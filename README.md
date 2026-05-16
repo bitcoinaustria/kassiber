@@ -56,7 +56,7 @@ kind of report when an error occurs.
 - syncs Bitcoin and Liquid wallets through `esplora` / `electrum`, supports
   address-based Bitcoin refresh through `bitcoinrpc`, and pulls confirmed
   BTCPay Greenfield wallet history
-- imports generic CSV/JSON, BTCPay exports, Phoenix exports, River exports, and BIP329 labels
+- imports generic CSV/JSON, BTCPay exports, Phoenix exports, River/Bull Bitcoin exchange exports, and BIP329 labels
 - pulls confirmed BTCPay on-chain wallet history directly from a BTCPay server via the Greenfield API
 - syncs BTCPay invoice/payment provenance separately from wallet balances, then applies exact merchant pricing only after reviewed reconciliation
 - keeps a local BTC-USD / BTC-EUR rates cache from Coinbase Exchange,

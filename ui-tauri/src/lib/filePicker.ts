@@ -3,8 +3,9 @@
  *
  * Uses the Tauri dialog plugin when running inside the desktop shell so the
  * user gets a real OS file picker that returns an absolute path the daemon
- * can open. Outside Tauri (Vite dev with the bridge transport, or vitest)
- * the picker is unavailable and callers fall back to the path text input.
+ * can open. In Vite dev bridge mode, a loopback-only bridge endpoint opens
+ * the same kind of native picker from the local dev server. Outside those
+ * local runtimes the picker is unavailable and callers fall back to text input.
  */
 
 export interface FilePickerOptions {
@@ -14,13 +15,42 @@ export interface FilePickerOptions {
   defaultPath?: string;
 }
 
-export const isFilePickerAvailable =
+const FILE_PICKER_BRIDGE_PATH = "/__kassiber__/pick-file";
+
+const isTauriRuntime =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+const isDevBridgeRuntime =
+  typeof window !== "undefined" && import.meta.env.DEV && !isTauriRuntime;
+
+export const isFilePickerAvailable = isTauriRuntime || isDevBridgeRuntime;
+
+async function pickFileViaDevBridge(
+  options: FilePickerOptions,
+): Promise<string | null> {
+  const response = await fetch(FILE_PICKER_BRIDGE_PATH, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(options),
+  });
+  if (!response.ok) return null;
+  const payload = (await response.json()) as {
+    path?: unknown;
+    error?: unknown;
+  };
+  if (payload.error) {
+    throw new Error(String(payload.error));
+  }
+  return typeof payload.path === "string" && payload.path ? payload.path : null;
+}
 
 export async function pickFile(
   options: FilePickerOptions = {},
 ): Promise<string | null> {
   if (!isFilePickerAvailable) return null;
+  if (isDevBridgeRuntime) {
+    return pickFileViaDevBridge(options);
+  }
   const { open } = await import("@tauri-apps/plugin-dialog");
   const selection = await open({
     multiple: false,

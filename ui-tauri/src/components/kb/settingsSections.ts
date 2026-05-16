@@ -6,6 +6,8 @@
 const SETTINGS_SECTION_INTEGRATION: Record<string, string> = {
   privacy: "privacy-sensitive",
   display: "display-currency",
+  explorer: "explorer-links",
+  explorers: "explorer-links",
   security: "security-lock-now",
   backends: "sync-add-backend",
   sync: "sync-add-backend",

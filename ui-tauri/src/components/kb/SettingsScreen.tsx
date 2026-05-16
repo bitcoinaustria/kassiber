@@ -68,6 +68,7 @@ import {
 } from "@/components/kb/AiProviderForm";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { clearImportProject } from "@/daemon/transport";
+import type { ExplorerSettings } from "@/lib/explorer";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 import { setSessionUnlockPassphrase } from "@/store/sessionLock";
 import { useUiStore, type AppLockPolicy } from "@/store/ui";
@@ -93,15 +94,46 @@ interface Backend {
   name: string;
   url: string;
   net: Net;
+  kind?: string;
+  chain?: string;
+  network?: string;
   health: string;
   on: boolean;
   auth: string;
+  authHeader?: string;
+  token?: string;
+  username?: string;
+  password?: string;
   trustSsl?: boolean;
   certificate?: string;
   proxy?: {
     host: string;
     port: string;
   } | null;
+}
+
+interface BackendSettingsRow {
+  name: string;
+  kind?: string;
+  chain?: string;
+  network?: string;
+  url?: string;
+  source?: string;
+  is_default?: boolean;
+  has_url?: boolean;
+  has_auth_header?: boolean;
+  has_token?: boolean;
+  has_username?: boolean;
+  has_password?: boolean;
+  insecure?: boolean;
+}
+
+interface BackendSettingsData {
+  backends: BackendSettingsRow[];
+  summary: {
+    count: number;
+    default_backend: string | null;
+  };
 }
 
 interface StatusData {
@@ -329,8 +361,83 @@ const DEFAULT_BACKENDS: Backend[] = [
   },
 ];
 
+const DEFAULT_RATE_BACKENDS: Backend[] = DEFAULT_BACKENDS.filter(
+  (backend) => backend.net === "FX",
+);
+
 function isSyncBackend(backend: Backend): boolean {
   return backend.net === "BTC" || backend.net === "LIQUID";
+}
+
+function backendNetFromRow(row: BackendSettingsRow): Net {
+  const chain = (row.chain ?? "").toLowerCase();
+  const kind = (row.kind ?? "").toLowerCase();
+  if (chain === "liquid" || kind === "liquid-esplora") return "LIQUID";
+  return "BTC";
+}
+
+function backendAuthLabel(row: BackendSettingsRow): string {
+  if (row.has_auth_header) return "bearer";
+  if (row.has_token) return "apikey";
+  if (row.has_username || row.has_password) return "basic";
+  return "none";
+}
+
+function backendRowToSettingsBackend(row: BackendSettingsRow): Backend {
+  const net = backendNetFromRow(row);
+  const name = row.name || "backend";
+  return {
+    id: name,
+    name,
+    url: row.url || (row.has_url ? "Configured endpoint" : "Missing endpoint"),
+    net,
+    kind: row.kind,
+    chain: row.chain,
+    network: row.network,
+    health: row.is_default ? "default" : row.source || row.kind || "configured",
+    on: row.has_url !== false,
+    auth: backendAuthLabel(row),
+    trustSsl: row.insecure,
+  };
+}
+
+function backendPayload(backend: Backend): Record<string, unknown> {
+  const chain = backend.chain ?? (backend.net === "LIQUID" ? "liquid" : "bitcoin");
+  const network =
+    backend.network ?? (backend.net === "LIQUID" ? "liquidv1" : "main");
+  const payload: Record<string, unknown> = {
+    name: backend.name,
+    kind: backend.kind ?? (backend.net === "LIQUID" ? "electrum" : "esplora"),
+    url: backend.url,
+    chain,
+    network,
+  };
+  const config: Record<string, unknown> = {};
+  if (typeof backend.trustSsl === "boolean") {
+    config.insecure = backend.trustSsl;
+  }
+  if (backend.certificate) {
+    config.certificate = backend.certificate;
+  }
+  if (backend.authHeader) {
+    payload.auth_header = backend.authHeader;
+  }
+  if (backend.token) {
+    payload.token = backend.token;
+  }
+  if (backend.username) {
+    config.username = backend.username;
+  }
+  if (backend.password) {
+    config.password = backend.password;
+  }
+  if (backend.proxy?.host && backend.proxy.port) {
+    payload.tor_proxy = `${backend.proxy.host}:${backend.proxy.port}`;
+  }
+  if (Object.keys(config).length > 0) {
+    payload.config = config;
+  }
+  return payload;
 }
 
 const backendIntegrationImage: Partial<Record<Net, string>> = {
@@ -371,21 +478,18 @@ function backendIntegrationArt(backend: Backend): Pick<
   if (backend.name.toLowerCase().includes("mempool")) {
     return {
       image: mempoolIcon,
-      className: "size-7",
-      imageFrameClassName: brandLogoFrame,
+      className: "size-8",
     };
   }
   if (backend.net === "LIQUID") {
     return {
       image: liquidIcon,
-      className: "size-7 scale-150",
-      imageFrameClassName: brandLogoFrame,
+      className: "size-8 scale-150",
     };
   }
   return {
     image: backendIntegrationImage[backend.net],
-    className: "size-7",
-    imageFrameClassName: brandLogoFrame,
+    className: "size-8",
   };
 }
 
@@ -398,6 +502,8 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const currency = useUiStore((s) => s.currency);
   const setCurrency = useUiStore((s) => s.setCurrency);
+  const explorerSettings = useUiStore((s) => s.explorerSettings);
+  const setExplorerSettings = useUiStore((s) => s.setExplorerSettings);
   const appLockPolicy = useUiStore((s) => s.appLockPolicy);
   const setAppLockPolicy = useUiStore((s) => s.setAppLockPolicy);
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
@@ -432,8 +538,17 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const changePassphrase = useDaemonMutation("ui.secrets.change_passphrase", {
     dataMode: "real",
   });
+  const backendSettingsQuery = useDaemon<BackendSettingsData>(
+    "ui.backends.settings.list",
+    undefined,
+    { refetchOnMount: "always" },
+  );
+  const createBackend = useDaemonMutation<BackendSettingsRow>("ui.backends.create");
+  const updateBackend = useDaemonMutation<BackendSettingsRow>("ui.backends.update");
+  const deleteBackend = useDaemonMutation<{ name: string; deleted: boolean }>(
+    "ui.backends.delete",
+  );
   const [clearClipboard, setClearClipboard] = React.useState(true);
-  const [backends, setBackends] = React.useState<Backend[]>(DEFAULT_BACKENDS);
   const [backendDialogOpen, setBackendDialogOpen] = React.useState(false);
   const [editingBackendId, setEditingBackendId] = React.useState<string | null>(
     null,
@@ -483,6 +598,14 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       window.removeEventListener("kassiber:settings-section", handler);
     };
   }, []);
+
+  const backends = React.useMemo<Backend[]>(() => {
+    const syncRows = backendSettingsQuery.data?.data?.backends ?? [];
+    return [
+      ...syncRows.map(backendRowToSettingsBackend),
+      ...DEFAULT_RATE_BACKENDS,
+    ];
+  }, [backendSettingsQuery.data]);
 
   const editingBackend = React.useMemo(
     () => backends.find((backend) => backend.id === editingBackendId) ?? null,
@@ -562,23 +685,25 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     setBackendDialogOpen(true);
   };
 
-  const onSaveBackend = (backend: Backend) => {
-    setBackends((prev) => {
-      const existingIndex = prev.findIndex((item) => item.id === backend.id);
-      if (existingIndex === -1) return [...prev, backend];
-
-      return prev.map((item) => (item.id === backend.id ? backend : item));
-    });
+  const onSaveBackend = async (backend: Backend) => {
+    const payload = backendPayload(backend);
+    if (editingBackend) {
+      await updateBackend.mutateAsync({ ...payload, name: editingBackend.id });
+    } else {
+      await createBackend.mutateAsync(payload);
+    }
+    await backendSettingsQuery.refetch();
     setBackendDialogOpen(false);
     setEditingBackendId(null);
   };
 
-  const onDeleteBackend = (backend: Backend) => {
+  const onDeleteBackend = async (backend: Backend) => {
     const ok = window.confirm(
       `Delete backend '${backend.name}'?\n\nWallets using this endpoint may need another backend before they can sync.`,
     );
     if (!ok) return;
-    setBackends((prev) => prev.filter((item) => item.id !== backend.id));
+    await deleteBackend.mutateAsync({ name: backend.id });
+    await backendSettingsQuery.refetch();
   };
 
   const settingsIntegrations = React.useMemo<IntegrationItem[]>(
@@ -594,7 +719,13 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         statusLabel: "On",
         category: "privacy",
         categoryLabel: "Privacy",
-        actionLabel: "Configure",
+        action: (
+          <Switch
+            checked={hideSensitive}
+            onCheckedChange={setHideSensitive}
+            aria-label="Hide sensitive data"
+          />
+        ),
       },
       {
         id: "privacy-clipboard",
@@ -607,7 +738,13 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         statusLabel: "On",
         category: "privacy",
         categoryLabel: "Privacy",
-        actionLabel: "Configure",
+        action: (
+          <Switch
+            checked={clearClipboard}
+            onCheckedChange={setClearClipboard}
+            aria-label="Clear clipboard after 30 seconds"
+          />
+        ),
       },
       {
         id: "display-currency",
@@ -621,6 +758,19 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         statusLabel: "Selected",
         category: "display",
         categoryLabel: "Display",
+        actionLabel: "Configure",
+      },
+      {
+        id: "explorer-links",
+        icon: ExternalLink,
+        title: "Transaction explorers",
+        description: "External links for Bitcoin and Liquid transaction details.",
+        isConnected:
+          explorerSettings.bitcoinBaseUrl.trim().length > 0 ||
+          explorerSettings.liquidBaseUrl.trim().length > 0,
+        statusLabel: "Configured",
+        category: "explorers",
+        categoryLabel: "Explorers",
         actionLabel: "Configure",
       },
       {
@@ -662,8 +812,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       {
         id: "sync-add-backend",
         image: bitcoinIcon,
-        className: "size-7",
-        imageFrameClassName: brandLogoFrame,
+        className: "size-8",
         title: "Add sync backend",
         description: "Add a Bitcoin or Liquid wallet refresh endpoint.",
         isConnected: false,
@@ -725,11 +874,17 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       currency,
       encryptedWorkspace,
       hideSensitive,
+      explorerSettings.bitcoinBaseUrl,
+      explorerSettings.liquidBaseUrl,
+      setHideSensitive,
       status?.database,
     ],
   );
 
   const onIntegrationAction = (integration: IntegrationItem) => {
+    if (integration.category === "privacy") {
+      return;
+    }
     setSelectedIntegrationId(integration.id ?? integration.title);
     const backend = backends.find((item) => item.id === integration.id);
     if (backend && isSyncBackend(backend)) {
@@ -934,26 +1089,24 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             <SettingsIntegrations4
               className="min-w-0"
               heading="Settings"
-              subHeading="Controls grouped by privacy, display, security, sync, assistant, and data."
+              subHeading="Controls grouped by privacy, display, explorers, security, sync, assistant, and data."
               integrations={settingsIntegrations}
               selectedId={selectedIntegrationId ?? undefined}
               onSelect={onIntegrationAction}
               renderDetail={(integration) => {
-                if (integration.category === "privacy") {
-                  return (
-                    <PrivacySettingsPanel
-                      hideSensitive={hideSensitive}
-                      setHideSensitive={setHideSensitive}
-                      clearClipboard={clearClipboard}
-                      setClearClipboard={setClearClipboard}
-                    />
-                  );
-                }
                 if (integration.category === "display") {
                   return (
                     <DisplaySettingsPanel
                       currency={currency}
                       setCurrency={setCurrency}
+                    />
+                  );
+                }
+                if (integration.category === "explorers") {
+                  return (
+                    <ExplorerSettingsPanel
+                      explorerSettings={explorerSettings}
+                      setExplorerSettings={setExplorerSettings}
                     />
                   );
                 }
@@ -1390,39 +1543,6 @@ function SettingsSwitchRow({
   );
 }
 
-function PrivacySettingsPanel({
-  hideSensitive,
-  setHideSensitive,
-  clearClipboard,
-  setClearClipboard,
-}: {
-  hideSensitive: boolean;
-  setHideSensitive: (hideSensitive: boolean) => void;
-  clearClipboard: boolean;
-  setClearClipboard: (clearClipboard: boolean) => void;
-}) {
-  return (
-    <section className="grid gap-3">
-      <div className="flex items-center gap-2">
-        <ShieldCheck className="size-4" aria-hidden="true" />
-        <h3 className="text-sm font-semibold">Privacy controls</h3>
-      </div>
-      <SettingsSwitchRow
-        label="Hide sensitive data"
-        description="Blur balances, addresses, and amounts throughout the UI."
-        checked={hideSensitive}
-        onCheckedChange={setHideSensitive}
-      />
-      <SettingsSwitchRow
-        label="Clear clipboard after 30s"
-        description="Auto-clear copied addresses and keys."
-        checked={clearClipboard}
-        onCheckedChange={setClearClipboard}
-      />
-    </section>
-  );
-}
-
 type CurrencyMode = "btc" | "eur";
 
 function DisplaySettingsPanel({
@@ -1440,28 +1560,82 @@ function DisplaySettingsPanel({
           Choose how balances and reports are shown across the app.
         </p>
       </div>
-      <div className="flex max-w-md items-center justify-between gap-3 rounded-md border bg-background px-4 py-3">
-        <span
-          className={cn(
-            "text-sm font-medium",
-            currency === "eur" ? "text-foreground" : "text-muted-foreground",
-          )}
-        >
-          € Euro
-        </span>
-        <Switch
-          checked={currency === "btc"}
-          onCheckedChange={(checked) => setCurrency(checked ? "btc" : "eur")}
-          aria-label="Display balances in Bitcoin"
-        />
-        <span
-          className={cn(
-            "text-sm font-medium",
-            currency === "btc" ? "text-foreground" : "text-muted-foreground",
-          )}
-        >
-          ₿ Bitcoin
-        </span>
+      <div className="grid max-w-md grid-cols-2 gap-1 rounded-md border bg-muted p-1">
+        {([
+          ["eur", "€", "Euro"],
+          ["btc", "₿", "Bitcoin"],
+        ] satisfies Array<[CurrencyMode, string, string]>).map(
+          ([value, symbol, label]) => {
+            const active = currency === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setCurrency(value)}
+                className={cn(
+                  "flex h-10 min-w-0 items-center justify-center gap-2 rounded-sm px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  active
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:bg-background/60 hover:text-foreground",
+                )}
+              >
+                <span className="text-base leading-none" aria-hidden="true">
+                  {symbol}
+                </span>
+                <span className="truncate">{label}</span>
+              </button>
+            );
+          },
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ExplorerSettingsPanel({
+  explorerSettings,
+  setExplorerSettings,
+}: {
+  explorerSettings: ExplorerSettings;
+  setExplorerSettings: (settings: Partial<ExplorerSettings>) => void;
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="space-y-3">
+        <div>
+          <h3 className="text-sm font-semibold">Transaction explorers</h3>
+          <p className="text-sm text-muted-foreground">
+            Optional explorer bases used by transaction detail links. Leave
+            empty to use the public defaults.
+          </p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="settings-bitcoin-explorer">Bitcoin explorer URL</Label>
+            <Input
+              id="settings-bitcoin-explorer"
+              value={explorerSettings.bitcoinBaseUrl}
+              onChange={(event) =>
+                setExplorerSettings({ bitcoinBaseUrl: event.target.value })
+              }
+              placeholder="https://mempool.bitcoin-austria.at"
+              inputMode="url"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="settings-liquid-explorer">Liquid explorer URL</Label>
+            <Input
+              id="settings-liquid-explorer"
+              value={explorerSettings.liquidBaseUrl}
+              onChange={(event) =>
+                setExplorerSettings({ liquidBaseUrl: event.target.value })
+              }
+              placeholder="https://liquid.network"
+              inputMode="url"
+            />
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -2720,7 +2894,7 @@ interface BackendModalProps {
   open: boolean;
   initial: Backend | null;
   onClose: () => void;
-  onSave: (backend: Backend) => void;
+  onSave: (backend: Backend) => void | Promise<void>;
 }
 
 function BackendModal({
@@ -2774,6 +2948,10 @@ function BackendModal({
         useSsl: electrumUseSsl,
       })
     : url.trim();
+  const selectedBackendKind =
+    preset?.protocol ??
+    initial?.kind ??
+    (type.net === "LIQUID" ? "liquid-esplora" : "esplora");
 
   React.useEffect(() => {
     if (!open) return;
@@ -2919,25 +3097,48 @@ function BackendModal({
         return;
       }
     }
-    onSave({
-      id: initial?.id ?? "b" + Date.now(),
-      name: name.trim(),
-      url: normalizedUrl,
-      net: type.net,
-      health: initial ? "just checked - ok" : "just added - ok",
-      on: connected,
-      auth: showAuth ? auth : "none",
-      trustSsl: isElectrum && electrumUseSsl ? trustSsl : undefined,
-      certificate:
-        isElectrum && electrumUseSsl && !trustSsl && certificate.trim()
-          ? certificate.trim()
-          : undefined,
-      proxy:
-        isElectrum && useProxy && proxyHost.trim() && proxyPort.trim()
-          ? { host: proxyHost.trim(), port: proxyPort.trim() }
-          : null,
-    });
-    setSaveState("idle");
+    try {
+      const authSecret = authVal.trim();
+      const authPassword = authVal2.trim();
+      await onSave({
+        id: initial?.id ?? name.trim(),
+        name: name.trim(),
+        url: normalizedUrl,
+        net: type.net,
+        kind: selectedBackendKind,
+        chain: type.net === "LIQUID" ? "liquid" : "bitcoin",
+        network: type.net === "LIQUID" ? "liquidv1" : "main",
+        health: initial ? "just checked - ok" : "just added - ok",
+        on: connected,
+        auth: showAuth ? auth : "none",
+        authHeader:
+          showAuth && auth === "bearer" && authSecret
+            ? `Bearer ${authSecret}`
+            : undefined,
+        token:
+          showAuth && auth === "apikey" && authSecret ? authSecret : undefined,
+        username:
+          showAuth && auth === "basic" && authSecret ? authSecret : undefined,
+        password:
+          showAuth && auth === "basic" && authPassword
+            ? authPassword
+            : undefined,
+        trustSsl: isElectrum && electrumUseSsl ? trustSsl : undefined,
+        certificate:
+          isElectrum && electrumUseSsl && !trustSsl && certificate.trim()
+            ? certificate.trim()
+            : undefined,
+        proxy:
+          isElectrum && useProxy && proxyHost.trim() && proxyPort.trim()
+            ? { host: proxyHost.trim(), port: proxyPort.trim() }
+            : null,
+      });
+    } catch (error) {
+      setTestState("fail");
+      setTestLog(error instanceof Error ? error.message : "Could not save backend.");
+    } finally {
+      setSaveState("idle");
+    }
   };
   const isSavingBackend = saveState === "saving";
 
@@ -3043,7 +3244,13 @@ function BackendModal({
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   placeholder="My home node"
+                  disabled={isEditing}
                 />
+                {isEditing ? (
+                  <p className="text-xs text-muted-foreground">
+                    Backend names are stable because wallets may reference them.
+                  </p>
+                ) : null}
               </div>
               {isElectrum ? (
                 <div className="grid gap-3 sm:grid-cols-[1fr_120px]">

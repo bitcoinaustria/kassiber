@@ -75,6 +75,8 @@ interface ReviewDataTableProps {
   emptyMessage?: string;
   badgeLabel?: string;
   showSummaryBadge?: boolean;
+  showStateColumn?: boolean;
+  showPriorityBadge?: boolean;
   shellClassName?: string;
 }
 
@@ -140,6 +142,8 @@ export function ReviewDataTable({
   emptyMessage,
   badgeLabel,
   showSummaryBadge = true,
+  showStateColumn = true,
+  showPriorityBadge = true,
   shellClassName = screenShellClassName,
 }: ReviewDataTableProps) {
   const hideSensitive = useUiStore((s) => s.hideSensitive);
@@ -333,7 +337,7 @@ export function ReviewDataTable({
               />
             </div>
             <div className="flex flex-wrap gap-2">
-              {statusOptions
+              {showStateColumn ? statusOptions
                 .filter(
                   (status) =>
                     status === "All" ||
@@ -350,7 +354,7 @@ export function ReviewDataTable({
                   >
                     {status}
                   </Button>
-                ))}
+                )) : null}
             </div>
           </div>
         </div>
@@ -401,7 +405,9 @@ export function ReviewDataTable({
                 <TableHead className="min-w-[140px] text-right">
                   Impact
                 </TableHead>
-                <TableHead className="min-w-[170px]">State</TableHead>
+                {showStateColumn ? (
+                  <TableHead className="min-w-[170px]">State</TableHead>
+                ) : null}
                 <TableHead className="w-[112px] text-right">
                   <SortButton
                     label="Date"
@@ -422,12 +428,14 @@ export function ReviewDataTable({
                     key={row.id}
                     row={row}
                     hideSensitive={hideSensitive}
+                    showStateColumn={showStateColumn}
+                    showPriorityBadge={showPriorityBadge}
                   />
                 ))
               ) : (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={showStateColumn ? 6 : 5}
                     className="h-24 text-center text-muted-foreground"
                   >
                     {emptyMessage ?? "No matching records."}
@@ -532,9 +540,13 @@ function QueueMetric({
 function ReviewWorklistRow({
   row,
   hideSensitive,
+  showStateColumn,
+  showPriorityBadge,
 }: {
   row: ReviewTableRow;
   hideSensitive: boolean;
+  showStateColumn: boolean;
+  showPriorityBadge: boolean;
 }) {
   const StatusIcon = statusIcon[row.status];
 
@@ -554,12 +566,14 @@ function ReviewWorklistRow({
           <div className="min-w-0">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <span className="truncate text-sm font-medium">{row.event}</span>
-              <Badge
-                variant="secondary"
-                className={cn("rounded-md", priorityClass[row.priority])}
-              >
-                {row.priority}
-              </Badge>
+              {showPriorityBadge ? (
+                <Badge
+                  variant="secondary"
+                  className={cn("rounded-md", priorityClass[row.priority])}
+                >
+                  {row.priority}
+                </Badge>
+              ) : null}
             </div>
             <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground sm:text-xs">
               <span className="font-mono">{row.id}</span>
@@ -601,17 +615,19 @@ function ReviewWorklistRow({
           {row.impact}
         </span>
       </TableCell>
-      <TableCell>
-        <Badge
-          variant="outline"
-          className={cn("rounded-md", statusClass[row.status])}
-        >
-          {row.status}
-        </Badge>
-        <p className="mt-1 text-[10px] text-muted-foreground sm:text-xs">
-          {nextActionLabel(row)}
-        </p>
-      </TableCell>
+      {showStateColumn ? (
+        <TableCell>
+          <Badge
+            variant="outline"
+            className={cn("rounded-md", statusClass[row.status])}
+          >
+            {row.status}
+          </Badge>
+          <p className="mt-1 text-[10px] text-muted-foreground sm:text-xs">
+            {nextActionLabel(row)}
+          </p>
+        </TableCell>
+      ) : null}
       <TableCell className="text-right">
         <span className="font-mono text-xs text-muted-foreground">
           {row.date}

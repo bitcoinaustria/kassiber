@@ -80,18 +80,22 @@ const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
 
 const fmtBtc = (value: number) => `₿ ${value.toFixed(8)}`;
-const fmtEur = (value: number) =>
-  "€ " +
-  value.toLocaleString("de-AT", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+const fmtEur = (value: number | null) =>
+  value === null
+    ? "Null"
+    : "€ " +
+      value.toLocaleString("de-AT", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
 const fmtSatSigned = (amountSat: number) =>
   `${amountSat >= 0 ? "+ " : "- "}${Math.abs(amountSat).toLocaleString(
     "en-US",
   )}`;
-const fmtEurSigned = (amountEur: number) =>
-  `${amountEur >= 0 ? "+ " : "- "}${fmtEur(Math.abs(amountEur))}`;
+const fmtEurSigned = (amountEur: number | null) =>
+  amountEur === null
+    ? "Null"
+    : `${amountEur >= 0 ? "+ " : "- "}${fmtEur(Math.abs(amountEur))}`;
 const fmtShortTxid = (value?: string) =>
   !value ? "no id" : value.length <= 18 ? value : `${value.slice(0, 10)}…${value.slice(-6)}`;
 

@@ -24,6 +24,7 @@ export type ConnectionKind =
   | "coinbase"
   | "bitpanda"
   | "river"
+  | "bullbitcoin"
   | "strike"
   | "phoenix"
   | "custom"
@@ -71,8 +72,8 @@ export interface Tx {
   counter: string;
   amountSat: number;
   feeSat?: number;
-  eur: number;
-  rate: number;
+  eur: number | null;
+  rate: number | null;
   tag: string;
   tags?: string[];
   note?: string;

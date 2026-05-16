@@ -21,6 +21,7 @@ describe("connection catalog", () => {
     const implementedSetupKinds = new Set([
       "descriptor",
       "file-wallet",
+      "file-enrichment",
       "btcpay",
       "bip329",
       "backend-settings",
@@ -42,6 +43,7 @@ describe("connection catalog", () => {
         "btcpay",
         "phoenix",
         "river",
+        "bullbitcoin",
       ]),
     );
   });

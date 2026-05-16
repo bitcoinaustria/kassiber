@@ -23,12 +23,12 @@ export type Transaction = {
   id: string;
   txnId: string;
   explorerId?: string;
-  amount: number;
+  amount: number | null;
   amountBtc?: number;
   feeBtc?: number;
-  feeEur?: number;
+  feeEur?: number | null;
   asset?: string;
-  rate?: number;
+  rate?: number | null;
   note?: string;
   tags?: string[];
   excluded?: boolean;
@@ -175,19 +175,23 @@ export function formatInlineBtc(btc: number, precision = 8) {
   return `₿${Math.abs(btc).toFixed(precision)}`;
 }
 
-export function formatDisplayMoney(eur: number, btc: number, currency: Currency) {
+export function formatDisplayMoney(eur: number | null, btc: number, currency: Currency) {
   if (currency === "btc") return formatInlineBtc(btc);
+  if (eur === null) return "Null";
   return currencyFormatter.format(eur);
 }
 
-export function formatSignedDisplayMoney(eur: number, btc: number, currency: Currency) {
+export function formatSignedDisplayMoney(eur: number | null, btc: number, currency: Currency) {
   if (currency === "btc") return formatBtc(btc, { sign: true });
+  if (eur === null) return "Null";
   const prefix = eur >= 0 ? "+ " : "− ";
   return `${prefix}${currencyFormatter.format(Math.abs(eur))}`;
 }
 
-export function formatCounterDisplayMoney(eur: number, btc: number, currency: Currency) {
-  if (currency === "btc") return currencyFormatter.format(Math.abs(eur));
+export function formatCounterDisplayMoney(eur: number | null, btc: number, currency: Currency) {
+  if (currency === "btc") {
+    return eur === null ? "Null" : currencyFormatter.format(Math.abs(eur));
+  }
   return formatBtc(btc);
 }
 
@@ -569,7 +573,7 @@ export function draftForTransaction(txn: Transaction): TransactionEditDraft {
     pricingQuality: txn.rate ? "exact" : "missing",
     manualCurrency: "EUR",
     manualPrice: txn.rate ? String(txn.rate) : "",
-    manualValue: txn.amount ? String(txn.amount) : "",
+    manualValue: txn.amount !== null && txn.amount ? String(txn.amount) : "",
     manualSource: "",
     reviewStatus: txn.status,
     taxable: defaultTaxClassification.taxable,
@@ -682,7 +686,8 @@ export function formatFee(txn: Transaction, currency: Currency) {
   const feeBtc = txn.feeBtc ?? 0;
   if (!feeBtc) return "-";
   if (currency === "btc") return formatBtcAmount(feeBtc);
-  return currencyFormatter.format(txn.feeEur ?? 0);
+  if (txn.feeEur === null || txn.feeEur === undefined) return "Null";
+  return currencyFormatter.format(txn.feeEur);
 }
 
 export function createNewTransactionDraft(): NewTransactionDraft {

@@ -12,6 +12,7 @@ from ..msat import msat_to_btc
 from ..tax_policy import build_tax_policy
 from ..time_utils import _iso_z, _parse_iso_datetime
 from ..wallet_descriptors import DEFAULT_DESCRIPTOR_GAP_LIMIT
+from . import rates as core_rates
 from . import reports as report_builders
 from .repo import current_context_snapshot
 from .wallets import wallet_btcpay_provenance_config
@@ -588,8 +589,8 @@ def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, A
             t.asset,
             t.amount,
             t.fee,
-            COALESCE(t.fiat_value, 0) AS fiat_value,
-            COALESCE(t.fiat_rate, 0) AS fiat_rate,
+            t.fiat_value,
+            t.fiat_rate,
             COALESCE(t.kind, '') AS kind,
             COALESCE(t.description, '') AS description,
             COALESCE(t.counterparty, '') AS counterparty,
@@ -622,8 +623,8 @@ def _activity_transactions(conn: sqlite3.Connection, profile_id: str) -> list[di
             t.asset,
             t.amount,
             t.fee,
-            COALESCE(t.fiat_value, 0) AS fiat_value,
-            COALESCE(t.fiat_rate, 0) AS fiat_rate,
+            t.fiat_value,
+            t.fiat_rate,
             COALESCE(t.kind, '') AS kind,
             COALESCE(t.description, '') AS description,
             COALESCE(t.counterparty, '') AS counterparty,
@@ -661,15 +662,23 @@ def _activity_transactions(conn: sqlite3.Connection, profile_id: str) -> list[di
 
 
 def _transaction_type(kind: str, direction: str, quarantine_reason: str | None) -> str:
-    if quarantine_reason:
-        return "Fee" if quarantine_reason == "missing_fee_price" else "Transfer"
     normalized = (kind or "").lower()
-    if "transfer" in normalized:
+    if "transfer" in normalized and direction != "inbound":
         return "Transfer"
     if "swap" in normalized:
         return "Swap"
     if "fee" in normalized:
         return "Fee"
+    if quarantine_reason:
+        normalized_reason = quarantine_reason.lower()
+        if normalized_reason == "missing_fee_price":
+            return "Fee"
+        if (
+            "transfer" in normalized_reason
+            or "pair" in normalized_reason
+            or "swap" in normalized_reason
+        ):
+            return "Transfer"
     if direction == "inbound":
         return "Income"
     return "Expense"
@@ -726,10 +735,10 @@ def _transaction_pair_display_meta(
             p.in_transaction_id,
             tout.asset AS out_asset,
             tout.amount AS out_amount,
-            COALESCE(tout.fiat_rate, 0) AS out_fiat_rate,
+            tout.fiat_rate AS out_fiat_rate,
             tin.asset AS in_asset,
             tin.amount AS in_amount,
-            COALESCE(tin.fiat_rate, 0) AS in_fiat_rate,
+            tin.fiat_rate AS in_fiat_rate,
             wout.label AS out_wallet,
             win.label AS in_wallet
         FROM transaction_pairs p
@@ -755,7 +764,12 @@ def _transaction_pair_display_meta(
         label = "Transfer" if pair_type == "transfer" else "Swap"
         counter = f"{label} fee - {out_asset} -> {in_asset}"
         account = f"{pair['out_wallet']} -> {pair['in_wallet']}"
-        display_rate = float(pair["out_fiat_rate"] or pair["in_fiat_rate"] or 0)
+        raw_display_rate = (
+            pair["out_fiat_rate"]
+            if pair["out_fiat_rate"] is not None
+            else pair["in_fiat_rate"]
+        )
+        display_rate = _positive_float_or_none(raw_display_rate)
         base = {
             "pair_id": pair["id"],
             "pair_type": pair_type,
@@ -780,15 +794,22 @@ def _transaction_pair_display_meta(
     return pair_meta
 
 
+def _positive_float_or_none(value: Any) -> float | None:
+    if value is None:
+        return None
+    parsed = float(value)
+    return parsed if parsed > 0 else None
+
+
 def _transaction_row_to_ui(
     row: sqlite3.Row,
     metadata_tags: list[str],
     pair_meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     fee_msat = int(row["fee"] or 0)
-    rate = float(row["fiat_rate"] or 0)
+    rate = _positive_float_or_none(row["fiat_rate"])
     if pair_meta:
-        rate = float(pair_meta["display_rate"] or 0)
+        rate = _positive_float_or_none(pair_meta["display_rate"])
         display_fee_msat = abs(int(pair_meta["fee_msat"] or 0))
         out_amount_msat = abs(int(pair_meta.get("out_amount_msat") or 0))
         in_amount_msat = abs(int(pair_meta.get("in_amount_msat") or 0))
@@ -796,11 +817,19 @@ def _transaction_row_to_ui(
         display_tags = [pair_tag, *[tag for tag in metadata_tags if tag != pair_tag]]
         if pair_meta["pair_type"] == "swap":
             amount_msat = -max(out_amount_msat, in_amount_msat)
-            fiat_value = -float(msat_to_btc(abs(amount_msat))) * rate if rate else 0.0
+            fiat_value = (
+                -float(msat_to_btc(abs(amount_msat))) * rate
+                if rate is not None
+                else None
+            )
             counter = f"Swap {pair_meta['out_asset']} -> {pair_meta['in_asset']}"
         else:
             amount_msat = -display_fee_msat
-            fiat_value = -float(msat_to_btc(display_fee_msat)) * rate if rate else 0.0
+            fiat_value = (
+                -float(msat_to_btc(display_fee_msat)) * rate
+                if rate is not None
+                else None
+            )
             counter = str(pair_meta["counter"])
         type_label = str(pair_meta["label"])
         account = str(pair_meta["account"])
@@ -817,7 +846,10 @@ def _transaction_row_to_ui(
     else:
         sign = 1 if row["direction"] == "inbound" else -1
         amount_msat = sign * int(row["amount"] or 0)
-        fiat_value = sign * abs(float(row["fiat_value"] or 0))
+        raw_fiat_value = _positive_float_or_none(row["fiat_value"])
+        fiat_value = (
+            sign * abs(raw_fiat_value) if raw_fiat_value is not None else None
+        )
         type_label = _transaction_type(
             row["kind"],
             row["direction"],
@@ -829,7 +861,11 @@ def _transaction_row_to_ui(
             and fee_msat > 0
         ):
             amount_msat = -fee_msat
-            fiat_value = -float(msat_to_btc(fee_msat)) * rate if rate else fiat_value
+            fiat_value = (
+                -float(msat_to_btc(fee_msat)) * rate
+                if rate is not None
+                else fiat_value
+            )
             type_label = "Fee"
         display_tags = list(metadata_tags)
         if not display_tags and row["quarantine_reason"]:
@@ -1280,8 +1316,8 @@ def build_transactions_snapshot(
             t.asset,
             t.amount,
             t.fee,
-            COALESCE(t.fiat_value, 0) AS fiat_value,
-            COALESCE(t.fiat_rate, 0) AS fiat_rate,
+            t.fiat_value,
+            t.fiat_rate,
             COALESCE(t.kind, '') AS kind,
             COALESCE(t.description, '') AS description,
             COALESCE(t.counterparty, '') AS counterparty,
@@ -1517,8 +1553,8 @@ def build_transactions_search_snapshot(
             t.asset,
             t.amount,
             t.fee,
-            COALESCE(t.fiat_value, 0) AS fiat_value,
-            COALESCE(t.fiat_rate, 0) AS fiat_rate,
+            t.fiat_value,
+            t.fiat_rate,
             COALESCE(t.kind, '') AS kind,
             COALESCE(t.description, '') AS description,
             COALESCE(t.counterparty, '') AS counterparty,
@@ -2799,6 +2835,7 @@ def build_rates_coverage_snapshot(
         ).fetchone()["count"]
         or 0
     )
+    missing_price_sql = core_rates.transaction_price_missing_sql("t")
     missing_rows_all = conn.execute(
         """
         SELECT
@@ -2819,12 +2856,9 @@ def build_rates_coverage_snapshot(
         JOIN wallets w ON w.id = t.wallet_id
         WHERE t.profile_id = ? AND t.excluded = 0
           AND (t.amount > 0 OR t.fee > 0)
-          AND t.fiat_rate IS NULL
-          AND t.fiat_rate_exact IS NULL
-          AND t.fiat_value IS NULL
-          AND t.fiat_value_exact IS NULL
+          AND {missing_price_sql}
         ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
-        """,
+        """.format(missing_price_sql=missing_price_sql),
         (profile["id"],),
     ).fetchall()
 
@@ -3043,13 +3077,15 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
             )
         missing_prices = rates_coverage["summary"]["missing_price_transactions"]
         if missing_prices:
+            uncovered = rates_coverage["summary"]["cache_uncovered_missing"]
+            daemon_kind = "ui.rates.rebuild" if uncovered else "ui.journals.process"
             blockers.append(
                 {
                     "id": "missing_prices",
                     "severity": "review",
                     "title": "Missing transaction prices",
                     "detail": f"{missing_prices} transaction(s) are missing fiat price fields.",
-                    "daemon_kind": "ui.rates.coverage",
+                    "daemon_kind": daemon_kind,
                 }
             )
     return {
@@ -3242,6 +3278,21 @@ def build_next_actions_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                 "daemon_kind": "ui.journals.process",
             }
         )
+    else:
+        rates_coverage = build_rates_coverage_snapshot(conn, {"limit": 1})
+        missing_prices = rates_coverage["summary"]["missing_price_transactions"]
+        if missing_prices:
+            uncovered = rates_coverage["summary"]["cache_uncovered_missing"]
+            suggestions.append(
+                {
+                    "id": "fetch_missing_prices" if uncovered else "apply_cached_prices",
+                    "title": "Fetch missing spot prices" if uncovered else "Apply cached spot prices",
+                    "reason": f"{missing_prices} transaction(s) still need fiat prices.",
+                    "mutating": True,
+                    "requires_consent": True,
+                    "daemon_kind": "ui.rates.rebuild" if uncovered else "ui.journals.process",
+                }
+            )
     if journals["quarantine_count"]:
         suggestions.append(
             {

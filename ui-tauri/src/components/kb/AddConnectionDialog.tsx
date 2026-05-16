@@ -48,8 +48,9 @@ interface SetupFormState {
   btcpayApiKey: string;
   walletMaterial: string;
   gapLimit: string;
+  targetWallet: string;
   sourceFile: string;
-  sourceFormat: "csv" | "json";
+  sourceFormat: "csv" | "json" | "phoenix_csv" | "river_csv" | "bullbitcoin_csv";
   btcpayStoreId: string;
   btcpayPaymentMethodId: string;
   btcpayPaymentMethodIds: string[];
@@ -113,6 +114,14 @@ interface WalletListData {
   }>;
 }
 
+interface ImportFileResult {
+  wallet: string;
+  imported: number;
+  skipped: number;
+  updated?: number;
+  bullbitcoin_rows?: number;
+}
+
 type DialogStep = "source" | "setup";
 const DESCRIPTOR_BACKEND_KINDS = new Set(["esplora", "electrum"]);
 const DEFAULT_BTCPAY_PAYMENT_METHOD_ID = "BTC-CHAIN";
@@ -128,6 +137,9 @@ function sourceFileFilters(source: ConnectionSource) {
   }
   if (source.sourceFormat === "river_csv") {
     return [{ name: "River CSV", extensions: ["csv"] }];
+  }
+  if (source.sourceFormat === "bullbitcoin_csv") {
+    return [{ name: "Bull Bitcoin CSV", extensions: ["csv"] }];
   }
   if (source.id === "csv") {
     return [{ name: "CSV or JSON", extensions: ["csv", "json"] }];
@@ -152,6 +164,7 @@ const formDefaultsFor = (source: ConnectionSource): SetupFormState => {
     btcpayApiKey: "",
     walletMaterial: "",
     gapLimit: "40",
+    targetWallet: "",
     sourceFile: "",
     sourceFormat: "csv",
     btcpayStoreId: "",
@@ -235,6 +248,8 @@ export function AddConnectionDialog({
   const walletsList = useDaemon<WalletListData>("ui.wallets.list");
   const createWallet =
     useDaemonMutation<{ wallet: { label: string } }>("ui.wallets.create");
+  const importFile =
+    useDaemonMutation<ImportFileResult>("ui.wallets.import_file");
   const createBtcpay = useDaemonMutation<{
     backend: { name: string };
     wallet: { label: string };
@@ -423,6 +438,7 @@ export function AddConnectionDialog({
     (!btcpayDiscovery || syncableDiscoveredPaymentMethodOptions.length === 0);
   const isSubmitting =
     createWallet.isPending ||
+    importFile.isPending ||
     createBtcpay.isPending ||
     discoverBtcpay.isPending ||
     importBip329.isPending ||
@@ -434,6 +450,8 @@ export function AddConnectionDialog({
       ? "Open backend settings"
       : syncWallet.isPending
         ? "Refreshing…"
+        : importFile.isPending
+          ? "Importing…"
         : importBip329.isPending
           ? "Importing labels…"
           : isSubmitting
@@ -444,6 +462,8 @@ export function AddConnectionDialog({
             : setupKind === "btcpay" &&
                 selectedBtcpayPaymentMethodIds.length > 1
               ? "Create connections"
+              : setupKind === "file-enrichment"
+                ? "Import pricing"
               : "Create connection";
   const canContinue = selected.status === "ready" && setupKind !== "planned";
 
@@ -574,6 +594,14 @@ export function AddConnectionDialog({
     if (setupKind === "file-wallet" && !form.sourceFile.trim()) {
       errors.sourceFile = "Pick the export file.";
     }
+    if (setupKind === "file-enrichment") {
+      if (!form.targetWallet.trim()) {
+        errors.targetWallet = "Choose the wallet to enrich.";
+      }
+      if (!form.sourceFile.trim()) {
+        errors.sourceFile = "Pick the export file.";
+      }
+    }
     if (setupKind === "btcpay") {
       if (form.btcpayInstanceMode === "saved") {
         if (!form.backend.trim()) {
@@ -679,7 +707,7 @@ export function AddConnectionDialog({
         });
         if (form.syncAfterCreate) {
           startSyncNotice(
-            `${label} is still refreshing from BTCPay. Slow backends can take a bit; Kassiber will update when the daemon finishes.`,
+            `${label} is still importing from the selected file. Large exports can take a bit; Kassiber will update when the daemon finishes.`,
           );
           try {
             await syncWallet.mutateAsync({ wallet: label });
@@ -690,6 +718,34 @@ export function AddConnectionDialog({
         addNotification({
           title: "Connection added",
           body: `${label} is configured${form.syncAfterCreate ? " and imported" : ""}.`,
+          tone: "success",
+        });
+      } else if (setupKind === "file-enrichment") {
+        const sourceFormat = selected.sourceFormat;
+        if (!sourceFormat) {
+          throw new Error("Selected source does not define an import format.");
+        }
+        startSyncNotice(
+          `${selected.title} is matching the export against existing ${form.targetWallet} transactions.`,
+        );
+        let importResult: ImportFileResult | undefined;
+        try {
+          const envelope = await importFile.mutateAsync({
+            wallet: form.targetWallet,
+            source_file: form.sourceFile.trim(),
+            source_format: sourceFormat,
+          });
+          importResult = envelope.data;
+        } finally {
+          clearSyncNotice();
+        }
+        addNotification({
+          title: "Import finished",
+          body: `${form.targetWallet} updated ${(
+            importResult?.updated ?? 0
+          ).toLocaleString("en-US")} rows and skipped ${(
+            importResult?.skipped ?? 0
+          ).toLocaleString("en-US")}.`,
           tone: "success",
         });
       } else if (setupKind === "btcpay") {
@@ -1046,6 +1102,64 @@ export function AddConnectionDialog({
             </div>
           </SetupField>
           {renderSyncAfterCreate("Import after setup")}
+        </>
+      );
+    }
+
+    if (setupKind === "file-enrichment") {
+      return (
+        <>
+          <SetupField
+            id="connection-target-wallet"
+            label="Wallet to enrich"
+            error={fieldErrors.targetWallet}
+            helper="Only rows matching transactions already in this wallet are applied."
+          >
+            <select
+              id="connection-target-wallet"
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={form.targetWallet}
+              onChange={(event) => updateForm("targetWallet", event.target.value)}
+              required
+            >
+              <option value="">Choose wallet</option>
+              {existingWalletOptions.map((wallet) => (
+                <option key={wallet.label} value={wallet.label}>
+                  {wallet.label}
+                </option>
+              ))}
+            </select>
+          </SetupField>
+          <SetupField
+            id="connection-source-file"
+            label="Export file path"
+            error={fieldErrors.sourceFile}
+          >
+            <div className="flex gap-2">
+              <Input
+                id="connection-source-file"
+                value={form.sourceFile}
+                onChange={(event) => updateForm("sourceFile", event.target.value)}
+                required
+              />
+              {isFilePickerAvailable ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    void pickFile({
+                      title: `Choose ${selected.title} export`,
+                      filters: sourceFileFilters(selected),
+                    }).then((path) => {
+                      if (path) updateForm("sourceFile", path);
+                    });
+                  }}
+                >
+                  Browse...
+                </Button>
+              ) : null}
+            </div>
+          </SetupField>
         </>
       );
     }
@@ -1828,27 +1942,6 @@ export function AddConnectionDialog({
               ? "Enter the local details Kassiber needs for this connection."
               : "Choose a watch-only wallet, node, exchange, or local file source."}
           </DialogDescription>
-          <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
-            <span
-              className={cn(
-                "flex size-5 items-center justify-center rounded-full border text-[11px]",
-                !isSetupStep && "border-primary bg-primary text-primary-foreground",
-              )}
-            >
-              1
-            </span>
-            <span>Choose source</span>
-            <span className="h-px w-6 bg-border" aria-hidden="true" />
-            <span
-              className={cn(
-                "flex size-5 items-center justify-center rounded-full border text-[11px]",
-                isSetupStep && "border-primary bg-primary text-primary-foreground",
-              )}
-            >
-              2
-            </span>
-            <span>Set up</span>
-          </div>
         </DialogHeader>
 
         {isSetupStep ? renderSetupStep() : renderSourceStep()}

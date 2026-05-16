@@ -140,6 +140,8 @@ const INCOMING_MARKER_MIN_PARAM = "incomingMinBtc";
 const OUTGOING_MARKER_MIN_PARAM = "outgoingMinBtc";
 const LEGACY_INCOMING_MARKER_MIN_PARAM = "incomingMin";
 const LEGACY_OUTGOING_MARKER_MIN_PARAM = "outgoingMin";
+const TREASURY_BRUSH_MIN_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const TREASURY_BRUSH_MIN_INDEX_SPAN = 5;
 
 const defaultTreasurySeriesVisibility: TreasurySeriesVisibility = {
   primary: true,
@@ -154,6 +156,7 @@ type TreasuryChartPoint = PortfolioChartPoint & {
   lineBalanceBtc?: number;
   lineBitcoinPriceEur?: number;
   lineAvgCostEur?: number | null;
+  brushBalanceBtc: number;
   reserveValueEur: number;
   activityBtc: number;
   activityCount: number;
@@ -179,6 +182,16 @@ type TreasuryChartPoint = PortfolioChartPoint & {
 
 type PortfolioChartMouseState = {
   activePayload?: Array<{ payload?: TreasuryChartPoint }>;
+};
+
+type TreasuryBrushRange = {
+  startIndex: number;
+  endIndex: number;
+};
+
+type TreasuryBrushChange = {
+  startIndex?: number;
+  endIndex?: number;
 };
 
 type ActivityScatterDotProps = {
@@ -228,7 +241,7 @@ type Transaction = {
   tags: string[];
   status: TransactionStatus;
   flow?: OverviewTransactionFlow;
-  amount: number;
+  amount: number | null;
   amountBtc?: number;
   date: string;
 };
@@ -270,16 +283,22 @@ function btcFromEur(eur: number, priceEur: number) {
   return priceEur ? eur / priceEur : 0;
 }
 
-function formatDisplayMoney(eur: number, priceEur: number, currency: Currency) {
+function formatDisplayMoney(
+  eur: number | null,
+  priceEur: number,
+  currency: Currency,
+) {
+  if (eur === null) return "Null";
   if (currency === "btc") return formatBtc(btcFromEur(eur, priceEur));
   return currencyFormatter.format(eur);
 }
 
 function formatSignedDisplayMoney(
-  eur: number,
+  eur: number | null,
   priceEur: number,
   currency: Currency,
 ) {
+  if (eur === null) return "Null";
   if (currency === "btc") {
     return formatBtc(btcFromEur(eur, priceEur), { sign: true });
   }
@@ -334,7 +353,7 @@ function donutCenterValueClass(value: string) {
 }
 
 function transactionBtc(tx: Transaction, priceEur: number) {
-  return tx.amountBtc ?? btcFromEur(tx.amount, priceEur);
+  return tx.amountBtc ?? btcFromEur(tx.amount ?? 0, priceEur);
 }
 
 function satToBtc(sats: number | undefined) {
@@ -906,6 +925,177 @@ function treasurySortTime(value: string | undefined) {
   return parsed && !Number.isNaN(parsed.valueOf()) ? parsed.valueOf() : null;
 }
 
+function fullTreasuryBrushRange(dataLength: number): TreasuryBrushRange {
+  return {
+    startIndex: 0,
+    endIndex: Math.max(0, dataLength - 1),
+  };
+}
+
+function sameTreasuryBrushRange(
+  a: TreasuryBrushRange | null,
+  b: TreasuryBrushRange,
+) {
+  return a?.startIndex === b.startIndex && a.endIndex === b.endIndex;
+}
+
+function clampTreasuryBrushIndex(index: number | undefined, dataLength: number) {
+  if (!Number.isFinite(index)) return 0;
+  return Math.max(0, Math.min(dataLength - 1, Math.round(index ?? 0)));
+}
+
+function treasuryBrushTime(point: TreasuryChartPoint | undefined) {
+  if (!point) return null;
+  if (Number.isFinite(point.sortTimeMs) && point.sortTimeMs > 0) {
+    return point.sortTimeMs;
+  }
+  return treasurySortTime(point.date);
+}
+
+function findTreasuryBrushIndexAtOrAfter(
+  data: TreasuryChartPoint[],
+  targetTime: number,
+) {
+  const index = data.findIndex((point) => {
+    const time = treasuryBrushTime(point);
+    return time !== null && time >= targetTime;
+  });
+  return index === -1 ? data.length - 1 : index;
+}
+
+function findTreasuryBrushIndexAtOrBefore(
+  data: TreasuryChartPoint[],
+  targetTime: number,
+) {
+  for (let index = data.length - 1; index >= 0; index -= 1) {
+    const time = treasuryBrushTime(data[index]);
+    if (time !== null && time <= targetTime) return index;
+  }
+  return 0;
+}
+
+function treasuryBrushMinIndexSpan(data: TreasuryChartPoint[]) {
+  if (data.length <= 1) return 0;
+  const firstTime = treasuryBrushTime(data[0]);
+  const lastTime = treasuryBrushTime(data[data.length - 1]);
+  if (
+    firstTime === null ||
+    lastTime === null ||
+    lastTime <= firstTime
+  ) {
+    return 1;
+  }
+  const proportionalSpan = Math.ceil(
+    ((data.length - 1) * TREASURY_BRUSH_MIN_WINDOW_MS) /
+      (lastTime - firstTime),
+  );
+  return Math.max(
+    1,
+    Math.min(
+      data.length - 1,
+      Math.max(proportionalSpan, TREASURY_BRUSH_MIN_INDEX_SPAN),
+    ),
+  );
+}
+
+function normalizeTreasuryBrushRange(
+  data: TreasuryChartPoint[],
+  next: TreasuryBrushChange | TreasuryBrushRange | null,
+  previous: TreasuryBrushRange | null,
+): TreasuryBrushRange {
+  if (data.length <= 1) return fullTreasuryBrushRange(data.length);
+
+  const fullRange = fullTreasuryBrushRange(data.length);
+  const requestedStart = clampTreasuryBrushIndex(
+    next?.startIndex ?? previous?.startIndex ?? fullRange.startIndex,
+    data.length,
+  );
+  const requestedEnd = clampTreasuryBrushIndex(
+    next?.endIndex ?? previous?.endIndex ?? fullRange.endIndex,
+    data.length,
+  );
+  const startIndex = Math.min(requestedStart, requestedEnd);
+  const endIndex = Math.max(requestedStart, requestedEnd);
+  const startTime = treasuryBrushTime(data[startIndex]);
+  const endTime = treasuryBrushTime(data[endIndex]);
+  const firstTime = treasuryBrushTime(data[0]);
+  const lastTime = treasuryBrushTime(data[data.length - 1]);
+
+  if (
+    startTime === null ||
+    endTime === null ||
+    firstTime === null ||
+    lastTime === null
+  ) {
+    return { startIndex, endIndex };
+  }
+
+  if (lastTime - firstTime <= TREASURY_BRUSH_MIN_WINDOW_MS) {
+    return fullRange;
+  }
+
+  const minIndexSpan = treasuryBrushMinIndexSpan(data);
+  if (
+    endTime - startTime >= TREASURY_BRUSH_MIN_WINDOW_MS &&
+    endIndex - startIndex >= minIndexSpan
+  ) {
+    return { startIndex, endIndex };
+  }
+
+  const startChanged = previous ? startIndex !== previous.startIndex : false;
+  const endChanged = previous ? endIndex !== previous.endIndex : false;
+  const keepEndFixed =
+    startChanged && !endChanged
+      ? true
+      : endChanged && !startChanged
+        ? false
+        : endIndex >= data.length - 1 || startIndex > data.length / 2;
+
+  if (keepEndFixed) {
+    return {
+      startIndex: Math.min(
+        findTreasuryBrushIndexAtOrBefore(
+          data,
+          endTime - TREASURY_BRUSH_MIN_WINDOW_MS,
+        ),
+        Math.max(0, endIndex - minIndexSpan),
+      ),
+      endIndex,
+    };
+  }
+
+  return {
+    startIndex,
+    endIndex: Math.max(
+      findTreasuryBrushIndexAtOrAfter(
+        data,
+        startTime + TREASURY_BRUSH_MIN_WINDOW_MS,
+      ),
+      Math.min(data.length - 1, startIndex + minIndexSpan),
+    ),
+  };
+}
+
+function rawTreasuryBrushRange(
+  dataLength: number,
+  next: TreasuryBrushChange | TreasuryBrushRange | null,
+  previous: TreasuryBrushRange,
+): TreasuryBrushRange {
+  if (dataLength <= 1) return fullTreasuryBrushRange(dataLength);
+  const requestedStart = clampTreasuryBrushIndex(
+    next?.startIndex ?? previous.startIndex,
+    dataLength,
+  );
+  const requestedEnd = clampTreasuryBrushIndex(
+    next?.endIndex ?? previous.endIndex,
+    dataLength,
+  );
+  return {
+    startIndex: Math.min(requestedStart, requestedEnd),
+    endIndex: Math.max(requestedStart, requestedEnd),
+  };
+}
+
 function formatTreasuryTick(value: string) {
   const parsed = parseIsoDayDate(value);
   if (!parsed) return value;
@@ -1130,9 +1320,9 @@ function activityTxs(snapshot: OverviewSnapshot): TreasuryActivityEvent[] {
       const volumeBtc =
         flow === "fee" ? Math.max(btc, feeBtc) : flow === "swap" ? pairedVolume : btc;
       if (volumeBtc <= 0 && feeBtc <= 0) return [];
-      const valueEur = Math.abs(tx.eur);
+      const valueEur = Math.abs(tx.eur ?? 0);
       const priceEur =
-        valueEur > 0 && btc > 0 ? valueEur / btc : tx.rate || snapshot.priceEur;
+        valueEur > 0 && btc > 0 ? valueEur / btc : tx.rate ?? snapshot.priceEur;
       return [
         {
           tx,
@@ -1197,6 +1387,7 @@ function buildTreasuryBasePoint(
     lineBalanceBtc: point.balanceBtc,
     lineBitcoinPriceEur: bitcoinPriceEur,
     lineAvgCostEur: avgCostEur,
+    brushBalanceBtc: point.balanceBtc,
     reserveValueEur: point.valueEur,
     activityBtc: 0,
     activityCount: 0,
@@ -1226,17 +1417,14 @@ function buildTreasuryActivityPoint(
   anchor: TreasuryChartPoint | null,
   snapshot: OverviewSnapshot,
 ): TreasuryChartPoint {
-  const balanceBtc =
-    event.tx.balanceBtc ?? anchor?.balanceBtc ?? latestPortfolioBalanceBtc(snapshot);
-  const costBasisEur =
-    event.tx.costBasisEur ?? anchor?.costBasisEur ?? snapshot.fiat.eurCostBasis;
+  const balanceBtc = anchor?.balanceBtc ?? latestPortfolioBalanceBtc(snapshot);
+  const costBasisEur = anchor?.costBasisEur ?? snapshot.fiat.eurCostBasis;
   const valueEur =
     balanceBtc > 0
       ? balanceBtc * event.priceEur
       : anchor?.valueEur ?? snapshot.fiat.eurBalance;
   const avgCostEur =
     balanceBtc > 0 && costBasisEur > 0 ? costBasisEur / balanceBtc : null;
-  const displayedBalanceBtc = anchor?.balanceBtc ?? balanceBtc;
   const date = activityDateKey(event);
   return {
     date,
@@ -1250,12 +1438,16 @@ function buildTreasuryActivityPoint(
     unrealizedEur: valueEur - costBasisEur,
     bitcoinPriceEur: event.priceEur,
     avgCostEur,
+    lineBalanceBtc: balanceBtc,
+    lineBitcoinPriceEur: event.priceEur,
+    lineAvgCostEur: avgCostEur,
+    brushBalanceBtc: balanceBtc,
     reserveValueEur: valueEur,
     activityBtc: event.volumeBtc,
     activityCount: 1,
     activityValueEur: event.valueEur,
     eventPriceEur: event.priceEur,
-    eventBalanceBtc: displayedBalanceBtc,
+    eventBalanceBtc: balanceBtc,
     eventSize: Math.max(event.volumeBtc, event.feeBtc),
     eventFlow: event.flow,
     eventSignedBtc: event.signedBtc,
@@ -1500,6 +1692,7 @@ function railForConnection(kind: string, label: string): BalanceRail {
     case "coinbase":
     case "bitpanda":
     case "river":
+    case "bullbitcoin":
     case "strike":
     case "csv":
     case "bip329":
@@ -3303,6 +3496,12 @@ const RevenueFlowChart = ({
   const [chartControlsOpen, setChartControlsOpen] = React.useState(false);
   const [expandedChartControlsOpen, setExpandedChartControlsOpen] =
     React.useState(false);
+  const [compactBrushRange, setCompactBrushRange] =
+    React.useState<TreasuryBrushRange | null>(null);
+  const [expandedBrushRange, setExpandedBrushRange] =
+    React.useState<TreasuryBrushRange | null>(null);
+  const [compactBrushRevision, setCompactBrushRevision] = React.useState(0);
+  const [expandedBrushRevision, setExpandedBrushRevision] = React.useState(0);
   const { active: activeSeries, handleHover } =
     useHoverHighlight<TreasuryChartSeriesKey>();
   const colorMode = useResolvedColorMode();
@@ -3449,9 +3648,39 @@ const RevenueFlowChart = ({
     [activityMarkerMinimumForPoint, expandedChartData, seriesVisible.events],
   );
 
+  React.useEffect(() => {
+    const data = compactMarkerView.chartDisplayData;
+    setCompactBrushRange((current) => {
+      const next = normalizeTreasuryBrushRange(
+        data,
+        current ?? fullTreasuryBrushRange(data.length),
+        current,
+      );
+      return sameTreasuryBrushRange(current, next) ? current : next;
+    });
+  }, [compactMarkerView.chartDisplayData]);
+
+  React.useEffect(() => {
+    const data = expandedMarkerView.chartDisplayData;
+    setExpandedBrushRange((current) => {
+      const next = normalizeTreasuryBrushRange(
+        data,
+        current ?? fullTreasuryBrushRange(data.length),
+        current,
+      );
+      return sameTreasuryBrushRange(current, next) ? current : next;
+    });
+  }, [expandedMarkerView.chartDisplayData]);
+
   const renderChartCard = (expanded = false) => {
     const plottedData = expanded ? expandedChartData : chartData;
     const markerView = expanded ? expandedMarkerView : compactMarkerView;
+    const brushRange = expanded ? expandedBrushRange : compactBrushRange;
+    const setBrushRange = expanded ? setExpandedBrushRange : setCompactBrushRange;
+    const brushRevision = expanded ? expandedBrushRevision : compactBrushRevision;
+    const bumpBrushRevision = expanded
+      ? setExpandedBrushRevision
+      : setCompactBrushRevision;
     const controlsOpen = expanded ? expandedChartControlsOpen : chartControlsOpen;
     const setControlsOpen = expanded
       ? setExpandedChartControlsOpen
@@ -3465,6 +3694,28 @@ const RevenueFlowChart = ({
     const brushGradientId = expanded
       ? "treasuryBrushGradientExpanded"
       : "treasuryBrushGradient";
+    const effectiveBrushRange =
+      brushRange ?? fullTreasuryBrushRange(chartDisplayData.length);
+    const handleBrushChange = (range: TreasuryBrushChange) => {
+      const normalizedRange = normalizeTreasuryBrushRange(
+        chartDisplayData,
+        range,
+        effectiveBrushRange,
+      );
+      const rawRange = rawTreasuryBrushRange(
+        chartDisplayData.length,
+        range,
+        effectiveBrushRange,
+      );
+      if (!sameTreasuryBrushRange(rawRange, normalizedRange)) {
+        window.setTimeout(() => bumpBrushRevision((revision) => revision + 1), 0);
+      }
+      setBrushRange((current) =>
+        sameTreasuryBrushRange(current, normalizedRange)
+          ? current
+          : normalizedRange,
+      );
+    };
     const visibleLatestReserve = snapshot.fiat.eurBalance;
     const visibleCostBasis = snapshot.fiat.eurCostBasis;
     const gainEur = visibleLatestReserve - visibleCostBasis;
@@ -3844,7 +4095,7 @@ const RevenueFlowChart = ({
                     />
                   )}
                   <Tooltip
-                    allowEscapeViewBox={{ x: true, y: true }}
+                    allowEscapeViewBox={{ x: false, y: true }}
                     content={
                       <TreasuryTooltip
                         hideSensitive={hideSensitive}
@@ -3933,11 +4184,16 @@ const RevenueFlowChart = ({
                   )}
                   {plottedData.length > 3 && (
                     <Brush
+                      key={`treasury-brush-${expanded ? "expanded" : "compact"}-${brushRevision}`}
                       className="text-muted-foreground"
                       dataKey="date"
+                      endIndex={effectiveBrushRange.endIndex}
                       fill="color-mix(in oklch, var(--muted) 70%, var(--background))"
                       height={expanded ? 60 : 74}
+                      onChange={handleBrushChange}
+                      onDragEnd={handleBrushChange}
                       padding={{ top: 8, right: 1, bottom: 8, left: 1 }}
+                      startIndex={effectiveBrushRange.startIndex}
                       travellerWidth={10}
                       stroke={primaryColor}
                       tickFormatter={(value) =>
@@ -3969,8 +4225,8 @@ const RevenueFlowChart = ({
                           </linearGradient>
                         </defs>
                         <Area
-                          type="monotone"
-                          dataKey="lineBitcoinPriceEur"
+                          type="stepAfter"
+                          dataKey="brushBalanceBtc"
                           stroke={primaryColor}
                           strokeWidth={1.35}
                           fill={`url(#${brushGradientId})`}
@@ -4079,7 +4335,12 @@ function flowForOverviewTx(tx: OverviewTx): OverviewTransactionFlow {
 }
 
 function toDashboardTransaction(tx: OverviewTx, index: number): Transaction {
-  const amount = tx.eur || (tx.amountSat / 100_000_000) * tx.rate;
+  const amount =
+    tx.eur !== null
+      ? tx.eur
+      : tx.rate !== null
+        ? (tx.amountSat / 100_000_000) * tx.rate
+        : null;
   const account = tx.account || tx.counter || "Unassigned";
   const accountLower = account.toLowerCase();
   const paymentMethod = accountLower.includes("liquid")
@@ -4477,7 +4738,9 @@ const RecentTransactionsTable = ({
                   : formatSignedDisplayMoney(t.amount, priceEur, currency);
               const secondaryAmount =
                 currency === "btc"
-                  ? currencyFormatter.format(Math.abs(t.amount))
+                  ? t.amount === null
+                    ? "Null"
+                    : currencyFormatter.format(Math.abs(t.amount))
                   : formatBtc(amountBtc);
               const amountTone =
                 flow === "incoming"

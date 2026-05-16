@@ -16,7 +16,7 @@ from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 from kassiber.cli.main import command_needs_db
-from kassiber.cli.handlers import _attachment_hooks, _audit_transaction_refs
+from kassiber.cli.handlers import _attachment_hooks, _audit_transaction_refs, process_journals
 from kassiber.core import attachments as core_attachments
 from kassiber.core import pricing
 from kassiber.core import rates as core_rates
@@ -35,6 +35,7 @@ from kassiber.core.ui_snapshot import (
     build_journals_snapshot,
     build_overview_snapshot,
     build_rates_coverage_snapshot,
+    build_next_actions_snapshot,
     build_report_blockers_snapshot,
     build_transactions_search_snapshot,
     build_transactions_snapshot,
@@ -404,7 +405,7 @@ class ReviewRegressionTest(unittest.TestCase):
                     50_000,
                     50_000,
                     "import",
-                    "deposit",
+                    "transfer",
                     "Initial funding",
                     "Exchange",
                     None,
@@ -514,6 +515,14 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         conn.execute(
             """
+            INSERT INTO journal_quarantines(
+                transaction_id, workspace_id, profile_id, reason, detail_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?)
+            """,
+            ("tx-ui-in", "ws-ui", "pf-ui", "missing_spot_price", "{}", now),
+        )
+        conn.execute(
+            """
             INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at)
             VALUES(?, ?, ?, ?, ?)
             """,
@@ -528,7 +537,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(overview["status"]["profile"], "UI Profile")
         self.assertEqual(overview["status"]["transactionCount"], 2)
         self.assertFalse(overview["status"]["needsJournals"])
-        self.assertEqual(overview["status"]["quarantines"], 1)
+        self.assertEqual(overview["status"]["quarantines"], 2)
         self.assertEqual(overview["priceEur"], 65_000)
         self.assertEqual(len(overview["connections"]), 1)
         self.assertEqual(overview["connections"][0]["label"], "Cold Wallet")
@@ -564,6 +573,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(transactions["year"], 2026)
         self.assertEqual([row["id"] for row in transactions["txs"]], ["tx-ui-spend", "tx-ui-in"])
         self.assertEqual(transactions["txs"][1]["type"], "Income")
+        self.assertEqual(transactions["txs"][1]["tag"], "Review")
         self.assertEqual(transactions["txs"][1]["externalId"], "a" * 64)
         self.assertEqual(transactions["txs"][1]["explorerId"], "a" * 64)
         self.assertEqual(transactions["txs"][1]["amountSat"], 100_000_000)
@@ -645,8 +655,8 @@ class ReviewRegressionTest(unittest.TestCase):
                 "rates-cache",
                 "payment",
                 "Zero amount marker",
-                None,
-                None,
+                0.0,
+                0.0,
                 0,
                 "{}",
                 now,
@@ -704,6 +714,135 @@ class ReviewRegressionTest(unittest.TestCase):
         blockers = build_report_blockers_snapshot(conn)
         self.assertTrue(blockers["ready"])
         self.assertEqual(blockers["blockers"], [])
+
+    def test_missing_price_repair_points_to_rate_rebuild(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-missing-price-action", "Missing Price Workspace", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, last_processed_at,
+                last_processed_tx_count, journal_input_version,
+                last_processed_input_version, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-missing-price-action",
+                "ws-missing-price-action",
+                "Missing Price Profile",
+                "EUR",
+                "generic",
+                365,
+                "FIFO",
+                now,
+                1,
+                0,
+                0,
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "wal-missing-price-action",
+                "ws-missing-price-action",
+                "pf-missing-price-action",
+                "Wallet",
+                "address",
+                "{}",
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "tx-missing-price-action",
+                "ws-missing-price-action",
+                "pf-missing-price-action",
+                "wal-missing-price-action",
+                "missing-price-action-ext",
+                "missing-price-action-fp",
+                "2026-01-02T00:00:00Z",
+                "2026-01-02T00:05:00Z",
+                "inbound",
+                "BTC",
+                btc_to_msat("0.25"),
+                0,
+                "EUR",
+                None,
+                None,
+                None,
+                "deposit",
+                "Incoming payment",
+                None,
+                None,
+                0,
+                "{}",
+                now,
+            ),
+        )
+        set_setting(conn, "context_workspace", "ws-missing-price-action")
+        set_setting(conn, "context_profile", "pf-missing-price-action")
+        conn.commit()
+
+        blockers = build_report_blockers_snapshot(conn)
+        self.assertFalse(blockers["ready"])
+        self.assertEqual(blockers["blockers"][0]["id"], "missing_prices")
+        self.assertEqual(blockers["blockers"][0]["daemon_kind"], "ui.rates.rebuild")
+
+        next_actions = build_next_actions_snapshot(conn)
+        self.assertEqual(next_actions["suggestions"][0]["id"], "fetch_missing_prices")
+        self.assertEqual(
+            next_actions["suggestions"][0]["daemon_kind"],
+            "ui.rates.rebuild",
+        )
+
+        transactions = build_transactions_snapshot(conn, {"limit": 1})
+        self.assertIsNone(transactions["txs"][0]["eur"])
+        self.assertIsNone(transactions["txs"][0]["rate"])
+
+        core_rates.upsert_rate(
+            conn,
+            "BTC-EUR",
+            "2026-01-02T00:05:00Z",
+            "65000.00",
+            core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+            fetched_at=now,
+            granularity="minute",
+            method="product_candles",
+        )
+        processed = process_journals(conn, None, None)
+        self.assertEqual(processed["auto_priced"], 1)
+        self.assertEqual(processed["quarantined"], 0)
+        priced = conn.execute(
+            """
+            SELECT fiat_rate_exact, fiat_value_exact, pricing_source_kind,
+                   pricing_provider
+            FROM transactions
+            WHERE id = 'tx-missing-price-action'
+            """
+        ).fetchone()
+        self.assertEqual(priced["fiat_rate_exact"], "65000.00")
+        self.assertEqual(priced["fiat_value_exact"], "16250.0000")
+        self.assertEqual(priced["pricing_source_kind"], pricing.SOURCE_FMV_PROVIDER)
+        self.assertEqual(priced["pricing_provider"], core_rates.RATE_SOURCE_COINBASE_EXCHANGE)
 
     def test_journal_pair_payload_picks_one_pair_for_chain_edge_case(self):
         conn = open_db(self.data_root)

@@ -24,6 +24,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   ReferenceLine,
   Tooltip,
   XAxis,
@@ -166,7 +167,7 @@ type FlowBucket = {
 type SwapCandidate = {
   in: Transaction;
   out: Transaction;
-  eur: number;
+  eur: number | null;
   btc: number;
 };
 
@@ -787,10 +788,18 @@ function toDashboardTransaction(tx: Tx, index: number): Transaction {
     id: tx.id,
     txnId: tx.externalId || tx.id || `TX-${index + 1}`,
     explorerId: tx.explorerId || undefined,
-    amount: Math.abs(tx.eur || (tx.amountSat / SATS_PER_BTC) * tx.rate),
+    amount:
+      tx.eur !== null
+        ? Math.abs(tx.eur)
+        : tx.rate !== null
+          ? Math.abs((tx.amountSat / SATS_PER_BTC) * tx.rate)
+          : null,
     amountBtc: Math.abs(tx.amountSat / SATS_PER_BTC),
     feeBtc: tx.feeSat ? Math.abs(tx.feeSat / SATS_PER_BTC) : 0,
-    feeEur: tx.feeSat ? Math.abs((tx.feeSat / SATS_PER_BTC) * tx.rate) : 0,
+    feeEur:
+      tx.feeSat && tx.rate !== null
+        ? Math.abs((tx.feeSat / SATS_PER_BTC) * tx.rate)
+        : null,
     asset: "BTC",
     rate: tx.rate,
     note: tx.note,
@@ -1127,7 +1136,7 @@ function sumByFlow(records: Transaction[], flow: TransactionFlow) {
   const rows = records.filter((txn) => transactionFlow(txn) === flow);
   return {
     count: rows.length,
-    eur: rows.reduce((sum, txn) => sum + txn.amount, 0),
+    eur: rows.reduce((sum, txn) => sum + (txn.amount ?? 0), 0),
     btc: rows.reduce((sum, txn) => sum + transactionBtc(txn), 0),
   };
 }
@@ -1146,7 +1155,10 @@ function buildSwapCandidates(
         {
           in: input,
           out,
-          eur: Math.min(input.amount, out.amount),
+          eur:
+            input.amount !== null && out.amount !== null
+              ? Math.min(input.amount, out.amount)
+              : null,
           btc: Math.min(transactionBtc(input), transactionBtc(out)),
         },
       ];
@@ -1197,7 +1209,10 @@ function buildSwapCandidates(
     candidates.push({
       in: best.txn,
       out: out.txn,
-      eur: Math.min(best.txn.amount, out.txn.amount),
+      eur:
+        best.txn.amount !== null && out.txn.amount !== null
+          ? Math.min(best.txn.amount, out.txn.amount)
+          : null,
       btc: Math.min(transactionBtc(best.txn), transactionBtc(out.txn)),
     });
   }
@@ -1253,7 +1268,7 @@ function buildFlowChartRows(
         stats: emptyFlowChartStats(),
       };
     const value =
-      metric === "count" ? 1 : currency === "btc" ? transactionBtc(txn) : txn.amount;
+      metric === "count" ? 1 : currency === "btc" ? transactionBtc(txn) : (txn.amount ?? 0);
     const flow = candidateIds.has(txn.id) ? "swap" : transactionFlow(txn);
     const segment = flowChartSegmentForFlow(flow);
     if (flow === "incoming") row.incoming += value;
@@ -1280,7 +1295,7 @@ function buildBreakdown<T extends string>(
     const key = getKey(txn);
     const row = rows.get(key) ?? { key, count: 0, eur: 0, btc: 0 };
     row.count += 1;
-    row.eur += txn.amount;
+    row.eur += txn.amount ?? 0;
     row.btc += transactionBtc(txn);
     rows.set(key, row);
   }
@@ -1373,7 +1388,7 @@ const TransactionWorkbench = ({
   const navigate = useNavigate();
   const [chartMetric, setChartMetric] =
     React.useState<FlowChartMetric>("amount");
-  const [chartMode, setChartMode] = React.useState<FlowChartMode>("external");
+  const [chartMode, setChartMode] = React.useState<FlowChartMode>("all");
   const swapCandidates = buildSwapCandidates(records, swapCandidateRefs);
   const swapCandidateIds = new Set(
     swapCandidates.flatMap((candidate) => [
@@ -1389,7 +1404,7 @@ const TransactionWorkbench = ({
   const swapCandidateTotals = swapCandidates.reduce(
     (sum, candidate) => ({
       count: sum.count + 1,
-      eur: sum.eur + candidate.eur,
+      eur: sum.eur + (candidate.eur ?? 0),
       btc: sum.btc + candidate.btc,
     }),
     { count: 0, eur: 0, btc: 0 },
@@ -1855,7 +1870,14 @@ const TransactionWorkbench = ({
                 />
                 <Tooltip
                   allowEscapeViewBox={{ x: true, y: true }}
-                  cursor={{ fillOpacity: 0.05 }}
+                  cursor={{
+                    className: "transition-opacity duration-150",
+                    fill: "var(--primary)",
+                    fillOpacity: 0.1,
+                    stroke: "var(--primary)",
+                    strokeOpacity: 0.55,
+                    strokeWidth: 1,
+                  }}
                   content={
                     <FlowTooltip
                       hideSensitive={hideSensitive}
@@ -1884,6 +1906,13 @@ const TransactionWorkbench = ({
                       {...flowChartCellProps(row, "incoming")}
                     />
                   ))}
+                  {chartMetric === "count" ? (
+                    <LabelList
+                      dataKey="incoming"
+                      position="top"
+                      formatter={formatCountBarLabel}
+                    />
+                  ) : null}
                 </Bar>
                 <Bar
                   dataKey="outgoing"
@@ -1900,6 +1929,13 @@ const TransactionWorkbench = ({
                       {...flowChartCellProps(row, "outgoing")}
                     />
                   ))}
+                  {chartMetric === "count" ? (
+                    <LabelList
+                      dataKey="outgoing"
+                      position="bottom"
+                      formatter={formatCountBarLabel}
+                    />
+                  ) : null}
                 </Bar>
                 <Bar
                   dataKey="transfers"
@@ -1916,6 +1952,13 @@ const TransactionWorkbench = ({
                       {...flowChartCellProps(row, "transfers")}
                     />
                   ))}
+                  {chartMetric === "count" ? (
+                    <LabelList
+                      dataKey="transfers"
+                      position="top"
+                      formatter={formatCountBarLabel}
+                    />
+                  ) : null}
                 </Bar>
                 <Bar
                   dataKey="swaps"
@@ -1932,6 +1975,13 @@ const TransactionWorkbench = ({
                       {...flowChartCellProps(row, "swaps")}
                     />
                   ))}
+                  {chartMetric === "count" ? (
+                    <LabelList
+                      dataKey="swaps"
+                      position="top"
+                      formatter={formatCountBarLabel}
+                    />
+                  ) : null}
                 </Bar>
                 <ReferenceLine
                   y={0}
@@ -2120,6 +2170,11 @@ function formatFlowTooltipValue(
   return formatSignedDisplayMoney(value, value, currency);
 }
 
+function formatCountBarLabel(value: unknown) {
+  const count = Math.abs(Number(value ?? 0));
+  return count > 0 ? String(Math.round(count)) : "";
+}
+
 function flowPointEntries(row: FlowChartPoint) {
   return [
     ["incoming", row.incoming],
@@ -2151,7 +2206,7 @@ function addFlowChartSegmentStats(
   txn: Transaction,
 ) {
   const btc = transactionBtc(txn);
-  const eur = txn.amount;
+  const eur = txn.amount ?? 0;
   stats.count += 1;
   stats.btc += btc;
   stats.eur += eur;
@@ -3086,7 +3141,11 @@ const TransactionsTable = ({
                 const signedAmountBtc =
                   flow === "outgoing" ? -amountBtc : amountBtc;
                 const signedAmountEur =
-                  flow === "outgoing" ? -txn.amount : txn.amount;
+                  txn.amount === null
+                    ? null
+                    : flow === "outgoing"
+                      ? -txn.amount
+                      : txn.amount;
                 const primaryAmount =
                   flow === "incoming" || flow === "outgoing"
                     ? formatSignedDisplayMoney(

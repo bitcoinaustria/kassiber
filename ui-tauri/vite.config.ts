@@ -1,4 +1,5 @@
 import {
+  execFile,
   execFileSync,
   spawn,
   type ChildProcessWithoutNullStreams,
@@ -13,6 +14,7 @@ import tailwindcss from "@tailwindcss/vite";
 
 const DAEMON_BRIDGE_PATH = "/__kassiber__/daemon";
 const DAEMON_BRIDGE_STREAM_PATH = "/__kassiber__/daemon/stream";
+const FILE_PICKER_BRIDGE_PATH = "/__kassiber__/pick-file";
 const BRIDGE_REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
 const UI_ROOT = __dirname;
 const NODE_MODULES_REALPATH = (() => {
@@ -29,7 +31,12 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.wallets.list",
   "ui.backends.list",
   "ui.backends.options",
+  "ui.backends.settings.list",
+  "ui.backends.create",
+  "ui.backends.update",
+  "ui.backends.delete",
   "ui.backends.electrum.test",
+  "ui.backends.http.test",
   "ui.profiles.snapshot",
   "ui.profiles.create",
   "ui.profiles.rename",
@@ -65,6 +72,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.saved_views.create",
   "ui.saved_views.delete",
   "ui.rates.summary",
+  "ui.rates.coverage",
   "ui.rates.kraken_csv.import",
   "ui.rates.rebuild",
   "ui.workspace.health",
@@ -75,6 +83,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.secrets.change_passphrase",
   "ui.next_actions",
   "ui.wallets.create",
+  "ui.wallets.import_file",
   "ui.wallets.preview_descriptor",
   "ui.connections.sources",
   "ui.connections.btcpay.create",
@@ -425,10 +434,131 @@ function daemonBridgePlugin() {
           await handleBridgeInvoke(req, res, supervisor);
           return;
         }
+        if (pathname === FILE_PICKER_BRIDGE_PATH) {
+          await handleBridgeFilePicker(req, res);
+          return;
+        }
         next();
       });
     },
   };
+}
+
+function execFileText(command: string, args: string[]) {
+  return new Promise<string>((resolve, reject) => {
+    execFile(command, args, { encoding: "utf8" }, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(stderr.trim() || error.message));
+        return;
+      }
+      resolve(stdout.trim());
+    });
+  });
+}
+
+function appleScriptString(value: string) {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function normalizeFilePickerFilters(filters: unknown) {
+  if (!Array.isArray(filters)) return [];
+  return filters
+    .flatMap((filter) => {
+      if (!filter || typeof filter !== "object" || Array.isArray(filter)) return [];
+      const extensions = (filter as { extensions?: unknown }).extensions;
+      if (!Array.isArray(extensions)) return [];
+      return extensions
+        .filter((extension): extension is string => typeof extension === "string")
+        .map((extension) => extension.trim().replace(/^\./, "").toLowerCase())
+        .filter((extension) => /^[a-z0-9]+$/.test(extension));
+    })
+    .filter((extension, index, all) => all.indexOf(extension) === index);
+}
+
+async function pickFileViaNativeBridge(request: Record<string, unknown>) {
+  const title =
+    typeof request.title === "string" && request.title.trim()
+      ? request.title.trim()
+      : "Choose a file";
+  const directory = request.directory === true;
+  if (process.platform === "darwin") {
+    const prompt = appleScriptString(title);
+    const script = directory
+      ? `POSIX path of (choose folder with prompt ${prompt})`
+      : (() => {
+          const extensions = normalizeFilePickerFilters(request.filters);
+          const ofType = extensions.length
+            ? ` of type {${extensions.map(appleScriptString).join(", ")}}`
+            : "";
+          return `POSIX path of (choose file with prompt ${prompt}${ofType})`;
+        })();
+    return execFileText("osascript", ["-e", script]);
+  }
+
+  const zenityArgs = [
+    "--file-selection",
+    ...(directory ? ["--directory"] : []),
+    `--title=${title}`,
+  ];
+  try {
+    return await execFileText("zenity", zenityArgs);
+  } catch {
+    throw new Error("No supported native file picker is available for the dev bridge.");
+  }
+}
+
+async function handleBridgeFilePicker(req: IncomingMessage, res: ServerResponse) {
+  if (!isLoopbackHost(req.headers.host)) {
+    writeJsonError(
+      res,
+      403,
+      "bridge_forbidden_host",
+      "file picker bridge only accepts loopback hosts",
+    );
+    return;
+  }
+  if (req.method !== "POST") {
+    writeJsonError(res, 405, "method_not_allowed", "file picker bridge only accepts POST");
+    return;
+  }
+  if (!isAllowedBridgeOrigin(req.headers.origin, req.headers.host)) {
+    writeJsonError(
+      res,
+      403,
+      "bridge_forbidden_origin",
+      "file picker bridge only accepts same-origin browser requests",
+    );
+    return;
+  }
+
+  let request: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(await readBody(req)) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("request body must be a JSON object");
+    }
+    request = parsed as Record<string, unknown>;
+  } catch (error) {
+    writeJsonError(
+      res,
+      400,
+      "invalid_file_picker_request",
+      error instanceof Error ? error.message : String(error),
+    );
+    return;
+  }
+
+  try {
+    const path = await pickFileViaNativeBridge(request);
+    writeJson(res, 200, { path: path || null });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const cancelled =
+      /user canceled/i.test(message) ||
+      /User cancelled/i.test(message) ||
+      /cancel/i.test(message);
+    writeJson(res, 200, cancelled ? { path: null } : { path: null, error: message });
+  }
 }
 
 async function handleBridgeInvoke(

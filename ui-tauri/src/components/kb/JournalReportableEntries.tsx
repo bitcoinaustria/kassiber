@@ -80,13 +80,13 @@ export function JournalReportableEntries() {
       <div className={screenPanelClassName}>
         <div className="rounded-xl border bg-card p-4">
           <h2 className="text-base font-semibold">
-            Reportable entries unavailable
+            Ledger entries unavailable
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {error instanceof Error
               ? error.message
               : data?.error?.message ??
-                "The daemon did not return reportable journal entries."}
+                "The daemon did not return processed ledger entries."}
           </p>
         </div>
       </div>
@@ -102,21 +102,23 @@ export function JournalReportableEntries() {
   return (
     <ReviewDataTable
       kind="journal-events"
-      eyebrow="Review · journal ledger"
-      title="Reportable Entries"
-      description="Processed journal entries with tax classification, pricing provenance, basis, proceeds, and gain/loss. This is the detailed report-readiness view."
+      eyebrow="Audit · processed ledger"
+      title="Processed Ledger"
+      description="Journal entries produced by processing transactions into tax lots, pricing, basis, proceeds, and gain/loss."
       rows={rows}
       metrics={metrics}
       showSummaryBadge={false}
+      showStateColumn={false}
+      showPriorityBadge={false}
       badgeLabel={
         snapshot.summary.needsJournals
           ? "stale"
           : `${snapshot.summary.count.toLocaleString("en-US")} entries`
       }
       shellClassName="w-full space-y-3 sm:space-y-4"
-      tableTitle="Reportable journal entries"
+      tableTitle="Processed ledger entries"
       tableDescriptionDetail={snapshot.summary.freshnessReason}
-      searchPlaceholder="Search wallet, entry, asset, pricing, Kennzahl..."
+      searchPlaceholder="Search wallet, entry, asset, pricing..."
       emptyMessage="No processed journal entries yet. Process journals after importing transactions."
       actions={
         <Button
@@ -141,7 +143,6 @@ function reportableEntryToRow(
   event: ReportableJournalEntry,
   summary: JournalEventsSnapshot["summary"],
 ): ReviewTableRow {
-  const pricingLabel = pricingSourceLabel(event);
   const atLabel =
     event.atKennzahl !== null
       ? `AT Kennzahl ${event.atKennzahl}`
@@ -156,7 +157,7 @@ function reportableEntryToRow(
     date: formatDate(event.occurredAt || event.createdAt),
     account: event.accountLabel || event.account || event.wallet,
     event: eventTitle(event),
-    source: [event.wallet, pricingLabel, atLabel].filter(Boolean).join(" · "),
+    source: [event.wallet, atLabel].filter(Boolean).join(" · "),
     amount: formatMsatAmount(event.quantityMsat, event.asset),
     basis: basisText(event),
     impact:
@@ -176,7 +177,7 @@ function reportableEntryToRow(
 
 function eventTitle(event: ReportableJournalEntry) {
   const typeLabel = formatEntryType(event.entryType);
-  const description = event.description.trim();
+  const description = stripJournalMarkers(event.description).trim();
   return description ? `${typeLabel} · ${description}` : typeLabel;
 }
 
@@ -194,9 +195,19 @@ function basisText(event: ReportableJournalEntry) {
 }
 
 function pricingSourceLabel(event: ReportableJournalEntry) {
-  const source = event.pricingSourceKind || "pricing";
-  const quality = event.pricingQuality ? `/${event.pricingQuality}` : "";
-  return `${source}${quality}`;
+  const source = event.pricingSourceKind;
+  const quality = event.pricingQuality;
+  if (!source && !quality) return "Pricing";
+  if (source === "manual_override") return "Manual price";
+  if (source === "source_price") return "Source price";
+  if (source === "rate_cache") return "Cached market rate";
+  if (source === "fmv_provider") {
+    return quality === "provider_sample"
+      ? "Provider market sample"
+      : "Provider market price";
+  }
+  const sourceLabel = formatEntryType(source || "pricing");
+  return quality ? `${sourceLabel} (${formatEntryType(quality)})` : sourceLabel;
 }
 
 function eventEvidenceHint(
@@ -210,6 +221,18 @@ function eventEvidenceHint(
     return "Carried by transfer matching";
   }
   return "Computed by journal processing";
+}
+
+function stripJournalMarkers(description: string) {
+  return description
+    .split(/\s+/)
+    .filter(
+      (token) =>
+        !token.startsWith("at_regime=") &&
+        !token.startsWith("at_pool=") &&
+        !token.startsWith("at_swap_link="),
+    )
+    .join(" ");
 }
 
 function formatEntryType(type: string) {

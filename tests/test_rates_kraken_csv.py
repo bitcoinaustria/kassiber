@@ -431,6 +431,51 @@ class KrakenCsvRatesTest(unittest.TestCase):
         self.assertEqual(rate_row["timestamp"], "2024-05-01T12:34:00Z")
         self.assertEqual(rate_row["rate_exact"], "60010.00")
 
+    def test_coinbase_sync_treats_zero_transaction_price_as_missing(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+        self._seed_transaction_needing_rate(conn)
+        conn.execute(
+            """
+            UPDATE transactions
+            SET fiat_rate = 0, fiat_value = 0
+            WHERE id = 'tx-1'
+            """
+        )
+        conn.commit()
+
+        def fake_coinbase_rows(pair, start, end, granularity=60):
+            return [
+                [
+                    1714566780,
+                    "59990.00",
+                    "60020.00",
+                    "60000.00",
+                    "60010.00",
+                    "0.50",
+                ],
+            ]
+
+        with patch.object(
+            core_rates,
+            "_coinbase_exchange_candles",
+            side_effect=fake_coinbase_rows,
+        ):
+            summary = core_rates.sync_rates(conn, days=1)
+
+        eur_summary = next(row for row in summary if row["pair"] == "BTC-EUR")
+        self.assertEqual(eur_summary["needed_minutes"], 1)
+        self.assertEqual(eur_summary["missing_minutes"], 1)
+        rate_row = conn.execute(
+            """
+            SELECT timestamp, rate_exact
+            FROM rates_cache
+            WHERE pair = 'BTC-EUR' AND source = 'coinbase-exchange'
+            """
+        ).fetchone()
+        self.assertEqual(rate_row["timestamp"], "2024-05-01T12:34:00Z")
+        self.assertEqual(rate_row["rate_exact"], "60010.00")
+
     def test_coinbase_sync_does_not_refetch_checked_sparse_minute(self):
         conn = open_db(str(self.data_root))
         self.addCleanup(conn.close)

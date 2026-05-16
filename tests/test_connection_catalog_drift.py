@@ -65,6 +65,10 @@ _DESKTOP_MUTATION_KINDS = (
     "ai.providers.set_api_key",
     "ai.providers.move_api_key",
 )
+_DESKTOP_RATE_READ_KINDS = (
+    "ui.rates.summary",
+    "ui.rates.coverage",
+)
 _DESKTOP_SWAP_MATCHING_KINDS = (
     "ui.transfers.suggest",
     "ui.transfers.list",
@@ -187,6 +191,13 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
         rust_kinds = self._rust_allowlist()
         vite_kinds = self._vite_allowlist()
         for kind in _DESKTOP_MUTATION_KINDS:
+            self.assertIn(kind, rust_kinds, f"{kind} is missing from Tauri daemon allowlist")
+            self.assertIn(kind, vite_kinds, f"{kind} is missing from Vite bridge allowlist")
+
+    def test_rate_read_kinds_are_allowed_by_desktop_boundaries(self):
+        rust_kinds = self._rust_allowlist()
+        vite_kinds = self._vite_allowlist()
+        for kind in _DESKTOP_RATE_READ_KINDS:
             self.assertIn(kind, rust_kinds, f"{kind} is missing from Tauri daemon allowlist")
             self.assertIn(kind, vite_kinds, f"{kind} is missing from Vite bridge allowlist")
 

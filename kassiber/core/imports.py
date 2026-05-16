@@ -15,6 +15,7 @@ from ..errors import AppError
 from ..fingerprints import make_transaction_fingerprint
 from . import pricing
 from ..importers import (
+    is_bullbitcoin_format,
     is_btcpay_format,
     is_phoenix_format,
     is_river_format,
@@ -84,7 +85,7 @@ def _find_existing_transaction(
     ).fetchone()
     if existing or not normalized["external_id"]:
         return existing
-    return conn.execute(
+    existing = conn.execute(
         """
         SELECT id, fingerprint, occurred_at, confirmed_at, fiat_rate, fiat_value,
                fiat_price_source, fiat_rate_exact, fiat_value_exact,
@@ -110,6 +111,34 @@ def _find_existing_transaction(
             normalized["asset"],
             btc_to_msat(normalized["amount"]),
             btc_to_msat(normalized["fee"]),
+        ),
+    ).fetchone()
+    if existing or normalized["pricing_source_kind"] != pricing.SOURCE_EXCHANGE_EXECUTION:
+        return existing
+    return conn.execute(
+        """
+        SELECT id, fingerprint, occurred_at, confirmed_at, fiat_rate, fiat_value,
+               fiat_price_source, fiat_rate_exact, fiat_value_exact,
+               pricing_source_kind, pricing_provider, pricing_pair, pricing_timestamp,
+               pricing_fetched_at, pricing_granularity, pricing_method,
+               pricing_external_ref, pricing_quality,
+               kind, description, counterparty, raw_json,
+               payment_hash, payment_hash_source
+        FROM transactions
+        WHERE wallet_id = ?
+          AND external_id = ?
+          AND direction = ?
+          AND asset = ?
+          AND amount = ?
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (
+            wallet_id,
+            normalized["external_id"],
+            normalized["direction"],
+            normalized["asset"],
+            btc_to_msat(normalized["amount"]),
         ),
     ).fetchone()
 
@@ -167,11 +196,15 @@ def _transaction_merge_updates(existing: Mapping[str, Any], normalized: Mapping[
     elif confirmed_at_added and existing["fiat_price_source"] == FIAT_PRICE_SOURCE_RATES_CACHE:
         updates.update({column: None for column in PRICE_COLUMNS})
 
-    if not existing["kind"] and normalized["kind"]:
+    exchange_execution_overrides = (
+        normalized["pricing_source_kind"] == pricing.SOURCE_EXCHANGE_EXECUTION
+        and incoming_priority >= existing_priority
+    )
+    if (exchange_execution_overrides or not existing["kind"]) and normalized["kind"]:
         updates["kind"] = normalized["kind"]
-    if not existing["description"] and normalized["description"]:
+    if (exchange_execution_overrides or not existing["description"]) and normalized["description"]:
         updates["description"] = normalized["description"]
-    if not existing["counterparty"] and normalized["counterparty"]:
+    if (exchange_execution_overrides or not existing["counterparty"]) and normalized["counterparty"]:
         updates["counterparty"] = normalized["counterparty"]
     if not existing["payment_hash"] and normalized["payment_hash"]:
         updates["payment_hash"] = normalized["payment_hash"]
@@ -322,9 +355,12 @@ def insert_wallet_records(
     hooks: ImportCoordinatorHooks,
     *,
     commit: bool = True,
+    match_existing_only: bool = False,
+    report_updates: bool = False,
 ) -> dict[str, Any]:
     imported = 0
     skipped = 0
+    updated = 0
     total = len(records)
     progress = sync_progress_emitter.get()
     if progress is not None:
@@ -355,6 +391,19 @@ def insert_wallet_records(
                     f"UPDATE transactions SET {assignments} WHERE id = ?",
                     (*updates.values(), existing["id"]),
                 )
+                updated += 1
+            skipped += 1
+            if progress is not None and (index % 200 == 0 or index == total):
+                _emit_import_progress(
+                    progress,
+                    wallet_label=wallet["label"],
+                    processed=index,
+                    total=total,
+                    imported=imported,
+                    skipped=skipped,
+                )
+            continue
+        if match_existing_only:
             skipped += 1
             if progress is not None and (index % 200 == 0 or index == total):
                 _emit_import_progress(
@@ -429,12 +478,15 @@ def insert_wallet_records(
     hooks.invalidate_journals(conn, profile["id"])
     if commit:
         conn.commit()
-    return {
+    outcome = {
         "wallet": wallet["label"],
         "source": source_label,
         "imported": imported,
         "skipped": skipped,
     }
+    if report_updates and updated:
+        outcome["updated"] = updated
+    return outcome
 
 
 def import_records_into_wallet(
@@ -449,6 +501,8 @@ def import_records_into_wallet(
     apply_phoenix: bool = False,
     apply_river: bool = False,
     commit: bool = True,
+    match_existing_only: bool = False,
+    report_updates: bool = False,
 ) -> dict[str, Any]:
     outcome = insert_wallet_records(
         conn,
@@ -458,6 +512,8 @@ def import_records_into_wallet(
         source_label,
         hooks,
         commit=False,
+        match_existing_only=match_existing_only,
+        report_updates=report_updates,
     )
     if apply_btcpay:
         outcome.update(apply_btcpay_metadata(conn, profile, wallet, records, hooks, commit=False))
@@ -674,8 +730,12 @@ def import_file_into_wallet(
         apply_btcpay=is_btcpay_format(input_format),
         apply_phoenix=is_phoenix_format(input_format),
         apply_river=is_river_format(input_format),
+        match_existing_only=is_bullbitcoin_format(input_format),
+        report_updates=is_bullbitcoin_format(input_format),
         commit=commit,
     )
+    if is_bullbitcoin_format(input_format):
+        outcome["bullbitcoin_rows"] = len(records)
     outcome["input_format"] = input_format
     outcome["file"] = os.path.abspath(file_path)
     return outcome

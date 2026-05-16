@@ -35,6 +35,7 @@ WALLET_KINDS = [
     "nwc",
     "phoenix",
     "river",
+    "bullbitcoin",
     "custom",
 ]
 REDACTED_CONFIG_VALUE = "[redacted]"
@@ -491,6 +492,11 @@ WALLET_KIND_CATALOG = {
     },
     "river": {
         "summary": "River Bitcoin Activity or Account Activity CSV importer.",
+        "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
+    "bullbitcoin": {
+        "summary": "Bull Bitcoin order CSV importer for exact buy/sell execution pricing.",
         "config_fields": ["source_file", "source_format"],
         "requires": [],
     },
