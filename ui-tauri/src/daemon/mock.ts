@@ -14,6 +14,11 @@ import type {
   DaemonTransport,
 } from "./transport";
 import { MOCK_PROFILES } from "@/mocks/profiles";
+import type {
+  ProfileGainsAlgorithm,
+  ProfileTaxCountry,
+  Workspace,
+} from "@/mocks/profiles";
 import { MOCK_AI_CHAT_STREAM, fixtures } from "./fixtures";
 
 const SIMULATED_LATENCY_MS = 50;
@@ -244,6 +249,106 @@ export const mockDaemon: DaemonTransport = {
         data: {
           activeProfileId: profileId,
           activeWorkspaceId: mockProfilesSnapshot.activeWorkspaceId,
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.onboarding.complete") {
+      const args = (req.args ?? {}) as {
+        workspace_label?: unknown;
+        profile_label?: unknown;
+        tax_country?: unknown;
+        fiat_currency?: unknown;
+        tax_long_term_days?: unknown;
+        gains_algorithm?: unknown;
+      };
+      const workspaceName =
+        typeof args.workspace_label === "string"
+          ? args.workspace_label.trim()
+          : "";
+      const profileName =
+        typeof args.profile_label === "string" ? args.profile_label.trim() : "";
+      if (!workspaceName || !profileName) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "Books set and book name are required.",
+            retryable: false,
+          },
+        };
+      }
+      const taxCountry: ProfileTaxCountry =
+        args.tax_country === "at" ? "at" : "generic";
+      const fiatCurrency =
+        typeof args.fiat_currency === "string" ? args.fiat_currency : "EUR";
+      const taxLongTermDays =
+        typeof args.tax_long_term_days === "number"
+          ? args.tax_long_term_days
+          : taxCountry === "at"
+            ? 0
+            : 365;
+      const rawGainsAlgorithm =
+        typeof args.gains_algorithm === "string" ? args.gains_algorithm : "";
+      const gainsAlgorithm: ProfileGainsAlgorithm =
+        rawGainsAlgorithm === "LIFO" ||
+        rawGainsAlgorithm === "HIFO" ||
+        rawGainsAlgorithm === "LOFO" ||
+        rawGainsAlgorithm === "MOVING_AVERAGE_AT"
+          ? rawGainsAlgorithm
+          : taxCountry === "at"
+            ? "MOVING_AVERAGE_AT"
+            : "FIFO";
+      const workspace: Workspace = {
+        id: `mock-workspace-${Date.now()}`,
+        name: workspaceName,
+        currency: fiatCurrency,
+        jurisdiction: taxCountry === "at" ? "Austria" : "Generic",
+        created: new Date().toISOString().slice(0, 10),
+        profiles: [
+          {
+            id: `mock-profile-${Date.now()}`,
+            name: profileName,
+            taxPolicy:
+              taxCountry === "at" ? "Austria - ATM - EUR" : "Generic defaults",
+            fiatCurrency,
+            taxCountry,
+            taxLongTermDays,
+            gainsAlgorithm,
+            accounts: 1,
+            wallets: 0,
+            lastOpened: "Just now",
+            active: true,
+          },
+        ],
+      };
+      mockProfilesSnapshot = {
+        activeWorkspaceId: workspace.id,
+        activeProfileId: workspace.profiles[0].id,
+        workspaces: [
+          ...mockProfilesSnapshot.workspaces.map((existing) => ({
+            ...existing,
+            profiles: existing.profiles.map((profile) => ({
+              ...profile,
+              active: false,
+            })),
+          })),
+          workspace,
+        ],
+      };
+      return {
+        kind: "ui.onboarding.complete",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          workspace: { id: workspace.id, name: workspace.name },
+          profile: {
+            id: workspace.profiles[0].id,
+            name: workspace.profiles[0].name,
+          },
+          profiles: mockProfilesSnapshot,
         } as T,
       };
     }

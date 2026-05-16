@@ -638,6 +638,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.journals.process", ready["data"]["supported_kinds"])
             self.assertIn("ui.transfers.review_context", ready["data"]["supported_kinds"])
             self.assertIn("ui.profiles.snapshot", ready["data"]["supported_kinds"])
+            self.assertIn("ui.onboarding.complete", ready["data"]["supported_kinds"])
             self.assertIn("ui.profiles.create", ready["data"]["supported_kinds"])
             self.assertIn("ui.profiles.switch", ready["data"]["supported_kinds"])
             self.assertIn("ui.rates.summary", ready["data"]["supported_kinds"])
@@ -2665,6 +2666,117 @@ class DaemonSmokeTest(unittest.TestCase):
                 _write_payload(
                     proc,
                     {"request_id": "shutdown-1", "kind": "daemon.shutdown"},
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+
+    def test_ui_onboarding_complete_creates_real_books(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-onboarding-") as tmp:
+            data_root = Path(tmp) / "data"
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "onboarding-1",
+                        "kind": "ui.onboarding.complete",
+                        "args": {
+                            "workspace_label": "Windows Smoke",
+                            "profile_label": "Private",
+                            "tax_country": "generic",
+                            "fiat_currency": "USD",
+                            "tax_long_term_days": 365,
+                            "gains_algorithm": "FIFO",
+                        },
+                    },
+                )
+                completed = _read_payload_timeout(proc)
+                self.assertEqual(completed["kind"], "ui.onboarding.complete")
+                self.assertEqual(completed["data"]["workspace"]["name"], "Windows Smoke")
+                self.assertEqual(completed["data"]["profile"]["name"], "Private")
+                self.assertEqual(completed["data"]["defaults"]["fiat_currency"], "USD")
+                self.assertEqual(completed["data"]["defaults"]["tax_country"], "generic")
+
+                _write_payload(
+                    proc,
+                    {"request_id": "profiles-1", "kind": "ui.profiles.snapshot"},
+                )
+                profiles = _read_payload_timeout(proc)
+                self.assertEqual(profiles["kind"], "ui.profiles.snapshot")
+                self.assertEqual(len(profiles["data"]["workspaces"]), 1)
+                self.assertEqual(
+                    profiles["data"]["workspaces"][0]["name"],
+                    "Windows Smoke",
+                )
+                self.assertEqual(
+                    profiles["data"]["workspaces"][0]["profiles"][0]["name"],
+                    "Private",
+                )
+
+                _write_payload(proc, {"request_id": "status-1", "kind": "status"})
+                status = _read_payload_timeout(proc)
+                self.assertEqual(status["data"]["current_workspace"], "Windows Smoke")
+                self.assertEqual(status["data"]["current_profile"], "Private")
+
+                _write_payload(
+                    proc,
+                    {"request_id": "shutdown-1", "kind": "daemon.shutdown"},
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+
+    def test_ui_onboarding_complete_rolls_back_books_on_backend_error(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-onboarding-rollback-") as tmp:
+            data_root = Path(tmp) / "data"
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "onboarding-bad-backend",
+                        "kind": "ui.onboarding.complete",
+                        "args": {
+                            "workspace_label": "Partial Books",
+                            "profile_label": "Private",
+                            "backend": {
+                                "name": "broken-electrum",
+                                "kind": "electrum",
+                                "url": "ssl://example.com:50002",
+                                "chain": "not-a-chain",
+                                "network": "main",
+                            },
+                        },
+                    },
+                )
+                failed = _read_payload_timeout(proc)
+                self.assertEqual(failed["kind"], "error")
+                self.assertEqual(failed["error"]["code"], "app_error")
+
+                _write_payload(
+                    proc,
+                    {"request_id": "profiles-after-error", "kind": "ui.profiles.snapshot"},
+                )
+                profiles = _read_payload_timeout(proc)
+                self.assertEqual(profiles["kind"], "ui.profiles.snapshot")
+                self.assertEqual(profiles["data"]["workspaces"], [])
+
+                _write_payload(
+                    proc,
+                    {"request_id": "shutdown-after-error", "kind": "daemon.shutdown"},
                 )
                 self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
                 code, stderr = _close_daemon(proc)

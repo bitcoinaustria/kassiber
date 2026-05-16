@@ -92,8 +92,8 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   returns safe backend names and metadata without exact URLs or tokens.
   `read_skill_reference("index")` returns only the
   compact in-app skill routing document; deeper references stay allowlisted.
-  Desktop connection setup uses explicit mutating daemon kinds
-  `ui.wallets.create`, `ui.connections.btcpay.create`,
+  Desktop onboarding and connection setup use explicit mutating daemon kinds
+  `ui.onboarding.complete`, `ui.wallets.create`, `ui.connections.btcpay.create`,
   `ui.connections.btcpay.discover`, and
   `ui.metadata.bip329.import`; transaction editor metadata saves use
   `ui.transactions.metadata.update`; desktop Settings maintenance uses

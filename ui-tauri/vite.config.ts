@@ -31,6 +31,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.backends.options",
   "ui.backends.electrum.test",
   "ui.profiles.snapshot",
+  "ui.onboarding.complete",
   "ui.profiles.create",
   "ui.profiles.rename",
   "ui.profiles.switch",

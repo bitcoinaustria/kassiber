@@ -775,6 +775,7 @@ def create_db_backend(
     tor_proxy=None,
     config=None,
     notes=None,
+    commit=True,
 ):
     """Insert a new backend row. Raises on name conflict or invalid kind/url."""
     name = name.strip().lower()
@@ -826,7 +827,8 @@ def create_db_backend(
     if name in tombstones:
         tombstones.remove(name)
         _save_bootstrap_backend_tombstones(conn, tombstones)
-    conn.commit()
+    if commit:
+        conn.commit()
     return get_db_backend(conn, name)
 
 
@@ -986,7 +988,7 @@ def delete_db_backend(conn, name):
     return {"name": name, "deleted": True}
 
 
-def set_default_backend(conn, runtime_config, name):
+def set_default_backend(conn, runtime_config, name, commit=True):
     """Persist `default_backend=<name>` in `settings`; mutate runtime_config to match."""
     name = name.strip().lower()
     if name not in runtime_config["backends"]:
@@ -1003,7 +1005,8 @@ def set_default_backend(conn, runtime_config, name):
             hint="Create or import that backend into SQLite first, then run `kassiber backends set-default` again.",
         )
     set_setting(conn, DEFAULT_BACKEND_SETTING, name)
-    conn.commit()
+    if commit:
+        conn.commit()
     runtime_config["default_backend"] = name
     return {"default_backend": name}
 
