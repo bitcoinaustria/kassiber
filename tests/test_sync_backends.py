@@ -1,8 +1,10 @@
+import io
 import unittest
 from unittest.mock import patch
 
 from kassiber.core.sync import WalletSyncHooks, WalletSyncState, sync_wallet_from_backend
 from kassiber.core.sync_backends import (
+    ElectrumClient,
     _connect_via_socks5,
     _read_exact,
     _socks5_address,
@@ -19,6 +21,14 @@ from kassiber.time_utils import timestamp_to_iso
 
 def _header_hex(timestamp):
     return ("00" * 68) + int(timestamp).to_bytes(4, "little").hex() + ("00" * 8)
+
+
+class _DummySocket:
+    def __init__(self):
+        self.sent = []
+
+    def sendall(self, payload):
+        self.sent.append(payload)
 
 
 class SyncBackendsTest(unittest.TestCase):
@@ -150,6 +160,47 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertAlmostEqual(float(records[0]["amount"]), 0.00012345, places=12)
         self.assertEqual(records[0]["occurred_at"], timestamp_to_iso(1_700_000_000))
         self.assertEqual(records[0]["confirmed_at"], timestamp_to_iso(1_700_000_000))
+
+    def test_electrum_call_raises_app_error_for_non_json_response(self):
+        client = ElectrumClient({"name": "electrum", "url": "tcp://electrum.example:50001"})
+        client.socket = _DummySocket()
+        client.reader = io.StringIO("<html>not electrum</html>\n")
+
+        with self.assertRaises(AppError) as raised:
+            client.call("server.version", [])
+
+        self.assertIn("Electrum-format JSON", str(raised.exception))
+        self.assertEqual(
+            raised.exception.hint,
+            "Check that the backend URL points to an Electrum server and uses the correct tcp/ssl port.",
+        )
+        self.assertEqual(
+            raised.exception.details,
+            {"response_preview": "<html>not electrum</html>"},
+        )
+        self.assertTrue(raised.exception.retryable)
+
+    def test_electrum_batch_call_raises_app_error_for_non_json_response(self):
+        client = ElectrumClient({"name": "electrum", "url": "tcp://electrum.example:50001"})
+        client.socket = _DummySocket()
+        client.reader = io.StringIO("not json\n")
+
+        with self.assertRaises(AppError) as raised:
+            client.batch_call([("server.version", [])])
+
+        self.assertIn("Electrum-format JSON", str(raised.exception))
+        self.assertEqual(raised.exception.details, {"response_preview": "not json"})
+
+    def test_electrum_call_raises_app_error_for_non_object_json_response(self):
+        client = ElectrumClient({"name": "electrum", "url": "tcp://electrum.example:50001"})
+        client.socket = _DummySocket()
+        client.reader = io.StringIO("[]\n")
+
+        with self.assertRaises(AppError) as raised:
+            client.call("server.version", [])
+
+        self.assertIn("Electrum-format JSON", str(raised.exception))
+        self.assertEqual(raised.exception.details, {"response_type": "list"})
 
     def test_bitcoinrpc_sync_adapter_returns_record_and_meta_shape(self):
         target = {"address": "bc1qcore", "script_pubkey": "0014core"}

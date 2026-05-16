@@ -377,6 +377,28 @@ class ElectrumClient:
         self.socket = None
         return False
 
+    def _decode_message(self, line):
+        try:
+            message = json.loads(line)
+        except json.JSONDecodeError as exc:
+            preview = line.strip().replace("\n", "\\n")
+            if len(preview) > 120:
+                preview = preview[:117] + "..."
+            raise AppError(
+                f"Backend '{self.backend['name']}' did not respond with Electrum-format JSON",
+                hint="Check that the backend URL points to an Electrum server and uses the correct tcp/ssl port.",
+                details={"response_preview": preview},
+                retryable=True,
+            ) from exc
+        if not isinstance(message, dict):
+            raise AppError(
+                f"Backend '{self.backend['name']}' did not respond with Electrum-format JSON",
+                hint="Check that the backend URL points to an Electrum server and uses the correct tcp/ssl port.",
+                details={"response_type": type(message).__name__},
+                retryable=True,
+            )
+        return message
+
     def call(self, method, params=None):
         if self.socket is None or self.reader is None:
             raise AppError("Electrum client is not connected")
@@ -394,7 +416,7 @@ class ElectrumClient:
             line = self.reader.readline()
             if not line:
                 raise AppError(f"Electrum backend '{self.backend['name']}' closed the connection")
-            message = json.loads(line)
+            message = self._decode_message(line)
             if message.get("id") != self.request_id:
                 continue
             if message.get("error"):
@@ -433,7 +455,7 @@ class ElectrumClient:
             line = self.reader.readline()
             if not line:
                 raise AppError(f"Electrum backend '{self.backend['name']}' closed the connection")
-            message = json.loads(line)
+            message = self._decode_message(line)
             response_id = message.get("id")
             if response_id not in pending:
                 continue
