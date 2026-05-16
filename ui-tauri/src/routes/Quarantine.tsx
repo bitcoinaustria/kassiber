@@ -192,6 +192,8 @@ function quarantineMetrics(summary: QuarantineSnapshot["summary"]): ReviewMetric
 }
 
 function quarantineReasonFilterIds(reason: string) {
+  // Mirrors daemon quarantine reason strings until the API exposes a typed
+  // review category for this filter band.
   const normalized = reason.toLowerCase();
   const filters: string[] = [];
   if (normalized.includes("price")) filters.push("missing-prices");

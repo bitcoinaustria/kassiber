@@ -61,7 +61,6 @@ interface JournalsSnapshot {
 
 interface DisplayJournalEntryType {
   type: string;
-  sourceTypes: string[];
   count: number;
   gainLossEur: number;
 }
@@ -452,13 +451,11 @@ function groupEntryTypesForDisplay(
     const displayType = displayEntryType(entry.type);
     const existing = grouped.get(displayType);
     if (existing) {
-      existing.sourceTypes.push(entry.type);
       existing.count += entry.count;
       existing.gainLossEur += entry.gainLossEur;
     } else {
       grouped.set(displayType, {
         type: displayType,
-        sourceTypes: [entry.type],
         count: entry.count,
         gainLossEur: entry.gainLossEur,
       });
@@ -472,10 +469,10 @@ function recentRowsForDisplayType(
   displayType: string,
 ) {
   if (displayType !== "transfer") {
-    return (
+    const rows =
       snapshot.recentByType?.[displayType] ??
-      snapshot.recent.filter((entry) => entry.type === displayType)
-    );
+      snapshot.recent.filter((entry) => entry.type === displayType);
+    return sortRecentJournalRows(rows);
   }
   const byType = snapshot.recentByType ?? {};
   const transferRows = [
@@ -483,9 +480,15 @@ function recentRowsForDisplayType(
     ...(byType.transfer_in ?? []),
   ];
   if (transferRows.length) {
-    return transferRows.sort((left, right) => right.date.localeCompare(left.date));
+    return sortRecentJournalRows(transferRows);
   }
-  return snapshot.recent.filter((entry) => isTransferDirection(entry.type));
+  return sortRecentJournalRows(
+    snapshot.recent.filter((entry) => isTransferDirection(entry.type)),
+  );
+}
+
+function sortRecentJournalRows(rows: RecentJournalEntry[]) {
+  return [...rows].sort((left, right) => right.date.localeCompare(left.date));
 }
 
 const toneTextStyles: Record<JournalTone, string> = {

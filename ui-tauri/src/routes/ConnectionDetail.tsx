@@ -56,6 +56,11 @@ import {
   useDaemonMutation,
   useDaemonStreamMutation,
 } from "@/daemon/client";
+import {
+  connectionKindLabels,
+  connectionKindTone,
+  connectionStatusStyles,
+} from "@/lib/connectionDisplay";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
@@ -69,12 +74,7 @@ import {
 import { detectWalletMaterial } from "@/lib/walletMaterialFormat";
 import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
-import type {
-  Connection,
-  ConnectionKind,
-  ConnectionStatus,
-  OverviewSnapshot,
-} from "@/mocks/seed";
+import type { Connection, OverviewSnapshot } from "@/mocks/seed";
 
 const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
@@ -97,53 +97,6 @@ const fmtShortTxid = (value?: string) =>
 
 const PLAINTEXT_CHANGE_ACK = "CHANGE LOCAL DATA";
 const PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA";
-
-const kindLabels: Record<ConnectionKind, string> = {
-  xpub: "XPUB",
-  address: "Address",
-  descriptor: "Descriptor",
-  "core-ln": "Core Lightning",
-  lnd: "LND",
-  nwc: "NWC",
-  cashu: "Cashu",
-  btcpay: "BTCPay",
-  kraken: "Kraken",
-  bitstamp: "Bitstamp",
-  coinbase: "Coinbase",
-  bitpanda: "Bitpanda",
-  river: "River",
-  strike: "Strike",
-  phoenix: "Phoenix",
-  custom: "Custom",
-  csv: "CSV",
-  bip329: "BIP329",
-};
-
-const statusStyles: Record<ConnectionStatus, string> = {
-  synced:
-    "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-400/20",
-  syncing:
-    "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-400/20",
-  idle: "bg-muted text-muted-foreground ring-border",
-  error:
-    "bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-400 dark:ring-red-400/20",
-};
-
-const connectionKindTone = (kind: ConnectionKind) => {
-  if (["core-ln", "lnd", "nwc", "strike", "phoenix"].includes(kind)) {
-    return "border-amber-600/20 bg-amber-500/10 text-amber-700 dark:text-amber-300";
-  }
-  if (["kraken", "bitstamp", "coinbase", "bitpanda", "river"].includes(kind)) {
-    return "border-violet-600/20 bg-violet-500/10 text-violet-700 dark:text-violet-300";
-  }
-  if (["cashu"].includes(kind)) {
-    return "border-sky-600/20 bg-sky-500/10 text-sky-700 dark:text-sky-300";
-  }
-  if (["btcpay", "csv", "bip329", "custom"].includes(kind)) {
-    return "border-muted-foreground/20 bg-muted text-muted-foreground";
-  }
-  return "border-emerald-600/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
-};
 
 interface UpdateWalletResult {
   wallet: {
@@ -339,7 +292,7 @@ function ConnectionDetailView({
     walletDetail?.sync_source ||
     connection.syncSource ||
     connection.sourceFormat ||
-    kindLabels[connection.kind];
+    connectionKindLabels[connection.kind];
   const sourceDetail =
     connection.syncMode === "live"
       ? "Live sync source"
@@ -616,12 +569,12 @@ function ConnectionDetailView({
             <div className="min-w-0">
               <div className="mb-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                 <Badge variant="outline" className="rounded-md">
-                  {kindLabels[connection.kind]}
+                  {connectionKindLabels[connection.kind]}
                 </Badge>
                 <span
                   className={cn(
                     "inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium ring-1 ring-inset sm:text-xs",
-                    statusStyles[connection.status],
+                    connectionStatusStyles[connection.status],
                   )}
                 >
                   {connection.status}

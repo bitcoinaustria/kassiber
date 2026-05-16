@@ -14,9 +14,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -30,6 +31,11 @@ import {
 import { useDaemon } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
+import {
+  connectionKindCategoryLabels,
+  connectionKindTone,
+  connectionStatusStyles,
+} from "@/lib/connectionDisplay";
 import { useCurrency, type Currency } from "@/lib/currency";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
@@ -38,7 +44,6 @@ import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 
 import type {
   Connection,
-  ConnectionKind,
   ConnectionStatus,
   OverviewSnapshot,
 } from "@/mocks/seed";
@@ -53,37 +58,6 @@ const fmtEur = (v: number) =>
     maximumFractionDigits: 2,
   });
 
-const kindLabels: Record<ConnectionKind, string> = {
-  xpub: "On-chain",
-  address: "On-chain",
-  descriptor: "On-chain",
-  "core-ln": "Lightning",
-  lnd: "Lightning",
-  nwc: "NWC",
-  cashu: "Ecash",
-  btcpay: "BTCPay",
-  kraken: "Exchange",
-  bitstamp: "Exchange",
-  coinbase: "Exchange",
-  bitpanda: "Exchange",
-  river: "Exchange",
-  strike: "Lightning",
-  phoenix: "Lightning",
-  custom: "Custom",
-  csv: "CSV",
-  bip329: "BIP329",
-};
-
-const statusStyles: Record<ConnectionStatus, string> = {
-  synced:
-    "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-400/20",
-  syncing:
-    "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-400/20",
-  idle: "bg-muted text-muted-foreground ring-border",
-  error:
-    "bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-400 dark:ring-red-400/20",
-};
-
 const statusDotStyles: Record<ConnectionStatus, string> = {
   synced: "bg-emerald-500",
   syncing: "bg-amber-500",
@@ -91,7 +65,9 @@ const statusDotStyles: Record<ConnectionStatus, string> = {
   error: "bg-red-500",
 };
 
-const kindFilterOptions = Array.from(new Set(Object.values(kindLabels)));
+const kindFilterOptions = Array.from(
+  new Set(Object.values(connectionKindCategoryLabels)),
+);
 const statusFilterOptions: ConnectionStatus[] = [
   "synced",
   "syncing",
@@ -102,22 +78,6 @@ const statusFilterOptions: ConnectionStatus[] = [
 const filterChipClassName =
   "inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted sm:text-xs";
 const headerActionClassName = "h-9 min-w-[112px] justify-center gap-2";
-
-const connectionKindTone = (kind: ConnectionKind) => {
-  if (["core-ln", "lnd", "nwc", "strike", "phoenix"].includes(kind)) {
-    return "border-amber-600/20 bg-amber-500/10 text-amber-700 dark:text-amber-300";
-  }
-  if (["kraken", "bitstamp", "coinbase", "bitpanda", "river"].includes(kind)) {
-    return "border-violet-600/20 bg-violet-500/10 text-violet-700 dark:text-violet-300";
-  }
-  if (["cashu"].includes(kind)) {
-    return "border-sky-600/20 bg-sky-500/10 text-sky-700 dark:text-sky-300";
-  }
-  if (["btcpay", "csv", "bip329", "custom"].includes(kind)) {
-    return "border-muted-foreground/20 bg-muted text-muted-foreground";
-  }
-  return "border-emerald-600/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
-};
 
 export function Connections() {
   const { data, isLoading } = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
@@ -163,7 +123,8 @@ export function Connections() {
   const syncedN = snapshot.connections.filter((c) => c.status === "synced").length;
   const filteredConnections = snapshot.connections.filter(
     (connection) =>
-      (kindFilter === "all" || kindLabels[connection.kind] === kindFilter) &&
+      (kindFilter === "all" ||
+        connectionKindCategoryLabels[connection.kind] === kindFilter) &&
       (statusFilter === "all" || connection.status === statusFilter),
   );
   const hasActiveFilters = kindFilter !== "all" || statusFilter !== "all";
@@ -295,21 +256,21 @@ export function Connections() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-[180px]">
                 <DropdownMenuLabel>Filter by status</DropdownMenuLabel>
-                <DropdownMenuCheckboxItem
-                  checked={statusFilter === "all"}
-                  onCheckedChange={() => setStatusFilter("all")}
+                <DropdownMenuRadioGroup
+                  value={statusFilter}
+                  onValueChange={(value) =>
+                    setStatusFilter(value as ConnectionStatus | "all")
+                  }
                 >
-                  All statuses
-                </DropdownMenuCheckboxItem>
-                {statusFilterOptions.map((status) => (
-                  <DropdownMenuCheckboxItem
-                    key={status}
-                    checked={statusFilter === status}
-                    onCheckedChange={() => setStatusFilter(status)}
-                  >
-                    {status}
-                  </DropdownMenuCheckboxItem>
-                ))}
+                  <DropdownMenuRadioItem value="all">
+                    All statuses
+                  </DropdownMenuRadioItem>
+                  {statusFilterOptions.map((status) => (
+                    <DropdownMenuRadioItem key={status} value={status}>
+                      {status}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -333,21 +294,19 @@ export function Connections() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-[200px]">
                 <DropdownMenuLabel>Filter by kind</DropdownMenuLabel>
-                <DropdownMenuCheckboxItem
-                  checked={kindFilter === "all"}
-                  onCheckedChange={() => setKindFilter("all")}
+                <DropdownMenuRadioGroup
+                  value={kindFilter}
+                  onValueChange={(value) => setKindFilter(value)}
                 >
-                  All kinds
-                </DropdownMenuCheckboxItem>
-                {kindFilterOptions.map((kind) => (
-                  <DropdownMenuCheckboxItem
-                    key={kind}
-                    checked={kindFilter === kind}
-                    onCheckedChange={() => setKindFilter(kind)}
-                  >
-                    {kind}
-                  </DropdownMenuCheckboxItem>
-                ))}
+                  <DropdownMenuRadioItem value="all">
+                    All kinds
+                  </DropdownMenuRadioItem>
+                  {kindFilterOptions.map((kind) => (
+                    <DropdownMenuRadioItem key={kind} value={kind}>
+                      {kind}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -390,7 +349,7 @@ export function Connections() {
           </div>
         )}
 
-        <div className="border-t p-0">
+        <div className="border-t">
           <div className="overflow-x-auto px-3 pb-3 pt-3 sm:px-6 sm:pb-4">
             <Table className="min-w-[920px]">
             <TableHeader>
@@ -532,7 +491,7 @@ function ConnectionRow({
       </TableCell>
       <TableCell>
         <Badge variant="outline" className="rounded-md">
-          {kindLabels[c.kind]}
+          {connectionKindCategoryLabels[c.kind]}
         </Badge>
       </TableCell>
       <TableCell>
@@ -541,7 +500,7 @@ function ConnectionRow({
           <span
             className={cn(
               "w-fit rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
-              statusStyles[c.status],
+              connectionStatusStyles[c.status],
             )}
           >
             {c.status}
