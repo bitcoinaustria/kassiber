@@ -61,6 +61,14 @@ def _hooks():
     )
 
 
+def _attachment_fk_targets(conn, table_name):
+    return {
+        row["table"]
+        for row in conn.execute(f"PRAGMA foreign_key_list({table_name})").fetchall()
+        if row["from"] == "attachment_id"
+    }
+
+
 class BtcpayCommercialProvenanceTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix="kassiber-btcpay-commercial-")
@@ -626,6 +634,41 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
             _hooks(),
             url="https://example.test/invoice",
         )
+        now = now_iso()
+        self.conn.execute(
+            """
+            INSERT INTO source_funds_sources(
+                id, workspace_id, profile_id, source_type, label, asset, created_at, updated_at
+            ) VALUES('source-1', 'ws', 'prof', 'exchange_purchase', 'Exchange buy', 'BTC', ?, ?)
+            """,
+            (now, now),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO source_funds_links(
+                id, workspace_id, profile_id, from_source_id, to_transaction_id,
+                link_type, state, confidence, method, asset, created_at, updated_at
+            ) VALUES(
+                'link-1', 'ws', 'prof', 'source-1', 'tx',
+                'source_to_transaction', 'reviewed', 'manual', 'manual', 'BTC', ?, ?
+            )
+            """,
+            (now, now),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO source_funds_source_attachments(source_id, attachment_id, created_at)
+            VALUES('source-1', ?, ?)
+            """,
+            (result["attachment_id"], now),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO source_funds_link_attachments(link_id, attachment_id, created_at)
+            VALUES('link-1', ?, ?)
+            """,
+            (result["attachment_id"], now),
+        )
         self.conn.execute("ALTER TABLE attachments RENAME TO attachments_legacy_notnull_tx")
         self.conn.execute(
             """
@@ -655,6 +698,12 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
             (result["attachment_id"],),
         ).fetchone()
         self.assertEqual(attachment["source_url"], "https://example.test/invoice")
+        for child_table in (
+            "external_document_attachments",
+            "source_funds_link_attachments",
+            "source_funds_source_attachments",
+        ):
+            self.assertEqual(_attachment_fk_targets(self.conn, child_table), {"attachments"})
         legacy = self.conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='attachments_legacy_notnull_tx'"
         ).fetchone()

@@ -1109,10 +1109,13 @@ def _migrate_nullable_attachment_transactions(conn):
     ).fetchone()
     current_sql = (table_sql[0] if table_sql else "") or ""
     if not legacy_sql and "transaction_id TEXT NOT NULL" not in current_sql:
+        _repair_attachment_child_fks(conn)
         return
     previous_fk_state = conn.execute("PRAGMA foreign_keys").fetchone()[0]
+    previous_legacy_state = conn.execute("PRAGMA legacy_alter_table").fetchone()[0]
     conn.commit()
     conn.execute("PRAGMA foreign_keys = OFF")
+    conn.execute("PRAGMA legacy_alter_table = ON")
     conn.execute("BEGIN IMMEDIATE")
     try:
         if not legacy_sql:
@@ -1155,6 +1158,100 @@ def _migrate_nullable_attachment_transactions(conn):
         conn.execute("ROLLBACK")
         raise
     finally:
+        conn.execute(
+            f"PRAGMA legacy_alter_table = {'ON' if previous_legacy_state else 'OFF'}"
+        )
+        conn.execute(f"PRAGMA foreign_keys = {'ON' if previous_fk_state else 'OFF'}")
+    _repair_attachment_child_fks(conn)
+
+
+def _attachment_fk_targets(conn, table_name):
+    table_exists = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?",
+        (table_name,),
+    ).fetchone()
+    if not table_exists:
+        return set()
+    return {
+        row["table"] if hasattr(row, "keys") else row[2]
+        for row in conn.execute(f"PRAGMA foreign_key_list({table_name})").fetchall()
+        if (row["from"] if hasattr(row, "keys") else row[3]) == "attachment_id"
+    }
+
+
+def _repair_attachment_child_fks(conn):
+    """Repair child tables whose attachment FK was rewritten to a temp table."""
+
+    child_tables = (
+        (
+            "source_funds_link_attachments",
+            """
+            CREATE TABLE source_funds_link_attachments (
+                link_id TEXT NOT NULL REFERENCES source_funds_links(id) ON DELETE CASCADE,
+                attachment_id TEXT NOT NULL REFERENCES attachments(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY(link_id, attachment_id)
+            )
+            """,
+            "link_id, attachment_id, created_at",
+        ),
+        (
+            "source_funds_source_attachments",
+            """
+            CREATE TABLE source_funds_source_attachments (
+                source_id TEXT NOT NULL REFERENCES source_funds_sources(id) ON DELETE CASCADE,
+                attachment_id TEXT NOT NULL REFERENCES attachments(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY(source_id, attachment_id)
+            )
+            """,
+            "source_id, attachment_id, created_at",
+        ),
+        (
+            "external_document_attachments",
+            """
+            CREATE TABLE external_document_attachments (
+                document_id TEXT NOT NULL REFERENCES external_documents(id) ON DELETE CASCADE,
+                attachment_id TEXT NOT NULL REFERENCES attachments(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY(document_id, attachment_id)
+            )
+            """,
+            "document_id, attachment_id, created_at",
+        ),
+    )
+    broken = [
+        (table, create_sql, columns)
+        for table, create_sql, columns in child_tables
+        if _attachment_fk_targets(conn, table) - {"attachments"}
+    ]
+    if not broken:
+        return
+
+    previous_fk_state = conn.execute("PRAGMA foreign_keys").fetchone()[0]
+    previous_legacy_state = conn.execute("PRAGMA legacy_alter_table").fetchone()[0]
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys = OFF")
+    conn.execute("PRAGMA legacy_alter_table = ON")
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        for table, create_sql, columns in broken:
+            legacy_table = f"{table}__legacy_attachment_fk"
+            conn.execute(f"ALTER TABLE {table} RENAME TO {legacy_table}")
+            conn.execute(create_sql)
+            conn.execute(
+                f"INSERT OR IGNORE INTO {table} ({columns}) "
+                f"SELECT {columns} FROM {legacy_table}"
+            )
+            conn.execute(f"DROP TABLE {legacy_table}")
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.execute(
+            f"PRAGMA legacy_alter_table = {'ON' if previous_legacy_state else 'OFF'}"
+        )
         conn.execute(f"PRAGMA foreign_keys = {'ON' if previous_fk_state else 'OFF'}")
 
 
