@@ -223,6 +223,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.btcpay.provenance.review",
     "ui.documents.list",
     "ui.documents.create",
+    "ui.documents.attach",
 ];
 
 /// Kinds that may emit intermediate stream records (kind = "<request_kind>.delta",

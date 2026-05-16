@@ -217,6 +217,7 @@ SUPPORTED_KINDS = (
     "ui.btcpay.provenance.review",
     "ui.documents.list",
     "ui.documents.create",
+    "ui.documents.attach",
     "ui.journals.snapshot",
     "ui.journals.events.list",
     "ui.journals.quarantine",
@@ -1423,6 +1424,22 @@ def _ui_commercial_payload(
             fiat_currency=args.get("fiat_currency"),
             fiat_value=args.get("fiat_value"),
             notes=args.get("notes"),
+        )
+    if kind == "ui.documents.attach":
+        document = args.get("document")
+        if not isinstance(document, str) or not document:
+            raise AppError("ui.documents.attach requires args.document", code="validation")
+        return core_commercial.attach_document_evidence(
+            conn,
+            ctx.data_root,
+            None,
+            None,
+            document,
+            hooks,
+            file_path=args.get("file_path") or args.get("file"),
+            url=args.get("url"),
+            label=args.get("label"),
+            media_type=args.get("media_type"),
         )
     raise AppError(f"Unsupported commercial daemon kind '{kind}'", code="validation")
 
@@ -6534,6 +6551,7 @@ def handle_request(
         "ui.btcpay.provenance.review",
         "ui.documents.list",
         "ui.documents.create",
+        "ui.documents.attach",
     }:
         return (
             _with_request_id(

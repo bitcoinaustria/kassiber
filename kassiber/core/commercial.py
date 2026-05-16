@@ -26,6 +26,25 @@ RECONCILIATION_STATES = ("unreviewed", "matched", "mismatch", "ignored")
 COMMERCIAL_KINDS = ("income", "expense", "refund", "transfer", "none")
 DEFAULT_PAGE_SIZE = 100
 SUGGESTION_LIMIT = 500
+TRANSACTION_APPLY_COLUMNS = (
+    "fiat_currency",
+    "fiat_rate",
+    "fiat_value",
+    "fiat_price_source",
+    "fiat_rate_exact",
+    "fiat_value_exact",
+    "pricing_source_kind",
+    "pricing_provider",
+    "pricing_pair",
+    "pricing_timestamp",
+    "pricing_fetched_at",
+    "pricing_granularity",
+    "pricing_method",
+    "pricing_external_ref",
+    "pricing_quality",
+    "kind",
+    "commercial_applied_link_id",
+)
 
 ScopeResolver = Callable[
     [sqlite3.Connection, str | None, str | None],
@@ -352,6 +371,20 @@ def create_document(
 ):
     workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     doc_type = _normalize_choice(document_type, DOCUMENT_TYPES, label="document type")
+    if external_ref:
+        existing = conn.execute(
+            """
+            SELECT id FROM external_documents
+            WHERE profile_id = ? AND external_ref = ?
+            """,
+            (profile["id"], external_ref),
+        ).fetchone()
+        if existing:
+            raise AppError(
+                f"External document reference '{external_ref}' already exists",
+                code="conflict",
+                hint="Use the existing document id or choose a unique external reference.",
+            )
     now = _now()
     document_id = str(uuid.uuid4())
     conn.execute(
@@ -387,18 +420,30 @@ def create_document(
 
 def get_document(conn, profile_id, document_ref):
     row = conn.execute(
+        "SELECT * FROM external_documents WHERE profile_id = ? AND id = ?",
+        (profile_id, document_ref),
+    ).fetchone()
+    if row:
+        return _document_payload(row)
+    rows = conn.execute(
         """
         SELECT *
         FROM external_documents
-        WHERE profile_id = ? AND (id = ? OR external_ref = ? OR label = ?)
+        WHERE profile_id = ? AND (external_ref = ? OR label = ?)
         ORDER BY created_at DESC
-        LIMIT 1
         """,
-        (profile_id, document_ref, document_ref, document_ref),
-    ).fetchone()
-    if not row:
+        (profile_id, document_ref, document_ref),
+    ).fetchall()
+    if not rows:
         raise AppError(f"External document '{document_ref}' not found", code="not_found")
-    return _document_payload(row)
+    if len(rows) > 1:
+        raise AppError(
+            f"External document reference '{document_ref}' is ambiguous",
+            code="ambiguous",
+            hint="Use the document id instead of a label or external reference.",
+            details={"matches": len(rows)},
+        )
+    return _document_payload(rows[0])
 
 
 def list_documents(conn, workspace_ref, profile_ref, hooks: CommercialHooks, *, limit=100):
@@ -503,6 +548,28 @@ def attach_document_evidence(
     return {"document_id": document["id"], "attachment_id": attachment_id, "label": label}
 
 
+def _matching_transactions_for_record(conn, profile_id, record):
+    clauses = []
+    params: list[Any] = [profile_id]
+    if record["txid"]:
+        clauses.append("external_id = ?")
+        params.append(record["txid"])
+    if record["payment_hash"]:
+        clauses.append("payment_hash = ?")
+        params.append(record["payment_hash"])
+    if not clauses:
+        return []
+    return conn.execute(
+        f"""
+        SELECT id, amount, fiat_value_exact, fiat_value
+        FROM transactions
+        WHERE profile_id = ? AND ({' OR '.join(clauses)})
+        ORDER BY occurred_at ASC, id ASC
+        """,
+        params,
+    ).fetchall()
+
+
 def suggest_links(
     conn,
     workspace_ref,
@@ -514,18 +581,9 @@ def suggest_links(
     workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     rows = conn.execute(
         """
-        SELECT p.*, t.id AS transaction_id, t.amount AS transaction_amount,
-               t.fiat_value_exact AS transaction_fiat_value_exact,
-               t.fiat_value AS transaction_fiat_value
+        SELECT p.*
         FROM btcpay_provenance_records p
-        JOIN transactions t
-          ON t.profile_id = p.profile_id
-         AND p.record_type = 'payment'
-         AND (
-              (p.txid IS NOT NULL AND p.txid != '' AND t.external_id = p.txid)
-              OR (p.payment_hash IS NOT NULL AND p.payment_hash != '' AND t.payment_hash = p.payment_hash)
-         )
-        WHERE p.profile_id = ?
+        WHERE p.profile_id = ? AND p.record_type = 'payment'
         ORDER BY COALESCE(p.occurred_at, p.created_at) DESC
         LIMIT ?
         """,
@@ -535,10 +593,14 @@ def suggest_links(
     suggestions = []
     now = _now()
     for row in rows:
+        matches = _matching_transactions_for_record(conn, profile["id"], row)
+        if len(matches) != 1:
+            continue
+        tx = matches[0]
         confidence = (
             "exact"
             if row["amount"] is not None
-            and int(row["amount"]) == abs(int(row["transaction_amount"]))
+            and int(row["amount"]) == abs(int(tx["amount"]))
             else "strong"
         )
         link = _upsert_link(
@@ -547,7 +609,7 @@ def suggest_links(
             profile,
             btcpay_record_id=row["id"],
             document_id=None,
-            transaction_id=row["transaction_id"],
+            transaction_id=tx["id"],
             link_type="btcpay_payment_transaction",
             state="suggested",
             confidence=confidence,
@@ -568,7 +630,10 @@ def suggest_links(
     suggestions.extend(document_transaction_links["links"])
     created += document_transaction_links["created"]
     conn.commit()
-    return {"created": created, "suggestions": suggestions}
+    unique_suggestions = {}
+    for suggestion in suggestions:
+        unique_suggestions[suggestion["id"]] = suggestion
+    return {"created": created, "suggestions": list(unique_suggestions.values())}
 
 
 def _suggest_document_links(conn, workspace, profile, now):
@@ -624,7 +689,8 @@ def _suggest_document_transaction_links(conn, workspace, profile, now):
     rows = conn.execute(
         """
         SELECT d.id AS document_id, p.id AS btcpay_record_id,
-               t.id AS transaction_id, d.fiat_value_exact AS doc_value,
+               p.txid, p.payment_hash,
+               d.fiat_value_exact AS doc_value,
                p.fiat_value_exact AS btcpay_value, p.amount AS payment_amount
         FROM external_documents d
         JOIN btcpay_provenance_records p
@@ -639,12 +705,6 @@ def _suggest_document_transaction_links(conn, workspace, profile, now):
                    AND p.fiat_value_exact = d.fiat_value_exact
               )
          )
-        JOIN transactions t
-          ON t.profile_id = p.profile_id
-         AND (
-              (p.txid IS NOT NULL AND p.txid != '' AND t.external_id = p.txid)
-              OR (p.payment_hash IS NOT NULL AND p.payment_hash != '' AND t.payment_hash = p.payment_hash)
-         )
         WHERE d.profile_id = ?
         LIMIT ?
         """,
@@ -653,13 +713,17 @@ def _suggest_document_transaction_links(conn, workspace, profile, now):
     created = 0
     links = []
     for row in rows:
+        matches = _matching_transactions_for_record(conn, profile["id"], row)
+        if len(matches) != 1:
+            continue
+        tx = matches[0]
         link = _upsert_link(
             conn,
             workspace,
             profile,
             btcpay_record_id=row["btcpay_record_id"],
             document_id=row["document_id"],
-            transaction_id=row["transaction_id"],
+            transaction_id=tx["id"],
             link_type="btcpay_payment_transaction",
             state="suggested",
             confidence="strong",
@@ -677,25 +741,63 @@ def _suggest_document_transaction_links(conn, workspace, profile, now):
 
 
 def _upsert_link(conn, workspace, profile, **values):
-    existing = conn.execute(
-        """
-        SELECT id FROM commercial_links
-        WHERE profile_id = ?
-          AND COALESCE(btcpay_record_id, '') = COALESCE(?, '')
-          AND COALESCE(document_id, '') = COALESCE(?, '')
-          AND COALESCE(transaction_id, '') = COALESCE(?, '')
-          AND link_type = ?
-          AND state != 'rejected'
-        """,
-        (
-            profile["id"],
-            values.get("btcpay_record_id"),
-            values.get("document_id"),
-            values.get("transaction_id"),
-            values["link_type"],
-        ),
-    ).fetchone()
+    if values["link_type"] == "btcpay_payment_transaction":
+        existing = conn.execute(
+            """
+            SELECT id, document_id FROM commercial_links
+            WHERE profile_id = ?
+              AND COALESCE(btcpay_record_id, '') = COALESCE(?, '')
+              AND COALESCE(transaction_id, '') = COALESCE(?, '')
+              AND link_type = ?
+              AND state != 'rejected'
+            """,
+            (
+                profile["id"],
+                values.get("btcpay_record_id"),
+                values.get("transaction_id"),
+                values["link_type"],
+            ),
+        ).fetchone()
+    else:
+        existing = conn.execute(
+            """
+            SELECT id, document_id FROM commercial_links
+            WHERE profile_id = ?
+              AND COALESCE(btcpay_record_id, '') = COALESCE(?, '')
+              AND COALESCE(document_id, '') = COALESCE(?, '')
+              AND COALESCE(transaction_id, '') = COALESCE(?, '')
+              AND link_type = ?
+              AND state != 'rejected'
+            """,
+            (
+                profile["id"],
+                values.get("btcpay_record_id"),
+                values.get("document_id"),
+                values.get("transaction_id"),
+                values["link_type"],
+            ),
+        ).fetchone()
     if existing:
+        if (
+            values["link_type"] == "btcpay_payment_transaction"
+            and values.get("document_id")
+            and not existing["document_id"]
+        ):
+            conn.execute(
+                """
+                UPDATE commercial_links
+                SET document_id = ?, allocation_fiat_exact = COALESCE(?, allocation_fiat_exact),
+                    method = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    values.get("document_id"),
+                    values.get("allocation_fiat_exact"),
+                    values["method"],
+                    values["now"],
+                    existing["id"],
+                ),
+            )
         return {"created": False, "link": get_link(conn, profile["id"], existing["id"])}
     link_id = str(uuid.uuid4())
     conn.execute(
@@ -773,6 +875,16 @@ def get_link(conn, profile_id, link_ref):
     return _link_payload(row)
 
 
+def _get_link_row(conn, profile_id, link_ref):
+    row = conn.execute(
+        "SELECT * FROM commercial_links WHERE profile_id = ? AND id = ?",
+        (profile_id, link_ref),
+    ).fetchone()
+    if not row:
+        raise AppError(f"Commercial link '{link_ref}' not found", code="not_found")
+    return row
+
+
 def review_link(
     conn,
     workspace_ref,
@@ -786,6 +898,7 @@ def review_link(
     notes=None,
 ):
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    link_before = _get_link_row(conn, profile["id"], link_ref)
     state = _normalize_choice(state, LINK_STATES, label="link state")
     reconciliation = _normalize_choice(
         reconciliation_state,
@@ -798,40 +911,200 @@ def review_link(
         commercial = _normalize_choice(commercial_kind, COMMERCIAL_KINDS, label="commercial kind")
         if commercial == "none":
             commercial = None
+    else:
+        commercial = link_before["commercial_kind"]
     now = _now()
-    cursor = conn.execute(
+    applied = False
+    restored = False
+    apply_snapshot_json = link_before["applied_transaction_snapshot_json"]
+    reviewed_snapshot_json = link_before["reviewed_record_snapshot_json"]
+    reviewed_snapshot_sha256 = link_before["reviewed_record_snapshot_sha256"]
+    if link_before["state"] == "reviewed" and state != "reviewed" and link_before["transaction_id"]:
+        restored = _restore_reviewed_link_transaction(conn, profile, link_before)
+    if state == "reviewed":
+        reviewed_snapshot_json, reviewed_snapshot_sha256 = _reviewed_record_snapshot_for_link(
+            conn, link_before
+        )
+        if link_before["transaction_id"]:
+            apply_result = _apply_reviewed_link_to_transaction(
+                conn, profile, link_before, commercial
+            )
+            applied = apply_result["applied"]
+            apply_snapshot_json = apply_result["snapshot_json"]
+    reviewed_at = now if state == "reviewed" else link_before["reviewed_at"]
+    conn.execute(
         """
         UPDATE commercial_links
-        SET state = ?, reconciliation_state = ?, commercial_kind = COALESCE(?, commercial_kind),
+        SET state = ?, reconciliation_state = ?, commercial_kind = ?,
+            applied_transaction_snapshot_json = ?,
+            reviewed_record_snapshot_json = ?,
+            reviewed_record_snapshot_sha256 = ?,
             notes = COALESCE(?, notes), reviewed_at = ?, updated_at = ?
         WHERE profile_id = ? AND id = ?
         """,
-        (state, reconciliation, commercial, notes, now, now, profile["id"], link_ref),
+        (
+            state,
+            reconciliation,
+            commercial,
+            apply_snapshot_json,
+            reviewed_snapshot_json,
+            reviewed_snapshot_sha256,
+            notes,
+            reviewed_at,
+            now,
+            profile["id"],
+            link_ref,
+        ),
     )
-    if cursor.rowcount == 0:
-        raise AppError(f"Commercial link '{link_ref}' not found", code="not_found")
-    link = get_link(conn, profile["id"], link_ref)
-    applied = False
-    if state == "reviewed" and link.get("transaction_id"):
-        applied = _apply_reviewed_link_to_transaction(conn, profile, link, commercial)
-        if applied:
-            hooks.invalidate_journals(conn, profile["id"])
+    if applied or restored:
+        hooks.invalidate_journals(conn, profile["id"])
     conn.commit()
     link = get_link(conn, profile["id"], link_ref)
     link["applied_to_transaction"] = applied
+    link["restored_transaction"] = restored
     return link
+
+
+def _reviewed_record_snapshot_for_link(conn, link):
+    if not link["btcpay_record_id"]:
+        return link["reviewed_record_snapshot_json"], link["reviewed_record_snapshot_sha256"]
+    record = conn.execute(
+        "SELECT raw_json FROM btcpay_provenance_records WHERE id = ?",
+        (link["btcpay_record_id"],),
+    ).fetchone()
+    if not record:
+        return None, None
+    raw_json = record["raw_json"] or "{}"
+    return raw_json, hashlib.sha256(raw_json.encode("utf-8")).hexdigest()
+
+
+def _transaction_snapshot(row):
+    return _json({column: row[column] for column in TRANSACTION_APPLY_COLUMNS})
+
+
+def _restore_reviewed_link_transaction(conn, profile, link):
+    snapshot_json = link["applied_transaction_snapshot_json"]
+    if not snapshot_json:
+        raise AppError(
+            f"Commercial link '{link['id']}' cannot be reverted because it has no transaction snapshot",
+            code="validation",
+        )
+    tx = conn.execute(
+        "SELECT commercial_applied_link_id FROM transactions WHERE profile_id = ? AND id = ?",
+        (profile["id"], link["transaction_id"]),
+    ).fetchone()
+    if not tx or tx["commercial_applied_link_id"] != link["id"]:
+        return False
+    snapshot = json.loads(snapshot_json)
+    updates = {column: snapshot.get(column) for column in TRANSACTION_APPLY_COLUMNS}
+    assignments = ", ".join(f"{column} = ?" for column in updates)
+    conn.execute(
+        f"UPDATE transactions SET {assignments} WHERE profile_id = ? AND id = ?",
+        (*updates.values(), profile["id"], link["transaction_id"]),
+    )
+    return True
 
 
 def _apply_reviewed_link_to_transaction(conn, profile, link, commercial_kind):
     record = None
-    if link.get("btcpay_record_id"):
+    if link["btcpay_record_id"]:
         record = conn.execute(
             "SELECT * FROM btcpay_provenance_records WHERE id = ?",
             (link["btcpay_record_id"],),
         ).fetchone()
     if not record:
-        return False
+        return {"applied": False, "snapshot_json": link["applied_transaction_snapshot_json"]}
+    tx = conn.execute(
+        f"""
+        SELECT id, direction, asset, amount, {', '.join(TRANSACTION_APPLY_COLUMNS)}
+        FROM transactions
+        WHERE profile_id = ? AND id = ?
+        """,
+        (profile["id"], link["transaction_id"]),
+    ).fetchone()
+    if not tx:
+        raise AppError(
+            f"Transaction '{link['transaction_id']}' not found for commercial link '{link['id']}'",
+            code="not_found",
+        )
+    owner = tx["commercial_applied_link_id"]
+    if owner and owner != link["id"]:
+        raise AppError(
+            "Transaction already has reviewed BTCPay pricing from another commercial link",
+            code="conflict",
+            hint="Reject or revert the existing reviewed link before reviewing another one.",
+            details={"transaction_id": tx["id"], "applied_link_id": owner},
+        )
+    existing_reviewed = conn.execute(
+        """
+        SELECT id FROM commercial_links
+        WHERE profile_id = ?
+          AND btcpay_record_id = ?
+          AND link_type = 'btcpay_payment_transaction'
+          AND state = 'reviewed'
+          AND id != ?
+        LIMIT 1
+        """,
+        (profile["id"], record["id"], link["id"]),
+    ).fetchone()
+    if existing_reviewed:
+        raise AppError(
+            "BTCPay payment is already reviewed against another transaction",
+            code="conflict",
+            hint="Reject the existing reviewed link before reviewing this payment again.",
+            details={"btcpay_record_id": record["id"], "reviewed_link_id": existing_reviewed["id"]},
+        )
+    if record["record_type"] == "payment":
+        matches = _matching_transactions_for_record(conn, profile["id"], record)
+        if len(matches) != 1 or matches[0]["id"] != tx["id"]:
+            raise AppError(
+                "BTCPay payment matches multiple wallet transactions",
+                code="ambiguous",
+                hint="Resolve the duplicate txid/payment-hash rows before reviewing this provenance link.",
+                details={"btcpay_record_id": record["id"], "matches": len(matches)},
+            )
+    if record["asset"] and record["asset"] != tx["asset"]:
+        raise AppError(
+            "BTCPay payment asset does not match the target transaction asset",
+            code="validation",
+            details={"payment_asset": record["asset"], "transaction_asset": tx["asset"]},
+        )
+    if record["fiat_currency"] and tx["fiat_currency"] and record["fiat_currency"] != tx["fiat_currency"]:
+        raise AppError(
+            "BTCPay invoice currency does not match the target transaction currency",
+            code="validation",
+            details={
+                "payment_currency": record["fiat_currency"],
+                "transaction_currency": tx["fiat_currency"],
+            },
+        )
+    if commercial_kind == "income" and tx["direction"] != "inbound":
+        raise AppError("Commercial income can only be applied to inbound transactions", code="validation")
+    if commercial_kind == "expense" and tx["direction"] != "outbound":
+        raise AppError("Commercial expense can only be applied to outbound transactions", code="validation")
+    pair = conn.execute(
+        """
+        SELECT id FROM transaction_pairs
+        WHERE profile_id = ?
+          AND deleted_at IS NULL
+          AND (out_transaction_id = ? OR in_transaction_id = ?)
+        LIMIT 1
+        """,
+        (profile["id"], tx["id"], tx["id"]),
+    ).fetchone()
+    if pair:
+        raise AppError(
+            "Commercial review cannot overwrite a transaction that is part of an active transfer pair",
+            code="validation",
+            hint="Unpair the transfer first or review the merchant-side transaction instead.",
+            details={"transaction_id": tx["id"], "pair_id": pair["id"]},
+        )
     updates: dict[str, Any] = {}
+    snapshot_json = (
+        link["applied_transaction_snapshot_json"]
+        if tx["commercial_applied_link_id"] == link["id"] and link["applied_transaction_snapshot_json"]
+        else _transaction_snapshot(tx)
+    )
     source_kind = pricing.SOURCE_BTCPAY_PAYMENT if record["record_type"] == "payment" else pricing.SOURCE_BTCPAY_INVOICE
     amount = abs(int(record["amount"] or 0))
     fiat_value = record["fiat_value_exact"]
@@ -853,16 +1126,19 @@ def _apply_reviewed_link_to_transaction(conn, profile, link, commercial_kind):
             external_ref=record["stable_key"],
         )
         updates.update(payload)
+        if record["fiat_currency"]:
+            updates["fiat_currency"] = record["fiat_currency"]
     if commercial_kind and commercial_kind != "transfer":
         updates["kind"] = commercial_kind
     if not updates:
-        return False
+        return {"applied": False, "snapshot_json": snapshot_json}
+    updates["commercial_applied_link_id"] = link["id"]
     assignments = ", ".join(f"{column} = ?" for column in updates)
     conn.execute(
         f"UPDATE transactions SET {assignments} WHERE profile_id = ? AND id = ?",
         (*updates.values(), profile["id"], link["transaction_id"]),
     )
-    return True
+    return {"applied": True, "snapshot_json": snapshot_json}
 
 
 def build_reviewed_subledger_rows(conn, workspace_ref, profile_ref, hooks: CommercialHooks):
@@ -986,6 +1262,8 @@ def _link_payload(row):
         "allocation_fiat_exact": row["allocation_fiat_exact"] or "",
         "reconciliation_state": row["reconciliation_state"],
         "commercial_kind": row["commercial_kind"] or "",
+        "reviewed_record_snapshot_sha256": row["reviewed_record_snapshot_sha256"] or "",
+        "has_applied_transaction_snapshot": bool(row["applied_transaction_snapshot_json"]),
         "notes": row["notes"] or "",
         "reviewed_at": row["reviewed_at"] or "",
         "created_at": row["created_at"],

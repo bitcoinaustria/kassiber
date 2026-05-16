@@ -5,7 +5,8 @@ import unittest
 from pathlib import Path
 
 from kassiber.core import commercial
-from kassiber.db import open_db
+from kassiber.db import _migrate_nullable_attachment_transactions, open_db
+from kassiber.errors import AppError
 from kassiber.msat import btc_to_msat
 from kassiber.sync_btcpay import fetch_btcpay_invoice_provenance
 from kassiber.time_utils import now_iso
@@ -102,6 +103,65 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
     def tearDown(self):
         self.conn.close()
         self.tmp.cleanup()
+
+    def _upsert_invoice_payment(self, *, raw_payment=None, asset="BTC"):
+        workspace, profile = _hooks().resolve_scope(self.conn)
+        commercial.upsert_btcpay_provenance(
+            self.conn,
+            workspace,
+            profile,
+            backend_name="btcpay-prod",
+            invoices=[
+                {
+                    "store_id": "store-1",
+                    "invoice_id": "inv-1",
+                    "order_id": "order-1",
+                    "status": "Settled",
+                    "created_at": "2026-01-01T11:59:00Z",
+                    "currency": "EUR",
+                    "amount": "500.00",
+                    "invoice": {"id": "inv-1"},
+                    "payments": [
+                        {
+                            "payment_id": "pay-1",
+                            "payment_method_id": f"{asset}-CHAIN",
+                            "status": "Settled",
+                            "received_at": "2026-01-01T12:00:00Z",
+                            "amount": "0.01000000",
+                            "rate": "50000.00",
+                            "txid": "a" * 64,
+                            "invoice_currency": "EUR",
+                            "invoice_amount": "500.00",
+                            "payment": raw_payment or {"id": "pay-1"},
+                        }
+                    ],
+                }
+            ],
+        )
+
+    def _create_matching_document(self):
+        return commercial.create_document(
+            self.conn,
+            None,
+            None,
+            _hooks(),
+            document_type="invoice",
+            label="Invoice 2026-001",
+            external_ref="inv-1",
+            fiat_currency="EUR",
+            fiat_value="500.00",
+        )
+
+    def _suggested_transaction_link_id(self):
+        suggested = commercial.suggest_links(self.conn, None, None, _hooks())
+        links = [
+            row
+            for row in suggested["suggestions"]
+            if row["link_type"] == "btcpay_payment_transaction"
+            and row["transaction_id"] == "tx"
+        ]
+        self.assertEqual(len(links), 1)
+        return links[0]["id"]
 
     def test_fetch_invoice_provenance_normalizes_invoice_and_payment(self):
         opener = _Opener(
@@ -223,6 +283,315 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
         subledger = commercial.build_reviewed_subledger_rows(self.conn, None, None, _hooks())
         self.assertEqual(subledger[0]["document_label"], "Invoice 2026-001")
         self.assertEqual(subledger[0]["invoice_id"], "inv-1")
+
+    def test_rejecting_reviewed_link_restores_transaction_snapshot(self):
+        self._upsert_invoice_payment()
+        self._create_matching_document()
+        link_id = self._suggested_transaction_link_id()
+
+        commercial.review_link(
+            self.conn,
+            None,
+            None,
+            link_id,
+            _hooks(),
+            state="reviewed",
+            commercial_kind="income",
+        )
+        reverted = commercial.review_link(
+            self.conn,
+            None,
+            None,
+            link_id,
+            _hooks(),
+            state="rejected",
+        )
+
+        self.assertTrue(reverted["restored_transaction"])
+        tx = self.conn.execute(
+            """
+            SELECT kind, pricing_source_kind, fiat_value_exact, commercial_applied_link_id
+            FROM transactions WHERE id = 'tx'
+            """
+        ).fetchone()
+        self.assertEqual(tx["kind"], "deposit")
+        self.assertIsNone(tx["pricing_source_kind"])
+        self.assertIsNone(tx["fiat_value_exact"])
+        self.assertIsNone(tx["commercial_applied_link_id"])
+        profile_row = self.conn.execute("SELECT journal_input_version FROM profiles WHERE id = 'prof'").fetchone()
+        self.assertEqual(profile_row["journal_input_version"], 2)
+
+    def test_review_freezes_btcpay_raw_snapshot_across_resync(self):
+        self._upsert_invoice_payment(raw_payment={"id": "pay-1", "rate": "50000.00"})
+        link_id = self._suggested_transaction_link_id()
+
+        reviewed = commercial.review_link(
+            self.conn,
+            None,
+            None,
+            link_id,
+            _hooks(),
+            state="reviewed",
+            commercial_kind="income",
+        )
+        frozen_hash = reviewed["reviewed_record_snapshot_sha256"]
+        self._upsert_invoice_payment(raw_payment={"id": "pay-1", "rate": "51000.00"})
+
+        link = commercial.list_links(self.conn, None, None, _hooks(), state="reviewed")[0]
+        self.assertEqual(link["reviewed_record_snapshot_sha256"], frozen_hash)
+        stored = self.conn.execute(
+            "SELECT reviewed_record_snapshot_json FROM commercial_links WHERE id = ?",
+            (link_id,),
+        ).fetchone()
+        self.assertIn("50000.00", stored["reviewed_record_snapshot_json"])
+
+    def test_ambiguous_payment_match_is_not_suggested_or_reviewable(self):
+        now = now_iso()
+        self.conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, direction, asset, amount, fee, fiat_currency,
+                kind, raw_json, created_at
+            ) VALUES(
+                'tx-duplicate', 'ws', 'prof', 'wallet',
+                'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+                'fp-commercial-duplicate', '2026-01-01T12:00:01Z', 'inbound',
+                'BTC', ?, 0, 'EUR', 'deposit', '{}', ?
+            )
+            """,
+            (btcpay_to_msat("0.01000000"), now),
+        )
+        self.conn.commit()
+        self._upsert_invoice_payment()
+
+        suggested = commercial.suggest_links(self.conn, None, None, _hooks())
+        self.assertEqual(
+            [row for row in suggested["suggestions"] if row["link_type"] == "btcpay_payment_transaction"],
+            [],
+        )
+        workspace, profile = _hooks().resolve_scope(self.conn)
+        record = self.conn.execute(
+            "SELECT id FROM btcpay_provenance_records WHERE record_type = 'payment'"
+        ).fetchone()
+        link = commercial._upsert_link(
+            self.conn,
+            workspace,
+            profile,
+            btcpay_record_id=record["id"],
+            document_id=None,
+            transaction_id="tx",
+            link_type="btcpay_payment_transaction",
+            state="suggested",
+            confidence="weak",
+            method="test",
+            allocation_amount=btcpay_to_msat("0.01000000"),
+            allocation_fiat_exact="500.00",
+            reconciliation_state="unreviewed",
+            commercial_kind=None,
+            notes=None,
+            now=now,
+        )["link"]
+        with self.assertRaises(AppError) as raised:
+            commercial.review_link(
+                self.conn,
+                None,
+                None,
+                link["id"],
+                _hooks(),
+                state="reviewed",
+                commercial_kind="income",
+            )
+        self.assertEqual(raised.exception.code, "ambiguous")
+
+    def test_review_rejects_asset_direction_currency_and_transfer_pair_mismatch(self):
+        self._upsert_invoice_payment(asset="LBTC")
+        link_id = self._suggested_transaction_link_id()
+        with self.assertRaises(AppError):
+            commercial.review_link(
+                self.conn,
+                None,
+                None,
+                link_id,
+                _hooks(),
+                state="reviewed",
+                commercial_kind="income",
+            )
+
+        self.conn.execute("UPDATE btcpay_provenance_records SET asset = 'BTC', fiat_currency = 'USD'")
+        with self.assertRaises(AppError):
+            commercial.review_link(
+                self.conn,
+                None,
+                None,
+                link_id,
+                _hooks(),
+                state="reviewed",
+                commercial_kind="income",
+            )
+
+        self.conn.execute("UPDATE btcpay_provenance_records SET fiat_currency = 'EUR'")
+        with self.assertRaises(AppError):
+            commercial.review_link(
+                self.conn,
+                None,
+                None,
+                link_id,
+                _hooks(),
+                state="reviewed",
+                commercial_kind="expense",
+            )
+
+        now = now_iso()
+        self.conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, direction, asset, amount, fee, fiat_currency,
+                kind, raw_json, created_at
+            ) VALUES(
+                'tx-out', 'ws', 'prof', 'wallet', 'out-ref', 'fp-out',
+                '2026-01-01T12:00:02Z', 'outbound',
+                'BTC', ?, 0, 'EUR', 'withdrawal', '{}', ?
+            )
+            """,
+            (-btcpay_to_msat("0.01000000"), now),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO transaction_pairs(
+                id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
+                kind, policy, created_at
+            ) VALUES('pair-1', 'ws', 'prof', 'tx-out', 'tx', 'manual', 'carrying-value', ?)
+            """,
+            (now,),
+        )
+        self.conn.commit()
+        with self.assertRaises(AppError):
+            commercial.review_link(
+                self.conn,
+                None,
+                None,
+                link_id,
+                _hooks(),
+                state="reviewed",
+                commercial_kind="income",
+            )
+
+    def test_payment_transaction_link_is_not_duplicated_when_document_later_matches(self):
+        self._upsert_invoice_payment()
+        first = commercial.suggest_links(self.conn, None, None, _hooks())
+        self.assertEqual(
+            len([row for row in first["suggestions"] if row["link_type"] == "btcpay_payment_transaction"]),
+            1,
+        )
+        document = self._create_matching_document()
+        second = commercial.suggest_links(self.conn, None, None, _hooks())
+
+        links = commercial.list_links(self.conn, None, None, _hooks())
+        payment_links = [row for row in links if row["link_type"] == "btcpay_payment_transaction"]
+        self.assertEqual(len(payment_links), 1)
+        self.assertEqual(payment_links[0]["document_id"], document["id"])
+        self.assertEqual(
+            len([row for row in second["suggestions"] if row["link_type"] == "btcpay_payment_transaction"]),
+            1,
+        )
+
+    def test_document_reference_resolution_rejects_ambiguous_labels_and_duplicate_refs(self):
+        commercial.create_document(
+            self.conn,
+            None,
+            None,
+            _hooks(),
+            document_type="invoice",
+            label="Invoice duplicate",
+        )
+        commercial.create_document(
+            self.conn,
+            None,
+            None,
+            _hooks(),
+            document_type="receipt",
+            label="Invoice duplicate",
+        )
+
+        with self.assertRaises(AppError) as raised:
+            commercial.attach_document_evidence(
+                self.conn,
+                str(self.data_root),
+                None,
+                None,
+                "Invoice duplicate",
+                _hooks(),
+                url="https://example.test/invoice",
+            )
+        self.assertEqual(raised.exception.code, "ambiguous")
+
+        commercial.create_document(
+            self.conn,
+            None,
+            None,
+            _hooks(),
+            document_type="invoice",
+            label="Invoice unique",
+            external_ref="unique-ref",
+        )
+        with self.assertRaises(AppError) as duplicate_ref:
+            commercial.create_document(
+                self.conn,
+                None,
+                None,
+                _hooks(),
+                document_type="invoice",
+                label="Invoice unique 2",
+                external_ref="unique-ref",
+            )
+        self.assertEqual(duplicate_ref.exception.code, "conflict")
+
+    def test_nullable_attachment_migration_recovers_stranded_legacy_table(self):
+        document = self._create_matching_document()
+        result = commercial.attach_document_evidence(
+            self.conn,
+            str(self.data_root),
+            None,
+            None,
+            document["id"],
+            _hooks(),
+            url="https://example.test/invoice",
+        )
+        self.conn.execute("ALTER TABLE attachments RENAME TO attachments_legacy_notnull_tx")
+        self.conn.execute(
+            """
+            CREATE TABLE attachments (
+                id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                transaction_id TEXT REFERENCES transactions(id) ON DELETE CASCADE,
+                attachment_type TEXT NOT NULL,
+                label TEXT NOT NULL,
+                original_filename TEXT,
+                stored_relpath TEXT,
+                source_url TEXT,
+                media_type TEXT,
+                size_bytes INTEGER,
+                sha256 TEXT,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        self.conn.commit()
+
+        _migrate_nullable_attachment_transactions(self.conn)
+
+        attachment = self.conn.execute(
+            "SELECT source_url FROM attachments WHERE id = ?",
+            (result["attachment_id"],),
+        ).fetchone()
+        self.assertEqual(attachment["source_url"], "https://example.test/invoice")
+        legacy = self.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='attachments_legacy_notnull_tx'"
+        ).fetchone()
+        self.assertIsNone(legacy)
 
     def test_external_document_evidence_reuses_attachment_store_without_transaction(self):
         document = commercial.create_document(
