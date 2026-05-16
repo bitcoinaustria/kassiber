@@ -1608,6 +1608,182 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(code, 0, stderr)
             self.assertEqual(stderr, "")
 
+    def test_ui_profiles_reset_data_preserves_connections(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-reset-book-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(data_root, tmp)
+            _run_cli(
+                data_root,
+                "backends",
+                "create",
+                "local-esplora",
+                "--kind",
+                "esplora",
+                "--url",
+                "https://example.invalid/api",
+                "--chain",
+                "bitcoin",
+                "--network",
+                "mainnet",
+            )
+            conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+            try:
+                config = {
+                    "address": "bc1qtestaddress0000000000000000000000000000000",
+                    "backend": "local-esplora",
+                    "chain": "bitcoin",
+                    "network": "mainnet",
+                }
+                conn.execute(
+                    "UPDATE wallets SET config_json = ? WHERE label = 'Cold'",
+                    (json.dumps(config, sort_keys=True),),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+            _run_cli(data_root, "journals", "process")
+
+            proc = _start_daemon(data_root)
+            try:
+                ready = _read_payload_timeout(proc)
+                self.assertEqual(ready["kind"], "daemon.ready")
+                self.assertIn(
+                    "ui.profiles.reset_data",
+                    ready["data"]["supported_kinds"],
+                )
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "reset-book-wrong-name",
+                        "kind": "ui.profiles.reset_data",
+                        "args": {"confirm": "RESET", "confirm_profile": "Wrong"},
+                    },
+                )
+                rejected = _read_payload_timeout(proc)
+                self.assertEqual(rejected["kind"], "error")
+                self.assertEqual(rejected["error"]["code"], "validation")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "reset-book-missing-auth",
+                        "kind": "ui.profiles.reset_data",
+                        "args": {"confirm": "RESET", "confirm_profile": "Main"},
+                    },
+                )
+                missing_ack = _read_payload_timeout(proc)
+                self.assertEqual(missing_ack["kind"], "error")
+                self.assertEqual(missing_ack["error"]["code"], "validation")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "reset-book-1",
+                        "kind": "ui.profiles.reset_data",
+                        "args": {
+                            "confirm": "RESET",
+                            "confirm_profile": "Main",
+                            "clear_shared_rates": True,
+                            "auth_response": {
+                                "plaintext_delete_ack": "DELETE LOCAL DATA",
+                            },
+                        },
+                    },
+                )
+                reset = _read_payload_timeout(proc)
+                self.assertEqual(reset["kind"], "ui.profiles.reset_data")
+                self.assertTrue(reset["data"]["reset"])
+                self.assertEqual(reset["data"]["profile"]["label"], "Main")
+                self.assertEqual(reset["data"]["removed"]["transactions"], 1)
+                self.assertGreaterEqual(
+                    reset["data"]["removed"]["journal_entries"],
+                    1,
+                )
+                self.assertEqual(reset["data"]["removed"]["rates_cache"], 1)
+                self.assertEqual(reset["data"]["rates_scope"], "global")
+                self.assertTrue(reset["data"]["shared_rates_cleared"])
+                self.assertEqual(reset["data"]["preserved"]["wallets"], 1)
+                self.assertGreaterEqual(reset["data"]["preserved"]["backends"], 1)
+
+                _write_payload(
+                    proc,
+                    {"request_id": "status-after-reset", "kind": "status"},
+                )
+                status = _read_payload_timeout(proc)
+                self.assertEqual(status["kind"], "status")
+                self.assertEqual(status["data"]["current_workspace"], "Demo")
+                self.assertEqual(status["data"]["current_profile"], "Main")
+                self.assertEqual(status["data"]["workspaces"], 1)
+                self.assertEqual(status["data"]["profiles"], 1)
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "wallets-after-reset",
+                        "kind": "ui.wallets.list",
+                    },
+                )
+                wallets = _read_payload_timeout(proc)
+                self.assertEqual(wallets["kind"], "ui.wallets.list")
+                wallet_labels = [
+                    row["label"] for row in wallets["data"]["wallets"]
+                ]
+                self.assertEqual(wallet_labels, ["Cold"])
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "backends-after-reset",
+                        "kind": "ui.backends.list",
+                    },
+                )
+                backends = _read_payload_timeout(proc)
+                self.assertEqual(backends["kind"], "ui.backends.list")
+                backend_names = [
+                    row["name"] for row in backends["data"]["backends"]
+                ]
+                self.assertEqual(backend_names, ["local-esplora"])
+
+                conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+                try:
+                    for table in (
+                        "transactions",
+                        "journal_entries",
+                        "journal_quarantines",
+                        "transaction_pairs",
+                        "bip329_labels",
+                        "tags",
+                        "rates_cache",
+                        "rates_checked_minutes",
+                    ):
+                        count = conn.execute(
+                            f"SELECT COUNT(*) FROM {table}"
+                        ).fetchone()[0]
+                        self.assertEqual(count, 0, table)
+                    self.assertEqual(
+                        conn.execute("SELECT COUNT(*) FROM wallets").fetchone()[0],
+                        1,
+                    )
+                    self.assertEqual(
+                        conn.execute("SELECT COUNT(*) FROM backends").fetchone()[0],
+                        reset["data"]["preserved"]["backends"],
+                    )
+                finally:
+                    conn.close()
+
+                _write_payload(
+                    proc,
+                    {"request_id": "shutdown-1", "kind": "daemon.shutdown"},
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+
     def test_ui_wallet_change_and_delete_require_local_confirmation(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-wallet-") as tmp:
             data_root = Path(tmp) / "data"
