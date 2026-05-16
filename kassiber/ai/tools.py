@@ -66,6 +66,7 @@ SKILL_REFERENCE_NAMES = (
     "onboarding",
     "reports",
     "secrets-and-backup",
+    "swap-matching",
     "troubleshooting",
     "verification",
     "wallets-backends",
@@ -718,6 +719,49 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         summary_template="Read swap candidates",
     ),
     ToolEntry(
+        name="ui.transfers.review_context",
+        description=(
+            "Read a deterministic swap-review packet for the active profile: "
+            "candidate legs, confidence reasons, fee assessment, conflict "
+            "status, metadata clues, journal impact if left unpaired, active "
+            "pairs, rules, and saved review views. No DB writes."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "description": "Maximum candidate review items to return.",
+                },
+                "confidence": {
+                    "type": "string",
+                    "enum": ["exact", "strong"],
+                    "description": "Optional filter pinning to one confidence band.",
+                },
+                "method": {
+                    "type": "string",
+                    "enum": ["payment_hash", "heuristic"],
+                    "description": "Optional filter pinning to one match method.",
+                },
+                "asset_pair": {
+                    "type": "string",
+                    "description": "OUT-IN asset shape, e.g. 'LBTC-BTC'.",
+                },
+                "route_pair": {
+                    "type": "string",
+                    "description": "Rail-aware OUT-IN route, e.g. 'LNBTC-LBTC'.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_transfers_review_context",
+        daemon_kind="ui.transfers.review_context",
+        summary_template="Read swap review context",
+    ),
+    ToolEntry(
         name="ui.transfers.list",
         description=(
             "Read active swap pairs (soft-deleted excluded) with their "
@@ -1054,11 +1098,11 @@ Before answering workspace-specific questions, use safe read tools such as
 ui.workspace.health, ui.next_actions, ui.wallets.list, ui.backends.list,
 ui.transactions.list, ui.transactions.extremes, ui.transactions.search,
 ui.journals.quarantine, ui.journals.events.list,
-ui.journals.transfers.list, ui.rates.summary, ui.rates.coverage,
-ui.report.blockers, ui.audit.changes_since_last_answer,
+ui.journals.transfers.list, ui.transfers.review_context, ui.rates.summary,
+ui.rates.coverage, ui.report.blockers, ui.audit.changes_since_last_answer,
 ui.maintenance.settings, ui.reports.summary, ui.reports.balance_sheet,
-ui.reports.portfolio_summary, ui.reports.tax_summary,
-ui.reports.balance_history, and report snapshots. Use
+ui.reports.portfolio_summary, ui.reports.tax_summary, ui.reports.balance_history,
+and report snapshots. Use
 ui.reports.summary for exact all-time inflow/outflow rollups,
 including reviewed transfer_pairs that explain swaps or pegs inside raw flows,
 ui.reports.balance_sheet for current bucket holdings,
@@ -1069,12 +1113,9 @@ Use ui.report.blockers before saying reports are ready, ui.rates.coverage for
 missing-price questions, and ui.audit.changes_since_last_answer when checking
 whether a previous answer is still current. Do not invent calculations when
 Kassiber can read program-derived output.
-For swap/peg/layer-transition questions, first read ui.transfers.suggest and
-ui.transfers.list for candidate and reviewed-pair evidence. Source pair kind
-and policy from ui.journals.transfers.list or report summary transfer_pairs,
-and source neutral_swap explanations from journal snapshot/event pair fields.
-If those fields are absent, say the tool surface is missing the evidence
-instead of inferring.
+For swap/peg/layer-transition questions, read ui.transfers.review_context first;
+use ui.transfers.suggest/list for focused candidate or pair follow-ups. Read
+swap-matching when review policy, confidence bands, or pairing workflow matters.
 
 Stale local journals are maintenance, not a question for the user; read/report
 tools may refresh them before answering. Watch-only source refresh contacts
@@ -1085,7 +1126,8 @@ Read command-templates for exact CLI command shapes and common fast paths.
 Read onboarding for first-run setup, data roots, and context selection.
 Read wallets-backends for wallet kinds, backend selection, source refresh, and
 imports. Read journal-processing for processing order, stale journals,
-quarantines, and transfer/swap pairing. Read metadata for notes, tags,
+quarantines, and transfer/swap pairing. Read swap-matching for candidate review,
+conflicts, auto-pair rules, and saved review views. Read metadata for notes, tags,
 exclusions, BIP329 labels, and attachments. Read reports for summary,
 portfolio, capital gains, balance history, Austrian handoff, and exports.
 Read verification for quick state checks and smoke validation. Read

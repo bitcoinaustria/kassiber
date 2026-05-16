@@ -169,6 +169,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_maintenance_configure",
             "ui_maintenance_run",
             "ui_transfers_suggest",
+            "ui_transfers_review_context",
             "ui_transfers_list",
             "ui_transfers_rules_list",
             "ui_saved_views_list",
@@ -287,12 +288,17 @@ class ToolCatalogPromptTest(unittest.TestCase):
 
     def test_read_skill_reference_allowlist(self):
         self.assertIn("index", SKILL_REFERENCE_NAMES)
+        self.assertIn("swap-matching", SKILL_REFERENCE_NAMES)
         self.assertIn("wallets-backends", SKILL_REFERENCE_NAMES)
         index = read_skill_reference("index")
         self.assertEqual(index["name"], "index")
         self.assertIn("Kassiber In-App Skill Index", index["content"])
         self.assertIn("wallets-backends", index["content"])
+        self.assertIn("swap-matching", index["content"])
         self.assertNotIn("kassiber backends create my-esplora", index["content"])
+        swap_reference = read_skill_reference("swap-matching")
+        self.assertEqual(swap_reference["name"], "swap-matching")
+        self.assertIn("Swap matching", swap_reference["content"])
         reference = read_skill_reference("wallets-backends")
         self.assertEqual(reference["name"], "wallets-backends")
         self.assertIn("Wallets and Backends", reference["content"])

@@ -608,6 +608,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.journals.quarantine", ready["data"]["supported_kinds"])
             self.assertIn("ui.journals.transfers.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.journals.process", ready["data"]["supported_kinds"])
+            self.assertIn("ui.transfers.review_context", ready["data"]["supported_kinds"])
             self.assertIn("ui.profiles.snapshot", ready["data"]["supported_kinds"])
             self.assertIn("ui.profiles.create", ready["data"]["supported_kinds"])
             self.assertIn("ui.profiles.switch", ready["data"]["supported_kinds"])
@@ -3333,11 +3334,19 @@ class DaemonSmokeTest(unittest.TestCase):
             }
         )
         planned_names = [item.name for item in planned]
+        self.assertIn("read_skill_reference", planned_names)
+        self.assertIn("ui.transfers.review_context", planned_names)
         self.assertIn("ui.transfers.suggest", planned_names)
         self.assertIn("ui.transfers.list", planned_names)
         self.assertIn("ui.journals.transfers.list", planned_names)
         self.assertIn("ui.journals.snapshot", planned_names)
         self.assertIn("ui.reports.summary", planned_names)
+        skill_reads = [
+            item.arguments
+            for item in planned
+            if item.name == "read_skill_reference"
+        ]
+        self.assertIn({"name": "swap-matching"}, skill_reads)
 
         planned = _planned_auto_read_tools(
             {

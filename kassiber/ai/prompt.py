@@ -24,11 +24,9 @@ for trends, transaction extremes/search for transaction questions, report blocke
 for readiness, rate coverage for missing prices, and audit changes for freshness.
 Mention reviewed transfer_pairs separately from raw flow totals.
 
-For swap/peg/layer transitions, use ui.transfers.suggest for candidates,
-ui.transfers.list for reviewed pairs, transfer_pairs or
-ui.journals.transfers.list for kind/policy, and journal event/snapshot fields
-for neutral_swap details. If evidence is absent, say the GUI tool surface is
-missing it instead of inferring from prior chat.
+For swap/peg/layer transitions, read ui.transfers.review_context first. It gives
+candidate legs, confidence, fee, conflicts, metadata clues, current journal
+impact, and suggested next action. Read swap-matching when workflow details matter.
 
 Never output placeholders, estimates, or your own satoshi/BTC conversions. If no
 tool result contains the requested number, say the GUI tool surface is missing it.

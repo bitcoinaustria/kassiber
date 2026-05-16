@@ -282,7 +282,9 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   for debugging inaccurate small-model answers.
 - [x] Wire the in-app AI swap-review surface end to end: advertised
   `ui.transfers.*` and `ui.saved_views.*` tools now execute through the same
-  daemon dispatcher as the GUI, with writes still behind tool consent.
+  daemon dispatcher as the GUI, with writes still behind tool consent; the chat
+  can also read the swap-matching skill reference and the deterministic
+  `ui.transfers.review_context` packet for useful review guidance.
 - [x] Dev browser bridge for real local AI: Vite keeps a loopback-only Python
   daemon supervisor, demuxes JSONL by `request_id`, and streams `ai.chat`
   records to browser clients as NDJSON so Codex/browser tools can test local

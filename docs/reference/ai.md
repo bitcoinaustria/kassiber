@@ -230,7 +230,7 @@ Before the provider is called, Kassiber also runs a small deterministic
 read-only router for Kassiber questions. It looks for common accounting intents
 such as pending work, sync readiness, totals, inflow/outflow, balances, tax
 summaries, largest/smallest transactions, transaction search, quarantine,
-transfers, swap candidates, saved review filters, auto-pair rules, and pricing.
+transfers, swap-review context, saved review filters, auto-pair rules, and pricing.
 Matching read-only tool results are streamed to the UI and inserted into the
 model context as exact local data, so small local models can answer from program
 output instead of doing their own arithmetic. That auto-read context is sent as
@@ -332,6 +332,11 @@ surfaces:
 - `ui_transfers_suggest` maps to daemon kind `ui.transfers.suggest`; it returns
   swap/peg candidates with confidence, method, computed fee, and conflict-cluster
   context without writing review decisions
+- `ui_transfers_review_context` maps to daemon kind
+  `ui.transfers.review_context`; it returns a bounded deterministic swap-review
+  packet with candidate leg summaries, confidence reasons, fee assessment,
+  conflict status, metadata clues, current journal impact if left unpaired,
+  suggested next action, active pairs, rules, and saved swap-candidate views
 - `ui_transfers_list` maps to daemon kind `ui.transfers.list`; it returns active
   reviewed transfer/swap pairs
 - `ui_transfers_rules_list` maps to daemon kind `ui.transfers.rules.list`; it
@@ -352,7 +357,7 @@ returns a compact routing document derived from the Kassiber skill concepts and
 points the model to deeper allowlisted references. The deeper references are
 restricted to files under `skills/kassiber/references/`: `command-templates`,
 `journal-processing`, `metadata`, `onboarding`, `reports`,
-`secrets-and-backup`, `troubleshooting`, `verification`, and
+`secrets-and-backup`, `swap-matching`, `troubleshooting`, `verification`, and
 `wallets-backends`.
 
 Mutating provider tools currently include `ui_wallets_sync`, which maps to

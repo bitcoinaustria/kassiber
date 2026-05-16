@@ -159,6 +159,39 @@ class DaemonSwapMatchingTest(unittest.TestCase):
 
         self._with_daemon(call)
 
+    def test_015_ui_transfers_review_context_returns_review_packet(self):
+        def call(proc):
+            envelope = _request_response(
+                proc,
+                {
+                    "kind": "ui.transfers.review_context",
+                    "request_id": "req-review",
+                    "args": {
+                        "workspace": "Main",
+                        "profile": "Swap",
+                        "limit": 5,
+                    },
+                },
+            )
+            self.assertEqual(envelope["kind"], "ui.transfers.review_context")
+            data = envelope["data"]
+            self.assertGreaterEqual(data["summary"]["candidate_count"], 1)
+            self.assertGreaterEqual(data["summary"]["review_items"], 1)
+            item = data["review_items"][0]
+            self.assertEqual(item["candidate"]["default_policy"], "carrying-value")
+            self.assertEqual(item["fee"]["swap_fee_msat"], 500000)
+            self.assertEqual(item["fee"]["assessment"], "normal")
+            self.assertIn("confidence", item)
+            self.assertIn("report_impact_if_left_unpaired", item)
+            self.assertIn("suggested_action", item)
+            mention_keywords = {
+                mention["keyword"]
+                for mention in item["metadata_mentions"]
+            }
+            self.assertTrue({"swap", "boltz"} & mention_keywords)
+
+        self._with_daemon(call)
+
     def test_02_ui_transfers_bulk_pair_and_list(self):
         def call(proc):
             envelope = _request_response(

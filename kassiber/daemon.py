@@ -121,6 +121,10 @@ from .envelope import build_envelope, build_error_envelope, json_ready
 from .errors import AppError
 from .redaction import redact_secret_text, redact_secret_value
 from .util import str_or_none
+from .daemon_swap_review import (
+    SWAP_REVIEW_DEFAULT_LIMIT,
+    build_swap_review_context_payload,
+)
 from .secrets.credentials import migrate_dotenv_credentials
 from .secrets.migration import create_empty_encrypted_database, migrate_plaintext_to_encrypted
 from .secrets.passphrase import change_database_passphrase
@@ -208,6 +212,7 @@ SUPPORTED_KINDS = (
     "ui.journals.transfers.list",
     "ui.journals.process",
     "ui.transfers.suggest",
+    "ui.transfers.review_context",
     "ui.transfers.list",
     "ui.transfers.pair",
     "ui.transfers.unpair",
@@ -285,6 +290,7 @@ _AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES = {
     "ui.journals.snapshot",
     "ui.journals.quarantine",
     "ui.journals.transfers.list",
+    "ui.transfers.review_context",
     "ui.rates.coverage",
     "ui.report.blockers",
     "ui.audit.changes_since_last_answer",
@@ -296,6 +302,7 @@ _DIRECT_AUTO_JOURNAL_REFRESH_KINDS = {
     "ui.reports.portfolio_summary",
     "ui.reports.tax_summary",
     "ui.reports.balance_history",
+    "ui.transfers.review_context",
     "ui.report.blockers",
 }
 _SWAP_MATCHING_DAEMON_KIND_PREFIXES = ("ui.transfers.", "ui.saved_views.")
@@ -1134,6 +1141,8 @@ def _ui_swap_matching_payload_from_conn(
             route_pair=args.get("route_pair"),
             method=args.get("method"),
         )
+    if kind == "ui.transfers.review_context":
+        return build_swap_review_context_payload(conn, args)
     if kind == "ui.transfers.list":
         return {"pairs": list_transaction_pairs(conn, workspace, profile)}
     if kind == "ui.transfers.pair":
@@ -3354,6 +3363,7 @@ def _planned_auto_read_tools(validated: dict[str, Any]) -> list[AutoReadToolCall
         "balance",
         "backend",
         "blocker",
+        "boltz",
         "capital gain",
         "cost basis",
         "connection",
@@ -3370,6 +3380,9 @@ def _planned_auto_read_tools(validated: dict[str, Any]) -> list[AutoReadToolCall
         "journal",
         "label",
         "largest",
+        "lbtc",
+        "lightning",
+        "liquid",
         "maintenance",
         "merchant",
         "missing",
@@ -3378,6 +3391,7 @@ def _planned_auto_read_tools(validated: dict[str, Any]) -> list[AutoReadToolCall
         "pending",
         "pair",
         "peg",
+        "phoenix",
         "portfolio",
         "quarantine",
         "rate",
@@ -3385,6 +3399,7 @@ def _planned_auto_read_tools(validated: dict[str, Any]) -> list[AutoReadToolCall
         "stale",
         "summary",
         "swap",
+        "submarine",
         "sync",
         "tag",
         "tax",
@@ -3650,10 +3665,19 @@ def _planned_auto_read_tools(validated: dict[str, Any]) -> list[AutoReadToolCall
         "swap",
         "pair",
         "peg",
+        "boltz",
+        "liquid",
+        "lbtc",
+        "lightning",
+        "phoenix",
+        "aqua",
+        "submarine",
         "übertrag",
         "uebertrag",
         "tausch",
     ):
+        add("read_skill_reference", {"name": "swap-matching"})
+        add("ui.transfers.review_context", {"limit": SWAP_REVIEW_DEFAULT_LIMIT})
         add("ui.transfers.suggest")
         add("ui.transfers.list")
         add("ui.journals.transfers.list", {"limit": 10})
