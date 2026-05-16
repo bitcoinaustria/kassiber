@@ -448,6 +448,23 @@ def create_transaction_pair(
             f"Run `kassiber transfers unpair --pair-id {existing['id']}` first.",
             code="conflict",
         )
+    existing_payout = conn.execute(
+        """
+        SELECT id FROM direct_swap_payouts
+        WHERE profile_id = ? AND deleted_at IS NULL
+          AND out_transaction_id IN (?, ?)
+        LIMIT 1
+        """,
+        (profile["id"], out_row["id"], in_row["id"]),
+    ).fetchone()
+    if existing_payout:
+        raise AppError(
+            f"One of the transactions already has an active direct swap payout "
+            f"(id={existing_payout['id']}). Delete that payout review before pairing.",
+            code="conflict",
+            hint="Run `kassiber transfers payouts delete --payout-id "
+            f"{existing_payout['id']}` first.",
+        )
     swap_fee_msat, swap_fee_kind = core_transfer_matching.compute_swap_fee(
         int(out_row["amount"] or 0),
         int(in_row["amount"] or 0),

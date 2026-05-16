@@ -73,6 +73,11 @@ reviewed source outbound, target asset amount, external payout id,
 counterparty, fiat payout value, policy, and swap-fee delta without
 creating a fake recipient wallet.
 
+The direct payout review model is not Austrian-only: when
+`payout_fiat_value` is present, it becomes the reviewed proceeds for the
+taxable source-row disposal. That lets privacy-preserving provider payout
+flows preserve the actual sale value even when no owned inbound leg exists.
+
 For Austrian cross-asset `policy=carrying-value`, journal processing
 synthesizes an in-memory target-asset acquisition plus immediate external
 disposal. The source swap leg becomes `neu_swap` / zero gain, the target

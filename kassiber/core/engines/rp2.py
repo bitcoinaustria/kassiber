@@ -16,6 +16,7 @@ from ...errors import AppError
 from ...msat import btc_to_msat, dec, msat_to_btc
 from ...tax_policy import build_tax_policy
 from ...transfers import apply_manual_pairs, detect_intra_transfers
+from .. import pricing
 from ..austrian import (
     AT_SWAP_QUARANTINE_REASON,
     REGIME_NEU,
@@ -1122,6 +1123,40 @@ def _direct_payout_value(record: Mapping[str, Any], out_row: Mapping[str, Any]) 
     return _fiat_value_from_row(out_row)
 
 
+def _direct_payout_proceeds_row(
+    record: Mapping[str, Any],
+    out_row: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    """Apply reviewed external payout proceeds to the taxable source row.
+
+    Direct payout reviews are not Austrian-only. The Austrian-only part is the
+    cross-asset carrying-value synthesis below; ordinary taxable direct payouts
+    still need the reviewed payout value to drive disposal proceeds.
+    """
+
+    payout_value = _row_get(record, "payout_fiat_value")
+    if payout_value in (None, ""):
+        return out_row
+    payout_value = dec(payout_value)
+    amount = msat_to_btc(int(out_row["amount"] or 0))
+    if amount <= 0 or payout_value <= 0:
+        return out_row
+    reviewed = dict(out_row)
+    payout_rate = payout_value / amount
+    reviewed.update(
+        {
+            "fiat_rate": float(payout_rate),
+            "fiat_value": float(payout_value),
+            "fiat_rate_exact": str(payout_rate),
+            "fiat_value_exact": str(payout_value),
+            "pricing_source_kind": pricing.SOURCE_MANUAL_OVERRIDE,
+            "pricing_quality": pricing.QUALITY_EXACT,
+            "note": _row_get(record, "notes") or _row_get(out_row, "note"),
+        }
+    )
+    return reviewed
+
+
 def _direct_payout_audit(record: Mapping[str, Any], out_row: Mapping[str, Any]) -> dict[str, Any]:
     payout_amount_msat = int(record["payout_amount"] or 0)
     return {
@@ -1145,7 +1180,13 @@ def _direct_payout_synthetic_rows(
     profile: Mapping[str, Any],
     rows: Sequence[Mapping[str, Any]],
     direct_payout_records: Sequence[Mapping[str, Any]],
-) -> tuple[list[Mapping[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], set[str]]:
+) -> tuple[
+    list[Mapping[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    set[str],
+]:
     """Return engine-only target legs for direct swap payouts.
 
     Cross-asset Austrian carrying-value payouts need two facts in RP2: a
@@ -1161,6 +1202,7 @@ def _direct_payout_synthetic_rows(
     tax_country = _profile_str(profile, "tax_country").lower()
     rows_by_id = {str(row["id"]): row for row in rows}
     rows_for_engine: list[Mapping[str, Any]] = list(rows)
+    row_overrides: dict[str, Mapping[str, Any]] = {}
     cross_asset_pairs: list[dict[str, Any]] = []
     direct_payouts: list[dict[str, Any]] = []
     quarantines: list[dict[str, Any]] = []
@@ -1180,12 +1222,18 @@ def _direct_payout_synthetic_rows(
             and out_row["asset"] != payout_asset
         )
         if not is_cross_asset_carry:
+            row_overrides[out_id] = _direct_payout_proceeds_row(record, out_row)
             continue
 
         payout_amount_msat = int(record["payout_amount"] or 0)
         payout_amount = msat_to_btc(payout_amount_msat)
         payout_value = _direct_payout_value(record, out_row)
-        if payout_amount is None or payout_amount <= 0 or payout_value is None or payout_value <= 0:
+        if (
+            payout_amount is None
+            or payout_amount <= 0
+            or payout_value is None
+            or payout_value <= 0
+        ):
             quarantines.append(
                 build_tax_quarantine(
                     profile,
@@ -1206,7 +1254,10 @@ def _direct_payout_synthetic_rows(
         pair_id = f"direct-payout:{record['id']}"
         in_id = f"{pair_id}:in"
         out_virtual_id = f"{pair_id}:out"
-        description = record["notes"] or f"Direct swap payout to {record['counterparty'] or 'external recipient'}"
+        description = (
+            record["notes"]
+            or f"Direct swap payout to {record['counterparty'] or 'external recipient'}"
+        )
         common = {
             "workspace_id": profile["workspace_id"],
             "profile_id": profile["id"],
@@ -1261,6 +1312,12 @@ def _direct_payout_synthetic_rows(
                 "in_asset": payout_asset,
             }
         )
+
+    if row_overrides:
+        rows_for_engine = [
+            row_overrides.get(str(row["id"]), row)
+            for row in rows_for_engine
+        ]
 
     return rows_for_engine, cross_asset_pairs, direct_payouts, quarantines, blocked_row_ids
 
