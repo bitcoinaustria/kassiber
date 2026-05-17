@@ -284,7 +284,7 @@ def _emit_austrian_e1kv_pdf(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=APP_NAME,
-        description="Open-source, local-first Bitcoin accounting CLI with wallet buckets and multi-wallet support.",
+        description="Open-source, local-first Bitcoin accounting with wallet buckets and multi-wallet support. CLI surface of the Kassiber suite; a desktop GUI is also available.",
     )
     parser.add_argument("--data-root", default=DEFAULT_DATA_ROOT, help="Data directory for the local SQLite store")
     parser.add_argument(

@@ -111,10 +111,14 @@ desktop leg uses GitHub's `macos-latest` runner with Tauri's
 (`aarch64-apple-darwin` and `x86_64-apple-darwin`). Keep the desktop artifact
 target name `macos-universal` so users only see one Mac GUI download.
 
+### Local Apple Silicon build
+
 For a local Apple Silicon build without Rosetta, use the arm64-only helper:
 
 ```bash
 ./scripts/build-macos-arm64-app.sh
+# skip the DMG if you only want the .app:
+BUNDLES=app ./scripts/build-macos-arm64-app.sh
 ```
 
 It builds the PyInstaller sidecar as
@@ -125,6 +129,44 @@ unsigned desktop app and DMG under
 `ui-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle`.
 The helper defaults to Python 3.11 to match the GitHub Actions prerelease
 workflow; set `PYTHON_VERSION=<version>` only for intentional local debugging.
+
+#### First launch on macOS
+
+Tauri ad-hoc signs the binary (required for arm64 to launch at all), but
+ad-hoc is not a Developer ID, so Gatekeeper will challenge the first launch.
+The good news for a local build: nothing downloaded it, so there is no
+`com.apple.quarantine` xattr — Gatekeeper is on its softer path.
+
+```bash
+open ui-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Kassiber.app
+```
+
+Expected dialogs and how to clear them:
+
+- **"Kassiber.app" cannot be opened because the developer cannot be
+  verified.** — the typical local-build case. Either:
+  - Finder → right-click the .app → **Open** → **Open** to record a
+    one-time override (macOS remembers the path), or
+  - System Settings → Privacy & Security → scroll to the blocked-app
+    notice → **Open Anyway**.
+- **"Kassiber.app" is damaged and can't be opened.** — only if a quarantine
+  xattr was attached (e.g. you zipped/unzipped the bundle through a tool
+  that adds the flag). Strip it:
+  ```bash
+  xattr -dr com.apple.quarantine \
+    ui-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Kassiber.app
+  ```
+
+Subsequent launches from the same path go through silently. If you rebuild
+over the same path, macOS usually keeps the override; if it doesn't, repeat
+the right-click → Open dance once.
+
+For day-to-day frontend iteration, skip the .app bundle entirely and use
+`pnpm --dir ui-tauri tauri:dev` — that runs the webview + Rust supervisor +
+Python daemon with HMR, no PyInstaller step, no DMG, no Gatekeeper dialog.
+Use the full build script when you specifically need a real installable
+`.app` to test packaging, the bundled CLI sidecar, file associations, or
+to hand a build to someone else on Apple Silicon.
 
 Desktop artifacts are unsigned previews, but normal daemon calls use the
 bundled PyInstaller CLI sidecar and do not require a separate Python checkout.

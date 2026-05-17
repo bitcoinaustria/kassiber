@@ -9,9 +9,9 @@ implementation plan.
 The desktop shell is a pre-alpha preview. It already uses real daemon-backed
 paths for the main setup, review, report, export, assistant, and diagnostics
 workflows, but the CLI is still the most complete and scriptable control
-surface. See [../../README.md](../../README.md) for the quick start and
-[machine-output.md](machine-output.md) for the JSON envelope contract the shell
-consumes through the daemon.
+surface. See [../quickstart.md](../quickstart.md) for the end-to-end
+workflows and [machine-output.md](machine-output.md) for the JSON envelope
+contract the shell consumes through the daemon.
 
 Current development modes:
 
@@ -45,6 +45,11 @@ sidecar built with PyInstaller. At runtime the supervisor prefers
 `KASSIBER_PYTHON` when it is explicitly set, then the bundled sidecar from the
 app resources, then the development Python fallback above. The same
 `KASSIBER_PYTHON` override applies to installed-app CLI forwarding.
+
+For a real installable `.app` built locally on Apple Silicon (without
+Rosetta), use `./scripts/build-macos-arm64-app.sh`. The build is unsigned
+and ad-hoc signed; first-launch Gatekeeper handling is documented in
+[prerelease-binaries.md → Local Apple Silicon build](prerelease-binaries.md#local-apple-silicon-build).
 
 The authenticated shell includes a Diagnostics screen with a redacted
 daemon/transport activity log and a downloadable JSON export. It is meant for
