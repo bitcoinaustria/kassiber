@@ -58,6 +58,7 @@ interface SetupFormState {
   targetWallet: string;
   sourceFile: string;
   sourceFormat: "csv" | "json" | "phoenix_csv" | "river_csv" | "bullbitcoin_csv";
+  bullImportMode: "relevant" | "full";
   btcpayStoreId: string;
   btcpayPaymentMethodId: string;
   btcpayPaymentMethodIds: string[];
@@ -71,6 +72,21 @@ interface SyncResult {
   wallet: string;
   status: string;
   message?: string;
+  source?: string;
+  imported?: number;
+  skipped?: number;
+  matched?: number;
+  unchanged?: number;
+  skipped_unmatched?: number;
+  skipped_ambiguous?: number;
+  unmatched?: number;
+  ambiguous?: number;
+  excluded?: number;
+  updated?: number;
+  bullbitcoin_rows?: number;
+  inserted_records?: ImportChangeRecord[];
+  updated_records?: ImportChangeRecord[];
+  reconciliation_records?: ImportChangeRecord[];
 }
 
 interface BackendOption {
@@ -121,12 +137,37 @@ interface WalletListData {
   }>;
 }
 
+interface ImportChangeRecord {
+  transaction_id: string;
+  external_id?: string | null;
+  wallet?: string | null;
+  asset?: string | null;
+  direction?: string | null;
+  amount_msat?: number | null;
+  changed_fields?: string[];
+  pricing_external_ref?: string | null;
+  status?: "matched" | "unmatched" | "ambiguous";
+  matched_wallet?: string | null;
+}
+
 interface ImportFileResult {
-  wallet: string;
+  wallet?: string;
+  scope?: string;
+  source?: string;
   imported: number;
   skipped: number;
+  matched?: number;
+  unchanged?: number;
+  skipped_unmatched?: number;
+  skipped_ambiguous?: number;
+  unmatched?: number;
+  ambiguous?: number;
+  excluded?: number;
   updated?: number;
   bullbitcoin_rows?: number;
+  inserted_records?: ImportChangeRecord[];
+  updated_records?: ImportChangeRecord[];
+  reconciliation_records?: ImportChangeRecord[];
 }
 
 type DialogStep = "source" | "setup";
@@ -174,6 +215,7 @@ const formDefaultsFor = (source: ConnectionSource): SetupFormState => {
     targetWallet: "",
     sourceFile: "",
     sourceFormat: "csv",
+    bullImportMode: "relevant",
     btcpayStoreId: "",
     btcpayPaymentMethodId: DEFAULT_BTCPAY_PAYMENT_METHOD_ID,
     btcpayPaymentMethodIds: [DEFAULT_BTCPAY_PAYMENT_METHOD_ID],
@@ -324,6 +366,8 @@ export function AddConnectionDialog({
     formDefaultsFor(CONNECTION_SOURCES[0]),
   );
   const [setupError, setSetupError] = React.useState<string | null>(null);
+  const [lastImportResult, setLastImportResult] =
+    React.useState<ImportFileResult | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<
     Partial<Record<keyof SetupFormState, string>>
   >({});
@@ -479,6 +523,7 @@ export function AddConnectionDialog({
     setForm(formDefaultsFor(selected));
     setSetupError(null);
     setFieldErrors({});
+    setLastImportResult(null);
     setPreviewAddresses(null);
     setPreviewError(null);
     setBtcpayTestStatus(null);
@@ -495,6 +540,7 @@ export function AddConnectionDialog({
     setSelectedId(source.id);
     setStep(initialSourceId && source.status === "ready" ? "setup" : "source");
     setSetupError(null);
+    setLastImportResult(null);
     setSourceQuery("");
   }, [initialSourceId, open]);
 
@@ -544,6 +590,14 @@ export function AddConnectionDialog({
     value: SetupFormState[Key],
   ) => {
     setForm((current) => ({ ...current, [key]: value }));
+    if (
+      key === "sourceFile" ||
+      key === "targetWallet" ||
+      key === "sourceFormat" ||
+      key === "bullImportMode"
+    ) {
+      setLastImportResult(null);
+    }
     setFieldErrors((current) => {
       if (!(key in current)) return current;
       const next = { ...current };
@@ -607,7 +661,7 @@ export function AddConnectionDialog({
       errors.sourceFile = "Pick the export file.";
     }
     if (setupKind === "file-enrichment") {
-      if (!form.targetWallet.trim()) {
+      if (selected.sourceFormat !== "bullbitcoin_csv" && !form.targetWallet.trim()) {
         errors.targetWallet = "Choose the wallet to enrich.";
       }
       if (!form.sourceFile.trim()) {
@@ -673,6 +727,7 @@ export function AddConnectionDialog({
       return;
     }
     setSetupError(null);
+    setLastImportResult(null);
     const errors = validateSetupForm();
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
@@ -722,7 +777,14 @@ export function AddConnectionDialog({
             `${label} is still importing from the selected file. Large exports can take a bit; Kassiber will update when the daemon finishes.`,
           );
           try {
-            await syncWallet.mutateAsync({ wallet: label });
+            const envelope = await syncWallet.mutateAsync({ wallet: label });
+            const result = envelope.data.results.find(
+              (item) => item.wallet === label,
+            );
+            const importSummary = importResultFromSyncResult(result);
+            if (importSummary) {
+              setLastImportResult(importSummary);
+            }
           } finally {
             clearSyncNotice();
           }
@@ -737,23 +799,32 @@ export function AddConnectionDialog({
         if (!sourceFormat) {
           throw new Error("Selected source does not define an import format.");
         }
+        const isBookWideImport = sourceFormat === "bullbitcoin_csv";
+        const isFullBullImport =
+          sourceFormat === "bullbitcoin_csv" && form.bullImportMode === "full";
         startSyncNotice(
-          `${selected.title} is matching the export against existing ${form.targetWallet} transactions.`,
+          isFullBullImport
+            ? `${selected.title} is importing completed orders into this book and flagging reconciliation gaps.`
+            : isBookWideImport
+            ? `${selected.title} is matching the export against existing transactions in this book.`
+            : `${selected.title} is matching the export against existing ${form.targetWallet} transactions.`,
         );
         let importResult: ImportFileResult | undefined;
         try {
           const envelope = await importFile.mutateAsync({
-            wallet: form.targetWallet,
+            ...(isBookWideImport ? {} : { wallet: form.targetWallet }),
             source_file: form.sourceFile.trim(),
             source_format: sourceFormat,
+            ...(sourceFormat === "bullbitcoin_csv" ? { mode: form.bullImportMode } : {}),
           });
           importResult = envelope.data;
+          setLastImportResult(importResult ?? null);
         } finally {
           clearSyncNotice();
         }
         addNotification({
           title: "Import finished",
-          body: `${form.targetWallet} updated ${(
+          body: `${isBookWideImport ? "Book" : form.targetWallet} updated ${(
             importResult?.updated ?? 0
           ).toLocaleString("en-US")} rows and skipped ${(
             importResult?.skipped ?? 0
@@ -1135,6 +1206,66 @@ export function AddConnectionDialog({
     }
 
     if (setupKind === "file-enrichment") {
+      if (selected.sourceFormat === "bullbitcoin_csv") {
+        return (
+          <>
+            <SetupField
+              id="connection-bull-import-mode"
+              label="Import mode"
+              helper={
+                form.bullImportMode === "full"
+                  ? "Imports every completed Bull order as excluded evidence and flags matched, missing, or ambiguous wallet evidence for this book."
+                  : "Only enriches completed Bull orders that uniquely match existing transactions anywhere in this book."
+              }
+            >
+              <select
+                id="connection-bull-import-mode"
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={form.bullImportMode}
+                onChange={(event) =>
+                  updateForm(
+                    "bullImportMode",
+                    event.target.value as SetupFormState["bullImportMode"],
+                  )
+                }
+              >
+                <option value="relevant">Relevant only</option>
+                <option value="full">Full import with flags</option>
+              </select>
+            </SetupField>
+            <SetupField
+              id="connection-source-file"
+              label="Order CSV path"
+              error={fieldErrors.sourceFile}
+              helper="Use the shared Bull export for this book; full mode keeps rows excluded until reviewed."
+            >
+              <div className="flex gap-2">
+                <Input
+                  id="connection-source-file"
+                  value={form.sourceFile}
+                  onChange={(event) => updateForm("sourceFile", event.target.value)}
+                  required
+                />
+                {isFilePickerAvailable ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={async () => {
+                      const picked = await pickFile({
+                        title: `Select ${selected.title} export file`,
+                        filters: sourceFileFilters(selected),
+                      });
+                      if (picked) updateForm("sourceFile", picked);
+                    }}
+                  >
+                    Browse…
+                  </Button>
+                ) : null}
+              </div>
+            </SetupField>
+          </>
+        );
+      }
       return (
         <>
           <SetupField
@@ -1831,6 +1962,140 @@ export function AddConnectionDialog({
     </div>
   );
 
+  const formatImportCount = (value: number | null | undefined) =>
+    (value ?? 0).toLocaleString("en-US");
+
+  const importResultFromSyncResult = (
+    result: SyncResult | undefined,
+  ): ImportFileResult | null => {
+    if (!result) return null;
+    const hasImportShape =
+      typeof result.imported === "number" ||
+      typeof result.skipped === "number" ||
+      typeof result.updated === "number" ||
+      Array.isArray(result.inserted_records) ||
+      Array.isArray(result.updated_records);
+    if (!hasImportShape) return null;
+    return {
+      wallet: result.wallet,
+      source: result.source,
+      imported: result.imported ?? 0,
+      skipped: result.skipped ?? 0,
+      matched: result.matched,
+      unchanged: result.unchanged,
+      skipped_unmatched: result.skipped_unmatched,
+      skipped_ambiguous: result.skipped_ambiguous,
+      unmatched: result.unmatched,
+      ambiguous: result.ambiguous,
+      excluded: result.excluded,
+      updated: result.updated,
+      bullbitcoin_rows: result.bullbitcoin_rows,
+      inserted_records: result.inserted_records,
+      updated_records: result.updated_records,
+      reconciliation_records: result.reconciliation_records,
+    };
+  };
+
+  const renderImportSummary = () => {
+    if (!lastImportResult) return null;
+    const changedRecords = [
+      ...(lastImportResult.inserted_records ?? []),
+      ...(lastImportResult.updated_records ?? []),
+    ];
+    const shownRecords = changedRecords.slice(0, 5);
+    const hiddenRecords = Math.max(0, changedRecords.length - shownRecords.length);
+    const rowsRead =
+      lastImportResult.bullbitcoin_rows ??
+      lastImportResult.imported + lastImportResult.skipped;
+    const isBookWide = lastImportResult.scope === "book";
+    const changedCount =
+      lastImportResult.imported + (lastImportResult.updated ?? 0);
+    const metrics: Array<[string, number | null | undefined]> = [
+      ["Rows read", rowsRead],
+      ["Inserted", lastImportResult.imported],
+      ["Updated", lastImportResult.updated],
+      ["Unchanged", lastImportResult.unchanged],
+    ];
+    if (lastImportResult.matched !== undefined) {
+      metrics.push(["Matched", lastImportResult.matched]);
+    }
+    if (lastImportResult.skipped_unmatched !== undefined) {
+      metrics.push(["Unmatched", lastImportResult.skipped_unmatched]);
+    }
+    if (lastImportResult.unmatched !== undefined) {
+      metrics.push(["Unmatched", lastImportResult.unmatched]);
+    }
+    if (lastImportResult.skipped_ambiguous !== undefined) {
+      metrics.push(["Ambiguous", lastImportResult.skipped_ambiguous]);
+    }
+    if (lastImportResult.ambiguous !== undefined) {
+      metrics.push(["Ambiguous", lastImportResult.ambiguous]);
+    }
+    if (lastImportResult.excluded !== undefined) {
+      metrics.push(["Excluded", lastImportResult.excluded]);
+    }
+    return (
+      <div className="space-y-3 rounded-md border bg-background p-3 text-sm">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="font-medium">Import summary</p>
+            <p className="text-xs text-muted-foreground">
+              {isBookWide ? "Matched against this book" : "Matched against the selected wallet"}
+            </p>
+          </div>
+          <Badge variant="secondary">
+            {formatImportCount(changedCount)} changed
+          </Badge>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {metrics.map(([label, value]) => (
+            <div key={label} className="rounded-md border border-border/60 p-2">
+              <p className="text-[11px] text-muted-foreground">{label}</p>
+              <p className="font-medium tabular-nums">
+                {formatImportCount(value as number | null | undefined)}
+              </p>
+            </div>
+          ))}
+        </div>
+        {shownRecords.length > 0 ? (
+          <div className="rounded-md border border-border/60">
+            {shownRecords.map((record) => (
+              <div
+                key={record.transaction_id}
+                className="space-y-1 border-b border-border/40 p-2.5 last:border-b-0"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="min-w-0 truncate text-xs font-medium">
+                    {record.wallet || "Book"} · {record.external_id || record.transaction_id}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {record.status ?? record.pricing_external_ref ?? "Bull order"}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {record.matched_wallet
+                    ? `Matched wallet ${record.matched_wallet}`
+                    : `Changed ${(record.changed_fields ?? []).join(", ") || "metadata"}`}
+                </p>
+              </div>
+            ))}
+            {hiddenRecords > 0 ? (
+              <div className="p-2.5 text-xs text-muted-foreground">
+                {formatImportCount(hiddenRecords)} more updated transaction
+                {hiddenRecords === 1 ? "" : "s"}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <p className="rounded-md border border-border/60 p-2.5 text-xs text-muted-foreground">
+            No stored transaction data changed. Rows may already have matching
+            pricing, or they may have been unmatched or ambiguous.
+          </p>
+        )}
+      </div>
+    );
+  };
+
   const renderSourceStep = () => (
     <div className="grid min-h-0 grid-cols-1 overflow-hidden rounded-lg border lg:grid-cols-[190px_minmax(0,1fr)]">
       <div className="overflow-y-auto border-b bg-muted/30 p-2 lg:border-r lg:border-b-0">
@@ -1965,6 +2230,7 @@ export function AddConnectionDialog({
               {setupError}
             </div>
           ) : null}
+          {renderImportSummary()}
         </form>
       </div>
     </div>

@@ -42,6 +42,10 @@ _BULLBITCOIN_EXISTING_CSV = """date,txid,direction,asset,amount,fee,fiat_value,f
 2026-04-15T09:50:00Z,bull-sell-tx,outbound,BTC,0.06811291,0.00001413,4277.69,62802.96,withdrawal,Synced from wallet,Synced from fulcrum
 """
 
+_BULLBITCOIN_OTHER_WALLET_EXISTING_CSV = """date,txid,direction,asset,amount,fee,fiat_value,fiat_rate,kind,description,counterparty
+2026-04-16T09:50:00Z,other-wallet-tx,outbound,BTC,0.01000000,0.00000100,610.00,61000.00,withdrawal,Synced from other wallet,Synced from fulcrum
+"""
+
 _BULLBITCOIN_ORDERS_CSV = """ORDER_NUMBER,ORDER_TYPE,ORDER_SUBTYPE,MESSAGE,ORDER_ID,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,EXCHANGE_RATE_AMOUNT,EXCHANGE_RATE_CURRENCY,PAYIN_METHOD,PAYOUT_METHOD,ORDER_STATUS,PAYIN_STATUS,PAYOUT_STATUS,CREATED_AT (UTC),COMPLETED_AT (UTC),SENT_AT (UTC),INDEX_RATE_AMOUNT,INDEX_RATE_CURRENCY,TRANSACTION_ID,ADDRESS
 1001,Fiat Payment,Market Order,,order-1,0.06811291,BTC,4202.19,USD,61694.45,USD,Bitcoin On-Chain,SEPA Transfer (USD),Completed,Completed,Completed,2026-04-15 09:40:00.000Z,2026-04-15 09:50:23.370Z,2026-04-15 09:51:00.000Z,62868.74,USD,bull-sell-tx,bc1qbullsell
 1002,Fiat Payment,Market Order,,order-2,0.01000000,BTC,600.00,USD,60000.00,USD,Bitcoin On-Chain,SEPA Transfer (USD),Completed,Completed,Completed,2026-04-16 09:40:00.000Z,2026-04-16 09:50:00.000Z,2026-04-16 09:51:00.000Z,60000.00,USD,other-wallet-tx,bc1qotherwallet
@@ -2207,6 +2211,13 @@ class AccountBucketBehaviorTest(unittest.TestCase):
         self.assertEqual(payload["kind"], "wallets.sync")
         self.assertEqual(payload["data"][0]["status"], "synced")
         self.assertEqual(payload["data"][0]["imported"], 3)
+        self.assertEqual(payload["data"][0]["unchanged"], 0)
+        self.assertEqual(len(payload["data"][0]["inserted_records"]), 3)
+        self.assertEqual(payload["data"][0]["inserted_records"][0]["wallet"], "River")
+        self.assertEqual(
+            payload["data"][0]["inserted_records"][0]["changed_fields"],
+            ["metadata", "pricing", "transaction"],
+        )
         self.assertEqual(payload["data"][0]["river_notes_set"], 3)
         self.assertEqual(payload["data"][0]["river_tags_added"], 3)
 
@@ -2304,6 +2315,175 @@ class AccountBucketBehaviorTest(unittest.TestCase):
         finally:
             conn.close()
         self.assertEqual(row["counterparty"], "Bull Bitcoin")
+
+    def test_z_bullbitcoin_csv_enriches_unique_book_wide_transaction(self):
+        other_existing_csv = Path(self._tmp.name) / "bull-other-wallet.csv"
+        other_existing_csv.write_text(_BULLBITCOIN_OTHER_WALLET_EXISTING_CSV, encoding="utf-8")
+        bull_csv = Path(self._tmp.name) / "bull-book-orders.csv"
+        bull_csv.write_text(_BULLBITCOIN_ORDERS_CSV, encoding="utf-8")
+
+        self._cli(
+            "wallets", "create",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--label", "Bull Book Primary",
+            "--kind", "custom",
+        )
+        self._cli(
+            "wallets", "create",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--label", "Bull Book Other",
+            "--kind", "custom",
+        )
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "Bull Book Other",
+            "--file", str(other_existing_csv),
+        )
+
+        payload = self._cli(
+            "wallets", "import-bull",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "Bull Book Primary",
+            "--file", str(bull_csv),
+        )
+        self.assertEqual(payload["data"]["scope"], "book")
+        self.assertEqual(payload["data"]["matched"], 1)
+        self.assertEqual(payload["data"]["updated"], 1)
+        self.assertEqual(payload["data"]["skipped"], 2)
+        self.assertEqual(payload["data"]["skipped_unmatched"], 1)
+        self.assertEqual(payload["data"]["skipped_ambiguous"], 0)
+        self.assertEqual(payload["data"]["updated_records"][0]["wallet"], "Bull Book Other")
+        self.assertEqual(payload["data"]["updated_records"][0]["external_id"], "other-wallet-tx")
+        self.assertIn("pricing_provider", payload["data"]["updated_records"][0]["changed_fields"])
+
+        payload = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "Bull Book Other",
+        )
+        sell = payload["data"][0]
+        self.assertEqual(sell["external_id"], "other-wallet-tx")
+        self.assertEqual(sell["pricing_provider"], "Bull Bitcoin")
+        self.assertEqual(sell["pricing_method"], "bullbitcoin_csv")
+        self.assertEqual(sell["pricing_external_ref"], "order-2")
+        self.assertEqual(sell["fiat_value_exact"], "600.00")
+        self.assertEqual(sell["fee_msat"], 100000)
+
+    def test_z_bullbitcoin_csv_skips_ambiguous_book_wide_matches(self):
+        existing_csv = Path(self._tmp.name) / "bull-ambiguous-wallet.csv"
+        existing_csv.write_text(_BULLBITCOIN_OTHER_WALLET_EXISTING_CSV, encoding="utf-8")
+        bull_csv = Path(self._tmp.name) / "bull-ambiguous-orders.csv"
+        bull_csv.write_text(_BULLBITCOIN_ORDERS_CSV, encoding="utf-8")
+
+        for wallet_label in ("Bull Ambiguous One", "Bull Ambiguous Two"):
+            self._cli(
+                "wallets", "create",
+                "--workspace", "Buckets",
+                "--profile", "Default",
+                "--label", wallet_label,
+                "--kind", "custom",
+            )
+            self._cli(
+                "wallets", "import-csv",
+                "--workspace", "Buckets",
+                "--profile", "Default",
+                "--wallet", wallet_label,
+                "--file", str(existing_csv),
+            )
+
+        payload = self._cli(
+            "wallets", "import-bull",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "Bull Ambiguous One",
+            "--file", str(bull_csv),
+        )
+        self.assertEqual(payload["data"].get("updated", 0), 0)
+        self.assertEqual(payload["data"]["skipped"], 2)
+        self.assertEqual(payload["data"]["matched"], 0)
+        self.assertEqual(payload["data"]["skipped_unmatched"], 1)
+        self.assertEqual(payload["data"]["skipped_ambiguous"], 1)
+        self.assertEqual(payload["data"]["updated_records"], [])
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        try:
+            enriched = conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM transactions
+                WHERE external_id = 'other-wallet-tx'
+                  AND pricing_provider = 'Bull Bitcoin'
+                """
+            ).fetchone()[0]
+        finally:
+            conn.close()
+        self.assertEqual(enriched, 0)
+
+    def test_z_bullbitcoin_csv_full_import_flags_shared_account_rows(self):
+        existing_csv = Path(self._tmp.name) / "bull-full-existing-wallet.csv"
+        existing_csv.write_text(_BULLBITCOIN_EXISTING_CSV, encoding="utf-8")
+        bull_csv = Path(self._tmp.name) / "bull-full-orders.csv"
+        bull_csv.write_text(_BULLBITCOIN_ORDERS_CSV, encoding="utf-8")
+
+        self._cli(
+            "wallets", "create",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--label", "Operations Wallet",
+            "--kind", "custom",
+        )
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "Operations Wallet",
+            "--file", str(existing_csv),
+        )
+
+        payload = self._cli(
+            "wallets", "import-bull",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--file", str(bull_csv),
+            "--mode", "full",
+        )
+        data = payload["data"]
+        self.assertEqual(data["scope"], "book")
+        self.assertEqual(data["mode"], "full")
+        self.assertEqual(data["wallet"], "Bull Bitcoin")
+        self.assertEqual(data["bullbitcoin_rows"], 2)
+        self.assertEqual(data["imported"], 2)
+        self.assertEqual(data["matched"], 1)
+        self.assertEqual(data["unmatched"], 1)
+        self.assertEqual(data["ambiguous"], 0)
+        self.assertEqual(data["excluded"], 2)
+        self.assertEqual(
+            sorted(record["status"] for record in data["inserted_records"]),
+            ["matched", "unmatched"],
+        )
+
+        payload = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "Bull Bitcoin",
+            "--order", "asc",
+        )
+        records = payload["data"]
+        self.assertEqual(len(records), 2)
+        self.assertTrue(all(record["excluded"] for record in records))
+        tags_by_external_id = {
+            record["external_id"]: {tag["code"] for tag in record["tags"]}
+            for record in records
+        }
+        self.assertIn("bullbitcoin-matched", tags_by_external_id["bull-sell-tx"])
+        self.assertIn("bullbitcoin-wallet-gap", tags_by_external_id["other-wallet-tx"])
 
     def test_z_bullbitcoin_csv_preserves_manual_transaction_metadata(self):
         existing_csv = Path(self._tmp.name) / "bull-manual-existing-wallet.csv"

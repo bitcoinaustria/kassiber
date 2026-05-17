@@ -34,6 +34,17 @@ ImportRow = Mapping[str, Any]
 TagRow = Mapping[str, Any]
 EnsureTagRow = Callable[[sqlite3.Connection, str, str, str, str], tuple[TagRow, bool]]
 InvalidateJournals = Callable[[sqlite3.Connection, str], None]
+BULLBITCOIN_IMPORT_MODE_RELEVANT = "relevant"
+BULLBITCOIN_IMPORT_MODE_FULL = "full"
+BULLBITCOIN_IMPORT_MODES = {
+    BULLBITCOIN_IMPORT_MODE_RELEVANT,
+    BULLBITCOIN_IMPORT_MODE_FULL,
+}
+BULLBITCOIN_RECONCILIATION_TAGS = {
+    "matched": ("bullbitcoin-matched", "Bull Bitcoin matched"),
+    "unmatched": ("bullbitcoin-wallet-gap", "Bull Bitcoin wallet gap"),
+    "ambiguous": ("bullbitcoin-ambiguous", "Bull Bitcoin ambiguous"),
+}
 
 
 ProgressCallback = Callable[[Mapping[str, Any]], None]
@@ -63,6 +74,16 @@ def normalize_import_direction(direction: Any, amount: Any) -> str:
     return "outbound" if dec(amount) < 0 else "inbound"
 
 
+_EXISTING_TRANSACTION_COLUMNS = """
+       id, workspace_id, profile_id, wallet_id, fingerprint, occurred_at,
+       confirmed_at, fiat_rate, fiat_value, fiat_price_source, fiat_rate_exact,
+       fiat_value_exact, pricing_source_kind, pricing_provider, pricing_pair,
+       pricing_timestamp, pricing_fetched_at, pricing_granularity, pricing_method,
+       pricing_external_ref, pricing_quality, kind, description, counterparty,
+       raw_json, payment_hash, payment_hash_source
+"""
+
+
 def _find_existing_transaction(
     conn: sqlite3.Connection,
     wallet_id: str,
@@ -70,14 +91,8 @@ def _find_existing_transaction(
     fingerprint: str,
 ):
     existing = conn.execute(
-        """
-        SELECT id, fingerprint, occurred_at, confirmed_at, fiat_rate, fiat_value,
-               fiat_price_source, fiat_rate_exact, fiat_value_exact,
-               pricing_source_kind, pricing_provider, pricing_pair, pricing_timestamp,
-               pricing_fetched_at, pricing_granularity, pricing_method,
-               pricing_external_ref, pricing_quality,
-               kind, description, counterparty, raw_json,
-               payment_hash, payment_hash_source
+        f"""
+        SELECT {_EXISTING_TRANSACTION_COLUMNS}
         FROM transactions
         WHERE fingerprint = ?
         """,
@@ -86,14 +101,8 @@ def _find_existing_transaction(
     if existing or not normalized["external_id"]:
         return existing
     existing = conn.execute(
-        """
-        SELECT id, fingerprint, occurred_at, confirmed_at, fiat_rate, fiat_value,
-               fiat_price_source, fiat_rate_exact, fiat_value_exact,
-               pricing_source_kind, pricing_provider, pricing_pair, pricing_timestamp,
-               pricing_fetched_at, pricing_granularity, pricing_method,
-               pricing_external_ref, pricing_quality,
-               kind, description, counterparty, raw_json,
-               payment_hash, payment_hash_source
+        f"""
+        SELECT {_EXISTING_TRANSACTION_COLUMNS}
         FROM transactions
         WHERE wallet_id = ?
           AND external_id = ?
@@ -116,14 +125,8 @@ def _find_existing_transaction(
     if existing or normalized["pricing_source_kind"] != pricing.SOURCE_EXCHANGE_EXECUTION:
         return existing
     return conn.execute(
-        """
-        SELECT id, fingerprint, occurred_at, confirmed_at, fiat_rate, fiat_value,
-               fiat_price_source, fiat_rate_exact, fiat_value_exact,
-               pricing_source_kind, pricing_provider, pricing_pair, pricing_timestamp,
-               pricing_fetched_at, pricing_granularity, pricing_method,
-               pricing_external_ref, pricing_quality,
-               kind, description, counterparty, raw_json,
-               payment_hash, payment_hash_source
+        f"""
+        SELECT {_EXISTING_TRANSACTION_COLUMNS}
         FROM transactions
         WHERE wallet_id = ?
           AND external_id = ?
@@ -141,6 +144,107 @@ def _find_existing_transaction(
             btc_to_msat(normalized["amount"]),
         ),
     ).fetchone()
+
+
+def _single_match(rows: Sequence[sqlite3.Row]) -> sqlite3.Row | None:
+    if len(rows) == 1:
+        return rows[0]
+    return None
+
+
+def _find_existing_profile_transaction_result(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    normalized: Mapping[str, Any],
+    *,
+    exclude_wallet_id: str | None = None,
+) -> tuple[sqlite3.Row | None, str]:
+    """Find one unambiguous book-wide transaction for exchange evidence."""
+    if not normalized["external_id"]:
+        return None, "unmatched"
+    amount_msat = btc_to_msat(normalized["amount"])
+    fee_msat = btc_to_msat(normalized["fee"])
+    wallet_filter = "AND wallet_id != ?" if exclude_wallet_id else ""
+    base_params: list[Any] = [
+        profile_id,
+        normalized["external_id"],
+        normalized["direction"],
+        normalized["asset"],
+        amount_msat,
+    ]
+    if exclude_wallet_id:
+        base_params.append(exclude_wallet_id)
+    exact_fee_rows = conn.execute(
+        f"""
+        SELECT {_EXISTING_TRANSACTION_COLUMNS}, wallet_label
+        FROM (
+            SELECT t.*, w.label AS wallet_label
+            FROM transactions t
+            JOIN wallets w ON w.id = t.wallet_id
+        )
+        WHERE profile_id = ?
+          AND external_id = ?
+          AND direction = ?
+          AND asset = ?
+          AND amount = ?
+          AND fee = ?
+          {wallet_filter}
+        ORDER BY created_at DESC
+        LIMIT 2
+        """,
+        (
+            profile_id,
+            normalized["external_id"],
+            normalized["direction"],
+            normalized["asset"],
+            amount_msat,
+            fee_msat,
+            *((exclude_wallet_id,) if exclude_wallet_id else ()),
+        ),
+    ).fetchall()
+    match = _single_match(exact_fee_rows)
+    if match or len(exact_fee_rows) > 1:
+        return match, "matched" if match else "ambiguous"
+    if normalized["pricing_source_kind"] != pricing.SOURCE_EXCHANGE_EXECUTION:
+        return None, "unmatched"
+    amount_rows = conn.execute(
+        f"""
+        SELECT {_EXISTING_TRANSACTION_COLUMNS}, wallet_label
+        FROM (
+            SELECT t.*, w.label AS wallet_label
+            FROM transactions t
+            JOIN wallets w ON w.id = t.wallet_id
+        )
+        WHERE profile_id = ?
+          AND external_id = ?
+          AND direction = ?
+          AND asset = ?
+          AND amount = ?
+          {wallet_filter}
+        ORDER BY created_at DESC
+        LIMIT 2
+        """,
+        tuple(base_params),
+    ).fetchall()
+    match = _single_match(amount_rows)
+    if match:
+        return match, "matched"
+    if len(amount_rows) > 1:
+        return None, "ambiguous"
+    return None, "unmatched"
+
+
+def _find_existing_profile_transaction(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    normalized: Mapping[str, Any],
+) -> sqlite3.Row | None:
+    match, _status = _find_existing_profile_transaction_result(
+        conn,
+        profile_id,
+        normalized,
+    )
+    return match
 
 
 PRICE_COLUMNS = (
@@ -249,6 +353,132 @@ def _transaction_merge_updates(existing: Mapping[str, Any], normalized: Mapping[
     if updates and normalized["raw_json"] and normalized["raw_json"] != existing["raw_json"]:
         updates["raw_json"] = normalized["raw_json"]
     return updates
+
+
+def _import_change_record(
+    tx_id: str,
+    wallet_label: str,
+    normalized: Mapping[str, Any],
+    changed_fields: Sequence[str],
+) -> dict[str, Any]:
+    return {
+        "transaction_id": tx_id,
+        "external_id": normalized["external_id"],
+        "wallet": wallet_label,
+        "asset": normalized["asset"],
+        "direction": normalized["direction"],
+        "amount_msat": btc_to_msat(normalized["amount"]),
+        "changed_fields": sorted(changed_fields),
+        "pricing_external_ref": normalized["pricing_external_ref"],
+    }
+
+
+def normalize_bullbitcoin_import_mode(import_mode: str | None) -> str:
+    mode = str(import_mode or BULLBITCOIN_IMPORT_MODE_RELEVANT).strip().lower()
+    if mode in {"relevant-only", "relevant_only", "match", "match-only", "match_only"}:
+        mode = BULLBITCOIN_IMPORT_MODE_RELEVANT
+    if mode not in BULLBITCOIN_IMPORT_MODES:
+        raise AppError(
+            f"Unsupported Bull Bitcoin import mode '{import_mode}'",
+            code="validation",
+            hint="Choose 'relevant' to enrich matching book transactions, or 'full' to import all completed Bull orders with reconciliation flags.",
+            retryable=False,
+        )
+    return mode
+
+
+def _find_imported_wallet_transaction(
+    conn: sqlite3.Connection,
+    wallet_id: str,
+    normalized: Mapping[str, Any],
+) -> sqlite3.Row | None:
+    fingerprint = make_transaction_fingerprint(
+        wallet_id,
+        normalized["external_id"],
+        normalized["occurred_at"],
+        normalized["direction"],
+        normalized["asset"],
+        normalized["amount"],
+        normalized["fee"],
+    )
+    existing = _find_existing_transaction(conn, wallet_id, normalized, fingerprint)
+    if existing:
+        return existing
+    return conn.execute(
+        f"""
+        SELECT {_EXISTING_TRANSACTION_COLUMNS}
+        FROM transactions
+        WHERE wallet_id = ?
+          AND pricing_external_ref = ?
+          AND direction = ?
+          AND asset = ?
+          AND amount = ?
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (
+            wallet_id,
+            normalized["pricing_external_ref"],
+            normalized["direction"],
+            normalized["asset"],
+            btc_to_msat(normalized["amount"]),
+        ),
+    ).fetchone()
+
+
+def _apply_bullbitcoin_reconciliation_flag(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+    tx_id: str,
+    status: str,
+    hooks: ImportCoordinatorHooks,
+) -> bool:
+    tag_rows: dict[str, sqlite3.Row] = {}
+    for tag_status, (code, label) in BULLBITCOIN_RECONCILIATION_TAGS.items():
+        tag, created = hooks.ensure_tag_row(
+            conn,
+            profile["workspace_id"],
+            profile["id"],
+            code,
+            label,
+        )
+        tag_rows[tag_status] = tag
+    conn.executemany(
+        "DELETE FROM transaction_tags WHERE transaction_id = ? AND tag_id = ?",
+        [(tx_id, tag["id"]) for tag in tag_rows.values()],
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
+        (tx_id, tag_rows[status]["id"]),
+    )
+    # In full mode the Bull account can be shared across multiple books, so an
+    # unmatched row is only a review signal until the user assigns it to this book.
+    exclude = True
+    conn.execute(
+        "UPDATE transactions SET excluded = ? WHERE id = ?",
+        (1 if exclude else 0, tx_id),
+    )
+    return exclude
+
+
+def _bullbitcoin_reconciliation_record(
+    normalized: Mapping[str, Any],
+    status: str,
+    imported_tx_id: str | None,
+    wallet_label: str,
+    matched: sqlite3.Row | None,
+) -> dict[str, Any]:
+    record = _import_change_record(
+        imported_tx_id or "",
+        wallet_label,
+        normalized,
+        ("reconciliation",),
+    )
+    record["status"] = status
+    if matched:
+        record["matched_transaction_id"] = matched["id"]
+        record["matched_wallet"] = matched["wallet_label"]
+    return record
 
 
 def _normalized_fiat_currency(value: Any) -> str:
@@ -403,6 +633,9 @@ def insert_wallet_records(
     imported = 0
     skipped = 0
     updated = 0
+    unchanged = 0
+    inserted_records: list[dict[str, Any]] = []
+    updated_records: list[dict[str, Any]] = []
     total = len(records)
     progress = sync_progress_emitter.get()
     if progress is not None:
@@ -428,12 +661,23 @@ def insert_wallet_records(
             _validate_import_price_currency(profile, normalized)
             updates = _transaction_merge_updates(existing, normalized, fingerprint)
             if updates:
+                changed_fields = sorted(updates)
                 assignments = ", ".join(f"{column} = ?" for column in updates)
                 conn.execute(
                     f"UPDATE transactions SET {assignments} WHERE id = ?",
                     (*updates.values(), existing["id"]),
                 )
                 updated += 1
+                updated_records.append(
+                    _import_change_record(
+                        existing["id"],
+                        wallet["label"],
+                        normalized,
+                        changed_fields,
+                    )
+                )
+            else:
+                unchanged += 1
             skipped += 1
             if progress is not None and (index % 200 == 0 or index == total):
                 _emit_import_progress(
@@ -509,6 +753,18 @@ def insert_wallet_records(
             ),
         )
         imported += 1
+        inserted_records.append(
+            _import_change_record(
+                tx_id,
+                wallet["label"],
+                normalized,
+                (
+                    "transaction",
+                    "pricing",
+                    "metadata",
+                ),
+            )
+        )
         if progress is not None and (index % 200 == 0 or index == total):
             _emit_import_progress(
                 progress,
@@ -526,9 +782,215 @@ def insert_wallet_records(
         "source": source_label,
         "imported": imported,
         "skipped": skipped,
+        "unchanged": unchanged,
+        "inserted_records": inserted_records,
+        "updated_records": updated_records,
     }
     if report_updates and updated:
         outcome["updated"] = updated
+    return outcome
+
+
+def enrich_profile_records(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+    records: Sequence[ImportRow],
+    source_label: str,
+    hooks: ImportCoordinatorHooks,
+    *,
+    commit: bool = True,
+    report_updates: bool = False,
+) -> dict[str, Any]:
+    """Enrich existing profile transactions from exchange evidence.
+
+    This is intentionally insert-free. Bull Bitcoin order exports describe
+    exchange execution, not a wallet source of truth, so unmatched or ambiguous
+    rows are left untouched.
+    """
+    updated = 0
+    matched = 0
+    unchanged = 0
+    skipped_ambiguous = 0
+    skipped_unmatched = 0
+    skipped = 0
+    updated_records: list[dict[str, Any]] = []
+    total = len(records)
+    progress = sync_progress_emitter.get()
+    if progress is not None:
+        _emit_import_progress(
+            progress,
+            wallet_label="book",
+            processed=0,
+            total=total,
+        )
+    for index, record in enumerate(records, start=1):
+        normalized = normalize_import_record(record, source_label=source_label)
+        existing, match_status = _find_existing_profile_transaction_result(
+            conn,
+            profile["id"],
+            normalized,
+        )
+        if not existing:
+            if match_status == "ambiguous":
+                skipped_ambiguous += 1
+            else:
+                skipped_unmatched += 1
+            skipped += 1
+        else:
+            matched += 1
+            _validate_import_price_currency(profile, normalized)
+            updates = _transaction_merge_updates(
+                existing,
+                normalized,
+                existing["fingerprint"],
+            )
+            if updates:
+                changed_fields = sorted(updates)
+                assignments = ", ".join(f"{column} = ?" for column in updates)
+                conn.execute(
+                    f"UPDATE transactions SET {assignments} WHERE id = ?",
+                    (*updates.values(), existing["id"]),
+                )
+                updated += 1
+                updated_records.append(
+                    _import_change_record(
+                        existing["id"],
+                        existing["wallet_label"],
+                        normalized,
+                        changed_fields,
+                    )
+                )
+            else:
+                unchanged += 1
+            skipped += 1
+        if progress is not None and (index % 200 == 0 or index == total):
+            _emit_import_progress(
+                progress,
+                wallet_label="book",
+                processed=index,
+                total=total,
+                imported=0,
+                skipped=skipped,
+            )
+    hooks.invalidate_journals(conn, profile["id"])
+    if commit:
+        conn.commit()
+    outcome = {
+        "scope": "book",
+        "source": source_label,
+        "imported": 0,
+        "skipped": skipped,
+        "matched": matched,
+        "unchanged": unchanged,
+        "skipped_unmatched": skipped_unmatched,
+        "skipped_ambiguous": skipped_ambiguous,
+        "updated_records": updated_records,
+    }
+    if report_updates and updated:
+        outcome["updated"] = updated
+    return outcome
+
+
+def import_bullbitcoin_records_full(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+    wallet: Mapping[str, Any],
+    records: Sequence[ImportRow],
+    source_label: str,
+    hooks: ImportCoordinatorHooks,
+    *,
+    commit: bool = True,
+) -> dict[str, Any]:
+    """Import every completed Bull order and flag book reconciliation status."""
+    normalized_records = [
+        normalize_import_record(record, source_label=source_label) for record in records
+    ]
+    reconciliation: list[tuple[dict[str, Any], sqlite3.Row | None, str]] = []
+    matched = 0
+    unmatched = 0
+    ambiguous = 0
+    for normalized in normalized_records:
+        existing, status = _find_existing_profile_transaction_result(
+            conn,
+            profile["id"],
+            normalized,
+            exclude_wallet_id=wallet["id"],
+        )
+        if status == "matched":
+            matched += 1
+        elif status == "ambiguous":
+            ambiguous += 1
+        else:
+            unmatched += 1
+        reconciliation.append((normalized, existing, status))
+
+    outcome = insert_wallet_records(
+        conn,
+        profile,
+        wallet,
+        records,
+        source_label,
+        hooks,
+        commit=False,
+        report_updates=True,
+    )
+
+    inserted_ids = {
+        record["transaction_id"] for record in outcome.get("inserted_records", [])
+    }
+    updated_ids = {
+        record["transaction_id"] for record in outcome.get("updated_records", [])
+    }
+    reconciliation_records: list[dict[str, Any]] = []
+    status_by_tx_id: dict[str, dict[str, Any]] = {}
+    excluded = 0
+    for normalized, existing, status in reconciliation:
+        imported = _find_imported_wallet_transaction(conn, wallet["id"], normalized)
+        if not imported:
+            continue
+        row_excluded = _apply_bullbitcoin_reconciliation_flag(
+            conn,
+            profile,
+            imported["id"],
+            status,
+            hooks,
+        )
+        if row_excluded:
+            excluded += 1
+        reconciliation_record = _bullbitcoin_reconciliation_record(
+            normalized,
+            status,
+            imported["id"],
+            wallet["label"],
+            existing,
+        )
+        status_by_tx_id[imported["id"]] = {
+            "status": status,
+            "excluded": row_excluded,
+            "matched_wallet": existing["wallet_label"] if existing else None,
+            "matched_transaction_id": existing["id"] if existing else None,
+        }
+        if imported["id"] in inserted_ids or imported["id"] in updated_ids:
+            reconciliation_record["changed"] = True
+        reconciliation_records.append(reconciliation_record)
+
+    hooks.invalidate_journals(conn, profile["id"])
+    if commit:
+        conn.commit()
+    for bucket in ("inserted_records", "updated_records"):
+        for record in outcome.get(bucket, []):
+            record.update(status_by_tx_id.get(record["transaction_id"], {}))
+    outcome.update(
+        {
+            "scope": "book",
+            "mode": BULLBITCOIN_IMPORT_MODE_FULL,
+            "matched": matched,
+            "unmatched": unmatched,
+            "ambiguous": ambiguous,
+            "excluded": excluded,
+            "reconciliation_records": reconciliation_records,
+        }
+    )
     return outcome
 
 
@@ -566,6 +1028,60 @@ def import_records_into_wallet(
         outcome.update(apply_river_metadata(conn, profile, wallet, records, hooks, commit=False))
     if commit:
         conn.commit()
+    return outcome
+
+
+def import_file_into_profile(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+    file_path: str,
+    input_format: str,
+    hooks: ImportCoordinatorHooks,
+    *,
+    import_mode: str = BULLBITCOIN_IMPORT_MODE_RELEVANT,
+    wallet: Mapping[str, Any] | None = None,
+    commit: bool = True,
+) -> dict[str, Any]:
+    records = load_import_records(file_path, input_format)
+    if not is_bullbitcoin_format(input_format):
+        raise AppError(
+            f"Profile-wide imports do not support '{input_format}'",
+            code="validation",
+            hint="Choose a wallet for wallet-scoped transaction imports.",
+            retryable=False,
+        )
+    mode = normalize_bullbitcoin_import_mode(import_mode)
+    if mode == BULLBITCOIN_IMPORT_MODE_FULL:
+        if wallet is None:
+            raise AppError(
+                "A Bull Bitcoin wallet is required for full import mode",
+                code="validation",
+                hint="Choose or create the book's Bull Bitcoin wallet.",
+                retryable=False,
+            )
+        outcome = import_bullbitcoin_records_full(
+            conn,
+            profile,
+            wallet,
+            records,
+            f"file:{input_format}",
+            hooks,
+            commit=commit,
+        )
+    else:
+        outcome = enrich_profile_records(
+            conn,
+            profile,
+            records,
+            f"file:{input_format}",
+            hooks,
+            report_updates=True,
+            commit=commit,
+        )
+        outcome["mode"] = mode
+    outcome["bullbitcoin_rows"] = len(records)
+    outcome["input_format"] = input_format
+    outcome["file"] = os.path.abspath(file_path)
     return outcome
 
 
@@ -789,6 +1305,9 @@ __all__ = [
     "apply_btcpay_metadata",
     "apply_phoenix_metadata",
     "apply_river_metadata",
+    "enrich_profile_records",
+    "import_file_into_profile",
+    "normalize_bullbitcoin_import_mode",
     "import_file_into_wallet",
     "import_records_into_wallet",
     "insert_wallet_records",

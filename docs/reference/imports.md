@@ -255,6 +255,8 @@ Behavior:
 - BTC fees become Kassiber BTC fees
 - `Transaction Type` / `Tag` becomes the transaction kind and a `river:*` tag
 - `Method`, `Source`, and `Destination` are preserved in the description/note
+- machine output includes inserted/updated transaction summaries so desktop
+  imports can show what changed
 
 You can also create a wallet whose source file is a River export:
 
@@ -270,16 +272,39 @@ python3 -m kassiber wallets sync --wallet river
 
 ## Bull Bitcoin
 
-Kassiber supports Bull Bitcoin order CSV exports as exchange evidence. The
-import is wallet-scoped: completed Bitcoin on-chain, Lightning, or Liquid
-orders with a transaction id are normalized, and canceled/expired orders or
-rows without a transaction id are skipped.
+Kassiber supports Bull Bitcoin order CSV exports as exchange evidence. Bull
+accounts are often shared across multiple books for the same organization, so
+the import is book-wide and mode-driven: completed Bitcoin on-chain, Lightning,
+or Liquid orders with a transaction id are normalized, then reconciled against
+existing transactions in the active profile. Canceled/expired orders or rows
+without a transaction id are skipped.
 
 Import directly:
 
 ```bash
 python3 -m kassiber wallets import-bull \
-  --wallet treasury \
+  --file /path/to/bull-orders.csv
+```
+
+The default `--mode relevant` enriches only rows that uniquely match existing
+transactions anywhere in the active profile. It is the safest mode when the same
+Bull export contains operations, fundraising, and other organization activity.
+
+`--mode full` imports every completed Bull order into the selected wallet, or
+into a default `Bull Bitcoin` wallet when no wallet is supplied. Full mode keeps
+the imported Bull rows excluded from accounting by default and adds
+reconciliation tags:
+
+- `bullbitcoin-matched` means the Bull row matched one existing wallet
+  transaction in this book
+- `bullbitcoin-wallet-gap` means no matching wallet transaction was found in
+  this book; the row may be a missing wallet sync or may belong to another book
+- `bullbitcoin-ambiguous` means more than one wallet transaction matched and
+  the row needs review
+
+```bash
+python3 -m kassiber wallets import-bull \
+  --mode full \
   --file /path/to/bull-orders.csv
 ```
 
@@ -289,18 +314,20 @@ Behavior:
 - fiat -> Bitcoin/Liquid/Lightning rows become inbound `buy` transactions
 - payout/payin fiat amounts are stored as exact `exchange_execution` pricing
   from provider `Bull Bitcoin`
-- imports are match-existing-only so orders for wallets outside the selected
-  Kassiber wallet are skipped
-- when the same transaction id, asset, amount, direction, and wallet already
-  exist from wallet sync, Kassiber enriches that row and preserves the
-  wallet-derived network fee
+- relevant imports are match-existing-only and never create standalone
+  transactions; full imports create excluded evidence rows
+- when exactly one transaction in the active profile has the same transaction
+  id, asset, amount, and direction, Kassiber enriches that row and preserves
+  the wallet-derived network fee
+- in relevant mode, duplicate or ambiguous matches are skipped instead of
+  guessed; in full mode, ambiguous rows are imported as excluded evidence and
+  tagged for review
 
 You can also attach a Bull Bitcoin export to an existing wallet that already
 receives the matching transactions from another source (for example Esplora,
 Electrum, Phoenix, or a descriptor sync). Bull exports are
 match-existing-only: this attachment does not create standalone transaction
-rows, and orders for transactions that are not already in that same wallet are
-skipped.
+rows, and matching is still profile-wide.
 
 ```bash
 python3 -m kassiber wallets update --wallet treasury \

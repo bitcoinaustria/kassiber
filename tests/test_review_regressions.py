@@ -3851,27 +3851,28 @@ class ReviewRegressionTest(unittest.TestCase):
             "--all",
         )
         self._assert_ok(payload, result, "wallets.sync")
+        self.assertEqual(payload["data"][0], {
+            "wallet": "SkipMe",
+            "status": "skipped",
+            "reason": "no file source, descriptor, or backend addresses configured",
+        })
+        sync_result = payload["data"][1]
+        self.assertEqual(sync_result["wallet"], "SyncMe")
+        self.assertEqual(sync_result["status"], "synced")
+        self.assertEqual(sync_result["source"], "file:phoenix_csv")
+        self.assertEqual(sync_result["imported"], 1)
+        self.assertEqual(sync_result["skipped"], 0)
+        self.assertEqual(sync_result["unchanged"], 0)
+        self.assertEqual(sync_result["phoenix_notes_set"], 1)
+        self.assertEqual(sync_result["phoenix_tags_added"], 1)
+        self.assertEqual(sync_result["phoenix_tags_created"], 1)
+        self.assertEqual(sync_result["input_format"], "phoenix_csv")
+        self.assertEqual(sync_result["file"], str(phoenix_csv))
+        self.assertEqual(len(sync_result["inserted_records"]), 1)
+        self.assertEqual(sync_result["inserted_records"][0]["wallet"], "SyncMe")
         self.assertEqual(
-            payload["data"],
-            [
-                {
-                    "wallet": "SkipMe",
-                    "status": "skipped",
-                    "reason": "no file source, descriptor, or backend addresses configured",
-                },
-                {
-                    "wallet": "SyncMe",
-                    "status": "synced",
-                    "source": "file:phoenix_csv",
-                    "imported": 1,
-                    "skipped": 0,
-                    "phoenix_notes_set": 1,
-                    "phoenix_tags_added": 1,
-                    "phoenix_tags_created": 1,
-                    "input_format": "phoenix_csv",
-                    "file": str(phoenix_csv),
-                },
-            ],
+            sync_result["inserted_records"][0]["external_id"],
+            "11111111-aaaa-bbbb-cccc-000000000001",
         )
         conn = open_db(self.data_root)
         self.addCleanup(conn.close)
@@ -3904,23 +3905,20 @@ class ReviewRegressionTest(unittest.TestCase):
             "--wallet", "SyncMe",
         )
         self._assert_ok(payload, result, "wallets.sync")
-        self.assertEqual(
-            payload["data"],
-            [
-                {
-                    "wallet": "SyncMe",
-                    "status": "synced",
-                    "source": "file:phoenix_csv",
-                    "imported": 0,
-                    "skipped": 1,
-                    "phoenix_notes_set": 0,
-                    "phoenix_tags_added": 0,
-                    "phoenix_tags_created": 0,
-                    "input_format": "phoenix_csv",
-                    "file": str(phoenix_csv),
-                }
-            ],
-        )
+        sync_result = payload["data"][0]
+        self.assertEqual(sync_result["wallet"], "SyncMe")
+        self.assertEqual(sync_result["status"], "synced")
+        self.assertEqual(sync_result["source"], "file:phoenix_csv")
+        self.assertEqual(sync_result["imported"], 0)
+        self.assertEqual(sync_result["skipped"], 1)
+        self.assertIn("unchanged", sync_result)
+        self.assertEqual(sync_result["inserted_records"], [])
+        self.assertIn("updated_records", sync_result)
+        self.assertEqual(sync_result["phoenix_notes_set"], 0)
+        self.assertEqual(sync_result["phoenix_tags_added"], 0)
+        self.assertEqual(sync_result["phoenix_tags_created"], 0)
+        self.assertEqual(sync_result["input_format"], "phoenix_csv")
+        self.assertEqual(sync_result["file"], str(phoenix_csv))
 
         payload, result = self._run_json(
             "transactions", "list",

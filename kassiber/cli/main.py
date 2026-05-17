@@ -602,8 +602,9 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_import_bull = wallets_sub.add_parser("import-bull", aliases=["import-bullbitcoin"])
     wallets_import_bull.add_argument("--workspace")
     wallets_import_bull.add_argument("--profile")
-    wallets_import_bull.add_argument("--wallet", required=True)
+    wallets_import_bull.add_argument("--wallet")
     wallets_import_bull.add_argument("--file", required=True)
+    wallets_import_bull.add_argument("--mode", choices=["relevant", "full"], default="relevant")
     wallets_sync_btcpay = wallets_sub.add_parser("sync-btcpay")
     wallets_sync_btcpay.add_argument("--workspace")
     wallets_sync_btcpay.add_argument("--profile")
@@ -1829,6 +1830,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.wallet,
                     args.file,
                     "bullbitcoin_csv",
+                    args.mode,
                 ),
             )
         if args.wallets_command == "sync-btcpay":

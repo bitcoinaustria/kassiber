@@ -66,6 +66,7 @@ from .cli.handlers import (
     delete_transfer_rule,
     dismiss_transfer_candidate,
     invalidate_journals,
+    import_into_profile,
     import_into_wallet,
     list_saved_views_cli,
     list_transaction_pairs,
@@ -5380,7 +5381,6 @@ def _import_wallet_file_payload(
     conn: sqlite3.Connection,
     args: dict[str, Any],
 ) -> dict[str, Any]:
-    wallet_ref = _required_str_arg(args, "wallet", "Wallet")
     source_file = _source_file_arg(args)
     if not source_file:
         raise AppError(
@@ -5397,6 +5397,32 @@ def _import_wallet_file_payload(
             hint="Choose a supported file format.",
             retryable=False,
         )
+    if source_format == "bullbitcoin_csv":
+        wallet_ref = _optional_str_arg(args, "wallet")
+        import_mode = (
+            _optional_str_arg(args, "mode")
+            or _optional_str_arg(args, "import_mode")
+            or "relevant"
+        )
+        if wallet_ref:
+            return import_into_wallet(
+                conn,
+                None,
+                None,
+                wallet_ref,
+                source_file,
+                source_format,
+                import_mode,
+            )
+        return import_into_profile(
+            conn,
+            None,
+            None,
+            source_file,
+            source_format,
+            import_mode,
+        )
+    wallet_ref = _required_str_arg(args, "wallet", "Wallet")
     return import_into_wallet(conn, None, None, wallet_ref, source_file, source_format)
 
 

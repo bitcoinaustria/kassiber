@@ -193,6 +193,20 @@ address when present. The daemon does not persist anything; callers use the
 preview to confirm a descriptor produces the expected wallet before
 committing.
 
+`ui.wallets.import_file` accepts `wallet`, `source_file`, and `source_format`
+for wallet-scoped CSV/JSON imports. Wallet CSV import results include
+`inserted_records`, `updated_records`, and `unchanged` so the desktop can show
+what changed after an exchange CSV import. For
+`source_format="bullbitcoin_csv"`, `wallet` is optional. The default
+`mode="relevant"` treats the export as book-wide exchange evidence and enriches
+only unique matching transactions in the active profile. `mode="full"` imports
+all completed Bull orders into the selected or default `Bull Bitcoin` wallet as
+excluded evidence, then flags each row as `matched`, `unmatched`, or
+`ambiguous` against this book's wallet transactions. The Bull result also
+includes `matched`, `skipped_unmatched`, and `skipped_ambiguous` in relevant
+mode, or `matched`, `unmatched`, `ambiguous`, `excluded`, and
+`reconciliation_records` in full mode.
+
 `ui.connections.sources` returns the daemon's authoritative catalog of
 supported wallet kinds (with summary/config-fields metadata) and the
 recognized import `source_formats`. The desktop catalog stays the source of

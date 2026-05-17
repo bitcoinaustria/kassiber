@@ -430,7 +430,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     sourceFormat: "bullbitcoin_csv",
     details: [
       "Completed Bitcoin, Lightning, and Liquid orders preserve exact fiat proceeds",
-      "Wallet-scoped imports only enrich matching transaction ids",
+      "Book-wide imports can enrich relevant rows or import the shared export with reconciliation flags",
     ],
   },
   {
