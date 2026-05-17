@@ -67,6 +67,28 @@ function isTransientScannerError(error: Error | string) {
   );
 }
 
+function scannerPreviewLabel({
+  error,
+  isStarting,
+  progress,
+  scanMode,
+  scannedMaterial,
+}: {
+  error: string | null;
+  isStarting: boolean;
+  progress: BbqrProgress | null;
+  scanMode: QrScanMode;
+  scannedMaterial: string | null;
+}) {
+  if (scannedMaterial) return "Ready to use";
+  if (error) return "Camera blocked";
+  if (isStarting) return "Starting camera";
+  if (progress) return `BBQR ${progress.received}/${progress.total}`;
+  if (scanMode === "bbqr") return "Collecting BBQR";
+  if (scanMode === "single") return "Scanning QR";
+  return "Scanning wallet QR";
+}
+
 export function WalletMaterialScannerDialog({
   open,
   onOpenChange,
@@ -92,6 +114,13 @@ export function WalletMaterialScannerDialog({
   const [scannedMaterial, setScannedMaterial] = React.useState<string | null>(
     null,
   );
+  const previewLabel = scannerPreviewLabel({
+    error,
+    isStarting,
+    progress,
+    scanMode,
+    scannedMaterial,
+  });
 
   const stopScanner = React.useCallback(() => {
     scannerRef.current?.stop();
@@ -332,7 +361,7 @@ export function WalletMaterialScannerDialog({
                 ) : (
                   <Camera className="size-3.5" />
                 )}
-                <span>{scanModeLabel(scanMode)}</span>
+                <span>{previewLabel}</span>
               </div>
               {devices.length > 1 ? (
                 <select
