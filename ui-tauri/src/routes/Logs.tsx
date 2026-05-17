@@ -12,13 +12,6 @@ import * as React from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
@@ -52,7 +45,7 @@ import {
 } from "@/lib/appLogs";
 import { isFilePickerAvailable, saveFile } from "@/lib/filePicker";
 import { appVersionLabel } from "@/lib/appVersion";
-import { screenPanelClassName } from "@/lib/screen-layout";
+import { screenShellClassName } from "@/lib/screen-layout";
 import { saveLogsExportAs } from "@/lib/saveText";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
@@ -213,136 +206,137 @@ export function Logs() {
   }
 
   return (
-    <main className={cn(screenPanelClassName, "flex h-full min-h-0 flex-col")}>
-      <Card className="min-h-0 flex-1 gap-0 overflow-hidden rounded-md py-0">
-        <CardHeader className="gap-3 border-b px-3 py-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0 space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <CardTitle className="text-base">Logs</CardTitle>
-                <Badge
-                  variant="outline"
-                  className="gap-1 border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                >
-                  <span className="size-2 rounded-full bg-emerald-500" aria-hidden="true" />
-                  Live
-                </Badge>
-              </div>
-              <CardDescription>
-                Local-only RAM buffer. Nothing is written to disk unless you export.
-              </CardDescription>
-            </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={copyLast200}>
-                <Copy className="size-4" aria-hidden="true" />
-                Copy 200
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button type="button" size="sm">
-                    <Download className="size-4" aria-hidden="true" />
-                    Export
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => void exportFormat("md")}>
-                    <FileText className="size-4" aria-hidden="true" />
-                    Markdown
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => void exportFormat("jsonl")}>
-                    <FileJson className="size-4" aria-hidden="true" />
-                    JSONL
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => void exportFormat("log")}>
-                    <FileText className="size-4" aria-hidden="true" />
-                    Log
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="size-8"
-                onClick={clearAppLogRecords}
-                title="Clear logs"
-              >
-                <Trash2 className="size-4" aria-hidden="true" />
-              </Button>
-            </div>
-          </div>
-
+    <div className={cn(screenShellClassName, "flex h-full min-h-0 flex-col")}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            Developer tools
+          </p>
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={level} onValueChange={(value) => setLevel(value as AppLogLevel)}>
-              <SelectTrigger className="h-8 w-[122px] font-mono text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {appLogLevels().map((item) => (
-                  <SelectItem key={item} value={item}>
-                    {item.toUpperCase()}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <div className="flex min-w-[12rem] flex-1 flex-wrap gap-1">
-              {Object.entries(moduleCounts).map(([module, count]) => (
-                <button
-                  key={module}
-                  type="button"
-                  aria-pressed={moduleFilter === module}
-                  onClick={() =>
-                    setModuleFilter((current) => (current === module ? null : module))
-                  }
-                  className={cn(
-                    "rounded-sm border px-2 py-1 font-mono text-xs text-muted-foreground transition-colors hover:bg-muted",
-                    moduleFilter === module && "border-primary bg-primary/10 text-primary",
-                  )}
-                >
-                  {module} {count}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-1">
-              <Input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search logs"
-                className="h-8 w-40 font-mono text-xs"
-              />
-              <Button
-                type="button"
-                size="icon"
-                variant={regex ? "default" : "outline"}
-                className="size-8"
-                onClick={() => setRegex((current) => !current)}
-                title="Regex search"
-              >
-                <Regex className="size-4" aria-hidden="true" />
+            <h2 className="text-2xl font-semibold tracking-tight">Logs</h2>
+            <Badge
+              variant="outline"
+              className="gap-1 border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+            >
+              <span className="size-2 rounded-full bg-emerald-500" aria-hidden="true" />
+              Live
+            </Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Local-only RAM buffer. Nothing is written to disk unless you export.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={copyLast200}>
+            <Copy className="size-4" aria-hidden="true" />
+            Copy 200
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" size="sm">
+                <Download className="size-4" aria-hidden="true" />
+                Export
               </Button>
-            </div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => void exportFormat("md")}>
+                <FileText className="size-4" aria-hidden="true" />
+                Markdown
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => void exportFormat("jsonl")}>
+                <FileJson className="size-4" aria-hidden="true" />
+                JSONL
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => void exportFormat("log")}>
+                <FileText className="size-4" aria-hidden="true" />
+                Log
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-8"
+            onClick={clearAppLogRecords}
+            title="Clear logs"
+          >
+            <Trash2 className="size-4" aria-hidden="true" />
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card">
+        <div className="flex flex-wrap items-center gap-2 border-b p-3">
+          <Select value={level} onValueChange={(value) => setLevel(value as AppLogLevel)}>
+            <SelectTrigger className="h-8 w-[122px] font-mono text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {appLogLevels().map((item) => (
+                <SelectItem key={item} value={item}>
+                  {item.toUpperCase()}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="flex min-w-0 flex-1 flex-wrap gap-1">
+            {Object.entries(moduleCounts).map(([module, count]) => (
+              <button
+                key={module}
+                type="button"
+                aria-pressed={moduleFilter === module}
+                onClick={() =>
+                  setModuleFilter((current) => (current === module ? null : module))
+                }
+                className={cn(
+                  "rounded-sm border px-2 py-1 font-mono text-xs text-muted-foreground transition-colors hover:bg-muted",
+                  moduleFilter === module && "border-primary bg-primary/10 text-primary",
+                )}
+              >
+                {module} {count}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1">
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search logs"
+              className="h-8 w-40 font-mono text-xs"
+            />
             <Button
               type="button"
-              size="sm"
-              variant={redacted ? "secondary" : "destructive"}
-              onClick={() => setRedacted((current) => !current)}
+              size="icon"
+              variant={regex ? "default" : "outline"}
+              className="size-8"
+              onClick={() => setRegex((current) => !current)}
+              title="Regex search"
             >
-              {redacted ? (
-                <Shield className="size-4" aria-hidden="true" />
-              ) : (
-                <Eye className="size-4" aria-hidden="true" />
-              )}
-              {redacted ? "Redacted" : "Raw"}
+              <Regex className="size-4" aria-hidden="true" />
             </Button>
-            <label className="flex h-8 items-center gap-2 rounded-md border px-2 text-xs text-muted-foreground">
-              <Checkbox
-                checked={maskAmounts}
-                onCheckedChange={(checked) => setMaskAmounts(Boolean(checked))}
-              />
-              Amounts
-            </label>
           </div>
-        </CardHeader>
+          <Button
+            type="button"
+            size="sm"
+            variant={redacted ? "secondary" : "destructive"}
+            onClick={() => setRedacted((current) => !current)}
+          >
+            {redacted ? (
+              <Shield className="size-4" aria-hidden="true" />
+            ) : (
+              <Eye className="size-4" aria-hidden="true" />
+            )}
+            {redacted ? "Redacted" : "Raw"}
+          </Button>
+          <label className="flex h-8 items-center gap-2 rounded-md border px-2 text-xs text-muted-foreground">
+            <Checkbox
+              checked={maskAmounts}
+              onCheckedChange={(checked) => setMaskAmounts(Boolean(checked))}
+            />
+            Amounts
+          </label>
+        </div>
 
         {!redacted ? (
           <div className="border-b border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -351,19 +345,19 @@ export function Logs() {
           </div>
         ) : null}
 
-        <div className="flex items-center justify-between border-b bg-muted/35 px-3 py-1 font-mono text-xs text-muted-foreground">
+        <div className="flex items-center justify-between border-b px-3 py-1.5 font-mono text-xs text-muted-foreground">
           <span>{filteredRecords.length} records · RAM buffer {formatBytes(bufferBytes)}</span>
           <span>rendering {visibleRecords.length} newest records</span>
         </div>
 
-        <CardContent className="relative min-h-0 flex-1 p-0">
+        <div className="relative min-h-0 flex-1">
           <div
             ref={viewportRef}
             onScroll={onScroll}
             className="h-full overflow-auto font-mono text-[12px] leading-5"
           >
             {visibleRecords.length === 0 ? (
-              <div className="grid h-full min-h-64 place-items-center text-sm text-muted-foreground">
+              <div className="flex h-full min-h-64 items-center justify-center text-sm text-muted-foreground">
                 No records match the current stream and search settings.
               </div>
             ) : (
@@ -401,9 +395,9 @@ export function Logs() {
               ↓ Jump to latest ({newWhilePaused} new)
             </Button>
           ) : null}
-        </CardContent>
-      </Card>
-    </main>
+        </div>
+      </div>
+    </div>
   );
 }
 
