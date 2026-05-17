@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { lockScreenConfig, shouldUseDaemonUnlock } from "./appLock";
+import {
+  lockScreenConfig,
+  shouldLockEncryptedWorkspaceOnLaunch,
+  shouldUseDaemonUnlock,
+} from "./appLock";
 
 describe("app lock decisions", () => {
   it("routes real workspaces through the daemon unlock path", () => {
@@ -53,5 +57,29 @@ describe("app lock decisions", () => {
         "The daemon needs the database passphrase before it can return live books data.",
       passphraseRequired: true,
     });
+  });
+
+  it("does not proactively lock encrypted books on launch unless the user enabled it", () => {
+    expect(
+      shouldLockEncryptedWorkspaceOnLaunch({
+        encryptedWorkspace: true,
+        requirePassphraseOnLaunch: false,
+        hasSessionUnlock: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldLockEncryptedWorkspaceOnLaunch({
+        encryptedWorkspace: true,
+        requirePassphraseOnLaunch: true,
+        hasSessionUnlock: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldLockEncryptedWorkspaceOnLaunch({
+        encryptedWorkspace: true,
+        requirePassphraseOnLaunch: true,
+        hasSessionUnlock: true,
+      }),
+    ).toBe(false);
   });
 });

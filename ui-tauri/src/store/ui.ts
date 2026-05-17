@@ -192,10 +192,10 @@ export interface UiState {
 }
 
 const DEFAULT_APP_LOCK_POLICY: AppLockPolicy = {
-  autoLockWhenIdle: true,
+  autoLockWhenIdle: false,
   idleMinutes: 5,
-  requirePassphraseOnLaunch: true,
-  lockOnWindowClose: true,
+  requirePassphraseOnLaunch: false,
+  lockOnWindowClose: false,
 };
 
 function normalizeIdentity(identity: Identity | null): Identity | null {
