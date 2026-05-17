@@ -5,6 +5,8 @@
 
 const SETTINGS_SECTION_INTEGRATION: Record<string, string> = {
   privacy: "privacy-sensitive",
+  developer: "privacy-developer-tools",
+  logs: "privacy-developer-tools",
   display: "display-currency",
   explorer: "explorer-links",
   explorers: "explorer-links",

@@ -36,7 +36,7 @@ describe("isAppRoutePath", () => {
       "/books",
       "/journals",
       "/quarantine",
-      "/diagnostics",
+      "/logs",
       "/settings",
       "/assistant",
     ]) {
@@ -71,22 +71,18 @@ describe("dispatchMenuIntent — workspace gating", () => {
     expect(deps.lockApp).toHaveBeenCalledTimes(1);
   });
 
-  it("drops navigate to non-Diagnostics routes when no workspace", () => {
+  it("drops navigate when no workspace is open", () => {
     const deps = makeDeps({ hasWorkspace: false });
     dispatchMenuIntent(
       { action: "navigate", route: "/transactions" },
       deps,
     );
     expect(deps.navigate).not.toHaveBeenCalled();
-  });
-
-  it("permits navigate to /diagnostics even without a workspace", () => {
-    const deps = makeDeps({ hasWorkspace: false });
     dispatchMenuIntent(
-      { action: "navigate", route: "/diagnostics" },
+      { action: "navigate", route: "/logs" },
       deps,
     );
-    expect(deps.navigate).toHaveBeenCalledWith({ to: "/diagnostics" });
+    expect(deps.navigate).not.toHaveBeenCalled();
   });
 });
 
