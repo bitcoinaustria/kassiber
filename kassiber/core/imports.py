@@ -15,10 +15,14 @@ from ..errors import AppError
 from ..fingerprints import make_transaction_fingerprint
 from . import pricing
 from ..importers import (
-    is_bullbitcoin_format,
+    exchange_evidence_label,
+    exchange_evidence_rows_key,
     is_btcpay_format,
+    is_bullbitcoin_format,
+    is_exchange_evidence_format,
     is_phoenix_format,
     is_river_format,
+    is_twentyonebitcoin_format,
     load_import_records,
 )
 from ..msat import btc_to_msat, dec
@@ -44,6 +48,15 @@ BULLBITCOIN_RECONCILIATION_TAGS = {
     "matched": ("bullbitcoin-matched", "Bull Bitcoin matched"),
     "unmatched": ("bullbitcoin-wallet-gap", "Bull Bitcoin wallet gap"),
     "ambiguous": ("bullbitcoin-ambiguous", "Bull Bitcoin ambiguous"),
+}
+TWENTYONEBITCOIN_RECONCILIATION_TAGS = {
+    "matched": ("21bitcoin-matched", "21bitcoin matched"),
+    "unmatched": ("21bitcoin-wallet-gap", "21bitcoin wallet gap"),
+    "ambiguous": ("21bitcoin-ambiguous", "21bitcoin ambiguous"),
+}
+EXCHANGE_EVIDENCE_RECONCILIATION_TAGS = {
+    "bullbitcoin_csv": BULLBITCOIN_RECONCILIATION_TAGS,
+    "21bitcoin_csv": TWENTYONEBITCOIN_RECONCILIATION_TAGS,
 }
 
 
@@ -379,12 +392,19 @@ def normalize_bullbitcoin_import_mode(import_mode: str | None) -> str:
         mode = BULLBITCOIN_IMPORT_MODE_RELEVANT
     if mode not in BULLBITCOIN_IMPORT_MODES:
         raise AppError(
-            f"Unsupported Bull Bitcoin import mode '{import_mode}'",
+            f"Unsupported exchange-evidence import mode '{import_mode}'",
             code="validation",
-            hint="Choose 'relevant' to enrich matching book transactions, or 'full' to import all completed Bull orders with reconciliation flags.",
+            hint="Choose 'relevant' to enrich matching book transactions, or 'full' to import all provider rows with reconciliation flags.",
             retryable=False,
         )
     return mode
+
+
+def _reconciliation_tags(input_format: str) -> Mapping[str, tuple[str, str]]:
+    return EXCHANGE_EVIDENCE_RECONCILIATION_TAGS.get(
+        input_format,
+        BULLBITCOIN_RECONCILIATION_TAGS,
+    )
 
 
 def _find_imported_wallet_transaction(
@@ -432,9 +452,10 @@ def _apply_bullbitcoin_reconciliation_flag(
     tx_id: str,
     status: str,
     hooks: ImportCoordinatorHooks,
+    input_format: str = "bullbitcoin_csv",
 ) -> bool:
     tag_rows: dict[str, sqlite3.Row] = {}
-    for tag_status, (code, label) in BULLBITCOIN_RECONCILIATION_TAGS.items():
+    for tag_status, (code, label) in _reconciliation_tags(input_format).items():
         tag, created = hooks.ensure_tag_row(
             conn,
             profile["workspace_id"],
@@ -451,8 +472,8 @@ def _apply_bullbitcoin_reconciliation_flag(
         "INSERT OR IGNORE INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
         (tx_id, tag_rows[status]["id"]),
     )
-    # In full mode the Bull account can be shared across multiple books, so an
-    # unmatched row is only a review signal until the user assigns it to this book.
+    # In full mode a provider account can be shared across multiple books, so
+    # an unmatched row is only a review signal until the user assigns it here.
     exclude = True
     conn.execute(
         "UPDATE transactions SET excluded = ? WHERE id = ?",
@@ -479,6 +500,71 @@ def _bullbitcoin_reconciliation_record(
         record["matched_transaction_id"] = matched["id"]
         record["matched_wallet"] = matched["wallet_label"]
     return record
+
+
+def _clear_exchange_reconciliation_flags(
+    conn: sqlite3.Connection,
+    wallet: Mapping[str, Any],
+    records: Sequence[ImportRow],
+    source_label: str,
+    input_format: str,
+) -> dict[str, int]:
+    tag_codes = [code for code, _label in _reconciliation_tags(input_format).values()]
+    if not tag_codes:
+        return {}
+    placeholders = ", ".join("?" for _ in tag_codes)
+    tag_rows = conn.execute(
+        f"SELECT id FROM tags WHERE code IN ({placeholders})",
+        tuple(tag_codes),
+    ).fetchall()
+    tag_ids = [tag["id"] for tag in tag_rows]
+    if not tag_ids:
+        return {}
+    tag_placeholders = ", ".join("?" for _ in tag_ids)
+    cleared = 0
+    reactivated = 0
+    for record in records:
+        normalized = normalize_import_record(record, source_label=source_label)
+        imported = _find_imported_wallet_transaction(conn, wallet["id"], normalized)
+        if not imported:
+            continue
+        tagged = conn.execute(
+            f"""
+            SELECT 1
+            FROM transaction_tags
+            WHERE transaction_id = ?
+              AND tag_id IN ({tag_placeholders})
+            LIMIT 1
+            """,
+            (imported["id"], *tag_ids),
+        ).fetchone()
+        if not tagged:
+            continue
+        conn.execute(
+            f"""
+            DELETE FROM transaction_tags
+            WHERE transaction_id = ?
+              AND tag_id IN ({tag_placeholders})
+            """,
+            (imported["id"], *tag_ids),
+        )
+        cleared += 1
+        current = conn.execute(
+            "SELECT excluded FROM transactions WHERE id = ?",
+            (imported["id"],),
+        ).fetchone()
+        if current and current["excluded"]:
+            conn.execute(
+                "UPDATE transactions SET excluded = 0 WHERE id = ?",
+                (imported["id"],),
+            )
+            reactivated += 1
+    outcome: dict[str, int] = {}
+    if cleared:
+        outcome["reconciliation_flags_cleared"] = cleared
+    if reactivated:
+        outcome["reactivated"] = reactivated
+    return outcome
 
 
 def _normalized_fiat_currency(value: Any) -> str:
@@ -533,6 +619,10 @@ def _emit_import_progress(
     if skipped is not None:
         payload["skipped"] = skipped
     progress(payload)
+
+
+def _exchange_evidence_matchable(record: ImportRow) -> bool:
+    return record.get("_exchange_evidence_matchable") is not False
 
 
 def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[str, Any]:
@@ -803,9 +893,9 @@ def enrich_profile_records(
 ) -> dict[str, Any]:
     """Enrich existing profile transactions from exchange evidence.
 
-    This is intentionally insert-free. Bull Bitcoin order exports describe
-    exchange execution, not a wallet source of truth, so unmatched or ambiguous
-    rows are left untouched.
+    This is intentionally insert-free. Exchange evidence can describe
+    execution or custodial activity rather than a wallet source of truth, so
+    unmatched, ambiguous, or non-wallet rows are left untouched.
     """
     updated = 0
     matched = 0
@@ -825,6 +915,19 @@ def enrich_profile_records(
         )
     for index, record in enumerate(records, start=1):
         normalized = normalize_import_record(record, source_label=source_label)
+        if not _exchange_evidence_matchable(record):
+            skipped_unmatched += 1
+            skipped += 1
+            if progress is not None and (index % 200 == 0 or index == total):
+                _emit_import_progress(
+                    progress,
+                    wallet_label="book",
+                    processed=index,
+                    total=total,
+                    imported=0,
+                    skipped=skipped,
+                )
+            continue
         existing, match_status = _find_existing_profile_transaction_result(
             conn,
             profile["id"],
@@ -899,9 +1002,10 @@ def import_bullbitcoin_records_full(
     source_label: str,
     hooks: ImportCoordinatorHooks,
     *,
+    input_format: str = "bullbitcoin_csv",
     commit: bool = True,
 ) -> dict[str, Any]:
-    """Import every completed Bull order and flag book reconciliation status."""
+    """Import every provider evidence row and flag book reconciliation status."""
     normalized_records = [
         normalize_import_record(record, source_label=source_label) for record in records
     ]
@@ -909,13 +1013,16 @@ def import_bullbitcoin_records_full(
     matched = 0
     unmatched = 0
     ambiguous = 0
-    for normalized in normalized_records:
-        existing, status = _find_existing_profile_transaction_result(
-            conn,
-            profile["id"],
-            normalized,
-            exclude_wallet_id=wallet["id"],
-        )
+    for source_record, normalized in zip(records, normalized_records):
+        if _exchange_evidence_matchable(source_record):
+            existing, status = _find_existing_profile_transaction_result(
+                conn,
+                profile["id"],
+                normalized,
+                exclude_wallet_id=wallet["id"],
+            )
+        else:
+            existing, status = None, "unmatched"
         if status == "matched":
             matched += 1
         elif status == "ambiguous":
@@ -954,6 +1061,7 @@ def import_bullbitcoin_records_full(
             imported["id"],
             status,
             hooks,
+            input_format=input_format,
         )
         if row_excluded:
             excluded += 1
@@ -1043,7 +1151,7 @@ def import_file_into_profile(
     commit: bool = True,
 ) -> dict[str, Any]:
     records = load_import_records(file_path, input_format)
-    if not is_bullbitcoin_format(input_format):
+    if not is_exchange_evidence_format(input_format):
         raise AppError(
             f"Profile-wide imports do not support '{input_format}'",
             code="validation",
@@ -1051,12 +1159,13 @@ def import_file_into_profile(
             retryable=False,
         )
     mode = normalize_bullbitcoin_import_mode(import_mode)
+    provider_label = exchange_evidence_label(input_format)
     if mode == BULLBITCOIN_IMPORT_MODE_FULL:
         if wallet is None:
             raise AppError(
-                "A Bull Bitcoin wallet is required for full import mode",
+                f"A {provider_label} wallet is required for full import mode",
                 code="validation",
-                hint="Choose or create the book's Bull Bitcoin wallet.",
+                hint=f"Choose or create the book's {provider_label} wallet.",
                 retryable=False,
             )
         outcome = import_bullbitcoin_records_full(
@@ -1066,6 +1175,7 @@ def import_file_into_profile(
             records,
             f"file:{input_format}",
             hooks,
+            input_format=input_format,
             commit=commit,
         )
     else:
@@ -1079,7 +1189,7 @@ def import_file_into_profile(
             commit=commit,
         )
         outcome["mode"] = mode
-    outcome["bullbitcoin_rows"] = len(records)
+    outcome[exchange_evidence_rows_key(input_format)] = len(records)
     outcome["input_format"] = input_format
     outcome["file"] = os.path.abspath(file_path)
     return outcome
@@ -1290,11 +1400,23 @@ def import_file_into_wallet(
         apply_phoenix=is_phoenix_format(input_format),
         apply_river=is_river_format(input_format),
         match_existing_only=is_bullbitcoin_format(input_format),
-        report_updates=is_bullbitcoin_format(input_format),
-        commit=commit,
+        report_updates=is_bullbitcoin_format(input_format) or is_twentyonebitcoin_format(input_format),
+        commit=False,
     )
-    if is_bullbitcoin_format(input_format):
-        outcome["bullbitcoin_rows"] = len(records)
+    if is_twentyonebitcoin_format(input_format):
+        outcome.update(
+            _clear_exchange_reconciliation_flags(
+                conn,
+                wallet,
+                records,
+                f"file:{input_format}",
+                input_format,
+            )
+        )
+    if commit:
+        conn.commit()
+    if is_exchange_evidence_format(input_format):
+        outcome[exchange_evidence_rows_key(input_format)] = len(records)
     outcome["input_format"] = input_format
     outcome["file"] = os.path.abspath(file_path)
     return outcome

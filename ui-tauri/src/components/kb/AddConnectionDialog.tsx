@@ -57,7 +57,7 @@ interface SetupFormState {
   gapLimit: string;
   targetWallet: string;
   sourceFile: string;
-  sourceFormat: "csv" | "json" | "phoenix_csv" | "river_csv" | "bullbitcoin_csv";
+  sourceFormat: "csv" | "json" | "phoenix_csv" | "river_csv" | "bullbitcoin_csv" | "21bitcoin_csv";
   bullImportMode: "relevant" | "full";
   btcpayStoreId: string;
   btcpayPaymentMethodId: string;
@@ -84,6 +84,7 @@ interface SyncResult {
   excluded?: number;
   updated?: number;
   bullbitcoin_rows?: number;
+  twentyonebitcoin_rows?: number;
   inserted_records?: ImportChangeRecord[];
   updated_records?: ImportChangeRecord[];
   reconciliation_records?: ImportChangeRecord[];
@@ -165,6 +166,7 @@ interface ImportFileResult {
   excluded?: number;
   updated?: number;
   bullbitcoin_rows?: number;
+  twentyonebitcoin_rows?: number;
   inserted_records?: ImportChangeRecord[];
   updated_records?: ImportChangeRecord[];
   reconciliation_records?: ImportChangeRecord[];
@@ -179,6 +181,10 @@ function supportsDescriptorSync(backend: BackendOption) {
   return DESCRIPTOR_BACKEND_KINDS.has(backend.kind);
 }
 
+function isExchangeEvidenceFormat(sourceFormat?: string) {
+  return sourceFormat === "bullbitcoin_csv" || sourceFormat === "21bitcoin_csv";
+}
+
 function sourceFileFilters(source: ConnectionSource) {
   if (source.sourceFormat === "phoenix_csv") {
     return [{ name: "Phoenix CSV", extensions: ["csv"] }];
@@ -188,6 +194,9 @@ function sourceFileFilters(source: ConnectionSource) {
   }
   if (source.sourceFormat === "bullbitcoin_csv") {
     return [{ name: "Bull Bitcoin CSV", extensions: ["csv"] }];
+  }
+  if (source.sourceFormat === "21bitcoin_csv") {
+    return [{ name: "21bitcoin CSV", extensions: ["csv"] }];
   }
   if (source.id === "csv") {
     return [{ name: "CSV or JSON", extensions: ["csv", "json"] }];
@@ -661,7 +670,7 @@ export function AddConnectionDialog({
       errors.sourceFile = "Pick the export file.";
     }
     if (setupKind === "file-enrichment") {
-      if (selected.sourceFormat !== "bullbitcoin_csv" && !form.targetWallet.trim()) {
+      if (!isExchangeEvidenceFormat(selected.sourceFormat) && !form.targetWallet.trim()) {
         errors.targetWallet = "Choose the wallet to enrich.";
       }
       if (!form.sourceFile.trim()) {
@@ -799,9 +808,9 @@ export function AddConnectionDialog({
         if (!sourceFormat) {
           throw new Error("Selected source does not define an import format.");
         }
-        const isBookWideImport = sourceFormat === "bullbitcoin_csv";
+        const isBookWideImport = isExchangeEvidenceFormat(sourceFormat);
         const isFullBullImport =
-          sourceFormat === "bullbitcoin_csv" && form.bullImportMode === "full";
+          isBookWideImport && form.bullImportMode === "full";
         startSyncNotice(
           isFullBullImport
             ? `${selected.title} is importing completed orders into this book and flagging reconciliation gaps.`
@@ -815,7 +824,7 @@ export function AddConnectionDialog({
             ...(isBookWideImport ? {} : { wallet: form.targetWallet }),
             source_file: form.sourceFile.trim(),
             source_format: sourceFormat,
-            ...(sourceFormat === "bullbitcoin_csv" ? { mode: form.bullImportMode } : {}),
+            ...(isBookWideImport ? { mode: form.bullImportMode } : {}),
           });
           importResult = envelope.data;
           setLastImportResult(importResult ?? null);
@@ -1206,7 +1215,7 @@ export function AddConnectionDialog({
     }
 
     if (setupKind === "file-enrichment") {
-      if (selected.sourceFormat === "bullbitcoin_csv") {
+      if (isExchangeEvidenceFormat(selected.sourceFormat)) {
         return (
           <>
             <SetupField
@@ -1214,8 +1223,10 @@ export function AddConnectionDialog({
               label="Import mode"
               helper={
                 form.bullImportMode === "full"
-                  ? "Imports every completed Bull order as excluded evidence and flags matched, missing, or ambiguous wallet evidence for this book."
-                  : "Only enriches completed Bull orders that uniquely match existing transactions anywhere in this book."
+                  ? `Imports every ${selected.title} row as excluded evidence and flags matched, missing, or ambiguous wallet evidence for this book.`
+                  : selected.sourceFormat === "21bitcoin_csv"
+                  ? "Only enriches 21bitcoin L1 withdrawal rows that uniquely match existing transactions anywhere in this book."
+                  : `Only enriches ${selected.title} rows that uniquely match existing transactions anywhere in this book.`
               }
             >
               <select
@@ -1235,9 +1246,9 @@ export function AddConnectionDialog({
             </SetupField>
             <SetupField
               id="connection-source-file"
-              label="Order CSV path"
+              label="CSV path"
               error={fieldErrors.sourceFile}
-              helper="Use the shared Bull export for this book; full mode keeps rows excluded until reviewed."
+              helper={`Use the shared ${selected.title} export for this book; full mode keeps rows excluded until reviewed.`}
             >
               <div className="flex gap-2">
                 <Input
@@ -1990,6 +2001,7 @@ export function AddConnectionDialog({
       excluded: result.excluded,
       updated: result.updated,
       bullbitcoin_rows: result.bullbitcoin_rows,
+      twentyonebitcoin_rows: result.twentyonebitcoin_rows,
       inserted_records: result.inserted_records,
       updated_records: result.updated_records,
       reconciliation_records: result.reconciliation_records,
@@ -2006,6 +2018,7 @@ export function AddConnectionDialog({
     const hiddenRecords = Math.max(0, changedRecords.length - shownRecords.length);
     const rowsRead =
       lastImportResult.bullbitcoin_rows ??
+      lastImportResult.twentyonebitcoin_rows ??
       lastImportResult.imported + lastImportResult.skipped;
     const isBookWide = lastImportResult.scope === "book";
     const changedCount =
