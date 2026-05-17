@@ -596,7 +596,6 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const setDeveloperToolsEnabled = useUiStore(
     (s) => s.setDeveloperToolsEnabled,
   );
-  const appLogBufferBytes = useAppLogBufferSize();
   const identity = useUiStore((s) => s.identity);
   const setIdentity = useUiStore((s) => s.setIdentity);
   const addNotification = useUiStore((s) => s.addNotification);
@@ -875,7 +874,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         icon: TerminalSquare,
         title: "Developer tools",
         description: developerToolsEnabled
-          ? `Logs page enabled. RAM buffer uses ${formatBytes(appLogBufferBytes)}.`
+          ? "Logs page enabled. Configure it to inspect the RAM buffer."
           : "Logs page hidden from navigation and deep links.",
         isConnected: developerToolsEnabled,
         statusLabel: "Enabled",
@@ -1006,7 +1005,6 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       appLockPolicy.autoLockWhenIdle,
       appLockPolicy.idleMinutes,
       aiFeaturesEnabled,
-      appLogBufferBytes,
       backends,
       clearClipboard,
       currency,
