@@ -93,7 +93,11 @@ import {
   getTransport,
   isImportProjectActive,
 } from "@/daemon/transport";
-import { lockScreenConfig, shouldUseDaemonUnlock } from "@/lib/appLock";
+import {
+  lockScreenConfig,
+  shouldLockEncryptedWorkspaceOnLaunch,
+  shouldUseDaemonUnlock,
+} from "@/lib/appLock";
 import { cn } from "@/lib/utils";
 import {
   clearSessionUnlockPassphrase,
@@ -553,6 +557,11 @@ export function AppShell() {
   const dataMode = useUiStore((s) => s.dataMode);
   const encryptedWorkspace =
     Boolean(identity?.encrypted) || identity?.databaseMode === "sqlcipher";
+  const lockEncryptedWorkspaceOnLaunch = shouldLockEncryptedWorkspaceOnLaunch({
+    encryptedWorkspace,
+    requirePassphraseOnLaunch: appLockPolicy.requirePassphraseOnLaunch,
+    hasSessionUnlock: hasSessionUnlockPassphrase(),
+  });
   const importedProjectRoot = identity?.importedProject?.dataRoot ?? null;
   const [importRootReady, setImportRootReady] = React.useState(
     () => !importedProjectRoot,
@@ -576,7 +585,7 @@ export function AppShell() {
   const daemonFetchCount = useIsFetching({ queryKey: ["daemon"] });
   const [assistantCollapsed, setAssistantCollapsed] = React.useState(false);
   const [locked, setLocked] = React.useState(
-    () => encryptedWorkspace && !hasSessionUnlockPassphrase(),
+    () => lockEncryptedWorkspaceOnLaunch,
   );
   const [assistantReturnPath, setAssistantReturnPath] =
     React.useState<AssistantReturnPath>("/overview");
@@ -820,7 +829,13 @@ export function AppShell() {
     setImportRootError(null);
     clearDaemonQueryCache();
     clearSessionUnlockPassphrase();
-    setLocked(Boolean(encryptedWorkspace));
+    setLocked(
+      shouldLockEncryptedWorkspaceOnLaunch({
+        encryptedWorkspace,
+        requirePassphraseOnLaunch: appLockPolicy.requirePassphraseOnLaunch,
+        hasSessionUnlock: false,
+      }),
+    );
     void activateImportProject(importedProjectRoot)
       .then(() => {
         if (disposed) return;
@@ -846,6 +861,7 @@ export function AppShell() {
     clearDaemonQueryCache,
     encryptedWorkspace,
     importedProjectRoot,
+    appLockPolicy.requirePassphraseOnLaunch,
   ]);
 
   React.useEffect(() => {
@@ -871,12 +887,12 @@ export function AppShell() {
   }, [clearDaemonQueryCache]);
 
   React.useEffect(() => {
-    if (!encryptedWorkspace) return;
+    if (!lockEncryptedWorkspaceOnLaunch) return;
     if (hasSessionUnlockPassphrase()) return;
     if (launchLockApplied.current) return;
     launchLockApplied.current = true;
     lockApp();
-  }, [encryptedWorkspace, lockApp]);
+  }, [lockEncryptedWorkspaceOnLaunch, lockApp]);
 
   React.useEffect(() => {
     if (!encryptedWorkspace || !appLockPolicy.autoLockWhenIdle || locked) {

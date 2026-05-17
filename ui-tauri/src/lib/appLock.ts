@@ -12,6 +12,22 @@ export function shouldUseDaemonUnlock({
   return (dataMode === "real" && hasIdentity) || daemonAuthRequired;
 }
 
+export function shouldLockEncryptedWorkspaceOnLaunch({
+  encryptedWorkspace,
+  requirePassphraseOnLaunch,
+  hasSessionUnlock,
+}: {
+  encryptedWorkspace: boolean;
+  requirePassphraseOnLaunch: boolean;
+  hasSessionUnlock: boolean;
+}) {
+  return (
+    encryptedWorkspace &&
+    requirePassphraseOnLaunch &&
+    !hasSessionUnlock
+  );
+}
+
 export function lockScreenConfig({
   daemonAuthRequired,
   encryptedWorkspace,

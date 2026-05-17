@@ -1760,18 +1760,13 @@ function SecuritySettingsPanel({
           label="Require passphrase on launch"
           description={
             encryptedWorkspace
-              ? "Encrypted databases always require unlock on launch."
+              ? "Prompt immediately when Kassiber opens; cold starts still need the database passphrase when the daemon is locked."
               : "Prompt every time Kassiber opens."
           }
-          checked={
-            encryptedWorkspace
-              ? true
-              : appLockPolicy.requirePassphraseOnLaunch
-          }
+          checked={appLockPolicy.requirePassphraseOnLaunch}
           onCheckedChange={(checked) =>
             setAppLockPolicy({ requirePassphraseOnLaunch: checked })
           }
-          disabled={encryptedWorkspace}
         />
         <SettingsSwitchRow
           label="Lock on window close"
