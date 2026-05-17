@@ -49,10 +49,14 @@ workflow almost nobody else covers.
   attacks. Kassiber's database is one file on your machine.
 - **Wrench-attack resistant** — watch-only by design (no spending keys to
   coerce), and optional SQLCipher 4 at-rest encryption keyed by a
-  passphrase that lives only in your head. A stolen, customs-seized, or
-  border-searched cold device reveals nothing. See
+  passphrase that lives only in your head. On a stolen, customs-seized, or
+  border-searched cold device, the encrypted database — descriptors,
+  xpubs, transactions, stored tokens — is unreadable. Attachments and a
+  couple of config files sit outside the SQLCipher boundary, so pair with
+  full-disk encryption for the full picture; the caveats are in
+  [SECURITY.md](SECURITY.md). The
   [jlopp/physical-bitcoin-attacks](https://github.com/jlopp/physical-bitcoin-attacks)
-  for the threat catalog.
+  catalog covers the threats this addresses.
 - **Local AI Chat** — assistant defaults to local
   [Ollama](https://ollama.com/); off-device providers require explicit
   per-provider acknowledgement and per-tool consent.
