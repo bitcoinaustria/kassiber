@@ -218,6 +218,9 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   - [x] Add a redacted in-app daemon log screen with a downloadable JSON
     export so prerelease/dev desktop failures can be inspected without losing
     the terse notification surface
+  - [x] Promote the desktop screen into a Developer tools-gated typed Logs view
+    with subscription-level control, a bounded RAM-only local ring buffer,
+    field-type redaction, copy-last-200, and Markdown/JSONL/log exports
 
 ### 1.1 Daemon mode (no UI yet)
 
@@ -363,8 +366,9 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Wire Reports export cards to daemon-backed managed exports for PDF,
   capital-gains CSV, and Austrian E 1kv XLSX, with default-app opening for
   completed files
-- [x] Add a Diagnostics screen that shows the recent redacted daemon/transport
-  log and lets users download it for local debugging
+- [x] Add a Developer tools-gated Logs screen that shows the recent structured
+  daemon/transport stream from RAM only and exports redacted snapshots for
+  local debugging on explicit download
 - [ ] Replace remaining Settings mock fixture data with typed daemon calls once
   phase 1.1 exists
 
@@ -441,6 +445,10 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   physical-lot answers
 - [ ] Adopt a per-project storage layout: one SQLite DB per project,
   minimal global app state, and no active top-level wallet side tree
+- [ ] Add scoped handoff export/import flows on top of the per-project layout:
+  tax advisor reports stay report-only, audit packages are explicit
+  one-book-or-selected-books packages, and technical wallet evidence remains a
+  separate restricted approval path rather than a normal export checkbox
 - [ ] Keep transaction document links in the project DB; only add managed
   copied-file storage if a concrete offline/self-contained workflow needs it
 - [x] Keep backend definitions and default-backend selection canonical in

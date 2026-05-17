@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   normalizeExternalBrowserUrl,
   readBridgeNdjsonStream,
-  redactForLog,
   type DaemonStreamRecord,
 } from "./transport";
 
@@ -76,32 +75,6 @@ describe("bridge NDJSON stream reader", () => {
     expect(records).toEqual([]);
     expect(terminal.kind).toBe("auth_required");
     expect(terminal.data).toEqual({ scope: "unlock_database" });
-  });
-});
-
-describe("daemon log redaction", () => {
-  it("redacts structured secret fields recursively", () => {
-    expect(
-      redactForLog({
-        limit: 25,
-        auth_response: { passphrase_secret: "correct horse battery staple" },
-        nested: { api_key: "sk-local", backendToken: "btcpay-token" },
-      }),
-    ).toEqual({
-      limit: 25,
-      auth_response: "[redacted]",
-      nested: { api_key: "[redacted]", backendToken: "[redacted]" },
-    });
-  });
-
-  it("redacts secret-looking strings in stderr-style details", () => {
-    expect(
-      redactForLog(
-        "token=btcpay-token Bearer abc.def.ghi wpkh([abcd1234/84h/0h/0h]xpub661MyMwAqRbcF12345678901234567890/0/*)",
-      ),
-    ).toBe(
-      "token=[redacted] Bearer [redacted] [redacted-descriptor]",
-    );
   });
 });
 

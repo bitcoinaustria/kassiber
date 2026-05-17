@@ -4,7 +4,7 @@ import {
   spawn,
   type ChildProcessWithoutNullStreams,
 } from "node:child_process";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import { createInterface } from "node:readline";
@@ -765,9 +765,21 @@ function resolveAppCommit(): string {
   }
 }
 
+function resolveAppVersion(): string {
+  try {
+    const pkg = JSON.parse(
+      readFileSync(path.resolve(UI_ROOT, "package.json"), "utf8"),
+    ) as { version?: unknown };
+    return typeof pkg.version === "string" ? pkg.version : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 export default defineConfig({
   define: {
     __APP_COMMIT__: JSON.stringify(resolveAppCommit()),
+    __APP_VERSION__: JSON.stringify(resolveAppVersion()),
   },
   plugins: [daemonBridgePlugin(), react(), tailwindcss()],
   resolve: {

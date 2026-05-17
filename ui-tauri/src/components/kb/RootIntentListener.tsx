@@ -16,7 +16,7 @@ const unexpectedWorkspaceAction = () => {
  * Listens for `kassiber:intent` events on the root layout — above the
  * workspace shell — so route navigation, settings panel deep links, and
  * sensitive-toggle still work before AppShell has mounted (Welcome screen
- * users, cold-start deep links into `/diagnostics` for support cases, etc.).
+ * users, settings deep links, etc.).
  *
  * Strictly handles `global` scope. Workspace-required actions (lock,
  * sync-all, process-journals) flow through AppShell's listener, which only

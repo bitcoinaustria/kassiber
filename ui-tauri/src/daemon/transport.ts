@@ -12,6 +12,11 @@
 
 import { mockDaemon, mockStream } from "./mock";
 import { useUiStore, type DataMode } from "@/store/ui";
+import {
+  emitAppLog,
+  type AppLogField,
+  type AppLogLevel,
+} from "@/lib/appLogs";
 
 export type DaemonMode = "mock" | "bridge" | "tauri";
 
@@ -202,99 +207,20 @@ export function makeDaemonRequestId(): string {
   return `req-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-const SENSITIVE_LOG_KEYS = [
-  "api_key",
-  "auth",
-  "auth_response",
-  "auth_header",
-  "basic_auth",
-  "blinding",
-  "cookie",
-  "descriptor",
-  "header",
-  "new_passphrase_secret",
-  "passphrase",
-  "passphrase_secret",
-  "password",
-  "private",
-  "secret",
-  "token",
-  "xpub",
-  "xprv",
-];
-
-const SENSITIVE_LOG_PATTERNS: Array<[RegExp, string]> = [
-  [
-    /\b(?:xprv|tprv|yprv|zprv|uprv|vprv)[1-9A-HJ-NP-Za-km-z]{20,}\b/g,
-    "[redacted-private-key]",
-  ],
-  [
-    /\b(?:xpub|tpub|ypub|zpub|upub|vpub)[1-9A-HJ-NP-Za-km-z]{20,}\b/g,
-    "[redacted-extended-key]",
-  ],
-  [
-    /\b(?:wpkh|sh|wsh|tr|pkh|combo)\([^)\n]{16,}\)/gi,
-    "[redacted-descriptor]",
-  ],
-  [/\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*/g, "Bearer [redacted]"],
-  [
-    /\b(api[_-]?key|auth[_-]?header|cookie|descriptor|passphrase|password|secret|token)\b(\s*[:=]\s*)([^\s,;"']+)/gi,
-    "$1$2[redacted]",
-  ],
-];
-
-export function redactForLog(value: unknown, depth = 0): unknown {
-  if (depth > 8) return "[truncated]";
-  if (Array.isArray(value)) {
-    return value.map((item) => redactForLog(item, depth + 1));
-  }
-  if (typeof value === "string") {
-    return redactStringForLog(value);
-  }
-  if (!value || typeof value !== "object") {
-    return value;
-  }
-  return Object.fromEntries(
-    Object.entries(value).map(([key, child]) => {
-      const normalized = key.toLowerCase();
-      if (
-        SENSITIVE_LOG_KEYS.some((sensitive) =>
-          normalized.includes(sensitive),
-        )
-      ) {
-        return [key, "[redacted]"];
-      }
-      return [key, redactForLog(child, depth + 1)];
-    }),
-  );
-}
-
-function redactStringForLog(value: string): string {
-  return SENSITIVE_LOG_PATTERNS.reduce(
-    (current, [pattern, replacement]) => current.replace(pattern, replacement),
-    value,
-  );
-}
-
-function summarizeRequestForLog(req: DaemonRequest): unknown {
-  const args = req.args ?? {};
-  return {
-    request_id: req.request_id ?? null,
-    arg_keys: Object.keys(args),
-  };
-}
-
 function recordDaemonLog(
-  level: "debug" | "info" | "warning" | "error",
+  level: AppLogLevel,
   source: string,
   message: string,
-  details?: unknown,
+  fields: Record<string, AppLogField>,
 ) {
-  useUiStore.getState().addLogEntry({
+  emitAppLog({
     level,
-    source,
-    message,
-    details: redactForLog(details),
+    module: source,
+    file: "daemon/transport.ts",
+    // Wrapper events are logical transport records; a fixed source line would drift.
+    line: 0,
+    msg: message,
+    fields,
   });
 }
 
@@ -304,18 +230,51 @@ function envelopeLogLevel(envelope: DaemonEnvelope): "info" | "warning" | "error
   return "info";
 }
 
-function summarizeEnvelopeForLog(envelope: DaemonEnvelope): unknown {
-  const summary: Record<string, unknown> = {
-    kind: envelope.kind,
-    schema_version: envelope.schema_version,
-    request_id: envelope.request_id ?? null,
+function textField(value: unknown): AppLogField {
+  return { type: "text", value: String(value ?? "") };
+}
+
+function numberField(value: unknown): AppLogField {
+  return { type: "number", value: typeof value === "number" ? value : 0 };
+}
+
+function booleanField(value: unknown): AppLogField {
+  return { type: "boolean", value: Boolean(value) };
+}
+
+function summarizeRequestFields(req: DaemonRequest): Record<string, AppLogField> {
+  const args = req.args ?? {};
+  return {
+    kind: textField(req.kind),
+    request_id: textField(req.request_id ?? ""),
+    arg_keys: textField(Object.keys(args).sort().join(",")),
+  };
+}
+
+function summarizeEnvelopeFields(
+  envelope: DaemonEnvelope,
+): Record<string, AppLogField> {
+  const summary: Record<string, AppLogField> = {
+    kind: textField(envelope.kind),
+    schema_version: numberField(envelope.schema_version),
+    request_id: textField(envelope.request_id ?? ""),
   };
   if (envelope.error) {
-    summary.error = envelope.error;
+    summary.error_code = textField(envelope.error.code);
+    summary.error_message = {
+      type: "label",
+      value: envelope.error.message,
+    };
+    summary.retryable = booleanField(envelope.error.retryable);
+    if (envelope.error.hint) {
+      summary.error_hint = { type: "label", value: envelope.error.hint };
+    }
   } else if (envelope.data && typeof envelope.data === "object") {
-    summary.data_keys = Object.keys(envelope.data as Record<string, unknown>);
+    summary.data_keys = textField(
+      Object.keys(envelope.data as Record<string, unknown>).sort().join(","),
+    );
   } else if (envelope.data !== undefined) {
-    summary.data_type = typeof envelope.data;
+    summary.data_type = textField(typeof envelope.data);
   }
   return summary;
 }
@@ -331,22 +290,31 @@ function withDaemonLogging(
       recordDaemonLog(
         "debug",
         source,
-        `invoke ${req.kind}`,
-        summarizeRequestForLog(req),
+        "Daemon invoke started",
+        summarizeRequestFields(req),
       );
       try {
         const envelope = await transport.invoke<T>(req);
         recordDaemonLog(
           envelopeLogLevel(envelope),
           source,
-          `terminal ${envelope.kind}`,
-          summarizeEnvelopeForLog(envelope),
+          "Daemon invoke finished",
+          summarizeEnvelopeFields(envelope),
         );
         return envelope;
       } catch (error) {
-        recordDaemonLog("error", source, `invoke ${req.kind} threw`, {
-          message: error instanceof Error ? error.message : String(error),
-        });
+        recordDaemonLog(
+          "error",
+          source,
+          "Daemon invoke threw",
+          {
+            kind: textField(req.kind),
+            error_message: {
+              type: "label",
+              value: error instanceof Error ? error.message : String(error),
+            },
+          },
+        );
         throw error;
       }
     },
@@ -357,22 +325,42 @@ function withDaemonLogging(
       recordDaemonLog(
         "debug",
         source,
-        `stream ${req.kind}`,
-        summarizeRequestForLog(req),
+        "Daemon stream started",
+        summarizeRequestFields(req),
       );
       try {
-        const envelope = await transport.stream<T, R>(req, options);
+        const envelope = await transport.stream<T, R>(req, {
+          ...options,
+          onRecord: (record) => {
+            recordDaemonLog(
+              "trace",
+              source,
+              "Daemon stream record",
+              summarizeEnvelopeFields(record),
+            );
+            options?.onRecord?.(record);
+          },
+        });
         recordDaemonLog(
           envelopeLogLevel(envelope),
           source,
-          `terminal ${envelope.kind}`,
-          summarizeEnvelopeForLog(envelope),
+          "Daemon stream finished",
+          summarizeEnvelopeFields(envelope),
         );
         return envelope;
       } catch (error) {
-        recordDaemonLog("error", source, `stream ${req.kind} threw`, {
-          message: error instanceof Error ? error.message : String(error),
-        });
+        recordDaemonLog(
+          "error",
+          source,
+          "Daemon stream threw",
+          {
+            kind: textField(req.kind),
+            error_message: {
+              type: "label",
+              value: error instanceof Error ? error.message : String(error),
+            },
+          },
+        );
         throw error;
       }
     },

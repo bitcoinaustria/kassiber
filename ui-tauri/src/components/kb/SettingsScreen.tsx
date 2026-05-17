@@ -21,6 +21,7 @@ import {
   Server,
   ShieldCheck,
   Terminal,
+  TerminalSquare,
   Trash2,
   Upload,
   XCircle,
@@ -87,6 +88,12 @@ import { useUiStore, type AppLockPolicy } from "@/store/ui";
 import type { AiModelsListData, AiModelRow } from "@/lib/aiCapabilities";
 import { screenPanelClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
+import {
+  APP_LOG_MAX_BYTES,
+  APP_LOG_MAX_RECORDS,
+  getAppLogBufferSize,
+  subscribeAppLogRecords,
+} from "@/lib/appLogs";
 import {
   DEFAULT_BACKEND_NAME,
   DEFAULT_BACKEND_URL,
@@ -569,6 +576,12 @@ function backendIntegrationArt(backend: Backend): Pick<
   };
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
 interface SettingsScreenProps {
   onLock?: () => void;
 }
@@ -584,6 +597,10 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const setAppLockPolicy = useUiStore((s) => s.setAppLockPolicy);
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
   const setAiFeaturesEnabled = useUiStore((s) => s.setAiFeaturesEnabled);
+  const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
+  const setDeveloperToolsEnabled = useUiStore(
+    (s) => s.setDeveloperToolsEnabled,
+  );
   const identity = useUiStore((s) => s.identity);
   const setIdentity = useUiStore((s) => s.setIdentity);
   const addNotification = useUiStore((s) => s.addNotification);
@@ -934,6 +951,19 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         ),
       },
       {
+        id: "privacy-developer-tools",
+        icon: TerminalSquare,
+        title: "Developer tools",
+        description: developerToolsEnabled
+          ? "Logs page enabled. Configure it to inspect the RAM buffer."
+          : "Logs page hidden from navigation and deep links.",
+        isConnected: developerToolsEnabled,
+        statusLabel: "Enabled",
+        category: "privacy",
+        categoryLabel: "Privacy",
+        actionLabel: "Configure",
+      },
+      {
         id: "display-currency",
         icon: Database,
         title: "Display currency",
@@ -1086,6 +1116,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       backends,
       clearClipboard,
       currency,
+      developerToolsEnabled,
       encryptedWorkspace,
       hideSensitive,
       explorerSettings.bitcoinBaseUrl,
@@ -1099,6 +1130,10 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   );
 
   const onIntegrationAction = (integration: IntegrationItem) => {
+    if (integration.id === "privacy-developer-tools") {
+      setSelectedIntegrationId(integration.id);
+      return;
+    }
     if (integration.category === "privacy") {
       return;
     }
@@ -1396,6 +1431,14 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
                       onRefresh={() => void refreshTerminalCommandStatus()}
                       onInstall={() => void onInstallTerminalCommand()}
                       onRemove={() => void onRemoveTerminalCommand()}
+                    />
+                  );
+                }
+                if (integration.id === "privacy-developer-tools") {
+                  return (
+                    <DeveloperToolsSettingsPanel
+                      enabled={developerToolsEnabled}
+                      setEnabled={setDeveloperToolsEnabled}
                     />
                   );
                 }
@@ -1951,6 +1994,54 @@ function DisplaySettingsPanel({
   );
 }
 
+function DeveloperToolsSettingsPanel({
+  enabled,
+  setEnabled,
+}: {
+  enabled: boolean;
+  setEnabled: (enabled: boolean) => void;
+}) {
+  const bytes = useAppLogBufferSize();
+  return (
+    <section className="space-y-3">
+      <div>
+        <h3 className="text-sm font-semibold">Developer tools</h3>
+        <p className="text-sm text-muted-foreground">
+          Show the typed Logs view after the local books are unlocked. Logs are
+          local-only, kept in RAM, and written to disk only when you export them.
+        </p>
+      </div>
+      <SettingsSwitchRow
+        label="Enable Logs page"
+        description={
+          enabled
+            ? "Logs is visible in Support and route navigation."
+            : "Logs is hidden and direct navigation redirects to Overview."
+        }
+        checked={enabled}
+        onCheckedChange={setEnabled}
+      />
+      <div className="rounded-md border bg-background p-3 text-sm">
+        <p className="font-medium">In-memory log buffer</p>
+        <p className="text-muted-foreground">
+          {formatBytes(bytes)} retained in this GUI session. Kassiber keeps at most{" "}
+          {APP_LOG_MAX_RECORDS.toLocaleString()} records or{" "}
+          {formatBytes(APP_LOG_MAX_BYTES)}, whichever is reached first. Refreshing
+          or closing the app clears the buffer unless you export it first.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function useAppLogBufferSize(): number {
+  return React.useSyncExternalStore(
+    subscribeAppLogRecords,
+    getAppLogBufferSize,
+    getAppLogBufferSize,
+  );
+}
+
 function ExplorerSettingsPanel({
   explorerSettings,
   setExplorerSettings,
@@ -2014,11 +2105,11 @@ function TerminalCommandSettingsPanel({
   onInstall: () => void;
   onRemove: () => void;
 }) {
-  const actionLabel = status?.installed
-    ? "Reinstall command"
-    : status?.needsRepair
-      ? "Repair command"
-    : "Install command";
+  const actionLabel = status?.needsRepair
+    ? "Repair command"
+    : status?.installed
+      ? "Reinstall command"
+      : "Install command";
   return (
     <section className="space-y-4">
       <div>
