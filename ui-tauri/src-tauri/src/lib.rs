@@ -1011,8 +1011,7 @@ fn default_state_data_root() -> PathBuf {
 }
 
 fn terminal_command_paths() -> Result<TerminalCommandPaths, String> {
-    let target_path = env::current_exe()
-        .map_err(|error| format!("Could not locate the Kassiber desktop executable: {error}"))?;
+    let target_path = terminal_command_target_path()?;
     let home = home_dir().ok_or_else(|| {
         "Could not locate your home folder for a user-owned terminal command.".to_string()
     })?;
@@ -1044,6 +1043,31 @@ fn terminal_command_paths() -> Result<TerminalCommandPaths, String> {
         command_path,
         target_path,
     })
+}
+
+fn terminal_command_target_path() -> Result<PathBuf, String> {
+    terminal_command_target_path_for(env::var_os("APPIMAGE"), || {
+        env::current_exe()
+            .map_err(|error| format!("Could not locate the Kassiber desktop executable: {error}"))
+    })
+}
+
+fn terminal_command_target_path_for(
+    appimage: Option<std::ffi::OsString>,
+    current_exe: impl FnOnce() -> Result<PathBuf, String>,
+) -> Result<PathBuf, String> {
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(appimage) = appimage
+            .as_ref()
+            .filter(|value| !value.as_os_str().is_empty())
+        {
+            return Ok(PathBuf::from(appimage));
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = appimage;
+    current_exe()
 }
 
 #[cfg(target_os = "windows")]
@@ -1631,17 +1655,19 @@ pub fn run() {
     // Single-instance must come before the deep-link plugin so a second
     // launch (`open kassiber://settings/privacy` while the app is already
     // running) is forwarded to the existing window instead of forking a new
-    // process. With a separate process we'd race the SQLite/SQLCipher
-    // database — the daemon assumes one writer at a time.
+    // GUI process. CLI-mode launches intentionally skip the plugin so a
+    // terminal `kassiber status` can still run while the GUI is open.
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            }
-        }));
+        if cli_args.is_none() {
+            builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
+            }));
+        }
     }
 
     builder
@@ -2285,6 +2311,21 @@ mod tests {
         assert!(!path_is_on_path(Path::new(
             "/path/that/should/not/exist/in/tests"
         )));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn terminal_command_target_prefers_stable_appimage_path() {
+        let appimage = std::ffi::OsString::from("/home/alice/Downloads/Kassiber.AppImage");
+        let target = super::terminal_command_target_path_for(Some(appimage), || {
+            Ok(PathBuf::from("/tmp/.mount_Kassiber/usr/bin/kassiber-ui"))
+        })
+        .expect("resolve terminal target");
+
+        assert_eq!(
+            target,
+            PathBuf::from("/home/alice/Downloads/Kassiber.AppImage")
+        );
     }
 
     #[test]
