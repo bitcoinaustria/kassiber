@@ -10,7 +10,7 @@
  */
 
 async function invokeSave(
-  command: "save_chat_export_as" | "save_diagnostics_log_as",
+  command: "save_chat_export_as" | "save_logs_export_as",
   destinationPath: string,
   contents: string,
 ): Promise<string> {
@@ -25,9 +25,9 @@ export function saveChatExportAs(
   return invokeSave("save_chat_export_as", destinationPath, contents);
 }
 
-export function saveDiagnosticsLogAs(
+export function saveLogsExportAs(
   destinationPath: string,
   contents: string,
 ): Promise<string> {
-  return invokeSave("save_diagnostics_log_as", destinationPath, contents);
+  return invokeSave("save_logs_export_as", destinationPath, contents);
 }

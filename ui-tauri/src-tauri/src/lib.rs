@@ -555,8 +555,8 @@ fn save_chat_export_as(destination_path: String, contents: String) -> Result<Str
 }
 
 #[tauri::command]
-fn save_diagnostics_log_as(destination_path: String, contents: String) -> Result<String, String> {
-    write_text_export(destination_path, contents, &["json", "jsonl", "log", "md"])
+fn save_logs_export_as(destination_path: String, contents: String) -> Result<String, String> {
+    write_text_export(destination_path, contents, &["jsonl", "log", "md"])
 }
 
 fn ensure_export_destination_outside_managed_root(
@@ -1391,7 +1391,7 @@ pub fn run() {
             open_exported_file,
             save_exported_file_as,
             save_chat_export_as,
-            save_diagnostics_log_as,
+            save_logs_export_as,
             open_external_url,
             select_import_project_directory,
             activate_import_project,

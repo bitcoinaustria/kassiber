@@ -44,7 +44,8 @@ import {
   type AppLogRecord,
 } from "@/lib/appLogs";
 import { isFilePickerAvailable, saveFile } from "@/lib/filePicker";
-import { saveDiagnosticsLogAs } from "@/lib/saveText";
+import { appVersionLabel } from "@/lib/appVersion";
+import { saveLogsExportAs } from "@/lib/saveText";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
@@ -77,7 +78,7 @@ export function Logs() {
   const [newWhilePaused, setNewWhilePaused] = React.useState(0);
   const viewportRef = React.useRef<HTMLDivElement | null>(null);
   const previousRecordCount = React.useRef(records.length);
-  const storageBytes = getAppLogStorageSize();
+  const storageBytes = useAppLogStorageSize();
 
   React.useEffect(() => {
     setAppLogSubscriptionLevel(level);
@@ -148,7 +149,7 @@ export function Logs() {
           filters: [{ name: format.toUpperCase(), extensions: [format] }],
         });
         if (!destination) return;
-        await saveDiagnosticsLogAs(destination, contents);
+        await saveLogsExportAs(destination, contents);
         return;
       }
       triggerBrowserDownload(filename, contents, contentType(format));
@@ -433,6 +434,14 @@ function useAppLogRecords(): AppLogRecord[] {
   );
 }
 
+function useAppLogStorageSize(): number {
+  return React.useSyncExternalStore(
+    subscribeAppLogRecords,
+    getAppLogStorageSize,
+    getAppLogStorageSize,
+  );
+}
+
 function filterRecords(
   records: AppLogRecord[],
   query: string,
@@ -507,10 +516,6 @@ function filterLabel(
     moduleFilter ? `module=${moduleFilter}` : "module=all",
     query ? `search=${regex ? "regex:" : ""}${query}` : "search=none",
   ].join(", ");
-}
-
-function appVersionLabel(): string {
-  return `${__APP_VERSION__} (${__APP_COMMIT__ ? __APP_COMMIT__.slice(0, 7) : "unknown"})`;
 }
 
 function osLabel(): string {

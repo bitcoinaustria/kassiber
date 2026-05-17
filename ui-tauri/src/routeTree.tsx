@@ -197,6 +197,9 @@ const diagnosticsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/diagnostics",
   beforeLoad: () => {
+    if (!useUiStore.getState().developerToolsEnabled) {
+      throw redirect({ to: "/overview" });
+    }
     throw redirect({ to: "/logs" });
   },
 });

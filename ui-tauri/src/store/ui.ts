@@ -33,17 +33,6 @@ export interface AppNotification {
   createdAt: string;
 }
 
-export type AppLogLevel = "debug" | "info" | "warning" | "error";
-
-export interface AppLogEntry {
-  id: string;
-  createdAt: string;
-  level: AppLogLevel;
-  source: string;
-  message: string;
-  details?: unknown;
-}
-
 export interface AppLockPolicy {
   autoLockWhenIdle: boolean;
   idleMinutes: number;
@@ -158,7 +147,6 @@ export interface UiState {
   assistantModelSelection: AiModelSelection | null;
   daemonSession: number;
   notifications: AppNotification[];
-  logEntries: AppLogEntry[];
   sourceFundsDrafts: Record<string, SourceFundsDraft>;
   deferredConnectionSetup: DeferredConnectionSetup | null;
   setLang: (lang: Lang) => void;
@@ -186,8 +174,6 @@ export interface UiState {
   ) => void;
   clearNotification: (id: string) => void;
   clearNotifications: () => void;
-  addLogEntry: (entry: Omit<AppLogEntry, "id" | "createdAt">) => void;
-  clearLogEntries: () => void;
   setSourceFundsDraft: (profileKey: string, draft: SourceFundsDraft) => void;
   clearSourceFundsDraft: (profileKey: string) => void;
   setDeferredConnectionSetup: (intent: DeferredConnectionSetup | null) => void;
@@ -274,7 +260,6 @@ export const useUiStore = create<UiState>()(
       assistantModelSelection: null,
       daemonSession: 0,
       notifications: [],
-      logEntries: [],
       sourceFundsDrafts: {},
       setLang: (lang) => set({ lang }),
       setCurrency: (currency) => set({ currency }),
@@ -365,18 +350,6 @@ export const useUiStore = create<UiState>()(
           ),
         })),
       clearNotifications: () => set({ notifications: [] }),
-      addLogEntry: (entry) =>
-        set((state) => ({
-          logEntries: [
-            {
-              ...entry,
-              id: `${Date.now()}-${state.logEntries.length}`,
-              createdAt: new Date().toISOString(),
-            },
-            ...state.logEntries,
-          ].slice(0, 300),
-        })),
-      clearLogEntries: () => set({ logEntries: [] }),
       setSourceFundsDraft: (profileKey, draft) =>
         set((state) => {
           const existing = state.sourceFundsDrafts[profileKey] ?? {};
@@ -435,7 +408,6 @@ export const useUiStore = create<UiState>()(
           ),
           sourceFundsDrafts:
             restored.sourceFundsDrafts ?? current.sourceFundsDrafts,
-          logEntries: current.logEntries,
         };
       },
     },

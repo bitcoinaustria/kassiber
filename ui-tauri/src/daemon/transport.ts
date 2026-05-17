@@ -196,13 +196,13 @@ function recordDaemonLog(
   source: string,
   message: string,
   fields: Record<string, AppLogField>,
-  line: number,
 ) {
   emitAppLog({
     level,
     module: source,
     file: "daemon/transport.ts",
-    line,
+    // Wrapper events are logical transport records; a fixed source line would drift.
+    line: 0,
     msg: message,
     fields,
   });
@@ -271,7 +271,12 @@ function withDaemonLogging(
     async invoke<T = unknown>(
       req: DaemonRequest,
     ): Promise<DaemonEnvelope<T>> {
-      recordDaemonLog("debug", source, "Daemon invoke started", summarizeRequestFields(req), 274);
+      recordDaemonLog(
+        "debug",
+        source,
+        "Daemon invoke started",
+        summarizeRequestFields(req),
+      );
       try {
         const envelope = await transport.invoke<T>(req);
         recordDaemonLog(
@@ -279,7 +284,6 @@ function withDaemonLogging(
           source,
           "Daemon invoke finished",
           summarizeEnvelopeFields(envelope),
-          277,
         );
         return envelope;
       } catch (error) {
@@ -294,7 +298,6 @@ function withDaemonLogging(
               value: error instanceof Error ? error.message : String(error),
             },
           },
-          286,
         );
         throw error;
       }
@@ -303,7 +306,12 @@ function withDaemonLogging(
       req: DaemonRequest,
       options?: DaemonStreamOptions<R>,
     ): Promise<DaemonEnvelope<T>> {
-      recordDaemonLog("debug", source, "Daemon stream started", summarizeRequestFields(req), 306);
+      recordDaemonLog(
+        "debug",
+        source,
+        "Daemon stream started",
+        summarizeRequestFields(req),
+      );
       try {
         const envelope = await transport.stream<T, R>(req, {
           ...options,
@@ -313,7 +321,6 @@ function withDaemonLogging(
               source,
               "Daemon stream record",
               summarizeEnvelopeFields(record),
-              311,
             );
             options?.onRecord?.(record);
           },
@@ -323,7 +330,6 @@ function withDaemonLogging(
           source,
           "Daemon stream finished",
           summarizeEnvelopeFields(envelope),
-          321,
         );
         return envelope;
       } catch (error) {
@@ -338,7 +344,6 @@ function withDaemonLogging(
               value: error instanceof Error ? error.message : String(error),
             },
           },
-          330,
         );
         throw error;
       }

@@ -5,6 +5,7 @@ import {
   emitAppLog,
   exportLogRecords,
   formatLogRecord,
+  getAppLogStorageSize,
   getAppLogRecords,
   logFilename,
   setAppLogSubscriptionLevel,
@@ -71,6 +72,10 @@ describe("typed app logs", () => {
       maskAmounts: false,
     });
     expect(redacted).toContain("Daemon invoke finished");
+    expect(redacted).toContain("address=bc1qe...f3xy");
+    expect(redacted).toContain("wallet_material=wallet#");
+    expect(redacted).toContain("label=wallet#");
+    expect(redacted).toContain("path=~/.../data");
     expect(redacted).toContain("bc1qe...f3xy");
     expect(redacted).toContain("wallet#");
     expect(redacted).toContain("~/.../data");
@@ -83,6 +88,29 @@ describe("typed app logs", () => {
     expect(stableMaskedValue({ type: "label", value: "Treasury hot wallet" })).toBe(
       stableMaskedValue({ type: "label", value: "Treasury hot wallet" }),
     );
+  });
+
+  it("keeps a redaction backstop for message and text fields", () => {
+    const emitted = emitAppLog({
+      ...record({
+        detail: {
+          type: "text",
+          value: "Bearer sk-local-secret and descriptor=wpkh([abcd]xpub661MyMwAqRbcFsecret/0/*)",
+        },
+      }),
+      msg: "failed with api_key=sk-local-secret",
+    });
+    expect(emitted).not.toBeNull();
+
+    const redacted = formatLogRecord(emitted!, {
+      redacted: true,
+      maskAmounts: false,
+    });
+    expect(redacted).toContain("api_key=[redacted]");
+    expect(redacted).toContain("Bearer [redacted]");
+    expect(redacted).toContain("descriptor=[redacted]");
+    expect(redacted).not.toContain("sk-local-secret");
+    expect(redacted).not.toContain("xpub");
   });
 
   it("exports a self-describing markdown snapshot and watermarks raw output", () => {
@@ -129,5 +157,14 @@ describe("typed app logs", () => {
     expect(logFilename("md", "redacted", new Date("2026-05-17T18:08:00Z"))).toBe(
       "kassiber-2026-05-17T18-08Z-redacted.md",
     );
+  });
+
+  it("tracks ring storage size without reading localStorage every time", () => {
+    emitAppLog(record({ detail: { type: "text", value: "first record" } }));
+    const before = getAppLogStorageSize();
+    expect(before).toBeGreaterThan(2);
+
+    emitAppLog(record({ detail: { type: "text", value: "second record" } }));
+    expect(getAppLogStorageSize()).toBeGreaterThan(before);
   });
 });

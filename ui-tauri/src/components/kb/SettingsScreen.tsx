@@ -87,6 +87,7 @@ import {
   APP_LOG_MAX_BYTES,
   APP_LOG_MAX_RECORDS,
   getAppLogStorageSize,
+  subscribeAppLogRecords,
 } from "@/lib/appLogs";
 import {
   DEFAULT_BACKEND_NAME,
@@ -595,6 +596,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const setDeveloperToolsEnabled = useUiStore(
     (s) => s.setDeveloperToolsEnabled,
   );
+  const appLogStorageBytes = useAppLogStorageSize();
   const identity = useUiStore((s) => s.identity);
   const setIdentity = useUiStore((s) => s.setIdentity);
   const addNotification = useUiStore((s) => s.addNotification);
@@ -873,7 +875,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         icon: TerminalSquare,
         title: "Developer tools",
         description: developerToolsEnabled
-          ? `Logs page enabled. Ring buffer uses ${formatBytes(getAppLogStorageSize())}.`
+          ? `Logs page enabled. Ring buffer uses ${formatBytes(appLogStorageBytes)}.`
           : "Logs page hidden from navigation and deep links.",
         isConnected: developerToolsEnabled,
         statusLabel: "Enabled",
@@ -1004,6 +1006,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       appLockPolicy.autoLockWhenIdle,
       appLockPolicy.idleMinutes,
       aiFeaturesEnabled,
+      appLogStorageBytes,
       backends,
       clearClipboard,
       currency,
@@ -1877,7 +1880,7 @@ function DeveloperToolsSettingsPanel({
   enabled: boolean;
   setEnabled: (enabled: boolean) => void;
 }) {
-  const bytes = getAppLogStorageSize();
+  const bytes = useAppLogStorageSize();
   return (
     <section className="space-y-3">
       <div>
@@ -1905,6 +1908,14 @@ function DeveloperToolsSettingsPanel({
         </p>
       </div>
     </section>
+  );
+}
+
+function useAppLogStorageSize(): number {
+  return React.useSyncExternalStore(
+    subscribeAppLogRecords,
+    getAppLogStorageSize,
+    getAppLogStorageSize,
   );
 }
 

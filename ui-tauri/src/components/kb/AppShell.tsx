@@ -118,6 +118,7 @@ import type { ProfilesSnapshot } from "@/mocks/profiles";
 import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
 import type { AssistantReturnPath } from "@/components/ai/assistantSession";
 import kLedgerMarkUrl from "@/assets/k-ledger-mark-transparent.svg";
+import { APP_COMMIT, APP_VERSION } from "@/lib/appVersion";
 import { ScreenAssistantMockup } from "./ScreenAssistantMockup";
 import { PreAlphaBanner } from "./PreAlphaBanner";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
@@ -165,8 +166,6 @@ type NotificationItem = Omit<AppNotification, "createdAt"> & {
   actionLabel?: string;
 };
 
-const APP_VERSION = __APP_VERSION__;
-const APP_COMMIT = __APP_COMMIT__;
 const APP_COMMIT_SHORT = APP_COMMIT ? APP_COMMIT.slice(0, 7) : "unknown";
 const NATIVE_MENU_EVENT = "kassiber:intent";
 const topNavIconButtonClassName =

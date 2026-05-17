@@ -77,9 +77,30 @@ const SENSITIVE_FIELD_TYPES = new Set<AppLogFieldType>([
 
 let subscriptionLevel: AppLogLevel = "info";
 let memoryRing: AppLogRecord[] | null = null;
+let memoryRingBytes: number | null = null;
 let pendingStorageFlush: ReturnType<typeof setTimeout> | null = null;
 let pendingStorageRecords: AppLogRecord[] | null = null;
 const subscribers = new Set<() => void>();
+
+const TEXT_BACKSTOP_PATTERNS: Array<[RegExp, string]> = [
+  [
+    /\b(?:xprv|tprv|yprv|zprv|uprv|vprv)[1-9A-HJ-NP-Za-km-z]{20,}\b/g,
+    "[redacted-private-key]",
+  ],
+  [
+    /\b(?:xpub|tpub|ypub|zpub|upub|vpub)[1-9A-HJ-NP-Za-km-z]{20,}\b/g,
+    "[redacted-extended-key]",
+  ],
+  [
+    /\b(?:wpkh|sh|wsh|tr|pkh|combo)\([^)\n]{16,}\)/gi,
+    "[redacted-wallet-material]",
+  ],
+  [/\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*/g, "Bearer [redacted]"],
+  [
+    /\b(api[_-]?key|auth[_-]?header|cookie|descriptor|passphrase|password|secret|token)\b(\s*[:=]\s*)([^\s,;"']+)/gi,
+    "$1$2[redacted]",
+  ],
+];
 
 export function appLogLevels(): AppLogLevel[] {
   return ["trace", "debug", "info", "warning", "error"];
@@ -109,11 +130,13 @@ export function getAppLogRecords(): AppLogRecord[] {
 }
 
 export function getAppLogStorageSize(): number {
-  return readStorage().length;
+  loadRing();
+  return memoryRingBytes ?? 0;
 }
 
 export function clearAppLogRecords(): void {
   memoryRing = [];
+  memoryRingBytes = 2;
   if (pendingStorageFlush) {
     clearTimeout(pendingStorageFlush);
     pendingStorageFlush = null;
@@ -143,9 +166,13 @@ export function emitAppLog(
   };
   const ring = loadRing();
   ring.push(next);
-  const bounded = enforceRingBounds(ring);
-  memoryRing = bounded;
-  scheduleStorageWrite(bounded);
+  const bounded = enforceRingBounds(
+    ring,
+    (memoryRingBytes ?? 2) + estimateRecordBytes(next),
+  );
+  memoryRing = bounded.records;
+  memoryRingBytes = bounded.bytes;
+  scheduleStorageWrite(bounded.records);
   notifySubscribers();
   return next;
 }
@@ -157,12 +184,8 @@ export function redactLogRecord(
   if (!options.redacted) return record;
   return {
     ...record,
-    fields: Object.fromEntries(
-      Object.entries(record.fields).map(([name, field]) => [
-        redactedFieldName(name, field),
-        redactField(field, options),
-      ]),
-    ),
+    msg: redactTextBackstop(record.msg),
+    fields: redactFields(record.fields, options),
     spantrace: record.spantrace?.map((child) => redactLogRecord(child, options)),
   };
 }
@@ -275,16 +298,48 @@ function redactField(
   options: AppLogRenderOptions,
 ): AppLogField {
   if (field.type === "amount" && !options.maskAmounts) return field;
+  if (field.type === "text" && typeof field.value === "string") {
+    return { ...field, value: redactTextBackstop(field.value) };
+  }
   if (!SENSITIVE_FIELD_TYPES.has(field.type) && field.type !== "amount") {
     return field;
   }
   return { type: "text", value: stableMaskedValue(field) };
 }
 
+function redactFields(
+  fields: Record<string, AppLogField>,
+  options: AppLogRenderOptions,
+): Record<string, AppLogField> {
+  const used = new Map<string, number>();
+  const entries = Object.entries(fields).map(([name, field]) => {
+    const baseName = redactedFieldName(name, field);
+    const seen = used.get(baseName) ?? 0;
+    used.set(baseName, seen + 1);
+    const renderedName = seen === 0 ? baseName : `${baseName}_${seen + 1}`;
+    return [renderedName, redactField(field, options)] as const;
+  });
+  return Object.fromEntries(entries);
+}
+
 function redactedFieldName(name: string, field: AppLogField): string {
   if (field.type === "amount") return name;
   if (!SENSITIVE_FIELD_TYPES.has(field.type)) return name;
-  return `field_${stableHash(`${field.type}:${name}`)}`;
+  if (
+    field.type === "xpub" ||
+    field.type === "xpriv" ||
+    field.type === "descriptor"
+  ) {
+    return "wallet_material";
+  }
+  return field.type;
+}
+
+function redactTextBackstop(value: string): string {
+  return TEXT_BACKSTOP_PATTERNS.reduce(
+    (current, [pattern, replacement]) => current.replace(pattern, replacement),
+    value,
+  );
 }
 
 function formatFields(fields: Record<string, AppLogField>): string {
@@ -300,14 +355,38 @@ function formatFields(fields: Record<string, AppLogField>): string {
   return parts.length ? parts.join(" ") : "";
 }
 
-function enforceRingBounds(records: AppLogRecord[]): AppLogRecord[] {
-  let next = records.slice(-APP_LOG_MAX_RECORDS);
-  let serialized = JSON.stringify(next);
-  while (next.length > 0 && serialized.length > APP_LOG_MAX_BYTES) {
-    next = next.slice(Math.max(1, Math.ceil(next.length * 0.1)));
-    serialized = JSON.stringify(next);
+interface RingSnapshot {
+  records: AppLogRecord[];
+  bytes: number;
+}
+
+function enforceRingBounds(
+  records: AppLogRecord[],
+  estimatedBytes: number,
+): RingSnapshot {
+  let bytes = estimatedBytes;
+  const firstIndex = Math.max(0, records.length - APP_LOG_MAX_RECORDS);
+  for (let index = 0; index < firstIndex; index += 1) {
+    bytes -= estimateRecordBytes(records[index]);
   }
-  return next;
+  let next = firstIndex > 0 ? records.slice(firstIndex) : records;
+  while (next.length > 0 && bytes > APP_LOG_MAX_BYTES) {
+    const dropCount = Math.max(1, Math.ceil(next.length * 0.1));
+    for (let index = 0; index < dropCount; index += 1) {
+      bytes -= estimateRecordBytes(next[index]);
+    }
+    next = next.slice(dropCount);
+  }
+  return { records: next, bytes: Math.max(2, bytes) };
+}
+
+function estimateRecordBytes(record: AppLogRecord): number {
+  return JSON.stringify(record).length + 1;
+}
+
+function estimateRecordsBytes(records: AppLogRecord[]): number {
+  if (records.length === 0) return 2;
+  return records.reduce((total, record) => total + estimateRecordBytes(record), 2);
 }
 
 function loadRing(): AppLogRecord[] {
@@ -315,13 +394,16 @@ function loadRing(): AppLogRecord[] {
   const raw = readStorage();
   if (!raw) {
     memoryRing = [];
+    memoryRingBytes = 2;
     return memoryRing;
   }
   try {
     const parsed = JSON.parse(raw);
     memoryRing = Array.isArray(parsed) ? parsed.filter(isAppLogRecord) : [];
+    memoryRingBytes = raw.length || estimateRecordsBytes(memoryRing);
   } catch {
     memoryRing = [];
+    memoryRingBytes = 2;
   }
   return memoryRing;
 }
