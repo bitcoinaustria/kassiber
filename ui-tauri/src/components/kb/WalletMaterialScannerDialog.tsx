@@ -50,13 +50,20 @@ function calculateScanRegion(video: HTMLVideoElement): QrScanner.ScanRegion {
   };
 }
 
-function isAbortLikeScannerError(error: Error | string) {
+function isTransientScannerError(error: Error | string) {
+  const message =
+    typeof error === "string" ? error : `${error.name} ${error.message}`;
+  const normalized = message.toLowerCase();
   if (typeof error === "string") {
-    return error.toLowerCase().includes("operation was aborted");
+    return (
+      normalized.includes("operation was aborted") ||
+      normalized.includes("scanner error: timeout")
+    );
   }
   return (
     error.name === "AbortError" ||
-    error.message.toLowerCase().includes("operation was aborted")
+    normalized.includes("operation was aborted") ||
+    normalized.includes("scanner error: timeout")
   );
 }
 
@@ -205,7 +212,7 @@ export function WalletMaterialScannerDialog({
               if (
                 scanError === QrScanner.NO_QR_CODE_FOUND ||
                 scannedMaterialRef.current ||
-                isAbortLikeScannerError(scanError)
+                isTransientScannerError(scanError)
               ) {
                 return;
               }
@@ -237,7 +244,7 @@ export function WalletMaterialScannerDialog({
         if (
           !cancelled &&
           !(
-            startError instanceof Error && isAbortLikeScannerError(startError)
+            startError instanceof Error && isTransientScannerError(startError)
           )
         ) {
           setError(
@@ -339,7 +346,7 @@ export function WalletMaterialScannerDialog({
                     scannerRef.current?.setCamera(nextDeviceId).catch((cameraError) => {
                       if (
                         cameraError instanceof Error &&
-                        isAbortLikeScannerError(cameraError)
+                        isTransientScannerError(cameraError)
                       ) {
                         return;
                       }
