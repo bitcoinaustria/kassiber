@@ -30,7 +30,8 @@
       "infoPlist": "Info.plist"
     },
     "resources": [
-      "binaries/"
+      "binaries/",
+      "bin/"
     ],
     "icon": [
       "icons/32x32.png",

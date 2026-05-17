@@ -20,6 +20,7 @@ import {
   RefreshCw,
   Server,
   ShieldCheck,
+  Terminal,
   TerminalSquare,
   Trash2,
   Upload,
@@ -74,7 +75,11 @@ import {
   clearImportProject,
   forgetTouchIdPassphrase,
   getTransport,
+  installTerminalCommand,
+  removeTerminalCommand,
   storeTouchIdPassphrase,
+  terminalCommandStatus,
+  type TerminalCommandStatus,
 } from "@/daemon/transport";
 import type { ExplorerSettings } from "@/lib/explorer";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
@@ -673,6 +678,13 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   >(null);
   const [touchIdEnrollPending, setTouchIdEnrollPending] =
     React.useState(false);
+  const [terminalStatus, setTerminalStatus] =
+    React.useState<TerminalCommandStatus | null>(null);
+  const [terminalStatusError, setTerminalStatusError] = React.useState<
+    string | null
+  >(null);
+  const [terminalCommandPending, setTerminalCommandPending] =
+    React.useState(false);
   const [selectedIntegrationId, setSelectedIntegrationId] = React.useState<
     string | null
   >(() => routeSelectedIntegrationId);
@@ -705,6 +717,26 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   React.useEffect(() => {
     setSelectedIntegrationId(routeSelectedIntegrationId);
   }, [routeSelectedIntegrationId]);
+
+  const refreshTerminalCommandStatus = React.useCallback(async () => {
+    try {
+      const next = await terminalCommandStatus();
+      setTerminalStatus(next);
+      setTerminalStatusError(null);
+      return next;
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Could not inspect terminal command.";
+      setTerminalStatusError(message);
+      return null;
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void refreshTerminalCommandStatus();
+  }, [refreshTerminalCommandStatus]);
 
   // Native menu may re-fire for the same section while the URL hash is
   // unchanged (user already on /settings#privacy, clicks Privacy again after
@@ -829,6 +861,55 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     await backendSettingsQuery.refetch();
   };
 
+  const onInstallTerminalCommand = async () => {
+    const wasRepair = Boolean(terminalStatus?.needsRepair);
+    setTerminalCommandPending(true);
+    try {
+      const next = await installTerminalCommand();
+      setTerminalStatus(next);
+      setTerminalStatusError(null);
+      addNotification({
+        title: wasRepair
+          ? "Terminal command repaired"
+          : "Terminal command installed",
+        body: next.pathOnPath
+          ? "Open a new terminal and run kassiber status."
+          : `Add ${next.binDir} to PATH, then open a new terminal.`,
+        tone: next.pathOnPath ? "success" : "warning",
+      });
+    } catch (error) {
+      setTerminalStatusError(
+        error instanceof Error
+          ? error.message
+          : "Could not install terminal command.",
+      );
+    } finally {
+      setTerminalCommandPending(false);
+    }
+  };
+
+  const onRemoveTerminalCommand = async () => {
+    setTerminalCommandPending(true);
+    try {
+      const next = await removeTerminalCommand();
+      setTerminalStatus(next);
+      setTerminalStatusError(null);
+      addNotification({
+        title: "Terminal command removed",
+        body: `${next.commandPath || "The command"} was removed.`,
+        tone: "success",
+      });
+    } catch (error) {
+      setTerminalStatusError(
+        error instanceof Error
+          ? error.message
+          : "Could not remove terminal command.",
+      );
+    } finally {
+      setTerminalCommandPending(false);
+    }
+  };
+
   const settingsIntegrations = React.useMemo<IntegrationItem[]>(
     () => [
       {
@@ -895,6 +976,33 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         category: "display",
         categoryLabel: "Display",
         actionLabel: "Configure",
+      },
+      {
+        id: "terminal-command",
+        icon: Terminal,
+        title: "Terminal command",
+        description: terminalStatus?.needsRepair
+          ? "The kassiber command is installed but needs repair."
+          : terminalStatus?.installed
+          ? terminalStatus.pathOnPath
+            ? "The kassiber command is available from your shell."
+            : "The kassiber command is installed; PATH may need a shell update."
+          : terminalStatus?.conflict
+            ? "Another command already exists at the install path."
+            : "Install a user-local kassiber command for your terminal.",
+        isConnected: Boolean(terminalStatus?.installed && terminalStatus.pathOnPath),
+        statusLabel: terminalStatus?.needsRepair
+          ? "Needs repair"
+          : terminalStatus?.managed
+            ? "Installed"
+            : "Not installed",
+        category: "desktop",
+        categoryLabel: "Desktop",
+        actionLabel: terminalStatus?.needsRepair
+          ? "Repair"
+          : terminalStatus?.managed
+            ? "Review"
+            : "Install",
       },
       {
         id: "explorer-links",
@@ -1015,6 +1123,9 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       explorerSettings.liquidBaseUrl,
       setHideSensitive,
       status?.database,
+      terminalStatus?.conflict,
+      terminalStatus?.installed,
+      terminalStatus?.pathOnPath,
     ],
   );
 
@@ -1290,7 +1401,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             <SettingsIntegrations4
               className="min-w-0"
               heading="Settings"
-              subHeading="Controls grouped by privacy, display, explorers, security, sync, assistant, and data."
+              subHeading="Controls grouped by privacy, display, desktop, explorers, security, sync, assistant, and data."
               integrations={settingsIntegrations}
               selectedId={selectedIntegrationId ?? undefined}
               onSelect={onIntegrationAction}
@@ -1308,6 +1419,18 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
                     <ExplorerSettingsPanel
                       explorerSettings={explorerSettings}
                       setExplorerSettings={setExplorerSettings}
+                    />
+                  );
+                }
+                if (integration.category === "desktop") {
+                  return (
+                    <TerminalCommandSettingsPanel
+                      status={terminalStatus}
+                      error={terminalStatusError}
+                      pending={terminalCommandPending}
+                      onRefresh={() => void refreshTerminalCommandStatus()}
+                      onInstall={() => void onInstallTerminalCommand()}
+                      onRemove={() => void onRemoveTerminalCommand()}
                     />
                   );
                 }
@@ -1963,6 +2086,141 @@ function ExplorerSettingsPanel({
           </div>
         </div>
       </div>
+    </section>
+  );
+}
+
+function TerminalCommandSettingsPanel({
+  status,
+  error,
+  pending,
+  onRefresh,
+  onInstall,
+  onRemove,
+}: {
+  status: TerminalCommandStatus | null;
+  error: string | null;
+  pending: boolean;
+  onRefresh: () => void;
+  onInstall: () => void;
+  onRemove: () => void;
+}) {
+  const actionLabel = status?.needsRepair
+    ? "Repair command"
+    : status?.installed
+      ? "Reinstall command"
+      : "Install command";
+  return (
+    <section className="space-y-4">
+      <div>
+        <h3 className="flex items-center gap-2 text-sm font-semibold">
+          <Terminal className="size-4" aria-hidden="true" />
+          Terminal command
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          Installs a user-local launcher for the bundled desktop CLI. No
+          administrator privileges are required.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          onClick={onInstall}
+          disabled={pending || status?.conflict || status?.available === false}
+        >
+          {pending ? (
+            <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Terminal className="size-4" aria-hidden="true" />
+          )}
+          {actionLabel}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onRefresh}
+          disabled={pending}
+        >
+          <RefreshCw className="size-4" aria-hidden="true" />
+          Refresh
+        </Button>
+        {status?.managed ? (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onRemove}
+            disabled={pending}
+          >
+            Remove
+          </Button>
+        ) : null}
+      </div>
+
+      {error ? (
+        <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+          <XCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <span>{error}</span>
+        </div>
+      ) : null}
+
+      {status ? (
+        <div className="space-y-3">
+          <div
+            className={cn(
+              "flex items-start gap-2 rounded-md border p-3 text-sm",
+              status.installed && status.pathOnPath
+                ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300"
+                : "border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-200",
+            )}
+          >
+            {status.installed && status.pathOnPath ? (
+              <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            ) : (
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            )}
+            <span>{status.message}</span>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="settings-terminal-command">Command</Label>
+              <Input
+                id="settings-terminal-command"
+                readOnly
+                value={status.commandPath || "loading..."}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="settings-terminal-target">Desktop executable</Label>
+              <Input
+                id="settings-terminal-target"
+                readOnly
+                value={status.targetPath || "loading..."}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-md border bg-background p-3 text-sm">
+            <p className="font-mono">kassiber status</p>
+          </div>
+
+          {!status.pathOnPath ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="settings-terminal-path">PATH update</Label>
+              <Input
+                id="settings-terminal-path"
+                readOnly
+                value={status.pathHint}
+              />
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+          Inspecting desktop command status...
+        </div>
+      )}
     </section>
   );
 }

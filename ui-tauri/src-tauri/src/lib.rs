@@ -9,6 +9,7 @@ use secret_store::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::env;
+use std::fs;
 use std::io::ErrorKind;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -26,6 +27,9 @@ const DEFAULT_STATE_DIR: &str = ".kassiber";
 const DEFAULT_DATA_DIR: &str = "data";
 const DB_FILENAMES: &[&str] = &["kassiber.sqlite3", "satbooks.sqlite3"];
 const IMPORT_PICKER_TIMEOUT: Duration = Duration::from_secs(300);
+const TERMINAL_COMMAND_NAME: &str = "kassiber";
+const TERMINAL_COMMAND_MARKER: &str =
+    "Kassiber desktop CLI launcher. Managed by Kassiber Settings.";
 // Event name kept on the existing `kassiber:` colon-prefixed convention so the
 // channel can be reused for OS-level deep links (e.g. `kassiber://transaction/...`)
 // without colliding with their URL form.
@@ -114,6 +118,8 @@ const DEEP_LINK_SETTINGS_SECTIONS: &[&str] = &[
     "developer",
     "logs",
     "display",
+    "desktop",
+    "terminal",
     "security",
     "backends",
     "sync",
@@ -316,6 +322,31 @@ struct MenuActionPayload {
 #[serde(rename_all = "camelCase")]
 struct TouchIdPassphraseUnlock {
     passphrase_secret: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TerminalCommandStatus {
+    platform: &'static str,
+    available: bool,
+    installed: bool,
+    managed: bool,
+    needs_repair: bool,
+    conflict: bool,
+    path_on_path: bool,
+    command: String,
+    bin_dir: String,
+    command_path: String,
+    target_path: String,
+    path_hint: String,
+    message: String,
+}
+
+struct TerminalCommandPaths {
+    platform: &'static str,
+    bin_dir: PathBuf,
+    command_path: PathBuf,
+    target_path: PathBuf,
 }
 
 struct AppMenuHandles {
@@ -700,6 +731,23 @@ fn touch_id_forget_passphrase_command(
     Ok(touch_id_passphrase_status(&account))
 }
 
+#[tauri::command]
+fn terminal_command_status_command() -> Result<TerminalCommandStatus, String> {
+    terminal_command_status()
+}
+
+#[tauri::command]
+fn terminal_command_install_command() -> Result<TerminalCommandStatus, String> {
+    install_terminal_command()?;
+    terminal_command_status()
+}
+
+#[tauri::command]
+fn terminal_command_remove_command() -> Result<TerminalCommandStatus, String> {
+    remove_terminal_command()?;
+    terminal_command_status()
+}
+
 fn touch_id_account_for_data_root(
     state: &Arc<DaemonSupervisor>,
     data_root: Option<String>,
@@ -939,8 +987,12 @@ impl ExpandUser for Path {
 }
 
 fn home_dir() -> Option<PathBuf> {
-    env::var_os("HOME")
-        .map(PathBuf::from)
+    #[cfg(target_os = "windows")]
+    let home = env::var_os("USERPROFILE").or_else(|| env::var_os("HOME"));
+    #[cfg(not(target_os = "windows"))]
+    let home = env::var_os("HOME");
+
+    home.map(PathBuf::from)
         .filter(|path| !path.as_os_str().is_empty())
 }
 
@@ -959,6 +1011,304 @@ fn default_state_data_root() -> PathBuf {
     home_dir()
         .map(|home| home.join(DEFAULT_STATE_DIR).join(DEFAULT_DATA_DIR))
         .unwrap_or_else(|| PathBuf::from(DEFAULT_STATE_DIR).join(DEFAULT_DATA_DIR))
+}
+
+fn terminal_command_paths() -> Result<TerminalCommandPaths, String> {
+    let target_path = terminal_command_target_path()?;
+    let home = home_dir().ok_or_else(|| {
+        "Could not locate your home folder for a user-owned terminal command.".to_string()
+    })?;
+
+    #[cfg(target_os = "windows")]
+    let platform = "windows";
+    #[cfg(target_os = "macos")]
+    let platform = "macos";
+    #[cfg(target_os = "linux")]
+    let platform = "linux";
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    let platform = "unsupported";
+
+    #[cfg(target_os = "windows")]
+    let candidates = terminal_command_windows_candidate_dirs(&home);
+    #[cfg(not(target_os = "windows"))]
+    let candidates = vec![home.join(".local").join("bin"), home.join("bin")];
+
+    let bin_dir = candidates
+        .iter()
+        .find(|path| path_is_on_path(path))
+        .cloned()
+        .or_else(|| candidates.first().cloned())
+        .ok_or_else(|| "Could not choose a user-owned terminal command directory.".to_string())?;
+    let command_path = bin_dir.join(terminal_command_filename());
+    Ok(TerminalCommandPaths {
+        platform,
+        bin_dir,
+        command_path,
+        target_path,
+    })
+}
+
+fn terminal_command_target_path() -> Result<PathBuf, String> {
+    terminal_command_target_path_for(env::var_os("APPIMAGE"), || {
+        env::current_exe()
+            .map_err(|error| format!("Could not locate the Kassiber desktop executable: {error}"))
+    })
+}
+
+fn terminal_command_target_path_for(
+    appimage: Option<std::ffi::OsString>,
+    current_exe: impl FnOnce() -> Result<PathBuf, String>,
+) -> Result<PathBuf, String> {
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(appimage) = appimage
+            .as_ref()
+            .filter(|value| !value.as_os_str().is_empty())
+        {
+            return Ok(PathBuf::from(appimage));
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = appimage;
+    current_exe()
+}
+
+#[cfg(target_os = "windows")]
+fn terminal_command_windows_candidate_dirs(home: &Path) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(local_app_data) =
+        env::var_os("LOCALAPPDATA").filter(|value| !value.as_os_str().is_empty())
+    {
+        candidates.push(PathBuf::from(local_app_data).join("Kassiber").join("bin"));
+    }
+    candidates.push(home.join(".kassiber").join("bin"));
+    candidates
+}
+
+#[cfg(target_os = "windows")]
+fn terminal_command_filename() -> &'static str {
+    "kassiber.cmd"
+}
+
+#[cfg(not(target_os = "windows"))]
+fn terminal_command_filename() -> &'static str {
+    TERMINAL_COMMAND_NAME
+}
+
+fn terminal_command_status() -> Result<TerminalCommandStatus, String> {
+    let paths = terminal_command_paths()?;
+    let existing = inspect_terminal_command(&paths)?;
+    let path_on_path = path_is_on_path(&paths.bin_dir);
+    let installed = matches!(existing, TerminalCommandFileState::Current);
+    let managed = matches!(
+        existing,
+        TerminalCommandFileState::Current | TerminalCommandFileState::ManagedStale
+    );
+    let needs_repair = matches!(existing, TerminalCommandFileState::ManagedStale);
+    let conflict = matches!(existing, TerminalCommandFileState::Conflict);
+    let message = terminal_command_message(installed, needs_repair, conflict, path_on_path);
+    Ok(TerminalCommandStatus {
+        platform: paths.platform,
+        available: true,
+        installed,
+        managed,
+        needs_repair,
+        conflict,
+        path_on_path,
+        command: TERMINAL_COMMAND_NAME.to_string(),
+        bin_dir: paths.bin_dir.to_string_lossy().into_owned(),
+        command_path: paths.command_path.to_string_lossy().into_owned(),
+        target_path: paths.target_path.to_string_lossy().into_owned(),
+        path_hint: terminal_command_path_hint(&paths.bin_dir),
+        message,
+    })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TerminalCommandFileState {
+    Missing,
+    Current,
+    ManagedStale,
+    Conflict,
+}
+
+fn inspect_terminal_command(
+    paths: &TerminalCommandPaths,
+) -> Result<TerminalCommandFileState, String> {
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Ok(metadata) = fs::symlink_metadata(&paths.command_path) {
+            if metadata.file_type().is_symlink() {
+                return fs::read_link(&paths.command_path)
+                    .map(|target| {
+                        if target == paths.target_path {
+                            // A direct symlink works today, but the Settings
+                            // installer normalizes managed launchers to the
+                            // script form so future dispatch stays explicit.
+                            TerminalCommandFileState::ManagedStale
+                        } else {
+                            TerminalCommandFileState::Conflict
+                        }
+                    })
+                    .map_err(|error| {
+                        format!("Could not inspect terminal command symlink: {error}")
+                    });
+            }
+        }
+    }
+
+    match fs::read_to_string(&paths.command_path) {
+        Ok(contents) => {
+            if contents == terminal_command_contents(&paths.target_path) {
+                return Ok(TerminalCommandFileState::Current);
+            }
+            if contents.contains(TERMINAL_COMMAND_MARKER) {
+                return Ok(TerminalCommandFileState::ManagedStale);
+            }
+            Ok(TerminalCommandFileState::Conflict)
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(TerminalCommandFileState::Missing),
+        Err(error) => Err(format!("Could not inspect terminal command: {error}")),
+    }
+}
+
+fn install_terminal_command() -> Result<(), String> {
+    let paths = terminal_command_paths()?;
+    match inspect_terminal_command(&paths)? {
+        TerminalCommandFileState::Missing => {}
+        TerminalCommandFileState::Current => return Ok(()),
+        TerminalCommandFileState::ManagedStale => {
+            fs::remove_file(&paths.command_path)
+                .map_err(|error| format!("Could not replace terminal command: {error}"))?;
+        }
+        TerminalCommandFileState::Conflict => {
+            return Err(format!(
+                "{} already exists and is not managed by Kassiber. Move it aside first if you want Kassiber to install this command there.",
+                paths.command_path.display()
+            ));
+        }
+    }
+
+    fs::create_dir_all(&paths.bin_dir)
+        .map_err(|error| format!("Could not create terminal command directory: {error}"))?;
+    fs::write(
+        &paths.command_path,
+        terminal_command_contents(&paths.target_path),
+    )
+    .map_err(|error| format!("Could not write terminal command: {error}"))?;
+    set_terminal_command_permissions(&paths.command_path)
+        .map_err(|error| format!("Could not make terminal command executable: {error}"))?;
+    Ok(())
+}
+
+fn remove_terminal_command() -> Result<(), String> {
+    let paths = terminal_command_paths()?;
+    match inspect_terminal_command(&paths)? {
+        TerminalCommandFileState::Missing => Ok(()),
+        TerminalCommandFileState::Current | TerminalCommandFileState::ManagedStale => {
+            fs::remove_file(&paths.command_path)
+                .map_err(|error| format!("Could not remove terminal command: {error}"))
+        }
+        TerminalCommandFileState::Conflict => Err(format!(
+            "{} is not managed by Kassiber, so it was left untouched.",
+            paths.command_path.display()
+        )),
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn set_terminal_command_permissions(path: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut permissions = fs::metadata(path)?.permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(path, permissions)
+}
+
+#[cfg(target_os = "windows")]
+fn set_terminal_command_permissions(_path: &Path) -> std::io::Result<()> {
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn terminal_command_contents(target_path: &Path) -> String {
+    let target = target_path.to_string_lossy().replace('%', "%%");
+    format!(
+        "@echo off\r\nREM {TERMINAL_COMMAND_MARKER}\r\nREM target: {}\r\n\"{}\" --cli %*\r\n",
+        target, target
+    )
+}
+
+#[cfg(not(target_os = "windows"))]
+fn terminal_command_contents(target_path: &Path) -> String {
+    format!(
+        "#!/bin/sh\n# {TERMINAL_COMMAND_MARKER}\n# target: {}\nexec {} --cli \"$@\"\n",
+        target_path.to_string_lossy(),
+        shell_single_quote(&target_path.to_string_lossy())
+    )
+}
+
+#[cfg(not(target_os = "windows"))]
+fn shell_single_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\"'\"'"))
+}
+
+fn terminal_command_message(
+    installed: bool,
+    needs_repair: bool,
+    conflict: bool,
+    path_on_path: bool,
+) -> String {
+    if conflict {
+        "A different command already exists at the install path.".to_string()
+    } else if needs_repair {
+        "The terminal command is managed by Kassiber but points at an older app path.".to_string()
+    } else if installed && path_on_path {
+        "The terminal command is installed and appears on PATH.".to_string()
+    } else if installed {
+        "The terminal command is installed; add its folder to PATH if your shell cannot find it."
+            .to_string()
+    } else {
+        "Install the user-local terminal command to run kassiber from a shell.".to_string()
+    }
+}
+
+fn terminal_command_path_hint(bin_dir: &Path) -> String {
+    #[cfg(target_os = "windows")]
+    {
+        format!("Add {} to your user PATH.", bin_dir.display())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let home = home_dir();
+        let display_dir = home
+            .as_ref()
+            .and_then(|home| bin_dir.strip_prefix(home).ok())
+            .map(|relative| format!("$HOME/{}", relative.to_string_lossy()))
+            .unwrap_or_else(|| bin_dir.to_string_lossy().into_owned());
+        format!("export PATH=\"{display_dir}:$PATH\"")
+    }
+}
+
+fn path_is_on_path(path: &Path) -> bool {
+    let Some(paths) = env::var_os("PATH") else {
+        return false;
+    };
+    env::split_paths(&paths).any(|candidate| same_path_text(&candidate, path))
+}
+
+fn same_path_text(left: &Path, right: &Path) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        left.to_string_lossy()
+            .trim_end_matches(['\\', '/'])
+            .eq_ignore_ascii_case(right.to_string_lossy().trim_end_matches(['\\', '/']))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        left.to_string_lossy().trim_end_matches('/')
+            == right.to_string_lossy().trim_end_matches('/')
+    }
 }
 
 fn choose_import_project_directory() -> Result<Option<PathBuf>, String> {
@@ -1305,20 +1655,22 @@ pub fn run() {
     let cli_args = desktop_cli_args();
     let mut builder = tauri::Builder::default();
 
-    // Single-instance must come before the deep-link plugin so a second
-    // launch (`open kassiber://settings/privacy` while the app is already
-    // running) is forwarded to the existing window instead of forking a new
-    // process. With a separate process we'd race the SQLite/SQLCipher
-    // database — the daemon assumes one writer at a time.
+    // Single-instance must come before the deep-link plugin so GUI/deep-link
+    // relaunches are forwarded to the existing window instead of forking a new
+    // GUI process. CLI-mode launches intentionally skip the plugin: they run a
+    // short-lived sidecar command and exit, so they do not start a second
+    // desktop supervisor or hold a competing GUI daemon open.
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            }
-        }));
+        if cli_args.is_none() {
+            builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
+            }));
+        }
     }
 
     builder
@@ -1400,6 +1752,9 @@ pub fn run() {
             touch_id_store_passphrase_command,
             touch_id_unlock_passphrase_command,
             touch_id_forget_passphrase_command,
+            terminal_command_status_command,
+            terminal_command_install_command,
+            terminal_command_remove_command,
             set_menu_state
         ])
         .run(tauri::generate_context!())
@@ -1920,19 +2275,136 @@ mod tests {
     use super::{
         copy_report_export_directory, database_is_encrypted,
         ensure_export_destination_outside_managed_root, inspect_import_project_directory,
-        is_managed_report_export_path, is_supported_austrian_csv_bundle_dir,
-        is_supported_export_file, is_supported_report_export_target, menu_action,
-        menu_action_for_deep_link, menu_action_for_id, navigate_action, open_settings_action,
-        validated_external_url, ALLOWED_DAEMON_KINDS, MENU_HELP_DOCS, MENU_LOCK_APP,
-        MENU_NAV_ASSISTANT, MENU_NAV_REPORTS, MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN,
-        MENU_UI_SCALE_DECREASE, MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET,
-        MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
-        MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL,
+        inspect_terminal_command, is_managed_report_export_path,
+        is_supported_austrian_csv_bundle_dir, is_supported_export_file,
+        is_supported_report_export_target, menu_action, menu_action_for_deep_link,
+        menu_action_for_id, navigate_action, open_settings_action, path_is_on_path,
+        terminal_command_contents, terminal_command_path_hint, validated_external_url,
+        TerminalCommandFileState, TerminalCommandPaths, ALLOWED_DAEMON_KINDS, MENU_HELP_DOCS,
+        MENU_LOCK_APP, MENU_NAV_ASSISTANT, MENU_NAV_REPORTS, MENU_SETTINGS_SECURITY,
+        MENU_TOGGLE_FULLSCREEN, MENU_UI_SCALE_DECREASE, MENU_UI_SCALE_INCREASE,
+        MENU_UI_SCALE_RESET, MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
+        MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL, TERMINAL_COMMAND_MARKER,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
     use tauri::Url;
+
+    #[test]
+    fn terminal_command_launcher_targets_desktop_executable() {
+        let target = Path::new("/Applications/Kassiber.app/Contents/MacOS/kassiber-ui");
+        let contents = terminal_command_contents(target);
+        assert!(contents.contains("Managed by Kassiber Settings"));
+        assert!(contents.contains("--cli"));
+        assert!(contents.contains("kassiber-ui"));
+    }
+
+    #[test]
+    fn terminal_command_path_hint_uses_user_shell_path_syntax() {
+        let hint = terminal_command_path_hint(Path::new("/Users/alice/.local/bin"));
+        #[cfg(target_os = "windows")]
+        assert!(hint.contains("PATH"));
+        #[cfg(not(target_os = "windows"))]
+        assert!(hint.contains("export PATH="));
+    }
+
+    #[test]
+    fn path_detection_tolerates_missing_path_env() {
+        assert!(!path_is_on_path(Path::new(
+            "/path/that/should/not/exist/in/tests"
+        )));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn terminal_command_target_prefers_stable_appimage_path() {
+        let appimage = std::ffi::OsString::from("/home/alice/Downloads/Kassiber.AppImage");
+        let target = super::terminal_command_target_path_for(Some(appimage), || {
+            Ok(PathBuf::from("/tmp/.mount_Kassiber/usr/bin/kassiber-ui"))
+        })
+        .expect("resolve terminal target");
+
+        assert_eq!(
+            target,
+            PathBuf::from("/home/alice/Downloads/Kassiber.AppImage")
+        );
+    }
+
+    #[test]
+    fn terminal_command_inspection_tracks_managed_conflict_and_stale_files() {
+        let root = unique_temp_dir("terminal-command-inspect");
+        let bin_dir = root.join("bin");
+        fs::create_dir_all(&bin_dir).expect("create bin dir");
+        let target_path = root
+            .join("Kassiber.app")
+            .join("Contents")
+            .join("MacOS")
+            .join("kassiber-ui");
+        let paths = TerminalCommandPaths {
+            platform: "macos",
+            command_path: bin_dir.join("kassiber"),
+            bin_dir,
+            target_path,
+        };
+
+        assert_eq!(
+            inspect_terminal_command(&paths).expect("inspect missing command"),
+            TerminalCommandFileState::Missing
+        );
+
+        fs::write(
+            &paths.command_path,
+            terminal_command_contents(&paths.target_path),
+        )
+        .expect("write managed command");
+        assert_eq!(
+            inspect_terminal_command(&paths).expect("inspect managed command"),
+            TerminalCommandFileState::Current
+        );
+
+        fs::write(&paths.command_path, "#!/bin/sh\necho elsewhere\n").expect("write conflict");
+        assert_eq!(
+            inspect_terminal_command(&paths).expect("inspect conflict command"),
+            TerminalCommandFileState::Conflict
+        );
+
+        fs::write(
+            &paths.command_path,
+            format!("#!/bin/sh\n# {TERMINAL_COMMAND_MARKER}\nexec /old/kassiber-ui --cli \"$@\"\n"),
+        )
+        .expect("write stale managed command");
+        assert_eq!(
+            inspect_terminal_command(&paths).expect("inspect stale command"),
+            TerminalCommandFileState::ManagedStale
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn terminal_command_inspection_normalizes_matching_symlink_to_managed_script() {
+        let root = unique_temp_dir("terminal-command-symlink");
+        let bin_dir = root.join("bin");
+        fs::create_dir_all(&bin_dir).expect("create bin dir");
+        let target_path = root
+            .join("Kassiber.app")
+            .join("Contents")
+            .join("MacOS")
+            .join("kassiber-ui");
+        let paths = TerminalCommandPaths {
+            platform: "macos",
+            command_path: bin_dir.join("kassiber"),
+            bin_dir,
+            target_path,
+        };
+        std::os::unix::fs::symlink(&paths.target_path, &paths.command_path)
+            .expect("create launcher symlink");
+
+        assert_eq!(
+            inspect_terminal_command(&paths).expect("inspect symlink command"),
+            TerminalCommandFileState::ManagedStale
+        );
+    }
 
     #[test]
     fn source_funds_daemon_kinds_are_in_allowlist() {
@@ -2071,6 +2543,14 @@ mod tests {
         assert_eq!(
             parse("kassiber://settings/privacy"),
             Some(open_settings_action(Some("privacy")))
+        );
+        assert_eq!(
+            parse("kassiber://settings/desktop"),
+            Some(open_settings_action(Some("desktop")))
+        );
+        assert_eq!(
+            parse("kassiber://settings/terminal"),
+            Some(open_settings_action(Some("terminal")))
         );
         // Unknown sections degrade to "open settings" without a section
         // rather than failing — the user still arrives at the right surface

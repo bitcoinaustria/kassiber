@@ -1,0 +1,43 @@
+import importlib.util
+import unittest
+from pathlib import Path
+
+
+def load_renderer():
+    script = Path(__file__).resolve().parents[1] / "scripts" / "render_homebrew_cask.py"
+    spec = importlib.util.spec_from_file_location("render_homebrew_cask", script)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("could not load render_homebrew_cask.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class HomebrewCaskRenderTest(unittest.TestCase):
+    def test_render_cask_links_bundled_terminal_launcher(self):
+        renderer = load_renderer()
+        sha256 = "a" * 64
+        cask = renderer.render_cask("v0.22.9", sha256)
+
+        self.assertIn('version "0.22.9"', cask)
+        self.assertIn(f'sha256 "{sha256}"', cask)
+        self.assertIn(
+            'url "https://github.com/bitcoinaustria/kassiber/releases/download/v#{version}/kassiber-macos-universal.dmg"',
+            cask,
+        )
+        self.assertIn('app "Kassiber.app"', cask)
+        self.assertIn(
+            'binary "#{appdir}/Kassiber.app/Contents/Resources/bin/kassiber",',
+            cask,
+        )
+        self.assertIn('target: "kassiber"', cask)
+
+    def test_render_cask_validates_checksum(self):
+        renderer = load_renderer()
+
+        with self.assertRaises(ValueError):
+            renderer.render_cask("0.22.9", "not-a-sha")
+
+
+if __name__ == "__main__":
+    unittest.main()
