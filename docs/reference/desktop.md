@@ -52,14 +52,25 @@ prerelease and development troubleshooting: request logs include argument keys,
 not argument values, while terminal daemon errors keep their structured
 message, hint, and redacted details when the daemon exposes them.
 
-Overview is the first configurable page workspace. Its page-level modules can
-be moved, resized from edges or the lower-right corner, focused above other
-modules, removed, re-added from the widget palette, and reset to the default
-layout. The layout is a local UI preference keyed by current book identity and
+Overview is the first configurable page workspace. Normal mode stays static:
+there is no background grid, drag handle, resize control, remove button, or
+widget palette until the user enters Edit layout. In edit mode, page-level
+modules can be moved, resized from edges or the lower-right corner, focused
+above other modules, removed, re-added from the widget palette, and reset to the
+default layout. Drag and resize interactions show a snapped outline preview
+while the underlying module stays visually stable, then commit the layout on
+release. The layout is a local UI preference keyed by current book identity and
 page id; it is not persisted in the accounting database and does not change
 daemon data. The widget palette contains the existing Overview modules plus
 planned placeholders so later report, source-of-funds, and wallet-monitoring
 modules can reuse the same surface.
+
+Configurable workspaces should remain a workflow feature, not a dashboard toy.
+Future expansion needs opinionated presets for concrete jobs, a small
+page-specific widget catalog, reversible reset/restore behavior, strong minimum
+size and collision constraints, precise keyboard/tile controls, and the same
+edit-mode rules across pages. If a page cannot name the workflow it improves,
+it should keep a fixed layout.
 
 Settings -> AI providers displays each provider's API-key presence plus storage
 location/state. Saving provider metadata does not include the raw key in the

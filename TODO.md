@@ -300,6 +300,15 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   draggable/resizable page widgets, snap-grid constraints, collision handling,
   z-order focus, reset-to-default, a widget palette with real and placeholder
   modules, and local per-book/page persistence
+- [ ] Prove configurable workspaces with one concrete workflow before expanding
+  beyond Overview. Candidate proof points: transaction cleanup workspace with
+  table/detail/filter/review-queue modules, or tax review workspace with
+  blockers, journal freshness, E 1kv preview, and export status. Keep the
+  long-term UX bar explicit: workflow presets, small page-specific widget
+  catalogs, reset/restore safety, no controls outside edit mode, no tiny or
+  overlapping widgets, keyboard/tile controls, and consistent behavior across
+  pages. If the only gain is movable dashboard cards, do not expand the
+  pattern.
 - [x] Transactions screen now uses `@shadcnblocks/dashboard2` as the
   transaction dashboard, with ordered period controls, enlarged search copy,
   and privacy visibility toggle in the header

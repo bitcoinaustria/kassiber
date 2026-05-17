@@ -92,6 +92,37 @@ page-level module frame; reports, tables, charts, and review controls inside a
 module should remain normal application UI. New configurable pages should reuse
 the shared `PageWorkspace` layer instead of creating one-off dashboard canvases.
 
+Configurable workspaces are only worth keeping if they increase task
+throughput. Normal mode must stay quiet and static: no grid, handles, palette,
+or motion outside an explicit edit-layout mode. Snapping should be shown as a
+preview outline while dragging or resizing, then committed on release, so data
+cards do not jump under the pointer.
+
+The long-term UX bar is workflow composition, not movable cards for their own
+sake:
+
+- Ship opinionated presets for real jobs such as tax review, transaction
+  cleanup, reporting/export readiness, source-of-funds review, and wallet
+  monitoring.
+- Keep each page's widget catalog small and page-specific. Add modules only
+  when they expose real state or actions for that workflow.
+- Provide reset-to-default, restore preset, and eventually duplicate/save as
+  preset affordances so experimentation is reversible.
+- Keep strong constraints: no overlapping modules, no unusably small widgets,
+  no empty decorative dashboards, and no layout controls outside edit mode.
+- Add precise non-pointer controls before expanding the pattern broadly:
+  keyboard nudging, size presets, and simple tile commands such as half-width,
+  full-width, and move-to-top.
+- Preserve cross-page consistency. If Transactions, Reports, or Source Funds
+  become configurable, they should use the same edit mode, persistence model,
+  reset behavior, and accessibility rules.
+
+Do not expand configurable workspaces to another main page until one concrete
+workflow proves the added control is useful. A good next proof is a transaction
+cleanup workstation with table, detail, filters, and review queue modules, or a
+tax review workstation with blockers, journal freshness, E 1kv preview, and
+export status.
+
 ### Animations honor motion preference and the display's refresh rate
 
 The Tauri webview (WKWebView on macOS, WebView2 on Windows, webkit2gtk on
