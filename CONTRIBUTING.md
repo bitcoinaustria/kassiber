@@ -70,6 +70,7 @@ PRs should say:
 
 If behavior changes, check whether these also need updates:
 - `README.md`
+- `docs/quickstart.md`
 - `AGENTS.md`
 - `TODO.md`
 - `skills/kassiber/`
