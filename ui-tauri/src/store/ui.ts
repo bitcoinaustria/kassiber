@@ -256,7 +256,7 @@ export const useUiStore = create<UiState>()(
       appLockPolicy: DEFAULT_APP_LOCK_POLICY,
       identity: null,
       aiFeaturesEnabled: true,
-      developerToolsEnabled: false,
+      developerToolsEnabled: true,
       assistantModelSelection: null,
       daemonSession: 0,
       notifications: [],

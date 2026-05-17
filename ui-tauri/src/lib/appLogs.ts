@@ -49,9 +49,8 @@ export interface AppLogRenderOptions {
   maskAmounts?: boolean;
 }
 
-export const APP_LOG_STORAGE_KEY = "kb.typedLogs.v1";
-export const APP_LOG_MAX_RECORDS = 10_000;
-export const APP_LOG_MAX_BYTES = 4 * 1024 * 1024;
+export const APP_LOG_MAX_RECORDS = 5_000;
+export const APP_LOG_MAX_BYTES = 2 * 1024 * 1024;
 
 const LEVEL_WEIGHT: Record<AppLogLevel, number> = {
   trace: 10,
@@ -76,10 +75,8 @@ const SENSITIVE_FIELD_TYPES = new Set<AppLogFieldType>([
 ]);
 
 let subscriptionLevel: AppLogLevel = "info";
-let memoryRing: AppLogRecord[] | null = null;
-let memoryRingBytes: number | null = null;
-let pendingStorageFlush: ReturnType<typeof setTimeout> | null = null;
-let pendingStorageRecords: AppLogRecord[] | null = null;
+let memoryRing: AppLogRecord[] = [];
+let memoryRingBytes = 2;
 const subscribers = new Set<() => void>();
 
 const TEXT_BACKSTOP_PATTERNS: Array<[RegExp, string]> = [
@@ -126,23 +123,16 @@ export function subscribeAppLogRecords(listener: () => void): () => void {
 }
 
 export function getAppLogRecords(): AppLogRecord[] {
-  return loadRing();
+  return memoryRing;
 }
 
-export function getAppLogStorageSize(): number {
-  loadRing();
-  return memoryRingBytes ?? 0;
+export function getAppLogBufferSize(): number {
+  return memoryRingBytes;
 }
 
 export function clearAppLogRecords(): void {
   memoryRing = [];
   memoryRingBytes = 2;
-  if (pendingStorageFlush) {
-    clearTimeout(pendingStorageFlush);
-    pendingStorageFlush = null;
-  }
-  pendingStorageRecords = null;
-  writeStorage([]);
   notifySubscribers();
 }
 
@@ -164,15 +154,13 @@ export function emitAppLog(
     fields: record.fields,
     spantrace: record.spantrace,
   };
-  const ring = loadRing();
-  ring.push(next);
+  const ring = [...memoryRing, next];
   const bounded = enforceRingBounds(
     ring,
-    (memoryRingBytes ?? 2) + estimateRecordBytes(next),
+    memoryRingBytes + estimateRecordBytes(next),
   );
   memoryRing = bounded.records;
   memoryRingBytes = bounded.bytes;
-  scheduleStorageWrite(bounded.records);
   notifySubscribers();
   return next;
 }
@@ -384,75 +372,8 @@ function estimateRecordBytes(record: AppLogRecord): number {
   return JSON.stringify(record).length + 1;
 }
 
-function estimateRecordsBytes(records: AppLogRecord[]): number {
-  if (records.length === 0) return 2;
-  return records.reduce((total, record) => total + estimateRecordBytes(record), 2);
-}
-
-function loadRing(): AppLogRecord[] {
-  if (memoryRing) return memoryRing;
-  const raw = readStorage();
-  if (!raw) {
-    memoryRing = [];
-    memoryRingBytes = 2;
-    return memoryRing;
-  }
-  try {
-    const parsed = JSON.parse(raw);
-    memoryRing = Array.isArray(parsed) ? parsed.filter(isAppLogRecord) : [];
-    memoryRingBytes = raw.length || estimateRecordsBytes(memoryRing);
-  } catch {
-    memoryRing = [];
-    memoryRingBytes = 2;
-  }
-  return memoryRing;
-}
-
-function readStorage(): string {
-  try {
-    return globalThis.localStorage?.getItem(APP_LOG_STORAGE_KEY) ?? "";
-  } catch {
-    return "";
-  }
-}
-
-function writeStorage(records: AppLogRecord[]): void {
-  try {
-    globalThis.localStorage?.setItem(APP_LOG_STORAGE_KEY, JSON.stringify(records));
-  } catch {
-    // If storage is unavailable or full, keep the in-memory ring for this run.
-  }
-}
-
-function scheduleStorageWrite(records: AppLogRecord[]): void {
-  pendingStorageRecords = records;
-  if (pendingStorageFlush) return;
-  pendingStorageFlush = setTimeout(() => {
-    pendingStorageFlush = null;
-    const recordsToWrite = pendingStorageRecords;
-    pendingStorageRecords = null;
-    writeStorage(recordsToWrite ?? []);
-  }, 100);
-}
-
 function notifySubscribers(): void {
   for (const subscriber of subscribers) subscriber();
-}
-
-function isAppLogRecord(value: unknown): value is AppLogRecord {
-  if (!value || typeof value !== "object") return false;
-  const record = value as Partial<AppLogRecord>;
-  return (
-    typeof record.id === "string" &&
-    typeof record.ts === "string" &&
-    typeof record.module === "string" &&
-    typeof record.file === "string" &&
-    typeof record.line === "number" &&
-    typeof record.msg === "string" &&
-    Boolean(record.fields) &&
-    typeof record.fields === "object" &&
-    appLogLevels().includes(record.level as AppLogLevel)
-  );
 }
 
 function makeLogId(): string {

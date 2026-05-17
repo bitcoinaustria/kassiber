@@ -32,8 +32,8 @@ import {
   clearAppLogRecords,
   exportLogRecords,
   formatLogRecord,
+  getAppLogBufferSize,
   getAppLogRecords,
-  getAppLogStorageSize,
   getAppLogSubscriptionLevel,
   logFilename,
   redactLogRecord,
@@ -78,7 +78,7 @@ export function Logs() {
   const [newWhilePaused, setNewWhilePaused] = React.useState(0);
   const viewportRef = React.useRef<HTMLDivElement | null>(null);
   const previousRecordCount = React.useRef(records.length);
-  const storageBytes = useAppLogStorageSize();
+  const bufferBytes = useAppLogBufferSize();
 
   React.useEffect(() => {
     setAppLogSubscriptionLevel(level);
@@ -325,7 +325,7 @@ export function Logs() {
       ) : null}
 
       <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-1 font-mono text-xs text-zinc-400">
-        <span>{filteredRecords.length} records · ring {formatBytes(storageBytes)}</span>
+        <span>{filteredRecords.length} records · RAM buffer {formatBytes(bufferBytes)}</span>
         <span>rendering {visibleRecords.length} newest records</span>
       </div>
 
@@ -434,11 +434,11 @@ function useAppLogRecords(): AppLogRecord[] {
   );
 }
 
-function useAppLogStorageSize(): number {
+function useAppLogBufferSize(): number {
   return React.useSyncExternalStore(
     subscribeAppLogRecords,
-    getAppLogStorageSize,
-    getAppLogStorageSize,
+    getAppLogBufferSize,
+    getAppLogBufferSize,
   );
 }
 

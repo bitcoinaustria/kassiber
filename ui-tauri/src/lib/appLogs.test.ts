@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  APP_LOG_MAX_BYTES,
+  APP_LOG_MAX_RECORDS,
   clearAppLogRecords,
   emitAppLog,
   exportLogRecords,
   formatLogRecord,
-  getAppLogStorageSize,
+  getAppLogBufferSize,
   getAppLogRecords,
   logFilename,
   setAppLogSubscriptionLevel,
@@ -26,19 +28,6 @@ function record(fields: AppLogRecord["fields"] = {}): Omit<AppLogRecord, "id" | 
 
 describe("typed app logs", () => {
   beforeEach(() => {
-    const storage = new Map<string, string>();
-    vi.stubGlobal("localStorage", {
-      getItem: (key: string) => storage.get(key) ?? null,
-      setItem: (key: string, value: string) => {
-        storage.set(key, value);
-      },
-      removeItem: (key: string) => {
-        storage.delete(key);
-      },
-      clear: () => {
-        storage.clear();
-      },
-    });
     clearAppLogRecords();
     setAppLogSubscriptionLevel("info");
   });
@@ -159,12 +148,39 @@ describe("typed app logs", () => {
     );
   });
 
-  it("tracks ring storage size without reading localStorage every time", () => {
+  it("keeps logs in RAM and does not touch browser storage", () => {
+    const setItem = vi.fn();
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn(),
+      setItem,
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    });
+
     emitAppLog(record({ detail: { type: "text", value: "first record" } }));
-    const before = getAppLogStorageSize();
+    const before = getAppLogBufferSize();
     expect(before).toBeGreaterThan(2);
+    expect(setItem).not.toHaveBeenCalled();
 
     emitAppLog(record({ detail: { type: "text", value: "second record" } }));
-    expect(getAppLogStorageSize()).toBeGreaterThan(before);
+    expect(getAppLogBufferSize()).toBeGreaterThan(before);
+    expect(setItem).not.toHaveBeenCalled();
+  });
+
+  it("bounds the in-memory ring by count and approximate bytes", () => {
+    for (let index = 0; index < APP_LOG_MAX_RECORDS + 25; index += 1) {
+      emitAppLog(
+        record({
+          index: { type: "number", value: index },
+          detail: { type: "text", value: "x".repeat(600) },
+        }),
+      );
+    }
+
+    expect(getAppLogRecords().length).toBeLessThanOrEqual(APP_LOG_MAX_RECORDS);
+    expect(getAppLogBufferSize()).toBeLessThanOrEqual(APP_LOG_MAX_BYTES);
+    expect(formatLogRecord(getAppLogRecords()[0], { redacted: true })).not.toContain(
+      "index=0",
+    );
   });
 });

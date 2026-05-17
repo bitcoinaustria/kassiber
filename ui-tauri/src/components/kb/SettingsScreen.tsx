@@ -86,7 +86,7 @@ import { cn } from "@/lib/utils";
 import {
   APP_LOG_MAX_BYTES,
   APP_LOG_MAX_RECORDS,
-  getAppLogStorageSize,
+  getAppLogBufferSize,
   subscribeAppLogRecords,
 } from "@/lib/appLogs";
 import {
@@ -596,7 +596,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const setDeveloperToolsEnabled = useUiStore(
     (s) => s.setDeveloperToolsEnabled,
   );
-  const appLogStorageBytes = useAppLogStorageSize();
+  const appLogBufferBytes = useAppLogBufferSize();
   const identity = useUiStore((s) => s.identity);
   const setIdentity = useUiStore((s) => s.setIdentity);
   const addNotification = useUiStore((s) => s.addNotification);
@@ -875,7 +875,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         icon: TerminalSquare,
         title: "Developer tools",
         description: developerToolsEnabled
-          ? `Logs page enabled. Ring buffer uses ${formatBytes(appLogStorageBytes)}.`
+          ? `Logs page enabled. RAM buffer uses ${formatBytes(appLogBufferBytes)}.`
           : "Logs page hidden from navigation and deep links.",
         isConnected: developerToolsEnabled,
         statusLabel: "Enabled",
@@ -1006,7 +1006,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       appLockPolicy.autoLockWhenIdle,
       appLockPolicy.idleMinutes,
       aiFeaturesEnabled,
-      appLogStorageBytes,
+      appLogBufferBytes,
       backends,
       clearClipboard,
       currency,
@@ -1880,13 +1880,14 @@ function DeveloperToolsSettingsPanel({
   enabled: boolean;
   setEnabled: (enabled: boolean) => void;
 }) {
-  const bytes = useAppLogStorageSize();
+  const bytes = useAppLogBufferSize();
   return (
     <section className="space-y-3">
       <div>
         <h3 className="text-sm font-semibold">Developer tools</h3>
         <p className="text-sm text-muted-foreground">
-          Show the typed Logs view after the local books are unlocked.
+          Show the typed Logs view after the local books are unlocked. Logs are
+          local-only, kept in RAM, and written to disk only when you export them.
         </p>
       </div>
       <SettingsSwitchRow
@@ -1900,22 +1901,23 @@ function DeveloperToolsSettingsPanel({
         onCheckedChange={setEnabled}
       />
       <div className="rounded-md border bg-background p-3 text-sm">
-        <p className="font-medium">On-disk ring buffer</p>
+        <p className="font-medium">In-memory log buffer</p>
         <p className="text-muted-foreground">
-          {formatBytes(bytes)} stored locally. Kassiber keeps at most{" "}
+          {formatBytes(bytes)} retained in this GUI session. Kassiber keeps at most{" "}
           {APP_LOG_MAX_RECORDS.toLocaleString()} records or{" "}
-          {formatBytes(APP_LOG_MAX_BYTES)}, whichever is reached first.
+          {formatBytes(APP_LOG_MAX_BYTES)}, whichever is reached first. Refreshing
+          or closing the app clears the buffer unless you export it first.
         </p>
       </div>
     </section>
   );
 }
 
-function useAppLogStorageSize(): number {
+function useAppLogBufferSize(): number {
   return React.useSyncExternalStore(
     subscribeAppLogRecords,
-    getAppLogStorageSize,
-    getAppLogStorageSize,
+    getAppLogBufferSize,
+    getAppLogBufferSize,
   );
 }
 
