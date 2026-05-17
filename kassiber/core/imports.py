@@ -8,6 +8,7 @@ import os
 import sqlite3
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Sequence
 
 from ..envelope import json_ready
@@ -21,6 +22,7 @@ from ..importers import (
     is_bullbitcoin_format,
     is_exchange_evidence_format,
     is_phoenix_format,
+    is_pocketbitcoin_format,
     is_river_format,
     is_twentyonebitcoin_format,
     load_import_records,
@@ -54,9 +56,15 @@ TWENTYONEBITCOIN_RECONCILIATION_TAGS = {
     "unmatched": ("21bitcoin-wallet-gap", "21bitcoin wallet gap"),
     "ambiguous": ("21bitcoin-ambiguous", "21bitcoin ambiguous"),
 }
+POCKETBITCOIN_RECONCILIATION_TAGS = {
+    "matched": ("pocketbitcoin-matched", "Pocket Bitcoin matched"),
+    "unmatched": ("pocketbitcoin-wallet-gap", "Pocket Bitcoin wallet gap"),
+    "ambiguous": ("pocketbitcoin-ambiguous", "Pocket Bitcoin ambiguous"),
+}
 EXCHANGE_EVIDENCE_RECONCILIATION_TAGS = {
     "bullbitcoin_csv": BULLBITCOIN_RECONCILIATION_TAGS,
     "21bitcoin_csv": TWENTYONEBITCOIN_RECONCILIATION_TAGS,
+    "pocketbitcoin_csv": POCKETBITCOIN_RECONCILIATION_TAGS,
 }
 
 
@@ -165,6 +173,82 @@ def _single_match(rows: Sequence[sqlite3.Row]) -> sqlite3.Row | None:
     return None
 
 
+def _timestamp_window(value: str, tolerance_seconds: int) -> tuple[str, str] | None:
+    if not value or tolerance_seconds <= 0:
+        return None
+    raw = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        center = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if center.tzinfo is None:
+        center = center.replace(tzinfo=timezone.utc)
+    else:
+        center = center.astimezone(timezone.utc)
+    delta = timedelta(seconds=tolerance_seconds)
+    start = (center - delta).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    end = (center + delta).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return start, end
+
+
+def _find_existing_profile_transaction_by_economics(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    normalized: Mapping[str, Any],
+    *,
+    exclude_wallet_id: str | None = None,
+) -> tuple[sqlite3.Row | None, str]:
+    """Find exchange evidence matches when the provider export has no txid."""
+    if not normalized.get("exchange_evidence_match_by_economics"):
+        return None, "unmatched"
+    filters: list[str] = []
+    params: list[Any] = [
+        profile_id,
+        normalized["direction"],
+        normalized["asset"],
+        btc_to_msat(normalized["amount"]),
+    ]
+    if exclude_wallet_id:
+        filters.append("wallet_id != ?")
+        params.append(exclude_wallet_id)
+    pricing_method = normalized.get("pricing_method")
+    if pricing_method:
+        filters.append("NOT (excluded = 1 AND pricing_method = ?)")
+        params.append(pricing_method)
+    window = _timestamp_window(
+        normalized["occurred_at"],
+        int(normalized.get("exchange_evidence_match_time_tolerance_seconds") or 0),
+    )
+    if window is not None:
+        filters.append("occurred_at BETWEEN ? AND ?")
+        params.extend(window)
+    extra_filters = "".join(f"\n          AND {condition}" for condition in filters)
+    rows = conn.execute(
+        f"""
+        SELECT {_EXISTING_TRANSACTION_COLUMNS}, wallet_label
+        FROM (
+            SELECT t.*, w.label AS wallet_label
+            FROM transactions t
+            JOIN wallets w ON w.id = t.wallet_id
+        )
+        WHERE profile_id = ?
+          AND direction = ?
+          AND asset = ?
+          AND amount = ?
+          {extra_filters}
+        ORDER BY created_at DESC
+        LIMIT 2
+        """,
+        tuple(params),
+    ).fetchall()
+    match = _single_match(rows)
+    if match:
+        return match, "matched"
+    if len(rows) > 1:
+        return None, "ambiguous"
+    return None, "unmatched"
+
+
 def _find_existing_profile_transaction_result(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -173,8 +257,16 @@ def _find_existing_profile_transaction_result(
     exclude_wallet_id: str | None = None,
 ) -> tuple[sqlite3.Row | None, str]:
     """Find one unambiguous book-wide transaction for exchange evidence."""
-    if not normalized["external_id"]:
-        return None, "unmatched"
+    if (
+        normalized.get("exchange_evidence_match_by_economics")
+        or not normalized["external_id"]
+    ):
+        return _find_existing_profile_transaction_by_economics(
+            conn,
+            profile_id,
+            normalized,
+            exclude_wallet_id=exclude_wallet_id,
+        )
     amount_msat = btc_to_msat(normalized["amount"])
     fee_msat = btc_to_msat(normalized["fee"])
     wallet_filter = "AND wallet_id != ?" if exclude_wallet_id else ""
@@ -244,6 +336,14 @@ def _find_existing_profile_transaction_result(
         return match, "matched"
     if len(amount_rows) > 1:
         return None, "ambiguous"
+    economic_match, economic_status = _find_existing_profile_transaction_by_economics(
+        conn,
+        profile_id,
+        normalized,
+        exclude_wallet_id=exclude_wallet_id,
+    )
+    if economic_status != "unmatched":
+        return economic_match, economic_status
     return None, "unmatched"
 
 
@@ -699,6 +799,12 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
         "counterparty": record.get("counterparty"),
         "payment_hash": payment_hash,
         "payment_hash_source": payment_hash_source,
+        "exchange_evidence_match_by_economics": bool(
+            record.get("_exchange_evidence_match_by_economics")
+        ),
+        "exchange_evidence_match_time_tolerance_seconds": int(
+            record.get("_exchange_evidence_match_time_tolerance_seconds") or 0
+        ),
         "raw_json": raw_json,
     }
 
@@ -1399,8 +1505,8 @@ def import_file_into_wallet(
         apply_btcpay=is_btcpay_format(input_format),
         apply_phoenix=is_phoenix_format(input_format),
         apply_river=is_river_format(input_format),
-        match_existing_only=is_bullbitcoin_format(input_format),
-        report_updates=is_bullbitcoin_format(input_format) or is_twentyonebitcoin_format(input_format),
+        match_existing_only=is_bullbitcoin_format(input_format) or is_pocketbitcoin_format(input_format),
+        report_updates=is_exchange_evidence_format(input_format),
         commit=False,
     )
     if is_twentyonebitcoin_format(input_format):

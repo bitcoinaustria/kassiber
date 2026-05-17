@@ -30,6 +30,9 @@ Import format families live here:
   - 21bitcoin (`21bitcoin_csv`) — transaction CSV export. BTC-side trades
     and withdrawals are normalized as a custodial platform ledger; fiat-only
     cash rows are skipped.
+  - Pocket Bitcoin (`pocketbitcoin_csv`) — account CSV export. Exchange rows
+    are normalized as exact execution evidence and paired with adjacent BTC
+    withdrawal rows when the export records the on-chain payout separately.
   - BIP329 JSONL — one-record-per-line label export. `record_type`
     distinguishes tx/addr/pubkey/input/output/xpub labels.
 
@@ -96,6 +99,8 @@ def load_import_records(file_path, input_format):
         return load_bullbitcoin_csv_records(file_path)
     if input_format == "21bitcoin_csv":
         return load_twentyonebitcoin_csv_records(file_path)
+    if input_format == "pocketbitcoin_csv":
+        return load_pocketbitcoin_csv_records(file_path)
     raise AppError(f"Unsupported input format '{input_format}'")
 
 
@@ -556,6 +561,209 @@ def is_bullbitcoin_format(input_format):
     return input_format == "bullbitcoin_csv"
 
 
+# -- Pocket Bitcoin ----------------------------------------------------------
+
+
+_POCKETBITCOIN_REQUIRED_COLUMNS = (
+    "type",
+    "date",
+    "reference",
+    "price.currency",
+    "price.amount",
+    "cost.currency",
+    "cost.amount",
+    "fee.currency",
+    "fee.amount",
+    "value.currency",
+    "value.amount",
+)
+
+_POCKETBITCOIN_CRYPTO_CURRENCIES = {"BTC", "XBT", "LBTC"}
+
+
+def _pocketbitcoin_row_type(record):
+    return str(_get_cell(record, "type") or "").strip().casefold()
+
+
+def _pocketbitcoin_crypto_asset(currency):
+    if currency in _POCKETBITCOIN_CRYPTO_CURRENCIES:
+        return "BTC" if currency == "XBT" else currency
+    return None
+
+
+def _pocketbitcoin_reference(record, fallback):
+    return str_or_none(_get_cell(record, "reference")) or fallback
+
+
+def _pocketbitcoin_withdrawal_key(withdrawal):
+    currency = _currency_cell(_get_cell(withdrawal, "value.currency"))
+    asset = _pocketbitcoin_crypto_asset(currency)
+    amount = _decimal_cell(_get_cell(withdrawal, "value.amount"))
+    fee = _decimal_cell(_get_cell(withdrawal, "fee.amount"))
+    fee_currency = _currency_cell(_get_cell(withdrawal, "fee.currency"))
+    if asset is None or amount is None or fee is None or fee_currency != currency:
+        return None
+    return asset, abs(amount) + abs(fee)
+
+
+def _pocketbitcoin_withdrawal_pairs(rows):
+    """Match Pocket exchange gross BTC amounts to separate withdrawal rows."""
+    withdrawals_by_key = {}
+    for row in rows:
+        if _pocketbitcoin_row_type(row) != "withdrawal":
+            continue
+        key = _pocketbitcoin_withdrawal_key(row)
+        if key is None:
+            continue
+        withdrawals_by_key.setdefault(key, []).append(row)
+    for bucket in withdrawals_by_key.values():
+        bucket.sort(key=lambda item: str(_get_cell(item, "date") or ""))
+
+    pairs = {}
+    for row in rows:
+        if _pocketbitcoin_row_type(row) != "exchange":
+            continue
+        value_currency = _currency_cell(_get_cell(row, "value.currency"))
+        asset = _pocketbitcoin_crypto_asset(value_currency)
+        gross_amount = _decimal_cell(_get_cell(row, "value.amount"))
+        if asset is None or gross_amount is None:
+            continue
+        candidates = withdrawals_by_key.get((asset, abs(gross_amount)), [])
+        if not candidates:
+            continue
+        exchange_date = str(_get_cell(row, "date") or "")
+        chosen_index = None
+        for index, candidate in enumerate(candidates):
+            withdrawal_date = str(_get_cell(candidate, "date") or "")
+            if not exchange_date or not withdrawal_date or withdrawal_date >= exchange_date:
+                chosen_index = index
+                break
+        if chosen_index is None:
+            chosen_index = 0
+        pairs[id(row)] = candidates.pop(chosen_index)
+    return pairs
+
+
+def normalize_pocketbitcoin_record(record, withdrawal=None, index=0):
+    """Turn one Pocket Bitcoin exchange row into the common import shape."""
+    sanitized = {str(key).strip(): value for key, value in record.items() if key is not None}
+    if _pocketbitcoin_row_type(sanitized) != "exchange":
+        return None
+
+    cost_currency = _currency_cell(_get_cell(sanitized, "cost.currency"))
+    value_currency = _currency_cell(_get_cell(sanitized, "value.currency"))
+    fee_currency = _currency_cell(_get_cell(sanitized, "fee.currency"))
+    cost_amount = _decimal_cell(_get_cell(sanitized, "cost.amount"))
+    value_amount = _decimal_cell(_get_cell(sanitized, "value.amount"))
+    fee_amount = _decimal_cell(_get_cell(sanitized, "fee.amount"))
+    if cost_amount is None or value_amount is None:
+        raise AppError("Pocket Bitcoin CSV has an exchange row with an empty amount")
+
+    cost_asset = _pocketbitcoin_crypto_asset(cost_currency)
+    value_asset = _pocketbitcoin_crypto_asset(value_currency)
+    if value_asset and not cost_asset:
+        direction = "inbound"
+        asset = value_asset
+        amount = abs(value_amount)
+        fiat_value = abs(cost_amount)
+        fiat_currency = cost_currency
+        kind = "buy"
+        if fee_currency == fiat_currency and fee_amount is not None:
+            fiat_value += abs(fee_amount)
+    elif cost_asset and not value_asset:
+        direction = "outbound"
+        asset = cost_asset
+        amount = abs(cost_amount)
+        fiat_value = abs(value_amount)
+        fiat_currency = value_currency
+        kind = "sell"
+        if fee_currency == fiat_currency and fee_amount is not None:
+            fiat_value = max(Decimal("0"), fiat_value - abs(fee_amount))
+    else:
+        return None
+
+    btc_fee = Decimal("0")
+    occurred_at = _get_cell(sanitized, "date")
+    raw_payload = dict(sanitized)
+    if withdrawal is not None:
+        withdrawal_currency = _currency_cell(_get_cell(withdrawal, "value.currency"))
+        withdrawal_asset = _pocketbitcoin_crypto_asset(withdrawal_currency)
+        withdrawal_amount = _decimal_cell(_get_cell(withdrawal, "value.amount"))
+        withdrawal_fee = _decimal_cell(_get_cell(withdrawal, "fee.amount"))
+        withdrawal_fee_currency = _currency_cell(_get_cell(withdrawal, "fee.currency"))
+        if (
+            direction == "inbound"
+            and withdrawal_asset == asset
+            and withdrawal_amount is not None
+        ):
+            amount = abs(withdrawal_amount)
+            occurred_at = _get_cell(withdrawal, "date") or occurred_at
+            if withdrawal_fee_currency == withdrawal_currency and withdrawal_fee is not None:
+                btc_fee = abs(withdrawal_fee)
+        raw_payload["_pocketbitcoin_withdrawal"] = {
+            str(key).strip(): value for key, value in withdrawal.items() if key is not None
+        }
+
+    price_amount = _decimal_cell(_get_cell(sanitized, "price.amount"))
+    fiat_rate = price_amount if price_amount is not None else (fiat_value / amount if amount else None)
+    reference = _pocketbitcoin_reference(
+        sanitized,
+        f"pocketbitcoin:{occurred_at}:{direction}:{asset}:{amount}:{index}",
+    )
+    description = f"Pocket Bitcoin {kind}"
+    return {
+        "txid": f"pocketbitcoin:{reference}",
+        "occurred_at": occurred_at,
+        "direction": direction,
+        "asset": asset,
+        "amount": amount,
+        "fee": btc_fee,
+        "fiat_rate": fiat_rate,
+        "fiat_value": fiat_value,
+        "fiat_currency": fiat_currency,
+        "pricing_source_kind": "exchange_execution",
+        "pricing_provider": "Pocket Bitcoin",
+        "pricing_pair": f"{asset}-{fiat_currency}" if fiat_currency else None,
+        "pricing_timestamp": _get_cell(sanitized, "date"),
+        "pricing_method": "pocketbitcoin_csv",
+        "pricing_external_ref": reference,
+        "pricing_quality": "exact",
+        "kind": kind,
+        "description": description,
+        "counterparty": "Pocket Bitcoin",
+        "_exchange_evidence_match_by_economics": True,
+        "_exchange_evidence_match_time_tolerance_seconds": 172800,
+        "raw_json": json.dumps(json_ready(raw_payload), sort_keys=True),
+    }
+
+
+def load_pocketbitcoin_csv_records(file_path):
+    """Load Pocket Bitcoin account CSV rows."""
+    with open(file_path, "r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        return []
+    header = {_normalized_column_key(column) for column in rows[0].keys()}
+    missing = [
+        column
+        for column in _POCKETBITCOIN_REQUIRED_COLUMNS
+        if _normalized_column_key(column) not in header
+    ]
+    if missing:
+        raise AppError("Pocket Bitcoin CSV is missing required columns: " + ", ".join(missing))
+    withdrawals = _pocketbitcoin_withdrawal_pairs(rows)
+    normalized = []
+    for index, row in enumerate(rows, start=1):
+        record = normalize_pocketbitcoin_record(row, withdrawals.get(id(row)), index=index)
+        if record is not None:
+            normalized.append(record)
+    return normalized
+
+
+def is_pocketbitcoin_format(input_format):
+    return input_format == "pocketbitcoin_csv"
+
+
 # -- 21bitcoin ---------------------------------------------------------------
 
 
@@ -743,7 +951,7 @@ def is_twentyonebitcoin_format(input_format):
 
 
 def is_exchange_evidence_format(input_format):
-    return input_format in {"bullbitcoin_csv", "21bitcoin_csv"}
+    return input_format in {"bullbitcoin_csv", "21bitcoin_csv", "pocketbitcoin_csv"}
 
 
 def exchange_evidence_label(input_format):
@@ -751,6 +959,8 @@ def exchange_evidence_label(input_format):
         return "Bull Bitcoin"
     if input_format == "21bitcoin_csv":
         return "21bitcoin"
+    if input_format == "pocketbitcoin_csv":
+        return "Pocket Bitcoin"
     return str(input_format or "").replace("_", " ")
 
 
@@ -759,6 +969,8 @@ def exchange_evidence_rows_key(input_format):
         return "bullbitcoin_rows"
     if input_format == "21bitcoin_csv":
         return "twentyonebitcoin_rows"
+    if input_format == "pocketbitcoin_csv":
+        return "pocketbitcoin_rows"
     return "exchange_rows"
 
 

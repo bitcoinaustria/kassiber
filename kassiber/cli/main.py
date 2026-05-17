@@ -533,7 +533,7 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_create.add_argument("--config")
     wallets_create.add_argument("--config-file")
     wallets_create.add_argument("--source-file")
-    wallets_create.add_argument("--source-format", choices=["json", "csv", "btcpay_json", "btcpay_csv", "phoenix_csv", "river_csv", "bullbitcoin_csv", "21bitcoin_csv"])
+    wallets_create.add_argument("--source-format", choices=["json", "csv", "btcpay_json", "btcpay_csv", "phoenix_csv", "river_csv", "bullbitcoin_csv", "21bitcoin_csv", "pocketbitcoin_csv"])
 
     wallets_sub.add_parser("kinds")
 
@@ -611,6 +611,12 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_import_21bitcoin.add_argument("--wallet")
     wallets_import_21bitcoin.add_argument("--file", required=True)
     wallets_import_21bitcoin.add_argument("--mode", choices=["relevant", "full"], default="full")
+    wallets_import_pocket = wallets_sub.add_parser("import-pocket", aliases=["import-pocketbitcoin"])
+    wallets_import_pocket.add_argument("--workspace")
+    wallets_import_pocket.add_argument("--profile")
+    wallets_import_pocket.add_argument("--wallet")
+    wallets_import_pocket.add_argument("--file", required=True)
+    wallets_import_pocket.add_argument("--mode", choices=["relevant", "full"], default="relevant")
     wallets_sync_btcpay = wallets_sub.add_parser("sync-btcpay")
     wallets_sync_btcpay.add_argument("--workspace")
     wallets_sync_btcpay.add_argument("--profile")
@@ -1849,6 +1855,19 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.wallet,
                     args.file,
                     "21bitcoin_csv",
+                    args.mode,
+                ),
+            )
+        if args.wallets_command in {"import-pocket", "import-pocketbitcoin"}:
+            return emit(
+                args,
+                import_into_wallet(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.wallet,
+                    args.file,
+                    "pocketbitcoin_csv",
                     args.mode,
                 ),
             )

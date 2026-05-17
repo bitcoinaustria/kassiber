@@ -75,6 +75,16 @@ _TWENTYONEBITCOIN_TRANSACTIONS_CSV = """id,exchange_name,depot_name,transaction_
 16,21bitcoin,main,07.10.2022 16:31:20,,,BTC,0.00040000,BTC,0.00001,withdrawal,Automatic Limit L1 BTC Withdrawal,l1-withdrawal-tx
 """
 
+_POCKETBITCOIN_EXISTING_CSV = """date,txid,direction,asset,amount,fee,description
+2022-07-19T23:15:28Z,pocket-wallet-tx,inbound,BTC,0.00228101,0,Synced from wallet
+"""
+
+_POCKETBITCOIN_CSV = """type,date,reference,price.currency,price.amount,cost.currency,cost.amount,fee.currency,fee.amount,value.currency,value.amount
+withdrawal,2022-07-19T23:15:28.000Z,,,,,,BTC,0.00000046,BTC,0.00228101
+exchange,2022-07-19T12:35:37.130Z,REF000001,EUR,21586.90000000,EUR,49.25000000,EUR,0.75000000,BTC,0.00228147
+deposit,2022-07-19T12:35:37.130Z,REF000002,,,,,EUR,0.00000000,EUR,50.00000000
+"""
+
 _CACHE_PRICING_CSV = """date,txid,direction,asset,amount,fee,description
 2024-05-10T09:00:00Z,cache-price-1,inbound,BTC,0.01000000,0,Cached price sample
 """
@@ -2837,6 +2847,148 @@ class AccountBucketBehaviorTest(unittest.TestCase):
         buy = {record["external_id"]: record for record in payload["data"]}["21bitcoin:2"]
         self.assertFalse(buy["excluded"])
         self.assertNotIn("21bitcoin-wallet-gap", {tag["code"] for tag in buy["tags"]})
+
+    def test_z_pocketbitcoin_csv_enriches_existing_wallet_transaction(self):
+        existing_csv = Path(self._tmp.name) / "pocket-existing-wallet.csv"
+        existing_csv.write_text(_POCKETBITCOIN_EXISTING_CSV, encoding="utf-8")
+        pocket_csv = Path(self._tmp.name) / "pocket-orders.csv"
+        pocket_csv.write_text(_POCKETBITCOIN_CSV, encoding="utf-8")
+
+        self._cli(
+            "profiles", "create",
+            "--workspace", "Buckets",
+            "--fiat-currency", "EUR",
+            "--tax-country", "generic",
+            "PocketEUR",
+        )
+        self._cli(
+            "wallets", "create",
+            "--workspace", "Buckets",
+            "--profile", "PocketEUR",
+            "--label", "Pocket Matched",
+            "--kind", "custom",
+        )
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Buckets",
+            "--profile", "PocketEUR",
+            "--wallet", "Pocket Matched",
+            "--file", str(existing_csv),
+        )
+
+        payload = self._cli(
+            "wallets", "import-pocket",
+            "--workspace", "Buckets",
+            "--profile", "PocketEUR",
+            "--wallet", "Pocket Matched",
+            "--file", str(pocket_csv),
+        )
+        self.assertEqual(payload["kind"], "wallets.import-pocket")
+        self.assertEqual(payload["data"]["input_format"], "pocketbitcoin_csv")
+        self.assertEqual(payload["data"]["pocketbitcoin_rows"], 1)
+        self.assertEqual(payload["data"]["matched"], 1)
+        self.assertEqual(payload["data"]["updated"], 1)
+        self.assertEqual(payload["data"]["skipped"], 1)
+
+        payload = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "PocketEUR",
+            "--wallet", "Pocket Matched",
+        )
+        buy = payload["data"][0]
+        self.assertEqual(buy["external_id"], "pocket-wallet-tx")
+        self.assertEqual(buy["kind"], "buy")
+        self.assertEqual(buy["fee_msat"], 0)
+        self.assertEqual(buy["pricing_source_kind"], "exchange_execution")
+        self.assertEqual(buy["pricing_provider"], "Pocket Bitcoin")
+        self.assertEqual(buy["pricing_method"], "pocketbitcoin_csv")
+        self.assertEqual(buy["pricing_pair"], "BTC-EUR")
+        self.assertEqual(buy["pricing_external_ref"], "REF000001")
+        self.assertEqual(buy["fiat_value_exact"], "50.00000000")
+        self.assertEqual(buy["fiat_rate_exact"], "21586.90000000")
+
+    def test_z_pocketbitcoin_csv_full_import_flags_wallet_gap_rows(self):
+        existing_csv = Path(self._tmp.name) / "pocket-full-existing-wallet.csv"
+        existing_csv.write_text(_POCKETBITCOIN_EXISTING_CSV, encoding="utf-8")
+        pocket_csv = Path(self._tmp.name) / "pocket-full-orders.csv"
+        pocket_csv.write_text(_POCKETBITCOIN_CSV, encoding="utf-8")
+
+        self._cli(
+            "profiles", "create",
+            "--workspace", "Buckets",
+            "--fiat-currency", "EUR",
+            "--tax-country", "generic",
+            "PocketFullEUR",
+        )
+
+        payload = self._cli(
+            "wallets", "import-pocket",
+            "--workspace", "Buckets",
+            "--profile", "PocketFullEUR",
+            "--file", str(pocket_csv),
+            "--mode", "full",
+        )
+        data = payload["data"]
+        self.assertEqual(data["scope"], "book")
+        self.assertEqual(data["mode"], "full")
+        self.assertEqual(data["wallet"], "Pocket Bitcoin")
+        self.assertEqual(data["pocketbitcoin_rows"], 1)
+        self.assertEqual(data["imported"], 1)
+        self.assertEqual(data["matched"], 0)
+        self.assertEqual(data["unmatched"], 1)
+        self.assertEqual(data["excluded"], 1)
+        self.assertEqual(data["inserted_records"][0]["status"], "unmatched")
+
+        payload = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "PocketFullEUR",
+            "--wallet", "Pocket Bitcoin",
+        )
+        buy = payload["data"][0]
+        self.assertTrue(buy["excluded"])
+        self.assertEqual(buy["amount_msat"], 228101000)
+        self.assertEqual(buy["fee_msat"], 46000)
+        self.assertEqual(buy["pricing_provider"], "Pocket Bitcoin")
+        self.assertEqual(buy["pricing_external_ref"], "REF000001")
+        self.assertIn("pocketbitcoin-wallet-gap", {tag["code"] for tag in buy["tags"]})
+
+        self._cli(
+            "wallets", "create",
+            "--workspace", "Buckets",
+            "--profile", "PocketFullEUR",
+            "--label", "Pocket Real Wallet",
+            "--kind", "custom",
+        )
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Buckets",
+            "--profile", "PocketFullEUR",
+            "--wallet", "Pocket Real Wallet",
+            "--file", str(existing_csv),
+        )
+
+        payload = self._cli(
+            "wallets", "import-pocket",
+            "--workspace", "Buckets",
+            "--profile", "PocketFullEUR",
+            "--file", str(pocket_csv),
+        )
+        self.assertEqual(payload["data"]["matched"], 1)
+        self.assertEqual(payload["data"]["updated"], 1)
+        self.assertEqual(payload["data"].get("skipped_ambiguous", 0), 0)
+
+        payload = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "PocketFullEUR",
+            "--wallet", "Pocket Real Wallet",
+        )
+        real_buy = payload["data"][0]
+        self.assertEqual(real_buy["external_id"], "pocket-wallet-tx")
+        self.assertEqual(real_buy["pricing_provider"], "Pocket Bitcoin")
+        self.assertFalse(real_buy["excluded"])
 
 
 if __name__ == "__main__":

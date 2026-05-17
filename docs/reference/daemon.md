@@ -206,9 +206,13 @@ as excluded evidence, then flags each row as `matched`, `unmatched`, or
 `source_format="21bitcoin_csv"`, the default `mode="full"` imports active
 custodial ledger rows into the selected or default `21bitcoin` wallet; explicit
 `mode="relevant"` keeps the evidence-only matching behavior for L1 withdrawal
-rows. The result also includes `matched`, `skipped_unmatched`, and
+rows. `source_format="pocketbitcoin_csv"` follows the Bull Bitcoin mode
+contract, uses a default `Pocket Bitcoin` wallet in full mode, and returns
+`pocketbitcoin_rows`. Because Pocket's CSV does not expose the blockchain txid,
+relevant-mode matching uses the net BTC amount, direction, asset, and nearby
+timestamp. The result also includes `matched`, `skipped_unmatched`, and
 `skipped_ambiguous` in relevant mode, or `matched`, `unmatched`, `ambiguous`,
-`excluded`, and `reconciliation_records` in Bull Bitcoin full mode.
+`excluded`, and `reconciliation_records` in Bull Bitcoin/Pocket full mode.
 
 `ui.connections.sources` returns the daemon's authoritative catalog of
 supported wallet kinds (with summary/config-fields metadata) and the

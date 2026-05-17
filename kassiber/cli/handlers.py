@@ -140,6 +140,7 @@ WALLET_KINDS = [
     "river",
     "bullbitcoin",
     "21bitcoin",
+    "pocketbitcoin",
     "custom",
 ]
 
@@ -1525,6 +1526,11 @@ WALLET_KIND_CATALOG = {
         "config_fields": ["source_file", "source_format"],
         "requires": [],
     },
+    "pocketbitcoin": {
+        "summary": "Pocket Bitcoin account CSV importer for exact buy/sell execution pricing.",
+        "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
     "custom": {
         "summary": "Custom CSV/JSON source; use with --config/--config-file to describe field mapping.",
         "config_fields": ["source_file", "source_format", "config"],
@@ -1535,6 +1541,7 @@ WALLET_KIND_CATALOG = {
 
 DEFAULT_BULLBITCOIN_WALLET_LABEL = "Bull Bitcoin"
 DEFAULT_TWENTYONEBITCOIN_WALLET_LABEL = "21bitcoin"
+DEFAULT_POCKETBITCOIN_WALLET_LABEL = "Pocket Bitcoin"
 
 
 def _get_or_create_provider_import_wallet(conn, profile, input_format, wallet_ref=None):
@@ -1543,6 +1550,9 @@ def _get_or_create_provider_import_wallet(conn, profile, input_format, wallet_re
     if input_format == "21bitcoin_csv":
         default_label = DEFAULT_TWENTYONEBITCOIN_WALLET_LABEL
         wallet_kind = "21bitcoin"
+    elif input_format == "pocketbitcoin_csv":
+        default_label = DEFAULT_POCKETBITCOIN_WALLET_LABEL
+        wallet_kind = "pocketbitcoin"
     else:
         default_label = DEFAULT_BULLBITCOIN_WALLET_LABEL
         wallet_kind = "bullbitcoin"
