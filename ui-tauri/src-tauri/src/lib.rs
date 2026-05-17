@@ -2,7 +2,10 @@
 mod secret_store;
 mod supervisor;
 
-use secret_store::secret_store_policy_status;
+use secret_store::{
+    secret_store_policy_status, touch_id_delete_passphrase, touch_id_get_passphrase,
+    touch_id_passphrase_status, touch_id_store_passphrase, TouchIdPassphraseStatus,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::env;
@@ -304,6 +307,12 @@ struct MenuActionPayload {
     route: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     section: Option<&'static str>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TouchIdPassphraseUnlock {
+    passphrase_secret: String,
 }
 
 struct AppMenuHandles {
@@ -648,6 +657,64 @@ fn clear_import_project(state: State<'_, Arc<DaemonSupervisor>>) -> Result<(), S
     state.clear_data_root().map_err(|error| error.message)
 }
 
+#[tauri::command]
+fn touch_id_passphrase_status_command(
+    state: State<'_, Arc<DaemonSupervisor>>,
+    data_root: Option<String>,
+) -> Result<TouchIdPassphraseStatus, String> {
+    let account = touch_id_account_for_data_root(&state, data_root)?;
+    Ok(touch_id_passphrase_status(&account))
+}
+
+#[tauri::command]
+fn touch_id_store_passphrase_command(
+    state: State<'_, Arc<DaemonSupervisor>>,
+    data_root: Option<String>,
+    passphrase_secret: String,
+) -> Result<TouchIdPassphraseStatus, String> {
+    let account = touch_id_account_for_data_root(&state, data_root)?;
+    touch_id_store_passphrase(&account, &passphrase_secret)?;
+    Ok(touch_id_passphrase_status(&account))
+}
+
+#[tauri::command]
+fn touch_id_unlock_passphrase_command(
+    state: State<'_, Arc<DaemonSupervisor>>,
+    data_root: Option<String>,
+) -> Result<Option<TouchIdPassphraseUnlock>, String> {
+    let account = touch_id_account_for_data_root(&state, data_root)?;
+    Ok(touch_id_get_passphrase(&account)?
+        .map(|passphrase_secret| TouchIdPassphraseUnlock { passphrase_secret }))
+}
+
+#[tauri::command]
+fn touch_id_forget_passphrase_command(
+    state: State<'_, Arc<DaemonSupervisor>>,
+    data_root: Option<String>,
+) -> Result<TouchIdPassphraseStatus, String> {
+    let account = touch_id_account_for_data_root(&state, data_root)?;
+    touch_id_delete_passphrase(&account)?;
+    Ok(touch_id_passphrase_status(&account))
+}
+
+fn touch_id_account_for_data_root(
+    state: &Arc<DaemonSupervisor>,
+    data_root: Option<String>,
+) -> Result<String, String> {
+    let selected = if let Some(data_root) = data_root.filter(|value| !value.trim().is_empty()) {
+        PathBuf::from(data_root).expanduser()
+    } else if let Some(active) = state.current_data_root().map_err(|error| error.message)? {
+        active
+    } else {
+        default_state_data_root()
+    };
+    // The normalized data-root path is the Keychain account namespace. Fall
+    // back to the selected path for first-run/default roots that may not exist
+    // before the daemon creates them.
+    let normalized = std::fs::canonicalize(&selected).unwrap_or(selected);
+    Ok(normalized.to_string_lossy().into_owned())
+}
+
 fn inspect_import_project_directory(path: &Path) -> Result<ImportProjectSelection, String> {
     let canonical = path
         .expanduser()
@@ -883,6 +950,12 @@ fn default_import_picker_root() -> PathBuf {
     } else {
         home_dir().unwrap_or(state_root)
     }
+}
+
+fn default_state_data_root() -> PathBuf {
+    home_dir()
+        .map(|home| home.join(DEFAULT_STATE_DIR).join(DEFAULT_DATA_DIR))
+        .unwrap_or_else(|| PathBuf::from(DEFAULT_STATE_DIR).join(DEFAULT_DATA_DIR))
 }
 
 fn choose_import_project_directory() -> Result<Option<PathBuf>, String> {
@@ -1320,6 +1393,10 @@ pub fn run() {
             select_import_project_directory,
             activate_import_project,
             clear_import_project,
+            touch_id_passphrase_status_command,
+            touch_id_store_passphrase_command,
+            touch_id_unlock_passphrase_command,
+            touch_id_forget_passphrase_command,
             set_menu_state
         ])
         .run(tauri::generate_context!())

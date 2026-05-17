@@ -502,8 +502,18 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   macOS arm64/x86_64, Linux x86_64, Windows x86_64. Today's tracer bullet
   ran on macOS arm64 only.
 - [ ] Optional convenience: opt-in OS-keychain remember-me layer and biometric
-  reveal gate. Both are convenience over the SQLCipher passphrase, never a
-  cryptographic substitute.
+  reveal gate. macOS desktop builds now have the first half for database
+  unlock: first lock-screen passphrase entry can enroll Touch ID for the next
+  unlock, and **Settings → Security → Set up Touch ID unlock** verifies the DB
+  passphrase and stores it immediately in Keychain. Later reads require a
+  native LocalAuthentication Touch ID prompt before the passphrase is returned.
+  Passphrase changes update the Keychain copy or disable Touch ID if the
+  native store rejects the update; forgetting the setting deletes Kassiber's
+  saved copy.
+  Remaining work: biometric reveal gates for descriptor/token recovery and
+  equivalent remember-me affordances for Windows/Linux where the platform
+  policy can support them. These remain convenience over the SQLCipher
+  passphrase, never a cryptographic substitute.
 - [x] Kassiber skill bundle for agents (`skills/kassiber`)
 - [ ] Optional server/REST mode, still local-first and opt-in
 

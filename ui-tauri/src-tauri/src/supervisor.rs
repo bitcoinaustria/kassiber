@@ -271,6 +271,16 @@ impl DaemonSupervisor {
         self.replace_data_root(None)
     }
 
+    pub fn current_data_root(&self) -> Result<Option<PathBuf>, SupervisorError> {
+        self.data_root
+            .lock()
+            .map(|data_root| data_root.clone())
+            .map_err(|_| {
+                SupervisorError::new("daemon_lock_poisoned", "daemon data-root lock is poisoned")
+                    .retryable()
+            })
+    }
+
     fn replace_data_root(&self, data_root: Option<PathBuf>) -> Result<(), SupervisorError> {
         let mut slot = self.process.lock().map_err(|_| {
             SupervisorError::new("daemon_lock_poisoned", "daemon process lock is poisoned")

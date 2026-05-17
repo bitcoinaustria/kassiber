@@ -4,8 +4,9 @@ Date: 2026-05-13
 
 This document records the next desktop secret-handling slice. It is current
 truth for the two-boundary model and the AI-provider API-key pilot; backend
-tokens, descriptors, xpubs, blinding keys, SQLCipher passphrases, and reveal
-payloads remain outside the OS-store pilot.
+tokens, descriptors, xpubs, blinding keys, and reveal payloads remain outside
+the OS-store pilot. macOS Touch ID unlock is a separate convenience layer over
+the SQLCipher passphrase, not a new accounting-secret storage boundary.
 
 ## Boundary Model
 
@@ -16,10 +17,11 @@ Kassiber has two intended secret boundaries:
    descriptors, xpubs, blinding keys, and the current AI-provider API-key
    fallback.
 2. OS credential stores are a separate user/device-mediated boundary for
-   selected external API secrets. The current implementation uses that boundary
-   for AI provider API keys only; it does not move backend credentials,
-   descriptors, xpubs, blinding keys, passphrases, or reveal payloads out of
-   SQLCipher.
+   selected external API secrets and optional unlock convenience. The current
+   implementation uses that boundary for AI provider API keys and, on macOS,
+   an opt-in Touch ID-gated copy of the SQLCipher passphrase. It does not move
+   backend credentials, descriptors, xpubs, blinding keys, or reveal payloads
+   out of SQLCipher.
 
 The unlocked Python daemon is the runtime trust boundary. Once it has an open
 database connection, it can read any DB-resident secret needed to fulfill an
@@ -32,8 +34,8 @@ Out of scope for protection claims:
   process running as the user
 - admin, root, kernel, debugger, memory inspection, swap capture, or a
   compromised OS account
-- production signing, notarization, app attestation, biometrics, or
-  remember-unlock behavior
+- production signing, notarization, app attestation, or stronger biometric
+  security claims beyond local user-presence convenience
 - remote custody, telemetry, crash upload, or outbound secret escrow
 
 Local-first constraints remain unchanged: no telemetry, no remote custody, and
@@ -44,7 +46,7 @@ raw shell, raw filesystem, arbitrary CLI, or generic daemon-dispatch access.
 
 | Secret or sensitive artifact | Entry | Storage | Transport | Reveal | Logs/diagnostics | Backup/restore | Protection level | Gaps |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SQLCipher DB passphrase | interactive prompt, `--db-passphrase-fd` | not stored by Kassiber | fd into CLI/daemon, prompt otherwise | not revealed | diagnostics redacts passphrase-shaped args and details | required to open backed-up encrypted DB | SQLCipher at-rest perimeter only | no remember-unlock, no OS-store unlock material |
+| SQLCipher DB passphrase | interactive prompt, `--db-passphrase-fd`, optional macOS Touch ID unlock | normally not stored; opt-in macOS Keychain item stores a copy for the current user | fd into CLI/daemon, prompt otherwise; desktop retrieves from Keychain only after LocalAuthentication Touch ID succeeds | not revealed | diagnostics redacts passphrase-shaped args and details | required to open backed-up encrypted DB; Keychain copy is not portable backup material | SQLCipher at-rest perimeter only; Touch ID is convenience | macOS only; reveal gates and Windows/Linux remember-me still open |
 | Backup passphrase / age recipient material | backup CLI prompts/options | not stored by Kassiber | local CLI process | not revealed | diagnostics redaction applies to passphrase-shaped keys/text | user-supplied for each backup/import | external `age` or `pyrage` boundary | no recovery if lost |
 | Backend tokens/auth headers/cookies/basic-auth | backend create/update, dotenv migration | SQLCipher DB `backends` table; older dotenvs may still be migrated | daemon/CLI explicit backend flows | `backends.reveal_token` after passphrase round-trip | safe backend views expose presence flags only; diagnostics aggregate credential presence | `.kassiber` SQLCipher backup includes values | SQLCipher at rest, unlocked daemon at runtime | not migrated to OS stores in this PR |
 | Descriptors, xpubs, blinding keys | wallet create/update/import | SQLCipher DB wallet config today | daemon/CLI wallet flows | `wallets.reveal_descriptor` after passphrase round-trip | safe wallet views expose state flags only; diagnostics redacts xpub/xprv patterns | `.kassiber` SQLCipher backup includes values | SQLCipher at rest, unlocked daemon at runtime | still in generic wallet config blob |
@@ -124,7 +126,13 @@ descriptors, xpubs, blinding keys, passphrases, or reveal payloads.
 | Windows | user-scope Credential Manager / DPAPI when available | User-scope Credential Manager / DPAPI only. No machine-scope secrets. | "Stored for this Windows user account only." |
 | Linux | `sqlcipher_inline` when Secret Service is missing, locked, headless, or no D-Bus | Use Secret Service only when available and unlocked. No plaintext fallback. | Show a banner when falling back because no reliable desktop secret service is available. |
 
-`remember-unlock` stays disabled for this pass.
+`remember-unlock` is currently macOS-only and explicitly opt-in for database
+unlock. First passphrase entry on the lock screen can enroll it for the next
+unlock, and Settings can verify the passphrase and store it immediately. It
+stores a per-data-root passphrase copy in macOS Keychain and requires a
+LocalAuthentication Touch ID success before reading it back; forgetting the
+setting removes Kassiber's saved copy. Passphrase rotation updates that
+Keychain copy or disables Touch ID if the native store rejects the update.
 
 ## Rust Secret Store Layer
 
@@ -212,7 +220,11 @@ Desktop:
 1. The daemon starts locked when the DB is SQLCipher-encrypted.
 2. The user supplies the passphrase through the unlock UI or CLI fd path.
 3. The Python daemon holds the unlocked connection for runtime requests.
-4. No OS keychain unlock material is stored in this PR.
+4. If the user enabled Touch ID unlock, the desktop shell stores a per-data-root
+   passphrase copy in macOS Keychain either from the first manual lock-screen
+   unlock or from the Settings verification dialog, and can retrieve it after
+   a LocalAuthentication Touch ID prompt on later lock screens. Passphrase
+   rotation updates the stored copy.
 
 ### Reveal Token/Descriptor
 

@@ -12,6 +12,7 @@ import {
   Download,
   ExternalLink,
   FileInput,
+  Fingerprint,
   KeyRound,
   Lock,
   Pencil,
@@ -67,7 +68,13 @@ import {
   type ExistingAiProvider,
 } from "@/components/kb/AiProviderForm";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
-import { clearImportProject } from "@/daemon/transport";
+import {
+  canUseTouchIdPassphraseUnlock,
+  clearImportProject,
+  forgetTouchIdPassphrase,
+  getTransport,
+  storeTouchIdPassphrase,
+} from "@/daemon/transport";
 import type { ExplorerSettings } from "@/lib/explorer";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 import { setSessionUnlockPassphrase } from "@/store/sessionLock";
@@ -593,6 +600,8 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const status =
     statusQuery.data?.kind === "status" ? statusQuery.data.data : null;
   const statusLoaded = statusQuery.data?.kind === "status";
+  const touchIdDataRoot = identity?.importedProject?.dataRoot ?? null;
+  const touchIdPlatformSupported = canUseTouchIdPassphraseUnlock();
   const deleteWorkspace = useDaemonMutation("ui.workspace.delete", {
     dataMode: "real",
   });
@@ -639,9 +648,42 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const [passphraseError, setPassphraseError] = React.useState<string | null>(
     null,
   );
+  const [touchIdEnrollOpen, setTouchIdEnrollOpen] = React.useState(false);
+  const [touchIdEnrollPassphrase, setTouchIdEnrollPassphrase] =
+    React.useState("");
+  const [touchIdEnrollError, setTouchIdEnrollError] = React.useState<
+    string | null
+  >(null);
+  const [touchIdEnrollPending, setTouchIdEnrollPending] =
+    React.useState(false);
   const [selectedIntegrationId, setSelectedIntegrationId] = React.useState<
     string | null
   >(() => routeSelectedIntegrationId);
+
+  const openTouchIdEnrollment = React.useCallback(() => {
+    setTouchIdEnrollError(null);
+    setTouchIdEnrollPassphrase("");
+    setTouchIdEnrollOpen(true);
+  }, []);
+
+  const forgetTouchIdUnlock = React.useCallback(
+    async () => {
+      try {
+        await forgetTouchIdPassphrase(touchIdDataRoot);
+        setAppLockPolicy({ touchIdUnlock: false });
+      } catch (error: unknown) {
+        addNotification({
+          title: "Touch ID passphrase was not removed",
+          body:
+            error instanceof Error
+              ? error.message
+              : "macOS Keychain did not remove the saved passphrase.",
+          tone: "warning",
+        });
+      }
+    },
+    [addNotification, setAppLockPolicy, touchIdDataRoot],
+  );
 
   React.useEffect(() => {
     setSelectedIntegrationId(routeSelectedIntegrationId);
@@ -1093,6 +1135,22 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         new_passphrase_secret: newPassphrase,
       });
       await setSessionUnlockPassphrase(newPassphrase);
+      if (appLockPolicy.touchIdUnlock && touchIdPlatformSupported) {
+        try {
+          await storeTouchIdPassphrase(newPassphrase, touchIdDataRoot);
+        } catch (error) {
+          setAppLockPolicy({ touchIdUnlock: false });
+          await forgetTouchIdPassphrase(touchIdDataRoot).catch(() => {});
+          addNotification({
+            title: "Touch ID unlock was disabled",
+            body:
+              error instanceof Error
+                ? error.message
+                : "The database passphrase changed, but macOS Keychain did not accept the updated Touch ID passphrase.",
+            tone: "warning",
+          });
+        }
+      }
       setPassphraseOpen(false);
       setCurrentPassphrase("");
       setNewPassphrase("");
@@ -1103,6 +1161,50 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
           ? error.message
           : "Could not change database passphrase.",
       );
+    }
+  };
+
+  const onEnrollTouchId = async () => {
+    setTouchIdEnrollError(null);
+    if (!touchIdEnrollPassphrase) {
+      setTouchIdEnrollError("Enter the database passphrase.");
+      return;
+    }
+
+    setTouchIdEnrollPending(true);
+    try {
+      const envelope = await getTransport("real").invoke({
+        kind: "daemon.unlock",
+        args: {
+          ...(identity?.importedProject
+            ? { require_existing_project: true }
+            : {}),
+          auth_response: { passphrase_secret: touchIdEnrollPassphrase },
+        },
+      });
+      if (envelope.kind !== "daemon.unlock") {
+        throw new Error("Database passphrase did not unlock these books.");
+      }
+      await storeTouchIdPassphrase(touchIdEnrollPassphrase, touchIdDataRoot);
+      await setSessionUnlockPassphrase(touchIdEnrollPassphrase);
+      setAppLockPolicy({ touchIdUnlock: true });
+      setTouchIdEnrollOpen(false);
+      setTouchIdEnrollPassphrase("");
+      addNotification({
+        title: "Touch ID unlock enabled",
+        body: "The database passphrase was saved in macOS Keychain behind local user presence.",
+        tone: "success",
+      });
+    } catch (error) {
+      setAppLockPolicy({ touchIdUnlock: false });
+      await forgetTouchIdPassphrase(touchIdDataRoot).catch(() => {});
+      setTouchIdEnrollError(
+        error instanceof Error
+          ? error.message
+          : "Could not save the database passphrase for Touch ID unlock.",
+      );
+    } finally {
+      setTouchIdEnrollPending(false);
     }
   };
 
@@ -1179,7 +1281,10 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
                     <SecuritySettingsPanel
                       appLockPolicy={appLockPolicy}
                       setAppLockPolicy={setAppLockPolicy}
+                      onEnrollTouchId={openTouchIdEnrollment}
+                      onForgetTouchId={forgetTouchIdUnlock}
                       encryptedWorkspace={encryptedWorkspace}
+                      touchIdPlatformSupported={touchIdPlatformSupported}
                       onLockNow={lockNow}
                       onChangePassphrase={openChangePassphrase}
                     />
@@ -1568,6 +1673,72 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             </form>
           </DialogContent>
         </Dialog>
+        <Dialog
+          open={touchIdEnrollOpen}
+          onOpenChange={(next) => {
+            if (!next && !touchIdEnrollPending) {
+              setTouchIdEnrollOpen(false);
+              setTouchIdEnrollPassphrase("");
+              setTouchIdEnrollError(null);
+            }
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Enable Touch ID unlock</DialogTitle>
+              <DialogDescription>
+                Enter the database passphrase once. Kassiber will verify it
+                locally, then save it in macOS Keychain behind local user
+                presence for these books.
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              className="space-y-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void onEnrollTouchId();
+              }}
+            >
+              <div className="space-y-2">
+                <Label htmlFor="touch-id-enroll-passphrase">
+                  Database passphrase
+                </Label>
+                <Input
+                  id="touch-id-enroll-passphrase"
+                  type="password"
+                  autoComplete="current-password"
+                  value={touchIdEnrollPassphrase}
+                  disabled={touchIdEnrollPending}
+                  onChange={(event) =>
+                    setTouchIdEnrollPassphrase(event.target.value)
+                  }
+                />
+              </div>
+              {touchIdEnrollError && (
+                <p className="m-0 text-sm text-destructive">
+                  {touchIdEnrollError}
+                </p>
+              )}
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={touchIdEnrollPending}
+                  onClick={() => {
+                    setTouchIdEnrollOpen(false);
+                    setTouchIdEnrollPassphrase("");
+                    setTouchIdEnrollError(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={touchIdEnrollPending}>
+                  {touchIdEnrollPending ? "Saving..." : "Enable Touch ID"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
     </>
   );
 }
@@ -1708,13 +1879,19 @@ function ExplorerSettingsPanel({
 function SecuritySettingsPanel({
   appLockPolicy,
   setAppLockPolicy,
+  onEnrollTouchId,
+  onForgetTouchId,
   encryptedWorkspace,
+  touchIdPlatformSupported,
   onLockNow,
   onChangePassphrase,
 }: {
   appLockPolicy: AppLockPolicy;
   setAppLockPolicy: (policy: Partial<AppLockPolicy>) => void;
+  onEnrollTouchId: () => void;
+  onForgetTouchId: () => void;
   encryptedWorkspace: boolean;
+  touchIdPlatformSupported: boolean;
   onLockNow: () => void;
   onChangePassphrase: () => void;
 }) {
@@ -1776,11 +1953,54 @@ function SecuritySettingsPanel({
             setAppLockPolicy({ lockOnWindowClose: checked })
           }
         />
+        <div className="flex flex-col gap-3 rounded-md border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm font-medium">
+              {appLockPolicy.touchIdUnlock
+                ? "Touch ID unlock saved"
+                : "Set up Touch ID unlock"}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {encryptedWorkspace
+                ? touchIdPlatformSupported
+                  ? appLockPolicy.touchIdUnlock
+                    ? "macOS will ask for local user presence before reading the saved passphrase."
+                    : "Verify the database passphrase once and save it in macOS Keychain."
+                  : "Touch ID unlock is available in the macOS desktop app."
+                : "Available after these books use SQLCipher encryption."}
+            </p>
+          </div>
+          {appLockPolicy.touchIdUnlock ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!encryptedWorkspace || !touchIdPlatformSupported}
+              onClick={onForgetTouchId}
+            >
+              Forget
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!encryptedWorkspace || !touchIdPlatformSupported}
+              onClick={onEnrollTouchId}
+            >
+              Set up
+            </Button>
+          )}
+        </div>
       </div>
       <div className="space-y-4 rounded-md border border-primary/15 bg-background p-4">
         <div className="space-y-1">
           <h3 className="flex items-center gap-2 text-sm font-semibold">
-            <KeyRound className="size-4" aria-hidden="true" />
+            {appLockPolicy.touchIdUnlock ? (
+              <Fingerprint className="size-4" aria-hidden="true" />
+            ) : (
+              <KeyRound className="size-4" aria-hidden="true" />
+            )}
             Security boundary
           </h3>
           <p className="m-0 text-sm leading-6 text-muted-foreground">

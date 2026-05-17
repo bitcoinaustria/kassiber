@@ -80,6 +80,9 @@ workflow almost nobody else covers.
 - **Sovereign storage** — SQLite system of record; optional SQLCipher 4
   passphrase encryption; single-file `tar | age` backups recoverable with
   stock `age` + `tar` + `sqlcipher` even if Kassiber disappears.
+- **Optional Touch ID unlock** — macOS desktop builds can save the database
+  passphrase in Keychain behind local user presence. This is a convenience,
+  not a recovery path or a replacement for the SQLCipher passphrase.
 - **Two surfaces, one daemon** — desktop GUI (Tauri 2 + React) for
   day-to-day work; CLI with deterministic JSON envelopes for scripting,
   automation, and power users; both backed by the same Python daemon.

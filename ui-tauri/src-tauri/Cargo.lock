@@ -1958,7 +1958,10 @@ name = "kassiber-ui"
 version = "0.22.4"
 dependencies = [
  "apple-native-keyring-store",
+ "block2",
  "keyring-core",
+ "objc2",
+ "objc2-foundation",
  "serde",
  "serde_json",
  "tauri",
