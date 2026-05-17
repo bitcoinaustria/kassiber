@@ -2909,6 +2909,8 @@ class AccountBucketBehaviorTest(unittest.TestCase):
         self.assertEqual(buy["fiat_rate_exact"], "21586.90000000")
 
     def test_z_pocketbitcoin_csv_full_import_flags_wallet_gap_rows(self):
+        existing_csv = Path(self._tmp.name) / "pocket-full-existing-wallet.csv"
+        existing_csv.write_text(_POCKETBITCOIN_EXISTING_CSV, encoding="utf-8")
         pocket_csv = Path(self._tmp.name) / "pocket-full-orders.csv"
         pocket_csv.write_text(_POCKETBITCOIN_CSV, encoding="utf-8")
 
@@ -2951,6 +2953,42 @@ class AccountBucketBehaviorTest(unittest.TestCase):
         self.assertEqual(buy["pricing_provider"], "Pocket Bitcoin")
         self.assertEqual(buy["pricing_external_ref"], "REF000001")
         self.assertIn("pocketbitcoin-wallet-gap", {tag["code"] for tag in buy["tags"]})
+
+        self._cli(
+            "wallets", "create",
+            "--workspace", "Buckets",
+            "--profile", "PocketFullEUR",
+            "--label", "Pocket Real Wallet",
+            "--kind", "custom",
+        )
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Buckets",
+            "--profile", "PocketFullEUR",
+            "--wallet", "Pocket Real Wallet",
+            "--file", str(existing_csv),
+        )
+
+        payload = self._cli(
+            "wallets", "import-pocket",
+            "--workspace", "Buckets",
+            "--profile", "PocketFullEUR",
+            "--file", str(pocket_csv),
+        )
+        self.assertEqual(payload["data"]["matched"], 1)
+        self.assertEqual(payload["data"]["updated"], 1)
+        self.assertEqual(payload["data"].get("skipped_ambiguous", 0), 0)
+
+        payload = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "PocketFullEUR",
+            "--wallet", "Pocket Real Wallet",
+        )
+        real_buy = payload["data"][0]
+        self.assertEqual(real_buy["external_id"], "pocket-wallet-tx")
+        self.assertEqual(real_buy["pricing_provider"], "Pocket Bitcoin")
+        self.assertFalse(real_buy["excluded"])
 
 
 if __name__ == "__main__":

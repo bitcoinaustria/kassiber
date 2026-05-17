@@ -201,7 +201,7 @@ def _find_existing_profile_transaction_by_economics(
     """Find exchange evidence matches when the provider export has no txid."""
     if not normalized.get("exchange_evidence_match_by_economics"):
         return None, "unmatched"
-    wallet_filter = "AND wallet_id != ?" if exclude_wallet_id else ""
+    filters: list[str] = []
     params: list[Any] = [
         profile_id,
         normalized["direction"],
@@ -209,15 +209,20 @@ def _find_existing_profile_transaction_by_economics(
         btc_to_msat(normalized["amount"]),
     ]
     if exclude_wallet_id:
+        filters.append("wallet_id != ?")
         params.append(exclude_wallet_id)
+    pricing_method = normalized.get("pricing_method")
+    if pricing_method:
+        filters.append("NOT (excluded = 1 AND pricing_method = ?)")
+        params.append(pricing_method)
     window = _timestamp_window(
         normalized["occurred_at"],
         int(normalized.get("exchange_evidence_match_time_tolerance_seconds") or 0),
     )
-    time_filter = ""
     if window is not None:
-        time_filter = "AND occurred_at BETWEEN ? AND ?"
+        filters.append("occurred_at BETWEEN ? AND ?")
         params.extend(window)
+    extra_filters = "".join(f"\n          AND {condition}" for condition in filters)
     rows = conn.execute(
         f"""
         SELECT {_EXISTING_TRANSACTION_COLUMNS}, wallet_label
@@ -230,8 +235,7 @@ def _find_existing_profile_transaction_by_economics(
           AND direction = ?
           AND asset = ?
           AND amount = ?
-          {wallet_filter}
-          {time_filter}
+          {extra_filters}
         ORDER BY created_at DESC
         LIMIT 2
         """,
@@ -253,7 +257,10 @@ def _find_existing_profile_transaction_result(
     exclude_wallet_id: str | None = None,
 ) -> tuple[sqlite3.Row | None, str]:
     """Find one unambiguous book-wide transaction for exchange evidence."""
-    if not normalized["external_id"]:
+    if (
+        normalized.get("exchange_evidence_match_by_economics")
+        or not normalized["external_id"]
+    ):
         return _find_existing_profile_transaction_by_economics(
             conn,
             profile_id,
