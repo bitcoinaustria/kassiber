@@ -1,11 +1,14 @@
 # Homebrew Cask
 
-Kassiber does not publish an official Homebrew tap yet, but macOS desktop
-artifacts are prepared for one: the `.app` bundle includes a managed launcher at
+Kassiber can publish a project-owned Homebrew cask from the prerelease workflow.
+The macOS `.app` bundle includes a managed launcher at
 `Contents/Resources/bin/kassiber` that forwards to the bundled CLI sidecar via
-the desktop executable.
+the desktop executable, and `.github/workflows/prerelease-binaries.yml` can
+write a cask that links that launcher as the terminal command.
 
-Recommended first tap layout:
+## Tap setup
+
+Create the tap repository:
 
 ```text
 bitcoinaustria/homebrew-kassiber
@@ -13,34 +16,33 @@ bitcoinaustria/homebrew-kassiber
     └── kassiber.rb
 ```
 
-Starter cask:
+Then add a repository secret to `bitcoinaustria/kassiber`:
+
+- `HOMEBREW_TAP_TOKEN` — a fine-grained GitHub token with write access to
+  `bitcoinaustria/homebrew-kassiber` contents.
+
+When the secret is absent, the prerelease workflow still publishes Kassiber
+release artifacts and skips the Homebrew update.
+
+## Publishing
+
+For a tag publish or `workflow_dispatch` run with `publish_release=true`, the
+release job:
+
+1. Builds and uploads `kassiber-macos-universal.dmg`.
+2. Generates `SHA256SUMS.txt`.
+3. Checks out `bitcoinaustria/homebrew-kassiber` when `HOMEBREW_TAP_TOKEN` is
+   configured.
+4. Renders `Casks/kassiber.rb` with `scripts/render_homebrew_cask.py`.
+5. Commits and pushes `Update Kassiber cask to <tag>`.
+
+The generated cask points at the immutable GitHub release DMG and links the
+bundled terminal launcher:
 
 ```ruby
-cask "kassiber" do
-  version "<version_without_v>"
-  sha256 "<sha256 of kassiber-macos-universal.dmg>"
-
-  url "https://github.com/bitcoinaustria/kassiber/releases/download/v#{version}/kassiber-macos-universal.dmg"
-  name "Kassiber"
-  desc "Local-first Bitcoin accounting suite"
-  homepage "https://github.com/bitcoinaustria/kassiber"
-
-  app "Kassiber.app"
-  binary "#{appdir}/Kassiber.app/Contents/Resources/bin/kassiber",
-         target: "kassiber"
-
-  livecheck do
-    url :url
-    strategy :github_latest
-  end
-
-  zap trash: [
-    "~/.kassiber",
-    "~/Library/Application Support/at.bitcoinaustria.kassiber",
-    "~/Library/Preferences/at.bitcoinaustria.kassiber.plist",
-    "~/Library/Saved Application State/at.bitcoinaustria.kassiber.savedState",
-  ]
-end
+app "Kassiber.app"
+binary "#{appdir}/Kassiber.app/Contents/Resources/bin/kassiber",
+       target: "kassiber"
 ```
 
 With a tap in place, users can install the desktop app and terminal command via:
@@ -54,3 +56,10 @@ kassiber status
 The cask route uses Homebrew's own prefix for the terminal command, so it does
 not need Kassiber's Settings -> Desktop -> Terminal command helper. That helper
 still matters for users who install the `.dmg` directly or do not use Homebrew.
+
+## Release discipline
+
+Only publish cask updates for immutable tags and DMG assets. Homebrew validates
+the downloaded DMG against the cask's SHA-256 checksum; replacing an existing
+release asset after the tap has been updated can break installs for users whose
+local Homebrew metadata or download cache no longer matches the asset.

@@ -39,6 +39,7 @@ run py -m compileall -q kassiber tests
 run py -m unittest tests.test_dependency_drift -v
 run py -m unittest tests.test_connection_catalog_drift -v
 run py -m unittest tests.test_report_contract_drift -v
+run py -m unittest tests.test_homebrew_cask -v
 run py -m unittest tests.test_btcpay_commercial_provenance -v
 run py -m unittest tests.test_core_maintenance -v
 run py -m unittest tests.test_cli_smoke -v

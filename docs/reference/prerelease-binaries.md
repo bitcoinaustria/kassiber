@@ -99,6 +99,12 @@ kassiber-windows-x64.msi
 SHA256SUMS.txt
 ```
 
+When the repository secret `HOMEBREW_TAP_TOKEN` is configured, successful
+release publishes also update `bitcoinaustria/homebrew-kassiber` with a cask
+for `kassiber-macos-universal.dmg`. See
+[Homebrew Cask](homebrew-cask.md) for the tap setup and immutability
+requirements.
+
 Use `x64` for public filenames instead of `x86_64`. Bundled sidecar resource
 filenames are internal to the desktop package and use Rust target triples such
 as `kassiber-cli-aarch64-apple-darwin`; those raw sidecars are not release

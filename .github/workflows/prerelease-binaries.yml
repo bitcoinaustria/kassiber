@@ -20,6 +20,11 @@ on:
 permissions:
   contents: write
 
+env:
+  HOMEBREW_TAP_REPOSITORY: bitcoinaustria/homebrew-kassiber
+  HOMEBREW_TAP_BRANCH: main
+  HOMEBREW_CASK_PATH: Casks/kassiber.rb
+
 concurrency:
   group: prerelease-binaries-${{ github.ref }}
   cancel-in-progress: false
@@ -543,3 +548,66 @@ jobs:
             overriding the bundled sidecar for debugging.
           files: |
             release/*
+
+      - name: Check Homebrew tap publishing
+        id: homebrew-tap
+        shell: bash
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "$HOMEBREW_TAP_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "HOMEBREW_TAP_TOKEN is not configured; skipping Homebrew cask update."
+          fi
+
+      - name: Check out Homebrew tap
+        if: steps.homebrew-tap.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.HOMEBREW_TAP_REPOSITORY }}
+          ref: ${{ env.HOMEBREW_TAP_BRANCH }}
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Render Homebrew cask
+        if: steps.homebrew-tap.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag_name="${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}"
+          version="${tag_name#v}"
+          dmg_name="kassiber-macos-universal.dmg"
+          dmg_path="release/${dmg_name}"
+          cask_path="homebrew-tap/${HOMEBREW_CASK_PATH}"
+
+          test -f "$dmg_path"
+          sha256="$(awk -v name="$dmg_name" '$2 == name { print $1 }' release/SHA256SUMS.txt)"
+          test -n "$sha256"
+
+          python scripts/render_homebrew_cask.py \
+            --version "$version" \
+            --sha256 "$sha256" \
+            --output "$cask_path"
+
+      - name: Commit Homebrew cask update
+        if: steps.homebrew-tap.outputs.enabled == 'true'
+        shell: bash
+        working-directory: homebrew-tap
+        run: |
+          set -euo pipefail
+          tag_name="${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$HOMEBREW_CASK_PATH"
+
+          if git diff --cached --quiet; then
+            echo "Homebrew cask already matches ${tag_name}; nothing to push."
+            exit 0
+          fi
+
+          git commit -m "Update Kassiber cask to ${tag_name}"
+          git push origin "HEAD:${HOMEBREW_TAP_BRANCH}"
