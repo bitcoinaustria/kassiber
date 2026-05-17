@@ -778,7 +778,7 @@ export function AddConnectionDialog({
           );
           try {
             const envelope = await syncWallet.mutateAsync({ wallet: label });
-            const result = envelope.data.results.find(
+            const result = envelope.data?.results.find(
               (item) => item.wallet === label,
             );
             const importSummary = importResultFromSyncResult(result);
