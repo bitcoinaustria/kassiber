@@ -66,7 +66,7 @@ workflow almost nobody else covers.
 
 - **Direct Bitcoin sync** — Esplora, Electrum, Bitcoin Core RPC, BTCPay
   Greenfield, Liquid Electrum.
-- **Imports** — BTCPay CSV/JSON, Phoenix, River, Bull Bitcoin, generic
+- **Imports** — BTCPay CSV/JSON, Phoenix, River, Bull Bitcoin, Pocket Bitcoin, generic
   CSV/JSON, BIP329 labels.
 - **Review workflows** — notes, tags, exclusions, attachments; reviewed
   transfer/swap pairing for Lightning, Liquid peg-in/peg-out, and submarine

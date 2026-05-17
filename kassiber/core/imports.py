@@ -8,6 +8,7 @@ import os
 import sqlite3
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Sequence
 
 from ..envelope import json_ready
@@ -18,6 +19,7 @@ from ..importers import (
     is_bullbitcoin_format,
     is_btcpay_format,
     is_phoenix_format,
+    is_pocketbitcoin_format,
     is_river_format,
     load_import_records,
 )
@@ -44,6 +46,11 @@ BULLBITCOIN_RECONCILIATION_TAGS = {
     "matched": ("bullbitcoin-matched", "Bull Bitcoin matched"),
     "unmatched": ("bullbitcoin-wallet-gap", "Bull Bitcoin wallet gap"),
     "ambiguous": ("bullbitcoin-ambiguous", "Bull Bitcoin ambiguous"),
+}
+POCKETBITCOIN_RECONCILIATION_TAGS = {
+    "matched": ("pocketbitcoin-matched", "Pocket Bitcoin matched"),
+    "unmatched": ("pocketbitcoin-wallet-gap", "Pocket Bitcoin wallet gap"),
+    "ambiguous": ("pocketbitcoin-ambiguous", "Pocket Bitcoin ambiguous"),
 }
 
 
@@ -152,6 +159,76 @@ def _single_match(rows: Sequence[sqlite3.Row]) -> sqlite3.Row | None:
     return None
 
 
+def _timestamp_window(value: str, tolerance_seconds: int) -> tuple[str, str] | None:
+    if not value or tolerance_seconds <= 0:
+        return None
+    raw = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        center = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if center.tzinfo is None:
+        center = center.replace(tzinfo=timezone.utc)
+    else:
+        center = center.astimezone(timezone.utc)
+    delta = timedelta(seconds=tolerance_seconds)
+    start = (center - delta).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    end = (center + delta).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return start, end
+
+
+def _find_existing_profile_transaction_by_economics(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    normalized: Mapping[str, Any],
+    *,
+    exclude_wallet_id: str | None = None,
+) -> tuple[sqlite3.Row | None, str]:
+    """Find exchange evidence matches when the provider export has no txid."""
+    if not normalized.get("match_without_external_id"):
+        return None, "unmatched"
+    wallet_filter = "AND wallet_id != ?" if exclude_wallet_id else ""
+    params: list[Any] = [
+        profile_id,
+        normalized["direction"],
+        normalized["asset"],
+        btc_to_msat(normalized["amount"]),
+    ]
+    if exclude_wallet_id:
+        params.append(exclude_wallet_id)
+    tolerance_seconds = int(normalized.get("match_time_tolerance_seconds") or 0)
+    window = _timestamp_window(normalized["occurred_at"], tolerance_seconds)
+    time_filter = ""
+    if window is not None:
+        time_filter = "AND occurred_at BETWEEN ? AND ?"
+        params.extend(window)
+    rows = conn.execute(
+        f"""
+        SELECT {_EXISTING_TRANSACTION_COLUMNS}, wallet_label
+        FROM (
+            SELECT t.*, w.label AS wallet_label
+            FROM transactions t
+            JOIN wallets w ON w.id = t.wallet_id
+        )
+        WHERE profile_id = ?
+          AND direction = ?
+          AND asset = ?
+          AND amount = ?
+          {wallet_filter}
+          {time_filter}
+        ORDER BY created_at DESC
+        LIMIT 2
+        """,
+        tuple(params),
+    ).fetchall()
+    match = _single_match(rows)
+    if match:
+        return match, "matched"
+    if len(rows) > 1:
+        return None, "ambiguous"
+    return None, "unmatched"
+
+
 def _find_existing_profile_transaction_result(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -161,7 +238,12 @@ def _find_existing_profile_transaction_result(
 ) -> tuple[sqlite3.Row | None, str]:
     """Find one unambiguous book-wide transaction for exchange evidence."""
     if not normalized["external_id"]:
-        return None, "unmatched"
+        return _find_existing_profile_transaction_by_economics(
+            conn,
+            profile_id,
+            normalized,
+            exclude_wallet_id=exclude_wallet_id,
+        )
     amount_msat = btc_to_msat(normalized["amount"])
     fee_msat = btc_to_msat(normalized["fee"])
     wallet_filter = "AND wallet_id != ?" if exclude_wallet_id else ""
@@ -231,6 +313,14 @@ def _find_existing_profile_transaction_result(
         return match, "matched"
     if len(amount_rows) > 1:
         return None, "ambiguous"
+    economic_match, economic_status = _find_existing_profile_transaction_by_economics(
+        conn,
+        profile_id,
+        normalized,
+        exclude_wallet_id=exclude_wallet_id,
+    )
+    if economic_status != "unmatched":
+        return economic_match, economic_status
     return None, "unmatched"
 
 
@@ -461,7 +551,60 @@ def _apply_bullbitcoin_reconciliation_flag(
     return exclude
 
 
+def _apply_pocketbitcoin_reconciliation_flag(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+    tx_id: str,
+    status: str,
+    hooks: ImportCoordinatorHooks,
+) -> bool:
+    tag_rows: dict[str, sqlite3.Row] = {}
+    for tag_status, (code, label) in POCKETBITCOIN_RECONCILIATION_TAGS.items():
+        tag, created = hooks.ensure_tag_row(
+            conn,
+            profile["workspace_id"],
+            profile["id"],
+            code,
+            label,
+        )
+        tag_rows[tag_status] = tag
+    conn.executemany(
+        "DELETE FROM transaction_tags WHERE transaction_id = ? AND tag_id = ?",
+        [(tx_id, tag["id"]) for tag in tag_rows.values()],
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
+        (tx_id, tag_rows[status]["id"]),
+    )
+    exclude = True
+    conn.execute(
+        "UPDATE transactions SET excluded = ? WHERE id = ?",
+        (1 if exclude else 0, tx_id),
+    )
+    return exclude
+
+
 def _bullbitcoin_reconciliation_record(
+    normalized: Mapping[str, Any],
+    status: str,
+    imported_tx_id: str | None,
+    wallet_label: str,
+    matched: sqlite3.Row | None,
+) -> dict[str, Any]:
+    record = _import_change_record(
+        imported_tx_id or "",
+        wallet_label,
+        normalized,
+        ("reconciliation",),
+    )
+    record["status"] = status
+    if matched:
+        record["matched_transaction_id"] = matched["id"]
+        record["matched_wallet"] = matched["wallet_label"]
+    return record
+
+
+def _pocketbitcoin_reconciliation_record(
     normalized: Mapping[str, Any],
     status: str,
     imported_tx_id: str | None,
@@ -609,6 +752,8 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
         "counterparty": record.get("counterparty"),
         "payment_hash": payment_hash,
         "payment_hash_source": payment_hash_source,
+        "match_without_external_id": bool(record.get("match_without_external_id")),
+        "match_time_tolerance_seconds": int(record.get("match_time_tolerance_seconds") or 0),
         "raw_json": raw_json,
     }
 
@@ -994,6 +1139,109 @@ def import_bullbitcoin_records_full(
     return outcome
 
 
+def import_pocketbitcoin_records_full(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+    wallet: Mapping[str, Any],
+    records: Sequence[ImportRow],
+    source_label: str,
+    hooks: ImportCoordinatorHooks,
+    *,
+    commit: bool = True,
+) -> dict[str, Any]:
+    """Import every Pocket exchange row and flag book reconciliation status."""
+    normalized_records = [
+        normalize_import_record(record, source_label=source_label) for record in records
+    ]
+    reconciliation: list[tuple[dict[str, Any], sqlite3.Row | None, str]] = []
+    matched = 0
+    unmatched = 0
+    ambiguous = 0
+    for normalized in normalized_records:
+        existing, status = _find_existing_profile_transaction_result(
+            conn,
+            profile["id"],
+            normalized,
+            exclude_wallet_id=wallet["id"],
+        )
+        if status == "matched":
+            matched += 1
+        elif status == "ambiguous":
+            ambiguous += 1
+        else:
+            unmatched += 1
+        reconciliation.append((normalized, existing, status))
+
+    outcome = insert_wallet_records(
+        conn,
+        profile,
+        wallet,
+        records,
+        source_label,
+        hooks,
+        commit=False,
+        report_updates=True,
+    )
+
+    inserted_ids = {
+        record["transaction_id"] for record in outcome.get("inserted_records", [])
+    }
+    updated_ids = {
+        record["transaction_id"] for record in outcome.get("updated_records", [])
+    }
+    reconciliation_records: list[dict[str, Any]] = []
+    status_by_tx_id: dict[str, dict[str, Any]] = {}
+    excluded = 0
+    for normalized, existing, status in reconciliation:
+        imported = _find_imported_wallet_transaction(conn, wallet["id"], normalized)
+        if not imported:
+            continue
+        row_excluded = _apply_pocketbitcoin_reconciliation_flag(
+            conn,
+            profile,
+            imported["id"],
+            status,
+            hooks,
+        )
+        if row_excluded:
+            excluded += 1
+        reconciliation_record = _pocketbitcoin_reconciliation_record(
+            normalized,
+            status,
+            imported["id"],
+            wallet["label"],
+            existing,
+        )
+        status_by_tx_id[imported["id"]] = {
+            "status": status,
+            "excluded": row_excluded,
+            "matched_wallet": existing["wallet_label"] if existing else None,
+            "matched_transaction_id": existing["id"] if existing else None,
+        }
+        if imported["id"] in inserted_ids or imported["id"] in updated_ids:
+            reconciliation_record["changed"] = True
+        reconciliation_records.append(reconciliation_record)
+
+    hooks.invalidate_journals(conn, profile["id"])
+    if commit:
+        conn.commit()
+    for bucket in ("inserted_records", "updated_records"):
+        for record in outcome.get(bucket, []):
+            record.update(status_by_tx_id.get(record["transaction_id"], {}))
+    outcome.update(
+        {
+            "scope": "book",
+            "mode": BULLBITCOIN_IMPORT_MODE_FULL,
+            "matched": matched,
+            "unmatched": unmatched,
+            "ambiguous": ambiguous,
+            "excluded": excluded,
+            "reconciliation_records": reconciliation_records,
+        }
+    )
+    return outcome
+
+
 def import_records_into_wallet(
     conn: sqlite3.Connection,
     profile: Mapping[str, Any],
@@ -1043,7 +1291,9 @@ def import_file_into_profile(
     commit: bool = True,
 ) -> dict[str, Any]:
     records = load_import_records(file_path, input_format)
-    if not is_bullbitcoin_format(input_format):
+    is_bull = is_bullbitcoin_format(input_format)
+    is_pocket = is_pocketbitcoin_format(input_format)
+    if not (is_bull or is_pocket):
         raise AppError(
             f"Profile-wide imports do not support '{input_format}'",
             code="validation",
@@ -1054,20 +1304,31 @@ def import_file_into_profile(
     if mode == BULLBITCOIN_IMPORT_MODE_FULL:
         if wallet is None:
             raise AppError(
-                "A Bull Bitcoin wallet is required for full import mode",
+                "A provider wallet is required for full import mode",
                 code="validation",
-                hint="Choose or create the book's Bull Bitcoin wallet.",
+                hint="Choose or create the book's exchange-evidence wallet.",
                 retryable=False,
             )
-        outcome = import_bullbitcoin_records_full(
-            conn,
-            profile,
-            wallet,
-            records,
-            f"file:{input_format}",
-            hooks,
-            commit=commit,
-        )
+        if is_pocket:
+            outcome = import_pocketbitcoin_records_full(
+                conn,
+                profile,
+                wallet,
+                records,
+                f"file:{input_format}",
+                hooks,
+                commit=commit,
+            )
+        else:
+            outcome = import_bullbitcoin_records_full(
+                conn,
+                profile,
+                wallet,
+                records,
+                f"file:{input_format}",
+                hooks,
+                commit=commit,
+            )
     else:
         outcome = enrich_profile_records(
             conn,
@@ -1079,7 +1340,10 @@ def import_file_into_profile(
             commit=commit,
         )
         outcome["mode"] = mode
-    outcome["bullbitcoin_rows"] = len(records)
+    if is_pocket:
+        outcome["pocketbitcoin_rows"] = len(records)
+    else:
+        outcome["bullbitcoin_rows"] = len(records)
     outcome["input_format"] = input_format
     outcome["file"] = os.path.abspath(file_path)
     return outcome
@@ -1289,12 +1553,14 @@ def import_file_into_wallet(
         apply_btcpay=is_btcpay_format(input_format),
         apply_phoenix=is_phoenix_format(input_format),
         apply_river=is_river_format(input_format),
-        match_existing_only=is_bullbitcoin_format(input_format),
-        report_updates=is_bullbitcoin_format(input_format),
+        match_existing_only=is_bullbitcoin_format(input_format) or is_pocketbitcoin_format(input_format),
+        report_updates=is_bullbitcoin_format(input_format) or is_pocketbitcoin_format(input_format),
         commit=commit,
     )
     if is_bullbitcoin_format(input_format):
         outcome["bullbitcoin_rows"] = len(records)
+    if is_pocketbitcoin_format(input_format):
+        outcome["pocketbitcoin_rows"] = len(records)
     outcome["input_format"] = input_format
     outcome["file"] = os.path.abspath(file_path)
     return outcome
@@ -1309,8 +1575,10 @@ __all__ = [
     "import_file_into_profile",
     "normalize_bullbitcoin_import_mode",
     "import_file_into_wallet",
+    "import_pocketbitcoin_records_full",
     "import_records_into_wallet",
     "insert_wallet_records",
+    "is_pocketbitcoin_format",
     "make_transaction_fingerprint",
     "normalize_import_direction",
     "normalize_import_record",

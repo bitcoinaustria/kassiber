@@ -10,6 +10,7 @@ Kassiber can ingest transactions and metadata from several sources. Imported dat
 - Phoenix CSV exports
 - River Bitcoin Activity / Account Activity CSV exports
 - Bull Bitcoin order CSV exports
+- Pocket Bitcoin account CSV exports
 - BIP329 JSONL labels
 
 Format references used by the dedicated importers:
@@ -17,6 +18,7 @@ Format references used by the dedicated importers:
 - BTCPay Greenfield API: <https://docs.btcpayserver.org/Development/GreenFieldExample/>
 - River Account Activity CSV: <https://support.river.com/hc/en-us/articles/45513824178963-How-do-I-download-my-account-activity>
 - Bull Bitcoin order CSV export from the Bull account order history
+- Pocket Bitcoin account CSV export
 - BIP329 labels JSONL: <https://bips.xyz/329>
 
 ## Generic transaction imports
@@ -332,6 +334,62 @@ rows, and matching is still profile-wide.
 ```bash
 python3 -m kassiber wallets update --wallet treasury \
   --config '{"source_file":"/path/to/bull-orders.csv","source_format":"bullbitcoin_csv"}'
+
+python3 -m kassiber wallets sync --wallet treasury
+```
+
+## Pocket Bitcoin
+
+Kassiber supports Pocket Bitcoin account CSV exports as exchange evidence. The
+Pocket export records fiat deposits, exchange executions, and BTC withdrawals
+as separate rows. Kassiber imports the exchange rows, pairs the matching BTC
+withdrawal row when present, and preserves the execution price as exact
+`exchange_execution` pricing.
+
+Import directly:
+
+```bash
+python3 -m kassiber wallets import-pocket \
+  --file /path/to/pocket-account.csv
+```
+
+The default `--mode relevant` mirrors the Bull Bitcoin flow: it enriches only
+rows that uniquely match an existing transaction in the active profile. Pocket
+does not export the blockchain txid in this CSV, so matching uses the net BTC
+withdrawal amount, direction, asset, and nearby timestamp instead of a txid.
+
+`--mode full` imports every exchange row into the selected wallet, or into a
+default `Pocket Bitcoin` wallet when no wallet is supplied. Full mode keeps the
+imported Pocket rows excluded from accounting by default and adds
+reconciliation tags:
+
+- `pocketbitcoin-matched` means the Pocket row matched one existing wallet
+  transaction in this book
+- `pocketbitcoin-wallet-gap` means no matching wallet transaction was found in
+  this book
+- `pocketbitcoin-ambiguous` means more than one wallet transaction matched and
+  the row needs review
+
+```bash
+python3 -m kassiber wallets import-pocket \
+  --mode full \
+  --file /path/to/pocket-account.csv
+```
+
+Behavior:
+
+- fiat -> Bitcoin rows become inbound `buy` transactions
+- Bitcoin -> fiat rows become outbound `sell` transactions when present
+- fiat exchange fees are included in buy cost basis and reduce sell proceeds
+- paired BTC withdrawal fees are stored on the imported Pocket evidence row
+- relevant imports are match-existing-only and never create standalone
+  transactions; full imports create excluded evidence rows
+
+You can also attach a Pocket export to an existing wallet:
+
+```bash
+python3 -m kassiber wallets update --wallet treasury \
+  --config '{"source_file":"/path/to/pocket-account.csv","source_format":"pocketbitcoin_csv"}'
 
 python3 -m kassiber wallets sync --wallet treasury
 ```

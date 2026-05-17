@@ -36,6 +36,7 @@ WALLET_KINDS = [
     "phoenix",
     "river",
     "bullbitcoin",
+    "pocketbitcoin",
     "custom",
 ]
 REDACTED_CONFIG_VALUE = "[redacted]"
@@ -497,6 +498,11 @@ WALLET_KIND_CATALOG = {
     },
     "bullbitcoin": {
         "summary": "Bull Bitcoin order CSV importer for exact buy/sell execution pricing.",
+        "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
+    "pocketbitcoin": {
+        "summary": "Pocket Bitcoin account CSV importer for exact buy/sell execution pricing.",
         "config_fields": ["source_file", "source_format"],
         "requires": [],
     },

@@ -206,6 +206,10 @@ excluded evidence, then flags each row as `matched`, `unmatched`, or
 includes `matched`, `skipped_unmatched`, and `skipped_ambiguous` in relevant
 mode, or `matched`, `unmatched`, `ambiguous`, `excluded`, and
 `reconciliation_records` in full mode.
+`source_format="pocketbitcoin_csv"` follows the same mode contract, using a
+default `Pocket Bitcoin` wallet in full mode and returning `pocketbitcoin_rows`.
+Because Pocket's CSV does not expose the blockchain txid, relevant-mode matching
+uses the net BTC amount, direction, asset, and nearby timestamp.
 
 `ui.connections.sources` returns the daemon's authoritative catalog of
 supported wallet kinds (with summary/config-fields metadata) and the
