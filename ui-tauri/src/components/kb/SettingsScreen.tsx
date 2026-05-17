@@ -845,14 +845,15 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   };
 
   const onInstallTerminalCommand = async () => {
+    const wasRepair = Boolean(terminalStatus?.needsRepair);
     setTerminalCommandPending(true);
     try {
       const next = await installTerminalCommand();
       setTerminalStatus(next);
       setTerminalStatusError(null);
       addNotification({
-        title: next.needsRepair
-          ? "Terminal command needs repair"
+        title: wasRepair
+          ? "Terminal command repaired"
           : "Terminal command installed",
         body: next.pathOnPath
           ? "Open a new terminal and run kassiber status."
@@ -950,7 +951,9 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         id: "terminal-command",
         icon: Terminal,
         title: "Terminal command",
-        description: terminalStatus?.installed
+        description: terminalStatus?.needsRepair
+          ? "The kassiber command is installed but needs repair."
+          : terminalStatus?.installed
           ? terminalStatus.pathOnPath
             ? "The kassiber command is available from your shell."
             : "The kassiber command is installed; PATH may need a shell update."
@@ -958,10 +961,18 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             ? "Another command already exists at the install path."
             : "Install a user-local kassiber command for your terminal.",
         isConnected: Boolean(terminalStatus?.installed && terminalStatus.pathOnPath),
-        statusLabel: terminalStatus?.installed ? "Installed" : "Not installed",
+        statusLabel: terminalStatus?.needsRepair
+          ? "Needs repair"
+          : terminalStatus?.managed
+            ? "Installed"
+            : "Not installed",
         category: "desktop",
         categoryLabel: "Desktop",
-        actionLabel: terminalStatus?.installed ? "Review" : "Install",
+        actionLabel: terminalStatus?.needsRepair
+          ? "Repair"
+          : terminalStatus?.managed
+            ? "Review"
+            : "Install",
       },
       {
         id: "explorer-links",
@@ -2004,9 +2015,9 @@ function TerminalCommandSettingsPanel({
   onRemove: () => void;
 }) {
   const actionLabel = status?.installed
-    ? status.needsRepair
+    ? "Reinstall command"
+    : status?.needsRepair
       ? "Repair command"
-      : "Reinstall command"
     : "Install command";
   return (
     <section className="space-y-4">

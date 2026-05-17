@@ -8,7 +8,13 @@
 set -eu
 
 launcher=$0
+depth=0
 while [ -L "$launcher" ]; do
+  depth=$((depth + 1))
+  if [ "$depth" -gt 40 ]; then
+    echo "kassiber: too many launcher symlinks" >&2
+    exit 127
+  fi
   link=$(readlink "$launcher") || exit 1
   case "$link" in
     /*) launcher=$link ;;

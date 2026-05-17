@@ -984,9 +984,12 @@ impl ExpandUser for Path {
 }
 
 fn home_dir() -> Option<PathBuf> {
-    env::var_os("HOME")
-        .or_else(|| env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
+    #[cfg(target_os = "windows")]
+    let home = env::var_os("USERPROFILE").or_else(|| env::var_os("HOME"));
+    #[cfg(not(target_os = "windows"))]
+    let home = env::var_os("HOME");
+
+    home.map(PathBuf::from)
         .filter(|path| !path.as_os_str().is_empty())
 }
 
@@ -1112,6 +1115,9 @@ fn inspect_terminal_command(
                 return fs::read_link(&paths.command_path)
                     .map(|target| {
                         if target == paths.target_path {
+                            // A direct symlink works today, but the Settings
+                            // installer normalizes managed launchers to the
+                            // script form so future dispatch stays explicit.
                             TerminalCommandFileState::ManagedStale
                         } else {
                             TerminalCommandFileState::Conflict
@@ -1145,7 +1151,7 @@ fn install_terminal_command() -> Result<(), String> {
         TerminalCommandFileState::Missing => {}
         TerminalCommandFileState::Current => return Ok(()),
         TerminalCommandFileState::ManagedStale => {
-            remove_file_or_symlink(&paths.command_path)
+            fs::remove_file(&paths.command_path)
                 .map_err(|error| format!("Could not replace terminal command: {error}"))?;
         }
         TerminalCommandFileState::Conflict => {
@@ -1173,7 +1179,7 @@ fn remove_terminal_command() -> Result<(), String> {
     match inspect_terminal_command(&paths)? {
         TerminalCommandFileState::Missing => Ok(()),
         TerminalCommandFileState::Current | TerminalCommandFileState::ManagedStale => {
-            remove_file_or_symlink(&paths.command_path)
+            fs::remove_file(&paths.command_path)
                 .map_err(|error| format!("Could not remove terminal command: {error}"))
         }
         TerminalCommandFileState::Conflict => Err(format!(
@@ -1181,10 +1187,6 @@ fn remove_terminal_command() -> Result<(), String> {
             paths.command_path.display()
         )),
     }
-}
-
-fn remove_file_or_symlink(path: &Path) -> std::io::Result<()> {
-    fs::remove_file(path)
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -2244,15 +2246,16 @@ mod tests {
     use super::{
         copy_report_export_directory, database_is_encrypted,
         ensure_export_destination_outside_managed_root, inspect_import_project_directory,
-        is_managed_report_export_path, is_supported_austrian_csv_bundle_dir,
-        is_supported_export_file, is_supported_report_export_target, menu_action,
-        menu_action_for_deep_link, menu_action_for_id, navigate_action, open_settings_action,
-        path_is_on_path, terminal_command_contents, terminal_command_path_hint,
-        validated_external_url, ALLOWED_DAEMON_KINDS, MENU_HELP_DOCS, MENU_LOCK_APP,
-        MENU_NAV_ASSISTANT, MENU_NAV_REPORTS, MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN,
-        MENU_UI_SCALE_DECREASE, MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET,
-        MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
-        MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL,
+        inspect_terminal_command, is_managed_report_export_path,
+        is_supported_austrian_csv_bundle_dir, is_supported_export_file,
+        is_supported_report_export_target, menu_action, menu_action_for_deep_link,
+        menu_action_for_id, navigate_action, open_settings_action, path_is_on_path,
+        terminal_command_contents, terminal_command_path_hint, validated_external_url,
+        TerminalCommandFileState, TerminalCommandPaths, ALLOWED_DAEMON_KINDS, MENU_HELP_DOCS,
+        MENU_LOCK_APP, MENU_NAV_ASSISTANT, MENU_NAV_REPORTS, MENU_SETTINGS_SECURITY,
+        MENU_TOGGLE_FULLSCREEN, MENU_UI_SCALE_DECREASE, MENU_UI_SCALE_INCREASE,
+        MENU_UI_SCALE_RESET, MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
+        MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL, TERMINAL_COMMAND_MARKER,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -2282,6 +2285,81 @@ mod tests {
         assert!(!path_is_on_path(Path::new(
             "/path/that/should/not/exist/in/tests"
         )));
+    }
+
+    #[test]
+    fn terminal_command_inspection_tracks_managed_conflict_and_stale_files() {
+        let root = unique_temp_dir("terminal-command-inspect");
+        let bin_dir = root.join("bin");
+        fs::create_dir_all(&bin_dir).expect("create bin dir");
+        let target_path = root
+            .join("Kassiber.app")
+            .join("Contents")
+            .join("MacOS")
+            .join("kassiber-ui");
+        let paths = TerminalCommandPaths {
+            platform: "macos",
+            command_path: bin_dir.join("kassiber"),
+            bin_dir,
+            target_path,
+        };
+
+        assert_eq!(
+            inspect_terminal_command(&paths).expect("inspect missing command"),
+            TerminalCommandFileState::Missing
+        );
+
+        fs::write(
+            &paths.command_path,
+            terminal_command_contents(&paths.target_path),
+        )
+        .expect("write managed command");
+        assert_eq!(
+            inspect_terminal_command(&paths).expect("inspect managed command"),
+            TerminalCommandFileState::Current
+        );
+
+        fs::write(&paths.command_path, "#!/bin/sh\necho elsewhere\n").expect("write conflict");
+        assert_eq!(
+            inspect_terminal_command(&paths).expect("inspect conflict command"),
+            TerminalCommandFileState::Conflict
+        );
+
+        fs::write(
+            &paths.command_path,
+            format!("#!/bin/sh\n# {TERMINAL_COMMAND_MARKER}\nexec /old/kassiber-ui --cli \"$@\"\n"),
+        )
+        .expect("write stale managed command");
+        assert_eq!(
+            inspect_terminal_command(&paths).expect("inspect stale command"),
+            TerminalCommandFileState::ManagedStale
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn terminal_command_inspection_normalizes_matching_symlink_to_managed_script() {
+        let root = unique_temp_dir("terminal-command-symlink");
+        let bin_dir = root.join("bin");
+        fs::create_dir_all(&bin_dir).expect("create bin dir");
+        let target_path = root
+            .join("Kassiber.app")
+            .join("Contents")
+            .join("MacOS")
+            .join("kassiber-ui");
+        let paths = TerminalCommandPaths {
+            platform: "macos",
+            command_path: bin_dir.join("kassiber"),
+            bin_dir,
+            target_path,
+        };
+        std::os::unix::fs::symlink(&paths.target_path, &paths.command_path)
+            .expect("create launcher symlink");
+
+        assert_eq!(
+            inspect_terminal_command(&paths).expect("inspect symlink command"),
+            TerminalCommandFileState::ManagedStale
+        );
     }
 
     #[test]
@@ -2421,6 +2499,10 @@ mod tests {
         assert_eq!(
             parse("kassiber://settings/privacy"),
             Some(open_settings_action(Some("privacy")))
+        );
+        assert_eq!(
+            parse("kassiber://settings/desktop"),
+            Some(open_settings_action(Some("desktop")))
         );
         assert_eq!(
             parse("kassiber://settings/terminal"),
