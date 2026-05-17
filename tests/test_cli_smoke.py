@@ -60,6 +60,21 @@ _BULLBITCOIN_LN_ORDERS_CSV = """ORDER_NUMBER,ORDER_TYPE,ORDER_SUBTYPE,MESSAGE,OR
 1004,Fiat Payment,Market Order,,order-ln-1,600.00,USD,0.01000000,BTC,60000.00,USD,SEPA Transfer (USD),Bitcoin Lightning,Completed,Completed,Completed,2026-04-18 09:40:00.000Z,2026-04-18 09:50:00.000Z,2026-04-18 09:51:00.000Z,60000.00,USD,bull-ln-buy-tx,lnbc1example
 """
 
+_TWENTYONEBITCOIN_EXISTING_CSV = """date,txid,direction,asset,amount,fee,fiat_value,fiat_rate,kind,description,counterparty
+2022-06-01T03:00:42Z,21bitcoin:2,inbound,BTC,0.00049106,0,36.93,75204.25,buy,Synced from wallet,Synced from 21bitcoin
+2022-10-07T16:31:20Z,l1-withdrawal-tx,outbound,BTC,0.00040000,0.00001000,,,withdrawal,Synced withdrawal,Synced from 21bitcoin
+"""
+
+_TWENTYONEBITCOIN_RECEIVE_CSV = """date,txid,direction,asset,amount,fee,fiat_value,fiat_rate,kind,description,counterparty
+2022-10-07T16:31:20Z,l1-withdrawal-tx,inbound,BTC,0.00040000,0,,,receive,Synced receive,Self custody
+"""
+
+_TWENTYONEBITCOIN_TRANSACTIONS_CSV = """id,exchange_name,depot_name,transaction_date,buy_asset,buy_amount,sell_asset,sell_amount,fee_asset,fee_amount,transaction_type,note,linked_transaction
+1,21bitcoin,main,01.01.222 03:00:39,EUR,22.67,,,,,deposit,Promotion Payout EUR Deposit,
+2,21bitcoin,main,01.06.222 03:00:42,BTC,0.00049106,EUR,36.93,EUR,0.56,trade,Promotion Payout BTC Purchase,
+16,21bitcoin,main,07.10.2022 16:31:20,,,BTC,0.00040000,BTC,0.00001,withdrawal,Automatic Limit L1 BTC Withdrawal,l1-withdrawal-tx
+"""
+
 _CACHE_PRICING_CSV = """date,txid,direction,asset,amount,fee,description
 2024-05-10T09:00:00Z,cache-price-1,inbound,BTC,0.01000000,0,Cached price sample
 """
@@ -2630,6 +2645,198 @@ class AccountBucketBehaviorTest(unittest.TestCase):
         self.assertEqual(buy["pricing_external_ref"], "order-ln-1")
         self.assertEqual(buy["fiat_value_exact"], "600.00")
         self.assertEqual(buy["fiat_rate_exact"], "60000.00")
+
+    def test_z_21bitcoin_csv_enriches_existing_wallet_transaction(self):
+        existing_csv = Path(self._tmp.name) / "21bitcoin-existing-wallet.csv"
+        existing_csv.write_text(_TWENTYONEBITCOIN_EXISTING_CSV, encoding="utf-8")
+        transactions_csv = Path(self._tmp.name) / "21bitcoin-transactions.csv"
+        transactions_csv.write_text(_TWENTYONEBITCOIN_TRANSACTIONS_CSV, encoding="utf-8")
+        self._cli(
+            "profiles", "create",
+            "--workspace", "Buckets",
+            "--fiat-currency", "EUR",
+            "--tax-country", "generic",
+            "Euro",
+        )
+
+        self._cli(
+            "wallets", "create",
+            "--workspace", "Buckets",
+            "--profile", "Euro",
+            "--label", "21bitcoin Matched",
+            "--kind", "custom",
+        )
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Buckets",
+            "--profile", "Euro",
+            "--wallet", "21bitcoin Matched",
+            "--file", str(existing_csv),
+        )
+
+        payload = self._cli(
+            "wallets", "import-21bitcoin",
+            "--workspace", "Buckets",
+            "--profile", "Euro",
+            "--wallet", "21bitcoin Matched",
+            "--file", str(transactions_csv),
+            "--mode", "relevant",
+        )
+        self.assertEqual(payload["kind"], "wallets.import-21bitcoin")
+        self.assertEqual(payload["data"]["input_format"], "21bitcoin_csv")
+        self.assertEqual(payload["data"]["twentyonebitcoin_rows"], 2)
+        self.assertEqual(payload["data"]["imported"], 0)
+        self.assertEqual(payload["data"].get("updated", 0), 0)
+        self.assertEqual(payload["data"]["unchanged"], 1)
+        self.assertEqual(payload["data"]["skipped"], 2)
+        self.assertEqual(payload["data"]["matched"], 1)
+        self.assertEqual(payload["data"]["skipped_unmatched"], 1)
+
+        payload = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "Euro",
+            "--wallet", "21bitcoin Matched",
+            "--order", "asc",
+        )
+        records = {record["external_id"]: record for record in payload["data"]}
+        buy = records["21bitcoin:2"]
+        self.assertEqual(buy["kind"], "buy")
+        self.assertIsNone(buy["pricing_provider"])
+        self.assertNotEqual(buy["pricing_method"], "21bitcoin_csv")
+        withdrawal = records["l1-withdrawal-tx"]
+        self.assertEqual(withdrawal["kind"], "withdrawal")
+        self.assertIsNone(withdrawal["pricing_method"])
+
+    def test_z_21bitcoin_csv_full_imports_active_custodial_ledger_rows(self):
+        receive_csv = Path(self._tmp.name) / "21bitcoin-full-receive-wallet.csv"
+        receive_csv.write_text(_TWENTYONEBITCOIN_RECEIVE_CSV, encoding="utf-8")
+        transactions_csv = Path(self._tmp.name) / "21bitcoin-full-transactions.csv"
+        transactions_csv.write_text(_TWENTYONEBITCOIN_TRANSACTIONS_CSV, encoding="utf-8")
+        self._cli(
+            "profiles", "create",
+            "--workspace", "Buckets",
+            "--fiat-currency", "EUR",
+            "--tax-country", "generic",
+            "Euro",
+        )
+
+        self._cli(
+            "wallets", "create",
+            "--workspace", "Buckets",
+            "--profile", "Euro",
+            "--label", "Cold Wallet",
+            "--kind", "custom",
+        )
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Buckets",
+            "--profile", "Euro",
+            "--wallet", "Cold Wallet",
+            "--file", str(receive_csv),
+        )
+
+        payload = self._cli(
+            "wallets", "import-21bitcoin",
+            "--workspace", "Buckets",
+            "--profile", "Euro",
+            "--file", str(transactions_csv),
+        )
+        data = payload["data"]
+        self.assertEqual(data["mode"], "full")
+        self.assertEqual(data["wallet"], "21bitcoin")
+        self.assertEqual(data["twentyonebitcoin_rows"], 2)
+        self.assertEqual(data["imported"], 2)
+        self.assertEqual(data["skipped"], 0)
+
+        payload = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "Euro",
+            "--wallet", "21bitcoin",
+            "--order", "asc",
+        )
+        records = payload["data"]
+        self.assertEqual(len(records), 2)
+        self.assertTrue(all(not record["excluded"] for record in records))
+        by_external_id = {record["external_id"]: record for record in records}
+        buy = by_external_id["21bitcoin:2"]
+        self.assertEqual(buy["kind"], "buy")
+        self.assertEqual(buy["pricing_provider"], "21bitcoin")
+        self.assertEqual(buy["pricing_method"], "21bitcoin_csv")
+        self.assertEqual(buy["fiat_value_exact"], "37.49")
+        withdrawal = by_external_id["l1-withdrawal-tx"]
+        self.assertEqual(withdrawal["kind"], "withdrawal")
+        self.assertIsNone(withdrawal["pricing_method"])
+        self.assertEqual(withdrawal["pricing_external_ref"], "16")
+
+        payload = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "Euro",
+            "--wallet", "Cold Wallet",
+            "--order", "asc",
+        )
+        receive = payload["data"][0]
+        self.assertEqual(receive["external_id"], "l1-withdrawal-tx")
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        stale = conn.execute(
+            """
+            SELECT t.id AS transaction_id, t.workspace_id, t.profile_id
+            FROM transactions t
+            JOIN wallets w ON w.id = t.wallet_id
+            WHERE t.external_id = ?
+              AND w.label = ?
+            """,
+            ("21bitcoin:2", "21bitcoin"),
+        ).fetchone()
+        conn.execute(
+            """
+            INSERT INTO tags(id, workspace_id, profile_id, code, label, created_at)
+            VALUES(?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "stale-21bitcoin-gap",
+                stale["workspace_id"],
+                stale["profile_id"],
+                "21bitcoin-wallet-gap",
+                "21bitcoin wallet gap",
+                "2024-01-01T00:00:00Z",
+            ),
+        )
+        conn.execute(
+            "INSERT INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
+            (stale["transaction_id"], "stale-21bitcoin-gap"),
+        )
+        conn.execute(
+            "UPDATE transactions SET excluded = 1 WHERE id = ?",
+            (stale["transaction_id"],),
+        )
+        conn.commit()
+        conn.close()
+
+        payload = self._cli(
+            "wallets", "import-21bitcoin",
+            "--workspace", "Buckets",
+            "--profile", "Euro",
+            "--file", str(transactions_csv),
+        )
+        self.assertEqual(payload["data"]["imported"], 0)
+        self.assertEqual(payload["data"]["reactivated"], 1)
+        self.assertEqual(payload["data"]["reconciliation_flags_cleared"], 1)
+
+        payload = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "Euro",
+            "--wallet", "21bitcoin",
+            "--order", "asc",
+        )
+        buy = {record["external_id"]: record for record in payload["data"]}["21bitcoin:2"]
+        self.assertFalse(buy["excluded"])
+        self.assertNotIn("21bitcoin-wallet-gap", {tag["code"] for tag in buy["tags"]})
 
 
 if __name__ == "__main__":

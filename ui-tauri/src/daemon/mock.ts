@@ -1169,6 +1169,7 @@ export const mockDaemon: DaemonTransport = {
             { kind: "phoenix", summary: "Phoenix CSV importer." },
             { kind: "river", summary: "River CSV importer." },
             { kind: "bullbitcoin", summary: "Bull Bitcoin CSV importer." },
+            { kind: "21bitcoin", summary: "21bitcoin CSV importer." },
           ],
           source_formats: [
             "btcpay_csv",
@@ -1178,6 +1179,7 @@ export const mockDaemon: DaemonTransport = {
             "phoenix_csv",
             "river_csv",
             "bullbitcoin_csv",
+            "21bitcoin_csv",
           ],
         } as T,
       };
