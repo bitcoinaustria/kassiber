@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   lockScreenConfig,
   shouldLockEncryptedWorkspaceOnLaunch,
+  shouldStoreTouchIdPassphrase,
   shouldUseDaemonUnlock,
 } from "./appLock";
 
@@ -79,6 +80,37 @@ describe("app lock decisions", () => {
         encryptedWorkspace: true,
         requirePassphraseOnLaunch: true,
         hasSessionUnlock: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("stores Touch ID passphrases only after explicit enrollment or an existing current-root entry", () => {
+    expect(
+      shouldStoreTouchIdPassphrase({
+        platformSupported: true,
+        rememberWithTouchId: true,
+        touchIdStatusConfigured: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldStoreTouchIdPassphrase({
+        platformSupported: true,
+        rememberWithTouchId: undefined,
+        touchIdStatusConfigured: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldStoreTouchIdPassphrase({
+        platformSupported: true,
+        rememberWithTouchId: undefined,
+        touchIdStatusConfigured: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldStoreTouchIdPassphrase({
+        platformSupported: true,
+        rememberWithTouchId: false,
+        touchIdStatusConfigured: true,
       }),
     ).toBe(false);
   });

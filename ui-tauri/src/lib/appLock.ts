@@ -44,3 +44,18 @@ export function lockScreenConfig({
     passphraseRequired: encryptedWorkspace || daemonAuthRequired,
   };
 }
+
+export function shouldStoreTouchIdPassphrase({
+  platformSupported,
+  rememberWithTouchId,
+  touchIdStatusConfigured,
+}: {
+  platformSupported: boolean;
+  rememberWithTouchId?: boolean;
+  touchIdStatusConfigured: boolean;
+}) {
+  if (!platformSupported || rememberWithTouchId === false) {
+    return false;
+  }
+  return rememberWithTouchId === true || touchIdStatusConfigured;
+}

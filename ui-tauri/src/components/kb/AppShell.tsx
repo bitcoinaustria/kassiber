@@ -102,6 +102,7 @@ import type { TouchIdPassphraseStatus } from "@/daemon/transport";
 import {
   lockScreenConfig,
   shouldLockEncryptedWorkspaceOnLaunch,
+  shouldStoreTouchIdPassphrase,
   shouldUseDaemonUnlock,
 } from "@/lib/appLock";
 import { cn } from "@/lib/utils";
@@ -717,11 +718,11 @@ export function AppShell() {
           setDaemonAuthRequired(false);
           setTouchIdAutoPromptPending(false);
           setLocked(false);
-          const shouldRememberWithTouchId =
-            touchIdPlatformSupported &&
-            options?.rememberWithTouchId !== false &&
-            (appLockPolicy.touchIdUnlock ||
-              options?.rememberWithTouchId === true);
+          const shouldRememberWithTouchId = shouldStoreTouchIdPassphrase({
+            platformSupported: touchIdPlatformSupported,
+            rememberWithTouchId: options?.rememberWithTouchId,
+            touchIdStatusConfigured: touchIdStatus?.configured === true,
+          });
           if (shouldRememberWithTouchId) {
             void storeTouchIdPassphrase(passphrase, touchIdDataRoot)
               .then((status) => {
@@ -770,7 +771,6 @@ export function AppShell() {
     },
     [
       addNotification,
-      appLockPolicy.touchIdUnlock,
       bumpDaemonSession,
       clearDaemonQueryCache,
       identity?.importedProject,
@@ -782,6 +782,7 @@ export function AppShell() {
       setAppLockPolicy,
       touchIdDataRoot,
       touchIdPlatformSupported,
+      touchIdStatus?.configured,
     ],
   );
 
