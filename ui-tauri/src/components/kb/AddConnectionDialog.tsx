@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { ScanLine } from "lucide-react";
+import { Loader2, ScanLine } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -2036,7 +2036,16 @@ export function AddConnectionDialog({
         </DialogContent>
       </Dialog>
       {scannerOpen ? (
-        <React.Suspense fallback={null}>
+        <React.Suspense
+          fallback={
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80">
+              <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm shadow-sm">
+                <Loader2 className="size-4 animate-spin" />
+                <span>Opening scanner</span>
+              </div>
+            </div>
+          }
+        >
           <WalletMaterialScannerDialog
             open={scannerOpen}
             onOpenChange={setScannerOpen}

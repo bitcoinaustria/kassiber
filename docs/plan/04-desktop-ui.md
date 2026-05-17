@@ -668,7 +668,10 @@ column stores the ref ID, not the raw value.
   microphone entitlement is required; sync still runs through the Python child,
   which is bundled inside the app and inherits app-level network policy.
 - Windows: `.msi` and `.exe` (NSIS). EV certificate signing.
-- Linux: `.deb` + `.AppImage`. `.rpm` if there's user demand.
+- Windows camera access uses WebView2 runtime prompts for the user-initiated
+  scanner.
+- Linux: `.deb` + `.AppImage`. `.rpm` if there's user demand. Camera access
+  is delegated to the system webview/runtime prompt for the scanner.
 
 ### 5.3 Code signing
 

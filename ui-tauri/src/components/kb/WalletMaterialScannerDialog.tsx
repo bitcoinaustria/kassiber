@@ -24,6 +24,8 @@ import {
 
 QrScanner.WORKER_PATH = qrScannerWorkerUrl;
 
+const STARTING_CAMERA_STATUS = "Starting camera.";
+
 interface WalletMaterialScannerDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -89,6 +91,12 @@ function scannerPreviewLabel({
   return "Scanning wallet QR";
 }
 
+function scanningStatusFor(mode: QrScanMode) {
+  if (mode === "bbqr") return "Looking for BBQR frames.";
+  if (mode === "single") return "Looking for a single QR.";
+  return "Looking for a wallet QR.";
+}
+
 export function WalletMaterialScannerDialog({
   open,
   onOpenChange,
@@ -150,7 +158,7 @@ export function WalletMaterialScannerDialog({
     setError(null);
     setScannedMaterial(null);
     lastScannedRef.current = null;
-    setStatus("Starting camera.");
+    setStatus(STARTING_CAMERA_STATUS);
   }, [open, stopScanner]);
 
   React.useEffect(() => {
@@ -158,13 +166,7 @@ export function WalletMaterialScannerDialog({
     setCollectorState(emptyBbqrCollectorState());
     setProgress(null);
     lastScannedRef.current = null;
-    setStatus(
-      scanMode === "bbqr"
-        ? "Looking for BBQR frames."
-        : scanMode === "single"
-          ? "Looking for a single QR."
-          : "Looking for a wallet QR.",
-    );
+    setStatus(scanningStatusFor(scanMode));
   }, [open, scanMode]);
 
   React.useEffect(() => {
@@ -266,7 +268,9 @@ export function WalletMaterialScannerDialog({
           setDevices(nextDevices);
           setSelectedDeviceId((current) => current || nextDevices[0]?.id || "");
           setStatus((current) =>
-            current === "Starting camera." ? "Looking for a wallet QR." : current,
+            current === STARTING_CAMERA_STATUS
+              ? scanningStatusFor(scanModeRef.current)
+              : current,
           );
         }
       } catch (startError) {

@@ -20,12 +20,15 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' asset: data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost; frame-ancestors 'none'"
+      "csp": "default-src 'self'; img-src 'self' asset: data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost; worker-src 'self' blob:; frame-ancestors 'none'"
     }
   },
   "bundle": {
     "active": false,
     "targets": "all",
+    "macOS": {
+      "infoPlist": "Info.plist"
+    },
     "resources": [
       "binaries/"
     ],

@@ -29,9 +29,6 @@ importers:
       '@tauri-apps/plugin-dialog':
         specifier: ^2.7.0
         version: 2.7.0
-      bbqr:
-        specifier: ^1.2.0
-        version: 1.2.0
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -41,6 +38,9 @@ importers:
       lucide-react:
         specifier: ^0.469.0
         version: 0.469.0(react@19.2.5)
+      pako:
+        specifier: ^2.1.0
+        version: 2.1.0
       qr-scanner:
         specifier: ^1.4.2
         version: 1.4.2
@@ -84,6 +84,9 @@ importers:
       '@types/node':
         specifier: ^22.10.5
         version: 22.19.17
+      '@types/pako':
+        specifier: ^2.0.4
+        version: 2.0.4
       '@types/react':
         specifier: ^19.0.7
         version: 19.2.14
@@ -1633,6 +1636,9 @@ packages:
   '@types/offscreencanvas@2019.7.3':
     resolution: {integrity: sha512-ieXiYmgSRXUDeOntE1InxjWyvEelZGP63M+cGuquuRLuIKKT1osnkXjxev9B7d1nXSug5vpunx+gNlbVxMlC9A==}
 
+  '@types/pako@2.0.4':
+    resolution: {integrity: sha512-VWDCbrLeVXJM9fihYodcLiIv0ku+AlOa/TQ1SvYOaBuyrSKgEcro95LJyIsJ4vSo6BXIxOKxiJAat04CmST9Fw==}
+
   '@types/react-dom@19.2.3':
     resolution: {integrity: sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ==}
     peerDependencies:
@@ -1789,9 +1795,6 @@ packages:
     resolution: {integrity: sha512-HdrkN8eVG2CXxeifv/VdJ4A4RSra1DTW8dc/hdxzhGHN8QePs6gKaWM9pHPcpCoxYZJuOZ8drHmbdpLHjCYjLA==}
     engines: {node: '>=6.0.0'}
     hasBin: true
-
-  bbqr@1.2.0:
-    resolution: {integrity: sha512-wB4UaSMcrnkQgq9ZFoWyvF3/tEAcnakb2n13D4PdppDl6FNvIM+RNmidD0UDeiL6C98syqTdmdD+czkKEgqmWg==}
 
   brace-expansion@1.1.13:
     resolution: {integrity: sha512-9ZLprWS6EENmhEOpjCYW2c8VkmOvckIJZfkr7rBW6dObmfgJ/L1GpSYW5Hpo9lDz4D1+n0Ckz8rU7FwHDQiG/w==}
@@ -2500,6 +2503,9 @@ packages:
   p-locate@5.0.0:
     resolution: {integrity: sha512-LaNjtRWUBY++zB5nE/NwcaoMylSPk+S+ZHNB1TzdbMJMny6dynpAGt7X/tl/QYq3TIeE6nxHppbo2LGymrG5Pw==}
     engines: {node: '>=10'}
+
+  pako@2.1.0:
+    resolution: {integrity: sha512-w+eufiZ1WuJYgPXbV/PO3NCMEc3xqylkKHzp8bxp1uW4qaSNQUkwmLLEc3kKsfz8lpV1F8Ht3U1Cm+9Srog2ug==}
 
   parent-module@1.0.1:
     resolution: {integrity: sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g==}
@@ -4383,6 +4389,8 @@ snapshots:
 
   '@types/offscreencanvas@2019.7.3': {}
 
+  '@types/pako@2.0.4': {}
+
   '@types/react-dom@19.2.3(@types/react@19.2.14)':
     dependencies:
       '@types/react': 19.2.14
@@ -4576,8 +4584,6 @@ snapshots:
   balanced-match@4.0.4: {}
 
   baseline-browser-mapping@2.10.17: {}
-
-  bbqr@1.2.0: {}
 
   brace-expansion@1.1.13:
     dependencies:
@@ -5448,6 +5454,8 @@ snapshots:
   p-locate@5.0.0:
     dependencies:
       p-limit: 3.1.0
+
+  pako@2.1.0: {}
 
   parent-module@1.0.1:
     dependencies:
