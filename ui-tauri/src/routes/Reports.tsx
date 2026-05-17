@@ -1222,14 +1222,12 @@ function HandoffScopePanel() {
     <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
       <div className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-5">
         <div className="flex min-w-0 items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-8 shrink-0"
-            aria-label="Handoff scope"
+          <span
+            className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground"
+            aria-hidden="true"
           >
             <ShieldCheck className="size-4 text-muted-foreground" aria-hidden="true" />
-          </Button>
+          </span>
           <div className="min-w-0">
             <h2 className="truncate text-sm font-medium sm:text-base">
               Handoff scope

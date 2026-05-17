@@ -1,3 +1,8 @@
+/**
+ * Informational taxonomy for Reports UI framing. These labels describe the
+ * intended handoff boundaries; runtime package/export gating is tracked in
+ * TODO.md until scoped audit-package exports exist.
+ */
 export type HandoffExportModeId =
   | "tax_advisor_report"
   | "audit_package"
@@ -27,6 +32,13 @@ export const SENSITIVE_WALLET_MATERIAL = [
   "raw wallet config",
 ] as const;
 
+export const NORMAL_HANDOFF_EXCLUSIONS = [
+  ...SENSITIVE_WALLET_MATERIAL,
+  "AI settings",
+  "logs",
+  "unrelated books",
+] as const;
+
 export const HANDOFF_EXPORT_MODES: readonly HandoffExportMode[] = [
   {
     id: "tax_advisor_report",
@@ -35,7 +47,7 @@ export const HANDOFF_EXPORT_MODES: readonly HandoffExportMode[] = [
     availability: "available",
     summary: "Default handoff for filing and ordinary tax review.",
     includes: ["PDF, XLSX, and CSV report output", "Tax fields", "Reviewed report rows"],
-    excludes: [...SENSITIVE_WALLET_MATERIAL],
+    excludes: [...NORMAL_HANDOFF_EXCLUSIONS],
     walletMaterialPolicy: "excluded",
   },
   {
@@ -49,7 +61,7 @@ export const HANDOFF_EXPORT_MODES: readonly HandoffExportMode[] = [
       "Journals and review state",
       "Chosen evidence attachments",
     ],
-    excludes: [...SENSITIVE_WALLET_MATERIAL],
+    excludes: [...NORMAL_HANDOFF_EXCLUSIONS],
     walletMaterialPolicy: "excluded",
   },
   {

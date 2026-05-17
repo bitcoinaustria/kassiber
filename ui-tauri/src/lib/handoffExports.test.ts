@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   HANDOFF_EXPORT_MODES,
-  SENSITIVE_WALLET_MATERIAL,
+  NORMAL_HANDOFF_EXCLUSIONS,
   handoffModeById,
   normalHandoffModes,
   requiresSensitiveWalletMaterialConsent,
@@ -18,8 +18,8 @@ describe("handoff export modes", () => {
     ]);
     for (const mode of normalModes) {
       expect(requiresSensitiveWalletMaterialConsent(mode)).toBe(false);
-      for (const sensitiveLabel of SENSITIVE_WALLET_MATERIAL) {
-        expect(mode.excludes).toContain(sensitiveLabel);
+      for (const excludedLabel of NORMAL_HANDOFF_EXCLUSIONS) {
+        expect(mode.excludes).toContain(excludedLabel);
       }
     }
   });
