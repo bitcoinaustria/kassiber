@@ -147,6 +147,28 @@ class PaymentHashExactMatchTests(unittest.TestCase):
         inbound = _row(id="b", wallet_id="w", payment_hash=_PAY_HASH, direction="inbound")
         self.assertEqual(suggest_swap_candidates([out, inbound]), [])
 
+    def test_same_asset_transfer_defaults_to_carrying_value_for_generic_profile(self):
+        out = _row(
+            id="cold-out",
+            wallet_id="cold",
+            wallet_label="Cold",
+            direction="outbound",
+            asset="BTC",
+            amount=100_000_000_000,
+        )
+        inbound = _row(
+            id="hot-in",
+            wallet_id="hot",
+            wallet_label="Hot",
+            direction="inbound",
+            asset="BTC",
+            occurred_at="2026-03-14T17:32:00Z",
+            amount=99_990_000_000,
+        )
+        candidates = suggest_swap_candidates([out, inbound], tax_country="generic")
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].default_policy, POLICY_CARRYING_VALUE)
+
 
 class HeuristicMatchTests(unittest.TestCase):
     def test_same_txid_self_transfer_skipped_before_heuristic(self):

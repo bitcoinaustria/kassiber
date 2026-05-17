@@ -243,7 +243,7 @@ class SwapMatchingCliTest(unittest.TestCase):
             data_root, "profiles", "create",
             "--workspace", "Main",
             "--fiat-currency", "USD",
-            "--tax-country", "at",
+            "--tax-country", "generic",
             "Swap",
         )
         for wallet in ("cold-onchain", "hot-onchain"):
@@ -335,6 +335,16 @@ class SwapMatchingCliTest(unittest.TestCase):
         self.assertEqual(candidate["out_asset"], "BTC")
         self.assertEqual(candidate["in_asset"], "BTC")
         self.assertEqual(candidate["default_kind"], "manual")
+        self.assertEqual(candidate["default_policy"], "carrying-value")
+
+        payload, code = _run(
+            data_root, "transfers", "bulk-pair",
+            "--workspace", "Main", "--profile", "Swap",
+            "--candidate-type", "transfer",
+            "--confidence", "strong",
+        )
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload["data"]["summary"]["count"], 1)
 
     def test_dismiss_blocks_candidate_until_expiry(self):
         data_root = self._fresh_root("dismiss")
