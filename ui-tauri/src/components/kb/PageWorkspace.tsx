@@ -392,7 +392,7 @@ function WorkspaceItemFrame({
 }) {
   return (
     <div
-      className={cn("absolute p-1", editing && "kb-workspace-item")}
+      className="absolute p-1"
       style={{
         left: `${(item.x / WORKSPACE_LAYOUT_COLUMNS) * 100}%`,
         top: item.y * WORKSPACE_LAYOUT_ROW_HEIGHT,
