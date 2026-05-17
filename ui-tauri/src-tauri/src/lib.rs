@@ -65,7 +65,7 @@ const MENU_NAV_SOURCE_FUNDS: &str = "kassiber:navigate:source-funds";
 const MENU_NAV_JOURNALS: &str = "kassiber:navigate:journals";
 const MENU_NAV_QUARANTINE: &str = "kassiber:navigate:quarantine";
 const MENU_NAV_ASSISTANT: &str = "kassiber:navigate:assistant";
-const MENU_NAV_DIAGNOSTICS: &str = "kassiber:navigate:diagnostics";
+const MENU_NAV_LOGS: &str = "kassiber:navigate:logs";
 const DOCS_URL: &str = "https://github.com/bitcoinaustria/kassiber#readme";
 const ISSUES_URL: &str = "https://github.com/bitcoinaustria/kassiber/issues";
 
@@ -100,7 +100,8 @@ const DEEP_LINK_ROUTE_HOSTS: &[(&str, &str)] = &[
     ("tax-events", "/journals"),
     ("quarantine", "/quarantine"),
     ("assistant", "/assistant"),
-    ("diagnostics", "/diagnostics"),
+    ("logs", "/logs"),
+    ("diagnostics", "/logs"),
 ];
 
 // Mirrors the React `SETTINGS_SECTION_INTEGRATION` map in
@@ -110,6 +111,8 @@ const DEEP_LINK_ROUTE_HOSTS: &[(&str, &str)] = &[
 // React helper does the final hash → integration-id lookup.
 const DEEP_LINK_SETTINGS_SECTIONS: &[&str] = &[
     "privacy",
+    "developer",
+    "logs",
     "display",
     "security",
     "backends",
@@ -553,7 +556,7 @@ fn save_chat_export_as(destination_path: String, contents: String) -> Result<Str
 
 #[tauri::command]
 fn save_diagnostics_log_as(destination_path: String, contents: String) -> Result<String, String> {
-    write_text_export(destination_path, contents, &["json"])
+    write_text_export(destination_path, contents, &["json", "jsonl", "log", "md"])
 }
 
 fn ensure_export_destination_outside_managed_root(
@@ -1499,7 +1502,7 @@ fn build_app_menu(
     let focus_item = menu_item(app, MENU_WINDOW_FOCUS, "Bring Main Window to Front", None)?;
     let docs_item = menu_item(app, MENU_HELP_DOCS, "Kassiber Documentation", None)?;
     let issues_item = menu_item(app, MENU_HELP_ISSUES, "Report an Issue", None)?;
-    let diagnostics_item = menu_item(app, MENU_NAV_DIAGNOSTICS, "Diagnostics", None)?;
+    let logs_item = menu_item(app, MENU_NAV_LOGS, "Logs", None)?;
     let sync_all_item = menu_item(
         app,
         MENU_WORKFLOW_SYNC_ALL,
@@ -1650,7 +1653,7 @@ fn build_app_menu(
     #[cfg(target_os = "macos")]
     let help_menu = SubmenuBuilder::new(app, "Help")
         .item(&docs_item)
-        .item(&diagnostics_item)
+        .item(&logs_item)
         .separator()
         .item(&issues_item)
         .build()?;
@@ -1658,7 +1661,7 @@ fn build_app_menu(
     #[cfg(not(target_os = "macos"))]
     let help_menu = SubmenuBuilder::new(app, "Help")
         .item(&docs_item)
-        .item(&diagnostics_item)
+        .item(&logs_item)
         .separator()
         .item(&issues_item)
         .separator()
@@ -1689,9 +1692,8 @@ fn build_app_menu(
         workflow_data_item.clone(),
         // View-menu navigation items: clicking these from the Welcome screen
         // would redirect right back via the identity-guard effect, so grey
-        // them out instead. Diagnostics + Settings items remain enabled
-        // because Diagnostics is meant to be reachable while triaging a
-        // broken workspace and Settings has its own no-identity render.
+        // them out instead. Logs is gated behind an unlocked workspace and
+        // Developer tools; Settings has its own no-identity render.
         overview_item.clone(),
         transactions_item.clone(),
         connections_item.clone(),
@@ -1700,6 +1702,7 @@ fn build_app_menu(
         source_funds_item.clone(),
         journals_item.clone(),
         quarantine_item.clone(),
+        logs_item.clone(),
     ];
 
     let handles = AppMenuHandles {
@@ -1821,7 +1824,7 @@ fn menu_action_for_id(id: &str) -> Option<MenuActionPayload> {
         MENU_NAV_JOURNALS => Some(navigate_action("/journals")),
         MENU_NAV_QUARANTINE => Some(navigate_action("/quarantine")),
         MENU_NAV_ASSISTANT => Some(navigate_action("/assistant")),
-        MENU_NAV_DIAGNOSTICS => Some(navigate_action("/diagnostics")),
+        MENU_NAV_LOGS => Some(navigate_action("/logs")),
         _ => None,
     }
 }

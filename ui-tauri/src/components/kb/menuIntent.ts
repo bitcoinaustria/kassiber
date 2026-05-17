@@ -20,7 +20,7 @@ export type AppRoutePath =
   | "/transfers"
   | "/swaps"
   | "/quarantine"
-  | "/diagnostics"
+  | "/logs"
   | "/settings"
   | "/assistant";
 
@@ -30,6 +30,8 @@ export type AppRoutePath =
 // type system says are impossible.
 export type SettingsMenuSection =
   | "privacy"
+  | "developer"
+  | "logs"
   | "display"
   | "security"
   | "backends"
@@ -57,7 +59,7 @@ export const APP_ROUTE_PATHS: readonly AppRoutePath[] = [
   "/transfers",
   "/swaps",
   "/quarantine",
-  "/diagnostics",
+  "/logs",
   "/settings",
   "/assistant",
 ];
@@ -189,9 +191,7 @@ export function dispatchMenuIntent(
       }
       // Welcome-screen users would be bounced straight back to `/` by the
       // identity-guard effect, flashing the wrong route mid-transition.
-      // Diagnostics stays reachable so support links keep working before
-      // a workspace exists.
-      if (!deps.hasWorkspace && payload.route !== "/diagnostics") return;
+      if (!deps.hasWorkspace) return;
       deps.navigate({ to: payload.route });
       return;
     }

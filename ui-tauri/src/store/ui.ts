@@ -154,6 +154,7 @@ export interface UiState {
   appLockPolicy: AppLockPolicy;
   identity: Identity | null;
   aiFeaturesEnabled: boolean;
+  developerToolsEnabled: boolean;
   assistantModelSelection: AiModelSelection | null;
   daemonSession: number;
   notifications: AppNotification[];
@@ -173,6 +174,7 @@ export interface UiState {
   setAppLockPolicy: (policy: Partial<AppLockPolicy>) => void;
   setIdentity: (identity: Identity | null) => void;
   setAiFeaturesEnabled: (enabled: boolean) => void;
+  setDeveloperToolsEnabled: (enabled: boolean) => void;
   setAssistantModelSelection: (selection: AiModelSelection | null) => void;
   bumpDaemonSession: () => void;
   addNotification: (
@@ -247,6 +249,7 @@ export function uiStatePartialForStorage(state: UiState) {
     appLockPolicy: state.appLockPolicy,
     identity: state.identity,
     aiFeaturesEnabled: state.aiFeaturesEnabled,
+    developerToolsEnabled: state.developerToolsEnabled,
     assistantModelSelection: state.assistantModelSelection,
     daemonSession: state.daemonSession,
     notifications: stripNotificationProgress(state.notifications),
@@ -267,6 +270,7 @@ export const useUiStore = create<UiState>()(
       appLockPolicy: DEFAULT_APP_LOCK_POLICY,
       identity: null,
       aiFeaturesEnabled: true,
+      developerToolsEnabled: false,
       assistantModelSelection: null,
       daemonSession: 0,
       notifications: [],
@@ -307,6 +311,8 @@ export const useUiStore = create<UiState>()(
           };
         }),
       setAiFeaturesEnabled: (enabled) => set({ aiFeaturesEnabled: enabled }),
+      setDeveloperToolsEnabled: (enabled) =>
+        set({ developerToolsEnabled: enabled }),
       setAssistantModelSelection: (assistantModelSelection) =>
         set({ assistantModelSelection }),
       bumpDaemonSession: () =>
@@ -419,6 +425,8 @@ export const useUiStore = create<UiState>()(
           },
           identity,
           aiFeaturesEnabled,
+          developerToolsEnabled:
+            restored.developerToolsEnabled ?? current.developerToolsEnabled,
           assistantModelSelection:
             restored.assistantModelSelection ??
             current.assistantModelSelection,

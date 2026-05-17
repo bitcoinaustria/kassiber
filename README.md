@@ -109,7 +109,7 @@ Launch the app. The Welcome screen walks you through optional database
 encryption, your books set and first book, tax policy, your first wallet
 or BTCPay connection, and the optional AI assistant. Every other flow —
 Overview, Connections, Imports, Transactions, Swap Matching, Journals,
-Quarantine, Reports, Source of Funds, Books, Settings, Diagnostics,
+Quarantine, Reports, Source of Funds, Books, Settings, Logs,
 Assistant — is one click away in the sidebar.
 
 ### CLI

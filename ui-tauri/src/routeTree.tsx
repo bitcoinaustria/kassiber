@@ -59,10 +59,7 @@ const Quarantine = lazyRouteComponent(
   () => import("./routes/Quarantine"),
   "Quarantine",
 );
-const Diagnostics = lazyRouteComponent(
-  () => import("./routes/Diagnostics"),
-  "Diagnostics",
-);
+const Logs = lazyRouteComponent(() => import("./routes/Logs"), "Logs");
 const Books = lazyRouteComponent(() => import("./routes/Books"), "Books");
 const Connections = lazyRouteComponent(
   () => import("./routes/Connections"),
@@ -185,10 +182,23 @@ const quarantineRoute = createRoute({
   component: Quarantine,
 });
 
+const logsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/logs",
+  beforeLoad: () => {
+    if (!useUiStore.getState().developerToolsEnabled) {
+      throw redirect({ to: "/overview" });
+    }
+  },
+  component: Logs,
+});
+
 const diagnosticsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/diagnostics",
-  component: Diagnostics,
+  beforeLoad: () => {
+    throw redirect({ to: "/logs" });
+  },
 });
 
 const booksRoute = createRoute({
@@ -282,6 +292,7 @@ const routeTree = rootRoute.addChildren([
     transferMatchingRoute,
     taxEventsRoute,
     quarantineRoute,
+    logsRoute,
     diagnosticsRoute,
     booksRoute,
     profilesRoute,
