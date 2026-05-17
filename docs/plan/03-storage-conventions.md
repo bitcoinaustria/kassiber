@@ -26,6 +26,34 @@ A project is the unit of storage, backup, import/export, and deletion.
 Do not split one project across unrelated writable roots unless a later design
 explicitly requires it.
 
+## Handoff Boundaries
+
+Use the project boundary for privacy isolation and the book boundary for scoped
+accounting handoff:
+
+- **Project export / backup** is the full local custody package for a related
+  set of books. It may contain encrypted wallet configuration, descriptors,
+  backend records, attachments, and every book in the project. It is not the
+  default artifact for tax advisors.
+- **Tax advisor report** is the default external handoff. It contains report
+  outputs and supporting report tables, but it never includes wallet
+  descriptors, xpubs, backend credentials, raw wallet config, AI settings, logs,
+  or unrelated books.
+- **Audit package** is a trusted/internal handoff for exactly one book or an
+  explicit set of books. It may include transaction-level evidence, journals,
+  reviewed source-of-funds state, selected attachments, and import provenance.
+  It still excludes descriptors and xpub-like wallet material by default. Import
+  should create a new project by default, not merge into an existing private
+  project silently.
+- **Technical wallet evidence** is a separate restricted action, not a normal
+  export checkbox. If it is ever implemented, it must require explicit approval
+  and should explain that descriptors or xpub-like material can reveal wallet
+  history and future wallet activity.
+
+Default UI and CLI export flows should prove the accounting without proving
+wallet completeness. Wallet-completeness evidence is a different job with a
+different sensitivity class.
+
 ## Current Layout
 
 Current default state is:

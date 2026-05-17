@@ -445,6 +445,10 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   physical-lot answers
 - [ ] Adopt a per-project storage layout: one SQLite DB per project,
   minimal global app state, and no active top-level wallet side tree
+- [ ] Add scoped handoff export/import flows on top of the per-project layout:
+  tax advisor reports stay report-only, audit packages are explicit
+  one-book-or-selected-books packages, and technical wallet evidence remains a
+  separate restricted approval path rather than a normal export checkbox
 - [ ] Keep transaction document links in the project DB; only add managed
   copied-file storage if a concrete offline/self-contained workflow needs it
 - [x] Keep backend definitions and default-backend selection canonical in
