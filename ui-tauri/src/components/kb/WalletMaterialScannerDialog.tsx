@@ -50,6 +50,16 @@ function calculateScanRegion(video: HTMLVideoElement): QrScanner.ScanRegion {
   };
 }
 
+function isAbortLikeScannerError(error: Error | string) {
+  if (typeof error === "string") {
+    return error.toLowerCase().includes("operation was aborted");
+  }
+  return (
+    error.name === "AbortError" ||
+    error.message.toLowerCase().includes("operation was aborted")
+  );
+}
+
 export function WalletMaterialScannerDialog({
   open,
   onOpenChange,
@@ -59,6 +69,9 @@ export function WalletMaterialScannerDialog({
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const scannerRef = React.useRef<QrScanner | null>(null);
   const lastScannedRef = React.useRef<string | null>(null);
+  const scanModeRef = React.useRef<QrScanMode>("auto");
+  const scannedMaterialRef = React.useRef<string | null>(null);
+  const selectedDeviceIdRef = React.useRef("");
   const [devices, setDevices] = React.useState<QrScanner.Camera[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = React.useState("");
   const [scanMode, setScanMode] = React.useState<QrScanMode>("auto");
@@ -78,6 +91,18 @@ export function WalletMaterialScannerDialog({
     scannerRef.current?.destroy();
     scannerRef.current = null;
   }, []);
+
+  React.useEffect(() => {
+    scanModeRef.current = scanMode;
+  }, [scanMode]);
+
+  React.useEffect(() => {
+    scannedMaterialRef.current = scannedMaterial;
+  }, [scannedMaterial]);
+
+  React.useEffect(() => {
+    selectedDeviceIdRef.current = selectedDeviceId;
+  }, [selectedDeviceId]);
 
   React.useEffect(() => {
     if (!open) {
@@ -107,9 +132,7 @@ export function WalletMaterialScannerDialog({
   }, [open, scanMode]);
 
   React.useEffect(() => {
-    if (!open || scannedMaterial) return;
-    const video = videoRef.current;
-    if (!video) return;
+    if (!open || scannedMaterialRef.current) return;
 
     let cancelled = false;
 
@@ -117,18 +140,27 @@ export function WalletMaterialScannerDialog({
       setIsStarting(true);
       setError(null);
       try {
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => resolve());
+        });
+        if (cancelled) return;
+        const video = videoRef.current;
+        if (!video) {
+          setStatus("Camera preview unavailable.");
+          return;
+        }
         stopScanner();
         const scanner = new QrScanner(
           video,
           (result) => {
-            if (cancelled || scannedMaterial) return;
+            if (cancelled || scannedMaterialRef.current) return;
             const text = result.data.trim();
             if (!text || text === lastScannedRef.current) return;
             lastScannedRef.current = text;
             setCollectorState((current) => {
               const processed = processWalletMaterialQrScan(
                 text,
-                scanMode,
+                scanModeRef.current,
                 current,
               );
               if (processed.status === "single") {
@@ -170,7 +202,11 @@ export function WalletMaterialScannerDialog({
             calculateScanRegion,
             maxScansPerSecond: 8,
             onDecodeError: (scanError) => {
-              if (scanError === QrScanner.NO_QR_CODE_FOUND || scannedMaterial) {
+              if (
+                scanError === QrScanner.NO_QR_CODE_FOUND ||
+                scannedMaterialRef.current ||
+                isAbortLikeScannerError(scanError)
+              ) {
                 return;
               }
               setError(
@@ -179,7 +215,7 @@ export function WalletMaterialScannerDialog({
                   : String(scanError),
               );
             },
-            preferredCamera: selectedDeviceId || "environment",
+            preferredCamera: selectedDeviceIdRef.current || "environment",
             returnDetailedScanResult: true,
           },
         );
@@ -198,7 +234,12 @@ export function WalletMaterialScannerDialog({
           );
         }
       } catch (startError) {
-        if (!cancelled) {
+        if (
+          !cancelled &&
+          !(
+            startError instanceof Error && isAbortLikeScannerError(startError)
+          )
+        ) {
           setError(
             startError instanceof Error
               ? startError.message
@@ -217,7 +258,7 @@ export function WalletMaterialScannerDialog({
       cancelled = true;
       stopScanner();
     };
-  }, [open, scanMode, scannedMaterial, selectedDeviceId, stopScanner]);
+  }, [open, stopScanner]);
 
   const useScannedMaterial = () => {
     if (!scannedMaterial) return;
@@ -291,8 +332,23 @@ export function WalletMaterialScannerDialog({
                   className="ml-auto h-8 min-w-0 rounded-md border border-white/20 bg-black/70 px-2 text-xs text-white"
                   value={selectedDeviceId}
                   onChange={(event) => {
-                    setSelectedDeviceId(event.target.value);
+                    const nextDeviceId = event.target.value;
+                    selectedDeviceIdRef.current = nextDeviceId;
+                    setSelectedDeviceId(nextDeviceId);
                     setScannedMaterial(null);
+                    scannerRef.current?.setCamera(nextDeviceId).catch((cameraError) => {
+                      if (
+                        cameraError instanceof Error &&
+                        isAbortLikeScannerError(cameraError)
+                      ) {
+                        return;
+                      }
+                      setError(
+                        cameraError instanceof Error
+                          ? cameraError.message
+                          : "Could not switch camera.",
+                      );
+                    });
                   }}
                 >
                   {devices.map((device, index) => (
