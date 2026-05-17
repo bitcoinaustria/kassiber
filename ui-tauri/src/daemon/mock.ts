@@ -1584,10 +1584,16 @@ export const mockDaemon: DaemonTransport = {
               checked_minutes: 300,
             },
           ],
-          journals: {
-            entries_created: 12,
-            quarantined: 0,
+          reprice: {
             auto_priced: 8,
+          },
+          journals: {
+            ok: true,
+            result: {
+              entries_created: 12,
+              quarantined: 0,
+              auto_priced: 8,
+            },
           },
         } as T,
       };

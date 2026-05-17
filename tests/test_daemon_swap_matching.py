@@ -220,6 +220,22 @@ class DaemonSwapMatchingTest(unittest.TestCase):
             }
             self.assertTrue({"swap", "boltz"} & mention_keywords)
 
+            envelope = _request_response(
+                proc,
+                {
+                    "kind": "ui.transfers.review_context",
+                    "request_id": "req-review-transfer-type",
+                    "args": {
+                        "workspace": "Main",
+                        "profile": "Swap",
+                        "limit": 5,
+                        "candidate_type": "transfer",
+                    },
+                },
+            )
+            self.assertEqual(envelope["kind"], "ui.transfers.review_context")
+            self.assertEqual(envelope["data"]["summary"]["candidate_count"], 0)
+
         self._with_daemon(call)
 
     def test_02_ui_transfers_bulk_pair_and_list(self):

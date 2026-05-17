@@ -344,7 +344,9 @@ surfaces:
   `ui.transfers.review_context`; it returns a bounded deterministic swap-review
   packet with candidate leg summaries, confidence reasons, fee assessment,
   conflict status, metadata clues, current journal impact if left unpaired,
-  suggested next action, active pairs, rules, and saved swap-candidate views
+  suggested next action, active pairs, rules, and saved swap-candidate views.
+  Pass `candidate_type=transfer` or `candidate_type=swap` when the review packet
+  should follow the split queues.
 - `ui_transfers_list` maps to daemon kind `ui.transfers.list`; it returns active
   reviewed transfer/swap pairs
 - `ui_transfers_rules_list` maps to daemon kind `ui.transfers.rules.list`; it

@@ -239,6 +239,11 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertEqual(get_tool("ui_maintenance_configure").kind_class, "mutating")
         self.assertEqual(get_tool("ui_maintenance_run").name, "ui.maintenance.run")
         self.assertEqual(get_tool("ui_maintenance_run").kind_class, "mutating")
+        review_context_schema = get_tool("ui_transfers_review_context").parameters
+        self.assertEqual(
+            review_context_schema["properties"]["candidate_type"]["enum"],
+            ["transfer", "swap"],
+        )
         self.assertIn("ui_wallets_sync", tool_names)
         self.assertIn("ui_journals_process", tool_names)
         self.assertIn("ui_maintenance_configure", tool_names)

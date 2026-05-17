@@ -427,6 +427,7 @@ def build_swap_review_context_payload(
         "method",
         "asset_pair",
         "route_pair",
+        "candidate_type",
         "time_window_seconds",
         "fee_pct_max",
         "fee_sats_min",

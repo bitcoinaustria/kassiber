@@ -795,6 +795,11 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                     "type": "string",
                     "description": "Rail-aware OUT-IN route, e.g. 'LNBTC-LBTC'.",
                 },
+                "candidate_type": {
+                    "type": "string",
+                    "enum": ["transfer", "swap"],
+                    "description": "Optional filter for same-asset transfers or cross-asset swaps.",
+                },
             },
         },
         kind_class="read_only",
