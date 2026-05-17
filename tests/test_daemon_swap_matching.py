@@ -146,6 +146,36 @@ class DaemonSwapMatchingTest(unittest.TestCase):
                 proc,
                 {
                     "kind": "ui.transfers.suggest",
+                    "request_id": "req-suggest-swap-type",
+                    "args": {
+                        "workspace": "Main",
+                        "profile": "Swap",
+                        "candidate_type": "swap",
+                    },
+                },
+            )
+            self.assertEqual(envelope["kind"], "ui.transfers.suggest")
+            self.assertGreaterEqual(envelope["data"]["counts"]["total"], 1)
+
+            envelope = _request_response(
+                proc,
+                {
+                    "kind": "ui.transfers.suggest",
+                    "request_id": "req-suggest-transfer-type",
+                    "args": {
+                        "workspace": "Main",
+                        "profile": "Swap",
+                        "candidate_type": "transfer",
+                    },
+                },
+            )
+            self.assertEqual(envelope["kind"], "ui.transfers.suggest")
+            self.assertEqual(envelope["data"]["counts"]["total"], 0)
+
+            envelope = _request_response(
+                proc,
+                {
+                    "kind": "ui.transfers.suggest",
                     "request_id": "req-suggest-route",
                     "args": {
                         "workspace": "Main",

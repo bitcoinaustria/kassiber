@@ -463,6 +463,7 @@ def build_swap_review_context_payload(
         asset_pair=args.get("asset_pair"),
         route_pair=args.get("route_pair"),
         method=args.get("method"),
+        candidate_type=args.get("candidate_type") or "swap",
     )
     candidates = list(candidate_payload.get("candidates", []))
     limited_candidates = candidates[:limit]

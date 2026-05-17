@@ -320,7 +320,10 @@ surfaces:
   price, and whether local rates-cache samples can cover those gaps
 - `ui_rates_rebuild` maps to daemon kind `ui.rates.rebuild`; after consent it
   fetches missing provider spot-rate windows, clears provider-derived
-  transaction prices, and reprocesses journals
+  transaction prices, applies cache-backed prices, and attempts to reprocess
+  journals. If journal processing is blocked by ledger or quarantine issues,
+  the tool still returns the completed rate/price sync with a structured
+  journal error instead of reporting the whole price sync as failed
 - `ui_report_blockers` maps to daemon kind `ui.report.blockers`; it returns a
   deterministic report-readiness answer with blockers for missing scope,
   wallets, transactions, stale journals, quarantine, or missing prices
@@ -333,8 +336,10 @@ surfaces:
 - `ui_workspace_health` maps to daemon kind `ui.workspace.health`
 - `ui_next_actions` maps to daemon kind `ui.next_actions`
 - `ui_transfers_suggest` maps to daemon kind `ui.transfers.suggest`; it returns
-  swap/peg candidates with confidence, method, computed fee, and conflict-cluster
-  context without writing review decisions
+  same-asset transfer candidates and cross-asset swap/peg candidates with
+  confidence, method, computed fee, and conflict-cluster context without writing
+  review decisions. Pass `candidate_type=transfer` or `candidate_type=swap` to
+  keep those queues separate.
 - `ui_transfers_review_context` maps to daemon kind
   `ui.transfers.review_context`; it returns a bounded deterministic swap-review
   packet with candidate leg summaries, confidence reasons, fee assessment,

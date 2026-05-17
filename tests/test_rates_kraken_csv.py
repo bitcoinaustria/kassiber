@@ -874,7 +874,9 @@ class KrakenCsvRatesTest(unittest.TestCase):
 
         self.assertEqual(payload["source"], "coinbase-exchange")
         self.assertEqual(payload["deleted"]["transaction_prices"], 1)
-        self.assertIsNotNone(payload["journals"])
+        self.assertEqual(payload["reprice"], {"auto_priced": 1})
+        self.assertTrue(payload["journals"]["ok"])
+        self.assertIsNotNone(payload["journals"]["result"])
         tx = conn.execute(
             """
             SELECT fiat_rate_exact, fiat_value_exact, pricing_source_kind,
@@ -902,6 +904,111 @@ class KrakenCsvRatesTest(unittest.TestCase):
             pricing.SOURCE_FMV_PROVIDER,
         )
         self.assertEqual(preserved["pricing_provider"], "kraken-csv")
+
+    def test_desktop_daemon_rebuild_returns_journal_error_after_price_sync(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+        self._seed_transaction_needing_rate(conn)
+        set_setting(conn, "context_workspace", "workspace-1")
+        set_setting(conn, "context_profile", "profile-1")
+
+        def fake_coinbase_rows(pair, start, end, granularity=60):
+            return [
+                [
+                    1714566780,
+                    "60000.00",
+                    "60040.00",
+                    "60010.00",
+                    "60030.00",
+                    "0.75",
+                ],
+            ]
+
+        with (
+            patch.object(
+                core_rates,
+                "_coinbase_exchange_candles",
+                side_effect=fake_coinbase_rows,
+            ),
+            patch(
+                "kassiber.daemon.process_journals",
+                side_effect=AppError("negative balance", code="app_error"),
+            ),
+        ):
+            payload = _rates_rebuild_payload(
+                conn,
+                {
+                    "source": core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+                    "pair": "BTC-EUR",
+                    "reprice_transactions": True,
+                },
+            )
+
+        self.assertEqual(payload["source"], "coinbase-exchange")
+        self.assertEqual(payload["reprice"], {"auto_priced": 1})
+        self.assertEqual(payload["journals"]["ok"], False)
+        self.assertEqual(payload["journals"]["error"]["message"], "negative balance")
+        tx = conn.execute(
+            """
+            SELECT fiat_rate_exact, fiat_value_exact, pricing_source_kind,
+                   pricing_provider
+            FROM transactions
+            WHERE id = 'tx-1'
+            """
+        ).fetchone()
+        self.assertEqual(tx["fiat_rate_exact"], "60030.00")
+        self.assertEqual(tx["fiat_value_exact"], "60.03000")
+        self.assertEqual(tx["pricing_source_kind"], pricing.SOURCE_FMV_PROVIDER)
+        self.assertEqual(tx["pricing_provider"], "coinbase-exchange")
+        profile = conn.execute(
+            """
+            SELECT last_processed_at, journal_input_version,
+                   last_processed_input_version
+            FROM profiles
+            WHERE id = 'profile-1'
+            """
+        ).fetchone()
+        self.assertIsNone(profile["last_processed_at"])
+        self.assertEqual(profile["journal_input_version"], 1)
+        self.assertEqual(profile["last_processed_input_version"], 0)
+
+    def test_journal_processing_rolls_back_auto_pricing_on_ledger_error(self):
+        from kassiber.cli import handlers
+
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+        self._seed_transaction_needing_rate(conn)
+        core_rates.upsert_rate(
+            conn,
+            "BTC-EUR",
+            "2024-05-01T12:34:00Z",
+            "59900.00",
+            core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+            fetched_at="2024-05-01T00:00:00Z",
+            granularity="minute",
+            method="product_candles",
+        )
+        conn.commit()
+
+        with patch.object(
+            handlers,
+            "build_ledger_state",
+            side_effect=AppError("negative balance", code="app_error"),
+        ):
+            with self.assertRaises(AppError):
+                handlers.process_journals(conn, None, None)
+
+        tx = conn.execute(
+            """
+            SELECT fiat_rate_exact, fiat_value_exact, pricing_source_kind
+            FROM transactions
+            WHERE id = 'tx-1'
+            """
+        ).fetchone()
+        self.assertIsNone(tx["fiat_rate_exact"])
+        self.assertIsNone(tx["fiat_value_exact"])
+        self.assertIsNone(tx["pricing_source_kind"])
+        self.assertFalse(conn.in_transaction)
 
 
 if __name__ == "__main__":

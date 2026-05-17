@@ -183,7 +183,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Quarantine", icon: ShieldAlert, href: "/quarantine" },
       { label: "Source Funds", icon: BadgeCheck, href: "/source-of-funds" },
-      { label: "Review swaps", icon: ArrowLeftRight, href: "/swaps" },
+      { label: "Swaps & Transfers", icon: ArrowLeftRight, href: "/swaps" },
       { label: "Ledger", icon: BookOpen, href: "/journals" },
     ],
   },
@@ -272,11 +272,20 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
     },
   ],
   [
+    "/transfers",
+    {
+      title: "Swaps & Transfers",
+      icon: ArrowLeftRight,
+      searchLabel: "Search swaps and transfers",
+      searchPlaceholder: "Search wallet, asset pair, txid...",
+    },
+  ],
+  [
     "/swaps",
     {
-      title: "Swap candidates",
+      title: "Swaps & Transfers",
       icon: ArrowLeftRight,
-      searchLabel: "Search swap candidates",
+      searchLabel: "Search swaps and transfers",
       searchPlaceholder: "Search wallet, asset pair, txid...",
     },
   ],
@@ -365,6 +374,13 @@ const STATIC_SEARCH_RESULTS: SearchResult[] = [
     detail: "Review ambiguous rows",
     keywords: ["review", "issues", "missing", "price"],
     to: "/quarantine",
+  },
+  {
+    id: "route:swaps-transfers",
+    title: "Swaps & Transfers",
+    detail: "Review candidate swap and transfer pairings",
+    keywords: ["swap", "swaps", "transfer", "transfers", "review", "pair"],
+    to: "/swaps",
   },
   {
     id: "route:settings",

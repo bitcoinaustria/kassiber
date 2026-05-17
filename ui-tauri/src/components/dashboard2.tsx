@@ -175,6 +175,8 @@ type SwapCandidate = {
 export type SwapCandidateReference = {
   in_id: string;
   out_id: string;
+  in_asset?: string;
+  out_asset?: string;
   conflict_set_id?: string;
 };
 
@@ -1167,22 +1169,24 @@ function buildSwapCandidates(
 ): SwapCandidate[] {
   if (candidateRefs) {
     const recordsById = new Map(records.map((txn) => [txn.id, txn]));
-    return nonConflictedCandidateRefs(candidateRefs).flatMap((candidate) => {
-      const input = recordsById.get(candidate.in_id);
-      const out = recordsById.get(candidate.out_id);
-      if (!input || !out) return [];
-      return [
-        {
-          in: input,
-          out,
-          eur:
-            input.amount !== null && out.amount !== null
-              ? Math.min(input.amount, out.amount)
-              : null,
-          btc: Math.min(transactionBtc(input), transactionBtc(out)),
-        },
-      ];
-    });
+    return nonConflictedCandidateRefs(candidateRefs)
+      .filter(isCrossAssetCandidateRef)
+      .flatMap((candidate) => {
+        const input = recordsById.get(candidate.in_id);
+        const out = recordsById.get(candidate.out_id);
+        if (!input || !out) return [];
+        return [
+          {
+            in: input,
+            out,
+            eur:
+              input.amount !== null && out.amount !== null
+                ? Math.min(input.amount, out.amount)
+                : null,
+            btc: Math.min(transactionBtc(input), transactionBtc(out)),
+          },
+        ];
+      });
   }
 
   const inbound = records
@@ -1238,6 +1242,11 @@ function buildSwapCandidates(
   }
 
   return candidates;
+}
+
+function isCrossAssetCandidateRef(candidate: SwapCandidateReference): boolean {
+  if (!candidate.in_asset || !candidate.out_asset) return true;
+  return candidate.in_asset.toUpperCase() !== candidate.out_asset.toUpperCase();
 }
 
 function nonConflictedCandidateRefs(
@@ -1681,7 +1690,7 @@ const TransactionWorkbench = ({
       onClick: handleSwapWorkflowClick,
       ariaLabel:
         knownSwapCandidateCount === null || knownSwapCandidateCount > 0
-          ? "Open swap candidates"
+          ? "Open pairing candidates"
           : "Show paired swap transactions",
     },
     {

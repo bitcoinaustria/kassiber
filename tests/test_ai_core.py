@@ -219,6 +219,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertEqual(get_tool("ui_rates_rebuild").name, "ui.rates.rebuild")
         self.assertEqual(get_tool("ui_rates_rebuild").kind_class, "mutating")
         self.assertEqual(get_tool("ui_report_blockers").name, "ui.report.blockers")
+        self.assertEqual(get_tool("ui_reports_report_blockers").name, "ui.report.blockers")
         self.assertEqual(
             get_tool("ui_audit_changes_since_last_answer").name,
             "ui.audit.changes_since_last_answer",
@@ -304,6 +305,11 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertIn("wallets-backends", index["content"])
         self.assertIn("swap-matching", index["content"])
         self.assertNotIn("kassiber backends create my-esplora", index["content"])
+        fallback_reference = read_skill_reference(
+            "swap-matching",
+            root=Path("/definitely/missing/kassiber/references"),
+        )
+        self.assertEqual(fallback_reference["name"], "swap-matching")
         swap_reference = read_skill_reference("swap-matching")
         self.assertEqual(swap_reference["name"], "swap-matching")
         self.assertIn("Swap matching", swap_reference["content"])

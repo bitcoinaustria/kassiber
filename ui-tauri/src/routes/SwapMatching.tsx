@@ -97,6 +97,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { useKeymap, type Keybinding } from "@/lib/keymap";
 import { screenShellClassName } from "@/lib/screen-layout";
@@ -211,6 +212,22 @@ function feePercent(candidate: SwapCandidate) {
   return (Math.abs(candidate.swap_fee_msat) / candidate.out_amount_msat) * 100;
 }
 
+function candidatePairType(candidate: SwapCandidate) {
+  return candidate.out_asset.toUpperCase() === candidate.in_asset.toUpperCase()
+    ? "transfer"
+    : "swap";
+}
+
+function candidateLabel(candidate: SwapCandidate) {
+  return candidatePairType(candidate) === "transfer"
+    ? "Transfer candidate"
+    : "Swap candidate";
+}
+
+function candidateFeeLabel(candidate: SwapCandidate) {
+  return candidatePairType(candidate) === "transfer" ? "Transfer fee" : "Swap fee";
+}
+
 interface BulkPairResult {
   applied: Array<{ id: string; swap_fee_msat?: number | null }>;
   summary: {
@@ -250,9 +267,9 @@ interface RulesEnvelope {
   rules: SwapRule[];
 }
 
-const SAVED_VIEW_SURFACE = "swap_candidates";
-
 const UNDO_WINDOW_MS = 20_000;
+
+type PairingReviewMode = "swaps" | "transfers";
 
 const RAIL_DETAILS: Record<
   SwapRail,
@@ -303,8 +320,48 @@ function railForLeg(asset: string, walletKind: string): SwapRail {
   return "onchain";
 }
 
+type PairingReviewTab = "swaps" | "transfers";
+
 export function SwapMatching() {
+  const [activeTab, setActiveTab] = useState<PairingReviewTab>("swaps");
+
+  return (
+    <div className={screenShellClassName}>
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as PairingReviewTab)}
+        className="space-y-3"
+      >
+        <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
+          <TabsTrigger value="swaps">Swaps</TabsTrigger>
+          <TabsTrigger value="transfers">Transfers</TabsTrigger>
+        </TabsList>
+        <TabsContent value="swaps" className="mt-0">
+          {activeTab === "swaps" ? <PairingReview mode="swaps" /> : null}
+        </TabsContent>
+        <TabsContent value="transfers" className="mt-0">
+          {activeTab === "transfers" ? <PairingReview mode="transfers" /> : null}
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function PairingReview({ mode }: { mode: PairingReviewMode }) {
   const hideSensitive = useUiStore((s) => s.hideSensitive);
+  const candidateType = mode === "transfers" ? "transfer" : "swap";
+  const savedViewSurface =
+    mode === "transfers" ? "transfer_candidates" : "swap_candidates";
+  const routeFilterEnabled = mode === "swaps";
+  const pageTitle = mode === "transfers" ? "Transfer candidates" : "Swap candidates";
+  const pageDescription =
+    mode === "transfers"
+      ? "Review likely wallet-to-wallet moves before pairing them as transfers."
+      : "Review likely Lightning, Liquid, and on-chain legs before pairing them as swaps.";
+  const emptyText =
+    mode === "transfers"
+      ? "No unpaired transfer candidates. Once likely same-asset wallet moves show up, they will appear here."
+      : "No unpaired swap candidates. Once likely cross-asset or cross-rail legs show up, they will appear here.";
   const [confidence, setConfidence] = useState<string>("all");
   const [method, setMethod] = useState<string>("all");
   const [routePair, setRoutePair] = useState<string>("all");
@@ -347,12 +404,12 @@ export function SwapMatching() {
   }, [undoState]);
 
   const args = useMemo(() => {
-    const next: Record<string, unknown> = {};
+    const next: Record<string, unknown> = { candidate_type: candidateType };
     if (confidence !== "all") next.confidence = confidence;
     if (method !== "all") next.method = method;
-    if (routePair !== "all") next.route_pair = routePair;
+    if (routeFilterEnabled && routePair !== "all") next.route_pair = routePair;
     return next;
-  }, [confidence, method, routePair]);
+  }, [candidateType, confidence, method, routeFilterEnabled, routePair]);
 
   const { data, isLoading, isError, error, refetch, isFetching } =
     useDaemon<SuggestEnvelope>("ui.transfers.suggest", args);
@@ -363,7 +420,7 @@ export function SwapMatching() {
   const unpairMutation = useDaemonMutation<unknown>("ui.transfers.unpair");
 
   const savedViewsQuery = useDaemon<SavedViewsEnvelope>("ui.saved_views.list", {
-    surface: SAVED_VIEW_SURFACE,
+    surface: savedViewSurface,
   });
   const savedViewCreate = useDaemonMutation<SavedView>("ui.saved_views.create");
   const savedViewDelete = useDaemonMutation<unknown>("ui.saved_views.delete");
@@ -384,11 +441,18 @@ export function SwapMatching() {
   const rules = rulesQuery.data?.data?.rules ?? [];
   const enabledRuleCount = rules.filter((rule) => rule.enabled).length;
 
-  const filterIsDirty = confidence !== "all" || method !== "all" || routePair !== "all";
+  const filterIsDirty =
+    confidence !== "all" ||
+    method !== "all" ||
+    (routeFilterEnabled && routePair !== "all");
 
   const applySavedView = (view: SavedView) => {
     setConfidence(typeof view.filter.confidence === "string" ? view.filter.confidence : "all");
     setMethod(typeof view.filter.method === "string" ? view.filter.method : "all");
+    if (!routeFilterEnabled) {
+      setRoutePair("all");
+      return;
+    }
     const savedRoutePair =
       typeof view.filter.route_pair === "string" && ROUTE_PAIR_VALUES.has(view.filter.route_pair)
         ? view.filter.route_pair
@@ -404,10 +468,10 @@ export function SwapMatching() {
     const filterPayload: Record<string, unknown> = {};
     if (confidence !== "all") filterPayload.confidence = confidence;
     if (method !== "all") filterPayload.method = method;
-    if (routePair !== "all") filterPayload.route_pair = routePair;
+    if (routeFilterEnabled && routePair !== "all") filterPayload.route_pair = routePair;
     try {
       await savedViewCreate.mutateAsync({
-        surface: SAVED_VIEW_SURFACE,
+        surface: savedViewSurface,
         name,
         filter: filterPayload,
       });
@@ -625,7 +689,7 @@ export function SwapMatching() {
       setPreviewError(
         error instanceof Error
           ? error.message
-          : "Could not pair the selected swap candidates.",
+          : "Could not pair the selected candidates.",
       );
     }
   };
@@ -774,7 +838,7 @@ export function SwapMatching() {
     bulkPairMutation.isPending || pairMutation.isPending || ruleApply.isPending;
 
   return (
-    <div className={screenShellClassName}>
+    <div className="min-w-0">
       <Collapsible open={rulesExpanded} onOpenChange={setRulesExpanded}>
         <div className="overflow-hidden rounded-xl border bg-card">
           <header className="flex flex-col gap-2.5 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-4">
@@ -784,12 +848,11 @@ export function SwapMatching() {
               </p>
               <div className="mt-0.5 flex flex-wrap items-center gap-2">
                 <h1 className="text-base font-semibold">
-                  Swap candidates
+                  {pageTitle}
                 </h1>
               </div>
               <p className="max-w-3xl text-sm text-muted-foreground">
-                Review likely Lightning, Liquid, and on-chain legs before they become
-                carrying-value pairs.
+                {pageDescription}
               </p>
               {savedViews.length > 0 ? (
                 <div className="flex flex-wrap items-center gap-1 text-xs">
@@ -857,7 +920,7 @@ export function SwapMatching() {
               onClick={() => {
                 setConfidence("all");
                 setMethod("all");
-                setRoutePair("all");
+                if (routeFilterEnabled) setRoutePair("all");
               }}
             />
             <SwapQueueMetric
@@ -919,18 +982,20 @@ export function SwapMatching() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={routePair} onValueChange={setRoutePair}>
-                <SelectTrigger className="h-8 w-44 shrink-0" aria-label="Route filter">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ROUTE_PAIR_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {routeFilterEnabled ? (
+                <Select value={routePair} onValueChange={setRoutePair}>
+                  <SelectTrigger className="h-8 w-44 shrink-0" aria-label="Route filter">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ROUTE_PAIR_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
               {filterIsDirty ? (
                 <>
                   <Button
@@ -949,7 +1014,7 @@ export function SwapMatching() {
                     onClick={() => {
                       setConfidence("all");
                       setMethod("all");
-                      setRoutePair("all");
+                      if (routeFilterEnabled) setRoutePair("all");
                     }}
                   >
                     Clear
@@ -1043,8 +1108,7 @@ export function SwapMatching() {
           ) : candidates.length === 0 ? (
             <div className="border-t px-6 py-8">
               <div className="rounded border border-dashed border-muted-foreground/40 p-6 text-center text-sm text-muted-foreground">
-                No unpaired swap candidates. Once a Lightning ↔ Liquid swap (or
-                BTC ↔ LBTC peg) shows up in your wallets, it will appear here.
+                {emptyText}
               </div>
             </div>
           ) : (
@@ -1067,7 +1131,7 @@ export function SwapMatching() {
                       Incoming
                     </TableHead>
                     <TableHead className="w-[160px] text-right text-xs font-medium text-muted-foreground">
-                      Swap fee
+                      Fee delta
                     </TableHead>
                     <TableHead className="w-[44px]"></TableHead>
                   </TableRow>
@@ -1367,7 +1431,7 @@ export function SwapMatching() {
               {undoState.summary.total_swap_fee_msat
                 ? (
                     <>
-                      {" · swap fees "}
+                      {" · fees "}
                       <span className={blurClass(hideSensitive)}>
                         {formatSats(undoState.summary.total_swap_fee_msat)}
                       </span>
@@ -1620,7 +1684,7 @@ function SwapCandidateDetailSheet({
         {candidate ? (
           <>
             <SheetHeader className="border-b p-4 sm:p-6">
-              <SheetTitle>Swap candidate</SheetTitle>
+              <SheetTitle>{candidateLabel(candidate)}</SheetTitle>
               <SheetDescription>
                 {candidate.method === "payment_hash"
                   ? "Matched by payment hash."
@@ -1704,7 +1768,7 @@ function SwapCandidateDetailSheet({
                   <p className="mt-1 text-muted-foreground">
                     {candidate.method === "payment_hash"
                       ? "Both legs share the same Lightning payment hash."
-                      : "The legs are close in time and amount after accounting for the swap fee."}
+                      : "The legs are close in time and amount after accounting for the fee delta."}
                   </p>
                   {candidate.rule_match ? (
                     <p className="mt-2 text-xs text-muted-foreground">
@@ -1718,7 +1782,7 @@ function SwapCandidateDetailSheet({
                     <DetailRow label="Pair kind" value={kind} />
                     <DetailRow label="Policy" value={policy} />
                     <DetailRow
-                      label="Swap fee"
+                      label={candidateFeeLabel(candidate)}
                       value={
                         <span className={blurClass(hideSensitive)}>
                           {formatSats(candidate.swap_fee_msat)} · {feePercent(candidate).toFixed(2)}%
@@ -1755,7 +1819,7 @@ function previewSummaryText(candidates: SwapCandidate[]): string {
   if (candidates.length === 0) return "No candidates to pair.";
   const totalFeeMsat = candidates.reduce((acc, c) => acc + c.swap_fee_msat, 0);
   const totalCarry = candidates.reduce((acc, c) => acc + c.out_amount, 0);
-  return `${candidates.length} pair${candidates.length === 1 ? "" : "s"} · carrying value ${formatBtc(totalCarry)} · total swap fees ${formatSats(totalFeeMsat)}.`;
+  return `${candidates.length} pair${candidates.length === 1 ? "" : "s"} · outgoing value ${formatBtc(totalCarry)} · total fees ${formatSats(totalFeeMsat)}.`;
 }
 
 interface SaveViewDialogProps {

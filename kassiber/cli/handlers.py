@@ -823,9 +823,31 @@ def _candidate_route_asset(asset, wallet_kind):
     return asset_key
 
 
+def _candidate_same_asset(candidate):
+    return str(candidate.out_asset or "").upper() == str(candidate.in_asset or "").upper()
+
+
 def _filter_transfer_candidates(
-    candidates, *, confidence=None, asset_pair=None, route_pair=None, method=None
+    candidates,
+    *,
+    confidence=None,
+    asset_pair=None,
+    route_pair=None,
+    method=None,
+    candidate_type=None,
 ):
+    if candidate_type:
+        if candidate_type not in ("transfer", "swap"):
+            raise AppError(
+                f"Invalid candidate_type '{candidate_type}', expected 'transfer' or 'swap'",
+                code="validation",
+            )
+        same_asset = candidate_type == "transfer"
+        candidates = [
+            c
+            for c in candidates
+            if _candidate_same_asset(c) == same_asset
+        ]
     if confidence:
         candidates = [c for c in candidates if c.confidence == confidence]
     if method:
@@ -886,6 +908,7 @@ def suggest_transfer_candidates(
     asset_pair=None,
     route_pair=None,
     method=None,
+    candidate_type=None,
 ):
     """Run the matcher and return the candidate envelope.
 
@@ -917,6 +940,7 @@ def suggest_transfer_candidates(
         asset_pair=asset_pair,
         route_pair=route_pair,
         method=method,
+        candidate_type=candidate_type,
     )
     rules = _load_transfer_rules(conn, profile["id"])
     rule_matches, _ = core_swap_rules.apply_rules(candidates, rules)
@@ -952,6 +976,7 @@ def bulk_pair_transfers(
     asset_pair=None,
     route_pair=None,
     method=None,
+    candidate_type=None,
 ):
     """Run the matcher and auto-pair every solo (non-conflicted) candidate
     whose confidence meets the threshold.
@@ -986,6 +1011,7 @@ def bulk_pair_transfers(
         asset_pair=asset_pair,
         route_pair=route_pair,
         method=method,
+        candidate_type=candidate_type,
     )
     cluster_sizes = {}
     for candidate in candidates:
@@ -1035,6 +1061,7 @@ def apply_transfer_rules(
     asset_pair=None,
     route_pair=None,
     method=None,
+    candidate_type=None,
 ):
     """Auto-pair every non-conflicted candidate matched by enabled rules."""
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
@@ -1059,6 +1086,7 @@ def apply_transfer_rules(
         asset_pair=asset_pair,
         route_pair=route_pair,
         method=method,
+        candidate_type=candidate_type,
     )
     rules = _load_transfer_rules(conn, profile["id"])
     rules_by_id = {rule.id: rule for rule in rules}
@@ -2545,94 +2573,101 @@ def build_ledger_state(conn, profile):
 def process_journals(conn, workspace_ref, profile_ref):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     require_tax_processing_supported(profile)
-    auto_priced = auto_price_transactions_from_rates_cache(conn, profile)
-    state = build_ledger_state(conn, profile)
-    conn.execute("DELETE FROM journal_entries WHERE profile_id = ?", (profile["id"],))
-    conn.execute("DELETE FROM journal_quarantines WHERE profile_id = ?", (profile["id"],))
-    created_at = now_iso()
-    pricing_by_tx = {
-        row["id"]: row
-        for row in conn.execute(
-            """
-            SELECT id, pricing_source_kind, pricing_quality
-            FROM transactions
-            WHERE profile_id = ?
-            """,
+    conn.execute("SAVEPOINT journals_process")
+    try:
+        auto_priced = auto_price_transactions_from_rates_cache(conn, profile)
+        state = build_ledger_state(conn, profile)
+        conn.execute("DELETE FROM journal_entries WHERE profile_id = ?", (profile["id"],))
+        conn.execute("DELETE FROM journal_quarantines WHERE profile_id = ?", (profile["id"],))
+        created_at = now_iso()
+        pricing_by_tx = {
+            row["id"]: row
+            for row in conn.execute(
+                """
+                SELECT id, pricing_source_kind, pricing_quality
+                FROM transactions
+                WHERE profile_id = ?
+                """,
+                (profile["id"],),
+            ).fetchall()
+        }
+        for entry in state["entries"]:
+            exact_payload = pricing.journal_exact_payload(entry)
+            tx_pricing = pricing_by_tx.get(entry["transaction_id"])
+            conn.execute(
+                """
+                INSERT INTO journal_entries(
+                    id, workspace_id, profile_id, transaction_id, wallet_id, account_id,
+                    occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
+                    cost_basis, proceeds, gain_loss, fiat_value_exact, unit_cost_exact,
+                    cost_basis_exact, proceeds_exact, gain_loss_exact, pricing_source_kind,
+                    pricing_quality, description, at_category, at_kennzahl, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    entry["id"],
+                    entry["workspace_id"],
+                    entry["profile_id"],
+                    entry["transaction_id"],
+                    entry["wallet_id"],
+                    entry["account_id"],
+                    entry["occurred_at"],
+                    entry["entry_type"],
+                    entry["asset"],
+                    btc_to_msat(entry["quantity"]),
+                    float(entry["fiat_value"]),
+                    float(entry["unit_cost"]),
+                    float(entry["cost_basis"]) if entry["cost_basis"] is not None else None,
+                    float(entry["proceeds"]) if entry["proceeds"] is not None else None,
+                    float(entry["gain_loss"]) if entry["gain_loss"] is not None else None,
+                    exact_payload["fiat_value_exact"],
+                    exact_payload["unit_cost_exact"],
+                    exact_payload["cost_basis_exact"],
+                    exact_payload["proceeds_exact"],
+                    exact_payload["gain_loss_exact"],
+                    tx_pricing["pricing_source_kind"] if tx_pricing else None,
+                    tx_pricing["pricing_quality"] if tx_pricing else None,
+                    entry["description"],
+                    entry.get("at_category"),
+                    entry.get("at_kennzahl"),
+                    created_at,
+                ),
+            )
+        for quarantine in state["quarantines"]:
+            conn.execute(
+                """
+                INSERT INTO journal_quarantines(
+                    transaction_id, workspace_id, profile_id, reason, detail_json, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    quarantine["transaction_id"],
+                    quarantine["workspace_id"],
+                    quarantine["profile_id"],
+                    quarantine["reason"],
+                    quarantine["detail_json"],
+                    created_at,
+                ),
+            )
+        tx_count = conn.execute(
+            "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded = 0",
             (profile["id"],),
-        ).fetchall()
-    }
-    for entry in state["entries"]:
-        exact_payload = pricing.journal_exact_payload(entry)
-        tx_pricing = pricing_by_tx.get(entry["transaction_id"])
+        ).fetchone()["count"]
         conn.execute(
             """
-            INSERT INTO journal_entries(
-                id, workspace_id, profile_id, transaction_id, wallet_id, account_id,
-                occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
-                cost_basis, proceeds, gain_loss, fiat_value_exact, unit_cost_exact,
-                cost_basis_exact, proceeds_exact, gain_loss_exact, pricing_source_kind,
-                pricing_quality, description, at_category, at_kennzahl, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            UPDATE profiles
+            SET last_processed_at = ?,
+                last_processed_tx_count = ?,
+                last_processed_input_version = journal_input_version
+            WHERE id = ?
             """,
-            (
-                entry["id"],
-                entry["workspace_id"],
-                entry["profile_id"],
-                entry["transaction_id"],
-                entry["wallet_id"],
-                entry["account_id"],
-                entry["occurred_at"],
-                entry["entry_type"],
-                entry["asset"],
-                btc_to_msat(entry["quantity"]),
-                float(entry["fiat_value"]),
-                float(entry["unit_cost"]),
-                float(entry["cost_basis"]) if entry["cost_basis"] is not None else None,
-                float(entry["proceeds"]) if entry["proceeds"] is not None else None,
-                float(entry["gain_loss"]) if entry["gain_loss"] is not None else None,
-                exact_payload["fiat_value_exact"],
-                exact_payload["unit_cost_exact"],
-                exact_payload["cost_basis_exact"],
-                exact_payload["proceeds_exact"],
-                exact_payload["gain_loss_exact"],
-                tx_pricing["pricing_source_kind"] if tx_pricing else None,
-                tx_pricing["pricing_quality"] if tx_pricing else None,
-                entry["description"],
-                entry.get("at_category"),
-                entry.get("at_kennzahl"),
-                created_at,
-            ),
+            (created_at, tx_count, profile["id"]),
         )
-    for quarantine in state["quarantines"]:
-        conn.execute(
-            """
-            INSERT INTO journal_quarantines(
-                transaction_id, workspace_id, profile_id, reason, detail_json, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?)
-            """,
-            (
-                quarantine["transaction_id"],
-                quarantine["workspace_id"],
-                quarantine["profile_id"],
-                quarantine["reason"],
-                quarantine["detail_json"],
-                created_at,
-            ),
-        )
-    tx_count = conn.execute(
-        "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded = 0",
-        (profile["id"],),
-    ).fetchone()["count"]
-    conn.execute(
-        """
-        UPDATE profiles
-        SET last_processed_at = ?,
-            last_processed_tx_count = ?,
-            last_processed_input_version = journal_input_version
-        WHERE id = ?
-        """,
-        (created_at, tx_count, profile["id"]),
-    )
+    except Exception:
+        conn.execute("ROLLBACK TO SAVEPOINT journals_process")
+        conn.execute("RELEASE SAVEPOINT journals_process")
+        raise
+    conn.execute("RELEASE SAVEPOINT journals_process")
     conn.commit()
     result = {
         "profile": profile["label"],

@@ -932,6 +932,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Match OUT-IN asset shape, e.g. LBTC-BTC for a peg-out",
     )
     transfers_suggest.add_argument(
+        "--candidate-type",
+        choices=("transfer", "swap"),
+        dest="candidate_type",
+        help="Restrict candidates to same-asset transfers or cross-asset swaps",
+    )
+    transfers_suggest.add_argument(
         "--time-window-seconds",
         dest="time_window_seconds",
         type=int,
@@ -955,6 +961,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--asset-pair",
         dest="asset_pair",
         help="Restrict to OUT-IN asset shape, e.g. LBTC-BTC for a peg-out",
+    )
+    transfers_bulk_pair.add_argument(
+        "--candidate-type",
+        choices=("transfer", "swap"),
+        dest="candidate_type",
+        help="Restrict candidates to same-asset transfers or cross-asset swaps",
     )
     transfers_bulk_pair.add_argument(
         "--time-window-seconds",
@@ -1027,6 +1039,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--asset-pair",
         dest="asset_pair",
         help="Restrict to OUT-IN asset shape, e.g. LBTC-BTC for a peg-out",
+    )
+    tr_rules_apply.add_argument(
+        "--candidate-type",
+        choices=("transfer", "swap"),
+        dest="candidate_type",
+        help="Restrict candidates to same-asset transfers or cross-asset swaps",
     )
     tr_rules_apply.add_argument(
         "--time-window-seconds",
@@ -2227,6 +2245,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     confidence=getattr(args, "confidence", None),
                     asset_pair=getattr(args, "asset_pair", None),
                     method=getattr(args, "method", None),
+                    candidate_type=getattr(args, "candidate_type", None),
                 ),
             )
         if args.transfers_command == "bulk-pair":
@@ -2242,6 +2261,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     fee_sats_min=args.fee_sats_min,
                     asset_pair=getattr(args, "asset_pair", None),
                     method=getattr(args, "method", None),
+                    candidate_type=getattr(args, "candidate_type", None),
                 ),
             )
         if args.transfers_command == "dismiss":
@@ -2312,6 +2332,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                         confidence=getattr(args, "confidence", None),
                         asset_pair=getattr(args, "asset_pair", None),
                         method=getattr(args, "method", None),
+                        candidate_type=getattr(args, "candidate_type", None),
                     ),
                 )
     if args.command == "views":

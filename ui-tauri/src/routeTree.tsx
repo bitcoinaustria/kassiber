@@ -171,6 +171,14 @@ const swapMatchingRoute = createRoute({
   component: SwapMatching,
 });
 
+const transferMatchingRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/transfers",
+  beforeLoad: () => {
+    throw redirect({ to: "/swaps" });
+  },
+});
+
 const quarantineRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/quarantine",
@@ -271,6 +279,7 @@ const routeTree = rootRoute.addChildren([
     sourceFundsRoute,
     journalsRoute,
     swapMatchingRoute,
+    transferMatchingRoute,
     taxEventsRoute,
     quarantineRoute,
     diagnosticsRoute,
