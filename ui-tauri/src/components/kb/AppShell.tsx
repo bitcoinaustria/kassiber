@@ -34,6 +34,7 @@ import {
   ShieldAlert,
   Sun,
   SunMoon,
+  TerminalSquare,
   User,
   Users,
   Wallet,
@@ -117,6 +118,7 @@ import type { ProfilesSnapshot } from "@/mocks/profiles";
 import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
 import type { AssistantReturnPath } from "@/components/ai/assistantSession";
 import kLedgerMarkUrl from "@/assets/k-ledger-mark-transparent.svg";
+import { APP_COMMIT, APP_VERSION } from "@/lib/appVersion";
 import { ScreenAssistantMockup } from "./ScreenAssistantMockup";
 import { PreAlphaBanner } from "./PreAlphaBanner";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
@@ -164,8 +166,6 @@ type NotificationItem = Omit<AppNotification, "createdAt"> & {
   actionLabel?: string;
 };
 
-const APP_VERSION = "0.22.0";
-const APP_COMMIT = __APP_COMMIT__;
 const APP_COMMIT_SHORT = APP_COMMIT ? APP_COMMIT.slice(0, 7) : "unknown";
 const NATIVE_MENU_EVENT = "kassiber:intent";
 const topNavIconButtonClassName =
@@ -238,11 +238,11 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
     },
   ],
   [
-    "/diagnostics",
+    "/logs",
     {
-      title: "Diagnostics",
-      icon: Bug,
-      searchLabel: "Search diagnostics",
+      title: "Logs",
+      icon: TerminalSquare,
+      searchLabel: "Search logs",
       searchPlaceholder: "Search daemon errors, logs...",
     },
   ],
@@ -401,11 +401,11 @@ const STATIC_SEARCH_RESULTS: SearchResult[] = [
     to: "/settings",
   },
   {
-    id: "route:diagnostics",
-    title: "Diagnostics",
-    detail: "Daemon log and troubleshooting export",
+    id: "route:logs",
+    title: "Logs",
+    detail: "Typed local log stream and redacted troubleshooting export",
     keywords: ["log", "logs", "error", "daemon", "download"],
-    to: "/diagnostics",
+    to: "/logs",
   },
   {
     id: "route:assistant",
@@ -437,6 +437,7 @@ function buildSearchResults(
   snapshot: OverviewSnapshot | undefined,
   query: string,
   aiFeaturesEnabled: boolean,
+  developerToolsEnabled: boolean,
 ): SearchResult[] {
   if (!query.trim()) return [];
 
@@ -495,9 +496,11 @@ function buildSearchResults(
   ];
 
   return [
-    ...STATIC_SEARCH_RESULTS.filter(
-      (result) => aiFeaturesEnabled || result.to !== "/assistant",
-    ),
+    ...STATIC_SEARCH_RESULTS.filter((result) => {
+      if (!aiFeaturesEnabled && result.to === "/assistant") return false;
+      if (!developerToolsEnabled && result.to === "/logs") return false;
+      return true;
+    }),
     ...dynamicResults,
   ]
     .filter((result) => searchMatches(result, query))
@@ -531,7 +534,7 @@ function notificationRouteFor(title: string): AppRoutePath | undefined {
     normalized.includes("failed") ||
     normalized.includes("daemon")
   ) {
-    return "/diagnostics";
+    return "/logs";
   }
   return undefined;
 }
@@ -544,7 +547,7 @@ function assistantReturnPathFor(pathname: string): AssistantReturnPath {
   if (pathname === "/books" || pathname === "/profiles") return "/books";
   if (pathname === "/journals") return "/journals";
   if (pathname === "/quarantine") return "/quarantine";
-  if (pathname === "/diagnostics") return "/diagnostics";
+  if (pathname === "/logs" || pathname === "/diagnostics") return "/logs";
   if (pathname === "/settings") return "/settings";
   return "/overview";
 }
@@ -560,6 +563,7 @@ export function AppShell() {
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const addNotification = useUiStore((s) => s.addNotification);
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
+  const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const bumpDaemonSession = useUiStore((s) => s.bumpDaemonSession);
   const { syncAll, isSyncing } = useWalletSyncAction();
   const dataMode = useUiStore((s) => s.dataMode);
@@ -1211,6 +1215,7 @@ export function AppShell() {
               onLock={lockApp}
               daemonEnabled={daemonEnabled}
               aiFeaturesEnabled={aiFeaturesEnabled}
+              developerToolsEnabled={developerToolsEnabled}
             />
             <div className="min-h-0 w-full overflow-hidden lg:pt-1.5 lg:pr-1.5 lg:pb-1.5">
               <div className="relative flex h-full w-full flex-col items-center justify-start overflow-hidden bg-background lg:rounded-tl-xl lg:rounded-tr-xl">
@@ -1314,11 +1319,13 @@ function AppSidebar({
   onLock,
   daemonEnabled,
   aiFeaturesEnabled,
+  developerToolsEnabled,
 }: {
   pathname: string;
   onLock: () => void;
   daemonEnabled: boolean;
   aiFeaturesEnabled: boolean;
+  developerToolsEnabled: boolean;
 }) {
   const navGroups = React.useMemo(
     () =>
@@ -1352,7 +1359,10 @@ function AppSidebar({
         ))}
       </SidebarContent>
       <SidebarFooter>
-        <SidebarActions pathname={pathname} />
+        <SidebarActions
+          pathname={pathname}
+          developerToolsEnabled={developerToolsEnabled}
+        />
         <NavUser onLock={onLock} daemonEnabled={daemonEnabled} />
         <AppVersion />
       </SidebarFooter>
@@ -1361,11 +1371,17 @@ function AppSidebar({
   );
 }
 
-function SidebarActions({ pathname }: { pathname: string }) {
+function SidebarActions({
+  pathname,
+  developerToolsEnabled,
+}: {
+  pathname: string;
+  developerToolsEnabled: boolean;
+}) {
   const dataMode = useUiStore((state) => state.dataMode);
   const setDataMode = useUiStore((state) => state.setDataMode);
   const isRealData = dataMode === "real";
-  const supportActive = pathname === "/diagnostics";
+  const supportActive = pathname === "/logs" || pathname === "/diagnostics";
 
   return (
     <SidebarMenu>
@@ -1397,17 +1413,16 @@ function SidebarActions({ pathname }: { pathname: string }) {
             </CollapsibleTrigger>
             <CollapsibleContent>
               <SidebarMenuSub>
-                <SidebarMenuSubItem>
-                  <SidebarMenuSubButton
-                    asChild
-                    isActive={pathname === "/diagnostics"}
-                  >
-                    <Link to="/diagnostics">
-                      <Bug className="size-3.5" aria-hidden="true" />
-                      <span>Diagnostics</span>
-                    </Link>
-                  </SidebarMenuSubButton>
-                </SidebarMenuSubItem>
+                {developerToolsEnabled ? (
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={pathname === "/logs"}>
+                      <Link to="/logs">
+                        <TerminalSquare className="size-3.5" aria-hidden="true" />
+                        <span>Logs</span>
+                      </Link>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                ) : null}
                 <SidebarMenuSubItem>
                   <SidebarMenuSubButton asChild>
                     <a
@@ -1646,6 +1661,7 @@ function AppDashboardHeader({
   const appNotifications = useUiStore((s) => s.notifications);
   const clearNotifications = useUiStore((s) => s.clearNotifications);
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
+  const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const { runJournalProcessing, isProcessingJournals } =
     useJournalProcessingAction();
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -1661,8 +1677,14 @@ function AppDashboardHeader({
   );
   const snapshot = data?.data;
   const searchResults = React.useMemo(
-    () => buildSearchResults(snapshot, searchQuery, aiFeaturesEnabled),
-    [snapshot, searchQuery, aiFeaturesEnabled],
+    () =>
+      buildSearchResults(
+        snapshot,
+        searchQuery,
+        aiFeaturesEnabled,
+        developerToolsEnabled,
+      ),
+    [snapshot, searchQuery, aiFeaturesEnabled, developerToolsEnabled],
   );
   const searchListId = React.useId();
   const searchActiveId = searchResults[activeSearchIndex]?.id
@@ -1750,7 +1772,7 @@ function AppDashboardHeader({
       ...item,
       to:
         item.tone === "error"
-          ? ("/diagnostics" as const)
+          ? (developerToolsEnabled ? ("/logs" as const) : ("/settings" as const))
           : notificationRouteFor(item.title),
     })),
     ...systemNotificationItems,

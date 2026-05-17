@@ -200,16 +200,19 @@ what changed after an exchange CSV import. For
 `source_format="bullbitcoin_csv"`, `wallet` is optional. The default
 `mode="relevant"` treats the export as book-wide exchange evidence and enriches
 only unique matching transactions in the active profile. `mode="full"` imports
-all completed Bull orders into the selected or default `Bull Bitcoin` wallet as
-excluded evidence, then flags each row as `matched`, `unmatched`, or
-`ambiguous` against this book's wallet transactions. The Bull result also
-includes `matched`, `skipped_unmatched`, and `skipped_ambiguous` in relevant
-mode, or `matched`, `unmatched`, `ambiguous`, `excluded`, and
-`reconciliation_records` in full mode.
-`source_format="pocketbitcoin_csv"` follows the same mode contract, using a
-default `Pocket Bitcoin` wallet in full mode and returning `pocketbitcoin_rows`.
-Because Pocket's CSV does not expose the blockchain txid, relevant-mode matching
-uses the net BTC amount, direction, asset, and nearby timestamp.
+all normalized Bull Bitcoin rows into the selected or default provider wallet
+as excluded evidence, then flags each row as `matched`, `unmatched`, or
+`ambiguous` against this book's wallet transactions. For
+`source_format="21bitcoin_csv"`, the default `mode="full"` imports active
+custodial ledger rows into the selected or default `21bitcoin` wallet; explicit
+`mode="relevant"` keeps the evidence-only matching behavior for L1 withdrawal
+rows. `source_format="pocketbitcoin_csv"` follows the Bull Bitcoin mode
+contract, uses a default `Pocket Bitcoin` wallet in full mode, and returns
+`pocketbitcoin_rows`. Because Pocket's CSV does not expose the blockchain txid,
+relevant-mode matching uses the net BTC amount, direction, asset, and nearby
+timestamp. The result also includes `matched`, `skipped_unmatched`, and
+`skipped_ambiguous` in relevant mode, or `matched`, `unmatched`, `ambiguous`,
+`excluded`, and `reconciliation_records` in Bull Bitcoin/Pocket full mode.
 
 `ui.connections.sources` returns the daemon's authoritative catalog of
 supported wallet kinds (with summary/config-fields metadata) and the

@@ -16,14 +16,18 @@ import {
   Download,
   ExternalLink,
   FileArchive,
+  FileCheck2,
   FileSpreadsheet,
   FileText,
   FolderOpen,
+  KeyRound,
   Landmark,
   Loader2,
+  PackageCheck,
   PieChart,
   RefreshCw,
   ShieldAlert,
+  ShieldCheck,
   Sigma,
   WalletCards,
 } from "lucide-react";
@@ -56,6 +60,10 @@ import {
   saveExportedFileAs,
 } from "@/daemon/transport";
 import { saveFile } from "@/lib/filePicker";
+import {
+  HANDOFF_EXPORT_MODES,
+  type HandoffExportMode,
+} from "@/lib/handoffExports";
 import {
   reportExportStatusForYear,
   type ReportExportStatus,
@@ -635,6 +643,7 @@ function ReportsView({
             onExport={handleExport}
             onOpenExport={handleOpenExport}
           />
+          <HandoffScopePanel />
           <SummaryPdfPanel
             year={effectiveYear}
             wallets={walletChoices}
@@ -1126,14 +1135,16 @@ function ReportFilesPanel({
             variant="outline"
             size="icon"
             className="size-8 shrink-0"
-            aria-label="Report files"
+            aria-label="Tax advisor report"
           >
             <FolderOpen className="size-4 text-muted-foreground" />
           </Button>
           <div>
-            <h2 className="text-sm font-medium sm:text-base">Report files</h2>
+            <h2 className="text-sm font-medium sm:text-base">
+              Tax advisor report
+            </h2>
             <p className="text-[10px] text-muted-foreground sm:text-xs">
-              Export report files
+              Safe external handoff · no descriptors or xpubs
             </p>
           </div>
         </div>
@@ -1200,6 +1211,92 @@ function ReportFilesPanel({
             }
             onExport={onExport}
           />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HandoffScopePanel() {
+  return (
+    <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
+      <div className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-5">
+        <div className="flex min-w-0 items-center gap-2">
+          <span
+            className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground"
+            aria-hidden="true"
+          >
+            <ShieldCheck className="size-4 text-muted-foreground" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-medium sm:text-base">
+              Handoff scope
+            </h2>
+            <p className="truncate text-[10px] text-muted-foreground sm:text-xs">
+              Report exports stay separate from wallet verification data
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="px-4 pt-3 pb-4 sm:px-5">
+        <div className="divide-y rounded-lg border bg-background/50">
+          {HANDOFF_EXPORT_MODES.map((mode) => (
+            <HandoffModeRow key={mode.id} mode={mode} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HandoffModeRow({ mode }: { mode: HandoffExportMode }) {
+  const Icon =
+    mode.id === "tax_advisor_report"
+      ? FileCheck2
+      : mode.id === "audit_package"
+        ? PackageCheck
+        : KeyRound;
+  const badgeClass =
+    mode.sensitivity === "External"
+      ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+      : mode.sensitivity === "Trusted"
+        ? "border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+        : "border-destructive/35 bg-destructive/10 text-destructive";
+  const availabilityLabel =
+    mode.availability === "available"
+      ? "Available"
+      : mode.availability === "planned"
+        ? "Planned"
+        : "Separate approval";
+
+  return (
+    <div className="flex items-start gap-3 px-3 py-3">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground ring-1 ring-inset ring-border">
+        <Icon className="size-4" aria-hidden="true" />
+      </span>
+      <div className="min-w-0 flex-1 space-y-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="min-w-0 truncate text-sm font-semibold">
+            {mode.title}
+          </span>
+          <Badge variant="outline" className={cn("rounded-md", badgeClass)}>
+            {mode.sensitivity}
+          </Badge>
+          <Badge variant="outline" className="rounded-md">
+            {availabilityLabel}
+          </Badge>
+        </div>
+        <p className="text-xs leading-5 text-muted-foreground">{mode.summary}</p>
+        <div className="grid gap-2 text-[10px] leading-4 text-muted-foreground sm:grid-cols-2">
+          <p>
+            <span className="font-medium text-foreground">Includes: </span>
+            {mode.includes.join(", ")}
+          </p>
+          <p>
+            <span className="font-medium text-foreground">Excludes: </span>
+            {mode.excludes.join(", ")}
+          </p>
         </div>
       </div>
     </div>

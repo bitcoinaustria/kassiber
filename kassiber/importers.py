@@ -27,6 +27,9 @@ Import format families live here:
     Bitcoin on-chain, Lightning, or Liquid <-> fiat orders are normalized
     to exchange execution pricing, keyed by the exported transaction id
     when present.
+  - 21bitcoin (`21bitcoin_csv`) — transaction CSV export. BTC-side trades
+    and withdrawals are normalized as a custodial platform ledger; fiat-only
+    cash rows are skipped.
   - Pocket Bitcoin (`pocketbitcoin_csv`) — account CSV export. Exchange rows
     are normalized as exact execution evidence and paired with adjacent BTC
     withdrawal rows when the export records the on-chain payout separately.
@@ -46,6 +49,7 @@ a validation envelope rather than a bare `ValueError` / `KeyError`.
 import csv
 import json
 import os
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from .envelope import json_ready
@@ -93,6 +97,8 @@ def load_import_records(file_path, input_format):
         return load_river_csv_records(file_path)
     if input_format == "bullbitcoin_csv":
         return load_bullbitcoin_csv_records(file_path)
+    if input_format == "21bitcoin_csv":
+        return load_twentyonebitcoin_csv_records(file_path)
     if input_format == "pocketbitcoin_csv":
         return load_pocketbitcoin_csv_records(file_path)
     raise AppError(f"Unsupported input format '{input_format}'")
@@ -585,13 +591,6 @@ def _pocketbitcoin_crypto_asset(currency):
     return None
 
 
-def _pocketbitcoin_fiat_amount(amount, currency):
-    if not currency or currency in _POCKETBITCOIN_CRYPTO_CURRENCIES:
-        return None
-    parsed = _decimal_cell(amount)
-    return abs(parsed) if parsed is not None else None
-
-
 def _pocketbitcoin_reference(record, fallback):
     return str_or_none(_get_cell(record, "reference")) or fallback
 
@@ -629,8 +628,7 @@ def _pocketbitcoin_withdrawal_pairs(rows):
         gross_amount = _decimal_cell(_get_cell(row, "value.amount"))
         if asset is None or gross_amount is None:
             continue
-        key = (asset, abs(gross_amount))
-        candidates = withdrawals_by_key.get(key, [])
+        candidates = withdrawals_by_key.get((asset, abs(gross_amount)), [])
         if not candidates:
             continue
         exchange_date = str(_get_cell(row, "date") or "")
@@ -733,8 +731,8 @@ def normalize_pocketbitcoin_record(record, withdrawal=None, index=0):
         "kind": kind,
         "description": description,
         "counterparty": "Pocket Bitcoin",
-        "match_without_external_id": True,
-        "match_time_tolerance_seconds": 172800,
+        "_exchange_evidence_match_by_economics": True,
+        "_exchange_evidence_match_time_tolerance_seconds": 172800,
         "raw_json": json.dumps(json_ready(raw_payload), sort_keys=True),
     }
 
@@ -747,7 +745,9 @@ def load_pocketbitcoin_csv_records(file_path):
         return []
     header = {_normalized_column_key(column) for column in rows[0].keys()}
     missing = [
-        column for column in _POCKETBITCOIN_REQUIRED_COLUMNS if _normalized_column_key(column) not in header
+        column
+        for column in _POCKETBITCOIN_REQUIRED_COLUMNS
+        if _normalized_column_key(column) not in header
     ]
     if missing:
         raise AppError("Pocket Bitcoin CSV is missing required columns: " + ", ".join(missing))
@@ -762,6 +762,216 @@ def load_pocketbitcoin_csv_records(file_path):
 
 def is_pocketbitcoin_format(input_format):
     return input_format == "pocketbitcoin_csv"
+
+
+# -- 21bitcoin ---------------------------------------------------------------
+
+
+_TWENTYONEBITCOIN_REQUIRED_COLUMNS = (
+    "id",
+    "transaction_date",
+    "buy_asset",
+    "buy_amount",
+    "sell_asset",
+    "sell_amount",
+    "fee_asset",
+    "fee_amount",
+    "transaction_type",
+)
+
+_TWENTYONEBITCOIN_CRYPTO_CURRENCIES = {"BTC", "XBT", "LBTC"}
+
+
+def _twentyonebitcoin_asset(value):
+    asset = _currency_cell(value)
+    return "BTC" if asset == "XBT" else asset
+
+
+def _twentyonebitcoin_datetime(value):
+    text = str_or_none(value)
+    if not text:
+        return None
+    text = text.strip()
+    date_part, _, time_part = text.partition(" ")
+    date_bits = date_part.split(".")
+    if len(date_bits) != 3:
+        return text
+    day, month, year_text = date_bits
+    year_text = year_text.strip()
+    time_bits = (time_part.strip() or "00:00:00").split(":")
+    if len(time_bits) != 3:
+        return text
+    try:
+        if len(year_text) == 3 and year_text.startswith("2"):
+            year = 2000 + int(year_text[-2:])
+        elif len(year_text) == 2:
+            year = 2000 + int(year_text)
+        else:
+            year = int(year_text)
+        second = time_bits[2].split(".", 1)[0]
+        dt = datetime(
+            year,
+            int(month),
+            int(day),
+            int(time_bits[0]),
+            int(time_bits[1]),
+            int(second),
+            tzinfo=timezone.utc,
+        )
+    except ValueError:
+        return text
+    return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def normalize_twentyonebitcoin_record(record):
+    """Turn one 21bitcoin transaction-export row into the common import shape."""
+    sanitized = {str(key).strip(): value for key, value in record.items() if key is not None}
+    row_id = str_or_none(_get_cell(sanitized, "id"))
+    if not row_id:
+        raise AppError("21bitcoin CSV has a BTC-side row without an id")
+
+    buy_currency = _twentyonebitcoin_asset(_get_cell(sanitized, "buy_asset"))
+    sell_currency = _twentyonebitcoin_asset(_get_cell(sanitized, "sell_asset"))
+    fee_currency = _twentyonebitcoin_asset(_get_cell(sanitized, "fee_asset"))
+    buy_amount = _decimal_cell(_get_cell(sanitized, "buy_amount"))
+    sell_amount = _decimal_cell(_get_cell(sanitized, "sell_amount"))
+    fee_amount = abs(_decimal_cell(_get_cell(sanitized, "fee_amount")) or Decimal("0"))
+
+    buy_is_crypto = buy_currency in _TWENTYONEBITCOIN_CRYPTO_CURRENCIES
+    sell_is_crypto = sell_currency in _TWENTYONEBITCOIN_CRYPTO_CURRENCIES
+    fee_is_crypto = fee_currency in _TWENTYONEBITCOIN_CRYPTO_CURRENCIES
+    fee_is_fiat = fee_currency is not None and not fee_is_crypto
+    transaction_type = str_or_none(_get_cell(sanitized, "transaction_type")) or "transaction"
+    transaction_type_key = transaction_type.strip().lower()
+    is_l1_withdrawal = transaction_type_key == "withdrawal"
+
+    fiat_currency = None
+    fiat_value = None
+    fiat_rate = None
+    pricing_source_kind = None
+    pricing_quality = None
+    if buy_is_crypto and not sell_is_crypto:
+        if buy_amount is None:
+            raise AppError("21bitcoin CSV has a BTC buy row with an empty buy_amount")
+        direction = "inbound"
+        asset = buy_currency
+        amount = abs(buy_amount)
+        fee = fee_amount if fee_currency == asset else Decimal("0")
+        if sell_amount is not None and sell_currency:
+            fiat_currency = sell_currency
+            fiat_value = abs(sell_amount) + (fee_amount if fee_is_fiat else Decimal("0"))
+        kind = "buy" if sell_currency else _twentyonebitcoin_kind(transaction_type, direction)
+    elif sell_is_crypto and not buy_is_crypto:
+        if sell_amount is None:
+            raise AppError("21bitcoin CSV has a BTC sell/withdrawal row with an empty sell_amount")
+        direction = "outbound"
+        asset = sell_currency
+        amount = abs(sell_amount)
+        fee = fee_amount if fee_currency == asset else Decimal("0")
+        if buy_amount is not None and buy_currency:
+            fiat_currency = buy_currency
+            fiat_value = max(Decimal("0"), abs(buy_amount) - (fee_amount if fee_is_fiat else Decimal("0")))
+            kind = "sell"
+        else:
+            kind = _twentyonebitcoin_kind(transaction_type, direction)
+    else:
+        return None
+
+    if fiat_value is not None and amount > 0:
+        fiat_rate = fiat_value / amount
+        pricing_source_kind = "exchange_execution"
+        pricing_quality = "exact"
+
+    note = str_or_none(_get_cell(sanitized, "note"))
+    depot = str_or_none(_get_cell(sanitized, "depot_name"))
+    description_parts = [part for part in (transaction_type, note, depot) if part]
+    description = " - ".join(description_parts) or "Imported from 21bitcoin"
+    provider_ref = f"21bitcoin:{row_id}"
+    linked_transaction = str_or_none(_get_cell(sanitized, "linked_transaction"))
+    external_ref = linked_transaction if is_l1_withdrawal and linked_transaction else provider_ref
+    return {
+        "txid": external_ref,
+        "occurred_at": _twentyonebitcoin_datetime(_get_cell(sanitized, "transaction_date")),
+        "direction": direction,
+        "asset": asset,
+        "amount": amount,
+        "fee": fee,
+        "fiat_rate": fiat_rate,
+        "fiat_value": fiat_value,
+        "fiat_currency": fiat_currency,
+        "pricing_source_kind": pricing_source_kind,
+        "pricing_provider": "21bitcoin",
+        "pricing_pair": f"{asset}-{fiat_currency}" if fiat_currency else None,
+        "pricing_method": "21bitcoin_csv" if pricing_source_kind else None,
+        "pricing_external_ref": row_id,
+        "pricing_quality": pricing_quality,
+        "kind": kind,
+        "description": description,
+        "counterparty": str_or_none(_get_cell(sanitized, "exchange_name")) or "21bitcoin",
+        "_exchange_evidence_matchable": is_l1_withdrawal,
+        "_21bitcoin_l1_withdrawal": is_l1_withdrawal,
+        "raw_json": json.dumps(json_ready(sanitized), sort_keys=True),
+    }
+
+
+def _twentyonebitcoin_kind(transaction_type, direction):
+    tag = str(transaction_type or "").strip().lower()
+    aliases = {
+        "deposit": "deposit",
+        "trade": "buy" if direction == "inbound" else "sell",
+        "withdrawal": "withdrawal",
+    }
+    return aliases.get(tag, tag.replace(" ", "_") if tag else direction)
+
+
+def load_twentyonebitcoin_csv_records(file_path):
+    """Load 21bitcoin transaction-export CSV rows."""
+    with open(file_path, "r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        return []
+    header = {_normalized_column_key(column) for column in rows[0].keys()}
+    missing = [
+        column
+        for column in _TWENTYONEBITCOIN_REQUIRED_COLUMNS
+        if _normalized_column_key(column) not in header
+    ]
+    if missing:
+        raise AppError("21bitcoin CSV is missing required columns: " + ", ".join(missing))
+    normalized = []
+    for row in rows:
+        record = normalize_twentyonebitcoin_record(row)
+        if record is not None:
+            normalized.append(record)
+    return normalized
+
+
+def is_twentyonebitcoin_format(input_format):
+    return input_format == "21bitcoin_csv"
+
+
+def is_exchange_evidence_format(input_format):
+    return input_format in {"bullbitcoin_csv", "21bitcoin_csv", "pocketbitcoin_csv"}
+
+
+def exchange_evidence_label(input_format):
+    if input_format == "bullbitcoin_csv":
+        return "Bull Bitcoin"
+    if input_format == "21bitcoin_csv":
+        return "21bitcoin"
+    if input_format == "pocketbitcoin_csv":
+        return "Pocket Bitcoin"
+    return str(input_format or "").replace("_", " ")
+
+
+def exchange_evidence_rows_key(input_format):
+    if input_format == "bullbitcoin_csv":
+        return "bullbitcoin_rows"
+    if input_format == "21bitcoin_csv":
+        return "twentyonebitcoin_rows"
+    if input_format == "pocketbitcoin_csv":
+        return "pocketbitcoin_rows"
+    return "exchange_rows"
 
 
 # -- River -------------------------------------------------------------------

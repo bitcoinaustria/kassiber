@@ -57,7 +57,7 @@ export interface ConnectionSource {
   docsHref?: string;
   setupKind?: SetupKind;
   walletKind?: string;
-  sourceFormat?: "csv" | "json" | "phoenix_csv" | "river_csv" | "bullbitcoin_csv";
+  sourceFormat?: "csv" | "json" | "phoenix_csv" | "river_csv" | "bullbitcoin_csv" | "21bitcoin_csv";
   chain?: "bitcoin" | "liquid";
   network?: string;
   details: string[];
@@ -480,13 +480,22 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "21bitcoin",
     title: "21bitcoin",
-    description: "Bitcoin-only app activity import.",
+    description: "Custodial platform ledger import with exact trade pricing.",
     category: "exchanges",
     image: twentyOneBitcoinIcon,
     imageClassName: "size-8 rounded-md",
-    status: "planned",
+    status: "ready",
     pathLabel: "CSV import",
-    details: ["Dedicated parser is not wired yet"],
+    formatLabel: "21bitcoin_csv",
+    docsHref: "https://21bitcoin.app/",
+    setupKind: "file-wallet",
+    walletKind: "21bitcoin",
+    sourceFormat: "21bitcoin_csv",
+    details: [
+      "BTC trade rows become active custodial balance activity",
+      "Buy/sell rows store exact 21bitcoin execution pricing from the CSV",
+      "L1 withdrawal rows can be paired to your receiving wallet so basis carries out",
+    ],
   },
   {
     id: "coinfinity",

@@ -139,6 +139,7 @@ WALLET_KINDS = [
     "phoenix",
     "river",
     "bullbitcoin",
+    "21bitcoin",
     "pocketbitcoin",
     "custom",
 ]
@@ -1520,6 +1521,11 @@ WALLET_KIND_CATALOG = {
         "config_fields": ["source_file", "source_format"],
         "requires": [],
     },
+    "21bitcoin": {
+        "summary": "21bitcoin custodial platform CSV importer with exact trade pricing.",
+        "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
     "pocketbitcoin": {
         "summary": "Pocket Bitcoin account CSV importer for exact buy/sell execution pricing.",
         "config_fields": ["source_file", "source_format"],
@@ -1534,12 +1540,22 @@ WALLET_KIND_CATALOG = {
 
 
 DEFAULT_BULLBITCOIN_WALLET_LABEL = "Bull Bitcoin"
+DEFAULT_TWENTYONEBITCOIN_WALLET_LABEL = "21bitcoin"
 DEFAULT_POCKETBITCOIN_WALLET_LABEL = "Pocket Bitcoin"
 
 
-def _get_or_create_bullbitcoin_wallet(conn, profile, wallet_ref=None):
+def _get_or_create_provider_import_wallet(conn, profile, input_format, wallet_ref=None):
     if wallet_ref:
         return resolve_wallet(conn, profile["id"], wallet_ref)
+    if input_format == "21bitcoin_csv":
+        default_label = DEFAULT_TWENTYONEBITCOIN_WALLET_LABEL
+        wallet_kind = "21bitcoin"
+    elif input_format == "pocketbitcoin_csv":
+        default_label = DEFAULT_POCKETBITCOIN_WALLET_LABEL
+        wallet_kind = "pocketbitcoin"
+    else:
+        default_label = DEFAULT_BULLBITCOIN_WALLET_LABEL
+        wallet_kind = "bullbitcoin"
     existing = conn.execute(
         """
         SELECT w.*, a.code AS account_code, a.label AS account_label
@@ -1548,7 +1564,7 @@ def _get_or_create_bullbitcoin_wallet(conn, profile, wallet_ref=None):
         WHERE w.profile_id = ? AND lower(w.label) = lower(?)
         LIMIT 1
         """,
-        (profile["id"], DEFAULT_BULLBITCOIN_WALLET_LABEL),
+        (profile["id"], default_label),
     ).fetchone()
     if existing:
         return existing
@@ -1556,35 +1572,9 @@ def _get_or_create_bullbitcoin_wallet(conn, profile, wallet_ref=None):
         conn,
         profile["workspace_id"],
         profile["id"],
-        DEFAULT_BULLBITCOIN_WALLET_LABEL,
-        "bullbitcoin",
-        config={"source_format": "bullbitcoin_csv"},
-    )
-    return resolve_wallet(conn, profile["id"], created["id"])
-
-
-def _get_or_create_pocketbitcoin_wallet(conn, profile, wallet_ref=None):
-    if wallet_ref:
-        return resolve_wallet(conn, profile["id"], wallet_ref)
-    existing = conn.execute(
-        """
-        SELECT w.*, a.code AS account_code, a.label AS account_label
-        FROM wallets w
-        LEFT JOIN accounts a ON a.id = w.account_id
-        WHERE w.profile_id = ? AND lower(w.label) = lower(?)
-        LIMIT 1
-        """,
-        (profile["id"], DEFAULT_POCKETBITCOIN_WALLET_LABEL),
-    ).fetchone()
-    if existing:
-        return existing
-    created = core_wallets.create_wallet(
-        conn,
-        profile["workspace_id"],
-        profile["id"],
-        DEFAULT_POCKETBITCOIN_WALLET_LABEL,
-        "pocketbitcoin",
-        config={"source_format": "pocketbitcoin_csv"},
+        default_label,
+        wallet_kind,
+        config={"source_format": input_format},
     )
     return resolve_wallet(conn, profile["id"], created["id"])
 
@@ -1599,13 +1589,26 @@ def import_into_wallet(
     import_mode=None,
 ):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    if core_imports.is_bullbitcoin_format(input_format) or core_imports.is_pocketbitcoin_format(input_format):
+    if input_format == "21bitcoin_csv":
+        mode = core_imports.normalize_bullbitcoin_import_mode(import_mode)
+        if mode == core_imports.BULLBITCOIN_IMPORT_MODE_RELEVANT:
+            if wallet_ref:
+                resolve_wallet(conn, profile["id"], wallet_ref)
+            return _import_file_for_profile(
+                conn,
+                profile,
+                file_path,
+                input_format,
+                import_mode=mode,
+            )
+        wallet = _get_or_create_provider_import_wallet(conn, profile, input_format, wallet_ref)
+        outcome = _import_file_for_sync(conn, profile, wallet, file_path, input_format)
+        outcome["mode"] = mode
+        return outcome
+    if core_imports.is_exchange_evidence_format(input_format):
         mode = core_imports.normalize_bullbitcoin_import_mode(import_mode)
         if mode == core_imports.BULLBITCOIN_IMPORT_MODE_FULL:
-            if core_imports.is_pocketbitcoin_format(input_format):
-                wallet = _get_or_create_pocketbitcoin_wallet(conn, profile, wallet_ref)
-            else:
-                wallet = _get_or_create_bullbitcoin_wallet(conn, profile, wallet_ref)
+            wallet = _get_or_create_provider_import_wallet(conn, profile, input_format, wallet_ref)
             return _import_file_for_profile(
                 conn,
                 profile,
@@ -1638,11 +1641,14 @@ def import_into_profile(
 ):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     mode = core_imports.normalize_bullbitcoin_import_mode(import_mode)
+    if input_format == "21bitcoin_csv" and mode == core_imports.BULLBITCOIN_IMPORT_MODE_FULL:
+        wallet = _get_or_create_provider_import_wallet(conn, profile, input_format, wallet_ref)
+        outcome = _import_file_for_sync(conn, profile, wallet, file_path, input_format)
+        outcome["mode"] = mode
+        return outcome
     wallet = None
-    if core_imports.is_bullbitcoin_format(input_format) and mode == core_imports.BULLBITCOIN_IMPORT_MODE_FULL:
-        wallet = _get_or_create_bullbitcoin_wallet(conn, profile, wallet_ref)
-    if core_imports.is_pocketbitcoin_format(input_format) and mode == core_imports.BULLBITCOIN_IMPORT_MODE_FULL:
-        wallet = _get_or_create_pocketbitcoin_wallet(conn, profile, wallet_ref)
+    if core_imports.is_exchange_evidence_format(input_format) and mode == core_imports.BULLBITCOIN_IMPORT_MODE_FULL:
+        wallet = _get_or_create_provider_import_wallet(conn, profile, input_format, wallet_ref)
     return _import_file_for_profile(
         conn,
         profile,
@@ -1722,7 +1728,17 @@ def _import_coordinator_hooks():
 
 
 def _import_file_for_sync(conn, profile, wallet, file_path, input_format, *, commit=True):
-    if core_imports.is_bullbitcoin_format(input_format) or core_imports.is_pocketbitcoin_format(input_format):
+    if input_format == "21bitcoin_csv":
+        return core_imports.import_file_into_wallet(
+            conn,
+            profile,
+            wallet,
+            file_path,
+            input_format,
+            _import_coordinator_hooks(),
+            commit=commit,
+        )
+    if core_imports.is_exchange_evidence_format(input_format):
         config = json.loads(wallet["config_json"] or "{}")
         mode = config.get("import_mode") or core_imports.BULLBITCOIN_IMPORT_MODE_RELEVANT
         return _import_file_for_profile(

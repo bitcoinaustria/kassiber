@@ -66,7 +66,8 @@ workflow almost nobody else covers.
 
 - **Direct Bitcoin sync** — Esplora, Electrum, Bitcoin Core RPC, BTCPay
   Greenfield, Liquid Electrum.
-- **Imports** — BTCPay CSV/JSON, Phoenix, River, Bull Bitcoin, Pocket Bitcoin, generic
+- **Imports** — BTCPay CSV/JSON, Phoenix, River, Bull Bitcoin, 21bitcoin,
+  Pocket Bitcoin, generic
   CSV/JSON, BIP329 labels.
 - **Review workflows** — notes, tags, exclusions, attachments; reviewed
   transfer/swap pairing for Lightning, Liquid peg-in/peg-out, and submarine
@@ -109,7 +110,7 @@ Launch the app. The Welcome screen walks you through optional database
 encryption, your books set and first book, tax policy, your first wallet
 or BTCPay connection, and the optional AI assistant. Every other flow —
 Overview, Connections, Imports, Transactions, Swap Matching, Journals,
-Quarantine, Reports, Source of Funds, Books, Settings, Diagnostics,
+Quarantine, Reports, Source of Funds, Books, Settings, Logs,
 Assistant — is one click away in the sidebar.
 
 ### CLI

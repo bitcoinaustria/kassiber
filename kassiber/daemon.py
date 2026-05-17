@@ -5106,6 +5106,7 @@ _UI_WALLET_SOURCE_FORMATS = {
     "phoenix_csv",
     "river_csv",
     "bullbitcoin_csv",
+    "21bitcoin_csv",
     "pocketbitcoin_csv",
 }
 
@@ -5419,6 +5420,22 @@ def _import_wallet_file_payload(
             conn,
             None,
             None,
+            source_file,
+            source_format,
+            import_mode,
+        )
+    if source_format == "21bitcoin_csv":
+        wallet_ref = _optional_str_arg(args, "wallet")
+        import_mode = (
+            _optional_str_arg(args, "mode")
+            or _optional_str_arg(args, "import_mode")
+            or "full"
+        )
+        return import_into_wallet(
+            conn,
+            None,
+            None,
+            wallet_ref,
             source_file,
             source_format,
             import_mode,
