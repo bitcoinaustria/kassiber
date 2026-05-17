@@ -46,6 +46,8 @@ echo "Python: $PYTHON_VERSION"
 
 run uv sync --frozen --python "$PYTHON_VERSION"
 
+skill_refs_add_data="$(python3 -c 'import os; print(f"skills/kassiber/references{os.pathsep}skills/kassiber/references")')"
+
 run uv run --python "$PYTHON_VERSION" --with pyinstaller==6.20.0 pyinstaller \
   --clean \
   --noconfirm \
@@ -53,6 +55,7 @@ run uv run --python "$PYTHON_VERSION" --with pyinstaller==6.20.0 pyinstaller \
   --name kassiber-cli \
   --specpath build \
   --paths . \
+  --add-data "$skill_refs_add_data" \
   --collect-submodules embit \
   --collect-data embit \
   --collect-submodules rp2 \

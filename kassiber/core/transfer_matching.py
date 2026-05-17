@@ -458,6 +458,11 @@ def _build_candidate(
     in_asset = str(_record_get(in_row, "asset") or "")
     out_wallet_kind = str(_record_get(out_row, "wallet_kind") or "")
     in_wallet_kind = str(_record_get(in_row, "wallet_kind") or "")
+    default_policy = (
+        POLICY_CARRYING_VALUE
+        if out_asset.upper() == in_asset.upper()
+        else default_policy_for(tax_country)
+    )
     return SwapCandidate(
         out_id=str(_record_get(out_row, "id")),
         in_id=str(_record_get(in_row, "id")),
@@ -478,7 +483,7 @@ def _build_candidate(
         swap_fee_msat=swap_fee_msat,
         swap_fee_kind=swap_fee_kind,
         default_kind=default_kind_for(out_asset, in_asset, out_wallet_kind, in_wallet_kind),
-        default_policy=default_policy_for(tax_country),
+        default_policy=default_policy,
         conflict_set_id="",  # filled in by _stamp_conflict_set_ids
     )
 

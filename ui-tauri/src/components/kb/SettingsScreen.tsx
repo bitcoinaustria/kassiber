@@ -198,11 +198,33 @@ interface RateRebuildData {
     missing_minutes?: number;
     checked_minutes?: number;
   }>;
-  journals?: {
-    entries_created?: number;
-    quarantined?: number;
+  reprice?: {
     auto_priced?: number;
   } | null;
+  journals?:
+    | {
+        ok: true;
+        result?: RateRebuildJournalResult | null;
+      }
+    | {
+        ok: false;
+        error?: DaemonErrorPayload | null;
+      }
+    | RateRebuildJournalResult
+    | null;
+}
+
+interface RateRebuildJournalResult {
+  entries_created?: number;
+  quarantined?: number;
+  auto_priced?: number;
+}
+
+interface DaemonErrorPayload {
+  code?: string;
+  message?: string;
+  hint?: string | null;
+  retryable?: boolean;
 }
 
 type AiSecretStoreId = "macos_keychain" | "windows_dpapi" | "linux_secret_service" | "sqlcipher_inline";
@@ -486,11 +508,31 @@ function formatKrakenRange(row: KrakenRatesImportSummaryRow): string {
 
 function rateRebuildTransactionProgress(data: RateRebuildData | null) {
   if (!data) return null;
+  const journalResult = rateRebuildJournalResult(data);
+  const refreshedSource =
+    data.reprice?.auto_priced ?? journalResult?.auto_priced;
   const refreshed =
-    Number(data.journals?.auto_priced ?? 0) ||
+    Number(refreshedSource ?? 0) ||
     Number(data.deleted.transaction_prices ?? 0);
   const total = Math.max(refreshed, Number(data.deleted.transaction_prices ?? 0));
   return { refreshed, total };
+}
+
+function rateRebuildJournalResult(
+  data: RateRebuildData | null,
+): RateRebuildJournalResult | null {
+  if (!data?.journals) return null;
+  if ("ok" in data.journals) {
+    return data.journals.ok ? data.journals.result ?? null : null;
+  }
+  return data.journals;
+}
+
+function rateRebuildJournalError(data: RateRebuildData | null): string | null {
+  if (!data?.journals || !("ok" in data.journals) || data.journals.ok) {
+    return null;
+  }
+  return data.journals.error?.message ?? "Journal processing is still blocked.";
 }
 
 function backendIntegrationArt(backend: Backend): Pick<
@@ -1890,6 +1932,7 @@ function BackendSettingsPanel({
       (total, row) => total + Number(row.samples ?? 0),
       0,
     ) ?? 0;
+  const rateRebuildJournalBlocker = rateRebuildJournalError(rateRebuildResult);
   const startRateRebuild = async () => {
     setRateRebuildError(null);
     setRateRebuildResult(null);
@@ -1910,17 +1953,22 @@ function BackendSettingsPanel({
       const payload = envelope.data ?? null;
       setRateRebuildResult(payload);
       setRateRebuildOpen(false);
+      const journalBlocker = rateRebuildJournalError(payload);
+      const fetchedRows =
+        payload?.sync.reduce(
+          (total, row) => total + Number(row.samples ?? 0),
+          0,
+        ) ?? 0;
       const notification = {
-        title: "Pricing cache rebuilt",
+        title: journalBlocker
+          ? "Pricing cache rebuilt with journal blocker"
+          : "Pricing cache rebuilt",
         body: payload
           ? `${formatCount(payload.deleted.transaction_prices)} cached transaction prices cleared; ${formatCount(
-              payload.sync.reduce(
-                (total, row) => total + Number(row.samples ?? 0),
-                0,
-              ),
-            )} rate rows fetched.`
+              fetchedRows,
+            )} rate rows fetched.${journalBlocker ? ` ${journalBlocker}` : ""}`
           : "Coinbase pricing cache was rebuilt.",
-        tone: "success",
+        tone: journalBlocker ? "warning" : "success",
         progress: undefined,
       } as const;
       if (rebuildNoticeRef.current) {
@@ -2051,30 +2099,68 @@ function BackendSettingsPanel({
           </div>
         ) : null}
         {rateRebuildResult ? (
-          <div className="mt-3 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-emerald-700 dark:text-emerald-300">
+          <div
+            className={cn(
+              "mt-3 rounded-md border p-3 text-sm",
+              rateRebuildJournalBlocker
+                ? "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200"
+                : "border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300",
+            )}
+          >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-medium">
-                {rateRebuildProgress?.total
+                {rateRebuildJournalBlocker
+                  ? "Pricing refreshed; journals still blocked"
+                  : rateRebuildProgress?.total
                   ? `${formatCount(rateRebuildProgress.refreshed)} / ${formatCount(
                       rateRebuildProgress.total,
                     )} transaction rates refreshed`
                   : "Pricing cache rebuilt"}
               </span>
-              <span className="text-xs text-emerald-700/80 dark:text-emerald-300/80">
+              <span
+                className={cn(
+                  "text-xs",
+                  rateRebuildJournalBlocker
+                    ? "text-amber-800/80 dark:text-amber-200/80"
+                    : "text-emerald-700/80 dark:text-emerald-300/80",
+                )}
+              >
                 {formatCount(rateRebuildSamples)} rate rows fetched
               </span>
             </div>
             <div
-              className="mt-2 h-2 overflow-hidden rounded-full bg-emerald-950/10 dark:bg-emerald-100/15"
+              className={cn(
+                "mt-2 h-2 overflow-hidden rounded-full",
+                rateRebuildJournalBlocker
+                  ? "bg-amber-950/10 dark:bg-amber-100/15"
+                  : "bg-emerald-950/10 dark:bg-emerald-100/15",
+              )}
               role="progressbar"
               aria-label="Transaction rate refresh progress"
               aria-valuemin={0}
               aria-valuemax={rateRebuildProgress?.total ?? 1}
               aria-valuenow={rateRebuildProgress?.refreshed ?? 1}
             >
-              <div className="h-full w-full rounded-full bg-emerald-500" />
+              <div
+                className={cn(
+                  "h-full w-full rounded-full",
+                  rateRebuildJournalBlocker ? "bg-amber-500" : "bg-emerald-500",
+                )}
+              />
             </div>
-            <p className="mt-2 text-xs text-emerald-700/80 dark:text-emerald-300/80">
+            {rateRebuildJournalBlocker ? (
+              <p className="mt-2 text-xs text-amber-800/80 dark:text-amber-200/80">
+                {rateRebuildJournalBlocker}
+              </p>
+            ) : null}
+            <p
+              className={cn(
+                "mt-2 text-xs",
+                rateRebuildJournalBlocker
+                  ? "text-amber-800/80 dark:text-amber-200/80"
+                  : "text-emerald-700/80 dark:text-emerald-300/80",
+              )}
+            >
               Removed {formatCount(rateRebuildResult.deleted.rates)} rate rows,{" "}
               {formatCount(rateRebuildResult.deleted.checked_minutes)} checked
               minutes, and{" "}

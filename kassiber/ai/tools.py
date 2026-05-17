@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import sys
 from typing import Any, Literal
 
 from ..errors import AppError
@@ -723,9 +724,9 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.transfers.suggest",
         description=(
-            "Read swap-candidate pairings the matcher infers from unpaired "
+            "Read transfer/swap candidate pairings the matcher infers from unpaired "
             "transactions. Surfaces exact (payment_hash) and strong (time + "
-            "amount heuristic) candidates with computed swap_fee_msat and "
+            "amount heuristic) candidates with computed fee deltas and "
             "conflict cluster ids. No DB writes."
         ),
         parameters={
@@ -746,12 +747,17 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                     "type": "string",
                     "description": "OUT-IN asset shape, e.g. 'LBTC-BTC' for a peg-out.",
                 },
+                "candidate_type": {
+                    "type": "string",
+                    "enum": ["transfer", "swap"],
+                    "description": "Optional filter for same-asset transfers or cross-asset swaps.",
+                },
             },
         },
         kind_class="read_only",
         wire_name="ui_transfers_suggest",
         daemon_kind="ui.transfers.suggest",
-        summary_template="Read swap candidates",
+        summary_template="Read transfer/swap candidates",
     ),
     ToolEntry(
         name="ui.transfers.review_context",
@@ -788,6 +794,11 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 "route_pair": {
                     "type": "string",
                     "description": "Rail-aware OUT-IN route, e.g. 'LNBTC-LBTC'.",
+                },
+                "candidate_type": {
+                    "type": "string",
+                    "enum": ["transfer", "swap"],
+                    "description": "Optional filter for same-asset transfers or cross-asset swaps.",
                 },
             },
         },
@@ -907,17 +918,22 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                     "enum": ["exact", "strong"],
                     "description": "Minimum confidence to auto-pair. Default 'exact'.",
                 },
+                "candidate_type": {
+                    "type": "string",
+                    "enum": ["transfer", "swap"],
+                    "description": "Optional filter for same-asset transfers or cross-asset swaps.",
+                },
             },
         },
         kind_class="mutating",
         wire_name="ui_transfers_bulk_pair",
         daemon_kind="ui.transfers.bulk_pair",
-        summary_template="Bulk-pair swap candidates",
+        summary_template="Bulk-pair transfer/swap candidates",
     ),
     ToolEntry(
         name="ui.transfers.dismiss",
         description=(
-            "Record a 'not a swap' dismissal so the matcher stops "
+            "Record a dismissal so the matcher stops "
             "suggesting this exact pair. Default expiry 90 days."
         ),
         parameters={
@@ -1057,6 +1073,7 @@ TOOL_BY_NAME: dict[str, ToolEntry] = {}
 for tool in TOOL_CATALOG:
     TOOL_BY_NAME[tool.name] = tool
     TOOL_BY_NAME[tool.provider_name] = tool
+TOOL_BY_NAME["ui_reports_report_blockers"] = TOOL_BY_NAME["ui.report.blockers"]
 
 
 def get_tool(name: str) -> ToolEntry | None:
@@ -1180,6 +1197,26 @@ def skill_reference_root() -> Path:
     return Path(__file__).resolve().parents[2] / "skills" / "kassiber" / "references"
 
 
+def skill_reference_roots(*, root: Path | None = None) -> list[Path]:
+    roots: list[Path] = []
+    if root is not None:
+        roots.append(root)
+    roots.append(skill_reference_root())
+    roots.append(Path.cwd() / "skills" / "kassiber" / "references")
+    bundle_root = getattr(sys, "_MEIPASS", None)
+    if bundle_root:
+        roots.append(Path(bundle_root) / "skills" / "kassiber" / "references")
+
+    unique: list[Path] = []
+    seen: set[Path] = set()
+    for candidate in roots:
+        resolved = candidate.resolve(strict=False)
+        if resolved not in seen:
+            seen.add(resolved)
+            unique.append(candidate)
+    return unique
+
+
 def read_skill_reference(name: str, *, root: Path | None = None) -> dict[str, str]:
     if name not in SKILL_REFERENCE_NAMES:
         raise AppError(
@@ -1190,15 +1227,18 @@ def read_skill_reference(name: str, *, root: Path | None = None) -> dict[str, st
         )
     if name == "index":
         return {"name": name, "content": SKILL_REFERENCE_INDEX}
-    reference_root = root or skill_reference_root()
-    path = reference_root / f"{name}.md"
-    try:
-        content = path.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise AppError(
-            "skill reference could not be read",
-            code="tool_reference_unavailable",
-            details={"name": name},
-            retryable=False,
-        ) from exc
-    return {"name": name, "content": content}
+    attempted: list[str] = []
+    for reference_root in skill_reference_roots(root=root):
+        path = reference_root / f"{name}.md"
+        attempted.append(str(path))
+        try:
+            content = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        return {"name": name, "content": content}
+    raise AppError(
+        "skill reference could not be read",
+        code="tool_reference_unavailable",
+        details={"name": name, "attempted": attempted},
+        retryable=False,
+    )

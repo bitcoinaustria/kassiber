@@ -55,6 +55,7 @@ from .ai.tools import (
 from .cli.handlers import (
     _metadata_hooks,
     _report_hooks,
+    auto_price_transactions_from_rates_cache,
     apply_transfer_rules,
     bulk_pair_transfers,
     create_saved_view_cli,
@@ -748,6 +749,16 @@ def _error_envelope(
     )
 
 
+def _app_error_payload(exc: AppError) -> dict[str, Any]:
+    return {
+        "code": exc.code,
+        "message": redact_secret_text(str(exc)),
+        "hint": redact_secret_text(exc.hint) if exc.hint else None,
+        "details": redact_secret_value(exc.details) if exc.details is not None else None,
+        "retryable": bool(exc.retryable),
+    }
+
+
 def _desktop_secret_store_bridge_enabled(args: Mapping[str, Any]) -> bool:
     return bool(args.get("_desktop_secret_store_bridge"))
 
@@ -1161,6 +1172,7 @@ def _ui_swap_matching_payload_from_conn(
             asset_pair=args.get("asset_pair"),
             route_pair=args.get("route_pair"),
             method=args.get("method"),
+            candidate_type=args.get("candidate_type"),
         )
     if kind == "ui.transfers.review_context":
         return build_swap_review_context_payload(conn, args)
@@ -1203,6 +1215,7 @@ def _ui_swap_matching_payload_from_conn(
             asset_pair=args.get("asset_pair"),
             route_pair=args.get("route_pair"),
             method=args.get("method"),
+            candidate_type=args.get("candidate_type"),
         )
     if kind == "ui.transfers.dismiss":
         return dismiss_transfer_candidate(
@@ -1266,6 +1279,7 @@ def _ui_swap_matching_payload_from_conn(
             asset_pair=args.get("asset_pair"),
             route_pair=args.get("route_pair"),
             method=args.get("method"),
+            candidate_type=args.get("candidate_type"),
         )
 
     if kind == "ui.saved_views.list":
@@ -2218,9 +2232,11 @@ def _rates_rebuild_payload(
         )
     reprice_transactions = bool(args.get("reprice_transactions", True))
     profile_id = None
+    journal_input_version_before = None
     if reprice_transactions:
         _, profile = resolve_scope(conn, None, None)
         profile_id = profile["id"]
+        journal_input_version_before = int(profile["journal_input_version"] or 0)
     rebuilt = core_rates.rebuild_rates_cache(
         conn,
         pair=pair,
@@ -2230,11 +2246,31 @@ def _rates_rebuild_payload(
         reprice_transactions=reprice_transactions,
         profile_id=profile_id,
     )
-    journals = None
+    reprice = None
     if reprice_transactions:
-        journals = process_journals(conn, None, None)
+        _, profile = resolve_scope(conn, None, None)
+        conn.execute("SAVEPOINT rates_rebuild_reprice")
+        try:
+            auto_priced = auto_price_transactions_from_rates_cache(conn, profile)
+            journal_input_version_after = int(profile["journal_input_version"] or 0)
+            if auto_priced and journal_input_version_after == journal_input_version_before:
+                invalidate_journals(conn, profile["id"])
+            conn.execute("RELEASE SAVEPOINT rates_rebuild_reprice")
+            conn.commit()
+        except Exception:
+            conn.execute("ROLLBACK TO SAVEPOINT rates_rebuild_reprice")
+            conn.execute("RELEASE SAVEPOINT rates_rebuild_reprice")
+            raise
+        reprice = {"auto_priced": auto_priced}
+    journals: dict[str, Any] | None = None
+    if reprice_transactions:
+        try:
+            journals = {"ok": True, "result": process_journals(conn, None, None)}
+        except AppError as exc:
+            journals = {"ok": False, "error": _app_error_payload(exc)}
     return {
         **rebuilt,
+        "reprice": reprice,
         "journals": journals,
     }
 

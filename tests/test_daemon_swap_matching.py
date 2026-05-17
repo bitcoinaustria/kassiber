@@ -146,6 +146,36 @@ class DaemonSwapMatchingTest(unittest.TestCase):
                 proc,
                 {
                     "kind": "ui.transfers.suggest",
+                    "request_id": "req-suggest-swap-type",
+                    "args": {
+                        "workspace": "Main",
+                        "profile": "Swap",
+                        "candidate_type": "swap",
+                    },
+                },
+            )
+            self.assertEqual(envelope["kind"], "ui.transfers.suggest")
+            self.assertGreaterEqual(envelope["data"]["counts"]["total"], 1)
+
+            envelope = _request_response(
+                proc,
+                {
+                    "kind": "ui.transfers.suggest",
+                    "request_id": "req-suggest-transfer-type",
+                    "args": {
+                        "workspace": "Main",
+                        "profile": "Swap",
+                        "candidate_type": "transfer",
+                    },
+                },
+            )
+            self.assertEqual(envelope["kind"], "ui.transfers.suggest")
+            self.assertEqual(envelope["data"]["counts"]["total"], 0)
+
+            envelope = _request_response(
+                proc,
+                {
+                    "kind": "ui.transfers.suggest",
                     "request_id": "req-suggest-route",
                     "args": {
                         "workspace": "Main",
@@ -189,6 +219,22 @@ class DaemonSwapMatchingTest(unittest.TestCase):
                 for mention in item["metadata_mentions"]
             }
             self.assertTrue({"swap", "boltz"} & mention_keywords)
+
+            envelope = _request_response(
+                proc,
+                {
+                    "kind": "ui.transfers.review_context",
+                    "request_id": "req-review-transfer-type",
+                    "args": {
+                        "workspace": "Main",
+                        "profile": "Swap",
+                        "limit": 5,
+                        "candidate_type": "transfer",
+                    },
+                },
+            )
+            self.assertEqual(envelope["kind"], "ui.transfers.review_context")
+            self.assertEqual(envelope["data"]["summary"]["candidate_count"], 0)
 
         self._with_daemon(call)
 

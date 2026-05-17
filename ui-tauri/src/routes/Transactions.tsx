@@ -17,6 +17,11 @@ interface SuggestEnvelope {
   };
 }
 
+function isCrossAssetCandidate(candidate: SwapCandidateReference) {
+  if (!candidate.in_asset || !candidate.out_asset) return true;
+  return candidate.in_asset.toUpperCase() !== candidate.out_asset.toUpperCase();
+}
+
 export function Transactions() {
   const dataMode = useUiStore((state) => state.dataMode);
   const { data, isLoading, isFetching } = useDaemon<TransactionsList>(
@@ -50,7 +55,7 @@ export function Transactions() {
       : undefined;
   const swapCandidateTotal =
     hasLiveSwapSuggestions && swapQuery.data?.data
-      ? (swapQuery.data.data.counts?.total ?? swapQuery.data.data.candidates.length)
+      ? swapQuery.data.data.candidates.filter(isCrossAssetCandidate).length
       : hasLiveTransactions
         ? null
         : undefined;
