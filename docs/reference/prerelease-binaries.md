@@ -170,8 +170,11 @@ to hand a build to someone else on Apple Silicon.
 
 Desktop artifacts are unsigned previews, but normal daemon calls use the
 bundled PyInstaller CLI sidecar and do not require a separate Python checkout.
-The GUI executable also forwards `--cli ...` to that sidecar so an installed
-desktop app can still be used from a terminal, for example:
+Settings -> Desktop -> Terminal command can install a user-local `kassiber`
+launcher without administrator privileges. The launcher forwards to the
+installed desktop executable with `--cli`, so the desktop bundle's sidecar is
+used from a normal terminal. The GUI executable also forwards `--cli ...`
+directly, for example:
 
 ```bash
 ./kassiber-linux-x64.AppImage --cli status
@@ -180,7 +183,13 @@ Kassiber.exe --cli status
 ```
 
 If the GUI executable is symlinked with the exact stem `kassiber`, plain CLI
-arguments are also forwarded. Use `--cli ...` for any other executable name.
+arguments are also forwarded. Use the Settings-managed launcher, or pass
+`--cli ...` for any other executable name.
+
+macOS `.app` bundles also include `Contents/Resources/bin/kassiber`, a stable
+launcher that package managers can link directly. A future Homebrew tap should
+use Homebrew's `binary` stanza against that path; see
+[Homebrew Cask](homebrew-cask.md).
 
 `KASSIBER_PYTHON` remains available as an intentional debug override for daemon
 startup and installed-app CLI forwarding.

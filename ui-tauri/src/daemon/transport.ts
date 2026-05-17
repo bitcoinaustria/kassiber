@@ -107,6 +107,22 @@ export interface TouchIdPassphraseUnlock {
   passphraseSecret: string;
 }
 
+export interface TerminalCommandStatus {
+  platform: "macos" | "windows" | "linux" | "unsupported";
+  available: boolean;
+  installed: boolean;
+  managed: boolean;
+  needsRepair: boolean;
+  conflict: boolean;
+  pathOnPath: boolean;
+  command: string;
+  binDir: string;
+  commandPath: string;
+  targetPath: string;
+  pathHint: string;
+  message: string;
+}
+
 let activeImportProjectSelection: ImportProjectSelection | null = null;
 let activeImportProjectActivation:
   | {
@@ -555,6 +571,46 @@ export async function forgetTouchIdPassphrase(
   return invoke<TouchIdPassphraseStatus>("touch_id_forget_passphrase_command", {
     dataRoot: dataRoot ?? null,
   });
+}
+
+const TERMINAL_COMMAND_UNAVAILABLE: TerminalCommandStatus = {
+  platform: "unsupported",
+  available: false,
+  installed: false,
+  managed: false,
+  needsRepair: false,
+  conflict: false,
+  pathOnPath: false,
+  command: "kassiber",
+  binDir: "",
+  commandPath: "",
+  targetPath: "",
+  pathHint: "",
+  message: "Terminal command installation is available in the desktop app.",
+};
+
+export async function terminalCommandStatus(): Promise<TerminalCommandStatus> {
+  if (DAEMON_MODE !== "tauri") {
+    return TERMINAL_COMMAND_UNAVAILABLE;
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<TerminalCommandStatus>("terminal_command_status_command");
+}
+
+export async function installTerminalCommand(): Promise<TerminalCommandStatus> {
+  if (DAEMON_MODE !== "tauri") {
+    throw new Error("Terminal command installation is available in the desktop app.");
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<TerminalCommandStatus>("terminal_command_install_command");
+}
+
+export async function removeTerminalCommand(): Promise<TerminalCommandStatus> {
+  if (DAEMON_MODE !== "tauri") {
+    throw new Error("Terminal command removal is available in the desktop app.");
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<TerminalCommandStatus>("terminal_command_remove_command");
 }
 
 const tauriDaemon: DaemonTransport = {

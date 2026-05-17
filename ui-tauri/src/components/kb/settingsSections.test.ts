@@ -11,6 +11,7 @@ describe("settings integration hash mapping", () => {
   it("maps each canonical settings section to an integration", () => {
     expect(selectedIntegrationForHash("privacy")).toBe("privacy-sensitive");
     expect(selectedIntegrationForHash("display")).toBe("display-currency");
+    expect(selectedIntegrationForHash("desktop")).toBe("terminal-command");
     expect(selectedIntegrationForHash("security")).toBe("security-lock-now");
     expect(selectedIntegrationForHash("backends")).toBe("sync-add-backend");
     expect(selectedIntegrationForHash("rates")).toBe("rate-providers");
@@ -18,12 +19,15 @@ describe("settings integration hash mapping", () => {
     expect(selectedIntegrationForHash("data")).toBe("data-root");
   });
 
-  it("treats `sync` and `assistant` as aliases", () => {
+  it("treats `sync`, `assistant`, and `terminal` as aliases", () => {
     expect(selectedIntegrationForHash("sync")).toBe(
       selectedIntegrationForHash("backends"),
     );
     expect(selectedIntegrationForHash("assistant")).toBe(
       selectedIntegrationForHash("ai"),
+    );
+    expect(selectedIntegrationForHash("terminal")).toBe(
+      selectedIntegrationForHash("desktop"),
     );
   });
 

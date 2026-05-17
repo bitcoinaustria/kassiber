@@ -1,0 +1,27 @@
+#!/bin/sh
+# Kassiber desktop CLI launcher for package managers.
+#
+# Homebrew casks can symlink this file from the installed .app bundle into
+# brew's bin directory. Resolve that symlink first, then forward to the desktop
+# executable so it can dispatch to the bundled CLI sidecar with --cli.
+
+set -eu
+
+launcher=$0
+while [ -L "$launcher" ]; do
+  link=$(readlink "$launcher") || exit 1
+  case "$link" in
+    /*) launcher=$link ;;
+    *) launcher=$(dirname "$launcher")/$link ;;
+  esac
+done
+
+launcher_dir=$(CDPATH= cd -- "$(dirname -- "$launcher")" && pwd)
+app_executable=$launcher_dir/../../MacOS/kassiber-ui
+
+if [ ! -x "$app_executable" ]; then
+  echo "kassiber: desktop executable not found at $app_executable" >&2
+  exit 127
+fi
+
+exec "$app_executable" --cli "$@"

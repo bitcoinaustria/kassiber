@@ -91,8 +91,9 @@ workflow almost nobody else covers.
 
 **Desktop app** — download an unsigned prerelease binary for macOS, Linux,
 or Windows from the latest `v*` release. The bundle ships a CLI sidecar,
-so no separate Python install is needed. Gatekeeper / SmartScreen
-first-launch handling lives in
+so no separate Python install is needed. Settings can install a user-local
+`kassiber` terminal launcher without administrator privileges. Gatekeeper /
+SmartScreen first-launch handling lives in
 [docs/reference/prerelease-binaries.md](docs/reference/prerelease-binaries.md).
 
 **From source** (CLI use or development, Python `>=3.10`):
@@ -153,7 +154,8 @@ overview.
   [Desktop](docs/reference/desktop.md) ·
   [Daemon](docs/reference/daemon.md) ·
   [Machine output](docs/reference/machine-output.md) ·
-  [Prerelease binaries](docs/reference/prerelease-binaries.md)
+  [Prerelease binaries](docs/reference/prerelease-binaries.md) ·
+  [Homebrew Cask](docs/reference/homebrew-cask.md)
 - **Architecture & plans** · [Overview](docs/plan/00-overview.md) ·
   [Desktop stack ADR](docs/plan/01-stack-decision.md) ·
   [Desktop implementation](docs/plan/04-desktop-ui.md) ·

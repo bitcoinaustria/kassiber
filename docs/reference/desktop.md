@@ -72,7 +72,18 @@ back explicitly to `sqlcipher_inline` when no desktop secret service, D-Bus
 session, or unlocked collection is available. There is no
 plaintext fallback and no remember-unlock behavior.
 
-The GUI executable also works as a CLI forwarder when launched with
+Settings -> Desktop -> Terminal command can install a user-local `kassiber`
+launcher without administrator privileges. It writes a small managed launcher
+under the user's bin directory (for example `~/.local/bin/kassiber`) that
+forwards to the installed desktop executable and its bundled CLI sidecar. If
+that directory is not on PATH, Settings shows the PATH line to add to the
+user's shell.
+
+Package managers can link the bundled launcher at
+`Kassiber.app/Contents/Resources/bin/kassiber` instead. The first target is a
+project-owned Homebrew tap; see [Homebrew Cask](homebrew-cask.md).
+
+The GUI executable also works as a CLI forwarder when launched directly with
 `--cli ...`. Examples:
 
 ```bash
@@ -82,7 +93,8 @@ Kassiber.exe --cli status
 ```
 
 If the app executable is symlinked with the exact executable stem `kassiber`,
-plain CLI args are also forwarded:
+plain CLI args are also forwarded, but the Settings launcher is preferred
+because it explicitly passes `--cli`:
 
 ```bash
 ln -s /Applications/Kassiber.app/Contents/MacOS/kassiber-ui /usr/local/bin/kassiber

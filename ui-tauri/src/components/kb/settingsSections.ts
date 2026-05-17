@@ -6,6 +6,8 @@
 const SETTINGS_SECTION_INTEGRATION: Record<string, string> = {
   privacy: "privacy-sensitive",
   display: "display-currency",
+  desktop: "terminal-command",
+  terminal: "terminal-command",
   explorer: "explorer-links",
   explorers: "explorer-links",
   security: "security-lock-now",
