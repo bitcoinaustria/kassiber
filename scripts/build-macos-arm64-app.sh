@@ -46,7 +46,7 @@ echo "Python: $PYTHON_VERSION"
 
 run uv sync --frozen --python "$PYTHON_VERSION"
 
-skill_refs_add_data="$(python3 -c 'import os; print(f"skills/kassiber/references{os.pathsep}skills/kassiber/references")')"
+skill_refs_add_data="$(ROOT="$ROOT" python3 -c 'import os; print(os.environ["ROOT"] + "/skills/kassiber/references" + os.pathsep + "skills/kassiber/references")')"
 
 run uv run --python "$PYTHON_VERSION" --with pyinstaller==6.20.0 pyinstaller \
   --clean \

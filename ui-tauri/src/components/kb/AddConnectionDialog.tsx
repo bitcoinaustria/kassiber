@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { Loader2, ScanLine } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,12 @@ import {
 } from "@/lib/connectionCatalog";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 import { detectWalletMaterial } from "@/lib/walletMaterialFormat";
+
+const WalletMaterialScannerDialog = React.lazy(() =>
+  import("./WalletMaterialScannerDialog").then((module) => ({
+    default: module.WalletMaterialScannerDialog,
+  })),
+);
 
 interface AddConnectionDialogProps {
   open: boolean;
@@ -324,6 +331,7 @@ export function AddConnectionDialog({
     { branch: "receive" | "change"; index: number; address: string }[] | null
   >(null);
   const [previewError, setPreviewError] = React.useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = React.useState(false);
   const [btcpayTestStatus, setBtcpayTestStatus] = React.useState<
     | { ok: true; storeId: string; paymentMethodId: string }
     | { ok: false; message: string }
@@ -489,6 +497,10 @@ export function AddConnectionDialog({
     setSetupError(null);
     setSourceQuery("");
   }, [initialSourceId, open]);
+
+  React.useEffect(() => {
+    if (!open) setScannerOpen(false);
+  }, [open]);
 
   React.useEffect(() => {
     if (!defaultBackendName) return;
@@ -984,6 +996,22 @@ export function AddConnectionDialog({
             label="Wallet export"
             error={fieldErrors.walletMaterial}
           >
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">
+                Paste or scan a descriptor, xpub-family export, Liquid
+                descriptor, or BBQR sequence.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={() => setScannerOpen(true)}
+              >
+                <ScanLine className="size-4" aria-hidden="true" />
+                Scan
+              </Button>
+            </div>
             <Textarea
               id="connection-wallet-material"
               className="min-h-32 font-mono text-xs"
@@ -1943,68 +1971,93 @@ export function AddConnectionDialog({
   );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="grid h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] sm:h-[740px] sm:max-w-[960px] lg:max-w-[1040px]">
-        <DialogHeader>
-          <DialogTitle>
-            {isSetupStep ? `Set up ${selected.title}` : "Add connection"}
-          </DialogTitle>
-          <DialogDescription>
-            {isSetupStep
-              ? "Enter the local details Kassiber needs for this connection."
-              : "Choose a watch-only wallet, node, exchange, or local file source."}
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="grid h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] sm:h-[740px] sm:max-w-[960px] lg:max-w-[1040px]">
+          <DialogHeader>
+            <DialogTitle>
+              {isSetupStep ? `Set up ${selected.title}` : "Add connection"}
+            </DialogTitle>
+            <DialogDescription>
+              {isSetupStep
+                ? "Enter the local details Kassiber needs for this connection."
+                : "Choose a watch-only wallet, node, exchange, or local file source."}
+            </DialogDescription>
+          </DialogHeader>
 
-        {isSetupStep ? renderSetupStep() : renderSourceStep()}
+          {isSetupStep ? renderSetupStep() : renderSourceStep()}
 
-        <DialogFooter className="gap-2 sm:justify-between">
-          {isSetupStep ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setStep("source")}
-              disabled={isSubmitting}
-            >
-              Back
-            </Button>
-          ) : (
-            <span />
-          )}
-          <div className="flex flex-col-reverse gap-2 sm:flex-row">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </Button>
+          <DialogFooter className="gap-2 sm:justify-between">
             {isSetupStep ? (
               <Button
-                type="submit"
-                form="connection-setup-form"
-                disabled={
-                  isSubmitting ||
-                  setupKind === "planned" ||
-                  missingBackend ||
-                  missingBtcpayMappingDiscovery
-                }
+                type="button"
+                variant="outline"
+                onClick={() => setStep("source")}
+                disabled={isSubmitting}
               >
-                {submitLabel}
+                Back
               </Button>
             ) : (
+              <span />
+            )}
+            <div className="flex flex-col-reverse gap-2 sm:flex-row">
               <Button
                 type="button"
-                disabled={!canContinue}
-                onClick={() => setStep("setup")}
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={isSubmitting}
               >
-                {selected.status === "ready" ? "Continue" : "Planned"}
+                Cancel
               </Button>
-            )}
-          </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+              {isSetupStep ? (
+                <Button
+                  type="submit"
+                  form="connection-setup-form"
+                  disabled={
+                    isSubmitting ||
+                    setupKind === "planned" ||
+                    missingBackend ||
+                    missingBtcpayMappingDiscovery
+                  }
+                >
+                  {submitLabel}
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  disabled={!canContinue}
+                  onClick={() => setStep("setup")}
+                >
+                  {selected.status === "ready" ? "Continue" : "Planned"}
+                </Button>
+              )}
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {scannerOpen ? (
+        <React.Suspense
+          fallback={
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80">
+              <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm shadow-sm">
+                <Loader2 className="size-4 animate-spin" />
+                <span>Opening scanner</span>
+              </div>
+            </div>
+          }
+        >
+          <WalletMaterialScannerDialog
+            open={scannerOpen}
+            onOpenChange={setScannerOpen}
+            title={`Scan ${selected.title}`}
+            onMaterialScanned={(material) => {
+              updateForm("walletMaterial", material);
+              setPreviewAddresses(null);
+              setPreviewError(null);
+            }}
+          />
+        </React.Suspense>
+      ) : null}
+    </>
   );
 }
