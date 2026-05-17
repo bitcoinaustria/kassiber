@@ -1652,11 +1652,11 @@ pub fn run() {
     let cli_args = desktop_cli_args();
     let mut builder = tauri::Builder::default();
 
-    // Single-instance must come before the deep-link plugin so a second
-    // launch (`open kassiber://settings/privacy` while the app is already
-    // running) is forwarded to the existing window instead of forking a new
-    // GUI process. CLI-mode launches intentionally skip the plugin so a
-    // terminal `kassiber status` can still run while the GUI is open.
+    // Single-instance must come before the deep-link plugin so GUI/deep-link
+    // relaunches are forwarded to the existing window instead of forking a new
+    // GUI process. CLI-mode launches intentionally skip the plugin: they run a
+    // short-lived sidecar command and exit, so they do not start a second
+    // desktop supervisor or hold a competing GUI daemon open.
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     {
         if cli_args.is_none() {
