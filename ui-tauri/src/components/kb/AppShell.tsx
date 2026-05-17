@@ -1381,10 +1381,24 @@ function SidebarActions({
   const dataMode = useUiStore((state) => state.dataMode);
   const setDataMode = useUiStore((state) => state.setDataMode);
   const isRealData = dataMode === "real";
-  const supportActive = pathname === "/logs" || pathname === "/diagnostics";
+  const supportActive = pathname === "/diagnostics";
 
   return (
     <SidebarMenu>
+      {developerToolsEnabled ? (
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            asChild
+            isActive={pathname === "/logs"}
+            tooltip="Logs"
+          >
+            <Link to="/logs">
+              <TerminalSquare className="size-4" aria-hidden="true" />
+              <span>Logs</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      ) : null}
       <SidebarMenuItem>
         <div className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
           <Server className="size-4 shrink-0" aria-hidden="true" />
@@ -1413,16 +1427,6 @@ function SidebarActions({
             </CollapsibleTrigger>
             <CollapsibleContent>
               <SidebarMenuSub>
-                {developerToolsEnabled ? (
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={pathname === "/logs"}>
-                      <Link to="/logs">
-                        <TerminalSquare className="size-3.5" aria-hidden="true" />
-                        <span>Logs</span>
-                      </Link>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                ) : null}
                 <SidebarMenuSubItem>
                   <SidebarMenuSubButton asChild>
                     <a
