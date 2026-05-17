@@ -1,4 +1,5 @@
 import {
+  ChevronRight,
   Copy,
   Download,
   Eye,
@@ -28,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  APP_LOG_MAX_BYTES,
   appLogLevels,
   clearAppLogRecords,
   exportLogRecords,
@@ -60,6 +62,7 @@ const LEVEL_CLASS: Record<AppLogLevel, string> = {
 
 const RENDER_STEP = 1000;
 const MAX_RENDERED_LINES = 8000;
+const SEARCH_INPUT_ID = "kb-logs-search";
 
 export function Logs() {
   const addNotification = useUiStore((s) => s.addNotification);
@@ -80,6 +83,10 @@ export function Logs() {
   const viewportRef = React.useRef<HTMLDivElement | null>(null);
   const previousRecordCount = React.useRef(records.length);
   const bufferBytes = useAppLogBufferSize();
+  const bufferFillPct = Math.min(
+    100,
+    Math.round((bufferBytes / APP_LOG_MAX_BYTES) * 100),
+  );
 
   React.useEffect(() => {
     setAppLogSubscriptionLevel(level);
@@ -110,6 +117,29 @@ export function Logs() {
   React.useEffect(() => {
     if (autoscroll) scrollToBottom();
   }, [autoscroll, renderLimit, query, moduleFilter, regex]);
+
+  // Keyboard shortcuts: `/` focuses search, `Esc` clears search + module filter.
+  React.useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target;
+      const inField =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable);
+      if (event.key === "/" && !inField && !event.metaKey && !event.ctrlKey) {
+        event.preventDefault();
+        document.getElementById(SEARCH_INPUT_ID)?.focus();
+        return;
+      }
+      if (event.key === "Escape" && (query || moduleFilter)) {
+        setQuery("");
+        setModuleFilter(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [query, moduleFilter]);
 
   const moduleCounts = React.useMemo(() => countByModule(records), [records]);
   const filteredRecords = React.useMemo(
@@ -218,7 +248,10 @@ export function Logs() {
               variant="outline"
               className="gap-1 border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
             >
-              <span className="size-2 rounded-full bg-emerald-500" aria-hidden="true" />
+              <span
+                className="size-2 animate-pulse rounded-full bg-emerald-500"
+                aria-hidden="true"
+              />
               Live
             </Badge>
           </div>
@@ -280,7 +313,7 @@ export function Logs() {
               ))}
             </SelectContent>
           </Select>
-          <div className="flex min-w-0 flex-1 flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1">
             {Object.entries(moduleCounts).map(([module, count]) => (
               <button
                 key={module}
@@ -298,12 +331,13 @@ export function Logs() {
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-1">
+          <div className="ml-auto flex items-center gap-1">
             <Input
+              id={SEARCH_INPUT_ID}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search logs"
-              className="h-8 w-40 font-mono text-xs"
+              placeholder="Search logs ( / )"
+              className="h-8 w-44 font-mono text-xs"
             />
             <Button
               type="button"
@@ -345,9 +379,18 @@ export function Logs() {
           </div>
         ) : null}
 
-        <div className="flex items-center justify-between border-b px-3 py-1.5 font-mono text-xs text-muted-foreground">
-          <span>{filteredRecords.length} records · RAM buffer {formatBytes(bufferBytes)}</span>
-          <span>rendering {visibleRecords.length} newest records</span>
+        <div className="relative border-b">
+          <div className="flex items-center justify-between px-3 py-1.5 font-mono text-xs text-foreground/70">
+            <span>
+              {filteredRecords.length} records · RAM buffer {formatBytes(bufferBytes)} ({bufferFillPct}%)
+            </span>
+            <span>rendering {visibleRecords.length} newest</span>
+          </div>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute bottom-0 left-0 h-px bg-primary/60"
+            style={{ width: `${bufferFillPct}%` }}
+          />
         </div>
 
         <div className="relative min-h-0 flex-1">
@@ -357,8 +400,13 @@ export function Logs() {
             className="h-full overflow-auto font-mono text-[12px] leading-5"
           >
             {visibleRecords.length === 0 ? (
-              <div className="flex h-full min-h-64 items-center justify-center text-sm text-muted-foreground">
-                No records match the current stream and search settings.
+              <div className="flex h-full min-h-64 flex-col items-center justify-center gap-1 text-sm text-muted-foreground">
+                <span>Waiting for daemon traffic…</span>
+                <span className="text-xs">
+                  Subscription ≥ {level.toUpperCase()}
+                  {moduleFilter ? ` · module ${moduleFilter}` : ""}
+                  {query ? ` · search "${query}"` : ""}
+                </span>
               </div>
             ) : (
               <div className="min-w-[960px]">
@@ -416,23 +464,39 @@ function LogRow({
 }) {
   const rendered = redactLogRecord(record, { redacted, maskAmounts });
   const fieldText = fieldsForScreen(rendered.fields);
-  const expandable = record.level === "error" || Boolean(record.spantrace?.length);
+  const time = rowTime(rendered.ts);
   return (
     <article className="border-b">
       <button
         type="button"
+        aria-expanded={expanded}
         className={cn(
-          "grid w-full grid-cols-[150px_76px_260px_minmax(320px,1fr)] gap-3 px-3 py-1.5 text-left transition-colors hover:bg-muted/60",
+          "grid w-full grid-cols-[20px_112px_76px_180px_minmax(320px,1fr)] items-center gap-3 px-3 py-1.5 text-left transition-colors hover:bg-muted/60",
           record.level === "error" && "bg-destructive/10",
         )}
-        onClick={expandable ? onToggle : undefined}
+        onClick={onToggle}
       >
-        <span className="text-muted-foreground">{timeOnly(rendered.ts)}</span>
+        <ChevronRight
+          className={cn(
+            "size-3.5 text-muted-foreground transition-transform",
+            expanded && "rotate-90",
+          )}
+          aria-hidden="true"
+        />
+        <span
+          className="whitespace-nowrap text-muted-foreground"
+          title={time.full}
+        >
+          {time.display}
+        </span>
         <Badge variant="outline" className={cn("justify-center uppercase", LEVEL_CLASS[rendered.level])}>
           {rendered.level}
         </Badge>
-        <span className="truncate text-muted-foreground">
-          {logLocation(rendered)}
+        <span
+          className="truncate text-muted-foreground"
+          title={logLocation(rendered)}
+        >
+          {rendered.module}
         </span>
         <span className="min-w-0">
           <span className="text-foreground">{rendered.msg}</span>
@@ -521,10 +585,15 @@ function fieldsForScreen(fields: Record<string, AppLogField>): string {
     .join(" ");
 }
 
-function timeOnly(ts: string): string {
+function rowTime(ts: string): { display: string; full: string } {
   const date = new Date(ts);
-  if (Number.isNaN(date.getTime())) return ts;
-  return date.toISOString();
+  if (Number.isNaN(date.getTime())) return { display: ts, full: ts };
+  const full = date.toISOString();
+  const today = new Date().toISOString().slice(0, 10);
+  const display = full.startsWith(today)
+    ? full.slice(11, 23) // HH:MM:SS.mmm
+    : `${full.slice(5, 10)} ${full.slice(11, 19)}`; // MM-DD HH:MM:SS
+  return { display, full };
 }
 
 function timeRangeLabel(records: AppLogRecord[]): string {
