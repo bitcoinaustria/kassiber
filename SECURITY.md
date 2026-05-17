@@ -119,10 +119,14 @@ from a parent process.
   The DB inside the backup is encrypted under whatever passphrase was
   active when the backup was produced.
 
-**OS keychain is not the perimeter.** This iteration deliberately does
-not store unlock material in the OS keychain. The passphrase is the
+**OS keychain is not the perimeter.** The SQLCipher passphrase is the
 perimeter. Pick a long passphrase from a password manager and treat
 the loss of that passphrase as data loss — there is no recovery path.
+Desktop macOS builds can optionally remember the database passphrase in
+Keychain behind a local user-presence prompt for Touch ID-style unlock.
+That is convenience only: disabling it removes Kassiber's saved copy, but
+it does not change the SQLCipher key, recover a lost passphrase, or move
+backend/wallet material out of the encrypted database.
 
 **Desktop credential stores are a separate boundary, not SQLCipher
 replacement.** Desktop builds can store AI provider API keys in macOS

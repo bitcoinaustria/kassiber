@@ -49,6 +49,7 @@ export interface AppLockPolicy {
   idleMinutes: number;
   requirePassphraseOnLaunch: boolean;
   lockOnWindowClose: boolean;
+  touchIdUnlock: boolean;
 }
 
 export interface ImportedProjectIdentity {
@@ -196,6 +197,7 @@ const DEFAULT_APP_LOCK_POLICY: AppLockPolicy = {
   idleMinutes: 5,
   requirePassphraseOnLaunch: false,
   lockOnWindowClose: false,
+  touchIdUnlock: false,
 };
 
 function normalizeIdentity(identity: Identity | null): Identity | null {

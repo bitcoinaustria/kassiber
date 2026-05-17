@@ -232,6 +232,16 @@ pub const STORE_ID_MACOS_KEYCHAIN: &str = "macos_keychain";
 pub const STORE_ID_WINDOWS_DPAPI: &str = "windows_dpapi";
 pub const STORE_ID_LINUX_SECRET_SERVICE: &str = "linux_secret_service";
 pub const STORE_ID_SQLCIPHER_INLINE: &str = "sqlcipher_inline";
+pub const TOUCH_ID_PASSPHRASE_SERVICE: &str = "Kassiber Database Passphrase";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct TouchIdPassphraseStatus {
+    pub platform: SecretStorePlatform,
+    pub available: bool,
+    pub configured: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
 
 pub fn default_secret_store_availability() -> SecretStoreAvailability {
     if cfg!(target_os = "macos") {
@@ -441,6 +451,208 @@ pub fn secret_store_policy_status() -> serde_json::Value {
         "default": default_selection,
         "policy": platform_policy_summary(),
     })
+}
+
+pub fn touch_id_passphrase_status(account: &str) -> TouchIdPassphraseStatus {
+    let platform = current_secret_store_platform();
+    if !cfg!(target_os = "macos") {
+        return TouchIdPassphraseStatus {
+            platform,
+            available: false,
+            configured: false,
+            reason: Some(
+                "Touch ID passphrase unlock is only available in the macOS desktop app."
+                    .to_string(),
+            ),
+        };
+    }
+
+    match touch_id_biometrics_available() {
+        Ok(()) => match touch_id_passphrase_exists(account) {
+            Ok(configured) => TouchIdPassphraseStatus {
+                platform,
+                available: true,
+                configured,
+                reason: None,
+            },
+            Err(reason) => TouchIdPassphraseStatus {
+                platform,
+                available: true,
+                configured: false,
+                reason: Some(reason),
+            },
+        },
+        Err(reason) => TouchIdPassphraseStatus {
+            platform,
+            available: false,
+            configured: false,
+            reason: Some(reason),
+        },
+    }
+}
+
+pub fn touch_id_store_passphrase(account: &str, passphrase: &str) -> Result<(), String> {
+    if passphrase.is_empty() {
+        return Err("database passphrase must not be empty".to_string());
+    }
+    touch_id_passphrase_entry(account)?
+        .set_secret(passphrase.as_bytes())
+        .map_err(keyring_error_for_user)
+}
+
+pub fn touch_id_get_passphrase(account: &str) -> Result<Option<String>, String> {
+    if !touch_id_passphrase_exists(account)? {
+        return Ok(None);
+    }
+    authenticate_touch_id_for_passphrase()?;
+    match touch_id_passphrase_entry(account)?.get_secret() {
+        Ok(secret) => String::from_utf8(secret)
+            .map(Some)
+            .map_err(|_| "stored database passphrase is not UTF-8".to_string()),
+        Err(KeyringError::NoEntry) => Ok(None),
+        Err(error) => Err(keyring_error_for_user(error)),
+    }
+}
+
+pub fn touch_id_delete_passphrase(account: &str) -> Result<(), String> {
+    match touch_id_passphrase_entry(account)?.delete_credential() {
+        Ok(()) | Err(KeyringError::NoEntry) => Ok(()),
+        Err(error) => Err(keyring_error_for_user(error)),
+    }
+}
+
+fn touch_id_passphrase_exists(account: &str) -> Result<bool, String> {
+    if account.trim().is_empty() {
+        return Err("Touch ID account is missing.".to_string());
+    }
+    touch_id_passphrase_search(account)
+}
+
+#[cfg(target_os = "macos")]
+fn touch_id_passphrase_entry(account: &str) -> Result<Entry, String> {
+    if account.trim().is_empty() {
+        return Err("Touch ID account is missing.".to_string());
+    }
+    apple_native_keyring_store::keychain::Store::new()
+        .map_err(keyring_error_for_user)?
+        .build(TOUCH_ID_PASSPHRASE_SERVICE, account, None)
+        .map_err(keyring_error_for_user)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn touch_id_passphrase_entry(_account: &str) -> Result<Entry, String> {
+    Err("Touch ID passphrase unlock is only available in the macOS desktop app.".to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn touch_id_passphrase_search(account: &str) -> Result<bool, String> {
+    let mut spec = HashMap::new();
+    spec.insert("service", TOUCH_ID_PASSPHRASE_SERVICE);
+    spec.insert("account", account);
+    Ok(!apple_native_keyring_store::keychain::Store::new()
+        .map_err(keyring_error_for_user)?
+        .search(&spec)
+        .map_err(keyring_error_for_user)?
+        .is_empty())
+}
+
+#[cfg(target_os = "macos")]
+fn authenticate_touch_id_for_passphrase() -> Result<(), String> {
+    use block2::RcBlock;
+    use objc2::msg_send;
+    use objc2::runtime::{AnyObject, Bool};
+    use objc2_foundation::NSString;
+    use std::sync::mpsc;
+
+    let context = touch_id_context_if_available()?;
+
+    let reason = NSString::from_str("Unlock Kassiber with Touch ID");
+    let (sender, receiver) = mpsc::channel();
+    let reply = RcBlock::new(move |success: Bool, _error: *mut AnyObject| {
+        let _ = sender.send(success.as_bool());
+    });
+    unsafe {
+        let _: () = msg_send![
+            &*context,
+            evaluatePolicy: LAPOLICY_DEVICE_OWNER_AUTHENTICATION_WITH_BIOMETRICS,
+            localizedReason: &*reason,
+            reply: &*reply
+        ];
+    }
+
+    match receiver.recv() {
+        Ok(true) => Ok(()),
+        Ok(false) => Err("Touch ID authentication was cancelled or failed.".to_string()),
+        Err(_) => Err("Touch ID authentication did not return a result.".to_string()),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn touch_id_biometrics_available() -> Result<(), String> {
+    touch_id_context_if_available().map(|_| ())
+}
+
+#[cfg(target_os = "macos")]
+fn touch_id_context_if_available() -> Result<objc2::rc::Retained<objc2::runtime::AnyObject>, String>
+{
+    use objc2::msg_send;
+    use objc2::rc::Retained;
+    use objc2::runtime::{AnyClass, AnyObject, Bool};
+
+    let class = AnyClass::get(c"LAContext")
+        .ok_or_else(|| "LocalAuthentication is unavailable on this Mac".to_string())?;
+    let context: Retained<AnyObject> = unsafe { msg_send![class, new] };
+    let mut can_evaluate_error: *mut AnyObject = std::ptr::null_mut();
+    let can_evaluate: Bool = unsafe {
+        msg_send![
+            &*context,
+            canEvaluatePolicy: LAPOLICY_DEVICE_OWNER_AUTHENTICATION_WITH_BIOMETRICS,
+            error: &mut can_evaluate_error
+        ]
+    };
+    if can_evaluate.as_bool() {
+        Ok(context)
+    } else {
+        Err(
+            ns_error_localized_description(can_evaluate_error).unwrap_or_else(|| {
+                "Touch ID is not available or not enrolled for this Mac user.".to_string()
+            }),
+        )
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn ns_error_localized_description(error: *mut objc2::runtime::AnyObject) -> Option<String> {
+    if error.is_null() {
+        return None;
+    }
+    use objc2::msg_send;
+    use objc2_foundation::NSString;
+
+    let description: *mut NSString = unsafe { msg_send![error, localizedDescription] };
+    if description.is_null() {
+        return None;
+    }
+    Some(unsafe { &*description }.to_string())
+}
+
+#[cfg(target_os = "macos")]
+// LocalAuthentication.framework LAPolicy.deviceOwnerAuthenticationWithBiometrics.
+const LAPOLICY_DEVICE_OWNER_AUTHENTICATION_WITH_BIOMETRICS: i64 = 1;
+
+#[cfg(not(target_os = "macos"))]
+fn touch_id_biometrics_available() -> Result<(), String> {
+    Err("Touch ID passphrase unlock is only available in the macOS desktop app.".to_string())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn authenticate_touch_id_for_passphrase() -> Result<(), String> {
+    Err("Touch ID passphrase unlock is only available in the macOS desktop app.".to_string())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn touch_id_passphrase_search(_account: &str) -> Result<bool, String> {
+    Err("Touch ID passphrase unlock is only available in the macOS desktop app.".to_string())
 }
 
 fn native_warning_for(

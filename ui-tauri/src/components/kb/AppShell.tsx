@@ -20,6 +20,7 @@ import {
   Database,
   Eye,
   EyeOff,
+  Fingerprint,
   Gauge,
   Heart,
   LifeBuoy,
@@ -89,10 +90,15 @@ import {
 } from "@/daemon/client";
 import {
   activateImportProject,
+  canUseTouchIdPassphraseUnlock,
   clearImportProject,
   getTransport,
   isImportProjectActive,
+  storeTouchIdPassphrase,
+  touchIdPassphraseStatus,
+  unlockTouchIdPassphrase,
 } from "@/daemon/transport";
+import type { TouchIdPassphraseStatus } from "@/daemon/transport";
 import {
   lockScreenConfig,
   shouldLockEncryptedWorkspaceOnLaunch,
@@ -548,6 +554,7 @@ export function AppShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const identity = useUiStore((s) => s.identity);
   const appLockPolicy = useUiStore((s) => s.appLockPolicy);
+  const setAppLockPolicy = useUiStore((s) => s.setAppLockPolicy);
   const setIdentity = useUiStore((s) => s.setIdentity);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const addNotification = useUiStore((s) => s.addNotification);
@@ -563,6 +570,8 @@ export function AppShell() {
     hasSessionUnlock: hasSessionUnlockPassphrase(),
   });
   const importedProjectRoot = identity?.importedProject?.dataRoot ?? null;
+  const touchIdDataRoot = importedProjectRoot;
+  const touchIdPlatformSupported = canUseTouchIdPassphraseUnlock();
   const [importRootReady, setImportRootReady] = React.useState(
     () => !importedProjectRoot,
   );
@@ -570,6 +579,8 @@ export function AppShell() {
     null,
   );
   const [daemonAuthRequired, setDaemonAuthRequired] = React.useState(false);
+  const [touchIdStatus, setTouchIdStatus] =
+    React.useState<TouchIdPassphraseStatus | null>(null);
   const requiresDaemonUnlock = shouldUseDaemonUnlock({
     dataMode,
     hasIdentity: Boolean(identity),
@@ -587,6 +598,8 @@ export function AppShell() {
   const [locked, setLocked] = React.useState(
     () => lockEncryptedWorkspaceOnLaunch,
   );
+  const [touchIdAutoPromptPending, setTouchIdAutoPromptPending] =
+    React.useState(() => lockEncryptedWorkspaceOnLaunch);
   const [assistantReturnPath, setAssistantReturnPath] =
     React.useState<AssistantReturnPath>("/overview");
   const mainRef = React.useRef<HTMLElement>(null);
@@ -616,7 +629,33 @@ export function AppShell() {
     }
   }, [identity?.importedProject]);
 
-  const lockApp = React.useCallback(() => {
+  const refreshTouchIdStatus = React.useCallback(async () => {
+    if (!encryptedWorkspace || !touchIdPlatformSupported) {
+      setTouchIdStatus(null);
+      return null;
+    }
+    try {
+      const status = await touchIdPassphraseStatus(touchIdDataRoot);
+      setTouchIdStatus(status);
+      return status;
+    } catch (error) {
+      const status: TouchIdPassphraseStatus = {
+        platform: "macos",
+        available: false,
+        configured: false,
+        reason: error instanceof Error ? error.message : String(error),
+      };
+      setTouchIdStatus(status);
+      return status;
+    }
+  }, [
+    encryptedWorkspace,
+    touchIdDataRoot,
+    touchIdPlatformSupported,
+  ]);
+
+  const applyLock = React.useCallback((autoPromptTouchId: boolean) => {
+    setTouchIdAutoPromptPending(autoPromptTouchId);
     if (requiresDaemonUnlock) {
       clearSessionUnlockPassphrase();
       clearDaemonQueryCache();
@@ -642,10 +681,16 @@ export function AppShell() {
     requiresDaemonUnlock,
     setIdentity,
   ]);
+  const lockApp = React.useCallback(() => applyLock(false), [applyLock]);
+  const lockAppWithTouchIdAutoPrompt = React.useCallback(
+    () => applyLock(true),
+    [applyLock],
+  );
 
   const unlockApp = React.useCallback(
     async (
       passphrase: string,
+      options?: { rememberWithTouchId?: boolean },
     ): Promise<{ ok: boolean; error?: string | null }> => {
       if (requiresDaemonUnlock) {
         if (importRootBlocked) {
@@ -670,7 +715,33 @@ export function AppShell() {
         if (unlocked) {
           await setSessionUnlockPassphrase(passphrase);
           setDaemonAuthRequired(false);
+          setTouchIdAutoPromptPending(false);
           setLocked(false);
+          const shouldRememberWithTouchId =
+            touchIdPlatformSupported &&
+            options?.rememberWithTouchId !== false &&
+            (appLockPolicy.touchIdUnlock ||
+              options?.rememberWithTouchId === true);
+          if (shouldRememberWithTouchId) {
+            void storeTouchIdPassphrase(passphrase, touchIdDataRoot)
+              .then((status) => {
+                setTouchIdStatus(status);
+                if (options?.rememberWithTouchId === true) {
+                  setAppLockPolicy({ touchIdUnlock: true });
+                }
+              })
+              .catch((error: unknown) => {
+                addNotification({
+                  title: "Touch ID unlock was not saved",
+                  body:
+                    error instanceof Error
+                      ? error.message
+                      : "macOS Keychain did not accept the saved passphrase.",
+                  tone: "warning",
+                });
+                void refreshTouchIdStatus();
+              });
+          }
           void queryClient.invalidateQueries({
             queryKey: ["daemon"],
           });
@@ -692,20 +763,46 @@ export function AppShell() {
 
       const unlocked = await verifySessionUnlockPassphrase(passphrase);
       if (unlocked) {
+        setTouchIdAutoPromptPending(false);
         setLocked(false);
       }
       return { ok: unlocked, error: null };
     },
     [
+      addNotification,
+      appLockPolicy.touchIdUnlock,
       bumpDaemonSession,
       clearDaemonQueryCache,
       identity?.importedProject,
       importRootBlocked,
       importRootError,
       queryClient,
+      refreshTouchIdStatus,
       requiresDaemonUnlock,
+      setAppLockPolicy,
+      touchIdDataRoot,
+      touchIdPlatformSupported,
     ],
   );
+
+  const unlockWithTouchId = React.useCallback(async () => {
+    const unlocked = await unlockTouchIdPassphrase(touchIdDataRoot);
+    if (!unlocked?.passphraseSecret) {
+      await refreshTouchIdStatus();
+      return {
+        ok: false,
+        error:
+          "No Touch ID passphrase was found for these books. Unlock once with the passphrase to save it again.",
+      };
+    }
+    return unlockApp(unlocked.passphraseSecret, {
+      rememberWithTouchId: false,
+    });
+  }, [
+    refreshTouchIdStatus,
+    touchIdDataRoot,
+    unlockApp,
+  ]);
 
   const resetLocalUiSession = React.useCallback(() => {
     clearSessionUnlockPassphrase();
@@ -829,13 +926,13 @@ export function AppShell() {
     setImportRootError(null);
     clearDaemonQueryCache();
     clearSessionUnlockPassphrase();
-    setLocked(
-      shouldLockEncryptedWorkspaceOnLaunch({
-        encryptedWorkspace,
-        requirePassphraseOnLaunch: appLockPolicy.requirePassphraseOnLaunch,
-        hasSessionUnlock: false,
-      }),
-    );
+    const nextLocked = shouldLockEncryptedWorkspaceOnLaunch({
+      encryptedWorkspace,
+      requirePassphraseOnLaunch: appLockPolicy.requirePassphraseOnLaunch,
+      hasSessionUnlock: false,
+    });
+    setTouchIdAutoPromptPending(nextLocked);
+    setLocked(nextLocked);
     void activateImportProject(importedProjectRoot)
       .then(() => {
         if (disposed) return;
@@ -877,6 +974,7 @@ export function AppShell() {
       setDaemonAuthRequired(true);
       clearSessionUnlockPassphrase();
       clearDaemonQueryCache();
+      setTouchIdAutoPromptPending(true);
       setLocked(true);
     };
 
@@ -891,8 +989,13 @@ export function AppShell() {
     if (hasSessionUnlockPassphrase()) return;
     if (launchLockApplied.current) return;
     launchLockApplied.current = true;
-    lockApp();
-  }, [lockEncryptedWorkspaceOnLaunch, lockApp]);
+    lockAppWithTouchIdAutoPrompt();
+  }, [lockEncryptedWorkspaceOnLaunch, lockAppWithTouchIdAutoPrompt]);
+
+  React.useEffect(() => {
+    if (!locked) return;
+    void refreshTouchIdStatus();
+  }, [locked, refreshTouchIdStatus]);
 
   React.useEffect(() => {
     if (!encryptedWorkspace || !appLockPolicy.autoLockWhenIdle || locked) {
@@ -1133,6 +1236,14 @@ export function AppShell() {
                       reason={lockedScreen.reason}
                       passphraseRequired={lockedScreen.passphraseRequired}
                       onUnlock={unlockApp}
+                      onTouchIdUnlock={unlockWithTouchId}
+                      touchIdEnabled={appLockPolicy.touchIdUnlock}
+                      touchIdPlatformSupported={touchIdPlatformSupported}
+                      touchIdStatus={touchIdStatus}
+                      autoTouchIdPrompt={
+                        appLockPolicy.touchIdUnlock &&
+                        touchIdAutoPromptPending
+                      }
                       onReset={resetLocalUiSession}
                     />
                   </main>
@@ -2081,23 +2192,55 @@ function LockScreen({
   reason,
   passphraseRequired = true,
   onUnlock,
+  onTouchIdUnlock,
+  touchIdEnabled,
+  touchIdPlatformSupported,
+  touchIdStatus,
+  autoTouchIdPrompt,
   onReset,
 }: {
   reason?: string;
   passphraseRequired?: boolean;
   onUnlock: (
     passphrase: string,
+    options?: { rememberWithTouchId?: boolean },
   ) => Promise<{ ok: boolean; error?: string | null }>;
+  onTouchIdUnlock: () => Promise<{ ok: boolean; error?: string | null }>;
+  touchIdEnabled: boolean;
+  touchIdPlatformSupported: boolean;
+  touchIdStatus: TouchIdPassphraseStatus | null;
+  autoTouchIdPrompt: boolean;
   onReset: () => void;
 }) {
   const [passphrase, setPassphrase] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
+  const [touchIdSubmitting, setTouchIdSubmitting] = React.useState(false);
+  const autoTouchIdPrompted = React.useRef(false);
+  const canEnrollTouchId =
+    touchIdPlatformSupported &&
+    passphraseRequired &&
+    !touchIdEnabled &&
+    touchIdStatus?.available !== false;
+  const [enrollTouchId, setEnrollTouchId] = React.useState(
+    () => touchIdEnabled && canEnrollTouchId,
+  );
   const inputRef = React.useRef<HTMLInputElement | null>(null);
-
+  const canUseTouchId =
+    touchIdEnabled &&
+    touchIdPlatformSupported &&
+    passphraseRequired &&
+    touchIdStatus?.available === true &&
+    touchIdStatus.configured;
   React.useEffect(() => {
     if (passphraseRequired) inputRef.current?.focus();
   }, [passphraseRequired]);
+
+  React.useEffect(() => {
+    if (!canEnrollTouchId) {
+      setEnrollTouchId(false);
+    }
+  }, [canEnrollTouchId]);
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -2105,7 +2248,9 @@ function LockScreen({
     setError(null);
     setSubmitting(true);
     try {
-      const result = await onUnlock(passphrase);
+      const result = await onUnlock(passphrase, {
+        rememberWithTouchId: canEnrollTouchId ? enrollTouchId : undefined,
+      });
       if (!result.ok) {
         setError(result.error ?? "Passphrase did not unlock this session.");
         setPassphrase("");
@@ -2115,6 +2260,32 @@ function LockScreen({
       setSubmitting(false);
     }
   };
+
+  const submitTouchId = React.useCallback(async () => {
+    if (touchIdSubmitting || submitting) return;
+    let keepPending = false;
+    setError(null);
+    setTouchIdSubmitting(true);
+    try {
+      const result = await onTouchIdUnlock();
+      if (!result.ok) {
+        setError(result.error ?? "Touch ID did not unlock this session.");
+      } else {
+        keepPending = true;
+      }
+    } finally {
+      if (!keepPending) {
+        setTouchIdSubmitting(false);
+      }
+    }
+  }, [onTouchIdUnlock, submitting, touchIdSubmitting]);
+
+  React.useEffect(() => {
+    if (!autoTouchIdPrompt || !canUseTouchId) return;
+    if (autoTouchIdPrompted.current) return;
+    autoTouchIdPrompted.current = true;
+    void submitTouchId();
+  }, [autoTouchIdPrompt, canUseTouchId, submitTouchId]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background px-4 text-foreground">
@@ -2139,7 +2310,12 @@ function LockScreen({
             </p>
           </div>
         </div>
-        {passphraseRequired ? (
+        {passphraseRequired && touchIdSubmitting ? (
+          <div className="mt-5 flex items-center gap-3 rounded-md border bg-background p-3 text-sm text-muted-foreground">
+            <Fingerprint className="size-4 text-foreground" aria-hidden="true" />
+            <span>Unlocking with Touch ID...</span>
+          </div>
+        ) : passphraseRequired ? (
           <div className="mt-5 space-y-2">
             <label
               htmlFor="lock-passphrase"
@@ -2157,6 +2333,47 @@ function LockScreen({
               disabled={submitting}
             />
             {error && <p className="m-0 text-xs text-destructive">{error}</p>}
+            {touchIdEnabled &&
+            touchIdPlatformSupported &&
+            touchIdStatus?.available === false ? (
+              <p className="m-0 text-xs text-muted-foreground">
+                {touchIdStatus.reason
+                  ? `Touch ID unlock is unavailable: ${touchIdStatus.reason}`
+                  : "Touch ID unlock is unavailable for this desktop session."}
+              </p>
+            ) : null}
+            {touchIdEnabled &&
+            touchIdPlatformSupported &&
+            touchIdStatus?.available === true &&
+            !touchIdStatus.configured ? (
+              <p className="m-0 text-xs text-muted-foreground">
+                {touchIdStatus.reason
+                  ? `Touch ID unlock is not set up: ${touchIdStatus.reason}`
+                  : "No Touch ID passphrase is saved for these books. Unlock once with the passphrase to save it again."}
+              </p>
+            ) : null}
+            {canEnrollTouchId ? (
+              <label
+                htmlFor="lock-touch-id-enroll"
+                className="flex items-center justify-between gap-3 rounded-md border bg-background p-3"
+              >
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-foreground">
+                    Use Touch ID next time
+                  </span>
+                  <span className="block text-xs leading-5 text-muted-foreground">
+                    Save this database passphrase in macOS Keychain behind
+                    local user presence.
+                  </span>
+                </span>
+                <Switch
+                  id="lock-touch-id-enroll"
+                  checked={enrollTouchId}
+                  disabled={submitting}
+                  onCheckedChange={setEnrollTouchId}
+                />
+              </label>
+            ) : null}
           </div>
         ) : (
           error && (
@@ -2165,7 +2382,27 @@ function LockScreen({
             </p>
           )
         )}
-        <Button className="mt-5 w-full" type="submit" disabled={submitting}>
+        {canUseTouchId ? (
+          <Button
+            className="mt-5 w-full"
+            type="button"
+            variant="outline"
+            disabled={submitting || touchIdSubmitting}
+            onClick={() => {
+              void submitTouchId();
+            }}
+          >
+            <Fingerprint className="size-4" aria-hidden="true" />
+            {touchIdSubmitting
+              ? "Waiting for Touch ID..."
+              : "Unlock with Touch ID"}
+          </Button>
+        ) : null}
+        <Button
+          className="mt-5 w-full"
+          type="submit"
+          disabled={submitting || touchIdSubmitting}
+        >
           {submitting
             ? "Unlocking..."
             : passphraseRequired

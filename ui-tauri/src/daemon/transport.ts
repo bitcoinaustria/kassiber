@@ -96,6 +96,17 @@ export interface ImportProjectSelection {
   encrypted: boolean;
 }
 
+export interface TouchIdPassphraseStatus {
+  platform: "macos" | "windows" | "linux" | "unsupported";
+  available: boolean;
+  configured: boolean;
+  reason?: string | null;
+}
+
+export interface TouchIdPassphraseUnlock {
+  passphraseSecret: string;
+}
+
 let activeImportProjectSelection: ImportProjectSelection | null = null;
 let activeImportProjectActivation:
   | {
@@ -477,6 +488,73 @@ export async function clearImportProject(): Promise<void> {
 
 export function canImportProjects(): boolean {
   return DAEMON_MODE === "tauri";
+}
+
+export function canUseTouchIdPassphraseUnlock(): boolean {
+  if (DAEMON_MODE !== "tauri" || typeof navigator === "undefined") {
+    return false;
+  }
+  return navigator.platform.toLowerCase().includes("mac");
+}
+
+const TOUCH_ID_UNAVAILABLE: TouchIdPassphraseStatus = {
+  platform: "unsupported",
+  available: false,
+  configured: false,
+  reason: "desktop_only",
+};
+
+export async function touchIdPassphraseStatus(
+  dataRoot?: string | null,
+): Promise<TouchIdPassphraseStatus> {
+  if (DAEMON_MODE !== "tauri") {
+    return TOUCH_ID_UNAVAILABLE;
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<TouchIdPassphraseStatus>("touch_id_passphrase_status_command", {
+    dataRoot: dataRoot ?? null,
+  });
+}
+
+export async function storeTouchIdPassphrase(
+  passphraseSecret: string,
+  dataRoot?: string | null,
+): Promise<TouchIdPassphraseStatus> {
+  if (DAEMON_MODE !== "tauri") {
+    return TOUCH_ID_UNAVAILABLE;
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<TouchIdPassphraseStatus>("touch_id_store_passphrase_command", {
+    dataRoot: dataRoot ?? null,
+    passphraseSecret,
+  });
+}
+
+export async function unlockTouchIdPassphrase(
+  dataRoot?: string | null,
+): Promise<TouchIdPassphraseUnlock | null> {
+  if (DAEMON_MODE !== "tauri") {
+    return null;
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<TouchIdPassphraseUnlock | null>(
+    "touch_id_unlock_passphrase_command",
+    {
+      dataRoot: dataRoot ?? null,
+    },
+  );
+}
+
+export async function forgetTouchIdPassphrase(
+  dataRoot?: string | null,
+): Promise<TouchIdPassphraseStatus> {
+  if (DAEMON_MODE !== "tauri") {
+    return TOUCH_ID_UNAVAILABLE;
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<TouchIdPassphraseStatus>("touch_id_forget_passphrase_command", {
+    dataRoot: dataRoot ?? null,
+  });
 }
 
 const tauriDaemon: DaemonTransport = {
