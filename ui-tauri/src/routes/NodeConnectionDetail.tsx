@@ -522,7 +522,10 @@ function ChannelsCard({
   hideSensitive,
   totalCapacitySat,
 }: ChannelsCardProps) {
-  const [showClosed, setShowClosed] = useState(false);
+  // When a node only has closed channels left, default to showing them so
+  // the "Show closed" toggle is not the only way to see any channel data.
+  const closedOnly = channels.length === 0 && closedChannels.length > 0;
+  const [showClosed, setShowClosed] = useState(closedOnly);
   const [openChannelId, setOpenChannelId] = useState<string | null>(null);
   const sorted = useMemo(
     () => [...channels].sort((a, b) => b.capacitySat - a.capacitySat),
@@ -538,6 +541,10 @@ function ChannelsCard({
   );
   const openChannel =
     allChannels.find((channel) => channel.id === openChannelId) ?? null;
+  const visibleRows = useMemo(
+    () => (showClosed ? [...sorted, ...sortedClosed] : sorted),
+    [showClosed, sorted, sortedClosed],
+  );
   return (
     <Card>
       <CardHeader className="border-b px-4 pb-3">
@@ -567,7 +574,7 @@ function ChannelsCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="p-0">
-        {sorted.length === 0 ? (
+        {visibleRows.length === 0 ? (
           <div className="px-5 py-8 text-sm text-muted-foreground">
             No channels reported by the node.
           </div>
@@ -583,7 +590,7 @@ function ChannelsCard({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sorted.map((channel) => (
+              {visibleRows.map((channel) => (
                 <ChannelRow
                   key={channel.id}
                   channel={channel}
@@ -592,17 +599,6 @@ function ChannelsCard({
                   onOpen={() => setOpenChannelId(channel.id)}
                 />
               ))}
-              {showClosed
-                ? sortedClosed.map((channel) => (
-                    <ChannelRow
-                      key={channel.id}
-                      channel={channel}
-                      hideSensitive={hideSensitive}
-                      totalCapacitySat={totalCapacitySat}
-                      onOpen={() => setOpenChannelId(channel.id)}
-                    />
-                  ))
-                : null}
             </TableBody>
           </Table>
         )}
