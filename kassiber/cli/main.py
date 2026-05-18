@@ -178,6 +178,14 @@ def _backend_extra_config(args: argparse.Namespace) -> dict[str, object] | None:
         config["cookiefile"] = args.cookiefile
     if getattr(args, "certificate", None) is not None:
         config["certificate"] = args.certificate
+    if getattr(args, "lightning_cli", None) is not None:
+        config["lightning_cli"] = args.lightning_cli
+    if getattr(args, "lightning_dir", None) is not None:
+        config["lightning_dir"] = args.lightning_dir
+    if getattr(args, "rpc_file", None) is not None:
+        config["rpc_file"] = args.rpc_file
+    if getattr(args, "commando_peer_id", None) is not None:
+        config["commando_peer_id"] = args.commando_peer_id
     username = read_secret_from_args(args, "username")
     if username is not None:
         config["username"] = username
@@ -483,6 +491,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to tls.cert or PEM contents (LND).",
     )
     backends_create.add_argument("--cookiefile")
+    backends_create.add_argument("--lightning-cli", dest="lightning_cli")
+    backends_create.add_argument("--lightning-dir", dest="lightning_dir")
+    backends_create.add_argument("--rpc-file", dest="rpc_file")
+    backends_create.add_argument("--commando-peer-id", dest="commando_peer_id")
     backends_create.add_argument(
         "--username",
         help="DEPRECATED — exposes secrets in shell history; prefer --username-stdin",
@@ -521,6 +533,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to tls.cert or PEM contents (LND).",
     )
     backends_update.add_argument("--cookiefile")
+    backends_update.add_argument("--lightning-cli", dest="lightning_cli")
+    backends_update.add_argument("--lightning-dir", dest="lightning_dir")
+    backends_update.add_argument("--rpc-file", dest="rpc_file")
+    backends_update.add_argument("--commando-peer-id", dest="commando_peer_id")
     backends_update.add_argument(
         "--username",
         help="DEPRECATED — prefer --username-stdin",

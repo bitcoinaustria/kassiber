@@ -48,6 +48,11 @@ from .types import (
     snapshot_to_dict_for_ai,
 )
 
+# Import side-effect: each adapter module registers itself with the registry
+# at import time. Listing them here ensures the daemon and CLI can resolve
+# the adapter without an explicit import.
+from . import cln as _cln  # noqa: F401  -- register_adapter("coreln", ...)
+
 __all__ = [
     "ChannelOpenCostCheck",
     "DEFAULT_OPEN_COST_SAT",

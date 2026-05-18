@@ -36,6 +36,10 @@ EnrichBTCPayWallet = Callable[
     [sqlite3.Connection, RuntimeConfig, ProfileRow, WalletRow],
     SyncOutcome,
 ]
+SyncCoreLightningWallet = Callable[
+    [sqlite3.Connection, RuntimeConfig, ProfileRow, WalletRow],
+    SyncOutcome,
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +63,7 @@ class WalletSyncHooks:
     backend_adapters: Mapping[str, BackendAdapter]
     sync_btcpay_wallet: SyncBTCPayWallet | None = None
     enrich_btcpay_wallet: EnrichBTCPayWallet | None = None
+    sync_core_lightning_wallet: SyncCoreLightningWallet | None = None
 
 
 def _merge_btcpay_enrichment(
@@ -87,6 +92,8 @@ def normalize_backend_kind(kind: Any) -> str:
         "bitcoin-core": "bitcoinrpc",
         "bitcoincore": "bitcoinrpc",
         "core": "bitcoinrpc",
+        "core-ln": "coreln",
+        "core-lightning": "coreln",
         "liquid-esplora": "esplora",
     }
     return aliases.get(value, value)
@@ -162,6 +169,12 @@ def sync_wallets(
                 raise AppError("BTCPay source refresh is not configured for this runtime")
             outcome = hooks.sync_btcpay_wallet(conn, runtime_config, profile, wallet)
             results.append({"wallet": wallet["label"], "status": "synced", **outcome})
+            continue
+        if wallet["kind"] == "coreln" and config.get("backend"):
+            if hooks.sync_core_lightning_wallet is None:
+                raise AppError("Core Lightning source refresh is not configured for this runtime")
+            outcome = hooks.sync_core_lightning_wallet(conn, runtime_config, profile, wallet)
+            results.append({"wallet": wallet["label"], **outcome})
             continue
         if source_file and source_format:
             outcome = hooks.import_file(conn, profile, wallet, source_file, source_format)

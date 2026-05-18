@@ -1,0 +1,421 @@
+"""Tests for the Core Lightning adapter.
+
+Covers the scaffold contract (registration on import, `fetch_node_snapshot`
+shape, private-channel handling), opsec discards (preimages, bolt11, route
+hops never reach the snapshot), the routed-vs-invoice double-count
+regression (P1 fix #1), and the read-only RPC allowlist.
+"""
+
+from __future__ import annotations
+
+import tempfile
+import unittest
+from pathlib import Path
+from typing import Any
+
+from kassiber.backends import get_db_backend
+from kassiber.core import accounts as core_accounts
+from kassiber.core import imports as core_imports
+from kassiber.core import wallets as core_wallets
+from kassiber.core.lightning import (
+    NodeSnapshot,
+    register_adapter,
+    resolve_adapter,
+)
+from kassiber.core.lightning import cln as core_cln
+from kassiber.core.lightning.cln import CoreLightningAdapter
+from kassiber.core.repo import fetch_wallet_with_account, invalidate_journals
+from kassiber.db import open_db
+from kassiber.errors import AppError
+
+
+def _canned_payloads(extra: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Canned RPC responses with the kinds of Tier-1 fields adapters must
+    discard already present, so the tests can prove they never leak out."""
+    payloads: dict[str, Any] = {
+        "getinfo": {
+            "id": "03" + "cd" * 32,
+            "alias": "k-node",
+            "version": "v23.11",
+            "blockheight": 800_001,
+            "network": "bitcoin",
+            "num_peers": 2,
+        },
+        "listfunds": {
+            "outputs": [
+                {
+                    "txid": "aa" * 32,
+                    "output": 0,
+                    "amount_msat": "200000msat",
+                    "status": "confirmed",
+                }
+            ],
+            "channels": [],
+        },
+        "listpeerchannels": {
+            "channels": [
+                {
+                    "peer_id": "02" + "ab" * 32,
+                    "peer_alias": "public-peer",
+                    "peer_connected": True,
+                    "private": False,
+                    "channel_id": "ch-public",
+                    "short_channel_id": "742x1x0",
+                    "state": "CHANNELD_NORMAL",
+                    "total_msat": "1000000000msat",
+                    "to_us_msat": "400000000msat",
+                    "their_amount_msat": "600000000msat",
+                    "opener": "local",
+                },
+                {
+                    "peer_id": "02" + "ef" * 32,
+                    "peer_alias": "private-peer",
+                    "peer_connected": True,
+                    "private": True,
+                    "channel_id": "ch-private",
+                    "short_channel_id": "742x2x0",
+                    "state": "CHANNELD_NORMAL",
+                    "total_msat": "500000000msat",
+                    "to_us_msat": "500000000msat",
+                    "their_amount_msat": "0msat",
+                    "opener": "remote",
+                },
+            ]
+        },
+        "listforwards": {
+            "forwards": [
+                {
+                    "in_channel": "111x1x0",
+                    "out_channel": "742x1x0",
+                    "fee_msat": "2000msat",
+                    "in_msat": "52000msat",
+                    "out_msat": "50000msat",
+                    "status": "settled",
+                    "received_time": 1_700_000_020,
+                    "resolved_time": 1_700_000_030,
+                    # Opsec: erring_node/failure_reason should be dropped.
+                    "failcode": 0,
+                    "failreason": "OK",
+                    "erring_node": "02" + "ba" * 32,
+                }
+            ]
+        },
+        "listpays": {
+            "pays": [
+                {
+                    "payment_hash": "22" * 32,
+                    "amount_msat": "40000msat",
+                    "amount_sent_msat": "40500msat",
+                    "status": "complete",
+                    "created_at": 1_700_000_040,
+                    "completed_at": 1_700_000_041,
+                    "destination": "02" + "dd" * 32,
+                    # Opsec: preimage, bolt11, route hops must be discarded.
+                    "preimage": "11" * 32,
+                    "bolt11": "lnbc1pjexample",
+                    "route": [
+                        {"id": "02" + "ee" * 32, "channel": "100x1x0"},
+                        {"id": "02" + "ff" * 32, "channel": "200x1x0"},
+                    ],
+                }
+            ]
+        },
+        "listinvoices": {
+            "invoices": [
+                {
+                    "label": "subscription-2025-01",
+                    "payment_hash": "33" * 32,
+                    "amount_msat": "120000msat",
+                    "amount_received_msat": "120000msat",
+                    "status": "paid",
+                    "paid_at": 1_700_000_050,
+                    "description": "Consulting Jan invoice",
+                    # Opsec: preimage / bolt11 / payment_secret must be
+                    # discarded. Route hints in invoices you paid would
+                    # leak someone else's private-channel peers.
+                    "payment_preimage": "ab" * 32,
+                    "payment_secret": "cd" * 32,
+                    "bolt11": "lnbc1pjinvoice",
+                    "routes": [
+                        [
+                            {
+                                "pubkey": "02" + "11" * 32,
+                                "short_channel_id": "999x1x0",
+                            }
+                        ]
+                    ],
+                }
+            ]
+        },
+        "listtransactions": {"transactions": []},
+        "bkpr-listincome": {
+            "income_events": [
+                {
+                    "account": "742x1x0",
+                    "tag": "routed",
+                    "credit_msat": "1500msat",
+                    "debit_msat": "0msat",
+                    "currency": "bc",
+                    "timestamp": 1_700_000_000,
+                    "payment_id": "11" * 32,
+                },
+                {
+                    "account": "wallet",
+                    "tag": "invoice",
+                    "credit_msat": "120000msat",
+                    "debit_msat": "0msat",
+                    "currency": "bc",
+                    "timestamp": 1_700_000_050,
+                    "payment_id": "33" * 32,
+                    "description": "Consulting Jan invoice",
+                },
+            ]
+        },
+        "bkpr-listbalances": {
+            "accounts": [
+                {
+                    "account": "742x1x0",
+                    "peer_id": "02" + "ab" * 32,
+                    "balances": [{"balance_msat": "400000000msat"}],
+                }
+            ]
+        },
+    }
+    if extra:
+        payloads.update(extra)
+    return payloads
+
+
+def _rpc(payloads: dict[str, Any]):
+    def call(method: str, _args: Any = None) -> Any:
+        return payloads.get(method, {})
+
+    return call
+
+
+class AdapterRegistrationTest(unittest.TestCase):
+    def test_adapter_registers_itself_on_import(self) -> None:
+        adapter = resolve_adapter("coreln")
+        self.assertIsNotNone(adapter)
+        self.assertIsInstance(adapter, CoreLightningAdapter)
+        self.assertEqual(adapter.kind, "coreln")
+
+
+class FetchNodeSnapshotTest(unittest.TestCase):
+    def _snapshot(self, payloads: dict[str, Any] | None = None) -> NodeSnapshot:
+        used = payloads or _canned_payloads()
+        snapshot_blob = core_cln.fetch_core_lightning_snapshot(
+            {"kind": "coreln", "name": "cln", "url": "cln://local"},
+            rpc_call=_rpc(used),
+        )
+        return core_cln.build_node_snapshot(snapshot_blob, window_days=30)
+
+    def test_fetch_node_snapshot_returns_typed_snapshot(self) -> None:
+        snapshot = self._snapshot()
+        self.assertIsInstance(snapshot, NodeSnapshot)
+        self.assertEqual(snapshot.alias, "k-node")
+        self.assertEqual(snapshot.pubkey, "03" + "cd" * 32)
+        self.assertEqual(snapshot.network, "bitcoin")
+        self.assertEqual(snapshot.implementation_version, "v23.11")
+        self.assertEqual(snapshot.block_height, 800_001)
+        self.assertEqual(len(snapshot.channels), 2)
+        self.assertIsNotNone(snapshot.routing)
+        self.assertEqual(snapshot.routing.forward_count, 1)
+
+    def test_private_channel_peer_pubkey_is_none(self) -> None:
+        snapshot = self._snapshot()
+        private_channel = next(
+            channel for channel in snapshot.channels if channel.is_private
+        )
+        self.assertIsNone(private_channel.peer_pubkey)
+        public_channel = next(
+            channel for channel in snapshot.channels if not channel.is_private
+        )
+        self.assertEqual(public_channel.peer_pubkey, "02" + "ab" * 32)
+
+    def test_preimages_bolt11_and_route_hops_never_reach_records(self) -> None:
+        # Drive the persistence reshape so we can scan the full curated
+        # record set, then assert none of the Tier-1 fields appear.
+        snapshot_blob = core_cln.fetch_core_lightning_snapshot(
+            {"kind": "coreln", "name": "cln", "url": "cln://local"},
+            rpc_call=_rpc(_canned_payloads()),
+        )
+        records = core_cln.snapshot_records(snapshot_blob, "2026-05-18T12:00:00Z")
+        forbidden_substrings = (
+            "11" * 32,  # pay preimage
+            "ab" * 32,  # invoice preimage
+            "cd" * 32,  # invoice payment_secret
+            "lnbc1pjexample",
+            "lnbc1pjinvoice",
+            "02" + "ba" * 32,  # erring_node
+            "02" + "11" * 32,  # invoice route hint pubkey
+        )
+        serialized = repr(records)
+        for needle in forbidden_substrings:
+            self.assertNotIn(needle, serialized, msg=f"leaked: {needle}")
+        # Forwards in NodeSnapshot must not carry failure_reason either.
+        snapshot = core_cln.build_node_snapshot(snapshot_blob, window_days=30)
+        for forward in snapshot.forwards:
+            self.assertIsNone(forward.failure_reason)
+
+    def test_routed_income_event_does_not_create_wallet_transaction(self) -> None:
+        # P1 fix #1: bkpr-listincome `routed` events must not become wallet
+        # transactions (they're already in the routing aggregate).
+        snapshot_blob = core_cln.fetch_core_lightning_snapshot(
+            {"kind": "coreln", "name": "cln", "url": "cln://local"},
+            rpc_call=_rpc(_canned_payloads()),
+        )
+        records = core_cln.snapshot_records(snapshot_blob, "2026-05-18T12:00:00Z")
+        import_payloads = [
+            payload
+            for payload in (core_cln._record_to_import(record) for record in records)
+            if payload is not None
+        ]
+        # Only the invoice income row should be imported as a wallet tx.
+        self.assertEqual(len(import_payloads), 1)
+        self.assertEqual(import_payloads[0]["kind"], "cln_invoice")
+        # And the routed event should not appear as a forward_day record's
+        # source either — it should only contribute to the aggregate.
+        forward_day_rows = [r for r in records if r["record_type"] == "forward_day"]
+        self.assertEqual(len(forward_day_rows), 1)
+
+
+class AdapterContractTest(unittest.TestCase):
+    def test_adapter_rejects_missing_backend(self) -> None:
+        adapter = CoreLightningAdapter()
+        with self.assertRaises(AppError) as ctx:
+            adapter.fetch_node_snapshot({"id": "w-1"}, None)
+        self.assertEqual(ctx.exception.code, "validation")
+
+
+class RpcAllowlistTest(unittest.TestCase):
+    def test_pay_close_withdraw_are_rejected_by_allowlist(self) -> None:
+        backend = {"kind": "coreln", "name": "cln", "url": "cln://local"}
+        for method in ("pay", "close", "withdraw", "fundchannel", "delpay"):
+            with self.assertRaises(AppError) as ctx:
+                core_cln.call_core_lightning(backend, method)
+            self.assertEqual(ctx.exception.code, "validation")
+
+    def test_allowlist_contains_only_read_methods(self) -> None:
+        for method in core_cln.CLN_ALLOWED_METHODS:
+            self.assertTrue(
+                method.startswith("get")
+                or method.startswith("list")
+                or method.startswith("bkpr-"),
+                msg=f"non-read method allowed: {method}",
+            )
+
+
+class PersistenceIdempotenceTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.conn = open_db(Path(self._tmp.name) / "data")
+        workspace = core_accounts.create_workspace(self.conn, "Personal")
+        self.profile = core_accounts.create_profile(
+            self.conn,
+            workspace["id"],
+            "Main",
+            "USD",
+            "FIFO",
+            "generic",
+            365,
+        )
+        core_accounts.create_backend(
+            self.conn,
+            "cln",
+            "coreln",
+            "cln://local",
+            token="readonly-rune",
+            config={"commando_peer_id": "02" + "ab" * 32},
+        )
+        created_wallet = core_wallets.create_wallet(
+            self.conn,
+            workspace["id"],
+            self.profile["id"],
+            "Routing node",
+            "coreln",
+            config={"backend": "cln"},
+        )
+        self.wallet = fetch_wallet_with_account(self.conn, created_wallet["id"])
+        self.backend = get_db_backend(self.conn, "cln")
+
+    def tearDown(self) -> None:
+        self.conn.close()
+        self._tmp.cleanup()
+
+    def _hooks(self) -> core_imports.ImportCoordinatorHooks:
+        return core_imports.ImportCoordinatorHooks(
+            ensure_tag_row=lambda *_args, **_kwargs: None,
+            invalidate_journals=invalidate_journals,
+        )
+
+    def test_balance_snapshot_is_daily_bucketed(self) -> None:
+        # P1 fix #2: two syncs on the same day must produce one balance row
+        # per account, not a fresh one per sync.
+        rpc = _rpc(_canned_payloads())
+        for _ in range(2):
+            core_cln.sync_core_lightning_wallet(
+                self.conn,
+                self.profile,
+                self.wallet,
+                self.backend,
+                self._hooks(),
+                rpc_call=rpc,
+            )
+        rows = self.conn.execute(
+            "SELECT COUNT(*) AS c FROM lightning_node_records"
+            " WHERE record_type = 'balance_snapshot'"
+        ).fetchone()
+        self.assertEqual(rows["c"], 1)
+
+    def test_no_raw_rpc_payload_persisted(self) -> None:
+        rpc = _rpc(_canned_payloads())
+        core_cln.sync_core_lightning_wallet(
+            self.conn,
+            self.profile,
+            self.wallet,
+            self.backend,
+            self._hooks(),
+            rpc_call=rpc,
+        )
+        # The opsec policy requires that raw RPC payloads never land on disk.
+        rows = self.conn.execute(
+            "SELECT raw_json FROM lightning_node_records"
+        ).fetchall()
+        self.assertTrue(rows, "expected at least one row")
+        for row in rows:
+            self.assertEqual(row["raw_json"], "{}")
+
+
+class RebalanceCostFormulaTest(unittest.TestCase):
+    def test_rebalance_fee_event_does_not_double_count_principal(self) -> None:
+        # P1 fix #3: a rebalance_fee bookkeeper event's `amount_msat` IS the
+        # fee. Summing principal + fee would double-count. The routing
+        # summary should treat it as a single fee value.
+        payloads = _canned_payloads(
+            {
+                "bkpr-listincome": {
+                    "income_events": [
+                        {
+                            "account": "742x1x0",
+                            "tag": "rebalance_fee",
+                            "debit_msat": "3000msat",
+                            "credit_msat": "0msat",
+                            "timestamp": 1_700_000_010,
+                        }
+                    ]
+                }
+            }
+        )
+        snapshot_blob = core_cln.fetch_core_lightning_snapshot(
+            {"kind": "coreln", "name": "cln", "url": "cln://local"},
+            rpc_call=_rpc(payloads),
+        )
+        snapshot = core_cln.build_node_snapshot(snapshot_blob, window_days=30)
+        self.assertIsNotNone(snapshot.routing)
+        # 3000 msat = 3 sat (truncated). Principal is NOT added.
+        self.assertEqual(snapshot.routing.rebalance_cost_sat, 3)
+
+
+if __name__ == "__main__":  # pragma: no cover
+    unittest.main()
