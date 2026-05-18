@@ -140,11 +140,11 @@ export interface NodeSnapshot {
   blockHeight?: number;
   /** sats sittable on-chain that the node owns */
   onchainBalanceSat: number;
-  /** sum of localBalanceSat across active channels */
+  /** sum of localBalanceSat across active + inactive channels (excludes closed and pending) */
   totalLocalBalanceSat: number;
-  /** sum of remoteBalanceSat across active channels */
+  /** sum of remoteBalanceSat across active + inactive channels (excludes closed and pending) */
   totalRemoteBalanceSat: number;
-  /** sum of capacitySat across active channels */
+  /** sum of capacitySat across active + inactive channels (excludes closed and pending) */
   totalCapacitySat: number;
   channels: NodeChannel[];
   /** appended for collapsed display; may be empty */
@@ -549,6 +549,14 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
       status: "idle",
     },
     {
+      id: "c5",
+      kind: "cashu",
+      label: "minibits.cash",
+      last: "3h ago",
+      balance: 0.00019823,
+      status: "synced",
+    },
+    {
       id: "c6",
       kind: "lnd",
       label: "Routing Node (LND)",
@@ -712,14 +720,6 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
           },
         ],
       },
-    },
-    {
-      id: "c5",
-      kind: "cashu",
-      label: "minibits.cash",
-      last: "3h ago",
-      balance: 0.00019823,
-      status: "synced",
     },
   ],
   txs: [

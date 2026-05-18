@@ -17,13 +17,10 @@ import {
   Coins,
   ExternalLink,
   Globe2,
-  MoreHorizontal,
-  Pencil,
   RefreshCw,
   Repeat,
   Server,
   TrendingUp,
-  Trash2,
   XCircle,
   Zap,
 } from "lucide-react";
@@ -40,13 +37,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Sheet,
   SheetContent,
@@ -66,6 +56,7 @@ import {
   connectionKindLabels,
   connectionKindTone,
 } from "@/lib/connectionDisplay";
+import { formatShortDate } from "@/lib/date";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { MISSING_FIAT_LABEL } from "@/lib/currency";
@@ -127,12 +118,6 @@ function explorerHrefForOutpoint(outpoint: string | null | undefined) {
   return `https://mempool.space/tx/${txid}`;
 }
 
-function shortDate(value: string | null | undefined) {
-  if (!value) return "—";
-  const normalized = value.replace("T", " ").replace(/Z$/, "");
-  return normalized.length > 16 ? normalized.slice(0, 16) : normalized;
-}
-
 function relativeFrom(value: string | null | undefined) {
   if (!value) return null;
   const ts = Date.parse(value);
@@ -165,8 +150,6 @@ interface NodeConnectionDetailProps {
   hideSensitive: boolean;
   onSync: () => void;
   isSyncRunning: boolean;
-  onEdit?: () => void;
-  onDelete?: () => void;
 }
 
 export function NodeConnectionDetail({
@@ -175,8 +158,6 @@ export function NodeConnectionDetail({
   hideSensitive,
   onSync,
   isSyncRunning,
-  onEdit,
-  onDelete,
 }: NodeConnectionDetailProps) {
   const node = connection.node;
   const refreshButtonLabel = isSyncRunning ? "Refreshing" : "Refresh";
@@ -189,8 +170,6 @@ export function NodeConnectionDetail({
           isSyncRunning={isSyncRunning}
           refreshButtonLabel={refreshButtonLabel}
           onSync={onSync}
-          onEdit={onEdit}
-          onDelete={onDelete}
         />
         <Card>
           <CardHeader className="border-b px-4 pb-3">
@@ -229,8 +208,6 @@ export function NodeConnectionDetail({
         isSyncRunning={isSyncRunning}
         refreshButtonLabel={refreshButtonLabel}
         onSync={onSync}
-        onEdit={onEdit}
-        onDelete={onDelete}
       />
 
       <NodeMetrics
@@ -277,8 +254,6 @@ interface NodeHeaderProps {
   isSyncRunning: boolean;
   refreshButtonLabel: string;
   onSync: () => void;
-  onEdit?: () => void;
-  onDelete?: () => void;
 }
 
 function NodeHeader({
@@ -287,8 +262,6 @@ function NodeHeader({
   isSyncRunning,
   refreshButtonLabel,
   onSync,
-  onEdit,
-  onDelete,
 }: NodeHeaderProps) {
   return (
     <Card className="rounded-xl py-3">
@@ -354,38 +327,6 @@ function NodeHeader({
             />
             <span>{refreshButtonLabel}</span>
           </Button>
-          {onEdit || onDelete ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  aria-label="More actions"
-                >
-                  <MoreHorizontal className="size-4" aria-hidden="true" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                {onEdit ? (
-                  <DropdownMenuItem onClick={onEdit}>
-                    <Pencil className="size-4" aria-hidden="true" />
-                    Edit
-                  </DropdownMenuItem>
-                ) : null}
-                {onEdit && onDelete ? <DropdownMenuSeparator /> : null}
-                {onDelete ? (
-                  <DropdownMenuItem
-                    className="text-destructive focus:text-destructive"
-                    onClick={onDelete}
-                  >
-                    <Trash2 className="size-4" aria-hidden="true" />
-                    Remove
-                  </DropdownMenuItem>
-                ) : null}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : null}
         </div>
       </CardContent>
     </Card>
@@ -705,22 +646,33 @@ function ChannelRow({
     totalCapacitySat > 0
       ? Math.round((channel.capacitySat / totalCapacitySat) * 100)
       : 0;
+  // Only active/inactive channels contribute to totalCapacitySat (closed and
+  // pending capacities are not summed), so the share-of-node line only makes
+  // sense for those states. Hide it elsewhere to avoid misleading percentages
+  // like "1 BTC closed channel = 21% of node".
+  const showSharePct =
+    channel.state === "active" || channel.state === "inactive";
   return (
     <TableRow
       className="cursor-pointer transition-colors hover:bg-muted/45 focus-within:bg-muted/45"
       onClick={onOpen}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onOpen();
-        }
-      }}
-      tabIndex={0}
-      role="button"
-      aria-label={`Channel detail for ${channel.peerAlias}`}
     >
       <TableCell className="min-w-0 align-top">
-        <div className="flex min-w-0 flex-col gap-1">
+        {/*
+          The row-level onClick gives mouse users a full-row hit target.
+          Keyboard / assistive-tech users open the channel-detail Sheet via
+          this in-cell button — leaving the <tr>'s implicit "row" role intact
+          so cell associations are still announced correctly.
+        */}
+        <button
+          type="button"
+          className="flex min-w-0 flex-col gap-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpen();
+          }}
+          aria-label={`Open channel detail for ${channel.peerAlias}`}
+        >
           <span className="flex items-center gap-1.5 truncate text-sm font-medium">
             {channel.peerAlias}
             {channel.isPrivate ? (
@@ -743,7 +695,7 @@ function ChannelRow({
             {fmtPubkey(channel.peerPubkey)}
             {channel.shortChannelId ? ` · ${channel.shortChannelId}` : ""}
           </span>
-        </div>
+        </button>
       </TableCell>
       <TableCell className="align-top">
         <div className="flex flex-col gap-1">
@@ -793,9 +745,11 @@ function ChannelRow({
         >
           {fmtSat(channel.capacitySat)}
         </span>
-        <span className="text-[10px] text-muted-foreground sm:text-xs">
-          {sharePct}% of node
-        </span>
+        {showSharePct ? (
+          <span className="text-[10px] text-muted-foreground sm:text-xs">
+            {sharePct}% of node
+          </span>
+        ) : null}
       </TableCell>
       <TableCell className="align-top text-right">
         {channel.baseFeeMsat == null && channel.feeRatePpm == null ? (
@@ -829,7 +783,7 @@ function ChannelRow({
         {channel.closedAt ? (
           <span className="mt-0.5 block text-[10px] text-muted-foreground sm:text-xs">
             {channel.closeKind ?? "closed"} ·{" "}
-            {formatNodeDate(channel.closedAt)}
+            {formatShortDate(channel.closedAt)}
           </span>
         ) : null}
       </TableCell>
@@ -902,14 +856,14 @@ function NodeDetailsCard({
           {connection.lastSyncAt ? (
             <DetailRow
               label="Last sync at"
-              value={formatNodeDate(connection.lastSyncAt)}
+              value={formatShortDate(connection.lastSyncAt)}
               mono
             />
           ) : null}
           {connection.lastTransactionAt ? (
             <DetailRow
               label="Last transaction"
-              value={formatNodeDate(connection.lastTransactionAt)}
+              value={formatShortDate(connection.lastTransactionAt)}
               mono
             />
           ) : null}
@@ -1099,7 +1053,7 @@ function ChannelDetailBody({
           {channel.openedAt ? (
             <DetailRow
               label="Opened"
-              value={`${shortDate(channel.openedAt)}${
+              value={`${formatShortDate(channel.openedAt)}${
                 relativeFrom(channel.openedAt)
                   ? ` · ${relativeFrom(channel.openedAt)}`
                   : ""
@@ -1110,7 +1064,7 @@ function ChannelDetailBody({
           {channel.closedAt ? (
             <DetailRow
               label="Closed"
-              value={`${shortDate(channel.closedAt)}${
+              value={`${formatShortDate(channel.closedAt)}${
                 channel.closeKind ? ` · ${channel.closeKind}` : ""
               }`}
               mono
@@ -1119,7 +1073,7 @@ function ChannelDetailBody({
           {channel.lastActivityAt ? (
             <DetailRow
               label="Last activity"
-              value={`${shortDate(channel.lastActivityAt)}${
+              value={`${formatShortDate(channel.lastActivityAt)}${
                 lastActivityRel ? ` · ${lastActivityRel}` : ""
               }`}
               mono
@@ -1225,7 +1179,12 @@ interface ForwardRowProps {
 
 function ForwardRow({ forward, hideSensitive }: ForwardRowProps) {
   const amountSat = Math.round(forward.amountInMsat / 1_000);
-  const feeSat = forward.feeMsat / 1_000;
+  // Sub-1000 msat fees would round down to "0.5 sat" etc, which reads wrong.
+  // Render those in msat so the value stays informative; otherwise show
+  // whole sats.
+  const feeMsat = forward.feeMsat;
+  const feeRendersAsMsat = feeMsat > 0 && feeMsat < 1_000;
+  const feeSat = Math.round(feeMsat / 1_000);
   const relative = relativeFrom(forward.occurredAt);
   const statusIcon =
     forward.status === "settled" ? (
@@ -1238,7 +1197,7 @@ function ForwardRow({ forward, hideSensitive }: ForwardRowProps) {
   return (
     <TableRow>
       <TableCell className="align-top">
-        <span className="block text-sm">{shortDate(forward.occurredAt)}</span>
+        <span className="block text-sm">{formatShortDate(forward.occurredAt)}</span>
         {relative ? (
           <span className="text-[10px] text-muted-foreground sm:text-xs">
             {relative}
@@ -1303,8 +1262,10 @@ function ForwardRow({ forward, hideSensitive }: ForwardRowProps) {
             blurClass(hideSensitive),
           )}
         >
-          {forward.status === "settled" && feeSat > 0
-            ? `+ ${feeSat.toLocaleString("en-US")} sat`
+          {forward.status === "settled" && feeMsat > 0
+            ? feeRendersAsMsat
+              ? `+ ${feeMsat.toLocaleString("en-US")} msat`
+              : `+ ${feeSat.toLocaleString("en-US")} sat`
             : "—"}
         </span>
       </TableCell>
@@ -1326,10 +1287,4 @@ function ForwardRow({ forward, hideSensitive }: ForwardRowProps) {
       </TableCell>
     </TableRow>
   );
-}
-
-function formatNodeDate(value: string | null | undefined) {
-  if (!value) return "—";
-  const normalized = value.replace("T", " ").replace(/Z$/, "");
-  return normalized.length > 16 ? normalized.slice(0, 16) : normalized;
 }

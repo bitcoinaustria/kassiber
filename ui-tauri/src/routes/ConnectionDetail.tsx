@@ -74,6 +74,7 @@ import {
 } from "@/lib/connectionDisplay";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
+import { formatShortDate } from "@/lib/date";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 import { editConfigKindForConnection } from "@/lib/connectionEditKind";
 import { describeWalletSyncResult, type SyncResult } from "@/lib/syncResults";
@@ -88,6 +89,11 @@ import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import type { Connection, ConnectionKind, OverviewSnapshot } from "@/mocks/seed";
 
+// Lightning *node* kinds — sync against a daemon that exposes channels,
+// peers, and routing snapshots. Phoenix is also categorised as "Lightning"
+// in connectionDisplay, but it lives in Kassiber as a CSV-import wallet
+// (`wallets import-phoenix`, setupKind: "file-wallet"), not a node-shaped
+// sync target — so it keeps rendering with the wallet detail layout below.
 const NODE_CONNECTION_KINDS: ReadonlySet<ConnectionKind> = new Set([
   "lnd",
   "core-ln",
@@ -176,12 +182,6 @@ const syncModeLabels: Record<string, string> = {
   not_configured: "Manual / not configured",
 };
 
-function formatConnectionDate(value?: string | null) {
-  if (!value) return "—";
-  const normalized = value.replace("T", " ").replace(/Z$/, "");
-  return normalized.length > 16 ? normalized.slice(0, 16) : normalized;
-}
-
 function formatBackendDetail(backend?: WalletListItem["backend"]) {
   if (!backend?.name) return "Not configured";
   const kind = backend.kind ? ` · ${backend.kind}` : "";
@@ -259,6 +259,9 @@ function NodeConnectionContainer({
   const walletSyncsInFlight = useIsMutating({
     mutationKey: walletSyncMutationKey,
   });
+  // TODO: switch to ui.connections.node.sync (or similar) once #154/#155 land
+  // a real node-sync kind. ui.wallets.sync is a mock-only stop-gap — the
+  // Python daemon won't execute it for lnd/core-ln/nwc kinds yet.
   const syncWallet = useDaemonStreamMutation<
     { results: SyncResult[] },
     WalletSyncProgress
@@ -278,6 +281,7 @@ function NodeConnectionContainer({
     },
   });
   const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
+  const nodeSyncDedupeKey = `node-sync-${connection.id}`;
 
   const isSyncRunning =
     syncWallet.isPending ||
@@ -293,7 +297,7 @@ function NodeConnectionContainer({
         title: "Node refresh already running",
         body: `${connection.label} is already scanning. Kassiber will update this page when the daemon finishes.`,
         tone: "info",
-        dedupeKey: "wallet-sync",
+        dedupeKey: nodeSyncDedupeKey,
       });
       return;
     }
@@ -302,7 +306,7 @@ function NodeConnectionContainer({
       title: "Node refresh started",
       body: `${connection.label} is fetching channel and routing data in read-only mode.`,
       tone: "warning",
-      dedupeKey: "wallet-sync",
+      dedupeKey: nodeSyncDedupeKey,
       progress: startingSyncProgress(),
     });
     startSyncNotice(
@@ -324,7 +328,7 @@ function NodeConnectionContainer({
                 : "Node refresh finished",
             body: message,
             tone: status === "error" ? "error" : "success",
-            dedupeKey: "wallet-sync",
+            dedupeKey: nodeSyncDedupeKey,
             progress: undefined,
           } as const;
           if (syncNoticeIdRef.current) {
@@ -340,7 +344,7 @@ function NodeConnectionContainer({
             title: "Node refresh failed",
             body: message,
             tone: "error",
-            dedupeKey: "wallet-sync",
+            dedupeKey: nodeSyncDedupeKey,
             progress: undefined,
           } as const;
           if (syncNoticeIdRef.current) {
@@ -1035,7 +1039,7 @@ function ConnectionDetailView({
               ) : null}
               <DetailRow
                 label="Created"
-                value={formatConnectionDate(walletDetail?.created_at)}
+                value={formatShortDate(walletDetail?.created_at)}
                 mono
               />
               <DetailRow label="Kassiber ID" value={connection.id} mono copy />
