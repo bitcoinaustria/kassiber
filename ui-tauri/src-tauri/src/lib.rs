@@ -202,7 +202,6 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.connections.btcpay.test",
     "ui.connections.node.snapshot",
     "ui.reports.lightning_profitability",
-    "ui.reports.export_lightning_profitability_csv",
     "ui.metadata.bip329.import",
     "ui.wallets.update",
     "ui.wallets.delete",

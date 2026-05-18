@@ -4,6 +4,12 @@ Computes the routing-revenue, payment-cost, rebalance-cost, on-chain-cost,
 net-profit pentad plus per-channel break-even from a node snapshot. The
 adapter is responsible for filling :class:`NodeSnapshot.routing` and
 :class:`NodeSnapshot.channels` — this module only reshapes and exports.
+
+Unit convention: the routing summary works in **sat** because adapters
+aggregate at the sat granularity that bookkeeper/listforwards APIs
+naturally produce; individual :class:`NodeForward` records keep msat
+precision. Adapters that compute internally in msat should round
+(``msat // 1000``) before filling :class:`NodeRoutingSnapshot`.
 """
 
 from __future__ import annotations
@@ -13,16 +19,24 @@ from typing import Any
 
 from .types import NodeChannel, NodeSnapshot
 
+# Coarse default open-cost heuristic: ~2_500 sat for a 200 vB open+close at
+# 12 sat/vB. Adapters that know each channel's exact funding-fee should
+# pass it through ``build_profitability_report(default_open_cost_sat=...)``.
+# Mock fixtures and the desktop reference this constant so the value stays
+# in one place.
+DEFAULT_OPEN_COST_SAT: int = 2_500
+
 
 @dataclass(frozen=True)
 class ChannelBreakEven:
-    """Per-channel routing earnings used as a coarse break-even indicator.
+    """Per-channel routing earnings vs. a coarse open-cost reference.
 
-    Kassiber doesn't model the exact channel-open on-chain fee per channel
-    today, so ``break_even`` is reported as ``True`` when
-    ``earned_routing_sat`` exceeds ``open_cost_sat`` (a coarse 2_500 sat
-    default). Adapters that know their precise open cost can compute
-    break-even themselves and pass it through here.
+    ``covers_open_cost`` is intentionally narrower than "broke even":
+    Kassiber doesn't yet model rebalance attribution, on-chain
+    amortization, or the channel's actual funding fee. It is ``True`` when
+    ``earned_routing_sat >= open_cost_sat`` (default
+    :data:`DEFAULT_OPEN_COST_SAT`). Adapters that know their precise open
+    cost can pass it through ``build_profitability_report(default_open_cost_sat=...)``.
     """
 
     channel_id: str
@@ -30,7 +44,7 @@ class ChannelBreakEven:
     capacity_sat: int
     earned_routing_sat: int
     open_cost_sat: int
-    break_even: bool
+    covers_open_cost: bool
 
 
 @dataclass(frozen=True)
@@ -74,7 +88,7 @@ class LightningProfitabilityReport:
                     "capacitySat": channel.capacity_sat,
                     "earnedRoutingSat": channel.earned_routing_sat,
                     "openCostSat": channel.open_cost_sat,
-                    "breakEven": channel.break_even,
+                    "coversOpenCost": channel.covers_open_cost,
                 }
                 for channel in self.channels
             ],
@@ -87,12 +101,12 @@ def build_profitability_report(
     connection_label: str,
     connection_kind: str,
     snapshot: NodeSnapshot,
-    default_open_cost_sat: int = 2_500,
+    default_open_cost_sat: int = DEFAULT_OPEN_COST_SAT,
 ) -> LightningProfitabilityReport:
     """Reshape a :class:`NodeSnapshot` into a profitability report.
 
     The snapshot's ``routing`` block is taken as authoritative for the
-    summary numbers; per-channel break-even is derived from
+    summary numbers; per-channel ``covers_open_cost`` is derived from
     ``earned_routing_sat`` vs. ``default_open_cost_sat``.
     """
     routing = snapshot.routing
@@ -143,7 +157,7 @@ def _channel_break_evens(
                 capacity_sat=channel.capacity_sat,
                 earned_routing_sat=earned,
                 open_cost_sat=default_open_cost_sat,
-                break_even=earned >= default_open_cost_sat,
+                covers_open_cost=earned >= default_open_cost_sat,
             )
         )
     return rows
@@ -192,7 +206,7 @@ def profitability_csv_rows(
                 _sat_to_btc(channel.earned_routing_sat),
                 f"capacity={channel.capacity_sat} sat;"
                 f" open_cost={channel.open_cost_sat} sat;"
-                f" break_even={'yes' if channel.break_even else 'no'};"
+                f" covers_open_cost={'yes' if channel.covers_open_cost else 'no'};"
                 f" id={channel.channel_id}",
             ]
         )

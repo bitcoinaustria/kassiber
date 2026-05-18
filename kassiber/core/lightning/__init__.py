@@ -11,7 +11,9 @@ Adapters belong under :mod:`kassiber.core.lightning` (e.g. ``lnd.py``,
 """
 
 from .adapter import LightningAdapter
+from .connections import LIGHTNING_WALLET_KINDS, resolve_lightning_connection
 from .profitability import (
+    DEFAULT_OPEN_COST_SAT,
     LightningProfitabilityReport,
     build_profitability_report,
     profitability_csv_rows,
@@ -28,6 +30,8 @@ from .types import (
 )
 
 __all__ = [
+    "DEFAULT_OPEN_COST_SAT",
+    "LIGHTNING_WALLET_KINDS",
     "LightningAdapter",
     "LightningProfitabilityReport",
     "NodeChannel",
@@ -40,6 +44,7 @@ __all__ = [
     "profitability_csv_rows",
     "register_adapter",
     "resolve_adapter",
+    "resolve_lightning_connection",
     "snapshot_to_dict",
     "unregister_adapter",
 ]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import sqlite3
 import sys
@@ -220,46 +221,30 @@ def _add_austrian_e1kv_pdf_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--file", required=True)
 
 
-_LIGHTNING_WALLET_KINDS_CLI = ("coreln", "lnd", "nwc")
+def _lightning_window_days(value: str) -> int:
+    """argparse ``type`` for the ``--window-days`` flag.
 
-
-def _cli_lightning_connection(
-    conn: sqlite3.Connection, ref: str
-) -> dict[str, Any]:
-    if not ref:
-        raise AppError(
-            "Specify --connection (wallet id or label).",
-            code="validation",
+    Mirrors the daemon's ``_coerce_int(default=30, minimum=1, maximum=365)``
+    so the CLI rejects out-of-range values at parse time instead of silently
+    clamping further down.
+    """
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise argparse.ArgumentTypeError(
+            f"--window-days must be an integer (got {value!r})"
+        ) from exc
+    if parsed < 1 or parsed > 365:
+        raise argparse.ArgumentTypeError(
+            f"--window-days must be between 1 and 365 (got {parsed})"
         )
-    rows = list(
-        conn.execute(
-            "SELECT id, label, kind FROM wallets"
-            " WHERE id = ? OR lower(label) = lower(?) LIMIT 1",
-            (ref, ref),
-        )
-    )
-    if not rows:
-        raise AppError(
-            f"Lightning connection '{ref}' not found.",
-            code="not_found",
-            hint="Run `kassiber wallets list` to see configured connections.",
-        )
-    row = dict(rows[0])
-    kind = str(row.get("kind") or "")
-    if kind not in _LIGHTNING_WALLET_KINDS_CLI:
-        raise AppError(
-            f"Connection '{row.get('label') or ref}' is not a Lightning node"
-            f" (kind={kind!r}).",
-            code="validation",
-            hint="Lightning kinds are coreln, lnd, nwc.",
-        )
-    return row
+    return parsed
 
 
 def _cli_build_lightning_snapshot(
     conn: sqlite3.Connection, ref: str, *, window_days: int
 ) -> tuple[dict[str, Any], core_lightning.NodeSnapshot]:
-    connection = _cli_lightning_connection(conn, ref)
+    connection = core_lightning.resolve_lightning_connection(conn, ref)
     kind = str(connection["kind"])
     adapter = core_lightning.resolve_adapter(kind)
     if adapter is None:
@@ -304,8 +289,6 @@ def _cli_export_lightning_profitability_csv(
         snapshot=snapshot,
     )
     rows = core_lightning.profitability_csv_rows(report)
-    import csv
-
     with open(file_path, "w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerows(rows)
@@ -1468,7 +1451,12 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Lightning connection (wallet id or label) to report on.",
     )
-    lightning_profitability.add_argument("--window-days", type=int, default=30)
+    lightning_profitability.add_argument(
+        "--window-days",
+        type=_lightning_window_days,
+        default=30,
+        help="Routing window in days (1-365, default 30).",
+    )
 
     export_lightning_profitability_csv = reports_sub.add_parser(
         "export-lightning-profitability-csv"
@@ -1480,7 +1468,12 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Lightning connection (wallet id or label) to export.",
     )
-    export_lightning_profitability_csv.add_argument("--window-days", type=int, default=30)
+    export_lightning_profitability_csv.add_argument(
+        "--window-days",
+        type=_lightning_window_days,
+        default=30,
+        help="Routing window in days (1-365, default 30).",
+    )
     export_lightning_profitability_csv.add_argument("--file", required=True)
 
     commercial_subledger = reports_sub.add_parser("commercial-subledger")

@@ -74,7 +74,6 @@ daemon for the exact current allowlist:
       "ui.connections.btcpay.test",
       "ui.connections.node.snapshot",
       "ui.reports.lightning_profitability",
-      "ui.reports.export_lightning_profitability_csv",
       "ui.metadata.bip329.import",
       "ui.wallets.update",
       "ui.wallets.delete",
@@ -315,8 +314,8 @@ instead.
 
 ## Lightning node kinds
 
-`ui.connections.node.snapshot`, `ui.reports.lightning_profitability`, and
-`ui.reports.export_lightning_profitability_csv` route through the shared
+`ui.connections.node.snapshot` and `ui.reports.lightning_profitability`
+route through the shared
 [`kassiber.core.lightning`](../../kassiber/core/lightning/) scaffold. Each
 request takes `args.connection` (a wallet id or label that resolves to a
 Lightning-kind wallet) and optional `args.window_days` (default 30, max 365).

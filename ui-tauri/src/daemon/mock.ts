@@ -13,6 +13,7 @@ import type {
   DaemonStreamRecord,
   DaemonTransport,
 } from "./transport";
+import { DEFAULT_OPEN_COST_SAT } from "@/lib/lightning";
 import { MOCK_PROFILES } from "@/mocks/profiles";
 import type {
   ProfileGainsAlgorithm,
@@ -1596,6 +1597,19 @@ export const mockDaemon: DaemonTransport = {
     if (req.kind === "ui.reports.lightning_profitability") {
       const args = (req.args ?? {}) as { connection?: unknown };
       const ref = typeof args.connection === "string" ? args.connection : "";
+      if (!ref) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "Lightning profitability requires `connection`.",
+            hint: "Pass the wallet id or label of an LND/CLN connection.",
+            retryable: false,
+          },
+        };
+      }
       const connection = mockOverviewSnapshot().connections.find(
         (item) => item.id === ref || item.label === ref,
       );
@@ -1660,8 +1674,9 @@ export const mockDaemon: DaemonTransport = {
         peerAlias: channel.peerAlias,
         capacitySat: channel.capacitySat,
         earnedRoutingSat: channel.earnedRoutingSat ?? 0,
-        openCostSat: 2_500,
-        breakEven: (channel.earnedRoutingSat ?? 0) >= 2_500,
+        openCostSat: DEFAULT_OPEN_COST_SAT,
+        coversOpenCost:
+          (channel.earnedRoutingSat ?? 0) >= DEFAULT_OPEN_COST_SAT,
       }));
       return {
         kind: "ui.reports.lightning_profitability",

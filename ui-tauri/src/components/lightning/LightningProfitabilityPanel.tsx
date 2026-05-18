@@ -26,10 +26,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  DEFAULT_OPEN_COST_SAT,
+  LIGHTNING_CONNECTION_KINDS,
+} from "@/lib/lightning";
 import { cn } from "@/lib/utils";
 import type { Connection, OverviewSnapshot } from "@/mocks/seed";
-
-const LIGHTNING_KINDS = new Set(["core-ln", "lnd", "nwc"]);
 
 interface LightningProfitabilityReport {
   connection: {
@@ -54,7 +56,7 @@ interface LightningProfitabilityReport {
     capacitySat: number;
     earnedRoutingSat: number;
     openCostSat: number;
-    breakEven: boolean;
+    coversOpenCost: boolean;
   }>;
 }
 
@@ -67,7 +69,7 @@ export function LightningProfitabilityPanel() {
   const lightningConnections = useMemo(
     () =>
       (overview.data?.data?.connections ?? []).filter((connection) =>
-        LIGHTNING_KINDS.has(connection.kind),
+        LIGHTNING_CONNECTION_KINDS.has(connection.kind),
       ),
     [overview.data],
   );
@@ -90,8 +92,10 @@ export function LightningProfitabilityPanel() {
         </CardTitle>
         <CardDescription>
           Routing revenue minus payment, rebalance, and on-chain costs per
-          Lightning connection. Per-channel break-even uses a coarse
-          2,500 sat open-cost default until adapters report exact open costs.
+          Lightning connection. The per-channel column reports whether earned
+          routing covers a coarse {DEFAULT_OPEN_COST_SAT.toLocaleString("en-US")} sat
+          open-cost default; adapters that know each channel's exact funding
+          fee can refine the threshold.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 px-4 pt-4">
@@ -207,7 +211,7 @@ function LightningProfitabilityBody({
               <TableHead className="text-right">Capacity</TableHead>
               <TableHead className="text-right">Earned routing</TableHead>
               <TableHead className="text-right">Open cost</TableHead>
-              <TableHead className="text-right">Break-even</TableHead>
+              <TableHead className="text-right">Covers open cost</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -242,12 +246,12 @@ function LightningProfitabilityBody({
                     <span
                       className={cn(
                         "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset",
-                        channel.breakEven
+                        channel.coversOpenCost
                           ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-300 dark:ring-emerald-400/20"
                           : "bg-muted text-muted-foreground ring-border",
                       )}
                     >
-                      {channel.breakEven ? "Yes" : "Not yet"}
+                      {channel.coversOpenCost ? "Yes" : "Not yet"}
                     </span>
                   </TableCell>
                 </TableRow>

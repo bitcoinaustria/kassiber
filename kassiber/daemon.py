@@ -285,7 +285,6 @@ SUPPORTED_KINDS = (
     "ui.connections.btcpay.test",
     "ui.connections.node.snapshot",
     "ui.reports.lightning_profitability",
-    "ui.reports.export_lightning_profitability_csv",
     "ui.metadata.bip329.import",
     "ui.wallets.update",
     "ui.wallets.delete",
@@ -5225,51 +5224,13 @@ def _backend_settings_list_payload(ctx: "DaemonContext") -> dict[str, Any]:
     }
 
 
-_LIGHTNING_WALLET_KINDS = ("coreln", "lnd", "nwc")
-
-
-def _resolve_lightning_connection(
-    conn: sqlite3.Connection, args: dict[str, Any]
-) -> dict[str, Any]:
-    ref = args.get("connection") or args.get("wallet") or args.get("label")
-    if not ref or not isinstance(ref, str):
-        raise AppError(
-            "Specify which Lightning connection to read.",
-            code="validation",
-            hint="Pass `connection` (wallet id or label).",
-        )
-    rows = list(
-        conn.execute(
-            "SELECT id, label, kind FROM wallets"
-            " WHERE id = ? OR lower(label) = lower(?)"
-            " LIMIT 1",
-            (ref, ref),
-        )
-    )
-    if not rows:
-        raise AppError(
-            f"Lightning connection '{ref}' not found.",
-            code="not_found",
-            hint="Run `kassiber wallets list` to see configured connections.",
-        )
-    row = dict(rows[0])
-    kind = str(row.get("kind") or "")
-    if kind not in _LIGHTNING_WALLET_KINDS:
-        raise AppError(
-            f"Connection '{row.get('label') or ref}' is not a Lightning node"
-            f" (kind={kind!r}).",
-            code="validation",
-            hint="Lightning kinds are coreln, lnd, nwc.",
-        )
-    return row
-
-
 def _lightning_node_snapshot_payload(
     conn: sqlite3.Connection,
     runtime_config: dict[str, object],
     args: dict[str, Any],
 ) -> dict[str, Any]:
-    connection = _resolve_lightning_connection(conn, args)
+    ref = args.get("connection") or args.get("wallet") or args.get("label")
+    connection = core_lightning.resolve_lightning_connection(conn, ref)
     kind = str(connection["kind"])
     adapter = core_lightning.resolve_adapter(kind)
     if adapter is None:
@@ -5302,7 +5263,8 @@ def _lightning_profitability_payload(
     runtime_config: dict[str, object],
     args: dict[str, Any],
 ) -> dict[str, Any]:
-    connection = _resolve_lightning_connection(conn, args)
+    ref = args.get("connection") or args.get("wallet") or args.get("label")
+    connection = core_lightning.resolve_lightning_connection(conn, ref)
     kind = str(connection["kind"])
     adapter = core_lightning.resolve_adapter(kind)
     if adapter is None:
@@ -5337,11 +5299,17 @@ def _resolve_backend_row(
     if not backend_name:
         return None
     try:
-        for backend in core_accounts.list_backends(runtime_config):
-            if str(backend.get("name") or "") == str(backend_name):
-                return dict(backend)
-    except Exception:
+        backends = core_accounts.list_backends(runtime_config)
+    except (KeyError, TypeError, ValueError, sqlite3.Error):
+        # Backend listing is best-effort here: the adapter only needs the
+        # backend row when it talks to a configured node, and the request
+        # path can still fall through with `backend=None` if config lookup
+        # fails. We narrow rather than catch `Exception` so genuine bugs
+        # (e.g. typos, attribute errors) still bubble up.
         return None
+    for backend in backends:
+        if str(backend.get("name") or "") == str(backend_name):
+            return dict(backend)
     return None
 
 

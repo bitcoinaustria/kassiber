@@ -7,6 +7,7 @@ written and reviewed independently.
 
 from __future__ import annotations
 
+import sqlite3
 import unittest
 from dataclasses import dataclass
 from typing import Any
@@ -21,9 +22,11 @@ from kassiber.core.lightning import (
     profitability_csv_rows,
     register_adapter,
     resolve_adapter,
+    resolve_lightning_connection,
     snapshot_to_dict,
     unregister_adapter,
 )
+from kassiber.errors import AppError
 
 
 def _channel(
@@ -160,11 +163,11 @@ class LightningProfitabilityTest(unittest.TestCase):
         self.assertEqual(payload["windowLabel"], "Last 30 days")
         self.assertEqual(payload["summary"]["netProfitSat"], 3_280)
         rows = {row["peerAlias"]: row for row in payload["channels"]}
-        self.assertTrue(rows["peer-a"]["breakEven"])  # earned 5_000 >= 2_500
-        self.assertFalse(rows["peer-b"]["breakEven"])  # earned 1_200 < 2_500
-        # earned=None coerces to 0 → not yet break-even
+        self.assertTrue(rows["peer-a"]["coversOpenCost"])  # earned 5_000 >= 2_500
+        self.assertFalse(rows["peer-b"]["coversOpenCost"])  # earned 1_200 < 2_500
+        # earned=None coerces to 0 → does not cover the open cost
         self.assertEqual(rows["peer-c"]["earnedRoutingSat"], 0)
-        self.assertFalse(rows["peer-c"]["breakEven"])
+        self.assertFalse(rows["peer-c"]["coversOpenCost"])
 
     def test_report_handles_snapshot_without_routing(self) -> None:
         snapshot = NodeSnapshot(
@@ -207,9 +210,124 @@ class LightningProfitabilityTest(unittest.TestCase):
         self.assertIn("peer-a", channel_keys)
 
 
+class ResolveLightningConnectionTest(unittest.TestCase):
+    def _conn_with_wallets(
+        self, rows: list[tuple[str, str, str]]
+    ) -> sqlite3.Connection:
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            "CREATE TABLE wallets (id TEXT PRIMARY KEY, label TEXT, kind TEXT)"
+        )
+        conn.executemany(
+            "INSERT INTO wallets (id, label, kind) VALUES (?, ?, ?)", rows
+        )
+        return conn
+
+    def test_resolves_lightning_wallet_by_label_case_insensitive(self) -> None:
+        conn = self._conn_with_wallets([("w1", "Home Node", "coreln")])
+        row = resolve_lightning_connection(conn, "home node")
+        self.assertEqual(row["id"], "w1")
+        self.assertEqual(row["kind"], "coreln")
+
+    def test_empty_ref_raises_validation(self) -> None:
+        conn = self._conn_with_wallets([])
+        with self.assertRaises(AppError) as ctx:
+            resolve_lightning_connection(conn, "")
+        self.assertEqual(ctx.exception.code, "validation")
+
+    def test_not_found_raises_not_found(self) -> None:
+        conn = self._conn_with_wallets([("w1", "Vault", "descriptor")])
+        with self.assertRaises(AppError) as ctx:
+            resolve_lightning_connection(conn, "missing-id")
+        self.assertEqual(ctx.exception.code, "not_found")
+
+    def test_non_lightning_kind_raises_validation(self) -> None:
+        conn = self._conn_with_wallets([("w1", "Vault", "descriptor")])
+        with self.assertRaises(AppError) as ctx:
+            resolve_lightning_connection(conn, "w1")
+        self.assertEqual(ctx.exception.code, "validation")
+
+
+class LightningDaemonPayloadTest(unittest.TestCase):
+    def _conn_with_lightning_wallet(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            "CREATE TABLE wallets (id TEXT PRIMARY KEY, label TEXT, kind TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO wallets (id, label, kind) VALUES (?, ?, ?)",
+            ("w-1", "Home CLN", "coreln"),
+        )
+        return conn
+
+    def test_snapshot_payload_returns_adapter_unavailable_without_registration(
+        self,
+    ) -> None:
+        from kassiber.daemon import _lightning_node_snapshot_payload
+
+        conn = self._conn_with_lightning_wallet()
+        unregister_adapter("coreln")
+        with self.assertRaises(AppError) as ctx:
+            _lightning_node_snapshot_payload(conn, {}, {"connection": "w-1"})
+        self.assertEqual(ctx.exception.code, "lightning_adapter_unavailable")
+        self.assertFalse(ctx.exception.retryable)
+
+    def test_profitability_payload_returns_adapter_unavailable_without_registration(
+        self,
+    ) -> None:
+        from kassiber.daemon import _lightning_profitability_payload
+
+        conn = self._conn_with_lightning_wallet()
+        unregister_adapter("coreln")
+        with self.assertRaises(AppError) as ctx:
+            _lightning_profitability_payload(conn, {}, {"connection": "w-1"})
+        self.assertEqual(ctx.exception.code, "lightning_adapter_unavailable")
+
+    def test_snapshot_payload_merges_connection_block_when_adapter_registered(
+        self,
+    ) -> None:
+        from kassiber.daemon import _lightning_node_snapshot_payload
+
+        conn = self._conn_with_lightning_wallet()
+        register_adapter("coreln", _FakeAdapter(kind="coreln"))
+        try:
+            payload = _lightning_node_snapshot_payload(
+                conn, {}, {"connection": "w-1"}
+            )
+        finally:
+            unregister_adapter("coreln")
+        self.assertEqual(
+            payload["connection"],
+            {"id": "w-1", "label": "Home CLN", "kind": "coreln"},
+        )
+        self.assertIn("totalLocalBalanceSat", payload)
+        self.assertIn("routing", payload)
+
+    def test_profitability_payload_returns_summary_when_adapter_registered(
+        self,
+    ) -> None:
+        from kassiber.daemon import _lightning_profitability_payload
+
+        conn = self._conn_with_lightning_wallet()
+        register_adapter("coreln", _FakeAdapter(kind="coreln"))
+        try:
+            payload = _lightning_profitability_payload(
+                conn, {}, {"connection": "w-1"}
+            )
+        finally:
+            unregister_adapter("coreln")
+        self.assertEqual(payload["connection"]["id"], "w-1")
+        self.assertEqual(payload["summary"]["netProfitSat"], 3_280)
+        self.assertGreaterEqual(len(payload["channels"]), 1)
+
+
 class LightningModuleExportsTest(unittest.TestCase):
     def test_top_level_exports_match_public_api(self) -> None:
         expected = {
+            "DEFAULT_OPEN_COST_SAT",
+            "LIGHTNING_WALLET_KINDS",
             "LightningAdapter",
             "LightningProfitabilityReport",
             "NodeChannel",
@@ -222,6 +340,7 @@ class LightningModuleExportsTest(unittest.TestCase):
             "profitability_csv_rows",
             "register_adapter",
             "resolve_adapter",
+            "resolve_lightning_connection",
             "snapshot_to_dict",
             "unregister_adapter",
         }
