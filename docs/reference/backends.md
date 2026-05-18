@@ -119,6 +119,7 @@ Current backend kinds:
 - `electrum`
 - `bitcoinrpc`
 - `btcpay`
+- `lnd`
 - `liquid-esplora`
 - `custom`
 
@@ -145,6 +146,33 @@ Bitcoin Core-specific fields:
 BTCPay-specific fields:
 
 - `TOKEN`
+
+LND-specific fields:
+
+- `TOKEN` stores the read-only macaroon as hex
+- `CERTIFICATE` stores either a path to `tls.cert` or PEM contents
+- `INSECURE` is available for local/self-signed testing when you deliberately
+  trust the endpoint
+
+Create a read-only LND backend without putting the macaroon in shell history:
+
+```bash
+xxd -p -c 256 readonly.macaroon | \
+  python3 -m kassiber backends create lnd --kind lnd \
+    --url https://127.0.0.1:8080 \
+    --certificate ~/.lnd/tls.cert \
+    --token-stdin
+```
+
+The desktop reads the LND node snapshot via `ui.connections.node.snapshot`
+and the profitability summary via `ui.reports.lightning_profitability`,
+both of which dispatch through the shared Lightning adapter registry. The
+adapter is strictly read-only: it calls `getinfo`, channel and balance
+endpoints, forwarding history, payments, invoices, and the fee report,
+but never opens, closes, or pays. Adapters drop preimages, encoded
+bolt11 strings, onion route hops, route hints, and
+`failure_source_pubkey` before any payload reaches the local DB. Private
+channels surface with `peer_pubkey=null` by default.
 
 BTCPay backends now serve two separate Kassiber flows:
 

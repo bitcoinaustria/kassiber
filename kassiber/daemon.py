@@ -83,6 +83,7 @@ from .cli.handlers import (
 from .core import commercial as core_commercial
 from .core import attachments as core_attachments
 from .core import lightning as core_lightning
+from .core.lightning import lnd as _core_lightning_lnd  # noqa: F401 — registers the LND adapter on import.
 from .core import reports as core_reports
 from .core import source_funds as core_source_funds
 from .core import transfer_matching as core_transfer_matching
@@ -5193,6 +5194,7 @@ def _backend_options_payload(ctx: "DaemonContext") -> dict[str, Any]:
         "insecure",
         "has_auth_header",
         "has_token",
+        "has_certificate",
         "has_cookiefile",
         "has_username",
         "has_password",

@@ -26,6 +26,7 @@
   - [kassiber/core/reports.py](kassiber/core/reports.py) — extracted report builders, balance-history calculations, and PDF export assembly behind hookable journal/runtime dependencies. `reports tax-summary` rows include `row_type=swap_fees_year` / `swap_fees_total` summarising persisted `transaction_pairs.swap_fee_msat` and `direct_swap_payouts.swap_fee_msat`.
   - [kassiber/core/transfer_matching.py](kassiber/core/transfer_matching.py) — pure swap-candidate matcher with `payment_hash` (exact) and time + amount (strong) confidence bands, signed fee computation, conflict cluster ids, and pair/dismissal suppression. Defaults: 24h time window, fee tolerance `max(1%, 2500 sats)`.
   - [kassiber/core/lightning/](kassiber/core/lightning/) — read-only Lightning scaffold: typed `NodeSnapshot` / `NodeChannel` / `NodeForward` shapes, `LightningAdapter` Protocol, registry (`register_adapter` / `resolve_adapter` / `registered_kinds`), and the generic `build_profitability_report` / `profitability_csv_rows` helpers. Node adapters (LND, Core Lightning, NWC, …) live in sibling modules and register themselves with the registry; the daemon kinds `ui.connections.node.snapshot` and `ui.reports.lightning_profitability` plus the `reports lightning-profitability` / `reports export-lightning-profitability-csv` CLI commands dispatch through the registry. The desktop / CLI path returns the full payload (`snapshot_to_dict` / `LightningProfitabilityReport.to_envelope_payload`); the AI tool dispatch swaps in redacted variants (`snapshot_to_dict_for_ai` / `to_ai_envelope_payload`) that drop the Tier-3 identity graph (operator pubkey, channel funding outpoints, peer pubkeys / aliases, short channel ids on channels and forwards, per-channel covers-open-cost rows). Adapters MUST follow the discard policy in [docs/reference/lightning-opsec.md](docs/reference/lightning-opsec.md): drop preimages, payment_secrets, full encoded bolt11 strings, route hop pubkey lists, route hints from received invoices, and `failure_source_pubkey` at the adapter boundary; pass `None` for `NodeChannel.peer_pubkey` on private channels (enforced at construction by `__post_init__`). `NodeChannel.__post_init__` enforces the `None`-for-private rule on `peer_pubkey` and runs format-only checks on `short_channel_id` / `funding_outpoint` so smuggling fails at the dataclass boundary; `NodeForward.failure_reason` is a categorical `NodeForwardFailureReason` Literal so adapters cannot smuggle raw node error blobs.
+  - [kassiber/core/lightning/lnd.py](kassiber/core/lightning/lnd.py) — LND REST adapter implementing the scaffold's `LightningAdapter` Protocol. Registers itself on import under `kind="lnd"`. Talks to `/v1/getinfo`, `/v1/channels`, `/v1/channels/closed`, `/v1/switch`, `/v1/payments`, `/v1/invoices`, `/v1/balance/{blockchain,channels}`, and `/v1/fees`; sanitizes preimages, encoded bolt11 strings, route hops, and `failure_source_pubkey` before any payload reaches the scaffold shapes. TLS settings (`certificate`, `insecure`) are read via `backend_value` so DB-resolved backend rows are honored.
   - [kassiber/core/htlc_parser.py](kassiber/core/htlc_parser.py) — pure parser for Boltz v1 P2WSH HTLC redeem scripts (submarine + reverse variants) and claim witnesses. Returns `payment_hash` when extractable; Boltz v2 Taproot cooperative spends fall through to heuristic by physics.
   - [kassiber/core/swap_rules.py](kassiber/core/swap_rules.py) — auto-pair rules engine with predicate matching, specificity sort, conflict-cluster skip, and a `detect_repeating_patterns` helper for "create rule from pattern" prompts.
   - [kassiber/core/saved_views.py](kassiber/core/saved_views.py) — generic saved-view CRUD (surface-discriminated). First consumer is the swap-candidate queue (`surface="swap_candidates"`).
@@ -91,10 +92,10 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ui.audit.changes_since_last_answer`, `ui.maintenance.settings`,
   `ui.workspace.health`, `ui.next_actions`, and virtual
   `read_skill_reference`. Lightning kinds require a registered adapter
-  (`kassiber.core.lightning.register_adapter`); the LND / Core Lightning
-  syncs each install their own and the daemon returns an
-  `lightning_adapter_unavailable` error envelope until one of those PRs
-  lands. `ui.backends.options` is a desktop setup helper that
+  (`kassiber.core.lightning.register_adapter`); LND ships an adapter that
+  registers itself on import, and Core Lightning / NWC adapters will
+  land later. The daemon returns an `lightning_adapter_unavailable`
+  error envelope when a wallet's kind has no adapter registered. `ui.backends.options` is a desktop setup helper that
   returns safe backend names and metadata without exact URLs or tokens.
   `read_skill_reference("index")` returns only the
   compact in-app skill routing document; deeper references stay allowlisted.
@@ -329,6 +330,6 @@ uv run python -m kassiber ai chat --help
 - No descriptor/xpub-native live sync through `bitcoinrpc` yet.
 - No self-hosted Liquid `elements_rpc` backend yet.
 - No BTCPay invoice/payment provenance ingest yet beyond confirmed on-chain wallet history plus comment/label carry-through from wallet-configured BTCPay sync.
-- No Lightning node adapters yet (`coreln`, `lnd`, `nwc` kinds are declared but do not sync).
+- LND (`kind="lnd"`) is implemented as a read-only node snapshot adapter behind the shared scaffold; Core Lightning (`coreln`) and NWC (`nwc`) kinds are declared but do not sync yet.
 - No REST/server mode or multi-user auth yet.
 - Generic cross-asset carrying-value is still unsupported: outside Austrian profiles, BTC ↔ LBTC peg-ins/peg-outs and submarine swaps remain audit-linked SELL + BUY pairs rather than a cost-basis-carry primitive.

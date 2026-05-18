@@ -63,6 +63,7 @@ import {
   type IntegrationItem,
 } from "@/components/shadcnblocks/settings-integrations4";
 import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
+import lightningLabsIcon from "@/assets/integrations/lightning-labs.png";
 import liquidIcon from "@/assets/integrations/liquid.svg";
 import mempoolIcon from "@/assets/integrations/mempool-space.svg";
 import {
@@ -144,6 +145,7 @@ interface BackendSettingsRow {
   has_url?: boolean;
   has_auth_header?: boolean;
   has_token?: boolean;
+  has_certificate?: boolean;
   has_username?: boolean;
   has_password?: boolean;
   insecure?: boolean;
@@ -409,12 +411,13 @@ const DEFAULT_RATE_BACKENDS: Backend[] = DEFAULT_BACKENDS.filter(
 );
 
 function isSyncBackend(backend: Backend): boolean {
-  return backend.net === "BTC" || backend.net === "LIQUID";
+  return backend.net === "BTC" || backend.net === "LIQUID" || backend.net === "LN";
 }
 
 function backendNetFromRow(row: BackendSettingsRow): Net {
   const chain = (row.chain ?? "").toLowerCase();
   const kind = (row.kind ?? "").toLowerCase();
+  if (kind === "lnd") return "LN";
   if (chain === "liquid" || kind === "liquid-esplora") return "LIQUID";
   return "BTC";
 }
@@ -508,6 +511,7 @@ function backendPayload(backend: Backend): Record<string, unknown> {
 const backendIntegrationImage: Partial<Record<Net, string>> = {
   BTC: bitcoinIcon,
   LIQUID: liquidIcon,
+  LN: lightningLabsIcon,
 };
 
 const brandLogoFrame =
@@ -570,6 +574,13 @@ function backendIntegrationArt(backend: Backend): Pick<
     return {
       image: liquidIcon,
       className: "size-8 scale-150",
+    };
+  }
+  if (backend.net === "LN") {
+    return {
+      image: lightningLabsIcon,
+      className: "size-8",
+      imageFrameClassName: brandLogoFrame,
     };
   }
   return {
@@ -3535,9 +3546,11 @@ function PresetMark({
       ? mempoolIcon
       : net === "LIQUID"
         ? liquidIcon
-        : preset.protocol === "esplora"
-          ? bitcoinIcon
-          : null;
+        : preset.protocol === "lnd"
+          ? lightningLabsIcon
+          : preset.protocol === "esplora"
+            ? bitcoinIcon
+            : null;
   if (image) {
     return (
       <span
@@ -3596,14 +3609,14 @@ interface SyncBackendPreset {
   id: string;
   name: string;
   url: string;
-  protocol: "esplora" | "electrum" | "bitcoinrpc" | "liquid-esplora";
+  protocol: "esplora" | "electrum" | "bitcoinrpc" | "liquid-esplora" | "lnd";
   label: string;
   disabled?: boolean;
   status?: string;
 }
 
 interface SyncBackendNetwork {
-  id: "bitcoin" | "liquid";
+  id: "bitcoin" | "liquid" | "lightning";
   label: string;
   net: Net;
   desc: string;
@@ -3659,6 +3672,21 @@ const SYNC_BACKEND_NETWORKS: SyncBackendNetwork[] = [
         url: "https://blockstream.info/liquid/api",
         protocol: "liquid-esplora",
         label: "Liquid Esplora",
+      },
+    ],
+  },
+  {
+    id: "lightning",
+    label: "Lightning",
+    net: "LN",
+    desc: "Read-only Lightning node history for profitability reports.",
+    presets: [
+      {
+        id: "lnd",
+        name: "LND",
+        url: "https://127.0.0.1:8080",
+        protocol: "lnd",
+        label: "LND REST",
       },
     ],
   },
@@ -3751,7 +3779,8 @@ function BackendModal({
       : type.presets.find((candidate) => candidate.id === presetId) ?? null;
   const isEditing = Boolean(initial);
   const isElectrum = preset?.protocol === "electrum";
-  const showAuth = preset?.protocol === "bitcoinrpc";
+  const isLnd = preset?.protocol === "lnd" || initial?.kind === "lnd";
+  const showAuth = preset?.protocol === "bitcoinrpc" || isLnd;
   const effectiveUrl = isElectrum
     ? buildElectrumUrl({
         host: electrumHost,
@@ -3762,7 +3791,11 @@ function BackendModal({
   const selectedBackendKind =
     preset?.protocol ??
     initial?.kind ??
-    (type.net === "LIQUID" ? "liquid-esplora" : "esplora");
+    (type.net === "LIQUID"
+      ? "liquid-esplora"
+      : type.net === "LN"
+        ? "lnd"
+        : "esplora");
 
   React.useEffect(() => {
     if (!open) return;
@@ -3823,6 +3856,11 @@ function BackendModal({
     if (preset) {
       setUrl(preset.url);
       setName(preset.name);
+      if (preset.protocol === "lnd") {
+        setAuth("apikey");
+      } else if (preset.protocol !== "bitcoinrpc") {
+        setAuth("none");
+      }
       if (preset.protocol === "electrum") {
         const parsed = parseElectrumEndpoint(preset.url);
         setElectrumHost(parsed.host);
@@ -3917,8 +3955,18 @@ function BackendModal({
         url: normalizedUrl,
         net: type.net,
         kind: selectedBackendKind,
-        chain: type.net === "LIQUID" ? "liquid" : "bitcoin",
-        network: type.net === "LIQUID" ? "liquidv1" : "main",
+        chain:
+          type.net === "LIQUID"
+            ? "liquid"
+            : type.net === "LN"
+              ? "bitcoin"
+              : "bitcoin",
+        network:
+          type.net === "LIQUID"
+            ? "liquidv1"
+            : type.net === "LN"
+              ? "main"
+              : "main",
         health: initial ? "just checked - ok" : "just added - ok",
         on: connected,
         auth: showAuth ? auth : "none",
@@ -3934,9 +3982,10 @@ function BackendModal({
           showAuth && auth === "basic" && authPassword
             ? authPassword
             : undefined,
-        trustSsl: isElectrum && electrumUseSsl ? trustSsl : undefined,
+        trustSsl: (isElectrum && electrumUseSsl) || isLnd ? trustSsl : undefined,
         certificate:
-          isElectrum && electrumUseSsl && !trustSsl && certificate.trim()
+          ((isElectrum && electrumUseSsl && !trustSsl) || isLnd) &&
+          certificate.trim()
             ? certificate.trim()
             : undefined,
         proxy:
@@ -3968,7 +4017,7 @@ function BackendModal({
           <DialogDescription>
             {isEditing
               ? "Update this wallet-refresh endpoint."
-              : "Connect a Bitcoin or Liquid wallet-refresh backend."}
+              : "Connect a Bitcoin, Liquid, or Lightning backend."}
           </DialogDescription>
         </DialogHeader>
 
@@ -3999,7 +4048,11 @@ function BackendModal({
                           {backendType.label}
                         </span>
                         <span className="block text-xs leading-tight text-muted-foreground">
-                          {backendType.net === "BTC" ? "Bitcoin" : "Liquid"}
+                          {backendType.net === "BTC"
+                            ? "Bitcoin"
+                            : backendType.net === "LIQUID"
+                              ? "Liquid"
+                              : "Lightning"}
                         </span>
                       </span>
                     </Button>
@@ -4226,6 +4279,43 @@ function BackendModal({
               </section>
             )}
 
+            {isLnd && (
+              <section className="grid gap-3 sm:grid-cols-2">
+                <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm sm:col-span-2">
+                  <span>
+                    <span className="block font-medium">
+                      Trust self-signed TLS
+                    </span>
+                    <span className="text-muted-foreground">
+                      Use only for a local LND REST endpoint you control.
+                    </span>
+                  </span>
+                  <Switch
+                    checked={trustSsl}
+                    onCheckedChange={(checked) => {
+                      setTrustSsl(checked);
+                      setTestState("idle");
+                      setTestLog("");
+                    }}
+                  />
+                </label>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="backend-lnd-certificate">TLS certificate</Label>
+                  <Input
+                    id="backend-lnd-certificate"
+                    value={certificate}
+                    onChange={(event) => {
+                      setCertificate(event.target.value);
+                      setTestState("idle");
+                      setTestLog("");
+                    }}
+                    placeholder="Path to tls.cert or PEM contents"
+                    disabled={trustSsl}
+                  />
+                </div>
+              </section>
+            )}
+
             {showAuth && (
               <section className="space-y-3">
                 <Label>RPC authentication</Label>
@@ -4245,10 +4335,10 @@ function BackendModal({
                 {auth === "apikey" && (
                   <SecretField
                     id="backend-api-key"
-                    label="API key"
+                    label={isLnd ? "Read-only macaroon hex" : "API key"}
                     value={authVal}
                     onChange={setAuthVal}
-                    placeholder="sk_live_..."
+                    placeholder={isLnd ? "0201036c6e64..." : "sk_live_..."}
                   />
                 )}
                 {auth === "bearer" && (

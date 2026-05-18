@@ -321,10 +321,11 @@ request takes `args.connection` (a wallet id or label that resolves to a
 Lightning-kind wallet) and optional `args.window_days` (default 30, max 365).
 The daemon resolves the wallet, looks up the registered
 [`LightningAdapter`](../../kassiber/core/lightning/adapter.py) for the wallet
-kind (`lnd`, `coreln`, `nwc`), and dispatches the read. Without a registered
-adapter the daemon returns an `lightning_adapter_unavailable` error envelope
-so the desktop can fall back to mock data; the LND and Core Lightning sync
-PRs install their adapters on import.
+kind (`lnd`, `coreln`, `nwc`), and dispatches the read. LND ships an
+adapter ([`kassiber/core/lightning/lnd.py`](../../kassiber/core/lightning/lnd.py))
+that the daemon imports at startup. Without a registered adapter the
+daemon returns an `lightning_adapter_unavailable` error envelope so the
+desktop can fall back to mock data.
 
 ## Encrypted database
 
