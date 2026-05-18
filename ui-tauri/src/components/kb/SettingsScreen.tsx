@@ -63,6 +63,7 @@ import {
   type IntegrationItem,
 } from "@/components/shadcnblocks/settings-integrations4";
 import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
+import electrumIcon from "@/assets/integrations/electrum.svg";
 import lightningLabsIcon from "@/assets/integrations/lightning-labs.png";
 import liquidIcon from "@/assets/integrations/liquid.svg";
 import mempoolIcon from "@/assets/integrations/mempool-space.svg";
@@ -587,6 +588,12 @@ function backendIntegrationArt(backend: Backend): Pick<
   if (backend.name.toLowerCase().includes("mempool")) {
     return {
       image: mempoolIcon,
+      className: "size-8",
+    };
+  }
+  if (backend.kind === "electrum") {
+    return {
+      image: electrumIcon,
       className: "size-8",
     };
   }
@@ -3708,13 +3715,15 @@ function PresetMark({
   const image =
     preset.id === "mempool"
       ? mempoolIcon
-      : net === "LIQUID"
-        ? liquidIcon
-        : preset.protocol === "lnd"
+      : preset.protocol === "electrum"
+        ? electrumIcon
+        : net === "LIQUID"
+          ? liquidIcon
+          : preset.protocol === "lnd"
           ? lightningLabsIcon
           : preset.protocol === "esplora"
-          ? bitcoinIcon
-          : null;
+            ? bitcoinIcon
+            : null;
   if (image) {
     return (
       <span
@@ -3729,7 +3738,7 @@ function PresetMark({
           alt=""
           className={cn(
             "size-5 object-contain",
-            net === "LIQUID" && "scale-150",
+            image === liquidIcon && "scale-150",
           )}
         />
       </span>

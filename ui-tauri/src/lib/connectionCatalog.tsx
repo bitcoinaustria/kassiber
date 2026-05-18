@@ -4,6 +4,7 @@ import { Database, FileInput, Server, Tags, Wallet, Zap } from "lucide-react";
 import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
 import bitpandaIcon from "@/assets/integrations/bitpanda.svg";
 import bitboxIcon from "@/assets/integrations/bitbox.svg";
+import blockstreamGreenIcon from "@/assets/integrations/blockstream-green.svg";
 import bluewalletIcon from "@/assets/integrations/bluewallet.png";
 import btcpayIcon from "@/assets/integrations/btcpay.svg";
 import bullBitcoinIcon from "@/assets/integrations/bullbitcoin.jpg";
@@ -11,6 +12,7 @@ import coldcardIcon from "@/assets/integrations/coldcard.svg";
 import coinfinityIcon from "@/assets/integrations/coinfinity-mark.svg";
 import coinbaseIcon from "@/assets/integrations/coinbase.svg";
 import coreLightningIcon from "@/assets/integrations/core-lightning.svg";
+import electrumIcon from "@/assets/integrations/electrum.svg";
 import foundationPassportIcon from "@/assets/integrations/foundation-passport.svg";
 import krakenIcon from "@/assets/integrations/kraken.svg";
 import ledgerIcon from "@/assets/integrations/ledger.svg";
@@ -20,9 +22,12 @@ import lianaIcon from "@/assets/integrations/liana.svg";
 import liquidIcon from "@/assets/integrations/liquid.svg";
 import mempoolIcon from "@/assets/integrations/mempool-space.svg";
 import nunchukIcon from "@/assets/integrations/nunchuk.svg";
+import phoenixIcon from "@/assets/integrations/phoenix.svg";
 import relaiIcon from "@/assets/integrations/relai.svg";
+import riverIcon from "@/assets/integrations/river.svg";
 import sparrowIcon from "@/assets/integrations/sparrow.png";
 import strikeIcon from "@/assets/integrations/strike.jpg";
+import swanBitcoinIcon from "@/assets/integrations/swan-bitcoin.svg";
 import trezorIcon from "@/assets/integrations/trezor.svg";
 import twentyOneBitcoinIcon from "@/assets/integrations/21bitcoin.png";
 
@@ -171,7 +176,8 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     title: "Electrum server",
     description: "Electrum/Fulcrum backend for descriptor and address refresh.",
     category: "nodes",
-    image: sourceIcon("EL", "#2563eb", "#ffffff"),
+    image: electrumIcon,
+    imageClassName: "size-8",
     status: "ready",
     pathLabel: "Index backend",
     formatLabel: "electrum",
@@ -215,7 +221,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     title: "Specter Desktop",
     description: "Multisig wallet descriptor export.",
     category: "wallets",
-    image: sourceIcon("SP", "#7c3aed", "#ffffff"),
+    icon: Wallet,
     status: "planned",
     pathLabel: "Wallet export",
     formatLabel: "descriptor",
@@ -237,7 +243,8 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     title: "Blockstream Green",
     description: "Bitcoin and Liquid wallet export.",
     category: "wallets",
-    image: sourceIcon("GR", "#00b45a", "#052e16"),
+    image: blockstreamGreenIcon,
+    imageClassName: "size-8 rounded-md",
     status: "planned",
     pathLabel: "Wallet export",
     formatLabel: "descriptor/xpub",
@@ -373,7 +380,8 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     title: "Phoenix",
     description: "Lightning wallet CSV activity import.",
     category: "lightning",
-    image: sourceIcon("PHX", "#6d28d9", "#ffffff"),
+    image: phoenixIcon,
+    imageClassName: "size-8",
     status: "ready",
     pathLabel: "CSV import",
     formatLabel: "phoenix_csv",
@@ -407,7 +415,9 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     title: "River",
     description: "Bitcoin Activity or Account Activity CSV import.",
     category: "exchanges",
-    image: sourceIcon("RV", "#1e3a8a", "#ffffff"),
+    image: riverIcon,
+    imageFrameClassName: "bg-[#151515]",
+    imageClassName: "h-5 w-auto",
     status: "ready",
     pathLabel: "CSV import",
     formatLabel: "river_csv",
@@ -457,7 +467,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     title: "Pocket Bitcoin",
     description: "Bitcoin-only broker activity import.",
     category: "exchanges",
-    image: sourceIcon("PKT", "#facc15", "#111827"),
+    icon: Wallet,
     status: "planned",
     pathLabel: "CSV import",
     details: ["Dedicated parser is not wired yet"],
@@ -467,7 +477,9 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     title: "Swan Bitcoin",
     description: "Bitcoin-only savings and broker activity import.",
     category: "exchanges",
-    image: sourceIcon("SW", "#111827", "#ffffff"),
+    image: swanBitcoinIcon,
+    imageClassName: "size-8 rounded-md",
+    imageFrameClassName: lightLogoFrame,
     status: "planned",
     pathLabel: "CSV import",
     details: ["Dedicated parser is not wired yet"],

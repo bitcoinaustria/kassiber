@@ -34,6 +34,21 @@ describe("connection catalog", () => {
     }
   });
 
+  it("uses real artwork for ready branded connection sources", () => {
+    const genericArtworkIds = new Set(["csv", "bip329"]);
+
+    for (const source of CONNECTION_SOURCES.filter(
+      (candidate) =>
+        candidate.status === "ready" && !genericArtworkIds.has(candidate.id),
+    )) {
+      expect(source.image).toBeTruthy();
+      const decodedImage =
+        source.image?.startsWith("data:image/svg+xml,") &&
+        decodeURIComponent(source.image);
+      expect(decodedImage && decodedImage.includes("<text ")).toBe(false);
+    }
+  });
+
   it("includes the Bitcoin-native connection families Kassiber can already use", () => {
     expect(CONNECTION_SOURCES.map((source) => source.id)).toEqual(
       expect.arrayContaining([
