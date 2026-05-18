@@ -146,8 +146,8 @@ const INCOMING_MARKER_MIN_PARAM = "incomingMinBtc";
 const OUTGOING_MARKER_MIN_PARAM = "outgoingMinBtc";
 const LEGACY_INCOMING_MARKER_MIN_PARAM = "incomingMin";
 const LEGACY_OUTGOING_MARKER_MIN_PARAM = "outgoingMin";
-const TREASURY_BRUSH_MIN_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
-const TREASURY_BRUSH_MIN_INDEX_SPAN = 5;
+const TREASURY_BRUSH_MIN_WINDOW_MS = (7 * 24 * 60 * 60 * 1000) / 3;
+const TREASURY_BRUSH_MIN_INDEX_SPAN = 2;
 
 const defaultTreasurySeriesVisibility: TreasurySeriesVisibility = {
   primary: true,
@@ -3725,6 +3725,13 @@ const RevenueFlowChart = ({
       : "treasuryBrushGradient";
     const effectiveBrushRange =
       brushRange ?? fullTreasuryBrushRange(chartDisplayData.length);
+    const selectedChartDisplayData =
+      chartDisplayData.length > 3
+        ? chartDisplayData.slice(
+            effectiveBrushRange.startIndex,
+            effectiveBrushRange.endIndex + 1,
+          )
+        : chartDisplayData;
     const handleBrushChange = (range: TreasuryBrushChange) => {
       const normalizedRange = normalizeTreasuryBrushRange(
         chartDisplayData,
@@ -3746,6 +3753,14 @@ const RevenueFlowChart = ({
           ? current
           : normalizedRange,
       );
+    };
+    const resetBrushRange = () => {
+      const fullRange = fullTreasuryBrushRange(chartDisplayData.length);
+      setBrushRange((current) => {
+        if (sameTreasuryBrushRange(current, fullRange)) return current;
+        window.setTimeout(() => bumpBrushRevision((revision) => revision + 1), 0);
+        return fullRange;
+      });
     };
     const visibleLatestReserve = snapshot.fiat.eurBalance;
     const visibleCostBasis = snapshot.fiat.eurCostBasis;
@@ -3789,28 +3804,47 @@ const RevenueFlowChart = ({
       0,
     );
     const netBtc = receivedBtc - spentBtc - feeBtc;
-    const balancePoints = chartDisplayData.filter((point) => !point.isActivityEvent);
+    const balancePoints = selectedChartDisplayData.filter(
+      (point) => !point.isActivityEvent,
+    );
     const chartStats = buildTreasuryChartStats(
-      balancePoints.length ? balancePoints : chartDisplayData,
+      balancePoints.length ? balancePoints : selectedChartDisplayData,
     );
     const statPeriodLabel = periodShortLabels[period];
     const selectedPoint = expanded
-      ? (chartDisplayData.find((point) => point.date === expandedPointDate) ??
-        chartDisplayData.at(-1) ??
+      ? (selectedChartDisplayData.find(
+          (point) => point.date === expandedPointDate,
+        ) ??
+        selectedChartDisplayData.at(-1) ??
         null)
       : null;
     const selectedPointIndex = selectedPoint
-      ? chartDisplayData.findIndex((point) => point.date === selectedPoint.date)
+      ? selectedChartDisplayData.findIndex(
+          (point) => point.date === selectedPoint.date,
+        )
       : -1;
     const previousPoint =
-      selectedPointIndex > 0 ? chartDisplayData[selectedPointIndex - 1] : null;
+      selectedPointIndex > 0
+        ? selectedChartDisplayData[selectedPointIndex - 1]
+        : null;
     const handleExpandedChartMove = (state: PortfolioChartMouseState) => {
       if (!expanded) return;
       const point = state.activePayload?.find((item) => item.payload)?.payload;
       if (point) setExpandedPointDate(point.date);
     };
+    const handleChartDoubleClick = (event: React.MouseEvent) => {
+      if (plottedData.length <= 3) return;
+      resetBrushRange();
+      event.preventDefault();
+    };
+    const handleChartClick = (event: React.MouseEvent) => {
+      if (event.detail >= 2) handleChartDoubleClick(event);
+    };
+    const handleChartMouseDown = (event: React.MouseEvent) => {
+      if (event.detail >= 2) handleChartDoubleClick(event);
+    };
     const xAxisTicks = portfolioAxisTicks(
-      balancePoints.length ? balancePoints : plottedData,
+      balancePoints.length ? balancePoints : selectedChartDisplayData,
       period,
       expanded,
     );
@@ -4046,27 +4080,33 @@ const RevenueFlowChart = ({
                   BTC Balance
                 </span>
               </div>
-              <ChartContainer
-                config={chartConfig}
-                className="h-full min-h-0 w-full overflow-visible [&_.recharts-tooltip-wrapper]:!z-[100]"
+              <div
+                className="flex h-full min-h-0 w-full flex-col overflow-visible"
+                onClickCapture={handleChartClick}
+                onDoubleClickCapture={handleChartDoubleClick}
+                onMouseDownCapture={handleChartMouseDown}
               >
-                <ComposedChart
-                  data={chartDisplayData}
-                  onMouseMove={
-                    expanded
-                      ? (state) =>
-                          handleExpandedChartMove(
-                            state as PortfolioChartMouseState,
-                          )
-                      : undefined
-                  }
-                  margin={{
-                    top: expanded ? 12 : 2,
-                    right: expanded ? 8 : 4,
-                    bottom: plottedData.length > 3 ? (expanded ? 14 : 8) : 0,
-                    left: expanded ? 52 : 48,
-                  }}
+                <ChartContainer
+                  config={chartConfig}
+                  className="min-h-0 flex-1 w-full overflow-visible [&_.recharts-tooltip-wrapper]:!z-[100]"
                 >
+                  <ComposedChart
+                    data={selectedChartDisplayData}
+                    onMouseMove={
+                      expanded
+                        ? (state) =>
+                            handleExpandedChartMove(
+                              state as PortfolioChartMouseState,
+                            )
+                        : undefined
+                    }
+                    margin={{
+                      top: expanded ? 12 : 2,
+                      right: expanded ? 8 : 4,
+                      bottom: plottedData.length > 3 ? (expanded ? 14 : 8) : 0,
+                      left: expanded ? 52 : 48,
+                    }}
+                  >
                   <CartesianGrid
                     strokeDasharray="0"
                     vertical
@@ -4213,64 +4253,85 @@ const RevenueFlowChart = ({
                       isAnimationActive={false}
                     />
                   )}
-                  {plottedData.length > 3 && (
-                    <Brush
-                      key={`treasury-brush-${expanded ? "expanded" : "compact"}-${brushRevision}`}
-                      className="text-muted-foreground"
-                      dataKey="date"
-                      endIndex={effectiveBrushRange.endIndex}
-                      fill="color-mix(in oklch, var(--muted) 70%, var(--background))"
-                      height={expanded ? 60 : 74}
-                      onChange={handleBrushChange}
-                      onDragEnd={handleBrushChange}
-                      padding={{ top: 8, right: 1, bottom: 8, left: 1 }}
-                      startIndex={effectiveBrushRange.startIndex}
-                      travellerWidth={10}
-                      stroke={primaryColor}
-                      tickFormatter={(value) =>
-                        plottedData.find((point) => point.date === value)?.month ??
-                        formatTreasuryTick(String(value))
-                      }
+                  </ComposedChart>
+                </ChartContainer>
+                {plottedData.length > 3 && (
+                  <ChartContainer
+                    config={chartConfig}
+                    className={cn(
+                      "w-full overflow-visible",
+                      expanded ? "h-[60px]" : "h-[74px]",
+                    )}
+                  >
+                    <AreaChart
+                      data={chartDisplayData}
+                      margin={{
+                        top: 0,
+                        right: expanded ? 72 : 68,
+                        bottom: 0,
+                        left: expanded ? 52 : 48,
+                      }}
                     >
-                      <AreaChart>
-                        <XAxis dataKey="date" hide />
-                        <YAxis hide domain={["dataMin", "dataMax"]} />
-                        <defs>
-                          <linearGradient
-                            id={brushGradientId}
-                            x1="0"
-                            y1="0"
-                            x2="0"
-                            y2="1"
-                          >
-                            <stop
-                              offset="0%"
-                              stopColor={primaryColor}
-                              stopOpacity={0.28}
-                            />
-                            <stop
-                              offset="100%"
-                              stopColor={primaryColor}
-                              stopOpacity={0.03}
-                            />
-                          </linearGradient>
-                        </defs>
-                        <Area
-                          type="stepAfter"
-                          dataKey="brushBalanceBtc"
-                          stroke={primaryColor}
-                          strokeWidth={1.35}
-                          fill={`url(#${brushGradientId})`}
-                          fillOpacity={1}
-                          dot={false}
-                          connectNulls
-                          isAnimationActive={false}
-                        />
-                      </AreaChart>
-                    </Brush>
-                  )}
-                </ComposedChart>
-              </ChartContainer>
+                      <Brush
+                        key={`treasury-brush-${expanded ? "expanded" : "compact"}-${brushRevision}`}
+                        className="text-muted-foreground"
+                        dataKey="date"
+                        endIndex={effectiveBrushRange.endIndex}
+                        fill="color-mix(in oklch, var(--muted) 70%, var(--background))"
+                        height={expanded ? 60 : 74}
+                        onClick={handleChartClick}
+                        onDoubleClick={handleChartDoubleClick}
+                        onMouseDownCapture={handleChartMouseDown}
+                        onDragEnd={handleBrushChange}
+                        padding={{ top: 8, right: 1, bottom: 8, left: 1 }}
+                        startIndex={effectiveBrushRange.startIndex}
+                        travellerWidth={10}
+                        stroke={primaryColor}
+                        tickFormatter={(value) =>
+                          plottedData.find((point) => point.date === value)?.month ??
+                          formatTreasuryTick(String(value))
+                        }
+                      >
+                        <AreaChart>
+                          <XAxis dataKey="date" hide />
+                          <YAxis hide domain={["dataMin", "dataMax"]} />
+                          <defs>
+                            <linearGradient
+                              id={brushGradientId}
+                              x1="0"
+                              y1="0"
+                              x2="0"
+                              y2="1"
+                            >
+                              <stop
+                                offset="0%"
+                                stopColor={primaryColor}
+                                stopOpacity={0.28}
+                              />
+                              <stop
+                                offset="100%"
+                                stopColor={primaryColor}
+                                stopOpacity={0.03}
+                              />
+                            </linearGradient>
+                          </defs>
+                          <Area
+                            type="stepAfter"
+                            dataKey="brushBalanceBtc"
+                            stroke={primaryColor}
+                            strokeWidth={1.35}
+                            fill={`url(#${brushGradientId})`}
+                            fillOpacity={1}
+                            dot={false}
+                            connectNulls
+                            isAnimationActive={false}
+                          />
+                        </AreaChart>
+                      </Brush>
+                    </AreaChart>
+                  </ChartContainer>
+                )}
+              </div>
               <div className="pointer-events-none flex items-center justify-center">
                 <span className="rotate-90 whitespace-nowrap text-[10px] font-semibold text-muted-foreground">
                   BTC Price (EUR)
@@ -4279,7 +4340,7 @@ const RevenueFlowChart = ({
             </div>
             {plottedData.length > 3 && (
               <p className="pt-1 text-center text-[10px] text-muted-foreground">
-                Drag the handles or selection area to reframe the time period
+                Drag the timeline window or handles to adjust the timeframe; double-click to reset
               </p>
             )}
           </div>
