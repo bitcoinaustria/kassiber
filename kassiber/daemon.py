@@ -82,6 +82,7 @@ from .cli.handlers import (
 )
 from .core import commercial as core_commercial
 from .core import attachments as core_attachments
+from .core import lnd as core_lnd
 from .core import reports as core_reports
 from .core import source_funds as core_source_funds
 from .core import transfer_matching as core_transfer_matching
@@ -116,7 +117,7 @@ from .core.ui_snapshot import (
     build_workspace_health_snapshot,
 )
 from .core.sync_backends import ElectrumClient
-from .backends import BACKEND_KINDS, load_runtime_config, merge_db_backends
+from .backends import BACKEND_KINDS, load_runtime_config, merge_db_backends, resolve_backend
 from .db import (
     ensure_data_root,
     open_db,
@@ -198,6 +199,8 @@ SUPPORTED_KINDS = (
     "ui.reports.portfolio_summary",
     "ui.reports.tax_summary",
     "ui.reports.balance_history",
+    "ui.reports.lightning_profitability",
+    "ui.reports.export_lightning_profitability_csv",
     "ui.reports.export_pdf",
     "ui.reports.export_summary_pdf",
     "ui.reports.export_csv",
@@ -230,6 +233,8 @@ SUPPORTED_KINDS = (
     "ui.btcpay.provenance.suggest",
     "ui.btcpay.provenance.links",
     "ui.btcpay.provenance.review",
+    "ui.lnd.status",
+    "ui.lnd.sync",
     "ui.documents.list",
     "ui.documents.create",
     "ui.documents.attach",
@@ -1941,6 +1946,37 @@ def _ui_report_export_payload(
         )
         return payload
 
+    if kind == "ui.reports.export_lightning_profitability_csv":
+        unknown = sorted(set(args) - {"backend"})
+        if unknown:
+            raise AppError(
+                "ui.reports.export_lightning_profitability_csv received unsupported arguments",
+                code="validation",
+                details={"unsupported": unknown},
+            )
+        _, profile = resolve_scope(conn, None, None)
+        backend = _lnd_backend_arg(args)
+        stem = "kassiber-lightning-profitability"
+        if backend:
+            stem = f"{stem}-{backend}"
+        path = _managed_report_export_path(ctx.data_root, stem, ".csv")
+        payload = dict(
+            core_lnd.export_lnd_profitability_csv(
+                conn,
+                profile,
+                path,
+                backend_name=backend,
+            )
+        )
+        payload.update(
+            {
+                "format": "csv",
+                "scope": "lightning_profitability",
+                "filename": Path(payload["file"]).name,
+            }
+        )
+        return payload
+
     if kind == "ui.reports.export_capital_gains_csv":
         year = args.get("year")
         stem = (
@@ -3010,6 +3046,92 @@ def _reports_balance_history_payload(
             "truncated": total_rows > len(rows),
         },
     }
+
+
+def _lnd_backend_arg(raw_args: dict[str, Any] | None) -> str | None:
+    args = raw_args or {}
+    backend = args.get("backend")
+    if backend is None:
+        return None
+    if not isinstance(backend, str) or not backend.strip():
+        raise AppError(
+            "backend must be a non-empty string",
+            code="validation",
+            retryable=False,
+        )
+    return backend.strip()
+
+
+def _lnd_status_payload(conn: sqlite3.Connection, raw_args: dict[str, Any] | None = None) -> dict[str, Any]:
+    args = raw_args or {}
+    unknown = sorted(set(args) - {"backend"})
+    if unknown:
+        raise AppError(
+            "ui.lnd.status received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    _, profile = resolve_scope(conn, None, None)
+    return core_lnd.lnd_status(conn, profile, _lnd_backend_arg(args))
+
+
+def _lnd_sync_payload(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object],
+    raw_args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    args = raw_args or {}
+    unknown = sorted(set(args) - {"backend", "page_size"})
+    if unknown:
+        raise AppError(
+            "ui.lnd.sync received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    backend_name = _lnd_backend_arg(args)
+    if backend_name is None:
+        raise AppError(
+            "ui.lnd.sync requires a backend",
+            code="validation",
+            retryable=False,
+        )
+    page_size = _coerce_positive_int(
+        args.get("page_size", core_lnd.LND_DEFAULT_PAGE_SIZE),
+        "ui.lnd.sync page_size",
+        maximum=core_lnd.LND_MAX_PAGE_SIZE,
+    )
+    workspace, profile = resolve_scope(conn, None, None)
+    backend = resolve_backend(runtime_config, backend_name)
+    return core_lnd.sync_lnd_backend(
+        conn,
+        workspace,
+        profile,
+        backend,
+        page_size=page_size,
+    )
+
+
+def _reports_lightning_profitability_payload(
+    conn: sqlite3.Connection,
+    raw_args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    args = raw_args or {}
+    unknown = sorted(set(args) - {"backend"})
+    if unknown:
+        raise AppError(
+            "ui.reports.lightning_profitability received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    _, profile = resolve_scope(conn, None, None)
+    return core_lnd.lnd_profitability_report(
+        conn,
+        profile,
+        backend_name=_lnd_backend_arg(args),
+    )
 
 
 def _coerce_positive_int(raw: Any, label: str, *, maximum: int) -> int:
@@ -5174,6 +5296,7 @@ def _backend_options_payload(ctx: "DaemonContext") -> dict[str, Any]:
         "insecure",
         "has_auth_header",
         "has_token",
+        "has_certificate",
         "has_cookiefile",
         "has_username",
         "has_password",
@@ -6921,6 +7044,37 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.lnd.status":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.lnd.status",
+                    _lnd_status_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.lnd.sync":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.lnd.sync",
+                    _lnd_sync_payload(
+                        ctx.conn,
+                        ctx.runtime_config,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.backends.create":
         return (
             _with_request_id(
@@ -7086,11 +7240,27 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.reports.lightning_profitability":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.reports.lightning_profitability",
+                    _reports_lightning_profitability_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind in {
         "ui.reports.export_pdf",
         "ui.reports.export_summary_pdf",
         "ui.reports.export_csv",
         "ui.reports.export_xlsx",
+        "ui.reports.export_lightning_profitability_csv",
         "ui.reports.export_capital_gains_csv",
         "ui.reports.export_austrian_e1kv_pdf",
         "ui.reports.export_austrian_e1kv_xlsx",

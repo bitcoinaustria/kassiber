@@ -119,6 +119,7 @@ Current backend kinds:
 - `electrum`
 - `bitcoinrpc`
 - `btcpay`
+- `lnd`
 - `liquid-esplora`
 - `custom`
 
@@ -145,6 +146,39 @@ Bitcoin Core-specific fields:
 BTCPay-specific fields:
 
 - `TOKEN`
+
+LND-specific fields:
+
+- `TOKEN` stores the read-only macaroon as hex
+- `CERTIFICATE` stores either a path to `tls.cert` or PEM contents
+- `INSECURE` is available for local/self-signed testing when you deliberately
+  trust the endpoint
+
+Create a read-only LND backend without putting the macaroon in shell history:
+
+```bash
+xxd -p -c 256 readonly.macaroon | \
+  python3 -m kassiber backends create lnd --kind lnd \
+    --url https://127.0.0.1:8080 \
+    --certificate ~/.lnd/tls.cert \
+    --token-stdin
+```
+
+Then sync and report:
+
+```bash
+python3 -m kassiber lnd sync --backend lnd
+python3 -m kassiber lnd status --backend lnd
+python3 -m kassiber reports lightning-profitability --backend lnd
+python3 -m kassiber reports export-lightning-profitability-csv --backend lnd --file lightning-profitability.csv
+```
+
+The LND sync path calls read/query endpoints only: `getinfo`, channels,
+closed channels, forwarding history, payments, invoices, wallet transactions,
+fee report, and wallet/channel balances. It does not call spending,
+invoice-creation, channel-management, or wallet-mutation endpoints. Use a
+macaroon scoped to those read permissions; Kassiber stores and emits only
+presence flags for the raw macaroon.
 
 BTCPay backends now serve two separate Kassiber flows:
 

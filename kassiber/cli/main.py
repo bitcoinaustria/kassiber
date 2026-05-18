@@ -84,6 +84,7 @@ from .handlers import (
     resolve_quarantine_exclude,
     resolve_quarantine_price_override,
     show_quarantine,
+    resolve_backend,
     attach_btcpay_provenance_to_wallet,
     sync_btcpay_commercial_provenance,
     sync_btcpay_into_wallet,
@@ -92,6 +93,7 @@ from .handlers import (
 from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
+from ..core import lnd as core_lnd
 from ..core import metadata as core_metadata
 from ..core import rates as core_rates
 from ..core import reports as core_reports
@@ -173,6 +175,8 @@ def _backend_extra_config(args: argparse.Namespace) -> dict[str, object] | None:
         config["insecure"] = args.insecure
     if getattr(args, "cookiefile", None) is not None:
         config["cookiefile"] = args.cookiefile
+    if getattr(args, "certificate", None) is not None:
+        config["certificate"] = args.certificate
     username = read_secret_from_args(args, "username")
     if username is not None:
         config["username"] = username
@@ -365,6 +369,7 @@ def build_parser() -> argparse.ArgumentParser:
     backends_create.add_argument("--timeout", type=int)
     backends_create.add_argument("--tor-proxy")
     backends_create.add_argument("--insecure")
+    backends_create.add_argument("--certificate")
     backends_create.add_argument("--cookiefile")
     backends_create.add_argument(
         "--username",
@@ -399,6 +404,7 @@ def build_parser() -> argparse.ArgumentParser:
     backends_update.add_argument("--timeout", type=int)
     backends_update.add_argument("--tor-proxy")
     backends_update.add_argument("--insecure")
+    backends_update.add_argument("--certificate")
     backends_update.add_argument("--cookiefile")
     backends_update.add_argument(
         "--username",
@@ -1099,6 +1105,18 @@ def build_parser() -> argparse.ArgumentParser:
     views_delete.add_argument("--profile")
     views_delete.add_argument("--view-id", required=True, dest="view_id")
 
+    lnd = sub.add_parser("lnd")
+    lnd_sub = lnd.add_subparsers(dest="lnd_command", required=True)
+    lnd_sync = lnd_sub.add_parser("sync")
+    lnd_sync.add_argument("--workspace")
+    lnd_sync.add_argument("--profile")
+    lnd_sync.add_argument("--backend", required=True)
+    lnd_sync.add_argument("--page-size", type=int, default=core_lnd.LND_DEFAULT_PAGE_SIZE)
+    lnd_status = lnd_sub.add_parser("status")
+    lnd_status.add_argument("--workspace")
+    lnd_status.add_argument("--profile")
+    lnd_status.add_argument("--backend")
+
     btcpay = sub.add_parser("btcpay")
     btcpay_sub = btcpay.add_subparsers(dest="btcpay_command", required=True)
     btcpay_provenance = btcpay_sub.add_parser("provenance")
@@ -1367,6 +1385,17 @@ def build_parser() -> argparse.ArgumentParser:
     export_commercial_subledger.add_argument("--workspace")
     export_commercial_subledger.add_argument("--profile")
     export_commercial_subledger.add_argument("--file", required=True)
+
+    lightning_profitability = reports_sub.add_parser("lightning-profitability")
+    lightning_profitability.add_argument("--workspace")
+    lightning_profitability.add_argument("--profile")
+    lightning_profitability.add_argument("--backend")
+
+    export_lightning_profitability = reports_sub.add_parser("export-lightning-profitability-csv")
+    export_lightning_profitability.add_argument("--workspace")
+    export_lightning_profitability.add_argument("--profile")
+    export_lightning_profitability.add_argument("--backend")
+    export_lightning_profitability.add_argument("--file", required=True)
 
     source_funds_report = reports_sub.add_parser("source-funds")
     source_funds_report.add_argument("--workspace")
@@ -2423,6 +2452,24 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             return emit(
                 args, delete_saved_view_cli(conn, args.workspace, args.profile, args.view_id)
             )
+    if args.command == "lnd":
+        backend_name = getattr(args, "backend", None)
+        if args.lnd_command == "sync":
+            backend = resolve_backend(args.runtime_config, backend_name)
+            workspace, profile = resolve_scope(conn, args.workspace, args.profile)
+            return emit(
+                args,
+                core_lnd.sync_lnd_backend(
+                    conn,
+                    workspace,
+                    profile,
+                    backend,
+                    page_size=args.page_size,
+                ),
+            )
+        if args.lnd_command == "status":
+            _, profile = resolve_scope(conn, args.workspace, args.profile)
+            return emit(args, core_lnd.lnd_status(conn, profile, backend_name))
     if args.command == "btcpay":
         commercial_hooks = _commercial_hooks()
         if args.btcpay_command == "provenance":
@@ -2872,6 +2919,27 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.profile,
                     args.file,
                     _commercial_hooks(),
+                ),
+            )
+        if args.reports_command == "lightning-profitability":
+            _, profile = resolve_scope(conn, args.workspace, args.profile)
+            return emit(
+                args,
+                core_lnd.lnd_profitability_report(
+                    conn,
+                    profile,
+                    backend_name=args.backend,
+                ),
+            )
+        if args.reports_command == "export-lightning-profitability-csv":
+            _, profile = resolve_scope(conn, args.workspace, args.profile)
+            return emit(
+                args,
+                core_lnd.export_lnd_profitability_csv(
+                    conn,
+                    profile,
+                    args.file,
+                    backend_name=args.backend,
                 ),
             )
         if args.reports_command == "source-funds":

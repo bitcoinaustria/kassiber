@@ -63,6 +63,7 @@ import {
   type IntegrationItem,
 } from "@/components/shadcnblocks/settings-integrations4";
 import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
+import lightningLabsIcon from "@/assets/integrations/lightning-labs.png";
 import liquidIcon from "@/assets/integrations/liquid.svg";
 import mempoolIcon from "@/assets/integrations/mempool-space.svg";
 import {
@@ -144,6 +145,7 @@ interface BackendSettingsRow {
   has_url?: boolean;
   has_auth_header?: boolean;
   has_token?: boolean;
+  has_certificate?: boolean;
   has_username?: boolean;
   has_password?: boolean;
   insecure?: boolean;
@@ -233,6 +235,26 @@ interface RateRebuildData {
       }
     | RateRebuildJournalResult
     | null;
+}
+
+interface LndStatusCursor {
+  backend_name: string;
+  dataset: string;
+  cursor_value: string | null;
+  synced_at: string | null;
+}
+
+interface LndStatusData {
+  backend: string | null;
+  cursors: LndStatusCursor[];
+  counts: Record<string, number>;
+  datasets: string[];
+}
+
+interface LndSyncData {
+  backend: string;
+  datasets: Record<string, number>;
+  status: string;
 }
 
 interface RateRebuildJournalResult {
@@ -409,12 +431,13 @@ const DEFAULT_RATE_BACKENDS: Backend[] = DEFAULT_BACKENDS.filter(
 );
 
 function isSyncBackend(backend: Backend): boolean {
-  return backend.net === "BTC" || backend.net === "LIQUID";
+  return backend.net === "BTC" || backend.net === "LIQUID" || backend.net === "LN";
 }
 
 function backendNetFromRow(row: BackendSettingsRow): Net {
   const chain = (row.chain ?? "").toLowerCase();
   const kind = (row.kind ?? "").toLowerCase();
+  if (kind === "lnd") return "LN";
   if (chain === "liquid" || kind === "liquid-esplora") return "LIQUID";
   return "BTC";
 }
@@ -508,6 +531,7 @@ function backendPayload(backend: Backend): Record<string, unknown> {
 const backendIntegrationImage: Partial<Record<Net, string>> = {
   BTC: bitcoinIcon,
   LIQUID: liquidIcon,
+  LN: lightningLabsIcon,
 };
 
 const brandLogoFrame =
@@ -570,6 +594,13 @@ function backendIntegrationArt(backend: Backend): Pick<
     return {
       image: liquidIcon,
       className: "size-8 scale-150",
+    };
+  }
+  if (backend.net === "LN") {
+    return {
+      image: lightningLabsIcon,
+      className: "size-8",
+      imageFrameClassName: brandLogoFrame,
     };
   }
   return {
@@ -2529,11 +2560,16 @@ function BackendSettingsPanel({
   onDelete: (backend: Backend) => void;
 }) {
   const syncBackends = backends.filter(isSyncBackend);
+  const lndBackends = syncBackends.filter((backend) => backend.kind === "lnd");
   const rateBackends = backends.filter((backend) => backend.net === "FX");
   const importKrakenRates = useDaemonMutation<KrakenRatesImportData>(
     "ui.rates.kraken_csv.import",
   );
   const rebuildRates = useDaemonMutation<RateRebuildData>("ui.rates.rebuild");
+  const lndStatus = useDaemon<LndStatusData>("ui.lnd.status", undefined, {
+    enabled: lndBackends.length > 0,
+  });
+  const syncLnd = useDaemonMutation<LndSyncData>("ui.lnd.sync");
   const addNotification = useUiStore((state) => state.addNotification);
   const updateNotification = useUiStore((state) => state.updateNotification);
   const rebuildNoticeRef = React.useRef<string | null>(null);
@@ -2545,6 +2581,11 @@ function BackendSettingsPanel({
   );
   const [pendingKrakenOperation, setPendingKrakenOperation] =
     React.useState<KrakenRatesImportOperation | null>(null);
+  const [pendingLndBackend, setPendingLndBackend] = React.useState<string | null>(
+    null,
+  );
+  const [lndSyncError, setLndSyncError] = React.useState<string | null>(null);
+  const [lndLastSync, setLndLastSync] = React.useState<LndSyncData | null>(null);
   const [rateRebuildOpen, setRateRebuildOpen] = React.useState(false);
   const [rateRebuildResult, setRateRebuildResult] =
     React.useState<RateRebuildData | null>(null);
@@ -2629,6 +2670,7 @@ function BackendSettingsPanel({
 
   const isImportingKraken = importKrakenRates.isPending;
   const isRebuildingRates = rebuildRates.isPending;
+  const isSyncingLnd = syncLnd.isPending;
   const rateRebuildProgress = rateRebuildTransactionProgress(rateRebuildResult);
   const rateRebuildSamples =
     rateRebuildResult?.sync.reduce(
@@ -2698,8 +2740,48 @@ function BackendSettingsPanel({
       }
     }
   };
+  const syncLndBackend = async (backend: Backend) => {
+    setLndSyncError(null);
+    setLndLastSync(null);
+    setPendingLndBackend(backend.id);
+    try {
+      const envelope = await syncLnd.mutateAsync({ backend: backend.id });
+      const payload = envelope.data ?? null;
+      setLndLastSync(payload);
+      await lndStatus.refetch();
+      addNotification({
+        title: "LND sync complete",
+        body: payload
+          ? `${backend.name}: ${formatCount(
+              Object.values(payload.datasets).reduce(
+                (total, value) => total + Number(value ?? 0),
+                0,
+              ),
+            )} rows refreshed.`
+          : `${backend.name} refreshed.`,
+        tone: "success",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "LND sync failed.";
+      setLndSyncError(message);
+      addNotification({
+        title: "LND sync failed",
+        body: message,
+        tone: "error",
+      });
+    } finally {
+      setPendingLndBackend(null);
+    }
+  };
   const importedPairs = krakenImportResult?.summary ?? [];
   const importedTotals = krakenImportResult?.totals;
+  const lndCounts = lndStatus.data?.data?.counts ?? {};
+  const lndCursorByBackend = new Map<string, LndStatusCursor[]>();
+  for (const cursor of lndStatus.data?.data?.cursors ?? []) {
+    const rows = lndCursorByBackend.get(cursor.backend_name) ?? [];
+    rows.push(cursor);
+    lndCursorByBackend.set(cursor.backend_name, rows);
+  }
   return (
     <section className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -2733,6 +2815,99 @@ function BackendSettingsPanel({
           onDelete={onDelete}
         />
       </div>
+
+      {lndBackends.length ? (
+        <div className="rounded-md border bg-background p-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Lightning node sync</p>
+              <p className="text-xs text-muted-foreground">
+                Read-only LND history feeds the Lightning profitability report.
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => lndStatus.refetch()}
+              disabled={lndStatus.isFetching || isSyncingLnd}
+            >
+              <RefreshCw
+                className={cn(
+                  "size-4",
+                  lndStatus.isFetching && "animate-spin",
+                )}
+                aria-hidden="true"
+              />
+              Refresh
+            </Button>
+          </div>
+          <div className="mt-3 grid gap-2">
+            {lndBackends.map((backend) => {
+              const cursors = lndCursorByBackend.get(backend.id) ?? [];
+              const lastSynced = cursors
+                .map((cursor) => cursor.synced_at)
+                .filter(Boolean)
+                .sort()
+                .at(-1);
+              const isPending = pendingLndBackend === backend.id;
+              return (
+                <div
+                  key={backend.id}
+                  className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{backend.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {lastSynced
+                        ? `Last sync ${lastSynced}`
+                        : "No LND sync has completed yet."}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {formatCount(lndCounts.channels ?? 0)} channels,{" "}
+                      {formatCount(lndCounts.forwards ?? 0)} forwards,{" "}
+                      {formatCount(lndCounts.payments ?? 0)} payments,{" "}
+                      {formatCount(lndCounts.invoices ?? 0)} invoices
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => syncLndBackend(backend)}
+                    disabled={isSyncingLnd}
+                  >
+                    {isPending ? (
+                      <RefreshCw
+                        className="size-4 animate-spin"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <RefreshCw className="size-4" aria-hidden="true" />
+                    )}
+                    {isPending ? "Syncing" : "Sync"}
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+          {lndLastSync ? (
+            <p className="mt-3 text-xs text-emerald-700 dark:text-emerald-300">
+              {lndLastSync.backend} refreshed{" "}
+              {formatCount(
+                Object.values(lndLastSync.datasets).reduce(
+                  (total, value) => total + Number(value ?? 0),
+                  0,
+                ),
+              )}{" "}
+              rows.
+            </p>
+          ) : null}
+          {lndSyncError ? (
+            <p className="mt-3 text-xs text-destructive">{lndSyncError}</p>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="space-y-2">
         <div>
@@ -3535,7 +3710,9 @@ function PresetMark({
       ? mempoolIcon
       : net === "LIQUID"
         ? liquidIcon
-        : preset.protocol === "esplora"
+        : preset.protocol === "lnd"
+          ? lightningLabsIcon
+          : preset.protocol === "esplora"
           ? bitcoinIcon
           : null;
   if (image) {
@@ -3596,14 +3773,14 @@ interface SyncBackendPreset {
   id: string;
   name: string;
   url: string;
-  protocol: "esplora" | "electrum" | "bitcoinrpc" | "liquid-esplora";
+  protocol: "esplora" | "electrum" | "bitcoinrpc" | "liquid-esplora" | "lnd";
   label: string;
   disabled?: boolean;
   status?: string;
 }
 
 interface SyncBackendNetwork {
-  id: "bitcoin" | "liquid";
+  id: "bitcoin" | "liquid" | "lightning";
   label: string;
   net: Net;
   desc: string;
@@ -3659,6 +3836,21 @@ const SYNC_BACKEND_NETWORKS: SyncBackendNetwork[] = [
         url: "https://blockstream.info/liquid/api",
         protocol: "liquid-esplora",
         label: "Liquid Esplora",
+      },
+    ],
+  },
+  {
+    id: "lightning",
+    label: "Lightning",
+    net: "LN",
+    desc: "Read-only Lightning node history for profitability reports.",
+    presets: [
+      {
+        id: "lnd",
+        name: "LND",
+        url: "https://127.0.0.1:8080",
+        protocol: "lnd",
+        label: "LND REST",
       },
     ],
   },
@@ -3751,7 +3943,8 @@ function BackendModal({
       : type.presets.find((candidate) => candidate.id === presetId) ?? null;
   const isEditing = Boolean(initial);
   const isElectrum = preset?.protocol === "electrum";
-  const showAuth = preset?.protocol === "bitcoinrpc";
+  const isLnd = preset?.protocol === "lnd" || initial?.kind === "lnd";
+  const showAuth = preset?.protocol === "bitcoinrpc" || isLnd;
   const effectiveUrl = isElectrum
     ? buildElectrumUrl({
         host: electrumHost,
@@ -3823,6 +4016,11 @@ function BackendModal({
     if (preset) {
       setUrl(preset.url);
       setName(preset.name);
+      if (preset.protocol === "lnd") {
+        setAuth("apikey");
+      } else if (preset.protocol !== "bitcoinrpc") {
+        setAuth("none");
+      }
       if (preset.protocol === "electrum") {
         const parsed = parseElectrumEndpoint(preset.url);
         setElectrumHost(parsed.host);
@@ -3934,9 +4132,10 @@ function BackendModal({
           showAuth && auth === "basic" && authPassword
             ? authPassword
             : undefined,
-        trustSsl: isElectrum && electrumUseSsl ? trustSsl : undefined,
+        trustSsl: (isElectrum && electrumUseSsl) || isLnd ? trustSsl : undefined,
         certificate:
-          isElectrum && electrumUseSsl && !trustSsl && certificate.trim()
+          ((isElectrum && electrumUseSsl && !trustSsl) || isLnd) &&
+          certificate.trim()
             ? certificate.trim()
             : undefined,
         proxy:
@@ -3999,7 +4198,11 @@ function BackendModal({
                           {backendType.label}
                         </span>
                         <span className="block text-xs leading-tight text-muted-foreground">
-                          {backendType.net === "BTC" ? "Bitcoin" : "Liquid"}
+                          {backendType.net === "BTC"
+                            ? "Bitcoin"
+                            : backendType.net === "LIQUID"
+                              ? "Liquid"
+                              : "Lightning"}
                         </span>
                       </span>
                     </Button>
@@ -4226,6 +4429,43 @@ function BackendModal({
               </section>
             )}
 
+            {isLnd && (
+              <section className="grid gap-3 sm:grid-cols-2">
+                <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm sm:col-span-2">
+                  <span>
+                    <span className="block font-medium">
+                      Trust self-signed TLS
+                    </span>
+                    <span className="text-muted-foreground">
+                      Use only for a local LND REST endpoint you control.
+                    </span>
+                  </span>
+                  <Switch
+                    checked={trustSsl}
+                    onCheckedChange={(checked) => {
+                      setTrustSsl(checked);
+                      setTestState("idle");
+                      setTestLog("");
+                    }}
+                  />
+                </label>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="backend-lnd-certificate">TLS certificate</Label>
+                  <Input
+                    id="backend-lnd-certificate"
+                    value={certificate}
+                    onChange={(event) => {
+                      setCertificate(event.target.value);
+                      setTestState("idle");
+                      setTestLog("");
+                    }}
+                    placeholder="Path to tls.cert or PEM contents"
+                    disabled={trustSsl}
+                  />
+                </div>
+              </section>
+            )}
+
             {showAuth && (
               <section className="space-y-3">
                 <Label>RPC authentication</Label>
@@ -4245,10 +4485,10 @@ function BackendModal({
                 {auth === "apikey" && (
                   <SecretField
                     id="backend-api-key"
-                    label="API key"
+                    label={isLnd ? "Read-only macaroon hex" : "API key"}
                     value={authVal}
                     onChange={setAuthVal}
-                    placeholder="sk_live_..."
+                    placeholder={isLnd ? "0201036c6e64..." : "sk_live_..."}
                   />
                 )}
                 {auth === "bearer" && (

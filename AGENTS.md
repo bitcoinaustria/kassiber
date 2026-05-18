@@ -23,6 +23,7 @@
   - [kassiber/core/tax_events.py](kassiber/core/tax_events.py) — in-memory normalization seam between raw transaction rows and tax-engine inputs, including early quarantine classification for under-specified tax semantics.
   - [kassiber/core/sync.py](kassiber/core/sync.py) — wallet sync orchestration above backend-specific transport details.
   - [kassiber/core/sync_backends.py](kassiber/core/sync_backends.py) — descriptor target discovery plus `esplora`, `electrum`, and `bitcoinrpc` live-sync adapters.
+  - [kassiber/core/lnd.py](kassiber/core/lnd.py) — read-only LND REST sync for channels, forwards, payments, invoices, wallet transactions, fee/balance snapshots, and Lightning profitability reports.
   - [kassiber/core/reports.py](kassiber/core/reports.py) — extracted report builders, balance-history calculations, and PDF export assembly behind hookable journal/runtime dependencies. `reports tax-summary` rows include `row_type=swap_fees_year` / `swap_fees_total` summarising persisted `transaction_pairs.swap_fee_msat` and `direct_swap_payouts.swap_fee_msat`.
   - [kassiber/core/transfer_matching.py](kassiber/core/transfer_matching.py) — pure swap-candidate matcher with `payment_hash` (exact) and time + amount (strong) confidence bands, signed fee computation, conflict cluster ids, and pair/dismissal suppression. Defaults: 24h time window, fee tolerance `max(1%, 2500 sats)`.
   - [kassiber/core/htlc_parser.py](kassiber/core/htlc_parser.py) — pure parser for Boltz v1 P2WSH HTLC redeem scripts (submarine + reverse variants) and claim witnesses. Returns `payment_hash` when extractable; Boltz v2 Taproot cooperative spends fall through to heuristic by physics.
@@ -83,7 +84,8 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ui.backends.list`, `ui.profiles.snapshot`, `ui.reports.capital_gains`,
   `ui.reports.summary`, `ui.reports.balance_sheet`,
   `ui.reports.portfolio_summary`, `ui.reports.tax_summary`,
-  `ui.reports.balance_history`, `ui.journals.snapshot`,
+  `ui.reports.balance_history`, `ui.reports.lightning_profitability`,
+  `ui.lnd.status`, `ui.lnd.sync`, `ui.journals.snapshot`,
   `ui.journals.quarantine`, `ui.journals.transfers.list`, `ui.rates.summary`,
   `ui.rates.coverage`, `ui.report.blockers`,
   `ui.audit.changes_since_last_answer`, `ui.maintenance.settings`,
@@ -156,8 +158,9 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `journals {process,list,transfers {list},quarantined,events {list,get},quarantine {show,clear,resolve {price-override,exclude}}}`
 - `transfers {pair,list,unpair,payouts {list,create,delete},suggest,bulk-pair,dismiss,rules {list,create,apply,delete,enable,disable}}`
 - `views {list,create,delete}` — generic saved-view CRUD; ``swap_candidates`` is the first surface consumer
+- `lnd {sync,status}` — read-only LND REST sync/status for node-history tables
 - `source-funds {sources {list,create,attach},links {list,create,review,attach,bulk-review},suggest,cases {list}}`
-- `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,source-funds,austrian-e1kv,austrian-tax-summary,export-pdf,export-summary-pdf,export-csv,export-xlsx,export-source-funds-pdf,export-austrian,export-austrian-e1kv-pdf,export-austrian-e1kv-xlsx,export-austrian-e1kv-csv}`
+- `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,lightning-profitability,source-funds,austrian-e1kv,austrian-tax-summary,export-pdf,export-summary-pdf,export-csv,export-xlsx,export-lightning-profitability-csv,export-source-funds-pdf,export-austrian,export-austrian-e1kv-pdf,export-austrian-e1kv-xlsx,export-austrian-e1kv-csv}`
 - `rates {pairs,sync,rebuild,latest,range,set}`
 - `diagnostics {collect}`
 - `ai providers {list,get,create,update,delete,set-default,clear-default}`
@@ -323,6 +326,6 @@ uv run python -m kassiber ai chat --help
 - No descriptor/xpub-native live sync through `bitcoinrpc` yet.
 - No self-hosted Liquid `elements_rpc` backend yet.
 - No BTCPay invoice/payment provenance ingest yet beyond confirmed on-chain wallet history plus comment/label carry-through from wallet-configured BTCPay sync.
-- No Lightning node adapters yet (`coreln`, `lnd`, `nwc` kinds are declared but do not sync).
+- LND REST sync is implemented as a read-only node-history integration. Core Lightning and NWC node adapters are still declared but do not sync.
 - No REST/server mode or multi-user auth yet.
 - Generic cross-asset carrying-value is still unsupported: outside Austrian profiles, BTC ↔ LBTC peg-ins/peg-outs and submarine swaps remain audit-linked SELL + BUY pairs rather than a cost-basis-carry primitive.

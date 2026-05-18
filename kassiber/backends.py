@@ -77,7 +77,7 @@ DEFAULT_BACKENDS = {
     },
 }
 
-BACKEND_KINDS = {"bitcoinrpc", "btcpay", "custom", "electrum", "esplora", "liquid-esplora", "mempool"}
+BACKEND_KINDS = {"bitcoinrpc", "btcpay", "custom", "electrum", "esplora", "liquid-esplora", "lnd", "mempool"}
 DEFAULT_ENV_FILENAME = "backends.env"
 DEFAULT_BACKEND_SETTING = "default_backend"
 BOOTSTRAP_DEFAULT_BACKEND_SETTING = "bootstrap_default_backend"
@@ -132,6 +132,7 @@ BACKEND_CLEAR_FIELD_ALIASES = {
 BACKEND_OUTPUT_PRESENCE_FIELDS = {
     "has_auth_header": ("auth_header",),
     "has_token": ("token",),
+    "has_certificate": ("certificate",),
     "has_cookiefile": ("cookiefile", "cookie_file"),
     "has_username": ("username", "rpcuser", "rpc_user"),
     "has_password": ("password", "rpcpassword", "rpc_password"),
@@ -852,7 +853,7 @@ def update_db_backend(conn, name, updates):
         raise AppError(
             "backends update requires at least one field to change",
             code="validation",
-            hint="Pass one or more of --kind, --url, --chain, --network, --auth-header, --token, --batch-size, --timeout, --tor-proxy, --insecure, --cookiefile, --username, --password, --wallet-prefix, --notes, or --clear <field>",
+            hint="Pass one or more of --kind, --url, --chain, --network, --auth-header, --token, --batch-size, --timeout, --tor-proxy, --insecure, --certificate, --cookiefile, --username, --password, --wallet-prefix, --notes, or --clear <field>",
         )
     unsupported_clear_fields = clear_fields - set(BACKEND_CLEAR_FIELD_ALIASES.values())
     if unsupported_clear_fields:

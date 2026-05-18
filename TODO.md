@@ -584,6 +584,10 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [ ] Add live provider-backed FX adapters beyond CoinGecko and local Kraken
   CSV archive ingest only after the UI and daemon can expose provider limits,
   granularity, and review state honestly
+- [x] Add read-only LND REST sync for Lightning node profitability: channels,
+  closed channels, forwards, payments, invoices, wallet transactions,
+  fee/balance snapshots, cursor state, daemon status/report views, and CSV
+  audit export.
 - [ ] Keep the machine envelope boundary centralized and explicit
 - [ ] Keep docs and examples Bitcoin-only
 - [ ] Add a narrow docs-drift check for shared command / verification /

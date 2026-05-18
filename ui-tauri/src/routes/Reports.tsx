@@ -215,6 +215,27 @@ interface ReportReadiness {
   };
 }
 
+interface LightningProfitabilityReport {
+  summary: {
+    routing_fees_earned_msat: number;
+    payment_fees_paid_msat: number;
+    wallet_fees_paid_msat: number;
+    net_profit_msat: number;
+    channel_count: number;
+    break_even_channel_count: number;
+    conservative_rebalance_classification: boolean;
+  };
+  channels: Array<{
+    backend: string;
+    chan_id?: string | null;
+    remote_pubkey?: string | null;
+    routing_fees_earned_msat: number;
+    lifecycle_cost_msat: number;
+    net_profit_msat: number;
+    break_even: boolean;
+  }>;
+}
+
 function reportExportDefaultFilename(
   format: ReportExportFormatId,
   year: number,
@@ -377,6 +398,9 @@ function ReportsView({
     useDaemonMutation<ReportExportResult>("ui.reports.export_austrian_e1kv_xlsx");
   const exportAustrianCsv =
     useDaemonMutation<ReportExportResult>("ui.reports.export_austrian_e1kv_csv");
+  const lightningProfitability = useDaemon<LightningProfitabilityReport>(
+    "ui.reports.lightning_profitability",
+  );
   const activeProfileIsAustrian = report.jurisdictionCode === "AT";
   const walletChoices = useMemo(
     () => wallets.filter((wallet) => wallet.id || wallet.label),
@@ -630,6 +654,11 @@ function ReportsView({
               formatNumber={fmt}
             />
           ) : null}
+          <LightningProfitabilityPanel
+            report={lightningProfitability.data?.data ?? null}
+            isLoading={lightningProfitability.isLoading}
+            hideSensitive={hideSensitive}
+          />
         </div>
         <div className="grid min-w-0 gap-3">
           <ReportFilesPanel
@@ -675,6 +704,99 @@ function ReportsView({
         </div>
       </div>
     </div>
+  );
+}
+
+function msatToSatLabel(msat: number): string {
+  return `${(msat / 1000).toLocaleString(undefined, {
+    maximumFractionDigits: 0,
+  })} sats`;
+}
+
+function LightningProfitabilityPanel({
+  report,
+  isLoading,
+  hideSensitive,
+}: {
+  report: LightningProfitabilityReport | null;
+  isLoading: boolean;
+  hideSensitive: boolean;
+}) {
+  if (isLoading) {
+    return (
+      <section className={screenPanelClassName}>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          Loading Lightning profitability
+        </div>
+      </section>
+    );
+  }
+  const summary = report?.summary;
+  if (!summary || summary.channel_count === 0) return null;
+  const topChannels = (report?.channels ?? []).slice(0, 6);
+  return (
+    <section className={screenPanelClassName}>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold">Lightning Profitability</h2>
+          <p className="text-sm text-muted-foreground">
+            Read-only LND node history, with rebalance fees left conservative
+            until reviewed.
+          </p>
+        </div>
+        <Badge variant={summary.net_profit_msat >= 0 ? "default" : "secondary"}>
+          {summary.break_even_channel_count}/{summary.channel_count} break even
+        </Badge>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-4">
+        {[
+          ["Routing fees", summary.routing_fees_earned_msat],
+          ["Payment fees", -summary.payment_fees_paid_msat],
+          ["Wallet fees", -summary.wallet_fees_paid_msat],
+          ["Net", summary.net_profit_msat],
+        ].map(([label, value]) => (
+          <div key={label} className="rounded-md border bg-background p-3">
+            <div className="text-xs text-muted-foreground">{label}</div>
+            <div className={cn("mt-1 font-mono text-sm", blurClass(hideSensitive))}>
+              {msatToSatLabel(Number(value))}
+            </div>
+          </div>
+        ))}
+      </div>
+      {topChannels.length ? (
+        <div className="mt-4 overflow-hidden rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Channel</TableHead>
+                <TableHead>Routing fees</TableHead>
+                <TableHead>Lifecycle cost</TableHead>
+                <TableHead>Net</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {topChannels.map((channel) => (
+                <TableRow key={`${channel.backend}-${channel.chan_id ?? channel.remote_pubkey}`}>
+                  <TableCell className="max-w-[220px] truncate font-mono text-xs">
+                    {channel.chan_id ?? channel.remote_pubkey ?? channel.backend}
+                  </TableCell>
+                  <TableCell className={cn("font-mono", blurClass(hideSensitive))}>
+                    {msatToSatLabel(channel.routing_fees_earned_msat)}
+                  </TableCell>
+                  <TableCell className={cn("font-mono", blurClass(hideSensitive))}>
+                    {msatToSatLabel(channel.lifecycle_cost_msat)}
+                  </TableCell>
+                  <TableCell className={cn("font-mono", blurClass(hideSensitive))}>
+                    {msatToSatLabel(channel.net_profit_msat)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      ) : null}
+    </section>
   );
 }
 

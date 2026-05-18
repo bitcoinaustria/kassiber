@@ -344,13 +344,18 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "lnd",
     title: "LND",
-    description: "Lightning Network Daemon read-only data.",
+    description: "Lightning Network Daemon read-only profitability data.",
     category: "lightning",
     image: lightningLabsIcon,
     imageClassName: "size-8",
-    status: "planned",
+    status: "ready",
     pathLabel: "Lightning node",
-    details: ["Lightning node adapters are declared but not synced yet"],
+    formatLabel: "LND REST",
+    setupKind: "backend-settings",
+    details: [
+      "Stores host, TLS certificate, and read-only macaroon presence",
+      "Syncs channels, forwards, payments, invoices, wallet transactions, and fee snapshots",
+    ],
   },
   {
     id: "zeus",

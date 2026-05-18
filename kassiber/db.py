@@ -632,6 +632,135 @@ CREATE TABLE IF NOT EXISTS ai_provider_secret_refs (
     created_at TEXT NOT NULL,
     rotated_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS lnd_sync_state (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    backend_name TEXT NOT NULL,
+    dataset TEXT NOT NULL,
+    cursor_value TEXT,
+    synced_at TEXT,
+    raw_cursor_json TEXT NOT NULL DEFAULT '{}',
+    PRIMARY KEY(profile_id, backend_name, dataset)
+);
+
+CREATE TABLE IF NOT EXISTS lnd_channels (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    backend_name TEXT NOT NULL,
+    stable_key TEXT NOT NULL,
+    chan_id TEXT,
+    channel_point TEXT,
+    remote_pubkey TEXT,
+    capacity_msat INTEGER NOT NULL DEFAULT 0,
+    local_balance_msat INTEGER NOT NULL DEFAULT 0,
+    remote_balance_msat INTEGER NOT NULL DEFAULT 0,
+    commit_fee_msat INTEGER NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 0,
+    private INTEGER NOT NULL DEFAULT 0,
+    opened_at TEXT,
+    closed_at TEXT,
+    close_type TEXT,
+    raw_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(profile_id, backend_name, stable_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_lnd_channels_profile_chan
+    ON lnd_channels(profile_id, backend_name, chan_id);
+
+CREATE TABLE IF NOT EXISTS lnd_forwards (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    backend_name TEXT NOT NULL,
+    stable_key TEXT NOT NULL,
+    occurred_at TEXT NOT NULL,
+    chan_id_in TEXT,
+    chan_id_out TEXT,
+    amount_in_msat INTEGER NOT NULL DEFAULT 0,
+    amount_out_msat INTEGER NOT NULL DEFAULT 0,
+    fee_msat INTEGER NOT NULL DEFAULT 0,
+    raw_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(profile_id, backend_name, stable_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_lnd_forwards_profile_time
+    ON lnd_forwards(profile_id, backend_name, occurred_at);
+
+CREATE TABLE IF NOT EXISTS lnd_payments (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    backend_name TEXT NOT NULL,
+    stable_key TEXT NOT NULL,
+    payment_hash TEXT,
+    occurred_at TEXT,
+    status TEXT,
+    value_msat INTEGER NOT NULL DEFAULT 0,
+    fee_msat INTEGER NOT NULL DEFAULT 0,
+    classification TEXT NOT NULL DEFAULT 'unclassified',
+    raw_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(profile_id, backend_name, stable_key)
+);
+
+CREATE TABLE IF NOT EXISTS lnd_invoices (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    backend_name TEXT NOT NULL,
+    stable_key TEXT NOT NULL,
+    payment_hash TEXT,
+    created_at_ts TEXT,
+    settled_at TEXT,
+    settled INTEGER NOT NULL DEFAULT 0,
+    value_msat INTEGER NOT NULL DEFAULT 0,
+    amount_paid_msat INTEGER NOT NULL DEFAULT 0,
+    memo TEXT,
+    raw_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(profile_id, backend_name, stable_key)
+);
+
+CREATE TABLE IF NOT EXISTS lnd_wallet_transactions (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    backend_name TEXT NOT NULL,
+    stable_key TEXT NOT NULL,
+    tx_hash TEXT,
+    occurred_at TEXT,
+    block_height INTEGER,
+    amount_msat INTEGER NOT NULL DEFAULT 0,
+    fee_msat INTEGER NOT NULL DEFAULT 0,
+    raw_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(profile_id, backend_name, stable_key)
+);
+
+CREATE TABLE IF NOT EXISTS lnd_snapshots (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    backend_name TEXT NOT NULL,
+    snapshot_type TEXT NOT NULL,
+    captured_at TEXT NOT NULL,
+    local_balance_msat INTEGER NOT NULL DEFAULT 0,
+    remote_balance_msat INTEGER NOT NULL DEFAULT 0,
+    wallet_confirmed_msat INTEGER NOT NULL DEFAULT 0,
+    routing_fee_24h_msat INTEGER NOT NULL DEFAULT 0,
+    routing_fee_7d_msat INTEGER NOT NULL DEFAULT 0,
+    routing_fee_30d_msat INTEGER NOT NULL DEFAULT 0,
+    raw_json TEXT NOT NULL DEFAULT '{}',
+    UNIQUE(profile_id, backend_name, snapshot_type, captured_at)
+);
 """
 
 
@@ -950,6 +1079,162 @@ def ensure_schema_compat(conn):
     _ensure_swap_matching_schema(conn)
     _ensure_direct_swap_payout_schema(conn)
     _ensure_commercial_reconciliation_schema(conn)
+    _ensure_lnd_schema(conn)
+
+
+def _ensure_lnd_schema(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS lnd_sync_state (
+            profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            backend_name TEXT NOT NULL,
+            dataset TEXT NOT NULL,
+            cursor_value TEXT,
+            synced_at TEXT,
+            raw_cursor_json TEXT NOT NULL DEFAULT '{}',
+            PRIMARY KEY(profile_id, backend_name, dataset)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS lnd_channels (
+            id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            backend_name TEXT NOT NULL,
+            stable_key TEXT NOT NULL,
+            chan_id TEXT,
+            channel_point TEXT,
+            remote_pubkey TEXT,
+            capacity_msat INTEGER NOT NULL DEFAULT 0,
+            local_balance_msat INTEGER NOT NULL DEFAULT 0,
+            remote_balance_msat INTEGER NOT NULL DEFAULT 0,
+            commit_fee_msat INTEGER NOT NULL DEFAULT 0,
+            active INTEGER NOT NULL DEFAULT 0,
+            private INTEGER NOT NULL DEFAULT 0,
+            opened_at TEXT,
+            closed_at TEXT,
+            close_type TEXT,
+            raw_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(profile_id, backend_name, stable_key)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_lnd_channels_profile_chan "
+        "ON lnd_channels(profile_id, backend_name, chan_id)"
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS lnd_forwards (
+            id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            backend_name TEXT NOT NULL,
+            stable_key TEXT NOT NULL,
+            occurred_at TEXT NOT NULL,
+            chan_id_in TEXT,
+            chan_id_out TEXT,
+            amount_in_msat INTEGER NOT NULL DEFAULT 0,
+            amount_out_msat INTEGER NOT NULL DEFAULT 0,
+            fee_msat INTEGER NOT NULL DEFAULT 0,
+            raw_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(profile_id, backend_name, stable_key)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_lnd_forwards_profile_time "
+        "ON lnd_forwards(profile_id, backend_name, occurred_at)"
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS lnd_payments (
+            id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            backend_name TEXT NOT NULL,
+            stable_key TEXT NOT NULL,
+            payment_hash TEXT,
+            occurred_at TEXT,
+            status TEXT,
+            value_msat INTEGER NOT NULL DEFAULT 0,
+            fee_msat INTEGER NOT NULL DEFAULT 0,
+            classification TEXT NOT NULL DEFAULT 'unclassified',
+            raw_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(profile_id, backend_name, stable_key)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS lnd_invoices (
+            id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            backend_name TEXT NOT NULL,
+            stable_key TEXT NOT NULL,
+            payment_hash TEXT,
+            created_at_ts TEXT,
+            settled_at TEXT,
+            settled INTEGER NOT NULL DEFAULT 0,
+            value_msat INTEGER NOT NULL DEFAULT 0,
+            amount_paid_msat INTEGER NOT NULL DEFAULT 0,
+            memo TEXT,
+            raw_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(profile_id, backend_name, stable_key)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS lnd_wallet_transactions (
+            id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            backend_name TEXT NOT NULL,
+            stable_key TEXT NOT NULL,
+            tx_hash TEXT,
+            occurred_at TEXT,
+            block_height INTEGER,
+            amount_msat INTEGER NOT NULL DEFAULT 0,
+            fee_msat INTEGER NOT NULL DEFAULT 0,
+            raw_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(profile_id, backend_name, stable_key)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS lnd_snapshots (
+            id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            backend_name TEXT NOT NULL,
+            snapshot_type TEXT NOT NULL,
+            captured_at TEXT NOT NULL,
+            local_balance_msat INTEGER NOT NULL DEFAULT 0,
+            remote_balance_msat INTEGER NOT NULL DEFAULT 0,
+            wallet_confirmed_msat INTEGER NOT NULL DEFAULT 0,
+            routing_fee_24h_msat INTEGER NOT NULL DEFAULT 0,
+            routing_fee_7d_msat INTEGER NOT NULL DEFAULT 0,
+            routing_fee_30d_msat INTEGER NOT NULL DEFAULT 0,
+            raw_json TEXT NOT NULL DEFAULT '{}',
+            UNIQUE(profile_id, backend_name, snapshot_type, captured_at)
+        )
+        """
+    )
 
 
 def _ensure_ai_provider_secret_refs_schema(conn):

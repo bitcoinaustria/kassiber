@@ -74,6 +74,7 @@ _KIND_SUBCOMMAND_ATTRS = (
     "payouts_command",
     "transfers_rules_command",
     "views_command",
+    "lnd_command",
     "btcpay_command",
     "btcpay_provenance_command",
     "documents_command",

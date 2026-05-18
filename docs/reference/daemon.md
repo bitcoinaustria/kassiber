@@ -260,6 +260,14 @@ store reference resolve. It returns
 propagates the same structured error codes (`auth_error`, `not_found`,
 `network_error`) the sync path uses. Nothing is persisted.
 
+`ui.lnd.status` and `ui.lnd.sync` expose the read-only LND node-history path.
+The backend row stores URL, TLS certificate presence, and read-only macaroon
+presence; daemon payloads do not expose raw macaroon contents. `ui.lnd.sync`
+refreshes channels, closed channels, forwards, payments, invoices, wallet
+transactions, and fee/balance snapshots. `ui.reports.lightning_profitability`
+and `ui.reports.export_lightning_profitability_csv` read those local tables for
+routing-fee, payment-fee, channel-cost, break-even, and audit-row views.
+
 `ui.metadata.bip329.import` accepts `file` and optional `wallet`, then imports
 BIP329 JSONL labels into the active profile and bridges transaction labels to
 matching local transactions.
