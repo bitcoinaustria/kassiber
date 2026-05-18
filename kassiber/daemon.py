@@ -5108,6 +5108,7 @@ _UI_WALLET_SOURCE_FORMATS = {
     "bullbitcoin_csv",
     "21bitcoin_csv",
     "pocketbitcoin_csv",
+    "strike_csv",
 }
 
 
@@ -5439,6 +5440,17 @@ def _import_wallet_file_payload(
             source_file,
             source_format,
             import_mode,
+        )
+    if source_format == "strike_csv":
+        wallet_ref = _optional_str_arg(args, "wallet")
+        return import_into_wallet(
+            conn,
+            None,
+            None,
+            wallet_ref,
+            source_file,
+            source_format,
+            "full",
         )
     wallet_ref = _required_str_arg(args, "wallet", "Wallet")
     return import_into_wallet(conn, None, None, wallet_ref, source_file, source_format)

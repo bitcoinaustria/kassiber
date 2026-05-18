@@ -57,7 +57,7 @@ interface SetupFormState {
   gapLimit: string;
   targetWallet: string;
   sourceFile: string;
-  sourceFormat: "csv" | "json" | "phoenix_csv" | "river_csv" | "bullbitcoin_csv" | "21bitcoin_csv";
+  sourceFormat: "csv" | "json" | "phoenix_csv" | "river_csv" | "bullbitcoin_csv" | "21bitcoin_csv" | "strike_csv";
   bullImportMode: "relevant" | "full";
   btcpayStoreId: string;
   btcpayPaymentMethodId: string;
@@ -85,6 +85,7 @@ interface SyncResult {
   updated?: number;
   bullbitcoin_rows?: number;
   twentyonebitcoin_rows?: number;
+  strike_rows?: number;
   inserted_records?: ImportChangeRecord[];
   updated_records?: ImportChangeRecord[];
   reconciliation_records?: ImportChangeRecord[];
@@ -167,6 +168,7 @@ interface ImportFileResult {
   updated?: number;
   bullbitcoin_rows?: number;
   twentyonebitcoin_rows?: number;
+  strike_rows?: number;
   inserted_records?: ImportChangeRecord[];
   updated_records?: ImportChangeRecord[];
   reconciliation_records?: ImportChangeRecord[];
@@ -197,6 +199,9 @@ function sourceFileFilters(source: ConnectionSource) {
   }
   if (source.sourceFormat === "21bitcoin_csv") {
     return [{ name: "21bitcoin CSV", extensions: ["csv"] }];
+  }
+  if (source.sourceFormat === "strike_csv") {
+    return [{ name: "Strike CSV", extensions: ["csv"] }];
   }
   if (source.id === "csv") {
     return [{ name: "CSV or JSON", extensions: ["csv", "json"] }];
@@ -2002,6 +2007,7 @@ export function AddConnectionDialog({
       updated: result.updated,
       bullbitcoin_rows: result.bullbitcoin_rows,
       twentyonebitcoin_rows: result.twentyonebitcoin_rows,
+      strike_rows: result.strike_rows,
       inserted_records: result.inserted_records,
       updated_records: result.updated_records,
       reconciliation_records: result.reconciliation_records,
@@ -2019,6 +2025,7 @@ export function AddConnectionDialog({
     const rowsRead =
       lastImportResult.bullbitcoin_rows ??
       lastImportResult.twentyonebitcoin_rows ??
+      lastImportResult.strike_rows ??
       lastImportResult.imported + lastImportResult.skipped;
     const isBookWide = lastImportResult.scope === "book";
     const changedCount =

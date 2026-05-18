@@ -141,6 +141,7 @@ WALLET_KINDS = [
     "bullbitcoin",
     "21bitcoin",
     "pocketbitcoin",
+    "strike",
     "custom",
 ]
 
@@ -1531,6 +1532,11 @@ WALLET_KIND_CATALOG = {
         "config_fields": ["source_file", "source_format"],
         "requires": [],
     },
+    "strike": {
+        "summary": "Strike custodial platform CSV importer for exchange, Bitcoin, and Lightning rows.",
+        "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
     "custom": {
         "summary": "Custom CSV/JSON source; use with --config/--config-file to describe field mapping.",
         "config_fields": ["source_file", "source_format", "config"],
@@ -1542,6 +1548,7 @@ WALLET_KIND_CATALOG = {
 DEFAULT_BULLBITCOIN_WALLET_LABEL = "Bull Bitcoin"
 DEFAULT_TWENTYONEBITCOIN_WALLET_LABEL = "21bitcoin"
 DEFAULT_POCKETBITCOIN_WALLET_LABEL = "Pocket Bitcoin"
+DEFAULT_STRIKE_WALLET_LABEL = "Strike"
 
 
 def _get_or_create_provider_import_wallet(conn, profile, input_format, wallet_ref=None):
@@ -1553,6 +1560,9 @@ def _get_or_create_provider_import_wallet(conn, profile, input_format, wallet_re
     elif input_format == "pocketbitcoin_csv":
         default_label = DEFAULT_POCKETBITCOIN_WALLET_LABEL
         wallet_kind = "pocketbitcoin"
+    elif input_format == "strike_csv":
+        default_label = DEFAULT_STRIKE_WALLET_LABEL
+        wallet_kind = "strike"
     else:
         default_label = DEFAULT_BULLBITCOIN_WALLET_LABEL
         wallet_kind = "bullbitcoin"
@@ -1589,9 +1599,10 @@ def import_into_wallet(
     import_mode=None,
 ):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    if input_format == "21bitcoin_csv":
-        mode = core_imports.normalize_bullbitcoin_import_mode(import_mode)
-        if mode == core_imports.BULLBITCOIN_IMPORT_MODE_RELEVANT:
+    if input_format in {"21bitcoin_csv", "strike_csv"}:
+        default_mode = core_imports.BULLBITCOIN_IMPORT_MODE_FULL if input_format == "strike_csv" else None
+        mode = core_imports.normalize_bullbitcoin_import_mode(import_mode or default_mode)
+        if input_format == "21bitcoin_csv" and mode == core_imports.BULLBITCOIN_IMPORT_MODE_RELEVANT:
             if wallet_ref:
                 resolve_wallet(conn, profile["id"], wallet_ref)
             return _import_file_for_profile(
@@ -1728,7 +1739,7 @@ def _import_coordinator_hooks():
 
 
 def _import_file_for_sync(conn, profile, wallet, file_path, input_format, *, commit=True):
-    if input_format == "21bitcoin_csv":
+    if input_format in {"21bitcoin_csv", "strike_csv"}:
         return core_imports.import_file_into_wallet(
             conn,
             profile,

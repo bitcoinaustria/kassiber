@@ -75,6 +75,15 @@ _TWENTYONEBITCOIN_TRANSACTIONS_CSV = """id,exchange_name,depot_name,transaction_
 16,21bitcoin,main,07.10.2022 16:31:20,,,BTC,0.00040000,BTC,0.00001,withdrawal,Automatic Limit L1 BTC Withdrawal,l1-withdrawal-tx
 """
 
+_STRIKE_CSV = """Reference,Date & Time (UTC),Transaction Type,Amount EUR,Fee EUR,Amount BTC,Fee BTC,BTC Price,Cost Basis (EUR),Destination,Description,Transaction Hash,Note
+strike-fiat-1,Mar 07 2026 21:59:51,Deposit,100.00,,-,-,,,,,,Bank deposit
+strike-buy-1,Mar 08 2026 09:15:00,Buy,-100.00,1.00,0.00100000,-,100000.00,100.00,,BTC purchase,,Cash balance
+strike-sell-1,Mar 08 2026 09:45:00,Sell,49.00,1.00,-0.00050000,-,100000.00,50.00,,BTC sale,,Cash balance
+strike-ln-1,Mar 08 2026 10:37:13,Receive,,,0.00272794,,,,lnbc1sampleinvoice,,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,Transfer Coinos
+strike-price-only,Mar 08 2026 11:00:00,,,,0.00050000,-,80000.00,,,Price-only inbound,,
+strike-chain-1,Mar 09 2026 10:37:13,Send,,,-0.00100000,0.00001000,60000.00,55.00,bc1qstrikewithdrawal,On-chain withdrawal,bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,Self custody
+"""
+
 _POCKETBITCOIN_EXISTING_CSV = """date,txid,direction,asset,amount,fee,description
 2022-07-19T23:15:28Z,pocket-wallet-tx,inbound,BTC,0.00228101,0,Synced from wallet
 """
@@ -2847,6 +2856,106 @@ class AccountBucketBehaviorTest(unittest.TestCase):
         buy = {record["external_id"]: record for record in payload["data"]}["21bitcoin:2"]
         self.assertFalse(buy["excluded"])
         self.assertNotIn("21bitcoin-wallet-gap", {tag["code"] for tag in buy["tags"]})
+
+    def test_strike_csv_imports_active_custodial_bitcoin_rows(self):
+        strike_csv = Path(self._tmp.name) / "strike.csv"
+        strike_csv.write_text(_STRIKE_CSV, encoding="utf-8")
+        self._cli(
+            "profiles", "create",
+            "--workspace", "Buckets",
+            "--fiat-currency", "EUR",
+            "--tax-country", "generic",
+            "StrikeEUR",
+        )
+
+        payload = self._cli(
+            "wallets", "import-strike",
+            "--workspace", "Buckets",
+            "--profile", "StrikeEUR",
+            "--file", str(strike_csv),
+        )
+        data = payload["data"]
+        self.assertEqual(payload["kind"], "wallets.import-strike")
+        self.assertEqual(data["mode"], "full")
+        self.assertEqual(data["wallet"], "Strike")
+        self.assertEqual(data["input_format"], "strike_csv")
+        self.assertEqual(data["strike_rows"], 5)
+        self.assertEqual(data["imported"], 5)
+        self.assertEqual(data["skipped"], 0)
+
+        payload = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "StrikeEUR",
+            "--wallet", "Strike",
+            "--order", "asc",
+        )
+        records = payload["data"]
+        self.assertEqual(len(records), 5)
+        by_external_id = {record["external_id"]: record for record in records}
+        buy = by_external_id["strike:strike-buy-1"]
+        self.assertEqual(buy["kind"], "buy")
+        self.assertEqual(buy["direction"], "inbound")
+        self.assertEqual(buy["amount_msat"], 100000000)
+        self.assertEqual(buy["pricing_source_kind"], "exchange_execution")
+        self.assertEqual(buy["pricing_provider"], "Strike")
+        self.assertEqual(buy["pricing_method"], "strike_csv")
+        self.assertEqual(buy["pricing_external_ref"], "strike-buy-1")
+        self.assertEqual(buy["fiat_rate_exact"], "100000.00")
+        self.assertEqual(buy["fiat_value_exact"], "101.00")
+        sell = by_external_id["strike:strike-sell-1"]
+        self.assertEqual(sell["kind"], "sell")
+        self.assertEqual(sell["direction"], "outbound")
+        self.assertEqual(sell["amount_msat"], 50000000)
+        self.assertEqual(sell["pricing_source_kind"], "exchange_execution")
+        self.assertEqual(sell["pricing_provider"], "Strike")
+        self.assertEqual(sell["pricing_method"], "strike_csv")
+        self.assertEqual(sell["pricing_external_ref"], "strike-sell-1")
+        self.assertEqual(sell["fiat_rate_exact"], "100000.00")
+        self.assertEqual(sell["fiat_value_exact"], "48.00")
+        lightning = by_external_id["strike:strike-ln-1"]
+        self.assertEqual(lightning["kind"], "receive")
+        self.assertEqual(lightning["direction"], "inbound")
+        self.assertEqual(lightning["amount_msat"], 272794000)
+        self.assertIsNone(lightning["pricing_method"])
+        price_only = by_external_id["strike:strike-price-only"]
+        self.assertEqual(price_only["kind"], "transaction")
+        self.assertEqual(price_only["direction"], "inbound")
+        self.assertEqual(price_only["amount_msat"], 50000000)
+        self.assertEqual(price_only["pricing_source_kind"], "exchange_execution")
+        self.assertEqual(price_only["pricing_method"], "strike_csv")
+        self.assertEqual(price_only["pricing_external_ref"], "strike-price-only")
+        self.assertEqual(price_only["fiat_rate_exact"], "80000.00")
+        self.assertEqual(price_only["fiat_value_exact"], "40.0000000000")
+        onchain = by_external_id[
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        ]
+        self.assertEqual(onchain["kind"], "send")
+        self.assertEqual(onchain["direction"], "outbound")
+        self.assertEqual(onchain["fee_msat"], 1000000)
+        self.assertEqual(onchain["pricing_provider"], "Strike")
+        self.assertEqual(onchain["pricing_method"], "strike_csv")
+        self.assertEqual(onchain["pricing_external_ref"], "strike-chain-1")
+        self.assertEqual(onchain["fiat_rate_exact"], "60000.00")
+        self.assertEqual(onchain["fiat_value_exact"], "60.0000000000")
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            """
+            SELECT payment_hash, payment_hash_source
+            FROM transactions
+            WHERE external_id = ?
+            """,
+            ("strike:strike-ln-1",),
+        ).fetchone()
+        conn.close()
+        self.assertIsNotNone(row)
+        self.assertEqual(
+            row["payment_hash"],
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        )
+        self.assertEqual(row["payment_hash_source"], "importer")
 
     def test_z_pocketbitcoin_csv_enriches_existing_wallet_transaction(self):
         existing_csv = Path(self._tmp.name) / "pocket-existing-wallet.csv"

@@ -44,6 +44,7 @@ describe("connection catalog", () => {
         "phoenix",
         "river",
         "bullbitcoin",
+        "strike",
       ]),
     );
   });
