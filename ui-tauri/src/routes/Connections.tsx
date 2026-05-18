@@ -435,6 +435,11 @@ function ConnectionRow({
     c.channels != null ? `${c.channels} channels` : null,
     c.gap != null ? `gap limit ${c.gap}` : null,
   ].filter(Boolean);
+  const compositionTitle = hideSensitive
+    ? "Wallet share hidden"
+    : pct < 0.1
+      ? "<0.1% of total balance"
+      : `${pct.toFixed(pct < 10 ? 1 : 0)}% of total balance`;
 
   const onKeyDown = (event: KeyboardEvent<HTMLTableRowElement>) => {
     if (event.key === "Enter" || event.key === " ") {
@@ -494,7 +499,7 @@ function ConnectionRow({
       <TableCell className="hidden lg:table-cell">
         <div
           className="relative h-2 overflow-hidden rounded-full bg-muted"
-          title={pct < 0.1 ? "<0.1% of total balance" : `${pct.toFixed(pct < 10 ? 1 : 0)}% of total balance`}
+          title={compositionTitle}
         >
           <div
             className="absolute inset-y-0 left-0 rounded-full bg-primary transition-[width]"
