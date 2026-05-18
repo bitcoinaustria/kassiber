@@ -6,6 +6,7 @@
  */
 
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import {
   ArrowDownRight,
@@ -52,6 +53,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  daemonMutationKey,
   useDaemon,
   useDaemonMutation,
   useDaemonStreamMutation,
@@ -222,10 +224,16 @@ function ConnectionDetailView({
   hideSensitive,
 }: ConnectionDetailViewProps) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const dataMode = useUiStore((state) => state.dataMode);
   const addNotification = useUiStore((state) => state.addNotification);
   const updateNotification = useUiStore((state) => state.updateNotification);
   const identity = useUiStore((state) => state.identity);
   const syncNoticeIdRef = useRef<string | null>(null);
+  const walletSyncMutationKey = daemonMutationKey(dataMode, "ui.wallets.sync");
+  const walletSyncsInFlight = useIsMutating({
+    mutationKey: walletSyncMutationKey,
+  });
   const [syncProgress, setSyncProgress] = useState<{
     wallet: string;
     processed: number;
@@ -313,9 +321,25 @@ function ConnectionDetailView({
     })
     .slice(0, 6);
   const txCount = connection.transactionCount ?? txsForConnection.length;
+  const isWalletSyncRunning =
+    syncWallet.isPending ||
+    walletSyncsInFlight > 0 ||
+    connection.status === "syncing";
+  const refreshButtonLabel = isWalletSyncRunning ? "Refreshing" : "Refresh";
 
   const onSync = () => {
-    if (syncWallet.isPending) return;
+    if (
+      syncWallet.isPending ||
+      queryClient.isMutating({ mutationKey: walletSyncMutationKey }) > 0
+    ) {
+      addNotification({
+        title: "Connection refresh already running",
+        body: `${connection.label} is already scanning. Kassiber will update this page when the daemon finishes.`,
+        tone: "info",
+        dedupeKey: "wallet-sync",
+      });
+      return;
+    }
     setSyncMessage(null);
     setSyncProgress(null);
     progressValueRef.current = startingSyncProgress().value ?? 5;
@@ -594,15 +618,17 @@ function ConnectionDetailView({
             type="button"
             variant="outline"
             size="sm"
-            className="self-start sm:self-center"
-            disabled={syncWallet.isPending}
+            className="min-w-[7.5rem] self-start sm:self-center"
+            disabled={isWalletSyncRunning}
+            aria-busy={isWalletSyncRunning}
+            aria-label={`${refreshButtonLabel} ${connection.label}`}
             onClick={onSync}
           >
             <RefreshCw
-              className={cn("size-4", syncWallet.isPending && "animate-spin")}
+              className={cn("size-4", isWalletSyncRunning && "animate-spin")}
               aria-hidden="true"
             />
-            {syncWallet.isPending ? "Refreshing" : "Refresh"}
+            <span>{refreshButtonLabel}</span>
           </Button>
         </CardContent>
         {syncProgress && syncWallet.isPending ? (
