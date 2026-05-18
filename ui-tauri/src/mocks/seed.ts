@@ -74,6 +74,14 @@ export interface Tx {
   feeSat?: number;
   eur: number | null;
   rate: number | null;
+  fiatCurrency?: string | null;
+  pricingSourceKind?: string | null;
+  pricingQuality?: string | null;
+  pricingExternalRef?: string | null;
+  reviewStatus?: string | null;
+  taxable?: boolean | null;
+  atRegime?: string | null;
+  atCategory?: string | null;
   tag: string;
   tags?: string[];
   note?: string;

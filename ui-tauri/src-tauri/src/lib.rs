@@ -498,6 +498,46 @@ fn open_exported_file(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn open_attachment_file(
+    state: State<'_, Arc<DaemonSupervisor>>,
+    path: String,
+) -> Result<(), String> {
+    let requested = PathBuf::from(path);
+    if !requested.is_absolute() {
+        return Err("Attachment paths must be absolute.".to_string());
+    }
+
+    let data_root = state
+        .current_data_root()
+        .map_err(|error| error.message)?
+        .unwrap_or_else(default_state_data_root);
+    let state_root = if data_root.file_name().and_then(|name| name.to_str()) == Some(DEFAULT_DATA_DIR)
+    {
+        data_root
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| data_root.clone())
+    } else {
+        data_root.clone()
+    };
+    let attachments_root = std::fs::canonicalize(state_root.join("attachments"))
+        .map_err(|error| format!("Attachments folder could not be found: {error}"))?;
+    let canonical = std::fs::canonicalize(&requested)
+        .map_err(|error| format!("Attachment file could not be found: {error}"))?;
+    if !canonical.starts_with(&attachments_root) {
+        return Err("Only managed Kassiber attachment files can be opened.".to_string());
+    }
+    let metadata = canonical
+        .metadata()
+        .map_err(|error| format!("Attachment file could not be inspected: {error}"))?;
+    if !metadata.is_file() {
+        return Err("Only attachment files can be opened.".to_string());
+    }
+
+    open_path_with_default_app(&canonical, "attachment")
+}
+
+#[tauri::command]
 fn save_exported_file_as(source_path: String, destination_path: String) -> Result<String, String> {
     let source = PathBuf::from(source_path);
     if !source.is_absolute() {
@@ -1579,11 +1619,15 @@ fn is_supported_report_export_target(path: &Path, metadata: &std::fs::Metadata) 
 }
 
 fn open_with_default_app(path: &Path) -> Result<(), String> {
+    open_path_with_default_app(path, "report export")
+}
+
+fn open_path_with_default_app(path: &Path, label: &str) -> Result<(), String> {
     let mut command = default_app_command(path);
     command
         .spawn()
         .map(|_| ())
-        .map_err(|error| format!("Could not open report export with the default app: {error}"))
+        .map_err(|error| format!("Could not open {label} with the default app: {error}"))
 }
 
 fn validated_external_url(url: &str) -> Result<String, String> {
@@ -1741,6 +1785,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             daemon_invoke,
             open_exported_file,
+            open_attachment_file,
             save_exported_file_as,
             save_chat_export_as,
             save_logs_export_as,

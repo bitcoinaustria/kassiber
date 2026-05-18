@@ -3973,6 +3973,35 @@ class DaemonSmokeTest(unittest.TestCase):
                 10_000_000_000,
             )
 
+            _write_payload(
+                proc,
+                {
+                    "request_id": "journal-events-filter-1",
+                    "kind": "ui.journals.events.list",
+                    "args": {"transaction": "seed-inbound-1", "limit": 5},
+                },
+            )
+            filtered_journal_events = _read_payload_timeout(proc)
+            self.assertEqual(filtered_journal_events["kind"], "ui.journals.events.list")
+            self.assertEqual(filtered_journal_events["data"]["summary"]["count"], 1)
+            self.assertEqual(
+                filtered_journal_events["data"]["events"][0]["transactionExternalId"],
+                "seed-inbound-1",
+            )
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "journal-events-filter-empty-1",
+                    "kind": "ui.journals.events.list",
+                    "args": {"transaction": "not-a-transaction", "limit": 5},
+                },
+            )
+            empty_journal_events = _read_payload_timeout(proc)
+            self.assertEqual(empty_journal_events["kind"], "ui.journals.events.list")
+            self.assertEqual(empty_journal_events["data"]["summary"]["count"], 0)
+            self.assertEqual(empty_journal_events["data"]["events"], [])
+
             _write_payload(proc, {"request_id": "wallets-1", "kind": "ui.wallets.list"})
             wallets = _read_payload_timeout(proc)
             self.assertEqual(wallets["kind"], "ui.wallets.list")
@@ -4365,6 +4394,16 @@ class DaemonSmokeTest(unittest.TestCase):
                         "note": "Receipt matched against invoice 42",
                         "tags": ["Income", "accountant"],
                         "excluded": True,
+                        "pricing_source_kind": "manual_override",
+                        "pricing_quality": "exact",
+                        "fiat_currency": "EUR",
+                        "fiat_rate": "65000.00",
+                        "fiat_value": "6500.00",
+                        "pricing_external_ref": "Invoice 42",
+                        "review_status": "review",
+                        "taxable": False,
+                        "at_regime": "outside",
+                        "at_category": "none",
                     },
                 },
             )
@@ -4379,6 +4418,16 @@ class DaemonSmokeTest(unittest.TestCase):
                 ],
             )
             self.assertTrue(saved["data"]["excluded"])
+            self.assertEqual(saved["data"]["fiat_currency"], "EUR")
+            self.assertEqual(saved["data"]["fiat_rate_exact"], "65000.00")
+            self.assertEqual(saved["data"]["fiat_value_exact"], "6500.00")
+            self.assertEqual(saved["data"]["pricing_source_kind"], "manual_override")
+            self.assertEqual(saved["data"]["pricing_quality"], "exact")
+            self.assertEqual(saved["data"]["pricing_external_ref"], "Invoice 42")
+            self.assertEqual(saved["data"]["review_status"], "review")
+            self.assertFalse(saved["data"]["taxable"])
+            self.assertEqual(saved["data"]["at_regime"], "outside")
+            self.assertEqual(saved["data"]["at_category"], "none")
             self.assertTrue(saved["data"]["updated"])
 
             _write_payload(
@@ -4396,7 +4445,166 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(tx["tags"], ["accountant", "Income"])
             self.assertEqual(tx["tag"], "accountant, Income")
             self.assertTrue(tx["excluded"])
+            self.assertEqual(tx["fiatCurrency"], "EUR")
+            self.assertEqual(tx["rate"], 65000.0)
+            self.assertEqual(tx["eur"], 6500.0)
+            self.assertEqual(tx["pricingSourceKind"], "manual_override")
+            self.assertEqual(tx["pricingQuality"], "exact")
+            self.assertEqual(tx["pricingExternalRef"], "Invoice 42")
+            self.assertEqual(tx["reviewStatus"], "review")
+            self.assertFalse(tx["taxable"])
+            self.assertEqual(tx["atRegime"], "outside")
+            self.assertEqual(tx["atCategory"], "none")
 
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
+
+    def test_daemon_transaction_taxable_override_updates_journal_inputs(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-taxable-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(data_root, tmp)
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "tx-taxable-false-1",
+                    "kind": "ui.transactions.metadata.update",
+                    "args": {
+                        "transaction": "seed-inbound-1",
+                        "taxable": False,
+                        "at_regime": "outside",
+                        "at_category": "none",
+                    },
+                },
+            )
+            saved = _read_payload_timeout(proc)
+            self.assertEqual(saved["kind"], "ui.transactions.metadata.update")
+            self.assertFalse(saved["data"]["taxable"])
+
+            _write_payload(proc, {"request_id": "process-1", "kind": "ui.journals.process"})
+            processed = _read_payload_timeout(proc)
+            self.assertEqual(processed["kind"], "ui.journals.process")
+            self.assertEqual(processed["data"]["processed_transactions"], 0)
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "journal-events-empty-1",
+                    "kind": "ui.journals.events.list",
+                    "args": {"transaction": "seed-inbound-1", "limit": 5},
+                },
+            )
+            events = _read_payload_timeout(proc)
+            self.assertEqual(events["kind"], "ui.journals.events.list")
+            self.assertEqual(events["data"]["events"], [])
+
+            _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
+
+    def test_daemon_transaction_attachments_round_trip(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-attachments-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(data_root, tmp)
+            receipt = Path(tmp) / "receipt.txt"
+            receipt.write_text("invoice 42\n", encoding="utf-8")
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "att-file-1",
+                    "kind": "ui.attachments.add",
+                    "args": {
+                        "transaction": "seed-inbound-1",
+                        "file_path": str(receipt),
+                        "label": "Receipt 42",
+                    },
+                },
+            )
+            file_added = _read_payload_timeout(proc)
+            self.assertEqual(file_added["kind"], "ui.attachments.add")
+            self.assertEqual(file_added["data"]["attachment_type"], "file")
+            self.assertEqual(file_added["data"]["label"], "Receipt 42")
+            self.assertTrue(file_added["data"]["exists"])
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "att-url-1",
+                    "kind": "ui.attachments.add",
+                    "args": {
+                        "transaction": "seed-inbound-1",
+                        "url": "https://example.test/invoice/42",
+                    },
+                },
+            )
+            url_added = _read_payload_timeout(proc)
+            self.assertEqual(url_added["kind"], "ui.attachments.add")
+            self.assertEqual(url_added["data"]["attachment_type"], "url")
+            self.assertEqual(url_added["data"]["url"], "https://example.test/invoice/42")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "att-list-1",
+                    "kind": "ui.attachments.list",
+                    "args": {"transaction": "seed-inbound-1"},
+                },
+            )
+            listed = _read_payload_timeout(proc)
+            self.assertEqual(listed["kind"], "ui.attachments.list")
+            self.assertEqual(len(listed["data"]["attachments"]), 2)
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "att-open-file-1",
+                    "kind": "ui.attachments.open",
+                    "args": {"attachment": file_added["data"]["id"]},
+                },
+            )
+            opened = _read_payload_timeout(proc)
+            self.assertEqual(opened["kind"], "ui.attachments.open")
+            self.assertEqual(opened["data"]["target_type"], "file")
+            self.assertTrue(Path(opened["data"]["path"]).exists())
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "att-remove-1",
+                    "kind": "ui.attachments.remove",
+                    "args": {"attachment": file_added["data"]["id"]},
+                },
+            )
+            removed = _read_payload_timeout(proc)
+            self.assertEqual(removed["kind"], "ui.attachments.remove")
+            self.assertTrue(removed["data"]["removed"])
+            self.assertTrue(removed["data"]["deleted_file"])
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "att-list-2",
+                    "kind": "ui.attachments.list",
+                    "args": {"transaction": "seed-inbound-1"},
+                },
+            )
+            listed_after_remove = _read_payload_timeout(proc)
+            self.assertEqual(len(listed_after_remove["data"]["attachments"]), 1)
+            self.assertEqual(
+                listed_after_remove["data"]["attachments"][0]["attachment_type"],
+                "url",
+            )
+
+            _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
             code, stderr = _close_daemon(proc)
             self.assertEqual(code, 0, stderr)
             self.assertEqual(stderr, "")

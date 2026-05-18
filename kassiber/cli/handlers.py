@@ -297,7 +297,11 @@ def _row_int(row, key, default=0):
 
 def _journals_current_for_profile(conn, profile):
     current_count = conn.execute(
-        "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded = 0",
+        """
+        SELECT COUNT(*) AS count
+        FROM transactions
+        WHERE profile_id = ? AND excluded = 0 AND COALESCE(taxability_override, 1) != 0
+        """,
         (profile["id"],),
     ).fetchone()["count"]
     input_version = _row_int(profile, "journal_input_version")
@@ -2689,7 +2693,7 @@ def build_ledger_state(conn, profile):
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         LEFT JOIN accounts a ON a.id = w.account_id
-        WHERE t.profile_id = ? AND t.excluded = 0
+        WHERE t.profile_id = ? AND t.excluded = 0 AND COALESCE(t.taxability_override, 1) != 0
         ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
         """,
         (profile["id"],),
@@ -2820,7 +2824,11 @@ def process_journals(conn, workspace_ref, profile_ref):
                 ),
             )
         tx_count = conn.execute(
-            "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded = 0",
+            """
+            SELECT COUNT(*) AS count
+            FROM transactions
+            WHERE profile_id = ? AND excluded = 0 AND COALESCE(taxability_override, 1) != 0
+            """,
             (profile["id"],),
         ).fetchone()["count"]
         conn.execute(

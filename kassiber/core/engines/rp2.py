@@ -784,8 +784,16 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
         at_category = None
         at_kennzahl = None
         event_key: Any = taxable_event.internal_id
+        source_row = row_by_id.get(taxable_event.unique_id)
         if tax_country == "at":
             at_category, at_kennzahl = _classify_at_disposal(gain_loss)
+            category_override = _row_get(source_row, "at_category_override") if source_row else None
+            if category_override == "none":
+                at_category = None
+                at_kennzahl = None
+            elif category_override:
+                at_category = str(category_override)
+                at_kennzahl = kennzahl_for_disposal_category(at_category)
             # One taxable event can split across multiple Austrian semantic
             # buckets when RP2 matches against heterogeneous acquired lots, so
             # keep separate journal rows per category.

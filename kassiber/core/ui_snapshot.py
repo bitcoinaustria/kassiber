@@ -238,7 +238,7 @@ def _journal_freshness(
         """
         SELECT COUNT(*) AS count
         FROM transactions
-        WHERE profile_id = ? AND excluded = 0
+        WHERE profile_id = ? AND excluded = 0 AND COALESCE(taxability_override, 1) != 0
         """,
         (profile["id"],),
     ).fetchone()["count"]
@@ -562,8 +562,16 @@ def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, A
             t.asset,
             t.amount,
             t.fee,
+            t.fiat_currency,
             t.fiat_value,
             t.fiat_rate,
+            t.pricing_source_kind,
+            t.pricing_quality,
+            t.pricing_external_ref,
+            t.review_status,
+            t.taxability_override,
+            t.at_regime_override,
+            t.at_category_override,
             COALESCE(t.kind, '') AS kind,
             COALESCE(t.description, '') AS description,
             COALESCE(t.counterparty, '') AS counterparty,
@@ -596,8 +604,16 @@ def _activity_transactions(conn: sqlite3.Connection, profile_id: str) -> list[di
             t.asset,
             t.amount,
             t.fee,
+            t.fiat_currency,
             t.fiat_value,
             t.fiat_rate,
+            t.pricing_source_kind,
+            t.pricing_quality,
+            t.pricing_external_ref,
+            t.review_status,
+            t.taxability_override,
+            t.at_regime_override,
+            t.at_category_override,
             COALESCE(t.kind, '') AS kind,
             COALESCE(t.description, '') AS description,
             COALESCE(t.counterparty, '') AS counterparty,
@@ -868,6 +884,7 @@ def _transaction_row_to_ui(
         excluded = bool(row["excluded"])
         include_empty_tags = True
 
+    row_keys = set(row.keys())
     payload = {
         "id": row_id,
         "externalId": external_id,
@@ -880,6 +897,18 @@ def _transaction_row_to_ui(
         "feeSat": fee_sat,
         "eur": fiat_value,
         "rate": rate,
+        "fiatCurrency": row["fiat_currency"] or None,
+        "pricingSourceKind": row["pricing_source_kind"] or None,
+        "pricingQuality": row["pricing_quality"] or None,
+        "pricingExternalRef": row["pricing_external_ref"] or None,
+        "reviewStatus": row["review_status"] if "review_status" in row_keys else None,
+        "taxable": (
+            None
+            if "taxability_override" not in row_keys or row["taxability_override"] is None
+            else bool(row["taxability_override"])
+        ),
+        "atRegime": row["at_regime_override"] if "at_regime_override" in row_keys else None,
+        "atCategory": row["at_category_override"] if "at_category_override" in row_keys else None,
         "tag": ", ".join(display_tags) or "Unlabeled",
         "note": note,
         "excluded": excluded,
@@ -903,7 +932,6 @@ def _transaction_row_to_ui(
             "feeSat": fee_sat,
             "feeKind": pair_meta.get("fee_kind"),
         }
-    row_keys = set(row.keys())
     if "quarantine_reason" in row_keys and row["quarantine_reason"]:
         payload["quarantineReason"] = row["quarantine_reason"]
     if occurred_at:
@@ -1291,8 +1319,16 @@ def build_transactions_snapshot(
             t.asset,
             t.amount,
             t.fee,
+            t.fiat_currency,
             t.fiat_value,
             t.fiat_rate,
+            t.pricing_source_kind,
+            t.pricing_quality,
+            t.pricing_external_ref,
+            t.review_status,
+            t.taxability_override,
+            t.at_regime_override,
+            t.at_category_override,
             COALESCE(t.kind, '') AS kind,
             COALESCE(t.description, '') AS description,
             COALESCE(t.counterparty, '') AS counterparty,
@@ -1528,8 +1564,16 @@ def build_transactions_search_snapshot(
             t.asset,
             t.amount,
             t.fee,
+            t.fiat_currency,
             t.fiat_value,
             t.fiat_rate,
+            t.pricing_source_kind,
+            t.pricing_quality,
+            t.pricing_external_ref,
+            t.review_status,
+            t.taxability_override,
+            t.at_regime_override,
+            t.at_category_override,
             COALESCE(t.kind, '') AS kind,
             COALESCE(t.description, '') AS description,
             COALESCE(t.counterparty, '') AS counterparty,
@@ -2111,7 +2155,7 @@ def build_journal_events_list_snapshot(
     args: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     raw_args = _coerce_args(args)
-    unknown = sorted(set(raw_args) - {"limit"})
+    unknown = sorted(set(raw_args) - {"limit", "transaction"})
     if unknown:
         raise AppError(
             "ui.journals.events.list received unsupported arguments",
@@ -2120,6 +2164,15 @@ def build_journal_events_list_snapshot(
             retryable=False,
         )
     limit = _coerce_limit(raw_args, default=100, maximum=MAX_UI_LIST_LIMIT)
+    transaction_ref = raw_args.get("transaction")
+    if transaction_ref is not None:
+        if not isinstance(transaction_ref, str):
+            raise AppError(
+                "ui.journals.events.list transaction must be a string",
+                code="validation",
+                retryable=False,
+            )
+        transaction_ref = transaction_ref.strip() or None
     context, profile = _active_context_and_profile(conn)
     empty_summary = {
         "workspace": None,
@@ -2137,6 +2190,11 @@ def build_journal_events_list_snapshot(
         return {"summary": empty_summary, "events": []}
 
     freshness = _journal_freshness(conn, profile)
+    where_sql = "WHERE je.profile_id = ?"
+    params: list[Any] = [profile["id"]]
+    if transaction_ref:
+        where_sql += " AND (je.transaction_id = ? OR t.external_id = ?)"
+        params.extend([transaction_ref, transaction_ref])
     summary_rows = conn.execute(
         f"""
         SELECT
@@ -2144,25 +2202,27 @@ def build_journal_events_list_snapshot(
             COUNT(*) AS count,
             SUM({_JOURNAL_DISPLAY_GAIN_LOSS_SQL}) AS gain_loss
         FROM journal_entries je
-        WHERE profile_id = ?
+        LEFT JOIN transactions t ON t.id = je.transaction_id
+        {where_sql}
         GROUP BY {_JOURNAL_DISPLAY_ENTRY_TYPE_SQL}
         ORDER BY count DESC, entry_type ASC
         """,
-        (profile["id"],),
+        params,
     ).fetchall()
     total = sum(int(row["count"] or 0) for row in summary_rows)
     reportable_count = conn.execute(
-        """
+        f"""
         SELECT COUNT(*) AS count
-        FROM journal_entries
-        WHERE profile_id = ?
+        FROM journal_entries je
+        LEFT JOIN transactions t ON t.id = je.transaction_id
+        {where_sql}
           AND (
-            (entry_type = 'disposal' AND COALESCE(at_category, '') != 'neu_swap')
-            OR entry_type IN ('income', 'fee', 'transfer_fee')
-            OR at_kennzahl IS NOT NULL
+            (je.entry_type = 'disposal' AND COALESCE(je.at_category, '') != 'neu_swap')
+            OR je.entry_type IN ('income', 'fee', 'transfer_fee')
+            OR je.at_kennzahl IS NOT NULL
           )
         """,
-        (profile["id"],),
+        params,
     ).fetchone()["count"]
     rows = conn.execute(
         f"""
@@ -2212,11 +2272,11 @@ def build_journal_events_list_snapshot(
         LEFT JOIN transactions tin ON tin.id = COALESCE(p_out.in_transaction_id, p_in.in_transaction_id)
         LEFT JOIN wallets wout ON wout.id = tout.wallet_id
         LEFT JOIN wallets win ON win.id = tin.wallet_id
-        WHERE je.profile_id = ?
+        {where_sql}
         ORDER BY je.occurred_at DESC, je.created_at DESC, je.id DESC
         LIMIT ?
         """,
-        (profile["id"], limit),
+        [*params, limit],
     ).fetchall()
     return {
         "summary": {

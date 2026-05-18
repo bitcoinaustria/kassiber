@@ -53,6 +53,40 @@ describe("draftForTransaction", () => {
     expect(draft.atCategory).toBe("neu_swap");
     expect(draft.taxable).toBe(false);
   });
+
+  it("hydrates persisted pricing provenance into the edit draft", () => {
+    const draft = draftForTransaction({
+      ...txWithTags([]),
+      amount: 6500,
+      rate: 65000,
+      fiatCurrency: "EUR",
+      pricingSourceKind: "manual_override",
+      pricingQuality: "exact",
+      pricingExternalRef: "Invoice 42",
+    });
+
+    expect(draft.pricingSourceKind).toBe("manual_override");
+    expect(draft.pricingQuality).toBe("exact");
+    expect(draft.manualCurrency).toBe("EUR");
+    expect(draft.manualPrice).toBe("65000");
+    expect(draft.manualValue).toBe("6500");
+    expect(draft.manualSource).toBe("Invoice 42");
+  });
+
+  it("hydrates persisted review and tax handling into the edit draft", () => {
+    const draft = draftForTransaction({
+      ...txWithTags([]),
+      reviewStatus: "review",
+      taxable: false,
+      atRegime: "outside",
+      atCategory: "none",
+    });
+
+    expect(draft.reviewStatus).toBe("review");
+    expect(draft.taxable).toBe(false);
+    expect(draft.atRegime).toBe("outside");
+    expect(draft.atCategory).toBe("none");
+  });
 });
 
 describe("money formatting", () => {
