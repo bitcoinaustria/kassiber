@@ -586,6 +586,157 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(transactions["txs"][1]["amountSat"], 100_000_000)
         self.assertEqual(transactions["txs"][1]["eur"], 50_000)
 
+    def test_overview_connection_balances_use_raw_wallet_transactions_when_journals_are_partial(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-ui-raw", "UI Raw Workspace", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, last_processed_at,
+                last_processed_tx_count, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-ui-raw",
+                "ws-ui-raw",
+                "UI Raw Profile",
+                "EUR",
+                "generic",
+                365,
+                "FIFO",
+                "2026-01-02T00:00:00Z",
+                2,
+                now,
+            ),
+        )
+        conn.executemany(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                ("wal-onchain", "ws-ui-raw", "pf-ui-raw", "Onchain", "descriptor", "{}", now),
+                ("wal-other", "ws-ui-raw", "pf-ui-raw", "Other", "address", "{}", now),
+            ],
+        )
+        conn.executemany(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "tx-onchain",
+                    "ws-ui-raw",
+                    "pf-ui-raw",
+                    "wal-onchain",
+                    "onchain-quarantined",
+                    "fp-onchain",
+                    "2026-01-01T10:00:00Z",
+                    "2026-01-01T10:10:00Z",
+                    "inbound",
+                    "BTC",
+                    btc_to_msat("0.25"),
+                    0,
+                    "EUR",
+                    None,
+                    None,
+                    None,
+                    "deposit",
+                    "Synced onchain funds",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
+                (
+                    "tx-other",
+                    "ws-ui-raw",
+                    "pf-ui-raw",
+                    "wal-other",
+                    "other-journaled",
+                    "fp-other",
+                    "2026-01-01T11:00:00Z",
+                    "2026-01-01T11:10:00Z",
+                    "inbound",
+                    "BTC",
+                    btc_to_msat("0.10"),
+                    0,
+                    "EUR",
+                    50_000,
+                    5_000,
+                    "import",
+                    "deposit",
+                    "Other funds",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
+            ],
+        )
+        conn.execute(
+            """
+            INSERT INTO journal_entries(
+                id, workspace_id, profile_id, transaction_id, wallet_id,
+                occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
+                cost_basis, proceeds, gain_loss, description, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "je-other",
+                "ws-ui-raw",
+                "pf-ui-raw",
+                "tx-other",
+                "wal-other",
+                "2026-01-01T11:00:00Z",
+                "acquisition",
+                "BTC",
+                btc_to_msat("0.10"),
+                5_000,
+                50_000,
+                5_000,
+                None,
+                None,
+                "Other funds",
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO journal_quarantines(
+                transaction_id, workspace_id, profile_id, reason, detail_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?)
+            """,
+            ("tx-onchain", "ws-ui-raw", "pf-ui-raw", "missing_spot_price", "{}", now),
+        )
+        set_setting(conn, "context_workspace", "ws-ui-raw")
+        set_setting(conn, "context_profile", "pf-ui-raw")
+        conn.commit()
+
+        overview = build_overview_snapshot(conn)
+        balances = {
+            connection["label"]: connection["balance"]
+            for connection in overview["connections"]
+        }
+        self.assertFalse(overview["status"]["needsJournals"])
+        self.assertEqual(overview["status"]["quarantines"], 1)
+        self.assertAlmostEqual(balances["Onchain"], 0.25)
+        self.assertAlmostEqual(balances["Other"], 0.10)
+
     def test_rates_coverage_ignores_zero_amount_rate_only_rows(self):
         conn = open_db(self.data_root)
         self.addCleanup(conn.close)

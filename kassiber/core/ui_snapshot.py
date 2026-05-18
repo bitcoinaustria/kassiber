@@ -490,33 +490,6 @@ def _transaction_wallet_balances(
     }
 
 
-def _wallet_balances(
-    conn: sqlite3.Connection,
-    profile_id: str,
-    *,
-    needs_journals: bool,
-) -> dict[str, float]:
-    if needs_journals:
-        return _transaction_wallet_balances(conn, profile_id)
-
-    rows = conn.execute(
-        """
-        SELECT wallet_id, SUM(quantity) AS quantity
-        FROM journal_entries
-        WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
-        GROUP BY wallet_id
-        """,
-        (profile_id,),
-    ).fetchall()
-    if rows:
-        return {
-            row["wallet_id"]: float(msat_to_btc(row["quantity"] or 0))
-            for row in rows
-        }
-
-    return _transaction_wallet_balances(conn, profile_id)
-
-
 def _connections(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -1172,11 +1145,11 @@ def build_overview_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         profile["id"],
         "USD",
     )
-    balances = _wallet_balances(
-        conn,
-        profile["id"],
-        needs_journals=needs_journals,
-    )
+    # Connection tiles are a wallet/source status surface, not a tax-report
+    # surface. Use raw synced transactions so quarantined or partially
+    # processed journal rows do not make a wallet with imported funds look
+    # empty in the GUI.
+    balances = _transaction_wallet_balances(conn, profile["id"])
     fiat = _fiat_snapshot(conn, profile["id"], price_eur, balances)
     snapshot = {
         "priceEur": price_eur,
