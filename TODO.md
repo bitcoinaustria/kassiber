@@ -398,6 +398,41 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 
 ## Later backlog
 
+- [ ] Split `TransactionDetailSheet.tsx` tab bodies into siblings —
+  the main component is ~1600 lines because the six tab panels live
+  inline. Extract `TabDetails`, `TabClassify`, `TabPricing`, `TabTax`,
+  `TabLinked`, `TabLedger` (and the right-rail children) into their
+  own files; pass `localDraft`, `updateDraft`, `transaction`,
+  `hideSensitive`, `currency`, dirty flags as props. Should land the
+  main file under ~800 lines without changing behavior.
+- [ ] Extend `ui.transactions.metadata.update` to accept tax handling and
+  pricing fields — currently allowed args are only
+  `{transaction, note, tags, excluded}`. The desktop detail sheet (`Tax`
+  tab, `Classify` tab, `Pricing` tab) renders the controls for Austrian
+  category, taxable, review status, pricing source kind/quality, and
+  manual override (currency / price / value / evidence) but keeps them
+  disabled until this kind grows to accept them. Pair with the change
+  history audit log so each new field also gets an `edits` row.
+- [ ] Desktop attachments daemon kinds — `ui.attachments.list`,
+  `ui.attachments.add`, `ui.attachments.remove`, `ui.attachments.open`
+  to wire the `AttachmentsPanel` in the transaction detail sheet to
+  the existing `kassiber/core/attachments.py` (which already handles
+  file + URL, multi per tx, integrity verification, and orphan GC).
+  Desktop UI is in place: `Attach files` opens a native multi-select
+  picker via `pickFiles`; `Attach links` opens a textarea dialog that
+  accepts one URL per line and submits them in one batch. Both
+  currently call console.info stubs in `dashboard2.tsx` — replace
+  with real `useDaemonMutation` calls and thread the list back as
+  `attachments` on the sheet.
+- [ ] Change history / audit log for metadata edits — per-row history of
+  what changed (label, tags, note, exclusion, tax handling, pricing
+  source, manual price evidence), who changed it, when, and the prior
+  value. Surfacing target: the `Edit history` panel in the desktop
+  transaction detail sheet (currently a placeholder). Backend needs a
+  new SQLite table (`transaction_edits` or similar), a daemon kind
+  (`ui.transactions.history`), and `metadata.update` writes that
+  append edit rows. Keep local-first and audit-friendly; redaction
+  rules for the sensitive blur should still apply when rendering.
 - [ ] Custom CSV mapping DSL for arbitrary wallet exports
 - [ ] Rates/manual adjustment surface
 - [ ] Full double-entry account model only if a future ledger design needs it:

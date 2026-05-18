@@ -904,6 +904,8 @@ def _transaction_row_to_ui(
             "feeKind": pair_meta.get("fee_kind"),
         }
     row_keys = set(row.keys())
+    if "quarantine_reason" in row_keys and row["quarantine_reason"]:
+        payload["quarantineReason"] = row["quarantine_reason"]
     if occurred_at:
         payload["occurredAt"] = occurred_at
     if "running_balance_btc" in row_keys:

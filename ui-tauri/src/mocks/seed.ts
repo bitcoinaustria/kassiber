@@ -78,6 +78,7 @@ export interface Tx {
   tags?: string[];
   note?: string;
   excluded?: boolean;
+  quarantineReason?: string | null;
   pair?: {
     id: string;
     type: "transfer" | "swap";

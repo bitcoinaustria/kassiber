@@ -583,6 +583,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(transactions["txs"][1]["tag"], "Review")
         self.assertEqual(transactions["txs"][1]["externalId"], "a" * 64)
         self.assertEqual(transactions["txs"][1]["explorerId"], "a" * 64)
+        self.assertEqual(transactions["txs"][1]["quarantineReason"], "missing_spot_price")
         self.assertEqual(transactions["txs"][1]["amountSat"], 100_000_000)
         self.assertEqual(transactions["txs"][1]["eur"], 50_000)
 

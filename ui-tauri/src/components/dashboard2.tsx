@@ -70,11 +70,12 @@ import {
   MOCK_TRANSACTIONS,
   type TransactionsList,
 } from "@/mocks/transactions";
-import { type Tx } from "@/mocks/seed";
+import { MOCK_OVERVIEW, type Tx } from "@/mocks/seed";
 import { useUiStore } from "@/store/ui";
 import {
   ExplorerOpenDialog,
   NewTransactionDialog,
+  type AttachmentItem,
   TransactionDetailSheet,
   allPaymentMethods,
   allTransactionFlows,
@@ -808,6 +809,7 @@ function toDashboardTransaction(tx: Tx, index: number): Transaction {
     note: tx.note,
     tags: tx.tags,
     excluded: tx.excluded,
+    quarantineReason: tx.quarantineReason ?? null,
     pair: tx.pair,
     counterparty: tx.counter || tx.account || "Unassigned",
     counterpartyInitials: initials(tx.counter || tx.account || "TX"),
@@ -819,6 +821,7 @@ function toDashboardTransaction(tx: Tx, index: number): Transaction {
     paymentMethod,
     date: tx.date,
     status: tag.toLowerCase().includes("review") ? "review" : status,
+    confirmations: tx.conf,
   };
 }
 
@@ -860,6 +863,41 @@ function initials(value: string) {
 }
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
+// Mock attachments keyed by transaction id. Replaced by ui.attachments.list
+// once the daemon kinds land (see TODO.md). Lets the AttachmentsPanel demo
+// its populated state in mock mode.
+const MOCK_ATTACHMENTS_BY_TX: Record<string, AttachmentItem[]> = {
+  tx1: [
+    {
+      id: "att-tx1-1",
+      kind: "file",
+      label: "invoice-2026-04-18.pdf",
+      detail: "PDF · 248 KB · sha256 a91f…7c",
+    },
+    {
+      id: "att-tx1-2",
+      kind: "url",
+      label: "btcpay.example.com/invoices/abc123",
+      detail: "BTCPay invoice",
+      href: "https://btcpay.example.com/invoices/abc123",
+    },
+    {
+      id: "att-tx1-3",
+      kind: "url",
+      label: "drive.example.com/q1-revenue-summary.xlsx",
+      detail: "Drive · accountant copy",
+      href: "https://drive.example.com/q1-revenue-summary.xlsx",
+    },
+    {
+      id: "att-tx1-4",
+      kind: "url",
+      label: "wiki.internal/customer-contract-ACME-2024",
+      detail: "Internal wiki",
+      href: "https://wiki.internal/customer-contract-ACME-2024",
+    },
+  ],
+};
 
 const periodLabels: Record<PeriodKey, string> = {
   ytd: "YTD",
@@ -2470,6 +2508,7 @@ const TransactionsTable = ({
   records,
   hideSensitive,
   currency,
+  nowRate,
   explorerSettings,
   swapCandidateIds = new Set<string>(),
   chartSelection,
@@ -2483,6 +2522,7 @@ const TransactionsTable = ({
   records: Transaction[];
   hideSensitive: boolean;
   currency: Currency;
+  nowRate: number | null;
   explorerSettings: ExplorerSettings;
   swapCandidateIds?: Set<string>;
   chartSelection: FlowChartSelection | null;
@@ -3539,6 +3579,40 @@ const TransactionsTable = ({
         explorerSettings={explorerSettings}
         isSaving={metadataUpdate.isPending}
         saveError={saveError}
+        nowRate={nowRate}
+        attachments={
+          detailTransaction
+            ? MOCK_ATTACHMENTS_BY_TX[detailTransaction.id]
+            : undefined
+        }
+        onAddAttachmentFiles={async (paths) => {
+          // TODO(attachments): wire to ui.attachments.add when daemon kind lands.
+          console.info("[attachments] add files (stub):", paths);
+          useUiStore.getState().addNotification({
+            title: "Attachments not wired yet",
+            body: `Selected ${paths.length} file${paths.length === 1 ? "" : "s"}, but the daemon kind that saves attachments isn't shipping in this build yet (see TODO.md).`,
+            tone: "info",
+            dedupeKey: "attachments-stub",
+          });
+        }}
+        onAddAttachmentLinks={async (urls) => {
+          // TODO(attachments): wire to ui.attachments.add when daemon kind lands.
+          console.info("[attachments] add links (stub):", urls);
+          useUiStore.getState().addNotification({
+            title: "Attachments not wired yet",
+            body: `Entered ${urls.length} link${urls.length === 1 ? "" : "s"}, but the daemon kind that saves attachments isn't shipping in this build yet (see TODO.md).`,
+            tone: "info",
+            dedupeKey: "attachments-stub",
+          });
+        }}
+        hasNext={
+          detailTransaction
+            ? filteredTransactions.findIndex(
+                (txn) => txn.id === detailTransaction.id,
+              ) <
+              filteredTransactions.length - 1
+            : false
+        }
         onOpenChange={(open) => {
           if (!open) {
             setDetailTransaction(null);
@@ -3557,6 +3631,26 @@ const TransactionsTable = ({
             throw error;
           }
         }}
+        onSaveAndNext={async (transactionId, draft) => {
+          try {
+            await saveTransactionDraft(transactionId, draft);
+            const idx = filteredTransactions.findIndex(
+              (txn) => txn.id === transactionId,
+            );
+            const next = filteredTransactions[idx + 1];
+            if (next) {
+              openTransactionDetail(next, detailInitialTab);
+            } else {
+              setDetailTransaction(null);
+              updateTransactionDetailParams(null);
+            }
+          } catch (error) {
+            setSaveError(
+              error instanceof Error ? error.message : "Could not save metadata.",
+            );
+            throw error;
+          }
+        }}
       />
     </>
   );
@@ -3565,12 +3659,14 @@ const TransactionsTable = ({
 const Dashboard2 = ({
   className,
   transactions = MOCK_TRANSACTIONS,
+  nowRate = MOCK_OVERVIEW.priceEur,
   swapCandidates,
   swapCandidateTotal,
   isDataRefreshing = false,
 }: {
   className?: string;
   transactions?: TransactionsList;
+  nowRate?: number | null;
   swapCandidates?: SwapCandidateReference[];
   swapCandidateTotal?: number | null;
   isDataRefreshing?: boolean;
@@ -3703,6 +3799,7 @@ const Dashboard2 = ({
         records={periodRecords}
         hideSensitive={hideSensitive}
         currency={currency}
+        nowRate={nowRate}
         explorerSettings={explorerSettings}
         swapCandidateIds={periodSwapCandidateIds}
         chartSelection={flowChartSelection}

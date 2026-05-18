@@ -32,6 +32,7 @@ export type Transaction = {
   note?: string;
   tags?: string[];
   excluded?: boolean;
+  quarantineReason?: string | null;
   pair?: Tx["pair"];
   counterparty: string;
   counterpartyInitials: string;
@@ -43,6 +44,7 @@ export type Transaction = {
   paymentMethod: "On-chain" | "Exchange" | "Lightning" | "Liquid";
   date: string;
   status: TransactionStatus;
+  confirmations?: number;
 };
 
 export type TransactionEditDraft = {

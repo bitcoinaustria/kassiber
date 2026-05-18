@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowDownRight,
   ArrowLeftRight,
@@ -1250,6 +1250,7 @@ function ActivityScatterDot({
   payload,
   activeSeries,
 }: ActivityScatterDotProps) {
+  const navigate = useNavigate();
   if (
     typeof cx !== "number" ||
     typeof cy !== "number" ||
@@ -1263,7 +1264,7 @@ function ActivityScatterDot({
   const transactionId = payload.eventTransactionId ?? payload.eventId;
   const openTransactionDetail = () => {
     if (!transactionId) return;
-    window.location.href = transactionDetailHref(transactionId);
+    void navigate({ to: transactionDetailHref(transactionId) });
   };
   const handleClick = (event: React.MouseEvent<SVGCircleElement>) => {
     if (!transactionId) return;
@@ -4781,9 +4782,9 @@ const RecentTransactionsTable = ({
               const primaryTag = t.tags[0] ?? overviewFlowLabels[flow];
               const extraTags = Math.max(0, t.tags.length - 1);
               return (
-                <a
+                <Link
                   key={t.id}
-                  href={transactionDetailHref(t.id)}
+                  to={transactionDetailHref(t.id)}
                   className="group flex min-w-0 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <span
@@ -4858,7 +4859,7 @@ const RecentTransactionsTable = ({
                       {secondaryAmount}
                     </span>
                   </span>
-                </a>
+                </Link>
               );
             })}
           </div>
