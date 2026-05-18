@@ -22,6 +22,7 @@ import mempoolIcon from "@/assets/integrations/mempool-space.svg";
 import nunchukIcon from "@/assets/integrations/nunchuk.svg";
 import relaiIcon from "@/assets/integrations/relai.svg";
 import sparrowIcon from "@/assets/integrations/sparrow.png";
+import strikeIcon from "@/assets/integrations/strike.jpg";
 import trezorIcon from "@/assets/integrations/trezor.svg";
 import twentyOneBitcoinIcon from "@/assets/integrations/21bitcoin.png";
 
@@ -57,7 +58,7 @@ export interface ConnectionSource {
   docsHref?: string;
   setupKind?: SetupKind;
   walletKind?: string;
-  sourceFormat?: "csv" | "json" | "phoenix_csv" | "river_csv" | "bullbitcoin_csv" | "21bitcoin_csv";
+  sourceFormat?: "csv" | "json" | "phoenix_csv" | "river_csv" | "bullbitcoin_csv" | "21bitcoin_csv" | "strike_csv";
   chain?: "bitcoin" | "liquid";
   network?: string;
   details: string[];
@@ -469,13 +470,22 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "strike",
     title: "Strike",
-    description: "Bitcoin and Lightning activity import.",
+    description: "Custodial Bitcoin wallet and exchange import.",
     category: "exchanges",
-    image: lightningIcon,
-    imageClassName: "size-8",
-    status: "planned",
-    pathLabel: "CSV import",
-    details: ["Dedicated parser is not wired yet"],
+    image: strikeIcon,
+    imageClassName: "size-8 rounded-lg",
+    status: "ready",
+    pathLabel: "Custodial platform",
+    formatLabel: "strike_csv",
+    docsHref: "https://strike.me/",
+    setupKind: "file-wallet",
+    walletKind: "strike",
+    sourceFormat: "strike_csv",
+    details: [
+      "BTC buys, sells, Lightning, and on-chain rows become active platform activity",
+      "Fiat-only funding and reversal rows are skipped",
+      "Rows use Strike BTC Price as exact CSV pricing when present",
+    ],
   },
   {
     id: "21bitcoin",

@@ -33,6 +33,9 @@ Import format families live here:
   - Pocket Bitcoin (`pocketbitcoin_csv`) — account CSV export. Exchange rows
     are normalized as exact execution evidence and paired with adjacent BTC
     withdrawal rows when the export records the on-chain payout separately.
+  - Strike (`strike_csv`) — custodial platform CSV export. Bitcoin Lightning,
+    on-chain, and BTC exchange rows are normalized as active platform ledger
+    rows; fiat-only funding rows are skipped.
   - BIP329 JSONL — one-record-per-line label export. `record_type`
     distinguishes tx/addr/pubkey/input/output/xpub labels.
 
@@ -101,6 +104,8 @@ def load_import_records(file_path, input_format):
         return load_twentyonebitcoin_csv_records(file_path)
     if input_format == "pocketbitcoin_csv":
         return load_pocketbitcoin_csv_records(file_path)
+    if input_format == "strike_csv":
+        return load_strike_csv_records(file_path)
     raise AppError(f"Unsupported input format '{input_format}'")
 
 
@@ -948,6 +953,231 @@ def load_twentyonebitcoin_csv_records(file_path):
 
 def is_twentyonebitcoin_format(input_format):
     return input_format == "21bitcoin_csv"
+
+
+# -- Strike ------------------------------------------------------------------
+
+
+_STRIKE_REQUIRED_COLUMNS = (
+    "Reference",
+    "Date & Time (UTC)",
+    "Transaction Type",
+    "Amount BTC",
+)
+
+
+def _strike_datetime(value):
+    text = str_or_none(value)
+    if not text:
+        return None
+    text = text.strip()
+    for fmt in ("%b %d %Y %H:%M:%S", "%B %d %Y %H:%M:%S"):
+        try:
+            dt = datetime.strptime(text, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return text
+
+
+def _strike_fiat_currency(record):
+    # Strike exports one fiat column family per CSV; pick that fiat from amount,
+    # fee, or cost-basis headers and ignore timestamp suffixes such as "(UTC)".
+    for key in record.keys():
+        label = str(key or "").strip()
+        label_key = label.casefold()
+        if label_key in {"btc price", "amount btc", "fee btc"}:
+            continue
+        if "(" in label and ")" in label and label_key.startswith(("amount", "fee", "cost basis")):
+            candidate = label.rsplit("(", 1)[1].split(")", 1)[0]
+            currency = _currency_cell(candidate)
+            if currency and currency not in {"BTC", "XBT", "LBTC"}:
+                return currency
+        parts = label.split()
+        if len(parts) >= 2 and parts[0].casefold() in {"amount", "fee"}:
+            currency = _currency_cell(parts[-1])
+            if currency and currency not in {"BTC", "XBT", "LBTC"}:
+                return currency
+    return None
+
+
+def _strike_lightning_row(transaction_type, destination):
+    text = f"{transaction_type or ''} {destination or ''}".strip().casefold()
+    destination_text = str(destination or "").strip().casefold()
+    return (
+        "lightning" in text
+        or destination_text.startswith(("lnbc", "lntb", "lnbcrt", "lightning:"))
+    )
+
+
+def _strike_payment_hash(value, *, lightning):
+    if not lightning:
+        return None
+    return _normalize_payment_hash(value)
+
+
+def _strike_decimal_cell(value):
+    text = str_or_none(value)
+    if text and text.strip() in {"-", "–", "—"}:
+        return None
+    return _decimal_cell(value)
+
+
+def _strike_kind(transaction_type, direction):
+    tag = str(transaction_type or "").strip().casefold()
+    aliases = {
+        "buy": "buy",
+        "purchase": "buy",
+        "sell": "sell",
+        "receive": "receive",
+        "received": "receive",
+        "send": "send",
+        "sent": "send",
+        "withdraw": "withdrawal",
+        "withdrawal": "withdrawal",
+    }
+    return aliases.get(tag, tag.replace(" ", "_") if tag else direction)
+
+
+def _strike_fiat_amount(record, fiat_currency):
+    if not fiat_currency:
+        return None
+    return _strike_decimal_cell(
+        _get_cell(
+            record,
+            f"Amount {fiat_currency}",
+            f"Amount ({fiat_currency})",
+        )
+    )
+
+
+def _strike_fiat_fee(record, fiat_currency):
+    if not fiat_currency:
+        return Decimal("0")
+    return abs(
+        _strike_decimal_cell(
+            _get_cell(
+                record,
+                f"Fee {fiat_currency}",
+                f"Fee ({fiat_currency})",
+            )
+        )
+        or Decimal("0")
+    )
+
+
+def _strike_cost_basis(record, fiat_currency):
+    if not fiat_currency:
+        return None
+    return _strike_decimal_cell(
+        _get_cell(
+            record,
+            f"Cost Basis ({fiat_currency})",
+            f"Cost Basis {fiat_currency}",
+        )
+    )
+
+
+def normalize_strike_record(record):
+    """Turn one Strike export row into the common import shape."""
+    sanitized = {str(key).strip(): value for key, value in record.items() if key is not None}
+    row_ref = str_or_none(_get_cell(sanitized, "Reference"))
+    if not row_ref:
+        raise AppError("Strike CSV has a BTC-side row without a Reference")
+
+    amount_btc = _strike_decimal_cell(_get_cell(sanitized, "Amount BTC"))
+    if amount_btc in (None, Decimal("0")):
+        return None
+    direction = "outbound" if amount_btc < 0 else "inbound"
+    amount = abs(amount_btc)
+    fee = abs(_strike_decimal_cell(_get_cell(sanitized, "Fee BTC")) or Decimal("0"))
+
+    fiat_currency = _strike_fiat_currency(sanitized)
+    amount_fiat = _strike_fiat_amount(sanitized, fiat_currency)
+    fee_fiat = _strike_fiat_fee(sanitized, fiat_currency)
+    cost_basis = _strike_cost_basis(sanitized, fiat_currency)
+    fiat_rate = abs(_strike_decimal_cell(_get_cell(sanitized, "BTC Price")) or Decimal("0")) or None
+    transaction_type = str_or_none(_get_cell(sanitized, "Transaction Type")) or "transaction"
+    destination = str_or_none(_get_cell(sanitized, "Destination"))
+    description = str_or_none(_get_cell(sanitized, "Description"))
+    note = str_or_none(_get_cell(sanitized, "Note"))
+    transaction_hash = str_or_none(_get_cell(sanitized, "Transaction Hash"))
+    lightning = _strike_lightning_row(transaction_type, destination)
+    payment_hash = _strike_payment_hash(transaction_hash, lightning=lightning)
+    external_ref = f"strike:{row_ref}" if lightning or not transaction_hash else transaction_hash
+    kind = _strike_kind(transaction_type, direction)
+
+    fiat_value = None
+    if amount_fiat is not None:
+        if direction == "inbound" and kind == "buy":
+            fiat_value = abs(amount_fiat) + fee_fiat
+        elif direction == "outbound" and kind == "sell":
+            fiat_value = max(Decimal("0"), abs(amount_fiat) - fee_fiat)
+        else:
+            fiat_value = abs(amount_fiat)
+    elif fiat_rate is not None:
+        fiat_value = amount * fiat_rate
+    elif kind == "buy" and cost_basis is not None:
+        fiat_value = abs(cost_basis)
+
+    if fiat_rate is None and fiat_value is not None and amount > 0:
+        fiat_rate = fiat_value / amount
+    pricing_source_kind = "exchange_execution" if fiat_rate is not None or fiat_value is not None else None
+    summary = " - ".join(part for part in (transaction_type, description, note) if part)
+    raw_payload = dict(sanitized)
+    raw_payload["_strike_lightning"] = lightning
+    return {
+        "txid": external_ref,
+        "occurred_at": _strike_datetime(_get_cell(sanitized, "Date & Time (UTC)")),
+        "direction": direction,
+        "asset": "BTC",
+        "amount": amount,
+        "fee": fee,
+        "fiat_rate": fiat_rate,
+        "fiat_value": fiat_value,
+        "fiat_currency": fiat_currency,
+        "pricing_source_kind": pricing_source_kind,
+        "pricing_provider": "Strike" if pricing_source_kind else None,
+        "pricing_pair": f"BTC-{fiat_currency}" if fiat_currency and pricing_source_kind else None,
+        "pricing_timestamp": _strike_datetime(_get_cell(sanitized, "Date & Time (UTC)"))
+        if pricing_source_kind
+        else None,
+        "pricing_method": "strike_csv" if pricing_source_kind else None,
+        "pricing_external_ref": row_ref if pricing_source_kind else None,
+        "pricing_quality": "exact" if pricing_source_kind else None,
+        "kind": kind,
+        "description": summary or "Imported from Strike",
+        "counterparty": "Strike",
+        "payment_hash": payment_hash,
+        "payment_hash_source": "importer" if payment_hash else None,
+        "raw_json": json.dumps(json_ready(raw_payload), sort_keys=True),
+    }
+
+
+def load_strike_csv_records(file_path):
+    """Load Strike transaction-history CSV rows."""
+    with open(file_path, "r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        return []
+    header = {_normalized_column_key(column) for column in rows[0].keys()}
+    missing = [
+        column
+        for column in _STRIKE_REQUIRED_COLUMNS
+        if _normalized_column_key(column) not in header
+    ]
+    if missing:
+        raise AppError("Strike CSV is missing required columns: " + ", ".join(missing))
+    normalized = []
+    for row in rows:
+        record = normalize_strike_record(row)
+        if record is not None:
+            normalized.append(record)
+    return normalized
+
+
+def is_strike_format(input_format):
+    return input_format == "strike_csv"
 
 
 def is_exchange_evidence_format(input_format):

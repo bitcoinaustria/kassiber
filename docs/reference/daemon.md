@@ -210,7 +210,11 @@ rows. `source_format="pocketbitcoin_csv"` follows the Bull Bitcoin mode
 contract, uses a default `Pocket Bitcoin` wallet in full mode, and returns
 `pocketbitcoin_rows`. Because Pocket's CSV does not expose the blockchain txid,
 relevant-mode matching uses the net BTC amount, direction, asset, and nearby
-timestamp. The result also includes `matched`, `skipped_unmatched`, and
+timestamp. `source_format="strike_csv"` imports active Strike platform ledger
+rows into the selected or default `Strike` wallet, including exchange buy/sell
+rows plus Lightning and on-chain wallet activity. It keeps Lightning payment
+hashes when exported, skips fiat-only platform rows, and returns `strike_rows`.
+The result also includes `matched`, `skipped_unmatched`, and
 `skipped_ambiguous` in relevant mode, or `matched`, `unmatched`, `ambiguous`,
 `excluded`, and `reconciliation_records` in Bull Bitcoin/Pocket full mode.
 

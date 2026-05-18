@@ -24,6 +24,7 @@ from ..importers import (
     is_phoenix_format,
     is_pocketbitcoin_format,
     is_river_format,
+    is_strike_format,
     is_twentyonebitcoin_format,
     load_import_records,
 )
@@ -1506,7 +1507,7 @@ def import_file_into_wallet(
         apply_phoenix=is_phoenix_format(input_format),
         apply_river=is_river_format(input_format),
         match_existing_only=is_bullbitcoin_format(input_format) or is_pocketbitcoin_format(input_format),
-        report_updates=is_exchange_evidence_format(input_format),
+        report_updates=is_exchange_evidence_format(input_format) or is_strike_format(input_format),
         commit=False,
     )
     if is_twentyonebitcoin_format(input_format):
@@ -1523,6 +1524,8 @@ def import_file_into_wallet(
         conn.commit()
     if is_exchange_evidence_format(input_format):
         outcome[exchange_evidence_rows_key(input_format)] = len(records)
+    if is_strike_format(input_format):
+        outcome["strike_rows"] = len(records)
     outcome["input_format"] = input_format
     outcome["file"] = os.path.abspath(file_path)
     return outcome
