@@ -49,6 +49,16 @@ describe("connection catalog", () => {
     );
   });
 
+  it("uses bundled brand artwork for Core Lightning", () => {
+    const coreLightning = CONNECTION_SOURCES.find(
+      (source) => source.id === "core-ln",
+    );
+
+    expect(coreLightning?.image).toContain("data:image/svg+xml");
+    expect(coreLightning?.image).not.toContain("font-family");
+    expect(coreLightning?.image).not.toContain("Core%20Lightning");
+  });
+
   it("marks transparent dark logos with a light frame for dark mode", () => {
     for (const id of [
       "bitbox",
