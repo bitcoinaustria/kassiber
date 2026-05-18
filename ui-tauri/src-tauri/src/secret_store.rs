@@ -546,14 +546,20 @@ fn touch_id_passphrase_entry(_account: &str) -> Result<Entry, String> {
 
 #[cfg(target_os = "macos")]
 fn touch_id_passphrase_search(account: &str) -> Result<bool, String> {
-    let mut spec = HashMap::new();
-    spec.insert("service", TOUCH_ID_PASSPHRASE_SERVICE);
-    spec.insert("account", account);
+    let spec = touch_id_passphrase_search_spec(account);
     Ok(!apple_native_keyring_store::keychain::Store::new()
         .map_err(keyring_error_for_user)?
         .search(&spec)
         .map_err(keyring_error_for_user)?
         .is_empty())
+}
+
+#[cfg(target_os = "macos")]
+fn touch_id_passphrase_search_spec(account: &str) -> HashMap<&'static str, &str> {
+    let mut spec = HashMap::new();
+    spec.insert("service", TOUCH_ID_PASSPHRASE_SERVICE);
+    spec.insert("user", account);
+    spec
 }
 
 #[cfg(target_os = "macos")]
@@ -974,5 +980,14 @@ mod tests {
         assert_eq!(store.list("svc").unwrap().len(), 1);
         store.delete("svc", "acct").unwrap();
         assert_eq!(store.get("svc", "acct").unwrap(), None);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn touch_id_search_uses_keyring_user_specifier() {
+        let spec = touch_id_passphrase_search_spec("/tmp/kassiber-data");
+        assert_eq!(spec.get("service"), Some(&TOUCH_ID_PASSPHRASE_SERVICE));
+        assert_eq!(spec.get("user"), Some(&"/tmp/kassiber-data"));
+        assert!(!spec.contains_key("account"));
     }
 }
