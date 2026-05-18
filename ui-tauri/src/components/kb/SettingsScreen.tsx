@@ -626,6 +626,8 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const statusLoaded = statusQuery.data?.kind === "status";
   const touchIdDataRoot = identity?.importedProject?.dataRoot ?? null;
   const touchIdPlatformSupported = canUseTouchIdPassphraseUnlock();
+  const encryptedWorkspace =
+    Boolean(identity?.encrypted) || identity?.databaseMode === "sqlcipher";
   const [touchIdStatus, setTouchIdStatus] =
     React.useState<TouchIdPassphraseStatus | null>(null);
   const [touchIdStatusPending, setTouchIdStatusPending] =
@@ -845,8 +847,6 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       : identity?.profile || identity?.name || null;
   const bookLabel = currentBookLabel || "current book";
   const resetBookAvailable = Boolean(currentBookLabel);
-  const encryptedWorkspace =
-    Boolean(identity?.encrypted) || identity?.databaseMode === "sqlcipher";
 
   const openResetBookData = () => {
     setResetDataPassphrase("");
