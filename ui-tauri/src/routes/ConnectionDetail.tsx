@@ -87,7 +87,12 @@ import {
 import { detectWalletMaterial } from "@/lib/walletMaterialFormat";
 import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
-import type { Connection, ConnectionKind, OverviewSnapshot } from "@/mocks/seed";
+import type {
+  Connection,
+  ConnectionKind,
+  NodeSnapshot,
+  OverviewSnapshot,
+} from "@/mocks/seed";
 
 // Lightning *node* kinds — sync against a daemon that exposes channels,
 // peers, and routing snapshots. Phoenix is also categorised as "Lightning"
@@ -263,6 +268,15 @@ function NodeConnectionContainer({
   const updateNotification = useUiStore((state) => state.updateNotification);
   const syncNoticeIdRef = useRef<string | null>(null);
   const progressValueRef = useRef(startingSyncProgress().value ?? 5);
+  const nodeSnapshotQuery = useDaemon<NodeSnapshot>(
+    "ui.connections.node.snapshot",
+    { connection: connection.id },
+    { retry: false },
+  );
+  const liveSnapshot = nodeSnapshotQuery.data?.data;
+  const resolvedConnection = liveSnapshot
+    ? { ...connection, node: liveSnapshot }
+    : connection;
   const walletSyncMutationKey = daemonMutationKey(dataMode, "ui.wallets.sync");
   const walletSyncsInFlight = useIsMutating({
     mutationKey: walletSyncMutationKey,
@@ -371,7 +385,7 @@ function NodeConnectionContainer({
 
   return (
     <NodeConnectionDetail
-      connection={connection}
+      connection={resolvedConnection}
       priceEur={priceEur}
       hideSensitive={hideSensitive}
       onSync={onSync}

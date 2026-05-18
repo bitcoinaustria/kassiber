@@ -1521,6 +1521,165 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.connections.node.snapshot") {
+      const args = (req.args ?? {}) as { connection?: unknown };
+      const ref = typeof args.connection === "string" ? args.connection : "";
+      if (!ref) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "Lightning node snapshot requires `connection`.",
+            hint: "Pass the wallet id or label of an LND/CLN connection.",
+            retryable: false,
+          },
+        };
+      }
+      const connection = mockOverviewSnapshot().connections.find(
+        (item) => item.id === ref || item.label === ref,
+      );
+      if (!connection) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "not_found",
+            message: `Lightning connection '${ref}' not found.`,
+            retryable: false,
+          },
+        };
+      }
+      const lightningKinds = new Set(["core-ln", "coreln", "lnd", "nwc"]);
+      if (!connection.kind || !lightningKinds.has(connection.kind)) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: `Connection '${connection.label}' is not a Lightning node.`,
+            retryable: false,
+          },
+        };
+      }
+      const node = (connection as { node?: unknown }).node;
+      if (!node) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "lightning_adapter_unavailable",
+            message: `No mock node snapshot is seeded for '${connection.label}'.`,
+            retryable: false,
+          },
+        };
+      }
+      return {
+        kind: "ui.connections.node.snapshot",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          ...(node as Record<string, unknown>),
+          connection: {
+            id: connection.id,
+            label: connection.label,
+            kind: connection.kind,
+          },
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.reports.lightning_profitability") {
+      const args = (req.args ?? {}) as { connection?: unknown };
+      const ref = typeof args.connection === "string" ? args.connection : "";
+      const connection = mockOverviewSnapshot().connections.find(
+        (item) => item.id === ref || item.label === ref,
+      );
+      if (!connection) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "not_found",
+            message: `Lightning connection '${ref}' not found.`,
+            retryable: false,
+          },
+        };
+      }
+      const node = (connection as {
+        node?: {
+          routing?: {
+            windowLabel: string;
+            routingRevenueSat: number;
+            paymentCostSat: number;
+            rebalanceCostSat: number;
+            onchainCostSat: number;
+            netProfitSat: number;
+            forwardCount: number;
+            paymentCount: number;
+            rebalanceCount: number;
+          };
+          channels?: Array<{
+            id: string;
+            peerAlias: string;
+            capacitySat: number;
+            earnedRoutingSat?: number | null;
+          }>;
+        };
+      }).node;
+      const routing = node?.routing ?? null;
+      const channels = node?.channels ?? [];
+      const summary = routing
+        ? {
+            routingRevenueSat: routing.routingRevenueSat,
+            paymentCostSat: routing.paymentCostSat,
+            rebalanceCostSat: routing.rebalanceCostSat,
+            onchainCostSat: routing.onchainCostSat,
+            netProfitSat: routing.netProfitSat,
+            forwardCount: routing.forwardCount,
+            paymentCount: routing.paymentCount,
+            rebalanceCount: routing.rebalanceCount,
+          }
+        : {
+            routingRevenueSat: 0,
+            paymentCostSat: 0,
+            rebalanceCostSat: 0,
+            onchainCostSat: 0,
+            netProfitSat: 0,
+            forwardCount: 0,
+            paymentCount: 0,
+            rebalanceCount: 0,
+          };
+      const channelBreakEvens = channels.map((channel) => ({
+        channelId: channel.id,
+        peerAlias: channel.peerAlias,
+        capacitySat: channel.capacitySat,
+        earnedRoutingSat: channel.earnedRoutingSat ?? 0,
+        openCostSat: 2_500,
+        breakEven: (channel.earnedRoutingSat ?? 0) >= 2_500,
+      }));
+      return {
+        kind: "ui.reports.lightning_profitability",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          connection: {
+            id: connection.id,
+            label: connection.label,
+            kind: connection.kind,
+          },
+          windowLabel: routing?.windowLabel ?? "No routing window reported",
+          summary,
+          channels: channelBreakEvens,
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.backends.electrum.test") {
       const args = (req.args ?? {}) as {
         url?: unknown;

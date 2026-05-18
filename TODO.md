@@ -44,6 +44,20 @@ Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the 
 
 ## Right now
 
+- [ ] Land a Lightning sync adapter on top of the
+  [`kassiber.core.lightning`](kassiber/core/lightning/) scaffold. The
+  scaffold ships the `NodeSnapshot` / `NodeChannel` / `NodeForward`
+  shapes, a `LightningAdapter` Protocol with `register_adapter` /
+  `resolve_adapter`, a generic profitability report, daemon kinds
+  (`ui.connections.node.snapshot`,
+  `ui.reports.lightning_profitability`), CLI commands
+  (`reports lightning-profitability`,
+  `reports export-lightning-profitability-csv`), AI tool registrations,
+  and the desktop wiring. Adapters need only implement the Protocol and
+  call `register_adapter("lnd" | "coreln", …)` on import. See PRs #154
+  (LND) and #155 (Core Lightning) for in-flight adapter work; both should
+  rebase to consume the scaffold rather than reinvent the CLI / daemon
+  surface.
 - [x] Finish the half-done `kassiber/importers.py` extraction:
   remove duplicate parser code from `kassiber/app.py`, import the shared
   helpers from `kassiber.importers`, then run the compile check and the

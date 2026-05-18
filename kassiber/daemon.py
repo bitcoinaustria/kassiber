@@ -82,6 +82,7 @@ from .cli.handlers import (
 )
 from .core import commercial as core_commercial
 from .core import attachments as core_attachments
+from .core import lightning as core_lightning
 from .core import reports as core_reports
 from .core import source_funds as core_source_funds
 from .core import transfer_matching as core_transfer_matching
@@ -282,6 +283,9 @@ SUPPORTED_KINDS = (
     "ui.connections.btcpay.create",
     "ui.connections.btcpay.discover",
     "ui.connections.btcpay.test",
+    "ui.connections.node.snapshot",
+    "ui.reports.lightning_profitability",
+    "ui.reports.export_lightning_profitability_csv",
     "ui.metadata.bip329.import",
     "ui.wallets.update",
     "ui.wallets.delete",
@@ -3150,6 +3154,14 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                 payload = _reports_tax_summary_payload(conn, call.arguments)
             elif entry.daemon_kind == "ui.reports.balance_history":
                 payload = _reports_balance_history_payload(conn, call.arguments)
+            elif entry.daemon_kind == "ui.reports.lightning_profitability":
+                payload = _lightning_profitability_payload(
+                    conn, runtime.runtime_config, call.arguments
+                )
+            elif entry.daemon_kind == "ui.connections.node.snapshot":
+                payload = _lightning_node_snapshot_payload(
+                    conn, runtime.runtime_config, call.arguments
+                )
             elif entry.daemon_kind == "ui.journals.snapshot":
                 payload = build_journals_snapshot(conn)
             elif entry.daemon_kind == "ui.journals.events.list":
@@ -5211,6 +5223,144 @@ def _backend_settings_list_payload(ctx: "DaemonContext") -> dict[str, Any]:
             "default_backend": str(ctx.runtime_config.get("default_backend") or "") or None,
         },
     }
+
+
+_LIGHTNING_WALLET_KINDS = ("coreln", "lnd", "nwc")
+
+
+def _resolve_lightning_connection(
+    conn: sqlite3.Connection, args: dict[str, Any]
+) -> dict[str, Any]:
+    ref = args.get("connection") or args.get("wallet") or args.get("label")
+    if not ref or not isinstance(ref, str):
+        raise AppError(
+            "Specify which Lightning connection to read.",
+            code="validation",
+            hint="Pass `connection` (wallet id or label).",
+        )
+    rows = list(
+        conn.execute(
+            "SELECT id, label, kind FROM wallets"
+            " WHERE id = ? OR lower(label) = lower(?)"
+            " LIMIT 1",
+            (ref, ref),
+        )
+    )
+    if not rows:
+        raise AppError(
+            f"Lightning connection '{ref}' not found.",
+            code="not_found",
+            hint="Run `kassiber wallets list` to see configured connections.",
+        )
+    row = dict(rows[0])
+    kind = str(row.get("kind") or "")
+    if kind not in _LIGHTNING_WALLET_KINDS:
+        raise AppError(
+            f"Connection '{row.get('label') or ref}' is not a Lightning node"
+            f" (kind={kind!r}).",
+            code="validation",
+            hint="Lightning kinds are coreln, lnd, nwc.",
+        )
+    return row
+
+
+def _lightning_node_snapshot_payload(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object],
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    connection = _resolve_lightning_connection(conn, args)
+    kind = str(connection["kind"])
+    adapter = core_lightning.resolve_adapter(kind)
+    if adapter is None:
+        raise AppError(
+            f"No Lightning sync adapter is registered for kind '{kind}'.",
+            code="lightning_adapter_unavailable",
+            hint=(
+                "Install the matching Lightning sync (LND or Core Lightning)"
+                " or run the desktop in mock mode."
+            ),
+            retryable=False,
+        )
+    window_days = _coerce_int(args.get("window_days"), default=30, minimum=1, maximum=365)
+    snapshot = adapter.fetch_node_snapshot(
+        connection,
+        _resolve_backend_row(runtime_config, connection),
+        window_days=window_days,
+    )
+    payload = core_lightning.snapshot_to_dict(snapshot)
+    payload["connection"] = {
+        "id": connection.get("id"),
+        "label": connection.get("label"),
+        "kind": connection.get("kind"),
+    }
+    return payload
+
+
+def _lightning_profitability_payload(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object],
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    connection = _resolve_lightning_connection(conn, args)
+    kind = str(connection["kind"])
+    adapter = core_lightning.resolve_adapter(kind)
+    if adapter is None:
+        raise AppError(
+            f"No Lightning sync adapter is registered for kind '{kind}'.",
+            code="lightning_adapter_unavailable",
+            hint=(
+                "Install the matching Lightning sync (LND or Core Lightning)"
+                " or run the desktop in mock mode."
+            ),
+            retryable=False,
+        )
+    window_days = _coerce_int(args.get("window_days"), default=30, minimum=1, maximum=365)
+    snapshot = adapter.fetch_node_snapshot(
+        connection,
+        _resolve_backend_row(runtime_config, connection),
+        window_days=window_days,
+    )
+    report = core_lightning.build_profitability_report(
+        connection_id=str(connection.get("id") or ""),
+        connection_label=str(connection.get("label") or ""),
+        connection_kind=kind,
+        snapshot=snapshot,
+    )
+    return report.to_envelope_payload()
+
+
+def _resolve_backend_row(
+    runtime_config: dict[str, object], wallet: dict[str, Any]
+) -> dict[str, Any] | None:
+    backend_name = wallet.get("backend_name") if isinstance(wallet, dict) else None
+    if not backend_name:
+        return None
+    try:
+        for backend in core_accounts.list_backends(runtime_config):
+            if str(backend.get("name") or "") == str(backend_name):
+                return dict(backend)
+    except Exception:
+        return None
+    return None
+
+
+def _coerce_int(
+    value: Any,
+    *,
+    default: int,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> int:
+    try:
+        result = int(value) if value is not None else default
+    except (TypeError, ValueError):
+        return default
+    if minimum is not None and result < minimum:
+        return minimum
+    if maximum is not None and result > maximum:
+        return maximum
+    return result
 
 
 def _backend_config_arg(args: dict[str, Any]) -> dict[str, Any] | None:
@@ -7692,6 +7842,38 @@ def handle_request(
                     "ui.connections.btcpay.test",
                     _test_btcpay_connection_payload(
                         ctx,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.connections.node.snapshot":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.connections.node.snapshot",
+                    _lightning_node_snapshot_payload(
+                        ctx.conn,
+                        ctx.runtime_config,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.reports.lightning_profitability":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.reports.lightning_profitability",
+                    _lightning_profitability_payload(
+                        ctx.conn,
+                        ctx.runtime_config,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),
                 ),

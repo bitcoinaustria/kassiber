@@ -40,6 +40,12 @@ export const fixtures: Record<string, unknown> = {
     profile: null,
   },
   "ui.overview.snapshot": MOCK_OVERVIEW,
+  "ui.connections.node.snapshot": {
+    error: "Pass `connection` to ui.connections.node.snapshot (handled in mock.ts).",
+  },
+  "ui.reports.lightning_profitability": {
+    error: "Pass `connection` to ui.reports.lightning_profitability (handled in mock.ts).",
+  },
   "ui.transactions.list": MOCK_TRANSACTIONS,
   "ui.transactions.extremes": {
     largest: MOCK_TRANSACTIONS.txs.slice(0, 3),

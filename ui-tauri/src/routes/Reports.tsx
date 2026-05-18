@@ -32,6 +32,7 @@ import {
   WalletCards,
 } from "lucide-react";
 
+import { LightningProfitabilityPanel } from "@/components/lightning/LightningProfitabilityPanel";
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -674,6 +675,8 @@ function ReportsView({
           />
         </div>
       </div>
+
+      <LightningProfitabilityPanel />
     </div>
   );
 }
