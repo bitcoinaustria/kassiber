@@ -325,9 +325,11 @@ def update_transaction_metadata(
     changed = False
 
     try:
+        tx_assignments = []
+        tx_params = []
         if note_set:
-            conn.execute("UPDATE transactions SET note = ? WHERE id = ?", (clean_note, tx["id"]))
-            changed = True
+            tx_assignments.append("note = ?")
+            tx_params.append(clean_note)
 
         if clean_tags is not None:
             tag_rows = [
@@ -342,50 +344,47 @@ def update_transaction_metadata(
             changed = True
 
         if excluded is not None:
-            conn.execute("UPDATE transactions SET excluded = ? WHERE id = ?", (1 if excluded else 0, tx["id"]))
-            changed = True
+            tx_assignments.append("excluded = ?")
+            tx_params.append(1 if excluded else 0)
 
         if review_status is not None:
-            conn.execute(
-                "UPDATE transactions SET review_status = ? WHERE id = ?",
-                (clean_review_status, tx["id"]),
-            )
-            changed = True
+            tx_assignments.append("review_status = ?")
+            tx_params.append(clean_review_status)
 
         if taxable is not None:
-            conn.execute(
-                "UPDATE transactions SET taxability_override = ? WHERE id = ?",
-                (1 if taxable else 0, tx["id"]),
-            )
-            changed = True
+            tx_assignments.append("taxability_override = ?")
+            tx_params.append(1 if taxable else 0)
 
         if at_regime is not None:
-            conn.execute(
-                "UPDATE transactions SET at_regime_override = ? WHERE id = ?",
-                (clean_at_regime, tx["id"]),
-            )
-            changed = True
+            tx_assignments.append("at_regime_override = ?")
+            tx_params.append(clean_at_regime)
 
         if at_category is not None:
-            conn.execute(
-                "UPDATE transactions SET at_category_override = ? WHERE id = ?",
-                (clean_at_category, tx["id"]),
-            )
-            changed = True
+            tx_assignments.append("at_category_override = ?")
+            tx_params.append(clean_at_category)
 
         if clean_pricing is not None:
-            conn.execute(
-                """
-                UPDATE transactions
-                SET fiat_currency = ?, fiat_rate = ?, fiat_value = ?,
-                    fiat_price_source = ?, fiat_rate_exact = ?, fiat_value_exact = ?,
-                    pricing_source_kind = ?, pricing_provider = ?, pricing_pair = ?,
-                    pricing_timestamp = ?, pricing_fetched_at = ?,
-                    pricing_granularity = ?, pricing_method = ?,
-                    pricing_external_ref = ?, pricing_quality = ?
-                WHERE id = ?
-                """,
-                (
+            tx_assignments.extend(
+                [
+                    "fiat_currency = ?",
+                    "fiat_rate = ?",
+                    "fiat_value = ?",
+                    "fiat_price_source = ?",
+                    "fiat_rate_exact = ?",
+                    "fiat_value_exact = ?",
+                    "pricing_source_kind = ?",
+                    "pricing_provider = ?",
+                    "pricing_pair = ?",
+                    "pricing_timestamp = ?",
+                    "pricing_fetched_at = ?",
+                    "pricing_granularity = ?",
+                    "pricing_method = ?",
+                    "pricing_external_ref = ?",
+                    "pricing_quality = ?",
+                ]
+            )
+            tx_params.extend(
+                [
                     clean_pricing["fiat_currency"],
                     clean_pricing["fiat_rate"],
                     clean_pricing["fiat_value"],
@@ -401,8 +400,13 @@ def update_transaction_metadata(
                     clean_pricing["pricing_method"],
                     clean_pricing["pricing_external_ref"],
                     clean_pricing["pricing_quality"],
-                    tx["id"],
-                ),
+                ]
+            )
+
+        if tx_assignments:
+            conn.execute(
+                f"UPDATE transactions SET {', '.join(tx_assignments)} WHERE id = ?",
+                (*tx_params, tx["id"]),
             )
             changed = True
 

@@ -1846,20 +1846,24 @@ def _normalize_tax_summary_row(row):
     return {key: normalized.get(key) for key in _TAX_SUMMARY_ROW_KEYS}
 
 
-def _neutral_swap_tax_summary_adjustments(conn, profile_id):
+def _non_reportable_tax_summary_adjustments(conn, profile_id):
     rows = conn.execute(
         """
-        SELECT substr(occurred_at, 1, 4) AS year,
-               asset,
-               SUM(ABS(quantity)) AS quantity_msat,
-               SUM(COALESCE(proceeds, 0)) AS proceeds,
-               SUM(COALESCE(cost_basis, 0)) AS cost_basis,
-               SUM(COALESCE(gain_loss, 0)) AS gain_loss
-        FROM journal_entries
-        WHERE profile_id = ?
-          AND entry_type = 'disposal'
-          AND at_category = 'neu_swap'
-        GROUP BY substr(occurred_at, 1, 4), asset
+        SELECT substr(je.occurred_at, 1, 4) AS year,
+               je.asset,
+               SUM(ABS(je.quantity)) AS quantity_msat,
+               SUM(COALESCE(je.proceeds, 0)) AS proceeds,
+               SUM(COALESCE(je.cost_basis, 0)) AS cost_basis,
+               SUM(COALESCE(je.gain_loss, 0)) AS gain_loss
+        FROM journal_entries je
+        LEFT JOIN transactions t ON t.id = je.transaction_id
+        WHERE je.profile_id = ?
+          AND je.entry_type = 'disposal'
+          AND (
+            je.at_category = 'neu_swap'
+            OR COALESCE(t.taxability_override, 1) = 0
+          )
+        GROUP BY substr(je.occurred_at, 1, 4), je.asset
         """,
         (profile_id,),
     ).fetchall()
@@ -1892,8 +1896,8 @@ def _tax_summary_row_is_zero(row):
     )
 
 
-def _exclude_neutral_swap_tax_summary_rows(conn, profile_id, rows):
-    adjustments = _neutral_swap_tax_summary_adjustments(conn, profile_id)
+def _exclude_non_reportable_tax_summary_rows(conn, profile_id, rows):
+    adjustments = _non_reportable_tax_summary_adjustments(conn, profile_id)
     if not adjustments:
         return [dict(row) for row in rows]
 
@@ -1936,7 +1940,7 @@ def report_tax_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks):
     _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     hooks.require_processed_journals(conn, profile)
     state = hooks.build_ledger_state(conn, profile)
-    taxable_summary_rows = _exclude_neutral_swap_tax_summary_rows(
+    taxable_summary_rows = _exclude_non_reportable_tax_summary_rows(
         conn,
         profile["id"],
         state["tax_summary"],
@@ -2223,6 +2227,7 @@ def _austrian_e1kv_rows(conn, profile, tax_year):
         "je.profile_id = ?",
         "je.at_category IS NOT NULL",
         "je.at_category != 'neu_swap'",
+        "COALESCE(t.taxability_override, 1) != 0",
     ]
     params: list[Any] = [profile["id"]]
     if tax_year is not None:

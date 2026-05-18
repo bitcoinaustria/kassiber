@@ -238,7 +238,7 @@ def _journal_freshness(
         """
         SELECT COUNT(*) AS count
         FROM transactions
-        WHERE profile_id = ? AND excluded = 0 AND COALESCE(taxability_override, 1) != 0
+        WHERE profile_id = ? AND excluded = 0
         """,
         (profile["id"],),
     ).fetchone()["count"]
@@ -2216,6 +2216,7 @@ def build_journal_events_list_snapshot(
         FROM journal_entries je
         LEFT JOIN transactions t ON t.id = je.transaction_id
         {where_sql}
+          AND COALESCE(t.taxability_override, 1) != 0
           AND (
             (je.entry_type = 'disposal' AND COALESCE(je.at_category, '') != 'neu_swap')
             OR je.entry_type IN ('income', 'fee', 'transfer_fee')

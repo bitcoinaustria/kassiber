@@ -35,6 +35,7 @@ _RP2_EARN_TRANSACTION_TYPES = {
     "staking",
     "wages",
 }
+_NON_REPORTABLE_AT_CATEGORY_OVERRIDES = {"alt_taxfree", "neu_swap"}
 _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE = {
     "airdrop": "AIRDROP",
     "hardfork": "HARDFORK",
@@ -788,7 +789,11 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
         if tax_country == "at":
             at_category, at_kennzahl = _classify_at_disposal(gain_loss)
             category_override = _row_get(source_row, "at_category_override") if source_row else None
-            if category_override == "none":
+            taxability_override = _row_get(source_row, "taxability_override") if source_row else None
+            if taxability_override == 0 and category_override in _NON_REPORTABLE_AT_CATEGORY_OVERRIDES:
+                at_category = str(category_override)
+                at_kennzahl = kennzahl_for_disposal_category(at_category)
+            elif taxability_override == 0 or category_override == "none":
                 at_category = None
                 at_kennzahl = None
             elif category_override:

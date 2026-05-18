@@ -75,6 +75,7 @@ let mockAttachments: MockAttachment[] = [
     created_at: "2026-04-18T14:23:00Z",
   },
 ];
+let mockAttachmentCounter = 0;
 
 type MockConnection = {
   id: string;
@@ -1314,7 +1315,7 @@ export const mockDaemon: DaemonTransport = {
             ? source
             : source.split(/[\\/]/).pop() || "attachment.bin";
       const attachment: MockAttachment = {
-        id: `att-mock-${Math.random().toString(36).slice(2)}`,
+        id: `att-mock-${(mockAttachmentCounter += 1)}`,
         transaction_id: transactionId,
         attachment_type: isUrl ? "url" : "file",
         label,

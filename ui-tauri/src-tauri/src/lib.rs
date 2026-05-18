@@ -511,18 +511,28 @@ fn open_attachment_file(
         .current_data_root()
         .map_err(|error| error.message)?
         .unwrap_or_else(default_state_data_root);
-    let state_root = if data_root.file_name().and_then(|name| name.to_str()) == Some(DEFAULT_DATA_DIR)
-    {
-        data_root
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| data_root.clone())
-    } else {
-        data_root.clone()
-    };
+    let canonical = validated_attachment_file_path(&data_root, &requested)?;
+    // Validation and spawning are intentionally adjacent; this is a local desktop
+    // open path, so the remaining TOCTOU surface is limited to same-user races.
+    open_path_with_default_app(&canonical, "attachment")
+}
+
+fn validated_attachment_file_path(data_root: &Path, requested: &Path) -> Result<PathBuf, String> {
+    if !requested.is_absolute() {
+        return Err("Attachment paths must be absolute.".to_string());
+    }
+    let state_root =
+        if data_root.file_name().and_then(|name| name.to_str()) == Some(DEFAULT_DATA_DIR) {
+            data_root
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| data_root.to_path_buf())
+        } else {
+            data_root.to_path_buf()
+        };
     let attachments_root = std::fs::canonicalize(state_root.join("attachments"))
         .map_err(|error| format!("Attachments folder could not be found: {error}"))?;
-    let canonical = std::fs::canonicalize(&requested)
+    let canonical = std::fs::canonicalize(requested)
         .map_err(|error| format!("Attachment file could not be found: {error}"))?;
     if !canonical.starts_with(&attachments_root) {
         return Err("Only managed Kassiber attachment files can be opened.".to_string());
@@ -533,8 +543,7 @@ fn open_attachment_file(
     if !metadata.is_file() {
         return Err("Only attachment files can be opened.".to_string());
     }
-
-    open_path_with_default_app(&canonical, "attachment")
+    Ok(canonical)
 }
 
 #[tauri::command]
@@ -2324,12 +2333,13 @@ mod tests {
         is_supported_austrian_csv_bundle_dir, is_supported_export_file,
         is_supported_report_export_target, menu_action, menu_action_for_deep_link,
         menu_action_for_id, navigate_action, open_settings_action, path_is_on_path,
-        terminal_command_contents, terminal_command_path_hint, validated_external_url,
-        TerminalCommandFileState, TerminalCommandPaths, ALLOWED_DAEMON_KINDS, MENU_HELP_DOCS,
-        MENU_LOCK_APP, MENU_NAV_ASSISTANT, MENU_NAV_REPORTS, MENU_SETTINGS_SECURITY,
-        MENU_TOGGLE_FULLSCREEN, MENU_UI_SCALE_DECREASE, MENU_UI_SCALE_INCREASE,
-        MENU_UI_SCALE_RESET, MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
-        MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL, TERMINAL_COMMAND_MARKER,
+        terminal_command_contents, terminal_command_path_hint, validated_attachment_file_path,
+        validated_external_url, TerminalCommandFileState, TerminalCommandPaths,
+        ALLOWED_DAEMON_KINDS, MENU_HELP_DOCS, MENU_LOCK_APP, MENU_NAV_ASSISTANT, MENU_NAV_REPORTS,
+        MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN, MENU_UI_SCALE_DECREASE,
+        MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET, MENU_WORKFLOW_CONNECTIONS_IMPORTS,
+        MENU_WORKFLOW_OPEN_REPORTS, MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL,
+        TERMINAL_COMMAND_MARKER,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -2359,6 +2369,84 @@ mod tests {
         assert!(!path_is_on_path(Path::new(
             "/path/that/should/not/exist/in/tests"
         )));
+    }
+
+    #[test]
+    fn open_attachment_validation_accepts_managed_file() {
+        let root = unique_temp_dir("attachment-open-happy");
+        let data_root = root.join("data");
+        let attachments_root = root.join("attachments");
+        fs::create_dir_all(&attachments_root).expect("create attachments root");
+        fs::create_dir_all(&data_root).expect("create data root");
+        let file = attachments_root.join("receipt.txt");
+        fs::write(&file, "invoice 42").expect("write attachment");
+
+        let validated =
+            validated_attachment_file_path(&data_root, &file).expect("validate attachment");
+
+        assert_eq!(validated, file.canonicalize().expect("canonical file"));
+    }
+
+    #[test]
+    fn open_attachment_validation_rejects_absolute_escape() {
+        let root = unique_temp_dir("attachment-open-escape");
+        let data_root = root.join("data");
+        let attachments_root = root.join("attachments");
+        fs::create_dir_all(&attachments_root).expect("create attachments root");
+        fs::create_dir_all(&data_root).expect("create data root");
+        let outside = root.join("outside.txt");
+        fs::write(&outside, "secret").expect("write outside file");
+
+        let error =
+            validated_attachment_file_path(&data_root, &outside).expect_err("reject escape");
+
+        assert!(error.contains("managed Kassiber attachment"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn open_attachment_validation_rejects_symlink_escape() {
+        let root = unique_temp_dir("attachment-open-symlink");
+        let data_root = root.join("data");
+        let attachments_root = root.join("attachments");
+        fs::create_dir_all(&attachments_root).expect("create attachments root");
+        fs::create_dir_all(&data_root).expect("create data root");
+        let outside = root.join("outside.txt");
+        fs::write(&outside, "secret").expect("write outside file");
+        let link = attachments_root.join("linked-outside.txt");
+        std::os::unix::fs::symlink(&outside, &link).expect("create symlink");
+
+        let error =
+            validated_attachment_file_path(&data_root, &link).expect_err("reject symlink escape");
+
+        assert!(error.contains("managed Kassiber attachment"));
+    }
+
+    #[test]
+    fn open_attachment_validation_rejects_directory() {
+        let root = unique_temp_dir("attachment-open-directory");
+        let data_root = root.join("data");
+        let attachments_root = root.join("attachments");
+        fs::create_dir_all(&attachments_root).expect("create attachments root");
+        fs::create_dir_all(&data_root).expect("create data root");
+
+        let error = validated_attachment_file_path(&data_root, &attachments_root)
+            .expect_err("reject directory");
+
+        assert!(error.contains("Only attachment files"));
+    }
+
+    #[test]
+    fn open_attachment_validation_rejects_missing_root() {
+        let root = unique_temp_dir("attachment-open-missing-root");
+        let data_root = root.join("data");
+        fs::create_dir_all(&data_root).expect("create data root");
+        let file = root.join("attachments").join("receipt.txt");
+
+        let error =
+            validated_attachment_file_path(&data_root, &file).expect_err("reject missing root");
+
+        assert!(error.contains("Attachments folder"));
     }
 
     #[cfg(target_os = "linux")]
