@@ -14,7 +14,7 @@ from typing import Any
 
 from ...errors import AppError
 
-LIGHTNING_WALLET_KINDS: tuple[str, ...] = ("coreln", "lnd", "nwc")
+LIGHTNING_ADAPTER_KINDS: tuple[str, ...] = ("coreln", "lnd", "nwc")
 
 
 def resolve_lightning_connection(
@@ -47,11 +47,11 @@ def resolve_lightning_connection(
         )
     row = dict(rows[0])
     kind = str(row.get("kind") or "")
-    if kind not in LIGHTNING_WALLET_KINDS:
+    if kind not in LIGHTNING_ADAPTER_KINDS:
         raise AppError(
             f"Connection '{row.get('label') or ref}' is not a Lightning node"
             f" (kind={kind!r}).",
             code="validation",
-            hint=f"Lightning kinds are {', '.join(LIGHTNING_WALLET_KINDS)}.",
+            hint=f"Lightning kinds are {', '.join(LIGHTNING_ADAPTER_KINDS)}.",
         )
     return row

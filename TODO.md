@@ -58,6 +58,14 @@ Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the 
   (LND) and #155 (Core Lightning) for in-flight adapter work; both should
   rebase to consume the scaffold rather than reinvent the CLI / daemon
   surface.
+- [ ] Design an opt-in encrypted Lightning **evidence vault** for
+  operators who need proof-of-payment for legal disputes, full invoice
+  replay for corrupted-bookkeeper recovery, or chain-of-custody records
+  for audits. The vault must live separately from the normal daemon /
+  AI / diagnostics surfaces — see Tier 1 in
+  [`docs/reference/lightning-opsec.md`](docs/reference/lightning-opsec.md).
+  The default discard policy on adapters does not change; the vault is
+  an explicit additive export workflow.
 - [x] Finish the half-done `kassiber/importers.py` extraction:
   remove duplicate parser code from `kassiber/app.py`, import the shared
   helpers from `kassiber.importers`, then run the compile check and the

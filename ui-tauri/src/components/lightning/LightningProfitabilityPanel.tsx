@@ -3,7 +3,7 @@
  *
  * Self-contained: it reads `ui.overview.snapshot` for the list of
  * Lightning-kind connections, lets the user pick one, and renders the
- * routing summary tiles plus the per-channel break-even table.
+ * routing summary tiles plus the per-channel covers-open-cost table.
  */
 
 import { useMemo, useState } from "react";

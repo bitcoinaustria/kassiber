@@ -21,9 +21,11 @@ from kassiber.core.lightning import (
     build_profitability_report,
     profitability_csv_rows,
     register_adapter,
+    registered_kinds,
     resolve_adapter,
     resolve_lightning_connection,
     snapshot_to_dict,
+    snapshot_to_dict_for_ai,
     unregister_adapter,
 )
 from kassiber.errors import AppError
@@ -33,6 +35,9 @@ def _channel(
     id_: str,
     earned: int | None = None,
     capacity: int = 1_000_000,
+    *,
+    scid_block: int = 800_000,
+    scid_tx: int = 1,
 ) -> NodeChannel:
     return NodeChannel(
         id=id_,
@@ -42,7 +47,7 @@ def _channel(
         local_balance_sat=capacity // 2,
         remote_balance_sat=capacity - capacity // 2,
         state="active",
-        short_channel_id=f"800000x{id_}x0",
+        short_channel_id=f"{scid_block}x{scid_tx}x0",
         funding_outpoint=("a" * 64) + ":0",
         base_fee_msat=1_000,
         fee_rate_ppm=200,
@@ -61,9 +66,9 @@ def _snapshot_with_routing() -> NodeSnapshot:
         total_remote_balance_sat=1_500_000,
         total_capacity_sat=3_000_000,
         channels=(
-            _channel("a", earned=5_000),
-            _channel("b", earned=1_200),
-            _channel("c", earned=None),
+            _channel("a", earned=5_000, scid_tx=1),
+            _channel("b", earned=1_200, scid_tx=2),
+            _channel("c", earned=None, scid_tx=3),
         ),
         routing=NodeRoutingSnapshot(
             window_label="Last 30 days",
@@ -163,6 +168,131 @@ class LightningTypesTest(unittest.TestCase):
             self.assertNotIn("inPeerPubkey", forward)
             self.assertNotIn("outPeerPubkey", forward)
 
+    def test_private_channel_with_peer_pubkey_is_rejected(self) -> None:
+        # Opsec policy enforced at the dataclass boundary: a private
+        # channel must never carry a peer pubkey because the peer chose
+        # private gossip for a reason. The frozen dataclass + __post_init__
+        # combination makes this fail fast on construction instead of
+        # silently shipping the pubkey to SQLite / the daemon / AI tools.
+        with self.assertRaises(ValueError) as ctx:
+            NodeChannel(
+                id="ch-private",
+                peer_alias="confidential-peer",
+                peer_pubkey="02" + "ff" * 32,
+                capacity_sat=500_000,
+                local_balance_sat=500_000,
+                remote_balance_sat=0,
+                state="active",
+                is_private=True,
+            )
+        self.assertIn("peer_pubkey must be None", str(ctx.exception))
+
+    def test_private_channel_with_no_peer_pubkey_is_accepted(self) -> None:
+        # The matching positive case: omitting peer_pubkey on a private
+        # channel is the documented adapter behavior.
+        channel = NodeChannel(
+            id="ch-private",
+            peer_alias="confidential-peer",
+            peer_pubkey=None,
+            capacity_sat=500_000,
+            local_balance_sat=500_000,
+            remote_balance_sat=0,
+            state="active",
+            is_private=True,
+        )
+        self.assertIsNone(channel.peer_pubkey)
+
+    def test_invalid_short_channel_id_format_is_rejected(self) -> None:
+        # The format-only validator catches obvious smuggling at the
+        # construction boundary (free text, JSON blobs, pubkeys). It
+        # does not validate that the block height exists.
+        with self.assertRaises(ValueError):
+            NodeChannel(
+                id="ch-bad-scid",
+                peer_alias="peer",
+                peer_pubkey="02" + "ab" * 32,
+                capacity_sat=500_000,
+                local_balance_sat=250_000,
+                remote_balance_sat=250_000,
+                state="active",
+                short_channel_id="not a real scid",
+            )
+
+    def test_invalid_funding_outpoint_format_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            NodeChannel(
+                id="ch-bad-outpoint",
+                peer_alias="peer",
+                peer_pubkey="02" + "ab" * 32,
+                capacity_sat=500_000,
+                local_balance_sat=250_000,
+                remote_balance_sat=250_000,
+                state="active",
+                funding_outpoint="definitely-not-an-outpoint",
+            )
+
+
+class LightningAiPayloadTest(unittest.TestCase):
+    """Tier-3 redaction tests for AI tool surfaces.
+
+    See docs/reference/lightning-opsec.md. The AI variants must drop the
+    identity-graph fields even though the equivalent UI variants keep
+    them — the AI surface is a place where a tool transcript could be
+    pasted or screenshotted.
+    """
+
+    def test_ai_snapshot_payload_strips_identity_fields(self) -> None:
+        payload = snapshot_to_dict_for_ai(_snapshot_with_routing())
+        # Operator's own pubkey must be redacted.
+        self.assertIsNone(payload["pubkey"])
+        # Each channel must drop the peer/identity columns; the keys must
+        # not be present at all (a `None` value is still a leak vector
+        # because the test would silently pass).
+        for channel in payload["channels"]:
+            self.assertNotIn("peerPubkey", channel)
+            self.assertNotIn("shortChannelId", channel)
+            self.assertNotIn("peerAlias", channel)
+            self.assertNotIn("fundingOutpoint", channel)
+            # Operational fields must still be present so the AI can
+            # answer balance / capacity / activity questions.
+            self.assertIn("capacitySat", channel)
+            self.assertIn("localBalanceSat", channel)
+            self.assertIn("state", channel)
+        for channel in payload["closedChannels"]:
+            self.assertNotIn("peerPubkey", channel)
+            self.assertNotIn("shortChannelId", channel)
+            self.assertNotIn("peerAlias", channel)
+            self.assertNotIn("fundingOutpoint", channel)
+        # Forwards must drop both peer aliases and both short channel ids.
+        for forward in payload["forwards"]:
+            self.assertNotIn("inPeerAlias", forward)
+            self.assertNotIn("outPeerAlias", forward)
+            self.assertNotIn("inShortChannelId", forward)
+            self.assertNotIn("outShortChannelId", forward)
+            # Amount / fee / status are operational, must remain.
+            self.assertIn("amountInMsat", forward)
+            self.assertIn("status", forward)
+        # The routing summary (aggregate) remains — it does not name peers.
+        self.assertIn("routing", payload)
+
+    def test_ai_profitability_payload_strips_per_channel_block(self) -> None:
+        snapshot = _snapshot_with_routing()
+        report = build_profitability_report(
+            connection_id="wallet-1",
+            connection_label="Home Node",
+            connection_kind="lnd",
+            snapshot=snapshot,
+        )
+        payload = report.to_ai_envelope_payload()
+        # The connection identifier block must be absent — Tier 3.
+        self.assertNotIn("connection", payload)
+        # No per-channel breakdown either; the keys must be absent.
+        self.assertNotIn("channels", payload)
+        # The aggregate summary + window label remain.
+        self.assertEqual(payload["windowLabel"], "Last 30 days")
+        self.assertEqual(payload["summary"]["netProfitSat"], 3_280)
+        self.assertEqual(payload["summary"]["forwardCount"], 42)
+
 
 class LightningRegistryTest(unittest.TestCase):
     def test_register_and_resolve_adapter(self) -> None:
@@ -181,9 +311,67 @@ class LightningRegistryTest(unittest.TestCase):
     def test_resolve_unknown_kind_returns_none(self) -> None:
         self.assertIsNone(resolve_adapter("not-registered-xyz"))
 
+    def test_registered_kinds_reports_current_registry(self) -> None:
+        register_adapter("lnd", _FakeAdapter(kind="lnd"))
+        register_adapter("coreln", _FakeAdapter(kind="coreln"))
+        try:
+            kinds = registered_kinds()
+            self.assertIn("lnd", kinds)
+            self.assertIn("coreln", kinds)
+            # Sorted output keeps the error-hint stable across runs.
+            self.assertEqual(list(kinds), sorted(kinds))
+        finally:
+            unregister_adapter("lnd")
+            unregister_adapter("coreln")
+
+
+class LightningForwardFailureReasonTest(unittest.TestCase):
+    def test_known_failure_reasons_accepted(self) -> None:
+        # The Literal enum is a static check, not a runtime one — but
+        # constructing a forward with each documented value verifies the
+        # mock-seed / adapter authors have a stable vocabulary to map to.
+        for value in (
+            "temporary_channel_failure",
+            "unknown_next_peer",
+            "fee_insufficient",
+            "incorrect_payment_details",
+            "expiry_too_soon",
+            "insufficient_balance",
+            "other",
+        ):
+            forward = NodeForward(
+                id=f"fw-{value}",
+                occurred_at="2026-05-18T10:00:00Z",
+                in_peer_alias="peer-in",
+                out_peer_alias="peer-out",
+                amount_in_msat=100_000,
+                amount_out_msat=0,
+                fee_msat=0,
+                status="failed",
+                failure_reason=value,  # type: ignore[arg-type]
+            )
+            self.assertEqual(forward.failure_reason, value)
+
+    def test_seed_failure_reasons_stay_in_enum(self) -> None:
+        # Pin: the values used by the mock seed and adapter authors must
+        # remain a subset of the documented enum so the type-check guard
+        # actually catches drift. If the seed changes, update both this
+        # test and the Literal in kassiber/core/lightning/types.py.
+        allowed = {
+            "temporary_channel_failure",
+            "unknown_next_peer",
+            "fee_insufficient",
+            "incorrect_payment_details",
+            "expiry_too_soon",
+            "insufficient_balance",
+            "other",
+        }
+        for value in ("temporary_channel_failure", "insufficient_balance"):
+            self.assertIn(value, allowed)
+
 
 class LightningProfitabilityTest(unittest.TestCase):
-    def test_build_report_carries_summary_and_channel_break_even(self) -> None:
+    def test_build_report_carries_summary_and_channel_open_cost_check(self) -> None:
         snapshot = _snapshot_with_routing()
         report = build_profitability_report(
             connection_id="wallet-1",
@@ -365,21 +553,25 @@ class LightningModuleExportsTest(unittest.TestCase):
     def test_top_level_exports_match_public_api(self) -> None:
         expected = {
             "DEFAULT_OPEN_COST_SAT",
-            "LIGHTNING_WALLET_KINDS",
+            "LIGHTNING_ADAPTER_KINDS",
             "LightningAdapter",
             "LightningProfitabilityReport",
+            "ChannelOpenCostCheck",
             "NodeChannel",
             "NodeChannelState",
             "NodeForward",
+            "NodeForwardFailureReason",
             "NodeForwardStatus",
             "NodeRoutingSnapshot",
             "NodeSnapshot",
             "build_profitability_report",
             "profitability_csv_rows",
             "register_adapter",
+            "registered_kinds",
             "resolve_adapter",
             "resolve_lightning_connection",
             "snapshot_to_dict",
+            "snapshot_to_dict_for_ai",
             "unregister_adapter",
         }
         self.assertTrue(expected.issubset(set(core_lightning.__all__)))

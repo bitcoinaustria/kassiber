@@ -8,11 +8,11 @@ opens channels, or pays invoices through a Lightning node.
 Adapters are also the **discard boundary** for sensitive node data: see
 [docs/reference/lightning-opsec.md](../../../docs/reference/lightning-opsec.md)
 for the full policy. Summary: drop preimages, payment_secrets, encoded
-bolt11 strings, onion route hops, route hints from received invoices,
-and ``failure_source_pubkey`` before populating :class:`NodeSnapshot`;
-pass ``None`` for :attr:`NodeChannel.peer_pubkey` on private channels by
-default; aggregate per-forward data at the day-per-channel grain when
-persisting.
+bolt11 strings, route hop pubkey lists, route hints from received
+invoices, and ``failure_source_pubkey`` before populating
+:class:`NodeSnapshot`; pass ``None`` for :attr:`NodeChannel.peer_pubkey`
+on private channels by default (enforced by ``NodeChannel.__post_init__``);
+aggregate per-forward data at the day-per-channel grain when persisting.
 """
 
 from __future__ import annotations

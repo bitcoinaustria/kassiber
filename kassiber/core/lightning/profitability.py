@@ -1,8 +1,8 @@
 """Generic Lightning profitability report.
 
 Computes the routing-revenue, payment-cost, rebalance-cost, on-chain-cost,
-net-profit pentad plus per-channel break-even from a node snapshot. The
-adapter is responsible for filling :class:`NodeSnapshot.routing` and
+net-profit pentad plus per-channel covers-open-cost from a node snapshot.
+The adapter is responsible for filling :class:`NodeSnapshot.routing` and
 :class:`NodeSnapshot.channels` — this module only reshapes and exports.
 
 Unit convention: the routing summary works in **sat** because adapters
@@ -28,7 +28,7 @@ DEFAULT_OPEN_COST_SAT: int = 2_500
 
 
 @dataclass(frozen=True)
-class ChannelBreakEven:
+class ChannelOpenCostCheck:
     """Per-channel routing earnings vs. a coarse open-cost reference.
 
     ``covers_open_cost`` is intentionally narrower than "broke even":
@@ -61,7 +61,7 @@ class LightningProfitabilityReport:
     forward_count: int
     payment_count: int
     rebalance_count: int
-    channels: tuple[ChannelBreakEven, ...]
+    channels: tuple[ChannelOpenCostCheck, ...]
 
     def to_envelope_payload(self) -> dict[str, Any]:
         return {
@@ -94,6 +94,31 @@ class LightningProfitabilityReport:
             ],
         }
 
+    def to_ai_envelope_payload(self) -> dict[str, Any]:
+        """Redacted AI variant: aggregate-only profitability.
+
+        Tier-3 opsec policy (``docs/reference/lightning-opsec.md``) keeps
+        the operator's connection identifiers and per-channel peer aliases
+        / channel ids out of AI tool output. The aggregate routing summary
+        + ``windowLabel`` answer "did this node earn anything this
+        window?" without exposing the per-channel identity graph that
+        per-channel rows would leak (``channelId`` is a short channel id;
+        ``peerAlias`` is gossip-sourced user content).
+        """
+        return {
+            "windowLabel": self.window_label,
+            "summary": {
+                "routingRevenueSat": self.routing_revenue_sat,
+                "paymentCostSat": self.payment_cost_sat,
+                "rebalanceCostSat": self.rebalance_cost_sat,
+                "onchainCostSat": self.onchain_cost_sat,
+                "netProfitSat": self.net_profit_sat,
+                "forwardCount": self.forward_count,
+                "paymentCount": self.payment_count,
+                "rebalanceCount": self.rebalance_count,
+            },
+        }
+
 
 def build_profitability_report(
     *,
@@ -124,7 +149,7 @@ def build_profitability_report(
             forward_count=0,
             payment_count=0,
             rebalance_count=0,
-            channels=tuple(_channel_break_evens(snapshot.channels, default_open_cost_sat)),
+            channels=tuple(_channel_open_cost_checks(snapshot.channels, default_open_cost_sat)),
         )
     return LightningProfitabilityReport(
         connection_id=connection_id,
@@ -139,19 +164,19 @@ def build_profitability_report(
         forward_count=routing.forward_count,
         payment_count=routing.payment_count,
         rebalance_count=routing.rebalance_count,
-        channels=tuple(_channel_break_evens(snapshot.channels, default_open_cost_sat)),
+        channels=tuple(_channel_open_cost_checks(snapshot.channels, default_open_cost_sat)),
     )
 
 
-def _channel_break_evens(
+def _channel_open_cost_checks(
     channels: tuple[NodeChannel, ...],
     default_open_cost_sat: int,
-) -> list[ChannelBreakEven]:
-    rows: list[ChannelBreakEven] = []
+) -> list[ChannelOpenCostCheck]:
+    rows: list[ChannelOpenCostCheck] = []
     for channel in channels:
         earned = channel.earned_routing_sat or 0
         rows.append(
-            ChannelBreakEven(
+            ChannelOpenCostCheck(
                 channel_id=channel.id,
                 peer_alias=channel.peer_alias,
                 capacity_sat=channel.capacity_sat,

@@ -3154,11 +3154,19 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
             elif entry.daemon_kind == "ui.reports.balance_history":
                 payload = _reports_balance_history_payload(conn, call.arguments)
             elif entry.daemon_kind == "ui.reports.lightning_profitability":
-                payload = _lightning_profitability_payload(
+                # AI surface: aggregate-only profitability (no connection
+                # identifiers, no per-channel rows). See Tier-3 policy in
+                # docs/reference/lightning-opsec.md. The UI surface keeps
+                # the full payload — it is the operator's own data.
+                payload = _lightning_profitability_payload_for_ai(
                     conn, runtime.runtime_config, call.arguments
                 )
             elif entry.daemon_kind == "ui.connections.node.snapshot":
-                payload = _lightning_node_snapshot_payload(
+                # AI surface: redacted snapshot (no operator pubkey, no
+                # per-channel/forward peer identifiers, no short channel
+                # ids, no funding outpoints). See Tier-3 policy in
+                # docs/reference/lightning-opsec.md.
+                payload = _lightning_node_snapshot_payload_for_ai(
                     conn, runtime.runtime_config, call.arguments
                 )
             elif entry.daemon_kind == "ui.journals.snapshot":
@@ -5224,6 +5232,21 @@ def _backend_settings_list_payload(ctx: "DaemonContext") -> dict[str, Any]:
     }
 
 
+def _lightning_adapter_unavailable_error(kind: str) -> AppError:
+    """Build the ``lightning_adapter_unavailable`` error with current registry hint."""
+    registered = ", ".join(core_lightning.registered_kinds()) or "<none>"
+    return AppError(
+        f"No Lightning sync adapter is registered for kind '{kind}'.",
+        code="lightning_adapter_unavailable",
+        hint=(
+            f"Registered Lightning kinds: {registered}. Install the matching"
+            " Lightning sync (LND or Core Lightning), or run the desktop in"
+            " mock mode."
+        ),
+        retryable=False,
+    )
+
+
 def _lightning_node_snapshot_payload(
     conn: sqlite3.Connection,
     runtime_config: dict[str, object],
@@ -5234,15 +5257,7 @@ def _lightning_node_snapshot_payload(
     kind = str(connection["kind"])
     adapter = core_lightning.resolve_adapter(kind)
     if adapter is None:
-        raise AppError(
-            f"No Lightning sync adapter is registered for kind '{kind}'.",
-            code="lightning_adapter_unavailable",
-            hint=(
-                "Install the matching Lightning sync (LND or Core Lightning)"
-                " or run the desktop in mock mode."
-            ),
-            retryable=False,
-        )
+        raise _lightning_adapter_unavailable_error(kind)
     window_days = _coerce_int(args.get("window_days"), default=30, minimum=1, maximum=365)
     snapshot = adapter.fetch_node_snapshot(
         connection,
@@ -5252,6 +5267,40 @@ def _lightning_node_snapshot_payload(
     payload = core_lightning.snapshot_to_dict(snapshot)
     payload["connection"] = {
         "id": connection.get("id"),
+        "label": connection.get("label"),
+        "kind": connection.get("kind"),
+    }
+    return payload
+
+
+def _lightning_node_snapshot_payload_for_ai(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object],
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    """AI variant of :func:`_lightning_node_snapshot_payload`.
+
+    The operator's own connection ``label`` is theirs — keep it so the
+    AI can tell two configured nodes apart. Everything else Tier-3 in
+    ``docs/reference/lightning-opsec.md`` (operator pubkey, channel
+    funding outpoints, peer pubkeys / aliases, short channel ids on
+    channels and forwards) is dropped via
+    :func:`core_lightning.snapshot_to_dict_for_ai` before serializing.
+    """
+    ref = args.get("connection") or args.get("wallet") or args.get("label")
+    connection = core_lightning.resolve_lightning_connection(conn, ref)
+    kind = str(connection["kind"])
+    adapter = core_lightning.resolve_adapter(kind)
+    if adapter is None:
+        raise _lightning_adapter_unavailable_error(kind)
+    window_days = _coerce_int(args.get("window_days"), default=30, minimum=1, maximum=365)
+    snapshot = adapter.fetch_node_snapshot(
+        connection,
+        _resolve_backend_row(runtime_config, connection),
+        window_days=window_days,
+    )
+    payload = core_lightning.snapshot_to_dict_for_ai(snapshot)
+    payload["connection"] = {
         "label": connection.get("label"),
         "kind": connection.get("kind"),
     }
@@ -5268,15 +5317,7 @@ def _lightning_profitability_payload(
     kind = str(connection["kind"])
     adapter = core_lightning.resolve_adapter(kind)
     if adapter is None:
-        raise AppError(
-            f"No Lightning sync adapter is registered for kind '{kind}'.",
-            code="lightning_adapter_unavailable",
-            hint=(
-                "Install the matching Lightning sync (LND or Core Lightning)"
-                " or run the desktop in mock mode."
-            ),
-            retryable=False,
-        )
+        raise _lightning_adapter_unavailable_error(kind)
     window_days = _coerce_int(args.get("window_days"), default=30, minimum=1, maximum=365)
     snapshot = adapter.fetch_node_snapshot(
         connection,
@@ -5290,6 +5331,40 @@ def _lightning_profitability_payload(
         snapshot=snapshot,
     )
     return report.to_envelope_payload()
+
+
+def _lightning_profitability_payload_for_ai(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object],
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    """AI variant of :func:`_lightning_profitability_payload`.
+
+    Returns only the routing-summary aggregate + window label, dropping
+    the ``connection`` identifier block and the per-channel rows that
+    leak peer aliases and short channel ids (Tier-3). The aggregate
+    answers profitability questions; the per-channel detail belongs in
+    the desktop UI surface, not in AI tool output.
+    """
+    ref = args.get("connection") or args.get("wallet") or args.get("label")
+    connection = core_lightning.resolve_lightning_connection(conn, ref)
+    kind = str(connection["kind"])
+    adapter = core_lightning.resolve_adapter(kind)
+    if adapter is None:
+        raise _lightning_adapter_unavailable_error(kind)
+    window_days = _coerce_int(args.get("window_days"), default=30, minimum=1, maximum=365)
+    snapshot = adapter.fetch_node_snapshot(
+        connection,
+        _resolve_backend_row(runtime_config, connection),
+        window_days=window_days,
+    )
+    report = core_lightning.build_profitability_report(
+        connection_id=str(connection.get("id") or ""),
+        connection_label=str(connection.get("label") or ""),
+        connection_kind=kind,
+        snapshot=snapshot,
+    )
+    return report.to_ai_envelope_payload()
 
 
 def _resolve_backend_row(

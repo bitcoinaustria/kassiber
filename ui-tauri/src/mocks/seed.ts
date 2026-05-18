@@ -103,6 +103,23 @@ export interface NodeChannel {
 
 export type NodeForwardStatus = "settled" | "failed" | "offered";
 
+/**
+ * Categorical failure reasons mirroring
+ * `kassiber.core.lightning.types.NodeForwardFailureReason`. Kept
+ * categorical so adapters cannot smuggle raw node error strings
+ * (which may include `failure_source_pubkey`, payment hashes, or
+ * route-hint JSON) through what otherwise would look like a free-text
+ * field. See `docs/reference/lightning-opsec.md`.
+ */
+export type NodeForwardFailureReason =
+  | "temporary_channel_failure"
+  | "unknown_next_peer"
+  | "fee_insufficient"
+  | "incorrect_payment_details"
+  | "expiry_too_soon"
+  | "insufficient_balance"
+  | "other";
+
 export interface NodeForward {
   id: string;
   /** UTC ISO timestamp */
@@ -118,7 +135,7 @@ export interface NodeForward {
   /** earned routing fee in millisat */
   feeMsat: number;
   status: NodeForwardStatus;
-  failureReason?: string | null;
+  failureReason?: NodeForwardFailureReason | null;
 }
 
 export interface NodeRoutingSnapshot {
@@ -506,7 +523,7 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
             amountOutMsat: 0,
             feeMsat: 0,
             status: "failed",
-            failureReason: "TEMPORARY_CHANNEL_FAILURE",
+            failureReason: "temporary_channel_failure",
           },
           {
             id: "fw_cln_5",
@@ -711,7 +728,7 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
             amountOutMsat: 0,
             feeMsat: 0,
             status: "failed",
-            failureReason: "INSUFFICIENT_BALANCE",
+            failureReason: "insufficient_balance",
           },
           {
             id: "fw_lnd_5",

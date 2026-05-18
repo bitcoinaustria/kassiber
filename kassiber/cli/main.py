@@ -248,10 +248,14 @@ def _cli_build_lightning_snapshot(
     kind = str(connection["kind"])
     adapter = core_lightning.resolve_adapter(kind)
     if adapter is None:
+        registered = ", ".join(core_lightning.registered_kinds()) or "<none>"
         raise AppError(
             f"No Lightning sync adapter is registered for kind '{kind}'.",
             code="lightning_adapter_unavailable",
-            hint="Install the matching Lightning sync (LND or Core Lightning).",
+            hint=(
+                f"Registered Lightning kinds: {registered}. Install the matching"
+                " Lightning sync (LND or Core Lightning)."
+            ),
         )
     snapshot = adapter.fetch_node_snapshot(connection, None, window_days=window_days)
     return connection, snapshot

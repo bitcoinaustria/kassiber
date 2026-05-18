@@ -337,10 +337,14 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.reports.lightning_profitability",
         description=(
-            "Read the routing-profitability summary for a Lightning connection: "
-            "routing revenue, payment cost, rebalance cost, on-chain cost, net "
-            "profit, plus per-channel break-even. Requires a registered Lightning "
-            "adapter; returns an error envelope when no LND/CLN sync is installed."
+            "Read the aggregate routing-profitability summary for a Lightning "
+            "connection: routing revenue, payment cost, rebalance cost, on-chain "
+            "cost, net profit, and counts plus window label. AI variant is "
+            "redacted per docs/reference/lightning-opsec.md Tier 3 — the "
+            "connection id and per-channel covers-open-cost rows are omitted "
+            "because per-channel peer aliases and short channel ids identify "
+            "third parties. Requires a registered Lightning adapter; returns an "
+            "error envelope when no LND/CLN sync is installed."
         ),
         parameters={
             "type": "object",
@@ -370,10 +374,14 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.connections.node.snapshot",
         description=(
-            "Read a Lightning node status snapshot: channels with local/remote "
-            "balances, peer count, on-chain balance, and routing window summary. "
-            "Returns an error envelope when no Lightning adapter is registered "
-            "for the connection's kind."
+            "Read an operational Lightning node snapshot: channels with "
+            "local/remote balances, peer count, on-chain balance, fee policies, "
+            "and routing window summary. AI variant is redacted per "
+            "docs/reference/lightning-opsec.md Tier 3 — operator pubkey, channel "
+            "funding outpoints, short channel ids, peer pubkeys and peer aliases "
+            "(including on forwards) are omitted; the operator's own connection "
+            "label is kept. Returns an error envelope when no Lightning adapter "
+            "is registered for the connection's kind."
         ),
         parameters={
             "type": "object",
