@@ -75,6 +75,12 @@ _TWENTYONEBITCOIN_TRANSACTIONS_CSV = """id,exchange_name,depot_name,transaction_
 16,21bitcoin,main,07.10.2022 16:31:20,,,BTC,0.00040000,BTC,0.00001,withdrawal,Automatic Limit L1 BTC Withdrawal,l1-withdrawal-tx
 """
 
+_STRIKE_CSV = """Reference,Date & Time (UTC),Transaction Type,Amount EUR,Fee EUR,Amount BTC,Fee BTC,BTC Price,Cost Basis (EUR),Destination,Description,Transaction Hash,Note
+strike-fiat-1,Mar 07 2026 21:59:51,Deposit,100.00,,,,,,,,,Bank deposit
+strike-ln-1,Mar 08 2026 10:37:13,Receive,,,0.00272794,,,,lnbc1sampleinvoice,,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,Transfer Coinos
+strike-chain-1,Mar 09 2026 10:37:13,Send,,,-0.00100000,0.00001000,60000.00,55.00,bc1qstrikewithdrawal,On-chain withdrawal,bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,Self custody
+"""
+
 _CACHE_PRICING_CSV = """date,txid,direction,asset,amount,fee,description
 2024-05-10T09:00:00Z,cache-price-1,inbound,BTC,0.01000000,0,Cached price sample
 """
@@ -2837,6 +2843,77 @@ class AccountBucketBehaviorTest(unittest.TestCase):
         buy = {record["external_id"]: record for record in payload["data"]}["21bitcoin:2"]
         self.assertFalse(buy["excluded"])
         self.assertNotIn("21bitcoin-wallet-gap", {tag["code"] for tag in buy["tags"]})
+
+    def test_strike_csv_imports_active_custodial_bitcoin_rows(self):
+        self._cli(
+            "profiles", "create",
+            "--workspace", "Buckets",
+            "--fiat-currency", "EUR",
+            "--tax-country", "generic",
+            "Euro",
+        )
+        strike_csv = self.data_root / "strike.csv"
+        strike_csv.write_text(_STRIKE_CSV, encoding="utf-8")
+
+        payload = self._cli(
+            "wallets", "import-strike",
+            "--workspace", "Buckets",
+            "--profile", "Euro",
+            "--file", str(strike_csv),
+        )
+        data = payload["data"]
+        self.assertEqual(data["mode"], "full")
+        self.assertEqual(data["wallet"], "Strike")
+        self.assertEqual(data["input_format"], "strike_csv")
+        self.assertEqual(data["strike_rows"], 2)
+        self.assertEqual(data["imported"], 2)
+        self.assertEqual(data["skipped"], 0)
+
+        payload = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "Euro",
+            "--wallet", "Strike",
+            "--order", "asc",
+        )
+        records = payload["data"]
+        self.assertEqual(len(records), 2)
+        by_external_id = {record["external_id"]: record for record in records}
+
+        lightning = by_external_id["strike:strike-ln-1"]
+        self.assertEqual(lightning["kind"], "receive")
+        self.assertEqual(lightning["direction"], "inbound")
+        self.assertEqual(lightning["amount_msat"], 272794000)
+        self.assertIsNone(lightning["pricing_method"])
+
+        onchain = by_external_id[
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        ]
+        self.assertEqual(onchain["kind"], "send")
+        self.assertEqual(onchain["direction"], "outbound")
+        self.assertEqual(onchain["fee_msat"], 1000000)
+        self.assertEqual(onchain["pricing_provider"], "Strike")
+        self.assertEqual(onchain["pricing_method"], "strike_csv")
+        self.assertEqual(onchain["pricing_external_ref"], "strike-chain-1")
+        self.assertEqual(onchain["fiat_rate_exact"], "60000.00")
+        self.assertEqual(onchain["fiat_value_exact"], "60.0000000000")
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        stored_lightning = conn.execute(
+            """
+            SELECT payment_hash, payment_hash_source
+            FROM transactions
+            WHERE external_id = ?
+            """,
+            ("strike:strike-ln-1",),
+        ).fetchone()
+        conn.close()
+        self.assertEqual(
+            stored_lightning["payment_hash"],
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        )
+        self.assertEqual(stored_lightning["payment_hash_source"], "importer")
 
 
 if __name__ == "__main__":

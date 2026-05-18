@@ -57,7 +57,7 @@ export interface ConnectionSource {
   docsHref?: string;
   setupKind?: SetupKind;
   walletKind?: string;
-  sourceFormat?: "csv" | "json" | "phoenix_csv" | "river_csv" | "bullbitcoin_csv" | "21bitcoin_csv";
+  sourceFormat?: "csv" | "json" | "phoenix_csv" | "river_csv" | "bullbitcoin_csv" | "21bitcoin_csv" | "strike_csv";
   chain?: "bitcoin" | "liquid";
   network?: string;
   details: string[];
@@ -469,13 +469,22 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "strike",
     title: "Strike",
-    description: "Bitcoin and Lightning activity import.",
-    category: "exchanges",
+    description: "Custodial Bitcoin and Lightning wallet import.",
+    category: "wallets",
     image: lightningIcon,
     imageClassName: "size-8",
-    status: "planned",
-    pathLabel: "CSV import",
-    details: ["Dedicated parser is not wired yet"],
+    status: "ready",
+    pathLabel: "Custodial wallet",
+    formatLabel: "strike_csv",
+    docsHref: "https://strike.me/",
+    setupKind: "file-wallet",
+    walletKind: "strike",
+    sourceFormat: "strike_csv",
+    details: [
+      "BTC Lightning and on-chain rows become active wallet activity",
+      "Fiat-only funding and reversal rows are skipped",
+      "Rows use Strike BTC Price as exact CSV pricing when present",
+    ],
   },
   {
     id: "21bitcoin",

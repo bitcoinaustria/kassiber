@@ -11,6 +11,7 @@ Kassiber can ingest transactions and metadata from several sources. Imported dat
 - River Bitcoin Activity / Account Activity CSV exports
 - Bull Bitcoin order CSV exports
 - 21bitcoin transaction CSV exports
+- Strike CSV exports
 - BIP329 JSONL labels
 
 Format references used by the dedicated importers:
@@ -19,6 +20,7 @@ Format references used by the dedicated importers:
 - River Account Activity CSV: <https://support.river.com/hc/en-us/articles/45513824178963-How-do-I-download-my-account-activity>
 - Bull Bitcoin order CSV export from the Bull account order history
 - 21bitcoin transaction CSV export from the 21bitcoin app
+- Strike CSV export from Strike transaction history
 - BIP329 labels JSONL: <https://bips.xyz/329>
 
 ## Generic transaction imports
@@ -387,6 +389,32 @@ Behavior:
   provider `21bitcoin`
 - relevant imports are match-existing-only and never create standalone
   transactions; full imports create active custodial ledger rows
+
+## Strike
+
+Kassiber supports Strike CSV exports as a custodial wallet ledger for BTC
+activity. This is meant to work for people who use Strike as an everyday
+wallet, not only as a broker. BTC Lightning and on-chain rows are imported into
+the selected custodial wallet, or into a default `Strike` wallet when no wallet
+is supplied. Fiat-only platform funding and reversal rows are skipped because
+they are not Bitcoin subledger activity.
+
+```bash
+python3 -m kassiber wallets import-strike \
+  --file /path/to/strike-export.csv
+```
+
+Behavior:
+
+- positive `Amount BTC` rows become inbound transactions
+- negative `Amount BTC` rows become outbound transactions
+- Lightning invoice rows use a provider-scoped id (`strike:<Reference>`) and
+  preserve the exported 64-character hash as `payment_hash` when present
+- on-chain rows use `Transaction Hash` as the transaction id when Strike
+  provides one
+- `BTC Price` is used as the exact CSV rate when present; fiat amount columns
+  and buy-row cost basis can fill pricing when Strike does not export a price
+- fiat-only deposit and reversal rows are ignored by the importer
 
 ## BIP329
 

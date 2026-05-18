@@ -206,7 +206,9 @@ as excluded evidence, then flags each row as `matched`, `unmatched`, or
 `source_format="21bitcoin_csv"`, the default `mode="full"` imports active
 custodial ledger rows into the selected or default `21bitcoin` wallet; explicit
 `mode="relevant"` keeps the evidence-only matching behavior for L1 withdrawal
-rows. The result also includes `matched`, `skipped_unmatched`, and
+rows. For `source_format="strike_csv"`, `wallet` is optional and the import
+creates active custodial ledger rows in the selected or default `Strike` wallet.
+The result also includes `matched`, `skipped_unmatched`, and
 `skipped_ambiguous` in relevant mode, or `matched`, `unmatched`, `ambiguous`,
 `excluded`, and `reconciliation_records` in Bull Bitcoin full mode.
 

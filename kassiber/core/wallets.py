@@ -37,6 +37,7 @@ WALLET_KINDS = [
     "river",
     "bullbitcoin",
     "21bitcoin",
+    "strike",
     "custom",
 ]
 REDACTED_CONFIG_VALUE = "[redacted]"
@@ -503,6 +504,11 @@ WALLET_KIND_CATALOG = {
     },
     "21bitcoin": {
         "summary": "21bitcoin custodial platform CSV importer with exact trade pricing.",
+        "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
+    "strike": {
+        "summary": "Strike custodial wallet CSV importer for Bitcoin and Lightning rows.",
         "config_fields": ["source_file", "source_format"],
         "requires": [],
     },
