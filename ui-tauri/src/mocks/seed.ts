@@ -48,6 +48,110 @@ export interface Connection {
   addresses?: number;
   gap?: number;
   channels?: number;
+  node?: NodeSnapshot;
+}
+
+export type NodeChannelState =
+  | "active"
+  | "inactive"
+  | "pending_open"
+  | "pending_close"
+  | "closed"
+  | "force_closed";
+
+export interface NodeChannel {
+  id: string;
+  /** short channel id or temporary id for pending channels */
+  shortChannelId?: string | null;
+  /** funding outpoint (txid:vout) */
+  fundingOutpoint?: string | null;
+  peerAlias: string;
+  peerPubkey: string;
+  /** total channel capacity in sats */
+  capacitySat: number;
+  /** sats currently spendable from this node */
+  localBalanceSat: number;
+  /** sats currently spendable by the remote */
+  remoteBalanceSat: number;
+  state: NodeChannelState;
+  isPrivate: boolean;
+  isInitiator: boolean;
+  /** base routing fee in millisat */
+  baseFeeMsat?: number;
+  /** proportional routing fee in parts-per-million */
+  feeRatePpm?: number;
+  /** UTC ISO of opening event */
+  openedAt?: string | null;
+  /** UTC ISO of closing event (closed/force-closed channels) */
+  closedAt?: string | null;
+  closeKind?: "cooperative" | "force" | "breach" | null;
+  /** number of forwards routed through this channel in the snapshot window */
+  forwardCount?: number;
+  /** sats earned routing through this channel in the snapshot window */
+  earnedRoutingSat?: number;
+  /** current in-flight HTLC count on this channel */
+  htlcCount?: number;
+  /** UTC ISO of the last forward/payment that touched this channel */
+  lastActivityAt?: string | null;
+}
+
+export type NodeForwardStatus = "settled" | "failed" | "offered";
+
+export interface NodeForward {
+  id: string;
+  /** UTC ISO timestamp */
+  occurredAt: string;
+  inPeerAlias: string;
+  inShortChannelId?: string | null;
+  outPeerAlias: string;
+  outShortChannelId?: string | null;
+  /** incoming amount in millisat */
+  amountInMsat: number;
+  /** outgoing amount in millisat (amountInMsat - feeMsat for settled forwards) */
+  amountOutMsat: number;
+  /** earned routing fee in millisat */
+  feeMsat: number;
+  status: NodeForwardStatus;
+  failureReason?: string | null;
+}
+
+export interface NodeRoutingSnapshot {
+  /** "Last 30 days" etc. */
+  windowLabel: string;
+  routingRevenueSat: number;
+  paymentCostSat: number;
+  rebalanceCostSat: number;
+  onchainCostSat: number;
+  netProfitSat: number;
+  forwardCount: number;
+  paymentCount: number;
+  rebalanceCount: number;
+}
+
+export interface NodeSnapshot {
+  alias: string;
+  pubkey: string;
+  /** mainnet / testnet / signet / regtest */
+  network: string;
+  /** "v0.18.0" or similar */
+  implementationVersion?: string;
+  /** number of active peers */
+  peerCount: number;
+  blockHeight?: number;
+  /** sats sittable on-chain that the node owns */
+  onchainBalanceSat: number;
+  /** sum of localBalanceSat across active channels */
+  totalLocalBalanceSat: number;
+  /** sum of remoteBalanceSat across active channels */
+  totalRemoteBalanceSat: number;
+  /** sum of capacitySat across active channels */
+  totalCapacitySat: number;
+  channels: NodeChannel[];
+  /** appended for collapsed display; may be empty */
+  closedChannels?: NodeChannel[];
+  routing?: NodeRoutingSnapshot;
+  /** recent forwards routed through the node; newest first */
+  forwards?: NodeForward[];
 }
 
 export type TxType =
@@ -174,6 +278,267 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
       balance: 0.04821309,
       status: "synced",
       channels: 12,
+      node: {
+        alias: "kassiber-home",
+        pubkey:
+          "03f3c108ccd536b8526841f0a5c58212bb9e6584a1eb493080e7c1cc34f82dad71",
+        network: "mainnet",
+        implementationVersion: "Core Lightning v24.11",
+        peerCount: 18,
+        blockHeight: 884_212,
+        onchainBalanceSat: 1_205_000,
+        totalLocalBalanceSat: 2_812_309,
+        totalRemoteBalanceSat: 2_010_000,
+        totalCapacitySat: 4_822_309,
+        channels: [
+          {
+            id: "ch1",
+            shortChannelId: "884011x412x0",
+            fundingOutpoint:
+              "8a9c4e7b6f5a3d2c1e0f9988776655443322110099aabbccddeeff0011223344:0",
+            peerAlias: "ACINQ",
+            peerPubkey:
+              "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+            capacitySat: 2_000_000,
+            localBalanceSat: 1_312_500,
+            remoteBalanceSat: 687_500,
+            state: "active",
+            isPrivate: false,
+            isInitiator: true,
+            baseFeeMsat: 1_000,
+            feeRatePpm: 250,
+            openedAt: "2025-09-21T14:22:11Z",
+            forwardCount: 142,
+            earnedRoutingSat: 11_240,
+            htlcCount: 2,
+            lastActivityAt: "2026-05-18T07:42:18Z",
+          },
+          {
+            id: "ch2",
+            shortChannelId: "884088x77x1",
+            fundingOutpoint:
+              "7f6e5d4c3b2a1908ffeeddccbbaa9988776655443322110099aabbccddeeff00:1",
+            peerAlias: "Boltz",
+            peerPubkey:
+              "026165850492521f4ac8abd9bd8088123446d126f648ca35e60f88177dc149ceb2",
+            capacitySat: 1_500_000,
+            localBalanceSat: 925_000,
+            remoteBalanceSat: 575_000,
+            state: "active",
+            isPrivate: false,
+            isInitiator: true,
+            baseFeeMsat: 0,
+            feeRatePpm: 100,
+            openedAt: "2025-10-04T09:14:00Z",
+            forwardCount: 96,
+            earnedRoutingSat: 4_812,
+            htlcCount: 0,
+            lastActivityAt: "2026-05-18T06:11:02Z",
+          },
+          {
+            id: "ch3",
+            shortChannelId: "884150x18x0",
+            fundingOutpoint:
+              "6e5d4c3b2a190877665544332211ffeeddccbbaa00998877665544332211aabb:0",
+            peerAlias: "WalletOfSatoshi.com",
+            peerPubkey:
+              "035e4ff418fc8b5554c5d9eea66396c227bd429a3251c8cbc711002ba215bfc226",
+            capacitySat: 800_000,
+            localBalanceSat: 312_000,
+            remoteBalanceSat: 488_000,
+            state: "active",
+            isPrivate: false,
+            isInitiator: false,
+            baseFeeMsat: 1_000,
+            feeRatePpm: 200,
+            openedAt: "2025-11-12T18:42:30Z",
+            forwardCount: 38,
+            earnedRoutingSat: 1_204,
+            htlcCount: 1,
+            lastActivityAt: "2026-05-17T22:30:00Z",
+          },
+          {
+            id: "ch4",
+            shortChannelId: "884188x42x2",
+            fundingOutpoint:
+              "5d4c3b2a190877665544332211ffeeddccbbaa00998877665544332211aabbcc:2",
+            peerAlias: "LNBig.com [lnd-22]",
+            peerPubkey:
+              "0298f6074a454a1f5345cb2a7c6f9fce206cd0bf675d177cdbf0ca7508dd28852d",
+            capacitySat: 522_309,
+            localBalanceSat: 262_809,
+            remoteBalanceSat: 259_500,
+            state: "inactive",
+            isPrivate: false,
+            isInitiator: true,
+            baseFeeMsat: 1_000,
+            feeRatePpm: 300,
+            openedAt: "2025-12-02T11:09:00Z",
+            forwardCount: 12,
+            earnedRoutingSat: 420,
+            htlcCount: 0,
+            lastActivityAt: "2026-05-11T14:08:42Z",
+          },
+          {
+            id: "ch5",
+            shortChannelId: null,
+            fundingOutpoint:
+              "4c3b2a190877665544332211ffeeddccbbaa00998877665544332211aabbccdd:0",
+            peerAlias: "Bitrefill",
+            peerPubkey:
+              "030c3f19d742ca294a55c00376b3b355c3c90d61c6b6b39554dbc7ac19b141c14f",
+            capacitySat: 500_000,
+            localBalanceSat: 500_000,
+            remoteBalanceSat: 0,
+            state: "pending_open",
+            isPrivate: true,
+            isInitiator: true,
+            openedAt: "2026-04-18T12:14:00Z",
+            forwardCount: 0,
+            earnedRoutingSat: 0,
+          },
+        ],
+        closedChannels: [
+          {
+            id: "ch_closed_1",
+            shortChannelId: "883102x88x0",
+            fundingOutpoint:
+              "3b2a190877665544332211ffeeddccbbaa00998877665544332211aabbccddee:0",
+            peerAlias: "old peer (alias unknown)",
+            peerPubkey:
+              "02d8f3b6d3a4be2bdc6e0a7c45ed6cc8c39ce14b5c14ba38eb1f0ad0a2b3c4d5e6",
+            capacitySat: 1_000_000,
+            localBalanceSat: 0,
+            remoteBalanceSat: 0,
+            state: "closed",
+            isPrivate: false,
+            isInitiator: true,
+            openedAt: "2025-04-09T08:00:00Z",
+            closedAt: "2026-01-21T11:08:00Z",
+            closeKind: "cooperative",
+            forwardCount: 0,
+            earnedRoutingSat: 0,
+          },
+          {
+            id: "ch_closed_2",
+            shortChannelId: "882011x12x1",
+            fundingOutpoint:
+              "2a190877665544332211ffeeddccbbaa00998877665544332211aabbccddeeff:1",
+            peerAlias: "neighbor.node",
+            peerPubkey:
+              "021a2b3c4d5e6f70819293a4b5c6d7e8f90011223344556677889900aabbccdd1e",
+            capacitySat: 750_000,
+            localBalanceSat: 0,
+            remoteBalanceSat: 0,
+            state: "force_closed",
+            isPrivate: false,
+            isInitiator: false,
+            openedAt: "2025-03-14T07:00:00Z",
+            closedAt: "2025-12-04T22:42:00Z",
+            closeKind: "force",
+            forwardCount: 0,
+            earnedRoutingSat: 0,
+          },
+        ],
+        routing: {
+          windowLabel: "Last 30 days",
+          routingRevenueSat: 17_676,
+          paymentCostSat: 1_412,
+          rebalanceCostSat: 880,
+          onchainCostSat: 4_210,
+          netProfitSat: 11_174,
+          forwardCount: 288,
+          paymentCount: 41,
+          rebalanceCount: 4,
+        },
+        forwards: [
+          {
+            id: "fw_cln_1",
+            occurredAt: "2026-05-18T07:42:18Z",
+            inPeerAlias: "ACINQ",
+            inShortChannelId: "884011x412x0",
+            outPeerAlias: "Boltz",
+            outShortChannelId: "884088x77x1",
+            amountInMsat: 240_120_000,
+            amountOutMsat: 240_000_000,
+            feeMsat: 120_000,
+            status: "settled",
+          },
+          {
+            id: "fw_cln_2",
+            occurredAt: "2026-05-18T06:11:02Z",
+            inPeerAlias: "WalletOfSatoshi.com",
+            inShortChannelId: "884150x18x0",
+            outPeerAlias: "ACINQ",
+            outShortChannelId: "884011x412x0",
+            amountInMsat: 18_540_000,
+            amountOutMsat: 18_500_000,
+            feeMsat: 40_000,
+            status: "settled",
+          },
+          {
+            id: "fw_cln_3",
+            occurredAt: "2026-05-17T22:30:00Z",
+            inPeerAlias: "Boltz",
+            inShortChannelId: "884088x77x1",
+            outPeerAlias: "WalletOfSatoshi.com",
+            outShortChannelId: "884150x18x0",
+            amountInMsat: 95_220_000,
+            amountOutMsat: 95_200_000,
+            feeMsat: 20_000,
+            status: "settled",
+          },
+          {
+            id: "fw_cln_4",
+            occurredAt: "2026-05-17T19:08:44Z",
+            inPeerAlias: "ACINQ",
+            inShortChannelId: "884011x412x0",
+            outPeerAlias: "LNBig.com [lnd-22]",
+            outShortChannelId: "884188x42x2",
+            amountInMsat: 412_000_000,
+            amountOutMsat: 0,
+            feeMsat: 0,
+            status: "failed",
+            failureReason: "TEMPORARY_CHANNEL_FAILURE",
+          },
+          {
+            id: "fw_cln_5",
+            occurredAt: "2026-05-17T15:22:12Z",
+            inPeerAlias: "Boltz",
+            inShortChannelId: "884088x77x1",
+            outPeerAlias: "ACINQ",
+            outShortChannelId: "884011x412x0",
+            amountInMsat: 1_204_500_000,
+            amountOutMsat: 1_204_000_000,
+            feeMsat: 500_000,
+            status: "settled",
+          },
+          {
+            id: "fw_cln_6",
+            occurredAt: "2026-05-17T11:04:18Z",
+            inPeerAlias: "WalletOfSatoshi.com",
+            inShortChannelId: "884150x18x0",
+            outPeerAlias: "Boltz",
+            outShortChannelId: "884088x77x1",
+            amountInMsat: 6_180_000,
+            amountOutMsat: 6_180_000,
+            feeMsat: 0,
+            status: "offered",
+          },
+          {
+            id: "fw_cln_7",
+            occurredAt: "2026-05-16T20:48:00Z",
+            inPeerAlias: "ACINQ",
+            inShortChannelId: "884011x412x0",
+            outPeerAlias: "Boltz",
+            outShortChannelId: "884088x77x1",
+            amountInMsat: 82_330_000,
+            amountOutMsat: 82_300_000,
+            feeMsat: 30_000,
+            status: "settled",
+          },
+        ],
+      },
     },
     {
       id: "c4",
@@ -182,6 +547,171 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
       last: "1h ago",
       balance: 0.00213500,
       status: "idle",
+    },
+    {
+      id: "c6",
+      kind: "lnd",
+      label: "Routing Node (LND)",
+      last: "44s ago",
+      balance: 0.02914872,
+      status: "syncing",
+      channels: 7,
+      node: {
+        alias: "kassiber-routing",
+        pubkey:
+          "02a14b7c5d9e0f1234567890abcdef00112233445566778899aabbccddeeff0011",
+        network: "mainnet",
+        implementationVersion: "lnd 0.18.4-beta",
+        peerCount: 11,
+        blockHeight: 884_209,
+        onchainBalanceSat: 612_500,
+        totalLocalBalanceSat: 1_840_000,
+        totalRemoteBalanceSat: 1_460_372,
+        totalCapacitySat: 3_300_372,
+        channels: [
+          {
+            id: "lch1",
+            shortChannelId: "884099x501x0",
+            fundingOutpoint:
+              "1f2e3d4c5b6a798877665544332211ffeeddccbbaa00998877665544332211aa:0",
+            peerAlias: "deezy.io",
+            peerPubkey:
+              "024bfaf0cabe7f874fd33ebf7c6f4e5d3c2b1a09081726354455667788990011aa",
+            capacitySat: 1_500_000,
+            localBalanceSat: 940_000,
+            remoteBalanceSat: 560_000,
+            state: "active",
+            isPrivate: false,
+            isInitiator: true,
+            baseFeeMsat: 1_000,
+            feeRatePpm: 150,
+            openedAt: "2025-08-30T13:14:00Z",
+            forwardCount: 204,
+            earnedRoutingSat: 8_122,
+            htlcCount: 3,
+            lastActivityAt: "2026-05-18T08:01:09Z",
+          },
+          {
+            id: "lch2",
+            shortChannelId: "884121x18x2",
+            fundingOutpoint:
+              "2e3d4c5b6a798877665544332211ffeeddccbbaa00998877665544332211aabb:2",
+            peerAlias: "Voltage Cloud",
+            peerPubkey:
+              "030115273849af5d6c7e8f90112233445566778899aabbccddeeff0011223344cc",
+            capacitySat: 1_000_000,
+            localBalanceSat: 612_000,
+            remoteBalanceSat: 388_000,
+            state: "active",
+            isPrivate: false,
+            isInitiator: true,
+            baseFeeMsat: 1_000,
+            feeRatePpm: 200,
+            openedAt: "2025-09-18T08:00:00Z",
+            forwardCount: 118,
+            earnedRoutingSat: 3_902,
+            htlcCount: 1,
+            lastActivityAt: "2026-05-18T07:11:42Z",
+          },
+          {
+            id: "lch3",
+            shortChannelId: "884170x77x1",
+            fundingOutpoint:
+              "3d4c5b6a798877665544332211ffeeddccbbaa00998877665544332211aabbcc:1",
+            peerAlias: "Olympus by ZEUS",
+            peerPubkey:
+              "0312345678abcdef0123456789abcdef00112233445566778899aabbccddeeff22",
+            capacitySat: 800_372,
+            localBalanceSat: 288_000,
+            remoteBalanceSat: 512_372,
+            state: "active",
+            isPrivate: true,
+            isInitiator: false,
+            baseFeeMsat: 1_000,
+            feeRatePpm: 350,
+            openedAt: "2025-11-04T21:30:00Z",
+            forwardCount: 51,
+            earnedRoutingSat: 1_840,
+            htlcCount: 0,
+            lastActivityAt: "2026-05-17T18:50:21Z",
+          },
+        ],
+        closedChannels: [],
+        routing: {
+          windowLabel: "Last 30 days",
+          routingRevenueSat: 13_864,
+          paymentCostSat: 942,
+          rebalanceCostSat: 1_204,
+          onchainCostSat: 2_180,
+          netProfitSat: 9_538,
+          forwardCount: 372,
+          paymentCount: 28,
+          rebalanceCount: 6,
+        },
+        forwards: [
+          {
+            id: "fw_lnd_1",
+            occurredAt: "2026-05-18T08:01:09Z",
+            inPeerAlias: "deezy.io",
+            inShortChannelId: "884099x501x0",
+            outPeerAlias: "Voltage Cloud",
+            outShortChannelId: "884121x18x2",
+            amountInMsat: 320_080_000,
+            amountOutMsat: 320_000_000,
+            feeMsat: 80_000,
+            status: "settled",
+          },
+          {
+            id: "fw_lnd_2",
+            occurredAt: "2026-05-18T07:11:42Z",
+            inPeerAlias: "Voltage Cloud",
+            inShortChannelId: "884121x18x2",
+            outPeerAlias: "Olympus by ZEUS",
+            outShortChannelId: "884170x77x1",
+            amountInMsat: 142_350_000,
+            amountOutMsat: 142_300_000,
+            feeMsat: 50_000,
+            status: "settled",
+          },
+          {
+            id: "fw_lnd_3",
+            occurredAt: "2026-05-17T18:50:21Z",
+            inPeerAlias: "deezy.io",
+            inShortChannelId: "884099x501x0",
+            outPeerAlias: "Olympus by ZEUS",
+            outShortChannelId: "884170x77x1",
+            amountInMsat: 50_280_000,
+            amountOutMsat: 50_250_000,
+            feeMsat: 30_000,
+            status: "settled",
+          },
+          {
+            id: "fw_lnd_4",
+            occurredAt: "2026-05-17T14:08:00Z",
+            inPeerAlias: "Olympus by ZEUS",
+            inShortChannelId: "884170x77x1",
+            outPeerAlias: "deezy.io",
+            outShortChannelId: "884099x501x0",
+            amountInMsat: 9_180_000,
+            amountOutMsat: 0,
+            feeMsat: 0,
+            status: "failed",
+            failureReason: "INSUFFICIENT_BALANCE",
+          },
+          {
+            id: "fw_lnd_5",
+            occurredAt: "2026-05-16T22:30:12Z",
+            inPeerAlias: "Voltage Cloud",
+            inShortChannelId: "884121x18x2",
+            outPeerAlias: "deezy.io",
+            outShortChannelId: "884099x501x0",
+            amountInMsat: 612_400_000,
+            amountOutMsat: 612_300_000,
+            feeMsat: 100_000,
+            status: "settled",
+          },
+        ],
+      },
     },
     {
       id: "c5",

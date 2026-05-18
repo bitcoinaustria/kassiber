@@ -26,6 +26,7 @@ import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { ConnectionStatusPill } from "@/components/kb/ConnectionStatusPill";
 import { DetailRow } from "@/components/kb/DetailRow";
 import { MetricCard } from "@/components/kb/MetricCard";
+import { NodeConnectionDetail } from "./NodeConnectionDetail";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -85,7 +86,16 @@ import {
 import { detectWalletMaterial } from "@/lib/walletMaterialFormat";
 import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
-import type { Connection, OverviewSnapshot } from "@/mocks/seed";
+import type { Connection, ConnectionKind, OverviewSnapshot } from "@/mocks/seed";
+
+const NODE_CONNECTION_KINDS: ReadonlySet<ConnectionKind> = new Set([
+  "lnd",
+  "core-ln",
+  "nwc",
+]);
+
+const isNodeConnection = (kind: ConnectionKind) =>
+  NODE_CONNECTION_KINDS.has(kind);
 
 const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
@@ -208,12 +218,152 @@ export function ConnectionDetail() {
     );
   }
 
+  if (isNodeConnection(connection.kind)) {
+    return (
+      <NodeConnectionContainer
+        connection={connection}
+        priceEur={snapshot.priceEur}
+        hideSensitive={hideSensitive}
+      />
+    );
+  }
+
   return (
     <ConnectionDetailView
       connection={connection}
       priceEur={snapshot.priceEur}
       txs={snapshot.txs}
       hideSensitive={hideSensitive}
+    />
+  );
+}
+
+interface NodeConnectionContainerProps {
+  connection: Connection;
+  priceEur: number;
+  hideSensitive: boolean;
+}
+
+function NodeConnectionContainer({
+  connection,
+  priceEur,
+  hideSensitive,
+}: NodeConnectionContainerProps) {
+  const queryClient = useQueryClient();
+  const dataMode = useUiStore((state) => state.dataMode);
+  const addNotification = useUiStore((state) => state.addNotification);
+  const updateNotification = useUiStore((state) => state.updateNotification);
+  const syncNoticeIdRef = useRef<string | null>(null);
+  const progressValueRef = useRef(startingSyncProgress().value ?? 5);
+  const walletSyncMutationKey = daemonMutationKey(dataMode, "ui.wallets.sync");
+  const walletSyncsInFlight = useIsMutating({
+    mutationKey: walletSyncMutationKey,
+  });
+  const syncWallet = useDaemonStreamMutation<
+    { results: SyncResult[] },
+    WalletSyncProgress
+  >("ui.wallets.sync", {
+    onProgress: (record) => {
+      if (!syncNoticeIdRef.current) return;
+      const wallet = record.wallet ?? connection.label;
+      const nextProgress = syncProgressNotification(
+        { ...record, wallet },
+        progressValueRef.current,
+      );
+      progressValueRef.current = nextProgress.value;
+      updateNotification(syncNoticeIdRef.current, {
+        body: nextProgress.body,
+        progress: nextProgress.progress,
+      });
+    },
+  });
+  const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
+
+  const isSyncRunning =
+    syncWallet.isPending ||
+    walletSyncsInFlight > 0 ||
+    connection.status === "syncing";
+
+  const onSync = () => {
+    if (
+      syncWallet.isPending ||
+      queryClient.isMutating({ mutationKey: walletSyncMutationKey }) > 0
+    ) {
+      addNotification({
+        title: "Node refresh already running",
+        body: `${connection.label} is already scanning. Kassiber will update this page when the daemon finishes.`,
+        tone: "info",
+        dedupeKey: "wallet-sync",
+      });
+      return;
+    }
+    progressValueRef.current = startingSyncProgress().value ?? 5;
+    syncNoticeIdRef.current = addNotification({
+      title: "Node refresh started",
+      body: `${connection.label} is fetching channel and routing data in read-only mode.`,
+      tone: "warning",
+      dedupeKey: "wallet-sync",
+      progress: startingSyncProgress(),
+    });
+    startSyncNotice(
+      `${connection.label} is still scanning. Large channel histories can take a moment; Kassiber will update when the daemon returns.`,
+    );
+    syncWallet.mutate(
+      { wallet: connection.label },
+      {
+        onSuccess: (envelope) => {
+          const result = envelope.data?.results?.find(
+            (item) => item.wallet === connection.label,
+          );
+          const status = result?.status ?? "synced";
+          const message = describeWalletSyncResult(result, connection.label);
+          const notification = {
+            title:
+              status === "error"
+                ? "Node refresh failed"
+                : "Node refresh finished",
+            body: message,
+            tone: status === "error" ? "error" : "success",
+            dedupeKey: "wallet-sync",
+            progress: undefined,
+          } as const;
+          if (syncNoticeIdRef.current) {
+            updateNotification(syncNoticeIdRef.current, notification);
+          } else {
+            addNotification(notification);
+          }
+        },
+        onError: (error) => {
+          const message =
+            error instanceof Error ? error.message : "Node refresh failed.";
+          const notification = {
+            title: "Node refresh failed",
+            body: message,
+            tone: "error",
+            dedupeKey: "wallet-sync",
+            progress: undefined,
+          } as const;
+          if (syncNoticeIdRef.current) {
+            updateNotification(syncNoticeIdRef.current, notification);
+          } else {
+            addNotification(notification);
+          }
+        },
+        onSettled: () => {
+          clearSyncNotice();
+          syncNoticeIdRef.current = null;
+        },
+      },
+    );
+  };
+
+  return (
+    <NodeConnectionDetail
+      connection={connection}
+      priceEur={priceEur}
+      hideSensitive={hideSensitive}
+      onSync={onSync}
+      isSyncRunning={isSyncRunning}
     />
   );
 }
