@@ -398,6 +398,13 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 
 ## Later backlog
 
+- [ ] Split `TransactionDetailSheet.tsx` tab bodies into siblings —
+  the main component is ~1600 lines because the six tab panels live
+  inline. Extract `TabDetails`, `TabClassify`, `TabPricing`, `TabTax`,
+  `TabLinked`, `TabLedger` (and the right-rail children) into their
+  own files; pass `localDraft`, `updateDraft`, `transaction`,
+  `hideSensitive`, `currency`, dirty flags as props. Should land the
+  main file under ~800 lines without changing behavior.
 - [ ] Extend `ui.transactions.metadata.update` to accept tax handling and
   pricing fields — currently allowed args are only
   `{transaction, note, tags, excluded}`. The desktop detail sheet (`Tax`

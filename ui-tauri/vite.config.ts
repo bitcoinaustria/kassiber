@@ -476,12 +476,15 @@ function normalizeFilePickerFilters(filters: unknown) {
     .filter((extension, index, all) => all.indexOf(extension) === index);
 }
 
-async function pickFileViaNativeBridge(request: Record<string, unknown>) {
+async function pickFileViaNativeBridge(
+  request: Record<string, unknown>,
+): Promise<string[]> {
   const title =
     typeof request.title === "string" && request.title.trim()
       ? request.title.trim()
       : "Choose a file";
   const directory = request.directory === true;
+  const multiple = request.multiple === true;
   if (process.platform === "darwin") {
     const prompt = appleScriptString(title);
     const script = directory
@@ -491,18 +494,37 @@ async function pickFileViaNativeBridge(request: Record<string, unknown>) {
           const ofType = extensions.length
             ? ` of type {${extensions.map(appleScriptString).join(", ")}}`
             : "";
+          if (multiple) {
+            // Emit one POSIX path per line so we can split on the client.
+            return `set theChoices to (choose file with prompt ${prompt}${ofType} with multiple selections allowed)
+set thePaths to {}
+repeat with anItem in theChoices
+  set end of thePaths to POSIX path of anItem
+end repeat
+set AppleScript's text item delimiters to linefeed
+return thePaths as text`;
+          }
           return `POSIX path of (choose file with prompt ${prompt}${ofType})`;
         })();
-    return execFileText("osascript", ["-e", script]);
+    const raw = await execFileText("osascript", ["-e", script]);
+    return raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
   }
 
   const zenityArgs = [
     "--file-selection",
     ...(directory ? ["--directory"] : []),
+    ...(multiple ? ["--multiple", "--separator=\n"] : []),
     `--title=${title}`,
   ];
   try {
-    return await execFileText("zenity", zenityArgs);
+    const raw = await execFileText("zenity", zenityArgs);
+    return raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
   } catch {
     throw new Error("No supported native file picker is available for the dev bridge.");
   }
@@ -550,15 +572,29 @@ async function handleBridgeFilePicker(req: IncomingMessage, res: ServerResponse)
   }
 
   try {
-    const path = await pickFileViaNativeBridge(request);
-    writeJson(res, 200, { path: path || null });
+    const paths = await pickFileViaNativeBridge(request);
+    if (request.multiple === true) {
+      writeJson(res, 200, { paths });
+    } else {
+      writeJson(res, 200, { path: paths[0] ?? null });
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const cancelled =
       /user canceled/i.test(message) ||
       /User cancelled/i.test(message) ||
       /cancel/i.test(message);
-    writeJson(res, 200, cancelled ? { path: null } : { path: null, error: message });
+    if (cancelled) {
+      writeJson(res, 200, request.multiple === true ? { paths: [] } : { path: null });
+    } else {
+      writeJson(
+        res,
+        200,
+        request.multiple === true
+          ? { paths: [], error: message }
+          : { path: null, error: message },
+      );
+    }
   }
 }
 

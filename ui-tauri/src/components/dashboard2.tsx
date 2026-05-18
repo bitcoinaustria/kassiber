@@ -3585,10 +3585,22 @@ const TransactionsTable = ({
         onAddAttachmentFiles={async (paths) => {
           // TODO(attachments): wire to ui.attachments.add when daemon kind lands.
           console.info("[attachments] add files (stub):", paths);
+          useUiStore.getState().addNotification({
+            title: "Attachments not wired yet",
+            body: `Selected ${paths.length} file${paths.length === 1 ? "" : "s"}, but the daemon kind that saves attachments isn't shipping in this build yet (see TODO.md).`,
+            tone: "info",
+            dedupeKey: "attachments-stub",
+          });
         }}
         onAddAttachmentLinks={async (urls) => {
           // TODO(attachments): wire to ui.attachments.add when daemon kind lands.
           console.info("[attachments] add links (stub):", urls);
+          useUiStore.getState().addNotification({
+            title: "Attachments not wired yet",
+            body: `Entered ${urls.length} link${urls.length === 1 ? "" : "s"}, but the daemon kind that saves attachments isn't shipping in this build yet (see TODO.md).`,
+            tone: "info",
+            dedupeKey: "attachments-stub",
+          });
         }}
         hasNext={
           detailTransaction

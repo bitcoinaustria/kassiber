@@ -629,7 +629,11 @@ function AttachLinksDialog({
     for (const line of lines) {
       try {
         const u = new URL(line);
-        if (!u.protocol.startsWith("http") && u.protocol !== "ipfs:") {
+        if (
+          u.protocol !== "http:" &&
+          u.protocol !== "https:" &&
+          u.protocol !== "ipfs:"
+        ) {
           errors.push(`${line} — must start with http://, https://, or ipfs://`);
           continue;
         }
@@ -758,16 +762,22 @@ function AttachmentsPanel({
   const wired = Boolean(onAddFiles || onAddLinks);
   const filePickerEnabled = Boolean(onAddFiles) && isFilePickerAvailable;
 
+  const [pickerError, setPickerError] = React.useState<string | null>(null);
   const handlePickFiles = async () => {
     if (!onAddFiles) return;
+    setPickerError(null);
     setPickerBusy(true);
     try {
       const paths = await pickFiles({
         title: "Attach files to this transaction",
       });
-      if (paths && paths.length) {
+      if (paths.length) {
         await onAddFiles(paths);
       }
+    } catch (err) {
+      setPickerError(
+        err instanceof Error ? err.message : "Could not open file picker.",
+      );
     } finally {
       setPickerBusy(false);
     }
@@ -851,6 +861,14 @@ function AttachmentsPanel({
           stay as references.
         </p>
       )}
+      {pickerError ? (
+        <p
+          role="alert"
+          className="mb-2 text-xs text-destructive"
+        >
+          {pickerError}
+        </p>
+      ) : null}
       <div className="grid grid-cols-2 gap-1.5">
         <Button
           type="button"

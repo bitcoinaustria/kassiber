@@ -1250,6 +1250,7 @@ function ActivityScatterDot({
   payload,
   activeSeries,
 }: ActivityScatterDotProps) {
+  const navigate = useNavigate();
   if (
     typeof cx !== "number" ||
     typeof cy !== "number" ||
@@ -1258,7 +1259,6 @@ function ActivityScatterDot({
     return null;
   }
 
-  const navigate = useNavigate();
   const normalizedSize = typeof size === "number" ? size : 80;
   const radius = Math.max(3, Math.sqrt(normalizedSize / Math.PI));
   const transactionId = payload.eventTransactionId ?? payload.eventId;
