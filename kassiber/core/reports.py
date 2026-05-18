@@ -68,6 +68,19 @@ AUSTRIAN_E1KV_CATEGORY_LABELS = {
     "alt_spekulation": "Altbestand innerhalb Spekulationsfrist",
     "alt_taxfree": "Altbestand ausserhalb Spekulationsfrist",
 }
+_TAX_SUMMARY_INCOME_TRANSACTION_TYPE_BY_KIND = {
+    "airdrop": "airdrop",
+    "hard_fork": "hardfork",
+    "hardfork": "hardfork",
+    "income": "income",
+    "interest": "interest",
+    "lending_interest": "interest",
+    "mining": "mining",
+    "mining_reward": "mining",
+    "routing_income": "income",
+    "staking": "staking",
+    "wages": "wages",
+}
 AUSTRIAN_TAX_SECTION_ORDER = (
     "1.1",
     "1.2",
@@ -1851,6 +1864,8 @@ def _non_reportable_tax_summary_adjustments(conn, profile_id):
         """
         SELECT substr(je.occurred_at, 1, 4) AS year,
                je.asset,
+               je.entry_type,
+               t.kind AS transaction_kind,
                SUM(ABS(je.quantity)) AS quantity_msat,
                SUM(COALESCE(je.proceeds, 0)) AS proceeds,
                SUM(COALESCE(je.cost_basis, 0)) AS cost_basis,
@@ -1858,12 +1873,14 @@ def _non_reportable_tax_summary_adjustments(conn, profile_id):
         FROM journal_entries je
         LEFT JOIN transactions t ON t.id = je.transaction_id
         WHERE je.profile_id = ?
-          AND je.entry_type = 'disposal'
           AND (
-            je.at_category = 'neu_swap'
-            OR COALESCE(t.taxability_override, 1) = 0
+            (je.entry_type = 'disposal' AND je.at_category = 'neu_swap')
+            OR (
+              COALESCE(t.taxability_override, 1) = 0
+              AND je.entry_type IN ('disposal', 'income')
+            )
           )
-        GROUP BY substr(je.occurred_at, 1, 4), je.asset
+        GROUP BY substr(je.occurred_at, 1, 4), je.asset, je.entry_type, t.kind
         """,
         (profile_id,),
     ).fetchall()
@@ -1874,7 +1891,14 @@ def _non_reportable_tax_summary_adjustments(conn, profile_id):
         if not year.isdigit() or not asset:
             continue
         quantity_msat = int(row["quantity_msat"] or 0)
-        adjustments[(int(year), asset, "sell")] = {
+        if row["entry_type"] == "income":
+            transaction_type = _TAX_SUMMARY_INCOME_TRANSACTION_TYPE_BY_KIND.get(
+                str(row["transaction_kind"] or "").strip().lower(),
+                "income",
+            )
+        else:
+            transaction_type = "sell"
+        adjustments[(int(year), asset, transaction_type)] = {
             "quantity": msat_to_btc(quantity_msat),
             "quantity_msat": quantity_msat,
             "proceeds": dec(row["proceeds"]),

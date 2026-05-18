@@ -401,6 +401,35 @@ def _seed_austrian_hodl_disposal(data_root, tmp_root):
     _run_cli(data_root, "wallets", "import-csv", "--wallet", "Cold", "--file", str(csv_path))
 
 
+def _seed_austrian_income_receipt(data_root, tmp_root):
+    csv_path = Path(tmp_root) / "income-receipt.csv"
+    csv_path.write_text(
+        "\n".join(
+            [
+                "date,txid,direction,asset,amount,fee,fiat_rate,kind,description",
+                "2026-01-01T10:00:00Z,staking-reward-1,inbound,BTC,0.00100000,0,40000,staking,Staking reward",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    _run_cli(data_root, "init")
+    _run_cli(data_root, "workspaces", "create", "Demo")
+    _run_cli(data_root, "profiles", "create", "Main", "--fiat-currency", "EUR", "--tax-country", "at")
+    _run_cli(
+        data_root,
+        "wallets",
+        "create",
+        "--label",
+        "Income",
+        "--kind",
+        "address",
+        "--address",
+        "bc1qtestincome000000000000000000000000000000",
+    )
+    _run_cli(data_root, "wallets", "import-csv", "--wallet", "Income", "--file", str(csv_path))
+
+
 def _seed_workspace_with_unpriced_transaction(data_root, tmp_root):
     csv_path = Path(tmp_root) / "unpriced.csv"
     csv_path.write_text(
@@ -4638,6 +4667,103 @@ class DaemonSmokeTest(unittest.TestCase):
             taxable_summary = _read_payload_timeout(proc)
             self.assertEqual(taxable_summary["kind"], "ui.reports.tax_summary")
             self.assertGreater(len(taxable_summary["data"]["rows"]), 0)
+
+            _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
+
+    def test_daemon_transaction_taxable_override_suppresses_income_tax_summary(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-income-taxable-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_austrian_income_receipt(data_root, tmp)
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "income-taxable-false-1",
+                    "kind": "ui.transactions.metadata.update",
+                    "args": {
+                        "transaction": "staking-reward-1",
+                        "taxable": False,
+                    },
+                },
+            )
+            saved = _read_payload_timeout(proc)
+            self.assertEqual(saved["kind"], "ui.transactions.metadata.update")
+            self.assertFalse(saved["data"]["taxable"])
+
+            _write_payload(proc, {"request_id": "process-income-1", "kind": "ui.journals.process"})
+            processed = _read_payload_timeout(proc)
+            self.assertEqual(processed["kind"], "ui.journals.process")
+            self.assertEqual(processed["data"]["processed_transactions"], 1)
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "income-events-nontaxable-1",
+                    "kind": "ui.journals.events.list",
+                    "args": {"transaction": "staking-reward-1", "limit": 5},
+                },
+            )
+            events = _read_payload_timeout(proc)
+            self.assertEqual(events["kind"], "ui.journals.events.list")
+            self.assertEqual(events["data"]["summary"]["reportableCount"], 0)
+            self.assertTrue(
+                any(event["entryType"] == "income" for event in events["data"]["events"])
+            )
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "income-tax-summary-nontaxable-1",
+                    "kind": "ui.reports.tax_summary",
+                    "args": {"year": 2026},
+                },
+            )
+            tax_summary = _read_payload_timeout(proc)
+            self.assertEqual(tax_summary["kind"], "ui.reports.tax_summary")
+            self.assertEqual(tax_summary["data"]["rows"], [])
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "income-taxable-true-1",
+                    "kind": "ui.transactions.metadata.update",
+                    "args": {
+                        "transaction": "staking-reward-1",
+                        "taxable": True,
+                    },
+                },
+            )
+            resaved = _read_payload_timeout(proc)
+            self.assertEqual(resaved["kind"], "ui.transactions.metadata.update")
+            self.assertTrue(resaved["data"]["taxable"])
+
+            _write_payload(proc, {"request_id": "process-income-2", "kind": "ui.journals.process"})
+            reprocessed = _read_payload_timeout(proc)
+            self.assertEqual(reprocessed["kind"], "ui.journals.process")
+            self.assertEqual(reprocessed["data"]["processed_transactions"], 1)
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "income-tax-summary-taxable-1",
+                    "kind": "ui.reports.tax_summary",
+                    "args": {"year": 2026},
+                },
+            )
+            taxable_summary = _read_payload_timeout(proc)
+            self.assertEqual(taxable_summary["kind"], "ui.reports.tax_summary")
+            self.assertTrue(
+                any(
+                    row["transaction_type"] == "staking"
+                    for row in taxable_summary["data"]["rows"]
+                )
+            )
 
             _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
             self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")

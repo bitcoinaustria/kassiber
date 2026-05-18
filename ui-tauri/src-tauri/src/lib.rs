@@ -134,6 +134,10 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.overview.snapshot",
     "ui.transactions.list",
     "ui.transactions.metadata.update",
+    "ui.attachments.list",
+    "ui.attachments.add",
+    "ui.attachments.remove",
+    "ui.attachments.open",
     "ui.wallets.list",
     "ui.backends.list",
     "ui.backends.options",
@@ -2595,6 +2599,24 @@ mod tests {
             "ui.saved_views.list",
             "ui.saved_views.create",
             "ui.saved_views.delete",
+        ];
+        for kind in required {
+            assert!(
+                ALLOWED_DAEMON_KINDS.contains(kind),
+                "daemon kind missing from Tauri allowlist: {kind}"
+            );
+        }
+    }
+
+    #[test]
+    fn transaction_attachment_daemon_kinds_are_in_allowlist() {
+        // TransactionDetailSheet routes attachment mutations through the
+        // daemon supervisor. Packaged desktop mode rejects any unlisted kind.
+        let required: &[&str] = &[
+            "ui.attachments.list",
+            "ui.attachments.add",
+            "ui.attachments.remove",
+            "ui.attachments.open",
         ];
         for kind in required {
             assert!(
