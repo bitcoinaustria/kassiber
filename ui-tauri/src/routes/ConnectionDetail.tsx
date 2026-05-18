@@ -5,7 +5,7 @@
  * Connections and Overview screens.
  */
 
-import { useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import {
@@ -13,17 +13,19 @@ import {
   ArrowLeft,
   ArrowLeftRight,
   ArrowUpRight,
-  Check,
-  Copy,
   Database,
-  KeyRound,
+  MoreHorizontal,
   Pencil,
+  Plus,
   RefreshCw,
   Trash2,
   Wallet,
 } from "lucide-react";
 
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
+import { ConnectionStatusPill } from "@/components/kb/ConnectionStatusPill";
+import { DetailRow } from "@/components/kb/DetailRow";
+import { MetricCard } from "@/components/kb/MetricCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,6 +43,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -61,7 +70,6 @@ import {
 import {
   connectionKindLabels,
   connectionKindTone,
-  connectionStatusStyles,
 } from "@/lib/connectionDisplay";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
@@ -596,40 +604,66 @@ function ConnectionDetailView({
               <Wallet className="size-4" />
             </span>
             <div className="min-w-0">
-              <div className="mb-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                <Badge variant="outline" className="rounded-md">
-                  {connectionKindLabels[connection.kind]}
-                </Badge>
-                <span
-                  className={cn(
-                    "inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium ring-1 ring-inset sm:text-xs",
-                    connectionStatusStyles[connection.status],
-                  )}
-                >
-                  {connection.status}
-                </span>
-              </div>
               <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">
                 {connection.label}
               </h1>
+              <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span className="truncate">
+                  {connectionKindLabels[connection.kind]}
+                </span>
+                {connection.status !== "synced" ? (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <ConnectionStatusPill status={connection.status} />
+                  </>
+                ) : null}
+              </div>
             </div>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="min-w-[7.5rem] self-start sm:self-center"
-            disabled={isWalletSyncRunning}
-            aria-busy={isWalletSyncRunning}
-            aria-label={`${refreshButtonLabel} ${connection.label}`}
-            onClick={onSync}
-          >
-            <RefreshCw
-              className={cn("size-4", isWalletSyncRunning && "animate-spin")}
-              aria-hidden="true"
-            />
-            <span>{refreshButtonLabel}</span>
-          </Button>
+          <div className="flex shrink-0 items-center gap-2 self-start sm:self-center">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-w-[7.5rem]"
+              disabled={isWalletSyncRunning}
+              aria-busy={isWalletSyncRunning}
+              aria-label={`${refreshButtonLabel} ${connection.label}`}
+              onClick={onSync}
+            >
+              <RefreshCw
+                className={cn("size-4", isWalletSyncRunning && "animate-spin")}
+                aria-hidden="true"
+              />
+              <span>{refreshButtonLabel}</span>
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  aria-label="More actions"
+                >
+                  <MoreHorizontal className="size-4" aria-hidden="true" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem onClick={openEditDialog}>
+                  <Pencil className="size-4" aria-hidden="true" />
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={openDeleteDialog}
+                >
+                  <Trash2 className="size-4" aria-hidden="true" />
+                  Remove
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </CardContent>
         {syncProgress && syncWallet.isPending ? (
           <div className="px-4 pt-3">
@@ -692,7 +726,7 @@ function ConnectionDetailView({
           label="Transactions"
           value={txCount.toLocaleString("en-US")}
           detail="Imported into this wallet"
-          icon={<KeyRound className="size-4" aria-hidden="true" />}
+          icon={<ArrowLeftRight className="size-4" aria-hidden="true" />}
         />
         <MetricCard
           label="Last sync"
@@ -775,8 +809,32 @@ function ConnectionDetailView({
                 ))}
               </div>
             ) : (
-              <div className="px-5 py-8 text-sm text-muted-foreground">
-                No recent transactions are attached to this wallet source.
+              <div className="flex flex-col items-start gap-3 px-5 py-8 text-sm text-muted-foreground">
+                <p>No transactions imported for this wallet yet.</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={isWalletSyncRunning}
+                    onClick={onSync}
+                  >
+                    <RefreshCw
+                      className={cn(
+                        "size-4",
+                        isWalletSyncRunning && "animate-spin",
+                      )}
+                      aria-hidden="true"
+                    />
+                    {isWalletSyncRunning ? "Refreshing" : "Refresh now"}
+                  </Button>
+                  <Button asChild type="button" variant="outline" size="sm">
+                    <Link to="/imports">
+                      <Plus className="size-4" aria-hidden="true" />
+                      Import file
+                    </Link>
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>
@@ -833,30 +891,6 @@ function ConnectionDetailView({
               <DetailRow label="Kassiber ID" value={connection.id} mono copy />
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader className="border-b px-4 pb-3">
-              <CardTitle className="text-sm sm:text-base">Connection actions</CardTitle>
-              <CardDescription>
-                Changing or removing a wallet source requires local confirmation.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2 px-4 pt-4">
-              <Button type="button" variant="outline" onClick={openEditDialog}>
-                <Pencil className="size-4" aria-hidden="true" />
-                Edit
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={openDeleteDialog}
-              >
-                <Trash2 className="size-4" aria-hidden="true" />
-                Remove
-              </Button>
-            </CardContent>
-          </Card>
-
         </div>
       </div>
 
@@ -1184,19 +1218,24 @@ function ConnectionTransactionRow({
         <Icon className="size-4" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <span className="truncate text-sm font-medium">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="min-w-0 flex-1 truncate text-sm font-medium">
             {tx.counter || tx.type}
           </span>
-          <Badge variant="outline" className="rounded-md">
+          <Badge variant="outline" className="rounded-md whitespace-nowrap">
             {tx.type}
           </Badge>
-          <Badge variant="outline" className="rounded-md">
-            {tx.conf > 0 ? "Confirmed" : "Pending"}
-          </Badge>
+          {tx.conf > 0 ? null : (
+            <Badge
+              variant="outline"
+              className="rounded-md whitespace-nowrap text-amber-700 ring-amber-600/20 dark:text-amber-300"
+            >
+              Pending
+            </Badge>
+          )}
         </span>
-        <span className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground sm:text-xs">
-          <span>{tx.date}</span>
+        <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground sm:text-xs">
+          <span className="shrink-0">{tx.date}</span>
           <span aria-hidden="true">·</span>
           <span className={cn("truncate font-mono", blurClass(hideSensitive))}>
             {fmtShortTxid(tx.externalId ?? tx.id)}
@@ -1230,89 +1269,3 @@ function ConnectionTransactionRow({
   );
 }
 
-interface MetricCardProps {
-  label: string;
-  value: ReactNode;
-  detail: string;
-  icon: ReactNode;
-}
-
-function MetricCard({ label, value, detail, icon }: MetricCardProps) {
-  return (
-    <Card className="gap-2.5 rounded-xl py-4">
-      <CardContent className="space-y-2 px-4">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          {icon}
-          <span className="text-xs font-medium">{label}</span>
-        </div>
-        <p className="text-xl font-semibold tracking-tight tabular-nums">
-          {value}
-        </p>
-        <p className="text-xs text-muted-foreground">{detail}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-interface DetailRowProps {
-  label: string;
-  value: ReactNode;
-  mono?: boolean;
-  copy?: boolean;
-}
-
-function DetailRow({ label, value, mono, copy }: DetailRowProps) {
-  return (
-    <div className="grid gap-1">
-      <div className="text-xs font-medium text-muted-foreground">{label}</div>
-      <div className="flex min-w-0 items-center gap-2">
-        <div
-          className={cn(
-            "min-w-0 flex-1 truncate text-sm",
-            mono && "font-mono text-xs",
-          )}
-        >
-          {value}
-        </div>
-        {copy && typeof value === "string" && <CopyButton value={value} />}
-      </div>
-    </div>
-  );
-}
-
-function CopyButton({
-  value,
-  ariaLabel = "Copy",
-}: {
-  value: string;
-  ariaLabel?: string;
-}) {
-  const [copied, setCopied] = useState(false);
-  const onCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1100);
-    } catch {
-      // Clipboard access is best-effort in browser preview.
-    }
-  };
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      size="icon-xs"
-      aria-label={copied ? "Copied" : ariaLabel}
-      onClick={onCopy}
-    >
-      {copied ? (
-        <Check
-          className="size-3 text-emerald-600 dark:text-emerald-400"
-          aria-hidden="true"
-        />
-      ) : (
-        <Copy className="size-3" aria-hidden="true" />
-      )}
-    </Button>
-  );
-}
