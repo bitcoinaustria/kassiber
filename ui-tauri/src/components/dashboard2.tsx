@@ -58,12 +58,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatBtc, useCurrency, type Currency } from "@/lib/currency";
 import { type ExplorerSettings } from "@/lib/explorer";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
-import { ScreenRefreshSkeleton } from "@/components/kb/ScreenSkeleton";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { useDaemonMutation } from "@/daemon/client";
 import {
@@ -1400,6 +1400,7 @@ const TransactionWorkbench = ({
   breakdownSelection,
   swapCandidateRefs,
   swapCandidateTotal,
+  isRefreshing,
 }: {
   period: PeriodKey;
   records: Transaction[];
@@ -1413,6 +1414,7 @@ const TransactionWorkbench = ({
   breakdownSelection: BreakdownSelection | null;
   swapCandidateRefs?: SwapCandidateReference[];
   swapCandidateTotal?: number | null;
+  isRefreshing?: boolean;
 }) => {
   const navigate = useNavigate();
   const [chartMetric, setChartMetric] =
@@ -1710,7 +1712,11 @@ const TransactionWorkbench = ({
 
   return (
     <>
-      <section className="grid grid-cols-2 overflow-hidden rounded-xl border bg-card md:grid-cols-3 xl:grid-cols-6">
+      <section
+        className="grid grid-cols-2 overflow-hidden rounded-xl border bg-card md:grid-cols-3 xl:grid-cols-6"
+        role={isRefreshing ? "status" : undefined}
+        aria-live={isRefreshing ? "polite" : undefined}
+      >
         {metricCards.map((metric, index) => {
           const Icon = metric.icon;
           const className = cn(
@@ -1719,9 +1725,19 @@ const TransactionWorkbench = ({
             index % 3 === 0 ? "md:border-l-0" : "md:border-l",
             index > 0 ? "xl:border-l" : "xl:border-l-0",
             metric.onClick &&
+              !isRefreshing &&
               "relative isolate w-full cursor-pointer overflow-hidden transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/60 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:before:scale-x-100 [&>*]:relative [&>*]:z-10",
           );
-          const content = (
+          const content = isRefreshing ? (
+            <>
+              <div className="flex items-center gap-2">
+                <Skeleton className="size-4 rounded-md" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+              <Skeleton className="h-6 w-24" />
+              <Skeleton className="h-3 w-16" />
+            </>
+          ) : (
             <>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Icon className={cn("size-4", metric.tone)} aria-hidden="true" />
@@ -1752,7 +1768,7 @@ const TransactionWorkbench = ({
               </div>
             </>
           );
-          return metric.onClick ? (
+          return metric.onClick && !isRefreshing ? (
             <button
               key={metric.label}
               type="button"
@@ -1775,12 +1791,16 @@ const TransactionWorkbench = ({
               <h2 className="text-sm font-semibold">
                 Flow by active {flowBucketLabel(period)}
               </h2>
-              <p className="text-xs text-muted-foreground">
-                {chartRecords.length} tx across {activeChartRows.length} active{" "}
-                {activeChartRows.length === 1
-                  ? flowBucketLabel(period)
-                  : `${flowBucketLabel(period)}s`}
-              </p>
+              {isRefreshing ? (
+                <Skeleton className="mt-1 h-3 w-36" />
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {chartRecords.length} tx across {activeChartRows.length} active{" "}
+                  {activeChartRows.length === 1
+                    ? flowBucketLabel(period)
+                    : `${flowBucketLabel(period)}s`}
+                </p>
+              )}
             </div>
             <div className="flex flex-col items-end gap-2">
               <div className="flex flex-wrap justify-end gap-x-2 gap-y-1 text-[10px] text-muted-foreground sm:text-xs">
@@ -1862,14 +1882,25 @@ const TransactionWorkbench = ({
             </div>
           </div>
           <div className="min-h-[280px] min-w-0 flex-1">
-            <ChartContainer
-              config={flowChartConfig}
-              className="h-full w-full overflow-visible [&_.recharts-tooltip-wrapper]:!z-30 [&_.recharts-wrapper]:!overflow-visible"
-            >
-              <BarChart
-                data={visibleChartRows}
-                margin={{ top: 18, right: 42, bottom: 0, left: 0 }}
+            {isRefreshing ? (
+              <div className="flex h-full min-h-[280px] items-end gap-3 border-b border-l border-border/60 px-3 pb-4">
+                {[42, 64, 36, 78, 52, 88, 48, 70].map((height, index) => (
+                  <Skeleton
+                    key={index}
+                    className="min-w-8 flex-1 rounded-t-md"
+                    style={{ height: `${height}%` }}
+                  />
+                ))}
+              </div>
+            ) : (
+              <ChartContainer
+                config={flowChartConfig}
+                className="h-full w-full overflow-visible [&_.recharts-tooltip-wrapper]:!z-30 [&_.recharts-wrapper]:!overflow-visible"
               >
+                <BarChart
+                  data={visibleChartRows}
+                  margin={{ top: 18, right: 42, bottom: 0, left: 0 }}
+                >
                 <CartesianGrid strokeDasharray="0" vertical={false} />
                 <XAxis
                   dataKey="date"
@@ -2018,8 +2049,9 @@ const TransactionWorkbench = ({
                   strokeOpacity={0.55}
                   strokeWidth={2}
                 />
-              </BarChart>
-            </ChartContainer>
+                </BarChart>
+              </ChartContainer>
+            )}
           </div>
         </div>
 
@@ -2030,6 +2062,7 @@ const TransactionWorkbench = ({
             maxValue={maxNetworkValue}
             currency={currency}
             hideSensitive={hideSensitive}
+            isRefreshing={isRefreshing}
             selectedKey={
               breakdownSelection?.dimension === "network"
                 ? breakdownSelection.key
@@ -2043,6 +2076,7 @@ const TransactionWorkbench = ({
             maxValue={maxWalletValue}
             currency={currency}
             hideSensitive={hideSensitive}
+            isRefreshing={isRefreshing}
             selectedKey={
               breakdownSelection?.dimension === "wallet"
                 ? breakdownSelection.key
@@ -2052,16 +2086,30 @@ const TransactionWorkbench = ({
           />
           <div className="border-t p-3 sm:col-span-2 lg:col-span-1 sm:p-4">
             <h3 className="mb-2 text-sm font-semibold">Data quality</h3>
-            <div className="divide-y text-xs">
-              <QualityRow label="No explorer id" value={withoutExplorer} />
-              <QualityRow label="Missing price" value={missingPriceCount} />
-              <QualityRow label="Failed import" value={failedCount} />
-              <QualityRow
-                label="Swap candidates"
-                value={swapCandidateTotals.count}
-                onClick={swapCandidateTotals.count > 0 ? openSwapWorkflow : undefined}
-              />
-            </div>
+            {isRefreshing ? (
+              <div className="space-y-3 py-1">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="grid grid-cols-[minmax(0,1fr)_48px] items-center gap-3"
+                  >
+                    <Skeleton className="h-3 w-full" />
+                    <Skeleton className="h-4 w-8 justify-self-end" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="divide-y text-xs">
+                <QualityRow label="No explorer id" value={withoutExplorer} />
+                <QualityRow label="Missing price" value={missingPriceCount} />
+                <QualityRow label="Failed import" value={failedCount} />
+                <QualityRow
+                  label="Swap candidates"
+                  value={swapCandidateTotals.count}
+                  onClick={swapCandidateTotals.count > 0 ? openSwapWorkflow : undefined}
+                />
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -2275,6 +2323,7 @@ function BreakdownPanel({
   maxValue,
   currency,
   hideSensitive,
+  isRefreshing,
   selectedKey,
   onSelect,
 }: {
@@ -2283,14 +2332,30 @@ function BreakdownPanel({
   maxValue: number;
   currency: Currency;
   hideSensitive: boolean;
+  isRefreshing?: boolean;
   selectedKey?: string | null;
   onSelect?: (key: string) => void;
 }) {
   return (
     <div className="border-t p-3 first:border-t-0 sm:p-4">
       <h3 className="mb-3 text-sm font-semibold">{title}</h3>
-      <div className="space-y-2.5">
-        {rows.map((row) => {
+      {isRefreshing ? (
+        <div className="space-y-3">
+          {Array.from({ length: title === "Wallet/source mix" ? 4 : 2 }).map(
+            (_, index) => (
+              <div key={index} className="space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <Skeleton className="h-3 w-28" />
+                  <Skeleton className="h-3 w-16" />
+                </div>
+                <Skeleton className="h-1.5 w-full rounded-full" />
+              </div>
+            ),
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {rows.map((row) => {
           const selected = selectedKey === row.key;
           const content = (
             <>
@@ -2330,7 +2395,8 @@ function BreakdownPanel({
             </div>
           );
         })}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2479,6 +2545,7 @@ const TransactionsTable = ({
   onQuickFilterChange,
   onBreakdownSelectionChange,
   resetTableFiltersToken,
+  isRefreshing,
 }: {
   records: Transaction[];
   hideSensitive: boolean;
@@ -2492,6 +2559,7 @@ const TransactionsTable = ({
   onQuickFilterChange: (filter: TableQuickFilter | null) => void;
   onBreakdownSelectionChange: (selection: BreakdownSelection | null) => void;
   resetTableFiltersToken: number;
+  isRefreshing?: boolean;
 }) => {
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
   const [dateFilter, setDateFilter] = React.useState<string>("all");
@@ -2861,12 +2929,21 @@ const TransactionsTable = ({
 
   return (
     <>
-      <div ref={tableRef} className="rounded-xl border bg-card">
+      <div
+        ref={tableRef}
+        className="rounded-xl border bg-card"
+        role={isRefreshing ? "status" : undefined}
+        aria-live={isRefreshing ? "polite" : undefined}
+      >
       <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5">
         <div className="flex flex-1 items-center gap-2">
           <span className="text-sm font-medium sm:text-base">Transactions</span>
           <span className="ml-1 inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-[10px] font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
-            {filteredTransactions.length}
+            {isRefreshing ? (
+              <Skeleton className="h-3 w-5" />
+            ) : (
+              filteredTransactions.length
+            )}
           </span>
         </div>
 
@@ -3134,7 +3211,39 @@ const TransactionsTable = ({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {paginatedTransactions.length === 0 ? (
+            {isRefreshing ? (
+              Array.from({ length: Math.min(pageSize, 10) }).map((_, index) => (
+                <TableRow key={`refresh-${index}`}>
+                  <TableCell>
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-48 max-w-full" />
+                      <Skeleton className="h-3 w-72 max-w-full" />
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="space-y-2">
+                      <Skeleton className="ml-auto h-4 w-24" />
+                      <Skeleton className="ml-auto h-3 w-16" />
+                    </div>
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell">
+                    <Skeleton className="h-5 w-28" />
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell">
+                    <Skeleton className="h-5 w-24" />
+                  </TableCell>
+                  <TableCell className="hidden xl:table-cell">
+                    <Skeleton className="h-5 w-20" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-6 w-24" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="size-8 rounded-md" />
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : paginatedTransactions.length === 0 ? (
               <TableRow>
                 <TableCell
                   colSpan={7}
@@ -3443,13 +3552,15 @@ const TransactionsTable = ({
             </SelectContent>
           </Select>
           <span className="text-muted-foreground">
-            {filteredTransactions.length === 0
+            {isRefreshing
+              ? "Refreshing"
+              : filteredTransactions.length === 0
               ? "0"
               : `${(currentPage - 1) * pageSize + 1}-${Math.min(
                   currentPage * pageSize,
                   filteredTransactions.length,
                 )}`}{" "}
-            of {filteredTransactions.length}
+            {isRefreshing ? "" : `of ${filteredTransactions.length}`}
           </span>
         </div>
 
@@ -3646,12 +3757,6 @@ const Dashboard2 = ({
       className={cn(screenShellClassName, "relative", className)}
       aria-busy={showRefreshSkeleton}
     >
-      {showRefreshSkeleton ? (
-        <ScreenRefreshSkeleton
-          className="sticky top-2 z-20"
-          label="Refreshing transactions"
-        />
-      ) : null}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <PeriodTabs activePeriod={period} onPeriodChange={handlePeriodChange} />
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -3697,6 +3802,7 @@ const Dashboard2 = ({
         breakdownSelection={breakdownSelection}
         swapCandidateRefs={swapCandidates}
         swapCandidateTotal={swapCandidateTotal}
+        isRefreshing={showRefreshSkeleton}
       />
 
       <TransactionsTable
@@ -3712,6 +3818,7 @@ const Dashboard2 = ({
         onQuickFilterChange={setQuickFilter}
         onBreakdownSelectionChange={setBreakdownSelection}
         resetTableFiltersToken={resetTableFiltersToken}
+        isRefreshing={showRefreshSkeleton}
       />
     </div>
   );
