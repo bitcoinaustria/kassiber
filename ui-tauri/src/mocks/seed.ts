@@ -66,7 +66,13 @@ export interface NodeChannel {
   /** funding outpoint (txid:vout) */
   fundingOutpoint?: string | null;
   peerAlias: string;
-  peerPubkey: string;
+  /**
+   * Hex node id of the channel peer. `null` for private channels by
+   * default (the peer chose private gossip for a reason). Adapters that
+   * surface a private-channel peer id must do so on explicit operator
+   * opt-in.
+   */
+  peerPubkey: string | null;
   /** total channel capacity in sats */
   capacitySat: number;
   /** sats currently spendable from this node */
@@ -385,8 +391,9 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
             fundingOutpoint:
               "4c3b2a190877665544332211ffeeddccbbaa00998877665544332211aabbccdd:0",
             peerAlias: "Bitrefill",
-            peerPubkey:
-              "030c3f19d742ca294a55c00376b3b355c3c90d61c6b6b39554dbc7ac19b141c14f",
+            // Private channel — adapter would not expose the peer pubkey
+            // by default (the peer chose private gossip).
+            peerPubkey: null,
             capacitySat: 500_000,
             localBalanceSat: 500_000,
             remoteBalanceSat: 0,
@@ -627,8 +634,8 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
             fundingOutpoint:
               "3d4c5b6a798877665544332211ffeeddccbbaa00998877665544332211aabbcc:1",
             peerAlias: "Olympus by ZEUS",
-            peerPubkey:
-              "0312345678abcdef0123456789abcdef00112233445566778899aabbccddeeff22",
+            // Private channel — pubkey withheld by default per opsec policy.
+            peerPubkey: null,
             capacitySat: 800_372,
             localBalanceSat: 288_000,
             remoteBalanceSat: 512_372,

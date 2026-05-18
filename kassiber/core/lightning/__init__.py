@@ -8,6 +8,17 @@ the CLI, daemon, and frontend stay node-agnostic.
 
 Adapters belong under :mod:`kassiber.core.lightning` (e.g. ``lnd.py``,
 ``cln.py``); the scaffold itself never talks to a node directly.
+
+Opsec policy — REQUIRED reading for adapter authors:
+[docs/reference/lightning-opsec.md](../../../docs/reference/lightning-opsec.md).
+Lightning APIs expose preimages, payment_secrets, encoded bolt11 blobs,
+onion route hops, route hints from received invoices, and
+``failure_source_pubkey`` — none of which have tax value and all of which
+endanger other users if they end up in a leaked DB. Adapters MUST discard
+these at the adapter boundary, never persist them, and never let them
+reach a :class:`NodeSnapshot` field. The shapes in
+:mod:`kassiber.core.lightning.types` deliberately have nowhere to put
+that data so adapters cannot leak it by accident.
 """
 
 from .adapter import LightningAdapter

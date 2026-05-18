@@ -5,6 +5,18 @@ shapes that the desktop reads from `ui.connections.node.snapshot`. Keep the
 field names and units consistent — the daemon serializes these straight
 through to JSON. Amounts are stored as integer sat / msat per project
 convention.
+
+Opsec note: see [docs/reference/lightning-opsec.md](../../../docs/reference/lightning-opsec.md)
+for the discard policy adapters must apply *before* filling these shapes —
+preimages, payment_secrets, encoded bolt11 strings, onion routing hops,
+route hints from received invoices, and `failure_source_pubkey` never
+belong on the wire. Note in particular that ``NodeChannel.peer_pubkey``
+is intentionally optional: adapters should pass ``None`` for private
+channels (``is_private=True``) unless the operator explicitly opts in,
+because the peer chose private gossip for a reason and Kassiber should
+not undo that decision in a local DB that might leak via diagnostics.
+``NodeForward`` deliberately carries only short channel ids and peer
+*aliases*, never peer pubkeys, for the same reason.
 """
 
 from __future__ import annotations
@@ -28,7 +40,12 @@ NodeForwardStatus = Literal["settled", "failed", "offered"]
 class NodeChannel:
     id: str
     peer_alias: str
-    peer_pubkey: str
+    #: Hex node id of the channel peer. Adapters MUST set this to ``None``
+    #: for private channels (``is_private=True``) unless the operator has
+    #: explicitly opted in to identifying their private peers in the
+    #: local DB. Public-channel peer ids are already in gossip so the
+    #: marginal privacy cost is near zero.
+    peer_pubkey: str | None
     capacity_sat: int
     local_balance_sat: int
     remote_balance_sat: int

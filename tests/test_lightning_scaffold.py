@@ -125,6 +125,44 @@ class LightningTypesTest(unittest.TestCase):
         self.assertEqual(routing["windowLabel"], "Last 30 days")
         self.assertEqual(routing["routingRevenueSat"], 6_200)
 
+    def test_private_channel_peer_pubkey_serializes_as_null(self) -> None:
+        # Opsec policy: adapters set peer_pubkey=None for private channels
+        # so the leaked DB cannot betray a peer's private-gossip decision.
+        private_channel = NodeChannel(
+            id="ch-private",
+            peer_alias="confidential-peer",
+            peer_pubkey=None,
+            capacity_sat=500_000,
+            local_balance_sat=500_000,
+            remote_balance_sat=0,
+            state="active",
+            is_private=True,
+        )
+        snapshot = NodeSnapshot(
+            alias="kassiber-test",
+            pubkey="02" + "cd" * 32,
+            network="mainnet",
+            peer_count=1,
+            onchain_balance_sat=0,
+            total_local_balance_sat=500_000,
+            total_remote_balance_sat=0,
+            total_capacity_sat=500_000,
+            channels=(private_channel,),
+        )
+        payload = snapshot_to_dict(snapshot)
+        first = payload["channels"][0]
+        self.assertIsNone(first["peerPubkey"])
+        self.assertTrue(first["isPrivate"])
+
+    def test_forward_shape_carries_no_peer_pubkey(self) -> None:
+        # Opsec policy: NodeForward stores short channel ids and peer
+        # aliases only — never peer pubkeys. Adapters cannot leak the
+        # routing graph through this surface by accident.
+        payload = snapshot_to_dict(_snapshot_with_routing())
+        for forward in payload["forwards"]:
+            self.assertNotIn("inPeerPubkey", forward)
+            self.assertNotIn("outPeerPubkey", forward)
+
 
 class LightningRegistryTest(unittest.TestCase):
     def test_register_and_resolve_adapter(self) -> None:

@@ -4,6 +4,15 @@ Implementations live in sibling modules (e.g. ``lnd.py``, ``cln.py``) and
 register themselves with :mod:`kassiber.core.lightning.registry`. Every
 adapter must be strictly read-only — Kassiber never closes channels,
 opens channels, or pays invoices through a Lightning node.
+
+Adapters are also the **discard boundary** for sensitive node data: see
+[docs/reference/lightning-opsec.md](../../../docs/reference/lightning-opsec.md)
+for the full policy. Summary: drop preimages, payment_secrets, encoded
+bolt11 strings, onion route hops, route hints from received invoices,
+and ``failure_source_pubkey`` before populating :class:`NodeSnapshot`;
+pass ``None`` for :attr:`NodeChannel.peer_pubkey` on private channels by
+default; aggregate per-forward data at the day-per-channel grain when
+persisting.
 """
 
 from __future__ import annotations
