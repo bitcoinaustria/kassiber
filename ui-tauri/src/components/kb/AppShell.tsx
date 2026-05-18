@@ -731,6 +731,17 @@ export function AppShell() {
             void storeTouchIdPassphrase(passphrase, touchIdDataRoot)
               .then((status) => {
                 setTouchIdStatus(status);
+                if (!status.configured) {
+                  setAppLockPolicy({ touchIdUnlock: false });
+                  addNotification({
+                    title: "Touch ID unlock was not saved",
+                    body: status.reason
+                      ? `Touch ID unlock is not set up: ${status.reason}`
+                      : "macOS Keychain did not report the saved passphrase.",
+                    tone: "warning",
+                  });
+                  return;
+                }
                 if (options?.rememberWithTouchId === true) {
                   setAppLockPolicy({ touchIdUnlock: true });
                 }
