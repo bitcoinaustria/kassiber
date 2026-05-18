@@ -43,6 +43,7 @@ export type Transaction = {
   paymentMethod: "On-chain" | "Exchange" | "Lightning" | "Liquid";
   date: string;
   status: TransactionStatus;
+  confirmations?: number;
 };
 
 export type TransactionEditDraft = {

@@ -62,6 +62,33 @@ export async function pickFile(
   return null;
 }
 
+/**
+ * Pick multiple files. Returns an array of absolute paths, or `null` when the
+ * runtime can't open a native picker. In dev-bridge mode falls back to the
+ * single-file bridge for now (returns a one-element array).
+ */
+export async function pickFiles(
+  options: FilePickerOptions = {},
+): Promise<string[] | null> {
+  if (!isFilePickerAvailable) return null;
+  if (isDevBridgeRuntime) {
+    const one = await pickFileViaDevBridge(options);
+    return one ? [one] : null;
+  }
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const selection = await open({
+    multiple: true,
+    directory: options.directory ?? false,
+    title: options.title,
+    filters: options.filters,
+  });
+  if (Array.isArray(selection)) {
+    return selection.filter((path): path is string => typeof path === "string");
+  }
+  if (typeof selection === "string") return [selection];
+  return null;
+}
+
 export async function saveFile(
   options: FilePickerOptions = {},
 ): Promise<string | null> {

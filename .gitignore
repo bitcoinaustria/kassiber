@@ -11,6 +11,7 @@ dist/
 .live-data/
 .live-data2/
 .claude/settings.local.json
+.claude/launch.json
 .kassiber-test/
 log/
 /temp

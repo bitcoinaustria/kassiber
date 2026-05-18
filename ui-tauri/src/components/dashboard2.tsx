@@ -70,11 +70,12 @@ import {
   MOCK_TRANSACTIONS,
   type TransactionsList,
 } from "@/mocks/transactions";
-import { type Tx } from "@/mocks/seed";
+import { MOCK_OVERVIEW, type Tx } from "@/mocks/seed";
 import { useUiStore } from "@/store/ui";
 import {
   ExplorerOpenDialog,
   NewTransactionDialog,
+  type AttachmentItem,
   TransactionDetailSheet,
   allPaymentMethods,
   allTransactionFlows,
@@ -819,6 +820,7 @@ function toDashboardTransaction(tx: Tx, index: number): Transaction {
     paymentMethod,
     date: tx.date,
     status: tag.toLowerCase().includes("review") ? "review" : status,
+    confirmations: tx.conf,
   };
 }
 
@@ -860,6 +862,41 @@ function initials(value: string) {
 }
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
+// Mock attachments keyed by transaction id. Replaced by ui.attachments.list
+// once the daemon kinds land (see TODO.md). Lets the AttachmentsPanel demo
+// its populated state in mock mode.
+const MOCK_ATTACHMENTS_BY_TX: Record<string, AttachmentItem[]> = {
+  tx1: [
+    {
+      id: "att-tx1-1",
+      kind: "file",
+      label: "invoice-2026-04-18.pdf",
+      detail: "PDF · 248 KB · sha256 a91f…7c",
+    },
+    {
+      id: "att-tx1-2",
+      kind: "url",
+      label: "btcpay.example.com/invoices/abc123",
+      detail: "BTCPay invoice",
+      href: "https://btcpay.example.com/invoices/abc123",
+    },
+    {
+      id: "att-tx1-3",
+      kind: "url",
+      label: "drive.example.com/q1-revenue-summary.xlsx",
+      detail: "Drive · accountant copy",
+      href: "https://drive.example.com/q1-revenue-summary.xlsx",
+    },
+    {
+      id: "att-tx1-4",
+      kind: "url",
+      label: "wiki.internal/customer-contract-ACME-2024",
+      detail: "Internal wiki",
+      href: "https://wiki.internal/customer-contract-ACME-2024",
+    },
+  ],
+};
 
 const periodLabels: Record<PeriodKey, string> = {
   ytd: "YTD",
@@ -3539,6 +3576,28 @@ const TransactionsTable = ({
         explorerSettings={explorerSettings}
         isSaving={metadataUpdate.isPending}
         saveError={saveError}
+        nowRate={MOCK_OVERVIEW.priceEur}
+        attachments={
+          detailTransaction
+            ? MOCK_ATTACHMENTS_BY_TX[detailTransaction.id]
+            : undefined
+        }
+        onAddAttachmentFiles={async (paths) => {
+          // TODO(attachments): wire to ui.attachments.add when daemon kind lands.
+          console.info("[attachments] add files (stub):", paths);
+        }}
+        onAddAttachmentLinks={async (urls) => {
+          // TODO(attachments): wire to ui.attachments.add when daemon kind lands.
+          console.info("[attachments] add links (stub):", urls);
+        }}
+        hasNext={
+          detailTransaction
+            ? filteredTransactions.findIndex(
+                (txn) => txn.id === detailTransaction.id,
+              ) <
+              filteredTransactions.length - 1
+            : false
+        }
         onOpenChange={(open) => {
           if (!open) {
             setDetailTransaction(null);
@@ -3550,6 +3609,26 @@ const TransactionsTable = ({
         onSave={async (transactionId, draft) => {
           try {
             await saveTransactionDraft(transactionId, draft);
+          } catch (error) {
+            setSaveError(
+              error instanceof Error ? error.message : "Could not save metadata.",
+            );
+            throw error;
+          }
+        }}
+        onSaveAndNext={async (transactionId, draft) => {
+          try {
+            await saveTransactionDraft(transactionId, draft);
+            const idx = filteredTransactions.findIndex(
+              (txn) => txn.id === transactionId,
+            );
+            const next = filteredTransactions[idx + 1];
+            if (next) {
+              openTransactionDetail(next, detailInitialTab);
+            } else {
+              setDetailTransaction(null);
+              updateTransactionDetailParams(null);
+            }
           } catch (error) {
             setSaveError(
               error instanceof Error ? error.message : "Could not save metadata.",
