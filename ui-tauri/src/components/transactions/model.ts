@@ -32,6 +32,7 @@ export type Transaction = {
   note?: string;
   tags?: string[];
   excluded?: boolean;
+  quarantineReason?: string | null;
   pair?: Tx["pair"];
   counterparty: string;
   counterpartyInitials: string;

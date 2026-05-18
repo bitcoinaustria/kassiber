@@ -809,6 +809,7 @@ function toDashboardTransaction(tx: Tx, index: number): Transaction {
     note: tx.note,
     tags: tx.tags,
     excluded: tx.excluded,
+    quarantineReason: tx.quarantineReason ?? null,
     pair: tx.pair,
     counterparty: tx.counter || tx.account || "Unassigned",
     counterpartyInitials: initials(tx.counter || tx.account || "TX"),
@@ -2507,6 +2508,7 @@ const TransactionsTable = ({
   records,
   hideSensitive,
   currency,
+  nowRate,
   explorerSettings,
   swapCandidateIds = new Set<string>(),
   chartSelection,
@@ -2520,6 +2522,7 @@ const TransactionsTable = ({
   records: Transaction[];
   hideSensitive: boolean;
   currency: Currency;
+  nowRate: number | null;
   explorerSettings: ExplorerSettings;
   swapCandidateIds?: Set<string>;
   chartSelection: FlowChartSelection | null;
@@ -3576,7 +3579,7 @@ const TransactionsTable = ({
         explorerSettings={explorerSettings}
         isSaving={metadataUpdate.isPending}
         saveError={saveError}
-        nowRate={MOCK_OVERVIEW.priceEur}
+        nowRate={nowRate}
         attachments={
           detailTransaction
             ? MOCK_ATTACHMENTS_BY_TX[detailTransaction.id]
@@ -3656,12 +3659,14 @@ const TransactionsTable = ({
 const Dashboard2 = ({
   className,
   transactions = MOCK_TRANSACTIONS,
+  nowRate = MOCK_OVERVIEW.priceEur,
   swapCandidates,
   swapCandidateTotal,
   isDataRefreshing = false,
 }: {
   className?: string;
   transactions?: TransactionsList;
+  nowRate?: number | null;
   swapCandidates?: SwapCandidateReference[];
   swapCandidateTotal?: number | null;
   isDataRefreshing?: boolean;
@@ -3794,6 +3799,7 @@ const Dashboard2 = ({
         records={periodRecords}
         hideSensitive={hideSensitive}
         currency={currency}
+        nowRate={nowRate}
         explorerSettings={explorerSettings}
         swapCandidateIds={periodSwapCandidateIds}
         chartSelection={flowChartSelection}

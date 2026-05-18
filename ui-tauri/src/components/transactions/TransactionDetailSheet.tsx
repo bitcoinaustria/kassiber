@@ -446,12 +446,14 @@ function StatusTimeline({ steps }: { steps: TimelineStep[] }) {
 function QuarantineBanner({
   title,
   reason,
+  hint,
   primaryActionLabel,
   onPrimaryAction,
   onExclude,
 }: {
   title: string;
   reason: string;
+  hint?: React.ReactNode;
   primaryActionLabel: string;
   onPrimaryAction?: () => void;
   onExclude?: () => void;
@@ -469,10 +471,8 @@ function QuarantineBanner({
         <div className="flex items-center gap-1.5 text-sm font-medium text-amber-700 dark:text-amber-300">
           {title}
           <InfoHint label="What does quarantined mean?">
-            Quarantined transactions are skipped during journal processing
-            and don't affect any tax or balance report. Resolve the blocker
-            below (set a price, or exclude the tx if it doesn't belong in
-            the books) to bring it back in.
+            {hint ??
+              "Journal-quarantined transactions are skipped during journal processing and don't affect tax reports until the blocker is resolved."}
           </InfoHint>
         </div>
         <div className="mt-0.5 text-xs text-amber-700/80 dark:text-amber-300/80">
@@ -746,12 +746,14 @@ function AttachLinksDialog({
 
 function AttachmentsPanel({
   items = [],
+  hideSensitive,
   onAddFiles,
   onAddLinks,
   onOpen,
   onRemove,
 }: {
   items?: AttachmentItem[];
+  hideSensitive: boolean;
   onAddFiles?: (paths: string[]) => void | Promise<void>;
   onAddLinks?: (urls: string[]) => void | Promise<void>;
   onOpen?: (item: AttachmentItem) => void;
@@ -799,60 +801,87 @@ function AttachmentsPanel({
       </div>
       {items.length ? (
         <ul className="mb-2 space-y-1.5">
-          {items.map((item) => (
-            <li
-              key={item.id}
-              className="flex min-w-0 items-center gap-2 rounded-md border bg-background px-2 py-1.5"
-            >
-              <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                {item.kind === "url" ? (
-                  <Link2 className="size-3.5" aria-hidden="true" />
+          {items.map((item) => {
+            const hiddenTitle = hideSensitive
+              ? "Attachment detail hidden"
+              : item.detail;
+            return (
+              <li
+                key={item.id}
+                className="flex min-w-0 items-center gap-2 rounded-md border bg-background px-2 py-1.5"
+              >
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                  {item.kind === "url" ? (
+                    <Link2 className="size-3.5" aria-hidden="true" />
+                  ) : (
+                    <FileText className="size-3.5" aria-hidden="true" />
+                  )}
+                </span>
+                {onOpen ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpen(item)}
+                    className="min-w-0 flex-1 text-left hover:underline"
+                    title={hiddenTitle}
+                  >
+                    <div
+                      className={cn(
+                        "truncate text-xs font-medium",
+                        blurClass(hideSensitive),
+                      )}
+                    >
+                      {item.label}
+                    </div>
+                    {item.detail ? (
+                      <div
+                        className={cn(
+                          "truncate text-[10px] text-muted-foreground",
+                          blurClass(hideSensitive),
+                        )}
+                      >
+                        {item.detail}
+                      </div>
+                    ) : null}
+                  </button>
                 ) : (
-                  <FileText className="size-3.5" aria-hidden="true" />
+                  <div className="min-w-0 flex-1" title={hiddenTitle}>
+                    <div
+                      className={cn(
+                        "truncate text-xs font-medium",
+                        blurClass(hideSensitive),
+                      )}
+                    >
+                      {item.label}
+                    </div>
+                    {item.detail ? (
+                      <div
+                        className={cn(
+                          "truncate text-[10px] text-muted-foreground",
+                          blurClass(hideSensitive),
+                        )}
+                      >
+                        {item.detail}
+                      </div>
+                    ) : null}
+                  </div>
                 )}
-              </span>
-              {onOpen ? (
-                <button
-                  type="button"
-                  onClick={() => onOpen(item)}
-                  className="min-w-0 flex-1 text-left hover:underline"
-                  title={item.detail}
-                >
-                  <div className="truncate text-xs font-medium">
-                    {item.label}
-                  </div>
-                  {item.detail ? (
-                    <div className="truncate text-[10px] text-muted-foreground">
-                      {item.detail}
-                    </div>
-                  ) : null}
-                </button>
-              ) : (
-                <div className="min-w-0 flex-1" title={item.detail}>
-                  <div className="truncate text-xs font-medium">
-                    {item.label}
-                  </div>
-                  {item.detail ? (
-                    <div className="truncate text-[10px] text-muted-foreground">
-                      {item.detail}
-                    </div>
-                  ) : null}
-                </div>
-              )}
-              {onRemove ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-6 shrink-0 text-muted-foreground"
-                  aria-label={`Remove ${item.label}`}
-                  onClick={() => onRemove(item)}
-                >
-                  <X className="size-3.5" aria-hidden="true" />
-                </Button>
-              ) : null}
-            </li>
-          ))}
+                {onRemove ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-6 shrink-0 text-muted-foreground"
+                    aria-label={
+                      hideSensitive ? "Remove attachment" : `Remove ${item.label}`
+                    }
+                    onClick={() => onRemove(item)}
+                  >
+                    <X className="size-3.5" aria-hidden="true" />
+                  </Button>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <p className="mb-2 text-xs text-muted-foreground">
@@ -1117,7 +1146,10 @@ export function TransactionDetailSheet({
     transaction.amount === null;
   const isLabeled =
     localDraft.label !== "Unlabeled" && localDraft.label.trim().length > 0;
-  const isQuarantined = isPricingMissing && !localDraft.excluded;
+  const quarantineReason = transaction.quarantineReason ?? null;
+  const hasJournalQuarantine = Boolean(quarantineReason) && !localDraft.excluded;
+  const hasPricingBlocker = isPricingMissing && !localDraft.excluded;
+  const showReviewBanner = hasJournalQuarantine || hasPricingBlocker;
   const confLabel = confirmationsLabel(transaction.confirmations);
   const dirtyTags = dirty.tags;
   const dirtyLabel = dirty.label;
@@ -1153,10 +1185,12 @@ export function TransactionDetailSheet({
       key: "journaled",
       label: localDraft.excluded
         ? "Excluded"
-        : isPricingMissing
+        : hasJournalQuarantine
+          ? "Quarantined"
+          : isPricingMissing
           ? "Pending journal"
           : "Journaled",
-      done: !localDraft.excluded && !isPricingMissing,
+      done: !localDraft.excluded && !hasJournalQuarantine && !isPricingMissing,
       hint:
         "Included in the RP2 journal once pricing is set and the tx isn't excluded.",
     },
@@ -1191,11 +1225,13 @@ export function TransactionDetailSheet({
     },
     {
       key: "quarantine",
-      label: isQuarantined
+      label: hasJournalQuarantine
         ? "Resolve quarantine to include in reports"
-        : "No quarantine",
-      done: !isQuarantined,
-      warn: isQuarantined,
+        : hasPricingBlocker
+          ? "Pricing incomplete"
+          : "No quarantine",
+      done: !hasJournalQuarantine && !hasPricingBlocker,
+      warn: hasJournalQuarantine || hasPricingBlocker,
       tab: "pricing",
     },
   ];
@@ -1255,6 +1291,9 @@ export function TransactionDetailSheet({
     setTimeout(() => manualPriceRef.current?.focus(), 0);
   };
   const setExcluded = () => updateDraft("excluded", true);
+  const normalizedQuarantineReason = quarantineReason
+    ? quarantineReason.replace(/_/g, " ")
+    : null;
 
   const taxNarrative = (() => {
     const action =
@@ -1425,26 +1464,33 @@ export function TransactionDetailSheet({
           <div className="min-h-0 flex-1 overflow-y-auto">
             <div className="grid gap-4 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="min-w-0 space-y-4">
-                {isQuarantined ? (
+                {showReviewBanner ? (
                   <QuarantineBanner
                     title={
-                      transaction.amount === null
-                        ? "Missing fiat price — quarantined"
+                      hasJournalQuarantine
+                        ? "Journal quarantine"
+                        : transaction.amount === null
+                        ? "Missing fiat price"
                         : localDraft.pricingSourceKind === null
-                          ? "No pricing source — quarantined"
-                          : "Pricing flagged for review — quarantined"
+                          ? "No pricing source"
+                          : "Pricing flagged for review"
                     }
                     reason={
-                      transaction.amount === null
-                        ? `No fiat price recorded for ${transaction.date}. Set a manual price (with receipt) or, once wired, backfill from the rates cache.`
-                        : localDraft.pricingSourceKind === null
-                          ? "Pick a pricing source on the Pricing tab — or set a manual override with evidence."
-                          : "Pricing source is marked as missing or under review. Confirm a source to clear quarantine."
+                      hasJournalQuarantine
+                        ? `Current journal blocker: ${normalizedQuarantineReason}.`
+                        : transaction.amount === null
+                          ? `No fiat price recorded for ${transaction.date}. Pricing edits are preview-only until the metadata daemon kind is extended.`
+                          : localDraft.pricingSourceKind === null
+                            ? "No persisted pricing source is available yet. Pricing edits are preview-only until the metadata daemon kind is extended."
+                            : "Pricing source is marked as missing or under review; editing it is deferred to the metadata daemon follow-up."
+                    }
+                    hint={
+                      hasJournalQuarantine
+                        ? undefined
+                        : "This is a pricing readiness warning from the transaction row. It is not an active journal quarantine unless the daemon returns a quarantine reason."
                     }
                     primaryActionLabel={
-                      transaction.amount === null
-                        ? "Set manual price"
-                        : "Open Pricing"
+                      hasJournalQuarantine ? "View Pricing" : "Open Pricing"
                     }
                     onPrimaryAction={jumpToManualPrice}
                     onExclude={setExcluded}
@@ -2422,6 +2468,7 @@ export function TransactionDetailSheet({
                 </div>
                 <AttachmentsPanel
                   items={attachments}
+                  hideSensitive={hideSensitive}
                   onAddFiles={onAddAttachmentFiles}
                   onAddLinks={onAddAttachmentLinks}
                   onOpen={onOpenAttachment}

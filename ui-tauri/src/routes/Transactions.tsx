@@ -8,6 +8,7 @@ import {
   MOCK_TRANSACTIONS,
   type TransactionsList,
 } from "@/mocks/transactions";
+import { MOCK_OVERVIEW } from "@/mocks/seed";
 import { useUiStore } from "@/store/ui";
 
 interface SuggestEnvelope {
@@ -15,6 +16,10 @@ interface SuggestEnvelope {
   counts?: {
     total?: number;
   };
+}
+
+interface OverviewSnapshot {
+  priceEur?: number | null;
 }
 
 function isCrossAssetCandidate(candidate: SwapCandidateReference) {
@@ -30,6 +35,7 @@ export function Transactions() {
       limit: 500,
     },
   );
+  const overview = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
   const swapQuery = useDaemon<SuggestEnvelope>("ui.transfers.suggest");
   const hasLiveTransactions =
     data?.kind === "ui.transactions.list" && Boolean(data.data);
@@ -44,6 +50,14 @@ export function Transactions() {
     hasLiveTransactions && data.data
       ? data.data
       : MOCK_TRANSACTIONS;
+  const hasLiveOverview =
+    overview.data?.kind === "ui.overview.snapshot" && Boolean(overview.data.data);
+  const nowRate =
+    hasLiveTransactions && hasLiveOverview
+      ? (overview.data?.data?.priceEur ?? null)
+      : hasLiveTransactions
+        ? null
+        : MOCK_OVERVIEW.priceEur;
   const hasLiveSwapSuggestions =
     swapQuery.data?.kind === "ui.transfers.suggest" &&
     Boolean(swapQuery.data.data);
@@ -63,6 +77,7 @@ export function Transactions() {
   return (
     <Dashboard2
       transactions={transactions}
+      nowRate={nowRate}
       swapCandidates={swapCandidates}
       swapCandidateTotal={swapCandidateTotal}
       isDataRefreshing={hasLiveTransactions && isFetching}
