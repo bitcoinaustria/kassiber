@@ -35,6 +35,48 @@ const cloneMockProfiles = () => ({
 
 let mockProfilesSnapshot = cloneMockProfiles();
 
+type MockAttachment = {
+  id: string;
+  transaction_id: string;
+  attachment_type: "file" | "url";
+  label: string;
+  original_filename?: string;
+  url?: string;
+  media_type?: string;
+  size_bytes?: number | null;
+  sha256?: string;
+  stored_relpath?: string;
+  exists?: boolean | null;
+  created_at: string;
+};
+
+let mockAttachments: MockAttachment[] = [
+  {
+    id: "att-tx1-1",
+    transaction_id: "tx1",
+    attachment_type: "file",
+    label: "invoice-2026-04-18.pdf",
+    original_filename: "invoice-2026-04-18.pdf",
+    media_type: "application/pdf",
+    size_bytes: 248_000,
+    sha256: "a91f000000000000000000000000000000000000000000000000000000007c",
+    stored_relpath: "mock/invoice-2026-04-18.pdf",
+    exists: true,
+    created_at: "2026-04-18T14:22:00Z",
+  },
+  {
+    id: "att-tx1-2",
+    transaction_id: "tx1",
+    attachment_type: "url",
+    label: "btcpay.example.com/invoices/abc123",
+    url: "https://btcpay.example.com/invoices/abc123",
+    media_type: "text/uri-list",
+    exists: null,
+    created_at: "2026-04-18T14:23:00Z",
+  },
+];
+let mockAttachmentCounter = 0;
+
 type MockConnection = {
   id: string;
   label: string;
@@ -1085,6 +1127,12 @@ export const mockDaemon: DaemonTransport = {
         note?: unknown;
         tags?: unknown;
         excluded?: unknown;
+        fiat_currency?: unknown;
+        fiat_rate?: unknown;
+        fiat_value?: unknown;
+        pricing_source_kind?: unknown;
+        pricing_quality?: unknown;
+        pricing_external_ref?: unknown;
       };
       const transactionId = typeof args.transaction === "string" ? args.transaction : "";
       const transactionList = fixtures["ui.transactions.list"] as {
@@ -1143,6 +1191,57 @@ export const mockDaemon: DaemonTransport = {
         tx.tag = tags.join(", ");
       }
       if (typeof args.excluded === "boolean") tx.excluded = args.excluded;
+      if ("fiat_currency" in args) {
+        tx.fiatCurrency =
+          typeof args.fiat_currency === "string" ? args.fiat_currency : null;
+      }
+      if ("fiat_rate" in args) {
+        tx.rate =
+          typeof args.fiat_rate === "string"
+            ? Number(args.fiat_rate)
+            : typeof args.fiat_rate === "number"
+              ? args.fiat_rate
+              : null;
+      }
+      if ("fiat_value" in args) {
+        tx.eur =
+          typeof args.fiat_value === "string"
+            ? Number(args.fiat_value)
+            : typeof args.fiat_value === "number"
+              ? args.fiat_value
+              : null;
+      }
+      if ("pricing_source_kind" in args) {
+        tx.pricingSourceKind =
+          typeof args.pricing_source_kind === "string"
+            ? args.pricing_source_kind
+            : null;
+      }
+      if ("pricing_quality" in args) {
+        tx.pricingQuality =
+          typeof args.pricing_quality === "string" ? args.pricing_quality : null;
+      }
+      if ("pricing_external_ref" in args) {
+        tx.pricingExternalRef =
+          typeof args.pricing_external_ref === "string"
+            ? args.pricing_external_ref
+            : null;
+      }
+      if ("review_status" in args) {
+        tx.reviewStatus =
+          typeof args.review_status === "string" ? args.review_status : null;
+      }
+      if ("taxable" in args) {
+        tx.taxable = typeof args.taxable === "boolean" ? args.taxable : null;
+      }
+      if ("at_regime" in args) {
+        tx.atRegime =
+          typeof args.at_regime === "string" ? args.at_regime : null;
+      }
+      if ("at_category" in args) {
+        tx.atCategory =
+          typeof args.at_category === "string" ? args.at_category : null;
+      }
       return {
         kind: "ui.transactions.metadata.update",
         schema_version: 1,
@@ -1152,7 +1251,135 @@ export const mockDaemon: DaemonTransport = {
           note: typeof args.note === "string" ? args.note : "",
           tags: (tags ?? []).map((tag) => ({ code: tag.toLowerCase(), label: tag })),
           excluded: args.excluded === true,
+          fiat_currency: tx.fiatCurrency ?? null,
+          fiat_rate: tx.rate ?? null,
+          fiat_value: tx.eur ?? null,
+          pricing_source_kind: tx.pricingSourceKind ?? null,
+          pricing_quality: tx.pricingQuality ?? null,
+          pricing_external_ref: tx.pricingExternalRef ?? null,
+          review_status: tx.reviewStatus ?? null,
+          taxable: tx.taxable ?? null,
+          at_regime: tx.atRegime ?? null,
+          at_category: tx.atCategory ?? null,
           updated: true,
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.attachments.list") {
+      const args = (req.args ?? {}) as { transaction?: unknown };
+      const tx = typeof args.transaction === "string" ? args.transaction : "";
+      return {
+        kind: "ui.attachments.list",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          attachments: mockAttachments.filter(
+            (attachment) => !tx || attachment.transaction_id === tx,
+          ),
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.attachments.add") {
+      const args = (req.args ?? {}) as {
+        transaction?: unknown;
+        file_path?: unknown;
+        url?: unknown;
+        label?: unknown;
+      };
+      const transactionId =
+        typeof args.transaction === "string" ? args.transaction : "";
+      const isUrl = typeof args.url === "string" && args.url.length > 0;
+      const source = isUrl
+        ? args.url as string
+        : typeof args.file_path === "string"
+          ? args.file_path
+          : "";
+      if (!transactionId || !source) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "ui.attachments.add requires transaction and file_path or url",
+            retryable: false,
+          },
+        };
+      }
+      const label =
+        typeof args.label === "string" && args.label.trim()
+          ? args.label.trim()
+          : isUrl
+            ? source
+            : source.split(/[\\/]/).pop() || "attachment.bin";
+      const attachment: MockAttachment = {
+        id: `att-mock-${(mockAttachmentCounter += 1)}`,
+        transaction_id: transactionId,
+        attachment_type: isUrl ? "url" : "file",
+        label,
+        original_filename: isUrl ? undefined : label,
+        url: isUrl ? source : undefined,
+        media_type: isUrl ? "text/uri-list" : "application/octet-stream",
+        size_bytes: isUrl ? null : 1024,
+        sha256: isUrl ? "" : "mock",
+        stored_relpath: isUrl ? "" : `mock/${label}`,
+        exists: isUrl ? null : true,
+        created_at: new Date().toISOString(),
+      };
+      mockAttachments = [attachment, ...mockAttachments];
+      return {
+        kind: "ui.attachments.add",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: attachment as T,
+      };
+    }
+
+    if (req.kind === "ui.attachments.remove") {
+      const args = (req.args ?? {}) as { attachment?: unknown };
+      const attachmentId =
+        typeof args.attachment === "string" ? args.attachment : "";
+      const attachment = mockAttachments.find((item) => item.id === attachmentId);
+      mockAttachments = mockAttachments.filter((item) => item.id !== attachmentId);
+      return {
+        kind: "ui.attachments.remove",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          ...(attachment ?? { id: attachmentId }),
+          removed: Boolean(attachment),
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.attachments.open") {
+      const args = (req.args ?? {}) as { attachment?: unknown };
+      const attachmentId =
+        typeof args.attachment === "string" ? args.attachment : "";
+      const attachment = mockAttachments.find((item) => item.id === attachmentId);
+      if (!attachment) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "not_found",
+            message: `Attachment '${attachmentId}' not found`,
+            retryable: false,
+          },
+        };
+      }
+      return {
+        kind: "ui.attachments.open",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          target_type: attachment.attachment_type === "url" ? "url" : "file",
+          url: attachment.url,
+          path: attachment.attachment_type === "file" ? `/tmp/${attachment.label}` : undefined,
+          attachment,
         } as T,
       };
     }

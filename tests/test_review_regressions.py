@@ -248,7 +248,11 @@ def _json_decimal(value):
 def _normalize_engine_entries(entries):
     return sorted(
         [
-            {key: _json_decimal(value) for key, value in entry.items() if key != "id"}
+            {
+                key: _json_decimal(value)
+                for key, value in entry.items()
+                if key not in {"id", "capital_gains_type"}
+            }
             for entry in entries
         ],
         key=lambda row: (

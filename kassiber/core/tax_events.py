@@ -363,6 +363,7 @@ def normalize_tax_asset_inputs(
         at_swap_link = None
         if is_at:
             at_pool = resolve_pool_id(wallet["id"])
+            regime_override = _row_get(row, "at_regime_override")
             if direction == "inbound":
                 at_regime = infer_regime_from_timestamp(row["occurred_at"])
             else:
@@ -370,6 +371,8 @@ def normalize_tax_asset_inputs(
                     row["id"],
                     outbound_regimes.get(row["id"], infer_regime_from_timestamp(row["occurred_at"])),
                 )
+            if regime_override in ("alt", "neu"):
+                at_regime = regime_override
             linked = swap_link_map.get(row["id"])
             if linked:
                 at_swap_link = linked

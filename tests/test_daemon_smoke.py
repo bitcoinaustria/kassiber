@@ -371,6 +371,97 @@ def _seed_workspace_with_transaction(
     _run_cli(data_root, "rates", "set", "BTC-EUR", "2026-01-01T00:00:00Z", "50000")
 
 
+def _seed_austrian_hodl_disposal(data_root, tmp_root):
+    csv_path = Path(tmp_root) / "hodl-disposal.csv"
+    csv_path.write_text(
+        "\n".join(
+            [
+                "date,txid,direction,asset,amount,fee,fiat_rate,description",
+                "2020-01-01T10:00:00Z,old-stack-1,inbound,BTC,0.10000000,0,10000,Old stack",
+                "2026-01-01T10:00:00Z,old-sale-1,outbound,BTC,0.10000000,0,50000,Old stack sale",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    _run_cli(data_root, "init")
+    _run_cli(data_root, "workspaces", "create", "Demo")
+    _run_cli(data_root, "profiles", "create", "Main", "--fiat-currency", "EUR", "--tax-country", "at")
+    _run_cli(
+        data_root,
+        "wallets",
+        "create",
+        "--label",
+        "Cold",
+        "--kind",
+        "address",
+        "--address",
+        "bc1qtestaddress0000000000000000000000000000000",
+    )
+    _run_cli(data_root, "wallets", "import-csv", "--wallet", "Cold", "--file", str(csv_path))
+
+
+def _seed_austrian_income_receipt(data_root, tmp_root):
+    csv_path = Path(tmp_root) / "income-receipt.csv"
+    csv_path.write_text(
+        "\n".join(
+            [
+                "date,txid,direction,asset,amount,fee,fiat_rate,kind,description",
+                "2026-01-01T10:00:00Z,staking-reward-1,inbound,BTC,0.00100000,0,40000,staking,Staking reward",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    _run_cli(data_root, "init")
+    _run_cli(data_root, "workspaces", "create", "Demo")
+    _run_cli(data_root, "profiles", "create", "Main", "--fiat-currency", "EUR", "--tax-country", "at")
+    _run_cli(
+        data_root,
+        "wallets",
+        "create",
+        "--label",
+        "Income",
+        "--kind",
+        "address",
+        "--address",
+        "bc1qtestincome000000000000000000000000000000",
+    )
+    _run_cli(data_root, "wallets", "import-csv", "--wallet", "Income", "--file", str(csv_path))
+
+
+def _seed_mixed_horizon_disposals(data_root, tmp_root):
+    csv_path = Path(tmp_root) / "mixed-horizon-disposals.csv"
+    csv_path.write_text(
+        "\n".join(
+            [
+                "date,txid,direction,asset,amount,fee,fiat_rate,description",
+                "2020-01-01T10:00:00Z,long-stack-1,inbound,BTC,0.10000000,0,10000,Long-term stack",
+                "2026-01-02T10:00:00Z,short-stack-1,inbound,BTC,0.10000000,0,20000,Short-term stack",
+                "2026-02-01T10:00:00Z,long-sale-1,outbound,BTC,0.10000000,0,50000,Long-term sale",
+                "2026-03-01T10:00:00Z,short-sale-1,outbound,BTC,0.10000000,0,60000,Short-term sale",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    _run_cli(data_root, "init")
+    _run_cli(data_root, "workspaces", "create", "Demo")
+    _run_cli(data_root, "profiles", "create", "Main", "--fiat-currency", "EUR")
+    _run_cli(
+        data_root,
+        "wallets",
+        "create",
+        "--label",
+        "Mixed",
+        "--kind",
+        "address",
+        "--address",
+        "bc1qtestmixed0000000000000000000000000000000",
+    )
+    _run_cli(data_root, "wallets", "import-csv", "--wallet", "Mixed", "--file", str(csv_path))
+
+
 def _seed_workspace_with_unpriced_transaction(data_root, tmp_root):
     csv_path = Path(tmp_root) / "unpriced.csv"
     csv_path.write_text(
@@ -3973,6 +4064,35 @@ class DaemonSmokeTest(unittest.TestCase):
                 10_000_000_000,
             )
 
+            _write_payload(
+                proc,
+                {
+                    "request_id": "journal-events-filter-1",
+                    "kind": "ui.journals.events.list",
+                    "args": {"transaction": "seed-inbound-1", "limit": 5},
+                },
+            )
+            filtered_journal_events = _read_payload_timeout(proc)
+            self.assertEqual(filtered_journal_events["kind"], "ui.journals.events.list")
+            self.assertEqual(filtered_journal_events["data"]["summary"]["count"], 1)
+            self.assertEqual(
+                filtered_journal_events["data"]["events"][0]["transactionExternalId"],
+                "seed-inbound-1",
+            )
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "journal-events-filter-empty-1",
+                    "kind": "ui.journals.events.list",
+                    "args": {"transaction": "not-a-transaction", "limit": 5},
+                },
+            )
+            empty_journal_events = _read_payload_timeout(proc)
+            self.assertEqual(empty_journal_events["kind"], "ui.journals.events.list")
+            self.assertEqual(empty_journal_events["data"]["summary"]["count"], 0)
+            self.assertEqual(empty_journal_events["data"]["events"], [])
+
             _write_payload(proc, {"request_id": "wallets-1", "kind": "ui.wallets.list"})
             wallets = _read_payload_timeout(proc)
             self.assertEqual(wallets["kind"], "ui.wallets.list")
@@ -4344,6 +4464,39 @@ class DaemonSmokeTest(unittest.TestCase):
             _write_payload(
                 proc,
                 {
+                    "request_id": "tx-meta-invalid-category-1",
+                    "kind": "ui.transactions.metadata.update",
+                    "args": {
+                        "transaction": "seed-inbound-1",
+                        "at_category": "garbage",
+                    },
+                },
+            )
+            invalid_category = _read_payload_timeout(proc)
+            self.assertEqual(invalid_category["kind"], "error")
+            self.assertEqual(invalid_category["error"]["code"], "validation")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "tx-meta-invalid-rate-1",
+                    "kind": "ui.transactions.metadata.update",
+                    "args": {
+                        "transaction": "seed-inbound-1",
+                        "pricing_source_kind": "manual_override",
+                        "pricing_quality": "exact",
+                        "fiat_currency": "EUR",
+                        "fiat_rate": "-1",
+                    },
+                },
+            )
+            invalid_rate = _read_payload_timeout(proc)
+            self.assertEqual(invalid_rate["kind"], "error")
+            self.assertEqual(invalid_rate["error"]["code"], "validation")
+
+            _write_payload(
+                proc,
+                {
                     "request_id": "tx-meta-after-invalid-1",
                     "kind": "ui.transactions.list",
                     "args": {"limit": 5},
@@ -4365,6 +4518,16 @@ class DaemonSmokeTest(unittest.TestCase):
                         "note": "Receipt matched against invoice 42",
                         "tags": ["Income", "accountant"],
                         "excluded": True,
+                        "pricing_source_kind": "manual_override",
+                        "pricing_quality": "exact",
+                        "fiat_currency": "EUR",
+                        "fiat_rate": "65000.00",
+                        "fiat_value": "6500.00",
+                        "pricing_external_ref": "Invoice 42",
+                        "review_status": "review",
+                        "taxable": False,
+                        "at_regime": "outside",
+                        "at_category": "none",
                     },
                 },
             )
@@ -4379,6 +4542,16 @@ class DaemonSmokeTest(unittest.TestCase):
                 ],
             )
             self.assertTrue(saved["data"]["excluded"])
+            self.assertEqual(saved["data"]["fiat_currency"], "EUR")
+            self.assertEqual(saved["data"]["fiat_rate_exact"], "65000.00")
+            self.assertEqual(saved["data"]["fiat_value_exact"], "6500.00")
+            self.assertEqual(saved["data"]["pricing_source_kind"], "manual_override")
+            self.assertEqual(saved["data"]["pricing_quality"], "exact")
+            self.assertEqual(saved["data"]["pricing_external_ref"], "Invoice 42")
+            self.assertEqual(saved["data"]["review_status"], "review")
+            self.assertFalse(saved["data"]["taxable"])
+            self.assertEqual(saved["data"]["at_regime"], "outside")
+            self.assertEqual(saved["data"]["at_category"], "none")
             self.assertTrue(saved["data"]["updated"])
 
             _write_payload(
@@ -4396,7 +4569,417 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(tx["tags"], ["accountant", "Income"])
             self.assertEqual(tx["tag"], "accountant, Income")
             self.assertTrue(tx["excluded"])
+            self.assertEqual(tx["fiatCurrency"], "EUR")
+            self.assertEqual(tx["rate"], 65000.0)
+            self.assertEqual(tx["eur"], 6500.0)
+            self.assertEqual(tx["pricingSourceKind"], "manual_override")
+            self.assertEqual(tx["pricingQuality"], "exact")
+            self.assertEqual(tx["pricingExternalRef"], "Invoice 42")
+            self.assertEqual(tx["reviewStatus"], "review")
+            self.assertFalse(tx["taxable"])
+            self.assertEqual(tx["atRegime"], "outside")
+            self.assertEqual(tx["atCategory"], "none")
 
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
+
+    def test_daemon_transaction_taxable_override_updates_journal_inputs(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-taxable-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_austrian_hodl_disposal(data_root, tmp)
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "tx-taxable-false-1",
+                    "kind": "ui.transactions.metadata.update",
+                    "args": {
+                        "transaction": "old-sale-1",
+                        "taxable": False,
+                        "at_regime": "alt",
+                        "at_category": "alt_taxfree",
+                    },
+                },
+            )
+            saved = _read_payload_timeout(proc)
+            self.assertEqual(saved["kind"], "ui.transactions.metadata.update")
+            self.assertFalse(saved["data"]["taxable"])
+
+            _write_payload(proc, {"request_id": "process-1", "kind": "ui.journals.process"})
+            processed = _read_payload_timeout(proc)
+            self.assertEqual(processed["kind"], "ui.journals.process")
+            self.assertEqual(processed["data"]["processed_transactions"], 2)
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "journal-events-nontaxable-1",
+                    "kind": "ui.journals.events.list",
+                    "args": {"transaction": "old-sale-1", "limit": 5},
+                },
+            )
+            events = _read_payload_timeout(proc)
+            self.assertEqual(events["kind"], "ui.journals.events.list")
+            self.assertEqual(events["data"]["summary"]["reportableCount"], 0)
+            self.assertEqual(events["data"]["events"][0]["atCategory"], "alt_taxfree")
+            self.assertIsNone(events["data"]["events"][0]["atKennzahl"])
+
+            _write_payload(
+                proc,
+                {"request_id": "balance-sheet-empty-1", "kind": "ui.reports.balance_sheet"},
+            )
+            balance_sheet = _read_payload_timeout(proc)
+            self.assertEqual(balance_sheet["kind"], "ui.reports.balance_sheet")
+            self.assertEqual(
+                sum(row["quantity_msat"] for row in balance_sheet["data"]["totals_by_asset"]),
+                0,
+            )
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "tax-summary-nontaxable-1",
+                    "kind": "ui.reports.tax_summary",
+                    "args": {"year": 2026},
+                },
+            )
+            tax_summary = _read_payload_timeout(proc)
+            self.assertEqual(tax_summary["kind"], "ui.reports.tax_summary")
+            self.assertEqual(tax_summary["data"]["rows"], [])
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "capital-gains-nontaxable-1",
+                    "kind": "ui.reports.capital_gains",
+                    "args": {"year": 2026},
+                },
+            )
+            capital_gains = _read_payload_timeout(proc)
+            self.assertEqual(capital_gains["kind"], "ui.reports.capital_gains")
+            self.assertEqual(capital_gains["data"]["lots"], [])
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "summary-pdf-nontaxable-1",
+                    "kind": "ui.reports.export_summary_pdf",
+                    "args": {
+                        "start": "2026-01-01T00:00:00Z",
+                        "end": "2026-12-31T23:59:59Z",
+                    },
+                },
+            )
+            summary_pdf = _read_payload_timeout(proc)
+            self.assertEqual(summary_pdf["kind"], "ui.reports.export_summary_pdf")
+            self.assertEqual(summary_pdf["data"]["metrics"]["realized_pnl"], 0.0)
+            self.assertEqual(summary_pdf["data"]["top_disposals"], [])
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "tx-taxable-true-1",
+                    "kind": "ui.transactions.metadata.update",
+                    "args": {
+                        "transaction": "old-sale-1",
+                        "taxable": True,
+                        "at_regime": "alt",
+                        "at_category": "alt_spekulation",
+                    },
+                },
+            )
+            resaved = _read_payload_timeout(proc)
+            self.assertEqual(resaved["kind"], "ui.transactions.metadata.update")
+            self.assertTrue(resaved["data"]["taxable"])
+
+            _write_payload(proc, {"request_id": "process-2", "kind": "ui.journals.process"})
+            reprocessed = _read_payload_timeout(proc)
+            self.assertEqual(reprocessed["kind"], "ui.journals.process")
+            self.assertEqual(reprocessed["data"]["processed_transactions"], 2)
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "journal-events-taxable-1",
+                    "kind": "ui.journals.events.list",
+                    "args": {"transaction": "old-sale-1", "limit": 5},
+                },
+            )
+            reportable_events = _read_payload_timeout(proc)
+            self.assertEqual(reportable_events["kind"], "ui.journals.events.list")
+            self.assertEqual(reportable_events["data"]["summary"]["reportableCount"], 1)
+            self.assertEqual(
+                reportable_events["data"]["events"][0]["atCategory"],
+                "alt_spekulation",
+            )
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "tax-summary-taxable-1",
+                    "kind": "ui.reports.tax_summary",
+                    "args": {"year": 2026},
+                },
+            )
+            taxable_summary = _read_payload_timeout(proc)
+            self.assertEqual(taxable_summary["kind"], "ui.reports.tax_summary")
+            self.assertGreater(len(taxable_summary["data"]["rows"]), 0)
+
+            _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
+
+    def test_daemon_transaction_taxable_override_suppresses_income_tax_summary(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-income-taxable-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_austrian_income_receipt(data_root, tmp)
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "income-taxable-false-1",
+                    "kind": "ui.transactions.metadata.update",
+                    "args": {
+                        "transaction": "staking-reward-1",
+                        "taxable": False,
+                    },
+                },
+            )
+            saved = _read_payload_timeout(proc)
+            self.assertEqual(saved["kind"], "ui.transactions.metadata.update")
+            self.assertFalse(saved["data"]["taxable"])
+
+            _write_payload(proc, {"request_id": "process-income-1", "kind": "ui.journals.process"})
+            processed = _read_payload_timeout(proc)
+            self.assertEqual(processed["kind"], "ui.journals.process")
+            self.assertEqual(processed["data"]["processed_transactions"], 1)
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "income-events-nontaxable-1",
+                    "kind": "ui.journals.events.list",
+                    "args": {"transaction": "staking-reward-1", "limit": 5},
+                },
+            )
+            events = _read_payload_timeout(proc)
+            self.assertEqual(events["kind"], "ui.journals.events.list")
+            self.assertEqual(events["data"]["summary"]["reportableCount"], 0)
+            self.assertTrue(
+                any(event["entryType"] == "income" for event in events["data"]["events"])
+            )
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "income-tax-summary-nontaxable-1",
+                    "kind": "ui.reports.tax_summary",
+                    "args": {"year": 2026},
+                },
+            )
+            tax_summary = _read_payload_timeout(proc)
+            self.assertEqual(tax_summary["kind"], "ui.reports.tax_summary")
+            self.assertEqual(tax_summary["data"]["rows"], [])
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "income-taxable-true-1",
+                    "kind": "ui.transactions.metadata.update",
+                    "args": {
+                        "transaction": "staking-reward-1",
+                        "taxable": True,
+                    },
+                },
+            )
+            resaved = _read_payload_timeout(proc)
+            self.assertEqual(resaved["kind"], "ui.transactions.metadata.update")
+            self.assertTrue(resaved["data"]["taxable"])
+
+            _write_payload(proc, {"request_id": "process-income-2", "kind": "ui.journals.process"})
+            reprocessed = _read_payload_timeout(proc)
+            self.assertEqual(reprocessed["kind"], "ui.journals.process")
+            self.assertEqual(reprocessed["data"]["processed_transactions"], 1)
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "income-tax-summary-taxable-1",
+                    "kind": "ui.reports.tax_summary",
+                    "args": {"year": 2026},
+                },
+            )
+            taxable_summary = _read_payload_timeout(proc)
+            self.assertEqual(taxable_summary["kind"], "ui.reports.tax_summary")
+            self.assertTrue(
+                any(
+                    row["transaction_type"] == "staking"
+                    for row in taxable_summary["data"]["rows"]
+                )
+            )
+
+            _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
+
+    def test_daemon_transaction_taxable_override_preserves_capital_gains_bucket(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-tax-buckets-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_mixed_horizon_disposals(data_root, tmp)
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "short-sale-taxable-false-1",
+                    "kind": "ui.transactions.metadata.update",
+                    "args": {
+                        "transaction": "short-sale-1",
+                        "taxable": False,
+                    },
+                },
+            )
+            saved = _read_payload_timeout(proc)
+            self.assertEqual(saved["kind"], "ui.transactions.metadata.update")
+            self.assertFalse(saved["data"]["taxable"])
+
+            _write_payload(proc, {"request_id": "process-buckets-1", "kind": "ui.journals.process"})
+            processed = _read_payload_timeout(proc)
+            self.assertEqual(processed["kind"], "ui.journals.process")
+            self.assertEqual(processed["data"]["processed_transactions"], 4)
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "tax-summary-buckets-1",
+                    "kind": "ui.reports.tax_summary",
+                    "args": {"year": 2026},
+                },
+            )
+            tax_summary = _read_payload_timeout(proc)
+            self.assertEqual(tax_summary["kind"], "ui.reports.tax_summary")
+            detail_rows = [
+                row
+                for row in tax_summary["data"]["rows"]
+                if row["row_type"] == "detail" and row["transaction_type"] == "sell"
+            ]
+            self.assertEqual([row["capital_gains_type"] for row in detail_rows], ["long"])
+            self.assertEqual(detail_rows[0]["quantity_msat"], 10_000_000_000)
+
+            _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
+
+    def test_daemon_transaction_attachments_round_trip(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-attachments-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(data_root, tmp)
+            receipt = Path(tmp) / "receipt.txt"
+            receipt.write_text("invoice 42\n", encoding="utf-8")
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "att-file-1",
+                    "kind": "ui.attachments.add",
+                    "args": {
+                        "transaction": "seed-inbound-1",
+                        "file_path": str(receipt),
+                        "label": "Receipt 42",
+                    },
+                },
+            )
+            file_added = _read_payload_timeout(proc)
+            self.assertEqual(file_added["kind"], "ui.attachments.add")
+            self.assertEqual(file_added["data"]["attachment_type"], "file")
+            self.assertEqual(file_added["data"]["label"], "Receipt 42")
+            self.assertTrue(file_added["data"]["exists"])
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "att-url-1",
+                    "kind": "ui.attachments.add",
+                    "args": {
+                        "transaction": "seed-inbound-1",
+                        "url": "https://example.test/invoice/42",
+                    },
+                },
+            )
+            url_added = _read_payload_timeout(proc)
+            self.assertEqual(url_added["kind"], "ui.attachments.add")
+            self.assertEqual(url_added["data"]["attachment_type"], "url")
+            self.assertEqual(url_added["data"]["url"], "https://example.test/invoice/42")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "att-list-1",
+                    "kind": "ui.attachments.list",
+                    "args": {"transaction": "seed-inbound-1"},
+                },
+            )
+            listed = _read_payload_timeout(proc)
+            self.assertEqual(listed["kind"], "ui.attachments.list")
+            self.assertEqual(len(listed["data"]["attachments"]), 2)
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "att-open-file-1",
+                    "kind": "ui.attachments.open",
+                    "args": {"attachment": file_added["data"]["id"]},
+                },
+            )
+            opened = _read_payload_timeout(proc)
+            self.assertEqual(opened["kind"], "ui.attachments.open")
+            self.assertEqual(opened["data"]["target_type"], "file")
+            self.assertTrue(Path(opened["data"]["path"]).exists())
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "att-remove-1",
+                    "kind": "ui.attachments.remove",
+                    "args": {"attachment": file_added["data"]["id"]},
+                },
+            )
+            removed = _read_payload_timeout(proc)
+            self.assertEqual(removed["kind"], "ui.attachments.remove")
+            self.assertTrue(removed["data"]["removed"])
+            self.assertTrue(removed["data"]["deleted_file"])
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "att-list-2",
+                    "kind": "ui.attachments.list",
+                    "args": {"transaction": "seed-inbound-1"},
+                },
+            )
+            listed_after_remove = _read_payload_timeout(proc)
+            self.assertEqual(len(listed_after_remove["data"]["attachments"]), 1)
+            self.assertEqual(
+                listed_after_remove["data"]["attachments"][0]["attachment_type"],
+                "url",
+            )
+
+            _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
             code, stderr = _close_daemon(proc)
             self.assertEqual(code, 0, stderr)
             self.assertEqual(stderr, "")

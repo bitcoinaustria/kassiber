@@ -29,6 +29,14 @@ export type Transaction = {
   feeEur?: number | null;
   asset?: string;
   rate?: number | null;
+  fiatCurrency?: string | null;
+  pricingSourceKind?: PricingSourceKind | null;
+  pricingQuality?: PricingQuality | null;
+  pricingExternalRef?: string | null;
+  reviewStatus?: TransactionStatus | null;
+  taxable?: boolean | null;
+  atRegime?: AustrianDraftRegime | null;
+  atCategory?: AustrianDraftCategory | null;
   note?: string;
   tags?: string[];
   excluded?: boolean;
@@ -569,16 +577,16 @@ export function draftForTransaction(txn: Transaction): TransactionEditDraft {
       initialTags.filter((tag) => tag !== persistedLabel),
     ),
     note: txn.note || "",
-    atRegime: defaultTaxClassification.atRegime,
-    atCategory: defaultTaxClassification.atCategory,
-    pricingSourceKind: txn.rate ? "generic_import" : null,
-    pricingQuality: txn.rate ? "exact" : "missing",
-    manualCurrency: "EUR",
+    atRegime: txn.atRegime ?? defaultTaxClassification.atRegime,
+    atCategory: txn.atCategory ?? defaultTaxClassification.atCategory,
+    pricingSourceKind: txn.pricingSourceKind ?? (txn.rate ? "generic_import" : null),
+    pricingQuality: txn.pricingQuality ?? (txn.rate ? "exact" : "missing"),
+    manualCurrency: txn.fiatCurrency ?? "EUR",
     manualPrice: txn.rate ? String(txn.rate) : "",
     manualValue: txn.amount !== null && txn.amount ? String(txn.amount) : "",
-    manualSource: "",
-    reviewStatus: txn.status,
-    taxable: defaultTaxClassification.taxable,
+    manualSource: txn.pricingExternalRef ?? "",
+    reviewStatus: txn.reviewStatus ?? txn.status,
+    taxable: txn.taxable ?? defaultTaxClassification.taxable,
     excluded: Boolean(txn.excluded),
   };
 }

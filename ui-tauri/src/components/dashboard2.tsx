@@ -65,7 +65,8 @@ import { type ExplorerSettings } from "@/lib/explorer";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
-import { useDaemonMutation } from "@/daemon/client";
+import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import { openAttachmentFile, openExternalUrl } from "@/daemon/transport";
 import {
   MOCK_TRANSACTIONS,
   type TransactionsList,
@@ -76,6 +77,8 @@ import {
   ExplorerOpenDialog,
   NewTransactionDialog,
   type AttachmentItem,
+  type JournalEventItem,
+  type SourceFundsLinkItem,
   TransactionDetailSheet,
   allPaymentMethods,
   allTransactionFlows,
@@ -93,6 +96,7 @@ import {
   formatShortTxid,
   formatSignedDisplayMoney,
   mockNewTransactionWalletSourceOptions,
+  parseManualDecimal,
   pricingSelectionValue,
   pricingSourceLabel,
   pricingSourceStyles,
@@ -806,6 +810,14 @@ function toDashboardTransaction(tx: Tx, index: number): Transaction {
         : null,
     asset: "BTC",
     rate: tx.rate,
+    fiatCurrency: tx.fiatCurrency,
+    pricingSourceKind: tx.pricingSourceKind as Transaction["pricingSourceKind"],
+    pricingQuality: tx.pricingQuality as Transaction["pricingQuality"],
+    pricingExternalRef: tx.pricingExternalRef,
+    reviewStatus: tx.reviewStatus as Transaction["reviewStatus"],
+    taxable: tx.taxable,
+    atRegime: tx.atRegime as Transaction["atRegime"],
+    atCategory: tx.atCategory as Transaction["atCategory"],
     note: tx.note,
     tags: tx.tags,
     excluded: tx.excluded,
@@ -864,40 +876,69 @@ function initials(value: string) {
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
-// Mock attachments keyed by transaction id. Replaced by ui.attachments.list
-// once the daemon kinds land (see TODO.md). Lets the AttachmentsPanel demo
-// its populated state in mock mode.
-const MOCK_ATTACHMENTS_BY_TX: Record<string, AttachmentItem[]> = {
-  tx1: [
-    {
-      id: "att-tx1-1",
-      kind: "file",
-      label: "invoice-2026-04-18.pdf",
-      detail: "PDF · 248 KB · sha256 a91f…7c",
-    },
-    {
-      id: "att-tx1-2",
-      kind: "url",
-      label: "btcpay.example.com/invoices/abc123",
-      detail: "BTCPay invoice",
-      href: "https://btcpay.example.com/invoices/abc123",
-    },
-    {
-      id: "att-tx1-3",
-      kind: "url",
-      label: "drive.example.com/q1-revenue-summary.xlsx",
-      detail: "Drive · accountant copy",
-      href: "https://drive.example.com/q1-revenue-summary.xlsx",
-    },
-    {
-      id: "att-tx1-4",
-      kind: "url",
-      label: "wiki.internal/customer-contract-ACME-2024",
-      detail: "Internal wiki",
-      href: "https://wiki.internal/customer-contract-ACME-2024",
-    },
-  ],
+type AttachmentRecord = {
+  id: string;
+  attachment_type: "file" | "url";
+  label: string;
+  original_filename?: string;
+  url?: string;
+  media_type?: string;
+  size_bytes?: number | null;
+  sha256?: string;
+  exists?: boolean | null;
 };
+
+type AttachmentsListData = {
+  attachments: AttachmentRecord[];
+};
+
+type AttachmentOpenData = {
+  target_type: "file" | "url";
+  path?: string;
+  url?: string;
+  attachment: AttachmentRecord;
+};
+
+type SourceFundsLinksData = {
+  links: SourceFundsLinkItem[];
+};
+
+type JournalEventsData = {
+  events: JournalEventItem[];
+};
+
+function compactBytes(bytes: number | null | undefined) {
+  if (bytes === null || bytes === undefined) return null;
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function attachmentRecordToItem(record: AttachmentRecord): AttachmentItem {
+  const kind = record.attachment_type === "url" ? "url" : "file";
+  const size = compactBytes(record.size_bytes);
+  const hash = record.sha256 ? `sha256 ${record.sha256.slice(0, 6)}...` : null;
+  const fileBits = [
+    record.media_type || null,
+    size,
+    hash,
+    record.exists === false ? "missing file" : null,
+  ].filter(Boolean);
+  return {
+    id: record.id,
+    kind,
+    label:
+      record.label ||
+      record.original_filename ||
+      record.url ||
+      (kind === "url" ? "Link attachment" : "File attachment"),
+    detail:
+      kind === "url"
+        ? record.url || record.media_type || undefined
+        : fileBits.join(" · ") || record.original_filename || undefined,
+    href: record.url || undefined,
+  };
+}
 
 const periodLabels: Record<PeriodKey, string> = {
   ytd: "YTD",
@@ -2622,6 +2663,28 @@ const TransactionsTable = ({
   );
   const [saveError, setSaveError] = React.useState<string | null>(null);
   const metadataUpdate = useDaemonMutation("ui.transactions.metadata.update");
+  const attachmentAdd = useDaemonMutation<AttachmentRecord>("ui.attachments.add");
+  const attachmentRemove = useDaemonMutation<AttachmentRecord>(
+    "ui.attachments.remove",
+  );
+  const attachmentOpen =
+    useDaemonMutation<AttachmentOpenData>("ui.attachments.open");
+  const unpairTransfer = useDaemonMutation("ui.transfers.unpair");
+  const attachmentsQuery = useDaemon<AttachmentsListData>(
+    "ui.attachments.list",
+    { transaction: detailTransaction?.id ?? "" },
+    { enabled: Boolean(detailTransaction) },
+  );
+  const sourceFundsLinksQuery = useDaemon<SourceFundsLinksData>(
+    "ui.source_funds.links.list",
+    { target_transaction: detailTransaction?.id ?? "" },
+    { enabled: Boolean(detailTransaction) },
+  );
+  const journalEventsQuery = useDaemon<JournalEventsData>(
+    "ui.journals.events.list",
+    { transaction: detailTransaction?.id ?? "", limit: 20 },
+    { enabled: Boolean(detailTransaction) },
+  );
   const explorerTarget = explorerTransaction
     ? explorerForTransaction(explorerTransaction, explorerSettings)
     : null;
@@ -2653,11 +2716,45 @@ const TransactionsTable = ({
         shouldPersistLabel ? draft.label : "",
         ...draft.tags,
       ].filter(Boolean);
+      const pricingDirty = baseline
+        ? draft.pricingSourceKind !== baseline.pricingSourceKind ||
+          draft.pricingQuality !== baseline.pricingQuality ||
+          draft.manualCurrency !== baseline.manualCurrency ||
+          draft.manualPrice !== baseline.manualPrice ||
+          draft.manualValue !== baseline.manualValue ||
+          draft.manualSource !== baseline.manualSource
+        : false;
+      const reviewTaxDirty = baseline
+        ? draft.reviewStatus !== baseline.reviewStatus ||
+          draft.taxable !== baseline.taxable ||
+          draft.atRegime !== baseline.atRegime ||
+          draft.atCategory !== baseline.atCategory
+        : false;
+      const manualPrice = parseManualDecimal(draft.manualPrice);
+      const manualValue = parseManualDecimal(draft.manualValue);
       await metadataUpdate.mutateAsync({
         transaction: transactionId,
         note: draft.note.trim() ? draft.note : null,
         tags: Array.from(new Set(tags)),
         excluded: draft.excluded,
+        ...(reviewTaxDirty
+          ? {
+              review_status: draft.reviewStatus,
+              taxable: draft.taxable,
+              at_regime: draft.atRegime,
+              at_category: draft.atCategory,
+            }
+          : {}),
+        ...(pricingDirty
+          ? {
+              pricing_source_kind: draft.pricingSourceKind,
+              pricing_quality: draft.pricingQuality,
+              fiat_currency: draft.manualCurrency.trim().toUpperCase(),
+              fiat_rate: manualPrice === null ? null : draft.manualPrice,
+              fiat_value: manualValue === null ? null : draft.manualValue,
+              pricing_external_ref: draft.manualSource.trim() || null,
+            }
+          : {}),
       });
       setDrafts((current) => ({
         ...current,
@@ -2676,6 +2773,16 @@ const TransactionsTable = ({
     },
     [],
   );
+  const attachmentItems = React.useMemo(
+    () =>
+      (attachmentsQuery.data?.data?.attachments ?? []).map(
+        attachmentRecordToItem,
+      ),
+    [attachmentsQuery.data],
+  );
+  const sourceFundsLinks =
+    sourceFundsLinksQuery.data?.data?.links ?? [];
+  const journalEvents = journalEventsQuery.data?.data?.events ?? [];
 
   const hasActiveFilters =
     chartSelection !== null ||
@@ -3691,31 +3798,75 @@ const TransactionsTable = ({
         isSaving={metadataUpdate.isPending}
         saveError={saveError}
         nowRate={nowRate}
-        attachments={
-          detailTransaction
-            ? MOCK_ATTACHMENTS_BY_TX[detailTransaction.id]
-            : undefined
-        }
+        attachments={detailTransaction ? attachmentItems : undefined}
+        sourceFundsLinks={sourceFundsLinks}
+        journalEvents={journalEvents}
         onAddAttachmentFiles={async (paths) => {
-          // TODO(attachments): wire to ui.attachments.add when daemon kind lands.
-          console.info("[attachments] add files (stub):", paths);
+          if (!detailTransaction) return;
+          for (const path of paths) {
+            await attachmentAdd.mutateAsync({
+              transaction: detailTransaction.id,
+              file_path: path,
+            });
+          }
           useUiStore.getState().addNotification({
-            title: "Attachments not wired yet",
-            body: `Selected ${paths.length} file${paths.length === 1 ? "" : "s"}, but the daemon kind that saves attachments isn't shipping in this build yet (see TODO.md).`,
-            tone: "info",
-            dedupeKey: "attachments-stub",
+            title: "Files attached",
+            body: `${paths.length} file${paths.length === 1 ? "" : "s"} copied into Kassiber attachments.`,
+            tone: "success",
+            dedupeKey: `attachments-files-${detailTransaction.id}`,
           });
         }}
         onAddAttachmentLinks={async (urls) => {
-          // TODO(attachments): wire to ui.attachments.add when daemon kind lands.
-          console.info("[attachments] add links (stub):", urls);
+          if (!detailTransaction) return;
+          for (const url of urls) {
+            await attachmentAdd.mutateAsync({
+              transaction: detailTransaction.id,
+              url,
+            });
+          }
           useUiStore.getState().addNotification({
-            title: "Attachments not wired yet",
-            body: `Entered ${urls.length} link${urls.length === 1 ? "" : "s"}, but the daemon kind that saves attachments isn't shipping in this build yet (see TODO.md).`,
-            tone: "info",
-            dedupeKey: "attachments-stub",
+            title: "Links attached",
+            body: `${urls.length} link${urls.length === 1 ? "" : "s"} stored as attachment references.`,
+            tone: "success",
+            dedupeKey: `attachments-links-${detailTransaction.id}`,
           });
         }}
+        onOpenAttachment={async (item) => {
+          const result = await attachmentOpen.mutateAsync({
+            attachment: item.id,
+          });
+          const data = result.data;
+          if (!data) return;
+          if (data.target_type === "url" && data.url) {
+            await openExternalUrl(data.url);
+            return;
+          }
+          if (data.target_type === "file" && data.path) {
+            await openAttachmentFile(data.path);
+          }
+        }}
+        onRemoveAttachment={async (item) => {
+          await attachmentRemove.mutateAsync({ attachment: item.id });
+          useUiStore.getState().addNotification({
+            title: "Attachment removed",
+            body: item.kind === "file" ? "Attachment record and copied file removed." : "Attachment link removed.",
+            tone: "success",
+            dedupeKey: `attachment-remove-${item.id}`,
+          });
+        }}
+        onUnpair={async (pairId) => {
+          await unpairTransfer.mutateAsync({ pair_id: pairId });
+          setDetailTransaction((current) =>
+            current?.pair?.id === pairId ? { ...current, pair: undefined } : current,
+          );
+          useUiStore.getState().addNotification({
+            title: "Pair removed",
+            body: "This movement is no longer linked to the other leg.",
+            tone: "success",
+            dedupeKey: `transfer-unpair-${pairId}`,
+          });
+        }}
+        isUnpairing={unpairTransfer.isPending}
         hasNext={
           detailTransaction
             ? filteredTransactions.findIndex(

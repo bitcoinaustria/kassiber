@@ -598,6 +598,27 @@ export type AttachmentItem = {
   href?: string;
 };
 
+export type SourceFundsLinkItem = {
+  id: string;
+  link_type: string;
+  state: string;
+  confidence: string;
+  asset?: string | null;
+  allocation_amount?: number | null;
+  explanation?: string;
+};
+
+export type JournalEventItem = {
+  id: string;
+  entryType: string;
+  asset: string;
+  quantity: number;
+  fiatValueEur: number;
+  gainLossEur?: number | null;
+  atCategory?: string | null;
+  description?: string;
+};
+
 function AttachLinksDialog({
   open,
   onOpenChange,
@@ -978,10 +999,14 @@ export function TransactionDetailSheet({
   saveError,
   nowRate,
   attachments,
+  sourceFundsLinks = [],
+  journalEvents = [],
   onAddAttachmentFiles,
   onAddAttachmentLinks,
   onOpenAttachment,
   onRemoveAttachment,
+  onUnpair,
+  isUnpairing,
   onOpenChange,
   onOpenExplorer,
   onSave,
@@ -998,10 +1023,14 @@ export function TransactionDetailSheet({
   saveError?: string | null;
   nowRate?: number | null;
   attachments?: AttachmentItem[];
+  sourceFundsLinks?: SourceFundsLinkItem[];
+  journalEvents?: JournalEventItem[];
   onAddAttachmentFiles?: (paths: string[]) => void | Promise<void>;
   onAddAttachmentLinks?: (urls: string[]) => void | Promise<void>;
   onOpenAttachment?: (item: AttachmentItem) => void;
   onRemoveAttachment?: (item: AttachmentItem) => void;
+  onUnpair?: (pairId: string) => void | Promise<void>;
+  isUnpairing?: boolean;
   onOpenChange: (open: boolean) => void;
   onOpenExplorer: (transaction: Transaction) => void;
   onSave: (
@@ -1154,7 +1183,18 @@ export function TransactionDetailSheet({
   const dirtyTags = dirty.tags;
   const dirtyLabel = dirty.label;
   const dirtyNote = dirty.note;
+  const dirtyPricing = Boolean(
+    dirty.pricingSourceKind ||
+      dirty.pricingQuality ||
+      dirty.manualCurrency ||
+      dirty.manualPrice ||
+      dirty.manualValue ||
+      dirty.manualSource,
+  );
   const dirtyExcluded = dirty.excluded;
+  const dirtyReviewTax = Boolean(
+    dirty.reviewStatus || dirty.taxable || dirty.atRegime || dirty.atCategory,
+  );
 
   const timelineSteps: TimelineStep[] = [
     {
@@ -1479,10 +1519,10 @@ export function TransactionDetailSheet({
                       hasJournalQuarantine
                         ? `Current journal blocker: ${normalizedQuarantineReason}.`
                         : transaction.amount === null
-                          ? `No fiat price recorded for ${transaction.date}. Pricing edits are preview-only until the metadata daemon kind is extended.`
+                          ? `No fiat price recorded for ${transaction.date}. Add a manual price or value to include this row in journal processing.`
                           : localDraft.pricingSourceKind === null
-                            ? "No persisted pricing source is available yet. Pricing edits are preview-only until the metadata daemon kind is extended."
-                            : "Pricing source is marked as missing or under review; editing it is deferred to the metadata daemon follow-up."
+                            ? "No persisted pricing source is available yet. Add a manual price or choose a backed pricing source."
+                            : "Pricing source is marked as missing or under review. Save a reviewed source before running journals."
                     }
                     hint={
                       hasJournalQuarantine
@@ -1502,14 +1542,17 @@ export function TransactionDetailSheet({
                     <TabsTrigger value="details">Details</TabsTrigger>
                     <TabsTrigger value="classify">
                       Classify
-                      {dirtyLabel || dirtyTags || dirtyNote ? (
+                      {dirtyLabel || dirtyTags || dirtyNote || dirty.reviewStatus ? (
                         <DirtyDot active />
                       ) : null}
                     </TabsTrigger>
-                    <TabsTrigger value="pricing">Pricing</TabsTrigger>
+                    <TabsTrigger value="pricing">
+                      Pricing
+                      {dirtyPricing ? <DirtyDot active /> : null}
+                    </TabsTrigger>
                     <TabsTrigger value="tax">
                       Tax
-                      {dirtyExcluded ? <DirtyDot active /> : null}
+                      {dirtyExcluded || dirtyReviewTax ? <DirtyDot active /> : null}
                     </TabsTrigger>
                     <TabsTrigger value="linked">Linked</TabsTrigger>
                     <TabsTrigger value="ledger">Ledger</TabsTrigger>
@@ -1691,15 +1734,14 @@ export function TransactionDetailSheet({
                           className="flex items-center gap-1.5 text-muted-foreground"
                         >
                           Review status
+                          <DirtyDot active={dirty.reviewStatus} />
                           <InfoHint label="Review status">
-                            Settled from on-chain confirmations. Editing the
-                            review state lands when the metadata daemon kind
-                            is extended (tracked in TODO.md).
+                            Local review state for filtering and audit
+                            workflow. It does not change chain confirmations.
                           </InfoHint>
                         </Label>
                         <Select
                           value={localDraft.reviewStatus}
-                          disabled
                           onValueChange={(value) =>
                             updateDraft(
                               "reviewStatus",
@@ -1831,9 +1873,8 @@ export function TransactionDetailSheet({
                           <button
                             key={option.value}
                             type="button"
-                            disabled
                             className={cn(
-                              "rounded-md border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-70",
+                              "rounded-md border p-3 text-left transition-colors hover:bg-muted/50",
                               pricingValue === option.value &&
                                 "border-primary bg-accent",
                             )}
@@ -1859,11 +1900,11 @@ export function TransactionDetailSheet({
                           <div>
                             <div className="flex items-center gap-1.5 text-sm font-medium">
                               Manual price override
+                              <DirtyDot active={dirtyPricing} />
                               <InfoHint label="Manual price override">
-                                Pricing edits land when the metadata daemon
-                                kind is extended to accept a price source +
-                                manual override (tracked in TODO.md). The
-                                editor below is preview-only for now.
+                                Saves a reviewed price source and exact manual
+                                rate/value to the transaction row. Reprocess
+                                journals after saving.
                               </InfoHint>
                             </div>
                             <div className="text-xs text-muted-foreground">
@@ -1892,7 +1933,6 @@ export function TransactionDetailSheet({
                             <Input
                               id="tx-manual-currency"
                               value={localDraft.manualCurrency}
-                              disabled
                               onChange={(event) =>
                                 updateDraft(
                                   "manualCurrency",
@@ -1909,7 +1949,6 @@ export function TransactionDetailSheet({
                               ref={manualPriceRef}
                               inputMode="decimal"
                               value={localDraft.manualPrice}
-                              disabled
                               onChange={(event) =>
                                 updateManualPrice(event.target.value)
                               }
@@ -1922,7 +1961,6 @@ export function TransactionDetailSheet({
                               id="tx-manual-value"
                               inputMode="decimal"
                               value={localDraft.manualValue}
-                              disabled
                               onChange={(event) =>
                                 updateManualValue(event.target.value)
                               }
@@ -1947,7 +1985,6 @@ export function TransactionDetailSheet({
                             id="tx-manual-source"
                             value={localDraft.manualSource}
                             className={blurClass(hideSensitive)}
-                            disabled
                             onChange={(event) =>
                               updateDraft("manualSource", event.target.value)
                             }
@@ -2001,7 +2038,7 @@ export function TransactionDetailSheet({
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <h3 className="flex items-center gap-1.5 text-sm font-semibold">
                           Tax handling
-                          <DirtyDot active={dirtyExcluded} />
+                          <DirtyDot active={dirtyExcluded || dirtyReviewTax} />
                         </h3>
                         <Badge
                           variant={
@@ -2024,6 +2061,7 @@ export function TransactionDetailSheet({
                             className="flex items-center gap-1.5"
                           >
                             Austrian category
+                            <DirtyDot active={dirty.atRegime || dirty.atCategory} />
                             <InfoHint label="Austrian category">
                               Maps to § 27b EStG buckets. "Neu" covers
                               post-2022 holdings; "Alt" covers pre-2022
@@ -2036,7 +2074,6 @@ export function TransactionDetailSheet({
                               localDraft.atRegime,
                               localDraft.atCategory,
                             )}
-                            disabled
                             onValueChange={(value) => {
                               const option =
                                 austrianTaxClassificationForValue(value);
@@ -2069,6 +2106,7 @@ export function TransactionDetailSheet({
                               className="flex items-center gap-1.5"
                             >
                               Taxable
+                              <DirtyDot active={dirty.taxable} />
                             </Label>
                             <p className="text-xs text-muted-foreground">
                               Included in journal processing.
@@ -2077,7 +2115,6 @@ export function TransactionDetailSheet({
                           <Switch
                             id="tx-taxable"
                             checked={localDraft.taxable}
-                            disabled
                             onCheckedChange={(checked) =>
                               updateDraft("taxable", checked)
                             }
@@ -2157,7 +2194,7 @@ export function TransactionDetailSheet({
                     </div>
                   </TabsContent>
 
-                  {/* Linked — pairs, source-of-funds (placeholder), journal entries (placeholder) */}
+                  {/* Linked — pairs, source-of-funds, journal entries */}
                   <TabsContent value="linked" className="mt-4 space-y-3">
                     {pair ? (
                       <div className="overflow-hidden rounded-md border">
@@ -2182,9 +2219,10 @@ export function TransactionDetailSheet({
                             variant="ghost"
                             size="sm"
                             className="h-7 px-2 text-xs text-muted-foreground"
-                            disabled
+                            disabled={!onUnpair || isUnpairing}
+                            onClick={() => onUnpair?.(pair.id)}
                           >
-                            Unpair
+                            {isUnpairing ? "Unpairing..." : "Unpair"}
                           </Button>
                         </div>
                         <LedgerRow
@@ -2251,33 +2289,65 @@ export function TransactionDetailSheet({
                       </div>
                     )}
 
-                    <div className="rounded-md border border-dashed bg-muted/40 p-4 text-sm">
-                      <div className="flex items-center gap-2 font-medium">
+                    <div className="overflow-hidden rounded-md border">
+                      <div className="flex items-center gap-2 border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                         <Layers
-                          className="size-4 text-muted-foreground"
+                          className="size-3"
                           aria-hidden="true"
                         />
                         Source of funds
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Linked sources and downstream uses will appear here
-                        once the source-of-funds workstation has reviewed this
-                        row.
-                      </p>
+                      {sourceFundsLinks.length ? (
+                        sourceFundsLinks.map((link) => (
+                          <LedgerRow
+                            key={link.id}
+                            label={`${link.link_type} · ${link.state}`}
+                            value={
+                              <span className={blurClass(hideSensitive)}>
+                                {link.allocation_amount
+                                  ? `${link.allocation_amount.toFixed(8)} ${link.asset ?? transaction.asset ?? "BTC"}`
+                                  : link.confidence}
+                              </span>
+                            }
+                            align="right"
+                            hint={link.explanation || link.confidence}
+                          />
+                        ))
+                      ) : (
+                        <div className="p-3 text-xs text-muted-foreground">
+                          No reviewed source-of-funds links for this row yet.
+                        </div>
+                      )}
                     </div>
-                    <div className="rounded-md border border-dashed bg-muted/40 p-4 text-sm">
-                      <div className="flex items-center gap-2 font-medium">
+                    <div className="overflow-hidden rounded-md border">
+                      <div className="flex items-center gap-2 border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                         <FileText
-                          className="size-4 text-muted-foreground"
+                          className="size-3"
                           aria-hidden="true"
                         />
                         Journal entries
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        After the next journal run, the RP2 entries this tx
-                        produced will appear here with a deep link into the
-                        ledger view.
-                      </p>
+                      {journalEvents.length ? (
+                        journalEvents.map((entry) => (
+                          <LedgerRow
+                            key={entry.id}
+                            label={`${entry.entryType}${entry.atCategory ? ` · ${entry.atCategory}` : ""}`}
+                            value={
+                              <span className={blurClass(hideSensitive)}>
+                                {entry.quantity.toFixed(8)} {entry.asset} ·{" "}
+                                {currencyFormatter.format(entry.fiatValueEur)}
+                              </span>
+                            }
+                            align="right"
+                            hint={entry.description || undefined}
+                          />
+                        ))
+                      ) : (
+                        <div className="p-3 text-xs text-muted-foreground">
+                          No journal entries for this row yet. Process journals
+                          after metadata or pricing changes.
+                        </div>
+                      )}
                     </div>
                   </TabsContent>
 

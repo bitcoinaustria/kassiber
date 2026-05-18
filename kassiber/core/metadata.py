@@ -11,12 +11,33 @@ from typing import Any, Callable, Mapping
 
 from ..errors import AppError
 from ..importers import load_bip329_file
-from ..msat import msat_to_btc
+from ..msat import dec, msat_to_btc
+from . import pricing
 
 DEFAULT_RECORDS_LIMIT = 100
 MAX_RECORDS_LIMIT = 1000
 MAX_TRANSACTION_NOTE_CHARS = 20_000
 MAX_TRANSACTION_TAG_CHARS = 128
+MAX_PRICING_EXTERNAL_REF_CHARS = 500
+SUPPORTED_PRICING_SOURCE_KINDS = set(pricing.SOURCE_PRIORITY)
+SUPPORTED_PRICING_QUALITIES = {
+    pricing.QUALITY_EXACT,
+    pricing.QUALITY_PROVIDER_SAMPLE,
+    pricing.QUALITY_COARSE_FALLBACK,
+    pricing.QUALITY_MISSING,
+}
+SUPPORTED_REVIEW_STATUSES = {"completed", "pending", "failed", "review"}
+SUPPORTED_AT_REGIME_OVERRIDES = {"alt", "neu", "outside"}
+SUPPORTED_AT_CATEGORY_OVERRIDES = {
+    "income_general",
+    "income_capital_yield",
+    "neu_gain",
+    "neu_loss",
+    "neu_swap",
+    "alt_spekulation",
+    "alt_taxfree",
+    "none",
+}
 
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
 WalletResolver = Callable[[sqlite3.Connection, str, str], Mapping[str, Any]]
@@ -129,6 +150,130 @@ def _clean_transaction_tags(tags):
     return cleaned
 
 
+def _clean_optional_string(value, field, *, max_chars):
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise AppError(f"{field} must be a string or null", code="validation", retryable=False)
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    if len(cleaned) > max_chars:
+        raise AppError(
+            f"{field} cannot exceed {max_chars} characters",
+            code="validation",
+            retryable=False,
+        )
+    return cleaned
+
+
+def _clean_fiat_currency(value, fallback):
+    raw = value if value not in (None, "") else fallback
+    if not isinstance(raw, str):
+        raise AppError("fiat_currency must be a string", code="validation", retryable=False)
+    cleaned = raw.strip().upper()
+    if len(cleaned) != 3 or not cleaned.isalpha():
+        raise AppError("fiat_currency must be a 3-letter currency code", code="validation", retryable=False)
+    return cleaned
+
+
+def _clean_decimal_or_none(value, field):
+    if value in (None, ""):
+        return None
+    try:
+        return dec(value)
+    except Exception as exc:
+        raise AppError(f"{field} must be a decimal number", code="validation", retryable=False) from exc
+
+
+def _clean_optional_choice(value, field, choices):
+    cleaned = _clean_optional_string(value, field, max_chars=64)
+    if cleaned is None:
+        return None
+    if cleaned not in choices:
+        raise AppError(
+            f"{field} is not supported",
+            code="validation",
+            details={field: cleaned},
+            retryable=False,
+        )
+    return cleaned
+
+
+def _transaction_pricing_payload(profile, tx, *, fiat_currency=None, fiat_rate=None, fiat_value=None, source_kind=None, quality=None, external_ref=None):
+    clean_source_kind = _clean_optional_string(source_kind, "pricing_source_kind", max_chars=64)
+    clean_quality = _clean_optional_string(quality, "pricing_quality", max_chars=64)
+    if clean_source_kind is not None and clean_source_kind not in SUPPORTED_PRICING_SOURCE_KINDS:
+        raise AppError(
+            "pricing_source_kind is not supported",
+            code="validation",
+            details={"pricing_source_kind": clean_source_kind},
+            retryable=False,
+        )
+    if clean_quality is not None and clean_quality not in SUPPORTED_PRICING_QUALITIES:
+        raise AppError(
+            "pricing_quality is not supported",
+            code="validation",
+            details={"pricing_quality": clean_quality},
+            retryable=False,
+        )
+
+    if clean_source_kind is None or clean_quality == pricing.QUALITY_MISSING:
+        clean_currency = _clean_fiat_currency(fiat_currency, tx["fiat_currency"] or profile["fiat_currency"])
+        return {
+            "fiat_currency": clean_currency,
+            **pricing.pricing_payload(
+                rate=None,
+                value=None,
+                source_kind=None,
+                quality=pricing.QUALITY_MISSING,
+            ),
+        }
+
+    clean_quality = clean_quality or pricing.import_quality(clean_source_kind)
+    clean_currency = _clean_fiat_currency(fiat_currency, tx["fiat_currency"] or profile["fiat_currency"])
+    rate = _clean_decimal_or_none(fiat_rate, "fiat_rate")
+    value = _clean_decimal_or_none(fiat_value, "fiat_value")
+    amount = abs(msat_to_btc(tx["amount"]))
+    if rate is None and value is not None and amount > 0:
+        rate = value / amount
+    if value is None and rate is not None and amount > 0:
+        value = rate * amount
+    if rate is None and value is None:
+        raise AppError(
+            "pricing updates require fiat_rate or fiat_value",
+            code="validation",
+            retryable=False,
+        )
+    if rate is not None and rate <= 0:
+        raise AppError("fiat_rate must be positive", code="validation", retryable=False)
+    if value is not None and value < 0:
+        raise AppError("fiat_value must not be negative", code="validation", retryable=False)
+
+    clean_external_ref = _clean_optional_string(
+        external_ref,
+        "pricing_external_ref",
+        max_chars=MAX_PRICING_EXTERNAL_REF_CHARS,
+    )
+    provider = "manual" if clean_source_kind == pricing.SOURCE_MANUAL_OVERRIDE else None
+    return {
+        "fiat_currency": clean_currency,
+        **pricing.pricing_payload(
+            rate=rate,
+            value=value,
+            source_kind=clean_source_kind,
+            quality=clean_quality,
+            provider=provider,
+            pair=f"{tx['asset']}-{clean_currency}",
+            pricing_timestamp=tx["confirmed_at"] or tx["occurred_at"],
+            fetched_at=None,
+            granularity="exact" if clean_quality == pricing.QUALITY_EXACT else None,
+            method="desktop_transaction_detail",
+            external_ref=clean_external_ref,
+        ),
+    }
+
+
 def update_transaction_metadata(
     conn,
     workspace_ref,
@@ -140,6 +285,11 @@ def update_transaction_metadata(
     note_set=False,
     tags=None,
     excluded=None,
+    pricing_update=None,
+    review_status=None,
+    taxable=None,
+    at_regime=None,
+    at_category=None,
 ):
     workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     tx = hooks.resolve_transaction(conn, profile["id"], tx_ref)
@@ -147,13 +297,39 @@ def update_transaction_metadata(
     clean_tags = _clean_transaction_tags(tags)
     if excluded is not None and not isinstance(excluded, bool):
         raise AppError("excluded must be a boolean", code="validation", retryable=False)
+    if taxable is not None and not isinstance(taxable, bool):
+        raise AppError("taxable must be a boolean", code="validation", retryable=False)
+    clean_review_status = (
+        _clean_optional_choice(review_status, "review_status", SUPPORTED_REVIEW_STATUSES)
+        if review_status is not None
+        else None
+    )
+    clean_at_regime = (
+        _clean_optional_choice(at_regime, "at_regime", SUPPORTED_AT_REGIME_OVERRIDES)
+        if at_regime is not None
+        else None
+    )
+    clean_at_category = (
+        _clean_optional_choice(at_category, "at_category", SUPPORTED_AT_CATEGORY_OVERRIDES)
+        if at_category is not None
+        else None
+    )
+    clean_pricing = None
+    if pricing_update is not None:
+        if not isinstance(pricing_update, Mapping):
+            raise AppError("pricing must be an object", code="validation", retryable=False)
+        clean_pricing = _transaction_pricing_payload(profile, tx, **pricing_update)
+        if clean_pricing["pricing_source_kind"] is not None:
+            clean_pricing["pricing_fetched_at"] = hooks.now_iso()
 
     changed = False
 
     try:
+        tx_assignments = []
+        tx_params = []
         if note_set:
-            conn.execute("UPDATE transactions SET note = ? WHERE id = ?", (clean_note, tx["id"]))
-            changed = True
+            tx_assignments.append("note = ?")
+            tx_params.append(clean_note)
 
         if clean_tags is not None:
             tag_rows = [
@@ -168,7 +344,70 @@ def update_transaction_metadata(
             changed = True
 
         if excluded is not None:
-            conn.execute("UPDATE transactions SET excluded = ? WHERE id = ?", (1 if excluded else 0, tx["id"]))
+            tx_assignments.append("excluded = ?")
+            tx_params.append(1 if excluded else 0)
+
+        if review_status is not None:
+            tx_assignments.append("review_status = ?")
+            tx_params.append(clean_review_status)
+
+        if taxable is not None:
+            tx_assignments.append("taxability_override = ?")
+            tx_params.append(1 if taxable else 0)
+
+        if at_regime is not None:
+            tx_assignments.append("at_regime_override = ?")
+            tx_params.append(clean_at_regime)
+
+        if at_category is not None:
+            tx_assignments.append("at_category_override = ?")
+            tx_params.append(clean_at_category)
+
+        if clean_pricing is not None:
+            tx_assignments.extend(
+                [
+                    "fiat_currency = ?",
+                    "fiat_rate = ?",
+                    "fiat_value = ?",
+                    "fiat_price_source = ?",
+                    "fiat_rate_exact = ?",
+                    "fiat_value_exact = ?",
+                    "pricing_source_kind = ?",
+                    "pricing_provider = ?",
+                    "pricing_pair = ?",
+                    "pricing_timestamp = ?",
+                    "pricing_fetched_at = ?",
+                    "pricing_granularity = ?",
+                    "pricing_method = ?",
+                    "pricing_external_ref = ?",
+                    "pricing_quality = ?",
+                ]
+            )
+            tx_params.extend(
+                [
+                    clean_pricing["fiat_currency"],
+                    clean_pricing["fiat_rate"],
+                    clean_pricing["fiat_value"],
+                    clean_pricing["fiat_price_source"],
+                    clean_pricing["fiat_rate_exact"],
+                    clean_pricing["fiat_value_exact"],
+                    clean_pricing["pricing_source_kind"],
+                    clean_pricing["pricing_provider"],
+                    clean_pricing["pricing_pair"],
+                    clean_pricing["pricing_timestamp"],
+                    clean_pricing["pricing_fetched_at"],
+                    clean_pricing["pricing_granularity"],
+                    clean_pricing["pricing_method"],
+                    clean_pricing["pricing_external_ref"],
+                    clean_pricing["pricing_quality"],
+                ]
+            )
+
+        if tx_assignments:
+            conn.execute(
+                f"UPDATE transactions SET {', '.join(tx_assignments)} WHERE id = ?",
+                (*tx_params, tx["id"]),
+            )
             changed = True
 
         if changed:
@@ -276,6 +515,18 @@ def get_transaction_record(conn, workspace_ref, profile_ref, tx_ref, hooks: Meta
         "wallet_label": wallet["label"] if wallet else "",
         "note": tx["note"] or "",
         "excluded": bool(tx["excluded"]),
+        "fiat_currency": tx["fiat_currency"],
+        "fiat_rate": tx["fiat_rate"],
+        "fiat_value": tx["fiat_value"],
+        "fiat_rate_exact": tx["fiat_rate_exact"],
+        "fiat_value_exact": tx["fiat_value_exact"],
+        "pricing_source_kind": tx["pricing_source_kind"],
+        "pricing_quality": tx["pricing_quality"],
+        "pricing_external_ref": tx["pricing_external_ref"],
+        "review_status": tx["review_status"],
+        "taxable": None if tx["taxability_override"] is None else bool(tx["taxability_override"]),
+        "at_regime": tx["at_regime_override"],
+        "at_category": tx["at_category_override"],
         "tags": _tags_for_transaction(conn, tx["id"]),
     }
 

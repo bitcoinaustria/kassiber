@@ -53,6 +53,7 @@ from .ai.tools import (
     summarize_tool_call,
 )
 from .cli.handlers import (
+    _attachment_hooks,
     _metadata_hooks,
     _report_hooks,
     auto_price_transactions_from_rates_cache,
@@ -80,6 +81,7 @@ from .cli.handlers import (
     sync_wallet,
 )
 from .core import commercial as core_commercial
+from .core import attachments as core_attachments
 from .core import reports as core_reports
 from .core import source_funds as core_source_funds
 from .core import transfer_matching as core_transfer_matching
@@ -124,6 +126,7 @@ from .db import (
     get_setting,
     set_setting,
     resolve_exports_root,
+    resolve_attachments_root,
 )
 from .envelope import build_envelope, build_error_envelope, json_ready
 from .errors import AppError
@@ -176,6 +179,10 @@ SUPPORTED_KINDS = (
     "ui.transactions.extremes",
     "ui.transactions.search",
     "ui.transactions.metadata.update",
+    "ui.attachments.list",
+    "ui.attachments.add",
+    "ui.attachments.remove",
+    "ui.attachments.open",
     "ui.wallets.list",
     "ui.backends.list",
     "ui.backends.options",
@@ -5870,7 +5877,16 @@ def _handle_transaction_metadata_update(
     if ctx.conn is None:
         raise AppError("database is not open", code="unavailable", retryable=True)
     args = _coerce_args_dict(request.get("request_id"), request.get("args"))
-    allowed = {"transaction", "note", "tags", "excluded"}
+    pricing_fields = {
+        "fiat_currency",
+        "fiat_rate",
+        "fiat_value",
+        "pricing_source_kind",
+        "pricing_quality",
+        "pricing_external_ref",
+    }
+    review_tax_fields = {"review_status", "taxable", "at_regime", "at_category"}
+    allowed = {"transaction", "note", "tags", "excluded"} | pricing_fields | review_tax_fields
     unknown = sorted(set(args) - allowed)
     if unknown:
         raise AppError(
@@ -5881,6 +5897,16 @@ def _handle_transaction_metadata_update(
         )
     transaction = _required_str_arg(args, "transaction", "transaction id")
     tags = args.get("tags") if "tags" in args else None
+    pricing_update = None
+    if any(field in args for field in pricing_fields):
+        pricing_update = {
+            "fiat_currency": args.get("fiat_currency"),
+            "fiat_rate": args.get("fiat_rate"),
+            "fiat_value": args.get("fiat_value"),
+            "source_kind": args.get("pricing_source_kind"),
+            "quality": args.get("pricing_quality"),
+            "external_ref": args.get("pricing_external_ref"),
+        }
     return core_metadata.update_transaction_metadata(
         ctx.conn,
         None,
@@ -5891,7 +5917,101 @@ def _handle_transaction_metadata_update(
         note_set="note" in args,
         tags=tags,
         excluded=args.get("excluded") if "excluded" in args else None,
+        pricing_update=pricing_update,
+        review_status=args.get("review_status") if "review_status" in args else None,
+        taxable=args.get("taxable") if "taxable" in args else None,
+        at_regime=args.get("at_regime") if "at_regime" in args else None,
+        at_category=args.get("at_category") if "at_category" in args else None,
     )
+
+
+def _ui_attachment_payload(
+    ctx: DaemonContext,
+    kind: str,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    conn = _require_conn(ctx)
+    hooks = _attachment_hooks()
+    if kind == "ui.attachments.list":
+        tx_ref = args.get("transaction")
+        if tx_ref is not None and not isinstance(tx_ref, str):
+            raise AppError("ui.attachments.list transaction must be a string", code="validation")
+        return {
+            "attachments": core_attachments.list_attachments(
+                conn,
+                ctx.data_root,
+                None,
+                None,
+                hooks,
+                tx_ref=tx_ref,
+            )
+        }
+    if kind == "ui.attachments.add":
+        transaction = args.get("transaction")
+        if not isinstance(transaction, str) or not transaction.strip():
+            raise AppError("ui.attachments.add requires args.transaction", code="validation")
+        return core_attachments.add_attachment(
+            conn,
+            ctx.data_root,
+            None,
+            None,
+            transaction,
+            hooks,
+            file_path=args.get("file_path") or args.get("file"),
+            url=args.get("url"),
+            label=args.get("label"),
+            media_type=args.get("media_type"),
+        )
+    if kind == "ui.attachments.remove":
+        attachment_id = args.get("attachment") or args.get("attachment_id")
+        if not isinstance(attachment_id, str) or not attachment_id.strip():
+            raise AppError("ui.attachments.remove requires args.attachment", code="validation")
+        return core_attachments.remove_attachment(
+            conn,
+            ctx.data_root,
+            None,
+            None,
+            attachment_id,
+            hooks,
+        )
+    if kind == "ui.attachments.open":
+        attachment_id = args.get("attachment") or args.get("attachment_id")
+        if not isinstance(attachment_id, str) or not attachment_id.strip():
+            raise AppError("ui.attachments.open requires args.attachment", code="validation")
+        attachment = next(
+            (
+                item
+                for item in core_attachments.list_attachments(
+                    conn,
+                    ctx.data_root,
+                    None,
+                    None,
+                    hooks,
+                )
+                if item["id"] == attachment_id
+            ),
+            None,
+        )
+        if attachment is None:
+            raise AppError(f"Attachment '{attachment_id}' not found", code="not_found")
+        if attachment["attachment_type"] == "url":
+            return {"attachment": attachment, "target_type": "url", "url": attachment["url"]}
+        stored_relpath = attachment.get("stored_relpath")
+        if not stored_relpath:
+            raise AppError("Attachment has no stored file path", code="not_found")
+        path = (resolve_attachments_root(ctx.data_root) / stored_relpath).resolve(strict=False)
+        if not path.exists():
+            raise AppError(
+                "Attachment file is missing",
+                code="not_found",
+                details={"stored_relpath": stored_relpath},
+            )
+        return {
+            "attachment": attachment,
+            "target_type": "file",
+            "path": str(path),
+        }
+    raise AppError(f"Unsupported attachment daemon kind '{kind}'", code="validation")
 
 
 def _connections_sources_payload() -> dict[str, Any]:
@@ -6726,6 +6846,27 @@ def handle_request(
                 build_envelope(
                     "ui.transactions.metadata.update",
                     _handle_transaction_metadata_update(ctx, request),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind in {
+        "ui.attachments.list",
+        "ui.attachments.add",
+        "ui.attachments.remove",
+        "ui.attachments.open",
+    }:
+        return (
+            _with_request_id(
+                build_envelope(
+                    kind,
+                    _ui_attachment_payload(
+                        ctx,
+                        kind,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
                 ),
                 request_id,
             ),

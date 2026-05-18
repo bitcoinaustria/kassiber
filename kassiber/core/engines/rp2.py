@@ -35,6 +35,7 @@ _RP2_EARN_TRANSACTION_TYPES = {
     "staking",
     "wages",
 }
+_NON_REPORTABLE_AT_CATEGORY_OVERRIDES = {"alt_taxfree", "neu_swap"}
 _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE = {
     "airdrop": "AIRDROP",
     "hardfork": "HARDFORK",
@@ -239,6 +240,13 @@ def _is_rp2_earn_transaction_type(transaction_type: Any) -> bool:
 def _rp2_transaction_type_value(transaction_type: Any) -> str:
     value = getattr(transaction_type, "value", transaction_type)
     return str(value or "").strip().lower()
+
+
+def _capital_gains_type(gain_loss: Any) -> str:
+    is_long = getattr(gain_loss, "is_long_term_capital_gains", False)
+    if callable(is_long):
+        is_long = is_long()
+    return "long" if bool(is_long) else "short"
 
 
 def _compose_transfer_notes(transfer: Any) -> str:
@@ -781,15 +789,28 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
             entry_type = "fee"
         else:
             entry_type = "disposal"
+        capital_gains_type = _capital_gains_type(gain_loss)
         at_category = None
         at_kennzahl = None
-        event_key: Any = taxable_event.internal_id
+        event_key: Any = (taxable_event.internal_id, capital_gains_type)
+        source_row = row_by_id.get(taxable_event.unique_id)
         if tax_country == "at":
             at_category, at_kennzahl = _classify_at_disposal(gain_loss)
+            category_override = _row_get(source_row, "at_category_override") if source_row else None
+            taxability_override = _row_get(source_row, "taxability_override") if source_row else None
+            if taxability_override == 0 and category_override in _NON_REPORTABLE_AT_CATEGORY_OVERRIDES:
+                at_category = str(category_override)
+                at_kennzahl = kennzahl_for_disposal_category(at_category)
+            elif taxability_override == 0 or category_override == "none":
+                at_category = None
+                at_kennzahl = None
+            elif category_override:
+                at_category = str(category_override)
+                at_kennzahl = kennzahl_for_disposal_category(at_category)
             # One taxable event can split across multiple Austrian semantic
             # buckets when RP2 matches against heterogeneous acquired lots, so
             # keep separate journal rows per category.
-            event_key = (taxable_event.internal_id, at_category)
+            event_key = (taxable_event.internal_id, capital_gains_type, at_category)
         event = realized_by_event.setdefault(
             event_key,
             {
@@ -808,6 +829,7 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
                 ),
                 "at_category": at_category,
                 "at_kennzahl": at_kennzahl,
+                "capital_gains_type": capital_gains_type,
             },
         )
         event["quantity"] += dec(gain_loss.crypto_amount)
@@ -842,6 +864,7 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
         if event.get("at_category") is not None:
             entry["at_category"] = event["at_category"]
             entry["at_kennzahl"] = event["at_kennzahl"]
+        entry["capital_gains_type"] = event["capital_gains_type"]
         entries.append(entry)
 
     for audit in intra_audit:

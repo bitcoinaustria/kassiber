@@ -298,7 +298,11 @@ def _row_int(row, key, default=0):
 
 def _journals_current_for_profile(conn, profile):
     current_count = conn.execute(
-        "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded = 0",
+        """
+        SELECT COUNT(*) AS count
+        FROM transactions
+        WHERE profile_id = ? AND excluded = 0
+        """,
         (profile["id"],),
     ).fetchone()["count"]
     input_version = _row_int(profile, "journal_input_version")
@@ -2782,8 +2786,9 @@ def process_journals(conn, workspace_ref, profile_ref):
                     occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
                     cost_basis, proceeds, gain_loss, fiat_value_exact, unit_cost_exact,
                     cost_basis_exact, proceeds_exact, gain_loss_exact, pricing_source_kind,
-                    pricing_quality, description, at_category, at_kennzahl, created_at
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    pricing_quality, description, at_category, at_kennzahl, capital_gains_type,
+                    created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     entry["id"],
@@ -2811,6 +2816,7 @@ def process_journals(conn, workspace_ref, profile_ref):
                     entry["description"],
                     entry.get("at_category"),
                     entry.get("at_kennzahl"),
+                    entry.get("capital_gains_type"),
                     created_at,
                 ),
             )
@@ -2831,7 +2837,11 @@ def process_journals(conn, workspace_ref, profile_ref):
                 ),
             )
         tx_count = conn.execute(
-            "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded = 0",
+            """
+            SELECT COUNT(*) AS count
+            FROM transactions
+            WHERE profile_id = ? AND excluded = 0
+            """,
             (profile["id"],),
         ).fetchone()["count"]
         conn.execute(
