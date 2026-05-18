@@ -1268,4 +1268,3 @@ function ConnectionTransactionRow({
     </Link>
   );
 }
-

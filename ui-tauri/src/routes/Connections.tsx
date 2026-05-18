@@ -129,6 +129,13 @@ export function Connections() {
     ? snapshot.connections.length
     : snapshotSyncingN;
   const syncedN = snapshot.connections.filter((c) => c.status === "synced").length;
+  const unsyncedN = snapshot.connections.length - syncedN;
+  const upToDateDetail =
+    syncingN > 0
+      ? `${syncingN.toLocaleString("en-US")} refreshing now`
+      : unsyncedN === 0
+        ? "All configured sources"
+        : `${unsyncedN.toLocaleString("en-US")} not yet up to date`;
   const filteredConnections = snapshot.connections.filter(
     (connection) =>
       (kindFilter === "all" ||
@@ -152,7 +159,7 @@ export function Connections() {
       <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0 space-y-1">
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            Watch-only sources
+            Wallets and sources
           </p>
           <h2 className="text-xl font-semibold tracking-tight">
             Wallets
@@ -215,11 +222,7 @@ export function Connections() {
           label="Up to date"
           icon={<CheckCircle2 className="size-4" aria-hidden="true" />}
           value={`${syncedN.toLocaleString("en-US")} / ${snapshot.connections.length.toLocaleString("en-US")}`}
-          detail={
-            syncingN > 0
-              ? `${syncingN.toLocaleString("en-US")} refreshing now`
-              : "All configured sources"
-          }
+          detail={upToDateDetail}
         />
         <MetricCard
           label="Needs attention"
