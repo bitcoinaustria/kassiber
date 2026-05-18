@@ -2775,8 +2775,9 @@ def process_journals(conn, workspace_ref, profile_ref):
                     occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
                     cost_basis, proceeds, gain_loss, fiat_value_exact, unit_cost_exact,
                     cost_basis_exact, proceeds_exact, gain_loss_exact, pricing_source_kind,
-                    pricing_quality, description, at_category, at_kennzahl, created_at
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    pricing_quality, description, at_category, at_kennzahl, capital_gains_type,
+                    created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     entry["id"],
@@ -2804,6 +2805,7 @@ def process_journals(conn, workspace_ref, profile_ref):
                     entry["description"],
                     entry.get("at_category"),
                     entry.get("at_kennzahl"),
+                    entry.get("capital_gains_type"),
                     created_at,
                 ),
             )

@@ -188,6 +188,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     description TEXT,
     at_category TEXT,
     at_kennzahl INTEGER,
+    capital_gains_type TEXT,
     created_at TEXT NOT NULL
 );
 
@@ -894,6 +895,7 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "backends", "config_json", "TEXT NOT NULL DEFAULT '{}'")
     ensure_column(conn, "journal_entries", "at_category", "TEXT")
     ensure_column(conn, "journal_entries", "at_kennzahl", "INTEGER")
+    ensure_column(conn, "journal_entries", "capital_gains_type", "TEXT")
     ensure_column(conn, "transactions", "confirmed_at", "TEXT")
     ensure_column(conn, "transactions", "fiat_price_source", "TEXT")
     ensure_column(conn, "transactions", "fiat_rate_exact", "TEXT")
@@ -1659,6 +1661,7 @@ def _migrate_msat_columns(conn):
                     description TEXT,
                     at_category TEXT,
                     at_kennzahl INTEGER,
+                    capital_gains_type TEXT,
                     created_at TEXT NOT NULL
                 );
                 INSERT INTO journal_entries__msat_new SELECT
@@ -1669,7 +1672,7 @@ def _migrate_msat_columns(conn):
                     fiat_value_exact, unit_cost_exact, cost_basis_exact,
                     proceeds_exact, gain_loss_exact, pricing_source_kind,
                     pricing_quality, description,
-                    at_category, at_kennzahl, created_at
+                    at_category, at_kennzahl, capital_gains_type, created_at
                 FROM journal_entries;
                 DROP TABLE journal_entries;
                 ALTER TABLE journal_entries__msat_new RENAME TO journal_entries;

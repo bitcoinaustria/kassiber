@@ -2,6 +2,7 @@
   "capital_gains": [
     {
       "asset": "BTC",
+      "capital_gains_type": "short",
       "cost_basis": 60.0,
       "description": "Move to hot wallet",
       "entry_type": "transfer_fee",

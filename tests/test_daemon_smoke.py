@@ -430,6 +430,38 @@ def _seed_austrian_income_receipt(data_root, tmp_root):
     _run_cli(data_root, "wallets", "import-csv", "--wallet", "Income", "--file", str(csv_path))
 
 
+def _seed_mixed_horizon_disposals(data_root, tmp_root):
+    csv_path = Path(tmp_root) / "mixed-horizon-disposals.csv"
+    csv_path.write_text(
+        "\n".join(
+            [
+                "date,txid,direction,asset,amount,fee,fiat_rate,description",
+                "2020-01-01T10:00:00Z,long-stack-1,inbound,BTC,0.10000000,0,10000,Long-term stack",
+                "2026-01-02T10:00:00Z,short-stack-1,inbound,BTC,0.10000000,0,20000,Short-term stack",
+                "2026-02-01T10:00:00Z,long-sale-1,outbound,BTC,0.10000000,0,50000,Long-term sale",
+                "2026-03-01T10:00:00Z,short-sale-1,outbound,BTC,0.10000000,0,60000,Short-term sale",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    _run_cli(data_root, "init")
+    _run_cli(data_root, "workspaces", "create", "Demo")
+    _run_cli(data_root, "profiles", "create", "Main", "--fiat-currency", "EUR")
+    _run_cli(
+        data_root,
+        "wallets",
+        "create",
+        "--label",
+        "Mixed",
+        "--kind",
+        "address",
+        "--address",
+        "bc1qtestmixed0000000000000000000000000000000",
+    )
+    _run_cli(data_root, "wallets", "import-csv", "--wallet", "Mixed", "--file", str(csv_path))
+
+
 def _seed_workspace_with_unpriced_transaction(data_root, tmp_root):
     csv_path = Path(tmp_root) / "unpriced.csv"
     csv_path.write_text(
@@ -4621,6 +4653,34 @@ class DaemonSmokeTest(unittest.TestCase):
             _write_payload(
                 proc,
                 {
+                    "request_id": "capital-gains-nontaxable-1",
+                    "kind": "ui.reports.capital_gains",
+                    "args": {"year": 2026},
+                },
+            )
+            capital_gains = _read_payload_timeout(proc)
+            self.assertEqual(capital_gains["kind"], "ui.reports.capital_gains")
+            self.assertEqual(capital_gains["data"]["lots"], [])
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "summary-pdf-nontaxable-1",
+                    "kind": "ui.reports.export_summary_pdf",
+                    "args": {
+                        "start": "2026-01-01T00:00:00Z",
+                        "end": "2026-12-31T23:59:59Z",
+                    },
+                },
+            )
+            summary_pdf = _read_payload_timeout(proc)
+            self.assertEqual(summary_pdf["kind"], "ui.reports.export_summary_pdf")
+            self.assertEqual(summary_pdf["data"]["metrics"]["realized_pnl"], 0.0)
+            self.assertEqual(summary_pdf["data"]["top_disposals"], [])
+
+            _write_payload(
+                proc,
+                {
                     "request_id": "tx-taxable-true-1",
                     "kind": "ui.transactions.metadata.update",
                     "args": {
@@ -4764,6 +4824,57 @@ class DaemonSmokeTest(unittest.TestCase):
                     for row in taxable_summary["data"]["rows"]
                 )
             )
+
+            _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
+
+    def test_daemon_transaction_taxable_override_preserves_capital_gains_bucket(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-tax-buckets-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_mixed_horizon_disposals(data_root, tmp)
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "short-sale-taxable-false-1",
+                    "kind": "ui.transactions.metadata.update",
+                    "args": {
+                        "transaction": "short-sale-1",
+                        "taxable": False,
+                    },
+                },
+            )
+            saved = _read_payload_timeout(proc)
+            self.assertEqual(saved["kind"], "ui.transactions.metadata.update")
+            self.assertFalse(saved["data"]["taxable"])
+
+            _write_payload(proc, {"request_id": "process-buckets-1", "kind": "ui.journals.process"})
+            processed = _read_payload_timeout(proc)
+            self.assertEqual(processed["kind"], "ui.journals.process")
+            self.assertEqual(processed["data"]["processed_transactions"], 4)
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "tax-summary-buckets-1",
+                    "kind": "ui.reports.tax_summary",
+                    "args": {"year": 2026},
+                },
+            )
+            tax_summary = _read_payload_timeout(proc)
+            self.assertEqual(tax_summary["kind"], "ui.reports.tax_summary")
+            detail_rows = [
+                row
+                for row in tax_summary["data"]["rows"]
+                if row["row_type"] == "detail" and row["transaction_type"] == "sell"
+            ]
+            self.assertEqual([row["capital_gains_type"] for row in detail_rows], ["long"])
+            self.assertEqual(detail_rows[0]["quantity_msat"], 10_000_000_000)
 
             _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
             self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")

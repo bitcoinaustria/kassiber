@@ -242,6 +242,13 @@ def _rp2_transaction_type_value(transaction_type: Any) -> str:
     return str(value or "").strip().lower()
 
 
+def _capital_gains_type(gain_loss: Any) -> str:
+    is_long = getattr(gain_loss, "is_long_term_capital_gains", False)
+    if callable(is_long):
+        is_long = is_long()
+    return "long" if bool(is_long) else "short"
+
+
 def _compose_transfer_notes(transfer: Any) -> str:
     tokens: list[str] = []
     pool = getattr(transfer, "at_pool", None)
@@ -782,9 +789,10 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
             entry_type = "fee"
         else:
             entry_type = "disposal"
+        capital_gains_type = _capital_gains_type(gain_loss)
         at_category = None
         at_kennzahl = None
-        event_key: Any = taxable_event.internal_id
+        event_key: Any = (taxable_event.internal_id, capital_gains_type)
         source_row = row_by_id.get(taxable_event.unique_id)
         if tax_country == "at":
             at_category, at_kennzahl = _classify_at_disposal(gain_loss)
@@ -802,7 +810,7 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
             # One taxable event can split across multiple Austrian semantic
             # buckets when RP2 matches against heterogeneous acquired lots, so
             # keep separate journal rows per category.
-            event_key = (taxable_event.internal_id, at_category)
+            event_key = (taxable_event.internal_id, capital_gains_type, at_category)
         event = realized_by_event.setdefault(
             event_key,
             {
@@ -821,6 +829,7 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
                 ),
                 "at_category": at_category,
                 "at_kennzahl": at_kennzahl,
+                "capital_gains_type": capital_gains_type,
             },
         )
         event["quantity"] += dec(gain_loss.crypto_amount)
@@ -855,6 +864,7 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
         if event.get("at_category") is not None:
             entry["at_category"] = event["at_category"]
             entry["at_kennzahl"] = event["at_kennzahl"]
+        entry["capital_gains_type"] = event["capital_gains_type"]
         entries.append(entry)
 
     for audit in intra_audit:

@@ -373,7 +373,12 @@ def report_portfolio_summary(conn, workspace_ref, profile_ref, hooks: ReportHook
 def report_capital_gains(conn, workspace_ref, profile_ref, hooks: ReportHooks, tax_year=None):
     _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     hooks.require_processed_journals(conn, profile)
-    where = ["je.profile_id = ?", "je.entry_type IN ('disposal', 'fee', 'transfer_fee', 'income')"]
+    where = [
+        "je.profile_id = ?",
+        "je.entry_type IN ('disposal', 'fee', 'transfer_fee', 'income')",
+        "COALESCE(t.taxability_override, 1) != 0",
+        "COALESCE(je.at_category, '') != 'neu_swap'",
+    ]
     params: list[Any] = [profile["id"]]
     if tax_year is not None:
         normalized_year = _normalize_tax_year(tax_year)
@@ -393,9 +398,11 @@ def report_capital_gains(conn, workspace_ref, profile_ref, hooks: ReportHooks, t
             COALESCE(je.gain_loss, 0) AS gain_loss,
             COALESCE(je.description, '') AS description,
             je.at_category,
-            je.at_kennzahl
+            je.at_kennzahl,
+            je.capital_gains_type
         FROM journal_entries je
         JOIN wallets w ON w.id = je.wallet_id
+        LEFT JOIN transactions t ON t.id = je.transaction_id
         WHERE {' AND '.join(where)}
         ORDER BY je.occurred_at ASC, je.created_at ASC, je.id ASC
         """,
@@ -1491,9 +1498,12 @@ def _summary_pdf_realized_periods(conn, profile_id, wallets, hooks: ReportHooks,
                COALESCE(je.cost_basis, 0) AS cost_basis,
                COALESCE(je.gain_loss, 0) AS gain_loss
         FROM journal_entries je
+        LEFT JOIN transactions t ON t.id = je.transaction_id
         WHERE je.profile_id = ?
           AND {wallet_filter}
           AND je.entry_type = 'disposal'
+          AND COALESCE(t.taxability_override, 1) != 0
+          AND COALESCE(je.at_category, '') != 'neu_swap'
           AND je.occurred_at >= ?
           AND je.occurred_at <= ?
         ORDER BY je.occurred_at ASC, je.created_at ASC, je.id ASC
@@ -1609,9 +1619,12 @@ def _summary_pdf_top_disposals(conn, profile_id, wallets, hooks: ReportHooks, st
                w.label AS wallet
         FROM journal_entries je
         JOIN wallets w ON w.id = je.wallet_id
+        LEFT JOIN transactions t ON t.id = je.transaction_id
         WHERE je.profile_id = ?
           AND {wallet_filter}
           AND je.entry_type = 'disposal'
+          AND COALESCE(t.taxability_override, 1) != 0
+          AND COALESCE(je.at_category, '') != 'neu_swap'
           AND je.occurred_at >= ?
           AND je.occurred_at <= ?
         ORDER BY ABS(je.gain_loss) DESC, je.occurred_at DESC
@@ -1866,6 +1879,7 @@ def _non_reportable_tax_summary_adjustments(conn, profile_id):
                je.asset,
                je.entry_type,
                t.kind AS transaction_kind,
+               COALESCE(je.capital_gains_type, '') AS capital_gains_type,
                SUM(ABS(je.quantity)) AS quantity_msat,
                SUM(COALESCE(je.proceeds, 0)) AS proceeds,
                SUM(COALESCE(je.cost_basis, 0)) AS cost_basis,
@@ -1880,7 +1894,7 @@ def _non_reportable_tax_summary_adjustments(conn, profile_id):
               AND je.entry_type IN ('disposal', 'income')
             )
           )
-        GROUP BY substr(je.occurred_at, 1, 4), je.asset, je.entry_type, t.kind
+        GROUP BY substr(je.occurred_at, 1, 4), je.asset, je.entry_type, t.kind, je.capital_gains_type
         """,
         (profile_id,),
     ).fetchall()
@@ -1898,13 +1912,23 @@ def _non_reportable_tax_summary_adjustments(conn, profile_id):
             )
         else:
             transaction_type = "sell"
-        adjustments[(int(year), asset, transaction_type)] = {
-            "quantity": msat_to_btc(quantity_msat),
-            "quantity_msat": quantity_msat,
-            "proceeds": dec(row["proceeds"]),
-            "cost_basis": dec(row["cost_basis"]),
-            "gain_loss": dec(row["gain_loss"]),
-        }
+        capital_gains_type = str(row["capital_gains_type"] or "short").strip().lower() or "short"
+        key = (int(year), asset, transaction_type, capital_gains_type)
+        adjustment = adjustments.setdefault(
+            key,
+            {
+                "quantity": Decimal("0"),
+                "quantity_msat": 0,
+                "proceeds": Decimal("0"),
+                "cost_basis": Decimal("0"),
+                "gain_loss": Decimal("0"),
+            },
+        )
+        adjustment["quantity"] += msat_to_btc(quantity_msat)
+        adjustment["quantity_msat"] += quantity_msat
+        adjustment["proceeds"] += dec(row["proceeds"])
+        adjustment["cost_basis"] += dec(row["cost_basis"])
+        adjustment["gain_loss"] += dec(row["gain_loss"])
     return adjustments
 
 
@@ -1932,6 +1956,7 @@ def _exclude_non_reportable_tax_summary_rows(conn, profile_id, rows):
             int(adjusted["year"]),
             str(adjusted["asset"] or ""),
             str(adjusted["transaction_type"] or "").lower(),
+            str(adjusted["capital_gains_type"] or "").lower(),
         )
         adjustment = adjustments.pop(key, None)
         if adjustment is not None:

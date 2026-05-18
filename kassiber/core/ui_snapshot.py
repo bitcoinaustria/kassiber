@@ -1620,20 +1620,22 @@ def _capital_gains_available_years(
     primary_only: bool = False,
 ) -> list[int]:
     reportable_filter = (
-        "((entry_type = 'disposal' AND COALESCE(at_category, '') != 'neu_swap') "
-        "OR at_kennzahl IS NOT NULL)"
+        "((je.entry_type = 'disposal' AND COALESCE(je.at_category, '') != 'neu_swap') "
+        "OR je.at_kennzahl IS NOT NULL)"
         if primary_only
-        else "(entry_type IN ('disposal', 'income', 'fee', 'transfer_fee') "
-        "OR at_kennzahl IS NOT NULL)"
+        else "(je.entry_type IN ('disposal', 'income', 'fee', 'transfer_fee') "
+        "OR je.at_kennzahl IS NOT NULL)"
     )
     rows = conn.execute(
         f"""
-        SELECT DISTINCT substr(occurred_at, 1, 4) AS year
-        FROM journal_entries
-        WHERE profile_id = ?
+        SELECT DISTINCT substr(je.occurred_at, 1, 4) AS year
+        FROM journal_entries je
+        LEFT JOIN transactions t ON t.id = je.transaction_id
+        WHERE je.profile_id = ?
+          AND COALESCE(t.taxability_override, 1) != 0
           AND {reportable_filter}
-          AND occurred_at IS NOT NULL
-          AND length(occurred_at) >= 4
+          AND je.occurred_at IS NOT NULL
+          AND length(je.occurred_at) >= 4
         ORDER BY year DESC
         """,
         (profile_id,),
@@ -1746,6 +1748,7 @@ def _capital_gains_neutral_swap_rows(
         WHERE je.profile_id = ?
           AND je.entry_type = 'disposal'
           AND je.at_category = 'neu_swap'
+          AND COALESCE(tout.taxability_override, 1) != 0
           AND substr(je.occurred_at, 1, 4) = ?
         ORDER BY je.occurred_at ASC, je.created_at ASC, je.id ASC
         """,
@@ -1862,13 +1865,15 @@ def build_capital_gains_snapshot(
         available_years = [latest_year, *available_years]
     rows = conn.execute(
         """
-        SELECT occurred_at, quantity, cost_basis, proceeds, gain_loss
-        FROM journal_entries
-        WHERE profile_id = ?
-          AND entry_type = 'disposal'
-          AND COALESCE(at_category, '') != 'neu_swap'
-          AND substr(occurred_at, 1, 4) = ?
-        ORDER BY occurred_at DESC, created_at DESC, id DESC
+        SELECT je.occurred_at, je.quantity, je.cost_basis, je.proceeds, je.gain_loss
+        FROM journal_entries je
+        LEFT JOIN transactions t ON t.id = je.transaction_id
+        WHERE je.profile_id = ?
+          AND je.entry_type = 'disposal'
+          AND COALESCE(t.taxability_override, 1) != 0
+          AND COALESCE(je.at_category, '') != 'neu_swap'
+          AND substr(je.occurred_at, 1, 4) = ?
+        ORDER BY je.occurred_at DESC, je.created_at DESC, je.id DESC
         LIMIT 200
         """,
         (profile["id"], str(latest_year)),
