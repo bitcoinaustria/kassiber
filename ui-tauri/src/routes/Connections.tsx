@@ -4,14 +4,21 @@
  * Uses the shared shadcn dashboard language while keeping row navigation.
  */
 
-import { type KeyboardEvent, type ReactNode, useEffect, useState } from "react";
-import { Filter, Plus, RefreshCw, Wallet, X } from "lucide-react";
+import { type KeyboardEvent, useEffect, useState } from "react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Filter,
+  Plus,
+  RefreshCw,
+  Wallet,
+  X,
+} from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,13 +41,14 @@ import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import {
   connectionKindCategoryLabels,
   connectionKindTone,
-  connectionStatusStyles,
 } from "@/lib/connectionDisplay";
 import { useCurrency, type Currency } from "@/lib/currency";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { AddConnectionDialog } from "@/components/kb/AddConnectionDialog";
+import { ConnectionStatusPill } from "@/components/kb/ConnectionStatusPill";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
+import { MetricCard } from "@/components/kb/MetricCard";
 
 import type {
   Connection,
@@ -121,6 +129,13 @@ export function Connections() {
     ? snapshot.connections.length
     : snapshotSyncingN;
   const syncedN = snapshot.connections.filter((c) => c.status === "synced").length;
+  const unsyncedN = snapshot.connections.length - syncedN;
+  const upToDateDetail =
+    syncingN > 0
+      ? `${syncingN.toLocaleString("en-US")} refreshing now`
+      : unsyncedN === 0
+        ? "All configured sources"
+        : `${unsyncedN.toLocaleString("en-US")} not yet up to date`;
   const filteredConnections = snapshot.connections.filter(
     (connection) =>
       (kindFilter === "all" ||
@@ -144,13 +159,7 @@ export function Connections() {
       <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0 space-y-1">
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            {snapshot.connections.length} wallets and sources ·{" "}
-            {errorN > 0 ? `${errorN} need attention · ` : ""}
-            {isSyncing
-              ? `${syncingN} refreshing now`
-              : snapshotSyncingN > 0
-                ? `${snapshotSyncingN} refreshing`
-                : "watch-only sources current"}
+            Wallets and sources
           </p>
           <h2 className="text-xl font-semibold tracking-tight">
             Wallets
@@ -189,8 +198,9 @@ export function Connections() {
         initialSourceId={resumeSourceId}
       />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <ConnectionMetric
+        <MetricCard
           label="Total balance"
+          icon={<Wallet className="size-4" aria-hidden="true" />}
           value={
             <span className={blurClass(hideSensitive)}>
               <CurrencyToggleText>
@@ -200,7 +210,7 @@ export function Connections() {
               </CurrencyToggleText>
             </span>
           }
-          sub={
+          detail={
             <CurrencyToggleText>
               {currency === "eur"
                 ? `₿ ${fmtBtc(totalBtc)}`
@@ -208,19 +218,17 @@ export function Connections() {
             </CurrencyToggleText>
           }
         />
-        <ConnectionMetric
-          label="Current"
-          value={syncedN.toLocaleString("en-US")}
-          sub={`${snapshot.connections.length} configured sources`}
+        <MetricCard
+          label="Up to date"
+          icon={<CheckCircle2 className="size-4" aria-hidden="true" />}
+          value={`${syncedN.toLocaleString("en-US")} / ${snapshot.connections.length.toLocaleString("en-US")}`}
+          detail={upToDateDetail}
         />
-        <ConnectionMetric
+        <MetricCard
           label="Needs attention"
+          icon={<AlertTriangle className="size-4" aria-hidden="true" />}
           value={errorN.toLocaleString("en-US")}
-          sub={
-            syncingN > 0
-              ? `${syncingN.toLocaleString("en-US")} refreshing now`
-              : "No failed sources"
-          }
+          detail={errorN > 0 ? "Failed source(s)" : "No failed sources"}
         />
       </div>
 
@@ -351,22 +359,22 @@ export function Connections() {
 
         <div className="border-t">
           <div className="overflow-x-auto px-3 pb-3 pt-3 sm:px-6 sm:pb-4">
-            <Table className="min-w-[920px]">
+            <Table>
             <TableHeader>
               <TableRow className="bg-muted/50 hover:bg-muted/50">
-                <TableHead className="min-w-[280px] text-xs font-medium text-muted-foreground sm:text-sm">
+                <TableHead className="min-w-[200px] text-xs font-medium text-muted-foreground sm:text-sm">
                   Wallet/source
                 </TableHead>
-                <TableHead className="min-w-[140px] text-xs font-medium text-muted-foreground sm:text-sm">
+                <TableHead className="w-[100px] text-xs font-medium text-muted-foreground sm:text-sm">
                   Kind
                 </TableHead>
-                <TableHead className="min-w-[140px] text-xs font-medium text-muted-foreground sm:text-sm">
+                <TableHead className="w-[110px] text-xs font-medium text-muted-foreground sm:text-sm">
                   Last sync
                 </TableHead>
-                <TableHead className="hidden min-w-[220px] text-xs font-medium text-muted-foreground sm:text-sm lg:table-cell">
+                <TableHead className="hidden w-[120px] text-xs font-medium text-muted-foreground sm:text-sm lg:table-cell">
                   Composition
                 </TableHead>
-                <TableHead className="min-w-[150px] text-right text-xs font-medium text-muted-foreground sm:text-sm">
+                <TableHead className="w-[140px] text-right text-xs font-medium text-muted-foreground sm:text-sm">
                   Balance
                 </TableHead>
               </TableRow>
@@ -403,27 +411,6 @@ export function Connections() {
   );
 }
 
-interface ConnectionMetricProps {
-  label: string;
-  value: ReactNode;
-  sub: ReactNode;
-}
-
-function ConnectionMetric({ label, value, sub }: ConnectionMetricProps) {
-  return (
-    <Card className="gap-2.5 py-4">
-      <CardContent className="space-y-2 px-4">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Wallet className="size-4" aria-hidden="true" />
-          <span className="text-xs font-medium">{label}</span>
-        </div>
-        <p className="text-xl font-semibold tracking-tight">{value}</p>
-        <p className="text-xs text-muted-foreground">{sub}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
 interface ConnectionRowProps {
   connection: Connection;
   totalBtc: number;
@@ -448,6 +435,11 @@ function ConnectionRow({
     c.channels != null ? `${c.channels} channels` : null,
     c.gap != null ? `gap limit ${c.gap}` : null,
   ].filter(Boolean);
+  const compositionTitle = hideSensitive
+    ? "Wallet share hidden"
+    : pct < 0.1
+      ? "<0.1% of total balance"
+      : `${pct.toFixed(pct < 10 ? 1 : 0)}% of total balance`;
 
   const onKeyDown = (event: KeyboardEvent<HTMLTableRowElement>) => {
     if (event.key === "Enter" || event.key === " ") {
@@ -464,7 +456,7 @@ function ConnectionRow({
       onClick={onSelect}
       onKeyDown={onKeyDown}
     >
-      <TableCell className="min-w-[280px]">
+      <TableCell className="min-w-[200px]">
         <div className="flex min-w-0 items-start gap-3">
           <span
             className={cn(
@@ -485,51 +477,34 @@ function ConnectionRow({
             <div className="truncate text-sm font-medium text-foreground">
               {c.label}
             </div>
-            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground sm:text-xs">
-              {metadataItems.map((item, index) => (
-                <span key={item}>
-                  {index > 0 ? "· " : ""}
-                  {item}
-                </span>
-              ))}
-            </div>
+            {metadataItems.length > 0 ? (
+              <div className="mt-1 truncate text-[10px] text-muted-foreground sm:text-xs">
+                {metadataItems.join(" · ")}
+              </div>
+            ) : null}
           </div>
         </div>
       </TableCell>
       <TableCell>
-        <Badge variant="outline" className="rounded-md">
+        <Badge variant="outline" className="rounded-md whitespace-nowrap">
           {connectionKindCategoryLabels[c.kind]}
         </Badge>
       </TableCell>
       <TableCell>
-        <div className="grid gap-1">
-          <span className="text-sm">{c.last}</span>
-          <span
-            className={cn(
-              "w-fit rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
-              connectionStatusStyles[c.status],
-            )}
-          >
-            {c.status}
-          </span>
+        <div className="flex flex-col gap-1 text-sm whitespace-nowrap">
+          <span>{c.last}</span>
+          <ConnectionStatusPill status={c.status} />
         </div>
       </TableCell>
       <TableCell className="hidden lg:table-cell">
-        <div className="flex items-center gap-2">
-          <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-muted">
-            <div
-              className="absolute inset-y-0 left-0 rounded-full bg-primary transition-[width]"
-              style={{ width: `${Math.max(1.5, pct)}%` }}
-            />
-          </div>
-          <span
-            className={cn(
-              "w-12 text-right text-xs text-muted-foreground tabular-nums",
-              blurClass(hideSensitive),
-            )}
-          >
-            {pct < 0.1 ? "<0.1%" : `${pct.toFixed(pct < 10 ? 1 : 0)}%`}
-          </span>
+        <div
+          className="relative h-2 overflow-hidden rounded-full bg-muted"
+          title={compositionTitle}
+        >
+          <div
+            className="absolute inset-y-0 left-0 rounded-full bg-primary transition-[width]"
+            style={{ width: `${Math.max(1.5, pct)}%` }}
+          />
         </div>
       </TableCell>
       <TableCell className="text-right">
