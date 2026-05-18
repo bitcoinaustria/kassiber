@@ -1275,9 +1275,7 @@ export function AppShell() {
                           appMainClassName,
                           isAssistantRoute
                             ? "pb-0"
-                            : assistantCollapsed
-                              ? "pb-[150px]"
-                              : "pb-[240px]",
+                            : "pb-[240px]",
                         )}
                       >
                         <RouteTransitionIndicator active={shellBusy} />
