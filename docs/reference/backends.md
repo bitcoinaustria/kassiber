@@ -119,6 +119,7 @@ Current backend kinds:
 - `electrum`
 - `bitcoinrpc`
 - `btcpay`
+- `coreln`
 - `liquid-esplora`
 - `custom`
 
@@ -146,6 +147,14 @@ BTCPay-specific fields:
 
 - `TOKEN`
 
+Core Lightning-specific fields:
+
+- `TOKEN` for a commando rune when using the least-privilege remote path
+- `COMMANDO_PEER_ID`
+- `LIGHTNING_CLI`
+- `LIGHTNING_DIR`
+- `RPC_FILE`
+
 BTCPay backends now serve two separate Kassiber flows:
 
 - wallet-history sync imports confirmed on-chain rows into configured wallets
@@ -167,6 +176,57 @@ The backend CLI now accepts the common backend-specific knobs directly:
 - `--insecure` for Electrum TLS bypass testing against servers you control
 - `--cookiefile` or `--username` / `--password` for Bitcoin Core RPC auth
 - `--wallet-prefix` for Bitcoin Core watch-only wallet naming
+- `--lightning-cli`, `--lightning-dir`, `--rpc-file`, and
+  `--commando-peer-id` for Core Lightning
+
+### Core Lightning read-only sync
+
+Core Lightning node sync is intentionally read-only from Kassiber's side.
+The adapter only calls `getinfo`, `bkpr-list*`, and `list*` RPC methods;
+it never calls payment, invoice creation, channel mutation, wallet
+mutation, or signing methods. The preferred least-privilege setup is a
+commando rune restricted to read and bookkeeper methods:
+
+```bash
+lightning-cli commando-rune restrictions='[["method^list","method^get","method^bkpr-list","method=summary"],["method/listdatastore"]]'
+```
+
+Store that rune through stdin or an fd so it does not land in shell history:
+
+```bash
+printf %s "$CLN_READONLY_RUNE" | python3 -m kassiber backends create cln \
+  --kind coreln \
+  --url cln://commando \
+  --commando-peer-id <node-id> \
+  --token-stdin
+
+python3 -m kassiber wallets create \
+  --label routing-node \
+  --kind coreln \
+  --backend cln
+
+python3 -m kassiber wallets sync --wallet routing-node
+python3 -m kassiber reports lightning-profitability --wallet routing-node
+python3 -m kassiber reports export-lightning-profitability-csv \
+  --wallet routing-node \
+  --file /tmp/kassiber-lightning-profitability.csv
+```
+
+In the desktop app, add Core Lightning from Settings -> Sync backends. The
+Core Lightning form stores the backend and creates the matching read-only node
+connection so normal wallet sync can refresh it.
+
+Local RPC-file use is also supported for operators who run Kassiber on the
+same machine as `lightningd`, but local RPC access is not least-privilege on
+its own. Prefer the commando rune path when you want the connection itself
+to be unable to pay, create invoices, close channels, or mutate wallet
+state.
+
+The sync stores CLN records in source-attributed Lightning tables and imports
+bookkeeper income-impacting rows into the normal wallet transaction table so
+journal processing can price and report them. Raw CLN snapshots remain
+available for audit and profitability reporting without pushing provider
+details into RP2.
 
 ### BTCPay Greenfield API
 

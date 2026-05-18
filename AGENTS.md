@@ -57,7 +57,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   - attachments
   - metadata (notes, tags, inclusion)
   - journals (RP2 processing + quarantine)
-  - reports (summary, tax-summary, balance-sheet, portfolio-summary, capital-gains, journal-entries, balance-history, austrian-e1kv, austrian-tax-summary, export-pdf, export-summary-pdf, export-csv, export-xlsx, export-austrian, export-austrian-e1kv-pdf, export-austrian-e1kv-xlsx, export-austrian-e1kv-csv)
+  - reports (summary, tax-summary, balance-sheet, portfolio-summary, capital-gains, journal-entries, balance-history, lightning-profitability, austrian-e1kv, austrian-tax-summary, export-pdf, export-summary-pdf, export-csv, export-xlsx, export-lightning-profitability-csv, export-austrian, export-austrian-e1kv-pdf, export-austrian-e1kv-xlsx, export-austrian-e1kv-csv)
   - rates (local cache + Coinbase Exchange sync + CoinGecko fallback + Kraken CSV archive ingest + manual override)
   - diagnostics (public-safe bug-report collection)
 - Every command accepts `--format {table,plain,json,csv}`, `--output <path>`, `--machine` (= `--format json`), `--debug`, `--diagnostics-out <path|auto>`, and `--db-passphrase-fd FD` (used to unlock a SQLCipher-encrypted database non-interactively).
@@ -83,7 +83,8 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ui.backends.list`, `ui.profiles.snapshot`, `ui.reports.capital_gains`,
   `ui.reports.summary`, `ui.reports.balance_sheet`,
   `ui.reports.portfolio_summary`, `ui.reports.tax_summary`,
-  `ui.reports.balance_history`, `ui.journals.snapshot`,
+  `ui.reports.balance_history`, `ui.reports.lightning_profitability`,
+  `ui.journals.snapshot`,
   `ui.journals.quarantine`, `ui.journals.transfers.list`, `ui.rates.summary`,
   `ui.rates.coverage`, `ui.report.blockers`,
   `ui.audit.changes_since_last_answer`, `ui.maintenance.settings`,
@@ -133,7 +134,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `pnpm --dir ui-tauri run dev:bridge` serves the React app at
   `http://127.0.0.1:5173`, forwards invokes through `/__kassiber__/daemon`,
   and streams `ai.chat` as NDJSON from `/__kassiber__/daemon/stream`.
-- Live sync kinds implemented: `esplora`, `electrum`, `bitcoinrpc`. BTCPay Greenfield confirmed on-chain wallet history sync is available through wallet config and `wallets sync-btcpay`.
+- Live sync kinds implemented: `esplora`, `electrum`, `bitcoinrpc`, `coreln`. BTCPay Greenfield confirmed on-chain wallet history sync is available through wallet config and `wallets sync-btcpay`.
 - BIP329 records are stored in SQLite and transaction labels are bridged into Kassiber tags.
 - BTCPay CSV/JSON imports become transactions, with comments mapped to notes and labels mapped to tags. Wallet-configured BTCPay sync and `wallets sync-btcpay` reuse that same normalization for confirmed Greenfield wallet history.
 - Transaction attachments are stored in a managed `attachments/` state sibling; file attachments are copied locally and URL attachments remain literal strings with no fetching or indexing.
@@ -157,7 +158,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `transfers {pair,list,unpair,payouts {list,create,delete},suggest,bulk-pair,dismiss,rules {list,create,apply,delete,enable,disable}}`
 - `views {list,create,delete}` — generic saved-view CRUD; ``swap_candidates`` is the first surface consumer
 - `source-funds {sources {list,create,attach},links {list,create,review,attach,bulk-review},suggest,cases {list}}`
-- `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,source-funds,austrian-e1kv,austrian-tax-summary,export-pdf,export-summary-pdf,export-csv,export-xlsx,export-source-funds-pdf,export-austrian,export-austrian-e1kv-pdf,export-austrian-e1kv-xlsx,export-austrian-e1kv-csv}`
+- `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,lightning-profitability,source-funds,austrian-e1kv,austrian-tax-summary,export-pdf,export-summary-pdf,export-csv,export-xlsx,export-lightning-profitability-csv,export-source-funds-pdf,export-austrian,export-austrian-e1kv-pdf,export-austrian-e1kv-xlsx,export-austrian-e1kv-csv}`
 - `rates {pairs,sync,rebuild,latest,range,set}`
 - `diagnostics {collect}`
 - `ai providers {list,get,create,update,delete,set-default,clear-default}`
@@ -323,6 +324,9 @@ uv run python -m kassiber ai chat --help
 - No descriptor/xpub-native live sync through `bitcoinrpc` yet.
 - No self-hosted Liquid `elements_rpc` backend yet.
 - No BTCPay invoice/payment provenance ingest yet beyond confirmed on-chain wallet history plus comment/label carry-through from wallet-configured BTCPay sync.
-- No Lightning node adapters yet (`coreln`, `lnd`, `nwc` kinds are declared but do not sync).
+- Core Lightning (`coreln`) read-only live sync is implemented for bookkeeper
+  records, funds/channels, forwards, payments, invoices, on-chain transaction
+  snapshots, and Lightning profitability reporting. LND and NWC remain
+  declared but inactive.
 - No REST/server mode or multi-user auth yet.
 - Generic cross-asset carrying-value is still unsupported: outside Austrian profiles, BTC ↔ LBTC peg-ins/peg-outs and submarine swaps remain audit-linked SELL + BUY pairs rather than a cost-basis-carry primitive.

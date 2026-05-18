@@ -92,6 +92,7 @@ from .handlers import (
 from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
+from ..core import lightning_cln as core_lightning_cln
 from ..core import metadata as core_metadata
 from ..core import rates as core_rates
 from ..core import reports as core_reports
@@ -173,6 +174,14 @@ def _backend_extra_config(args: argparse.Namespace) -> dict[str, object] | None:
         config["insecure"] = args.insecure
     if getattr(args, "cookiefile", None) is not None:
         config["cookiefile"] = args.cookiefile
+    if getattr(args, "lightning_cli", None) is not None:
+        config["lightning_cli"] = args.lightning_cli
+    if getattr(args, "lightning_dir", None) is not None:
+        config["lightning_dir"] = args.lightning_dir
+    if getattr(args, "rpc_file", None) is not None:
+        config["rpc_file"] = args.rpc_file
+    if getattr(args, "commando_peer_id", None) is not None:
+        config["commando_peer_id"] = args.commando_peer_id
     username = read_secret_from_args(args, "username")
     if username is not None:
         config["username"] = username
@@ -366,6 +375,10 @@ def build_parser() -> argparse.ArgumentParser:
     backends_create.add_argument("--tor-proxy")
     backends_create.add_argument("--insecure")
     backends_create.add_argument("--cookiefile")
+    backends_create.add_argument("--lightning-cli", dest="lightning_cli")
+    backends_create.add_argument("--lightning-dir", dest="lightning_dir")
+    backends_create.add_argument("--rpc-file", dest="rpc_file")
+    backends_create.add_argument("--commando-peer-id", dest="commando_peer_id")
     backends_create.add_argument(
         "--username",
         help="DEPRECATED — exposes secrets in shell history; prefer --username-stdin",
@@ -400,6 +413,10 @@ def build_parser() -> argparse.ArgumentParser:
     backends_update.add_argument("--tor-proxy")
     backends_update.add_argument("--insecure")
     backends_update.add_argument("--cookiefile")
+    backends_update.add_argument("--lightning-cli", dest="lightning_cli")
+    backends_update.add_argument("--lightning-dir", dest="lightning_dir")
+    backends_update.add_argument("--rpc-file", dest="rpc_file")
+    backends_update.add_argument("--commando-peer-id", dest="commando_peer_id")
     backends_update.add_argument(
         "--username",
         help="DEPRECATED — prefer --username-stdin",
@@ -1367,6 +1384,17 @@ def build_parser() -> argparse.ArgumentParser:
     export_commercial_subledger.add_argument("--workspace")
     export_commercial_subledger.add_argument("--profile")
     export_commercial_subledger.add_argument("--file", required=True)
+
+    lightning_profitability = reports_sub.add_parser("lightning-profitability")
+    lightning_profitability.add_argument("--workspace")
+    lightning_profitability.add_argument("--profile")
+    lightning_profitability.add_argument("--wallet")
+
+    export_lightning_profitability = reports_sub.add_parser("export-lightning-profitability-csv")
+    export_lightning_profitability.add_argument("--workspace")
+    export_lightning_profitability.add_argument("--profile")
+    export_lightning_profitability.add_argument("--wallet")
+    export_lightning_profitability.add_argument("--file", required=True)
 
     source_funds_report = reports_sub.add_parser("source-funds")
     source_funds_report.add_argument("--workspace")
@@ -2872,6 +2900,27 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.profile,
                     args.file,
                     _commercial_hooks(),
+                ),
+            )
+        if args.reports_command == "lightning-profitability":
+            return emit(
+                args,
+                core_lightning_cln.report_lightning_profitability(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    wallet_ref=args.wallet,
+                ),
+            )
+        if args.reports_command == "export-lightning-profitability-csv":
+            return emit(
+                args,
+                core_lightning_cln.export_lightning_profitability_csv(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.file,
+                    wallet_ref=args.wallet,
                 ),
             )
         if args.reports_command == "source-funds":

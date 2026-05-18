@@ -34,6 +34,7 @@ from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
 from ..core import imports as core_imports
+from ..core import lightning_cln as core_lightning_cln
 from ..core import metadata as core_metadata
 from ..core import pricing
 from ..core import rates as core_rates
@@ -1863,6 +1864,14 @@ def _wallet_sync_hooks(commit=True):
             runtime_config,
             profile,
             wallet,
+            commit=commit,
+        ),
+        sync_core_lightning_wallet=lambda conn, runtime_config, profile, wallet: core_lightning_cln.sync_core_lightning_wallet(
+            conn,
+            profile,
+            wallet,
+            resolve_backend(runtime_config, json.loads(wallet["config_json"] or "{}").get("backend")),
+            _import_coordinator_hooks(),
             commit=commit,
         ),
     )

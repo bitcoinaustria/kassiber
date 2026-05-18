@@ -406,6 +406,28 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         summary_template="Read balance history",
     ),
     ToolEntry(
+        name="ui.reports.lightning_profitability",
+        description=(
+            "Read Core Lightning profitability totals from synced read-only node "
+            "records, including routing revenue, payment/rebalance/on-chain costs, "
+            "per-channel break-even rows, and recent sync status."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "wallet": {
+                    "type": "string",
+                    "description": "Optional Core Lightning wallet id or label filter.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_reports_lightning_profitability",
+        daemon_kind="ui.reports.lightning_profitability",
+        summary_template="Read Lightning profitability",
+    ),
+    ToolEntry(
         name="ui.journals.snapshot",
         description=(
             "Read journal processing status, recent journal rows, quarantine "
@@ -1159,11 +1181,13 @@ ui.journals.transfers.list, ui.transfers.review_context, ui.rates.summary,
 ui.rates.coverage, ui.report.blockers, ui.audit.changes_since_last_answer,
 ui.maintenance.settings, ui.reports.summary, ui.reports.balance_sheet,
 ui.reports.portfolio_summary, ui.reports.tax_summary, ui.reports.balance_history,
-and report snapshots. Use
+ui.reports.lightning_profitability, and report snapshots. Use
 ui.reports.summary for exact all-time inflow/outflow rollups,
 including reviewed transfer_pairs that explain swaps or pegs inside raw flows,
 ui.reports.balance_sheet for current bucket holdings,
 ui.reports.portfolio_summary for current wallet holdings,
+ui.reports.lightning_profitability for Core Lightning routing revenue,
+payment/rebalance/on-chain costs, per-channel break-even status, and sync health,
 ui.transactions.extremes for largest/smallest transactions, and
 ui.transactions.search for specific notes, counterparties, tags, ids, or txids.
 Use ui.report.blockers before saying reports are ready, ui.rates.coverage for
@@ -1186,7 +1210,8 @@ imports. Read journal-processing for processing order, stale journals,
 quarantines, and transfer/swap pairing. Read swap-matching for candidate review,
 conflicts, auto-pair rules, and saved review views. Read metadata for notes, tags,
 exclusions, BIP329 labels, and attachments. Read reports for summary,
-portfolio, capital gains, balance history, Austrian handoff, and exports.
+portfolio, capital gains, balance history, Lightning profitability, Austrian
+handoff, and exports.
 Read verification for quick state checks and smoke validation. Read
 troubleshooting for common errors and path confusion. Read secrets-and-backup
 for SQLCipher, passphrase/fd handling, credential migration, and backups.

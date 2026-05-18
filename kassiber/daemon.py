@@ -80,6 +80,7 @@ from .cli.handlers import (
     sync_wallet,
 )
 from .core import commercial as core_commercial
+from .core import lightning_cln as core_lightning_cln
 from .core import reports as core_reports
 from .core import source_funds as core_source_funds
 from .core import transfer_matching as core_transfer_matching
@@ -191,6 +192,7 @@ SUPPORTED_KINDS = (
     "ui.reports.portfolio_summary",
     "ui.reports.tax_summary",
     "ui.reports.balance_history",
+    "ui.reports.lightning_profitability",
     "ui.reports.export_pdf",
     "ui.reports.export_summary_pdf",
     "ui.reports.export_csv",
@@ -310,6 +312,7 @@ _AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES = {
     "ui.reports.portfolio_summary",
     "ui.reports.tax_summary",
     "ui.reports.balance_history",
+    "ui.reports.lightning_profitability",
     "ui.journals.snapshot",
     "ui.journals.quarantine",
     "ui.journals.transfers.list",
@@ -325,6 +328,7 @@ _DIRECT_AUTO_JOURNAL_REFRESH_KINDS = {
     "ui.reports.portfolio_summary",
     "ui.reports.tax_summary",
     "ui.reports.balance_history",
+    "ui.reports.lightning_profitability",
     "ui.transfers.review_context",
     "ui.report.blockers",
 }
@@ -3003,6 +3007,34 @@ def _reports_balance_history_payload(
             "truncated": total_rows > len(rows),
         },
     }
+
+
+def _reports_lightning_profitability_payload(
+    conn: sqlite3.Connection,
+    raw_args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    args = raw_args or {}
+    unknown = sorted(set(args) - {"wallet"})
+    if unknown:
+        raise AppError(
+            "ui.reports.lightning_profitability received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    wallet = args.get("wallet")
+    if wallet is not None and (not isinstance(wallet, str) or not wallet.strip()):
+        raise AppError(
+            "ui.reports.lightning_profitability wallet must be a non-empty string",
+            code="validation",
+            retryable=False,
+        )
+    return core_lightning_cln.report_lightning_profitability(
+        conn,
+        None,
+        None,
+        wallet_ref=wallet.strip() if isinstance(wallet, str) else None,
+    )
 
 
 def _coerce_positive_int(raw: Any, label: str, *, maximum: int) -> int:
@@ -6936,6 +6968,21 @@ def handle_request(
                 build_envelope(
                     "ui.reports.balance_history",
                     _reports_balance_history_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.reports.lightning_profitability":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.reports.lightning_profitability",
+                    _reports_lightning_profitability_payload(
                         ctx.conn,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),

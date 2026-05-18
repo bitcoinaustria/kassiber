@@ -364,6 +364,11 @@ def _validated_wallet_config(normalized_kind, config):
             "Descriptor wallets require --descriptor/--descriptor-file or a file-based source",
             code="validation",
         )
+    if normalized_kind == "coreln" and not config.get("backend") and not config.get("source_file"):
+        raise AppError(
+            "Core Lightning wallets require a --backend for live sync or a file-based source",
+            code="validation",
+        )
     if chain == "liquid" and descriptor_plan is None and not config.get("source_file"):
         raise AppError(
             "Liquid live refresh currently requires a descriptor with private blinding keys",
@@ -474,9 +479,9 @@ WALLET_KIND_CATALOG = {
         "requires": ["addresses|source_file"],
     },
     "coreln": {
-        "summary": "Core Lightning CSV-derived wallet (deposits/withdrawals from node exports).",
-        "config_fields": ["source_file", "source_format"],
-        "requires": [],
+        "summary": "Core Lightning node wallet; supports read-only live sync through a coreln backend or CSV-style imports.",
+        "config_fields": ["backend", "source_file", "source_format"],
+        "requires": ["backend|source_file"],
     },
     "lnd": {
         "summary": "LND CSV-derived wallet (deposits/withdrawals from node exports).",

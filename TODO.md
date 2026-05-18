@@ -476,6 +476,9 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   already exists in `kassiber/core/swap_rules.py`).
 - [ ] Promote bitcoinrpc-synced wallets to opportunistic HTLC enrichment
   via a per-tx `getrawtransaction` fetch when payment_hash is missing.
+- [x] Add read-only Core Lightning live sync through `coreln` backends and
+  wallets, including source-attributed CLN records, bookkeeper-derived
+  wallet transactions, and a Lightning profitability report/export surface.
 - [ ] Revisit per-wallet basis attribution if a jurisdiction ever needs
   physical-lot answers
 - [ ] Adopt a per-project storage layout: one SQLite DB per project,

@@ -65,7 +65,7 @@ workflow almost nobody else covers.
 ## Highlights
 
 - **Direct Bitcoin sync** — Esplora, Electrum, Bitcoin Core RPC, BTCPay
-  Greenfield, Liquid Electrum.
+  Greenfield, Core Lightning read-only node sync, Liquid Electrum.
 - **Imports** — BTCPay CSV/JSON, Phoenix, River, Bull Bitcoin, 21bitcoin,
   Pocket Bitcoin, Strike, generic CSV/JSON, BIP329 labels.
 - **Review workflows** — notes, tags, exclusions, attachments; reviewed
@@ -74,7 +74,8 @@ workflow almost nobody else covers.
   gated PDF export.
 - **Tax & reports** — RP2 lot accounting (FIFO/LIFO/HIFO/LOFO and moving
   average); Austrian § 27b EStG with E 1kv PDF / XLSX / CSV; summary,
-  balance sheet, capital gains, portfolio, balance history; local
+  balance sheet, capital gains, portfolio, balance history, Lightning
+  profitability; local
   BTC-USD / BTC-EUR rates cache (Coinbase + CoinGecko fallback + Kraken
   OHLCVT local archive).
 - **Sovereign storage** — SQLite system of record; optional SQLCipher 4

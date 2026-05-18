@@ -63,6 +63,7 @@ import {
   type IntegrationItem,
 } from "@/components/shadcnblocks/settings-integrations4";
 import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
+import coreLightningIcon from "@/assets/integrations/core-lightning.svg";
 import liquidIcon from "@/assets/integrations/liquid.svg";
 import mempoolIcon from "@/assets/integrations/mempool-space.svg";
 import {
@@ -125,6 +126,10 @@ interface Backend {
   token?: string;
   username?: string;
   password?: string;
+  commandoPeerId?: string;
+  lightningCli?: string;
+  lightningDir?: string;
+  rpcFile?: string;
   trustSsl?: boolean;
   certificate?: string;
   proxy?: {
@@ -146,6 +151,9 @@ interface BackendSettingsRow {
   has_token?: boolean;
   has_username?: boolean;
   has_password?: boolean;
+  has_commando_peer_id?: boolean;
+  has_lightning_dir?: boolean;
+  has_rpc_file?: boolean;
   insecure?: boolean;
 }
 
@@ -409,12 +417,13 @@ const DEFAULT_RATE_BACKENDS: Backend[] = DEFAULT_BACKENDS.filter(
 );
 
 function isSyncBackend(backend: Backend): boolean {
-  return backend.net === "BTC" || backend.net === "LIQUID";
+  return backend.net === "BTC" || backend.net === "LIQUID" || backend.net === "LN";
 }
 
 function backendNetFromRow(row: BackendSettingsRow): Net {
   const chain = (row.chain ?? "").toLowerCase();
   const kind = (row.kind ?? "").toLowerCase();
+  if (kind === "coreln") return "LN";
   if (chain === "liquid" || kind === "liquid-esplora") return "LIQUID";
   return "BTC";
 }
@@ -440,6 +449,9 @@ function backendRowToSettingsBackend(row: BackendSettingsRow): Backend {
     health: row.is_default ? "default" : row.source || row.kind || "configured",
     on: row.has_url !== false,
     auth: backendAuthLabel(row),
+    commandoPeerId: row.has_commando_peer_id ? "Configured peer" : undefined,
+    lightningDir: row.has_lightning_dir ? "Configured directory" : undefined,
+    rpcFile: row.has_rpc_file ? "Configured RPC file" : undefined,
     trustSsl: row.insecure,
   };
 }
@@ -462,6 +474,18 @@ function backendPayload(backend: Backend): Record<string, unknown> {
   }
   if (backend.certificate) {
     config.certificate = backend.certificate;
+  }
+  if (backend.commandoPeerId) {
+    config.commando_peer_id = backend.commandoPeerId;
+  }
+  if (backend.lightningCli) {
+    config.lightning_cli = backend.lightningCli;
+  }
+  if (backend.lightningDir) {
+    config.lightning_dir = backend.lightningDir;
+  }
+  if (backend.rpcFile) {
+    config.rpc_file = backend.rpcFile;
   }
   const clear = new Set<string>();
   if (auth === "none") {
@@ -507,6 +531,7 @@ function backendPayload(backend: Backend): Record<string, unknown> {
 
 const backendIntegrationImage: Partial<Record<Net, string>> = {
   BTC: bitcoinIcon,
+  LN: coreLightningIcon,
   LIQUID: liquidIcon,
 };
 
@@ -570,6 +595,13 @@ function backendIntegrationArt(backend: Backend): Pick<
     return {
       image: liquidIcon,
       className: "size-8 scale-150",
+    };
+  }
+  if (backend.net === "LN") {
+    return {
+      image: coreLightningIcon,
+      className: "size-8",
+      imageFrameClassName: "bg-[#494120]",
     };
   }
   return {
@@ -650,6 +682,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   );
   const createBackend = useDaemonMutation<BackendSettingsRow>("ui.backends.create");
   const updateBackend = useDaemonMutation<BackendSettingsRow>("ui.backends.update");
+  const createWallet = useDaemonMutation("ui.wallets.create");
   const deleteBackend = useDaemonMutation<{ name: string; deleted: boolean }>(
     "ui.backends.delete",
   );
@@ -889,6 +922,15 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       await updateBackend.mutateAsync({ ...payload, name: editingBackend.id });
     } else {
       await createBackend.mutateAsync(payload);
+      if (backend.kind === "coreln") {
+        await createWallet.mutateAsync({
+          label: backend.name,
+          kind: "coreln",
+          backend: backend.name,
+          chain: "bitcoin",
+          network: "main",
+        });
+      }
     }
     await backendSettingsQuery.refetch();
     setBackendDialogOpen(false);
@@ -3499,7 +3541,14 @@ function NetworkBadge({ net }: { net: Net }) {
 }
 
 function NetworkMark({ net }: { net: Net }) {
-  const image = net === "LIQUID" ? liquidIcon : net === "BTC" ? bitcoinIcon : null;
+  const image =
+    net === "LIQUID"
+      ? liquidIcon
+      : net === "BTC"
+        ? bitcoinIcon
+        : net === "LN"
+          ? coreLightningIcon
+          : null;
   if (image) {
     return (
       <span
@@ -3533,6 +3582,8 @@ function PresetMark({
   const image =
     preset.id === "mempool"
       ? mempoolIcon
+      : preset.protocol === "coreln"
+        ? coreLightningIcon
       : net === "LIQUID"
         ? liquidIcon
         : preset.protocol === "esplora"
@@ -3596,14 +3647,14 @@ interface SyncBackendPreset {
   id: string;
   name: string;
   url: string;
-  protocol: "esplora" | "electrum" | "bitcoinrpc" | "liquid-esplora";
+  protocol: "esplora" | "electrum" | "bitcoinrpc" | "liquid-esplora" | "coreln";
   label: string;
   disabled?: boolean;
   status?: string;
 }
 
 interface SyncBackendNetwork {
-  id: "bitcoin" | "liquid";
+  id: "bitcoin" | "liquid" | "lightning";
   label: string;
   net: Net;
   desc: string;
@@ -3637,6 +3688,21 @@ const SYNC_BACKEND_NETWORKS: SyncBackendNetwork[] = [
         url: "http://127.0.0.1:8332",
         protocol: "bitcoinrpc",
         label: "Bitcoin Core RPC",
+      },
+    ],
+  },
+  {
+    id: "lightning",
+    label: "Core Lightning",
+    net: "LN",
+    desc: "Read-only Core Lightning node accounting sync.",
+    presets: [
+      {
+        id: "core-lightning",
+        name: "Core Lightning read-only",
+        url: "cln://commando",
+        protocol: "coreln",
+        label: "Commando rune",
       },
     ],
   },
@@ -3738,6 +3804,10 @@ function BackendModal({
   const [useProxy, setUseProxy] = React.useState(false);
   const [proxyHost, setProxyHost] = React.useState("");
   const [proxyPort, setProxyPort] = React.useState("");
+  const [commandoPeerId, setCommandoPeerId] = React.useState("");
+  const [lightningCli, setLightningCli] = React.useState("");
+  const [lightningDir, setLightningDir] = React.useState("");
+  const [rpcFile, setRpcFile] = React.useState("");
   const [testState, setTestState] = React.useState<TestState>("idle");
   const [testLog, setTestLog] = React.useState("");
   const [saveState, setSaveState] = React.useState<"idle" | "saving">("idle");
@@ -3750,6 +3820,8 @@ function BackendModal({
       ? null
       : type.presets.find((candidate) => candidate.id === presetId) ?? null;
   const isEditing = Boolean(initial);
+  const isCoreLightning =
+    preset?.protocol === "coreln" || initial?.kind === "coreln";
   const isElectrum = preset?.protocol === "electrum";
   const showAuth = preset?.protocol === "bitcoinrpc";
   const effectiveUrl = isElectrum
@@ -3758,6 +3830,8 @@ function BackendModal({
         port: electrumPort,
         useSsl: electrumUseSsl,
       })
+    : isCoreLightning
+      ? url.trim() || "cln://commando"
     : url.trim();
   const selectedBackendKind =
     preset?.protocol ??
@@ -3783,6 +3857,20 @@ function BackendModal({
       setAuth(initial.auth);
       setAuthVal("");
       setAuthVal2("");
+      setCommandoPeerId(
+        initial.commandoPeerId === "Configured peer"
+          ? ""
+          : initial.commandoPeerId ?? "",
+      );
+      setLightningCli(initial.lightningCli ?? "");
+      setLightningDir(
+        initial.lightningDir === "Configured directory"
+          ? ""
+          : initial.lightningDir ?? "",
+      );
+      setRpcFile(
+        initial.rpcFile === "Configured RPC file" ? "" : initial.rpcFile ?? "",
+      );
       setElectrumHost(parsedElectrum.host);
       setElectrumPort(parsedElectrum.port);
       setElectrumUseSsl(parsedElectrum.useSsl);
@@ -3833,6 +3921,13 @@ function BackendModal({
       setUrl("");
       setName("");
     }
+    setAuth("none");
+    setAuthVal("");
+    setAuthVal2("");
+    setCommandoPeerId("");
+    setLightningCli("");
+    setLightningDir("");
+    setRpcFile("");
     setTestState("idle");
     setTestLog("");
   }, [initial, open, preset, presetId]);
@@ -3853,6 +3948,11 @@ function BackendModal({
 
   const testConnection = async () => {
     if (!effectiveUrl) return false;
+    if (isCoreLightning) {
+      setTestState("ok");
+      setTestLog("Core Lightning read-only connection will be checked during wallet sync.");
+      return true;
+    }
     setTestState("testing");
     if (isElectrum) {
       try {
@@ -3895,11 +3995,14 @@ function BackendModal({
     }
   };
 
-  const canAdd = name.trim().length > 0 && effectiveUrl.length > 0;
+  const canAdd =
+    name.trim().length > 0 &&
+    effectiveUrl.length > 0 &&
+    (!isCoreLightning || Boolean(commandoPeerId.trim() && authVal.trim()));
   const save = async () => {
     if (!canAdd) return;
     const normalizedUrl = effectiveUrl;
-    let connected = testState === "ok";
+    let connected = testState === "ok" || isCoreLightning;
     setSaveState("saving");
     if (!connected) {
       connected = await testConnection();
@@ -3921,19 +4024,31 @@ function BackendModal({
         network: type.net === "LIQUID" ? "liquidv1" : "main",
         health: initial ? "just checked - ok" : "just added - ok",
         on: connected,
-        auth: showAuth ? auth : "none",
+        auth: isCoreLightning ? "apikey" : showAuth ? auth : "none",
         authHeader:
           showAuth && auth === "bearer" && authSecret
             ? `Bearer ${authSecret}`
             : undefined,
         token:
-          showAuth && auth === "apikey" && authSecret ? authSecret : undefined,
+          (showAuth && auth === "apikey" && authSecret) ||
+          (isCoreLightning && authSecret)
+            ? authSecret
+            : undefined,
         username:
           showAuth && auth === "basic" && authSecret ? authSecret : undefined,
         password:
           showAuth && auth === "basic" && authPassword
             ? authPassword
             : undefined,
+        commandoPeerId:
+          isCoreLightning && commandoPeerId.trim()
+            ? commandoPeerId.trim()
+            : undefined,
+        lightningCli:
+          isCoreLightning && lightningCli.trim() ? lightningCli.trim() : undefined,
+        lightningDir:
+          isCoreLightning && lightningDir.trim() ? lightningDir.trim() : undefined,
+        rpcFile: isCoreLightning && rpcFile.trim() ? rpcFile.trim() : undefined,
         trustSsl: isElectrum && electrumUseSsl ? trustSsl : undefined,
         certificate:
           isElectrum && electrumUseSsl && !trustSsl && certificate.trim()
@@ -4108,6 +4223,85 @@ function BackendModal({
                 </div>
               )}
             </section>
+
+            {isCoreLightning && (
+              <section className="space-y-3">
+                <div>
+                  <Label>Core Lightning access</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Use a restricted commando rune for least-privilege read-only sync.
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="backend-commando-peer">Commando peer id</Label>
+                    <Input
+                      id="backend-commando-peer"
+                      value={commandoPeerId}
+                      onChange={(event) => {
+                        setCommandoPeerId(event.target.value);
+                        setTestState("idle");
+                        setTestLog("");
+                      }}
+                      placeholder="02..."
+                    />
+                  </div>
+                  <SecretField
+                    id="backend-commando-rune"
+                    label="Rune"
+                    value={authVal}
+                    onChange={(value) => {
+                      setAuthVal(value);
+                      setTestState("idle");
+                      setTestLog("");
+                    }}
+                    placeholder="readonly rune"
+                  />
+                  <div className="space-y-2">
+                    <Label htmlFor="backend-lightning-cli">lightning-cli path</Label>
+                    <Input
+                      id="backend-lightning-cli"
+                      value={lightningCli}
+                      onChange={(event) => {
+                        setLightningCli(event.target.value);
+                        setTestState("idle");
+                        setTestLog("");
+                      }}
+                      placeholder="lightning-cli"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="backend-lightning-dir">Lightning directory</Label>
+                    <Input
+                      id="backend-lightning-dir"
+                      value={lightningDir}
+                      onChange={(event) => {
+                        setLightningDir(event.target.value);
+                        setTestState("idle");
+                        setTestLog("");
+                      }}
+                      placeholder="~/.lightning"
+                    />
+                  </div>
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="backend-rpc-file">RPC file</Label>
+                    <Input
+                      id="backend-rpc-file"
+                      value={rpcFile}
+                      onChange={(event) => {
+                        setRpcFile(event.target.value);
+                        setTestState("idle");
+                        setTestLog("");
+                      }}
+                      placeholder="lightning-rpc"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Local RPC file access is convenient but broader than a read-only rune.
+                    </p>
+                  </div>
+                </div>
+              </section>
+            )}
 
             {isElectrum && (
               <section className="grid gap-3 sm:grid-cols-2">

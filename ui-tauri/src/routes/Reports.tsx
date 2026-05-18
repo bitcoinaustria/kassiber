@@ -30,6 +30,7 @@ import {
   ShieldCheck,
   Sigma,
   WalletCards,
+  Zap,
 } from "lucide-react";
 
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
@@ -204,6 +205,40 @@ interface WalletListData {
   }>;
 }
 
+interface LightningChannelProfitability {
+  channel_id: string;
+  routing_revenue_msat: number;
+  cost_msat: number;
+  balance_msat: number;
+  net_msat: number;
+  break_even: boolean;
+}
+
+interface LightningSyncSummary {
+  wallet_id?: string;
+  backend_name?: string;
+  node_id?: string;
+  node_alias?: string;
+  completed_at?: string;
+  status?: string;
+  error_json?: string | null;
+}
+
+interface LightningProfitabilityReport {
+  wallet: string;
+  record_count: number;
+  routing_revenue_msat: number;
+  routing_revenue_candidate_msat: number;
+  invoice_income_msat: number;
+  bookkeeper_income_net_msat: number;
+  payment_cost_msat: number;
+  rebalance_cost_msat: number;
+  onchain_cost_msat: number;
+  net_routing_profit_msat: number;
+  channels: LightningChannelProfitability[];
+  recent_syncs: LightningSyncSummary[];
+}
+
 interface ReportReadiness {
   title: string;
   detail: string;
@@ -269,6 +304,8 @@ export function Reports() {
   );
   const { data, isLoading, isFetching, isError, error } =
     useDaemon<CapitalGainsReport>("ui.reports.capital_gains", reportArgs);
+  const lightningProfitability =
+    useDaemon<LightningProfitabilityReport>("ui.reports.lightning_profitability");
   const wallets = useDaemon<WalletListData>("ui.wallets.list");
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const returnedReportYear = data?.data?.year;
@@ -317,6 +354,8 @@ export function Reports() {
       selectedYear={selectedYear}
       onYearChange={setSelectedYear}
       wallets={wallets.data?.data?.wallets ?? []}
+      lightningReport={lightningProfitability.data?.data ?? null}
+      lightningLoading={lightningProfitability.isLoading}
     />
   );
 }
@@ -327,6 +366,8 @@ interface ReportsViewProps {
   selectedYear: number | null;
   onYearChange: (year: number) => void;
   wallets: WalletListData["wallets"];
+  lightningReport: LightningProfitabilityReport | null;
+  lightningLoading: boolean;
 }
 
 function ReportsView({
@@ -335,6 +376,8 @@ function ReportsView({
   selectedYear,
   onYearChange,
   wallets,
+  lightningReport,
+  lightningLoading,
 }: ReportsViewProps) {
   const year = report.year;
   const effectiveYear = selectedYear ?? year;
@@ -642,6 +685,11 @@ function ReportsView({
             successfulExport={successfulExport}
             onExport={handleExport}
             onOpenExport={handleOpenExport}
+          />
+          <LightningProfitabilityPanel
+            report={lightningReport}
+            loading={lightningLoading}
+            hideSensitive={hideSensitive}
           />
           <HandoffScopePanel />
           <SummaryPdfPanel
@@ -1212,6 +1260,167 @@ function ReportFilesPanel({
             onExport={onExport}
           />
         </div>
+      </div>
+    </div>
+  );
+}
+
+function LightningProfitabilityPanel({
+  report,
+  loading,
+  hideSensitive,
+}: {
+  report: LightningProfitabilityReport | null;
+  loading: boolean;
+  hideSensitive: boolean;
+}) {
+  const channels = report?.channels ?? [];
+  const latestSync = report?.recent_syncs?.[0];
+  const status = latestSync?.status ?? (report?.record_count ? "synced" : "idle");
+  const nodeLabel = latestSync?.node_alias || latestSync?.backend_name || "Core Lightning";
+  const netProfitMsat = report?.net_routing_profit_msat ?? 0;
+  const netTone =
+    netProfitMsat > 0
+      ? "text-emerald-600 dark:text-emerald-400"
+      : netProfitMsat < 0
+        ? "text-destructive"
+        : "text-muted-foreground";
+
+  return (
+    <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
+      <div className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-5">
+        <div className="flex min-w-0 items-center gap-2">
+          <span
+            className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground"
+            aria-hidden="true"
+          >
+            <Zap className="size-4 text-muted-foreground" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-medium sm:text-base">
+              Lightning profitability
+            </h2>
+            <p className="truncate text-[10px] text-muted-foreground sm:text-xs">
+              Read-only Core Lightning accounting records
+            </p>
+          </div>
+        </div>
+        <Badge variant="outline" className="rounded-md">
+          {loading ? "Loading" : status}
+        </Badge>
+      </div>
+
+      <div className="space-y-4 p-4 sm:p-5">
+        {!report || report.record_count === 0 ? (
+          <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+            Connect a Core Lightning wallet and sync it to populate routing,
+            payment, invoice, on-chain, and channel profitability rows.
+          </div>
+        ) : (
+          <>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <LightningMetric
+                label="Routing revenue"
+                value={formatMsatAsSats(report.routing_revenue_msat)}
+                hidden={hideSensitive}
+              />
+              <LightningMetric
+                label="Net routing profit"
+                value={formatSignedMsatAsSats(report.net_routing_profit_msat)}
+                hidden={hideSensitive}
+                valueClassName={netTone}
+              />
+              <LightningMetric
+                label="Rebalance cost"
+                value={formatMsatAsSats(report.rebalance_cost_msat)}
+                hidden={hideSensitive}
+              />
+              <LightningMetric
+                label="On-chain cost"
+                value={formatMsatAsSats(report.onchain_cost_msat)}
+                hidden={hideSensitive}
+              />
+            </div>
+
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Channel</TableHead>
+                    <TableHead className="text-right">Net</TableHead>
+                    <TableHead className="text-right">Break-even</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {channels.slice(0, 4).map((channel) => (
+                    <TableRow key={channel.channel_id}>
+                      <TableCell className="max-w-[150px] truncate font-mono text-xs">
+                        {channel.channel_id}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          "text-right font-mono text-xs",
+                          blurClass(hideSensitive),
+                          channel.net_msat >= 0
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-destructive",
+                        )}
+                      >
+                        {formatSignedMsatAsSats(channel.net_msat)}
+                      </TableCell>
+                      <TableCell className="text-right text-xs">
+                        {channel.break_even ? "Yes" : "No"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span className="truncate">{nodeLabel}</span>
+              <span aria-hidden="true">·</span>
+              <span>{report.record_count} record{report.record_count === 1 ? "" : "s"}</span>
+              {latestSync?.completed_at ? (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="truncate">
+                    Synced {formatSyncTime(latestSync.completed_at)}
+                  </span>
+                </>
+              ) : null}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LightningMetric({
+  label,
+  value,
+  hidden,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  hidden: boolean;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="rounded-md border bg-muted/20 p-3">
+      <div className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+        {label}
+      </div>
+      <div
+        className={cn(
+          "mt-1 truncate font-mono text-sm font-semibold",
+          blurClass(hidden),
+          valueClassName,
+        )}
+      >
+        {value}
       </div>
     </div>
   );
@@ -2006,6 +2215,24 @@ function signedMoney(
   format: (value: number) => string,
 ) {
   return `${value >= 0 ? "+" : "-"} ${currency} ${format(Math.abs(value))}`;
+}
+
+function formatMsatAsSats(value: number) {
+  return `${Math.round(value / 1000).toLocaleString()} sats`;
+}
+
+function formatSignedMsatAsSats(value: number) {
+  const sign = value >= 0 ? "+" : "-";
+  return `${sign} ${formatMsatAsSats(Math.abs(value))}`;
+}
+
+function formatSyncTime(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 }
 
 function formatMoney(
