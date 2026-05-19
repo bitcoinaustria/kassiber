@@ -94,6 +94,7 @@ from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
 from ..core import lightning as core_lightning
+from ..core.lightning import lnd as _core_lightning_lnd  # noqa: F401 — registers the LND adapter on import.
 from ..core import metadata as core_metadata
 from ..core import rates as core_rates
 from ..core import reports as core_reports
@@ -175,6 +176,8 @@ def _backend_extra_config(args: argparse.Namespace) -> dict[str, object] | None:
         config["insecure"] = args.insecure
     if getattr(args, "cookiefile", None) is not None:
         config["cookiefile"] = args.cookiefile
+    if getattr(args, "certificate", None) is not None:
+        config["certificate"] = args.certificate
     username = read_secret_from_args(args, "username")
     if username is not None:
         config["username"] = username
@@ -475,6 +478,10 @@ def build_parser() -> argparse.ArgumentParser:
     backends_create.add_argument("--timeout", type=int)
     backends_create.add_argument("--tor-proxy")
     backends_create.add_argument("--insecure")
+    backends_create.add_argument(
+        "--certificate",
+        help="Path to tls.cert or PEM contents (LND).",
+    )
     backends_create.add_argument("--cookiefile")
     backends_create.add_argument(
         "--username",
@@ -509,6 +516,10 @@ def build_parser() -> argparse.ArgumentParser:
     backends_update.add_argument("--timeout", type=int)
     backends_update.add_argument("--tor-proxy")
     backends_update.add_argument("--insecure")
+    backends_update.add_argument(
+        "--certificate",
+        help="Path to tls.cert or PEM contents (LND).",
+    )
     backends_update.add_argument("--cookiefile")
     backends_update.add_argument(
         "--username",
