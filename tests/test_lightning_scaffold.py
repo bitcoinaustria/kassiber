@@ -411,6 +411,61 @@ class LightningForwardFailureReasonTest(unittest.TestCase):
         for value in ("temporary_channel_failure", "insufficient_balance"):
             self.assertIn(value, allowed)
 
+    def test_failure_reason_runtime_rejects_unknown_values(self) -> None:
+        # Type-level ``Literal`` is a static check only; without runtime
+        # enforcement an adapter could write
+        # ``failure_reason="failure_source_pubkey=02..."`` and have it
+        # serialize straight through to the wire payload — defeating the
+        # categorical-only guard that exists to keep Tier-1 material out
+        # of AI tool transcripts. The dataclass __post_init__ rejects
+        # anything outside the documented allowlist.
+        with self.assertRaises(ValueError) as ctx:
+            NodeForward(
+                id="fw-bad-reason",
+                occurred_at="2026-05-18T10:00:00Z",
+                in_peer_alias="peer-in",
+                out_peer_alias="peer-out",
+                amount_in_msat=100_000,
+                amount_out_msat=0,
+                fee_msat=0,
+                status="failed",
+                failure_reason="failure_source_pubkey=02ab",  # type: ignore[arg-type]
+            )
+        self.assertIn("failure_reason", str(ctx.exception))
+
+    def test_status_runtime_rejects_unknown_values(self) -> None:
+        # ``status`` is also a type-checker-only ``Literal``. The runtime
+        # guard pins the documented vocabulary so an adapter cannot ship
+        # a raw node state code through what should be a categorical field.
+        with self.assertRaises(ValueError) as ctx:
+            NodeForward(
+                id="fw-bad-status",
+                occurred_at="2026-05-18T10:00:00Z",
+                in_peer_alias="peer-in",
+                out_peer_alias="peer-out",
+                amount_in_msat=100_000,
+                amount_out_msat=100_000,
+                fee_msat=0,
+                status="bogus",  # type: ignore[arg-type]
+            )
+        self.assertIn("status", str(ctx.exception))
+
+    def test_failure_reason_none_is_accepted(self) -> None:
+        # The matching positive case: leaving ``failure_reason`` unset on
+        # a settled forward must continue to work — the runtime guard
+        # only rejects unknown non-None values.
+        forward = NodeForward(
+            id="fw-settled",
+            occurred_at="2026-05-18T10:00:00Z",
+            in_peer_alias="peer-in",
+            out_peer_alias="peer-out",
+            amount_in_msat=100_000,
+            amount_out_msat=99_900,
+            fee_msat=100,
+            status="settled",
+        )
+        self.assertIsNone(forward.failure_reason)
+
 
 class LightningProfitabilityTest(unittest.TestCase):
     def test_build_report_carries_summary_and_channel_open_cost_check(self) -> None:
@@ -478,57 +533,160 @@ class LightningProfitabilityTest(unittest.TestCase):
         self.assertIn("peer-a", channel_keys)
 
 
-class ResolveLightningConnectionTest(unittest.TestCase):
-    def _conn_with_wallets(
-        self, rows: list[tuple[str, str, str]]
-    ) -> sqlite3.Connection:
-        conn = sqlite3.connect(":memory:")
-        conn.row_factory = sqlite3.Row
-        conn.execute(
-            "CREATE TABLE wallets (id TEXT PRIMARY KEY, label TEXT, kind TEXT)"
-        )
-        conn.executemany(
-            "INSERT INTO wallets (id, label, kind) VALUES (?, ?, ?)", rows
-        )
-        return conn
+def _scoped_lightning_conn(
+    rows: list[tuple[str, str, str, str, str]],
+    *,
+    workspaces: list[tuple[str, str]] | None = None,
+    profiles: list[tuple[str, str, str]] | None = None,
+    default_workspace: str = "ws-1",
+    default_profile: str = "pf-1",
+) -> sqlite3.Connection:
+    """Build an in-memory DB shaped like a real Kassiber file.
 
+    The resolver scopes lookups by profile (wallet labels are only unique
+    per profile), so the fixture needs ``workspaces``, ``profiles``, and
+    a ``settings`` row for the active workspace + profile. ``rows`` is a
+    list of ``(id, label, kind, profile_id, config_json)`` tuples.
+    """
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.execute(
+        "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+    )
+    conn.execute(
+        "CREATE TABLE workspaces (id TEXT PRIMARY KEY, label TEXT NOT NULL)"
+    )
+    conn.execute(
+        "CREATE TABLE profiles ("
+        " id TEXT PRIMARY KEY,"
+        " workspace_id TEXT NOT NULL,"
+        " label TEXT NOT NULL,"
+        " UNIQUE (workspace_id, label))"
+    )
+    conn.execute(
+        "CREATE TABLE wallets ("
+        " id TEXT PRIMARY KEY,"
+        " label TEXT NOT NULL,"
+        " kind TEXT NOT NULL,"
+        " profile_id TEXT NOT NULL,"
+        " config_json TEXT NOT NULL DEFAULT '{}',"
+        " UNIQUE (profile_id, label))"
+    )
+    conn.executemany(
+        "INSERT INTO workspaces (id, label) VALUES (?, ?)",
+        workspaces or [("ws-1", "Workspace 1")],
+    )
+    conn.executemany(
+        "INSERT INTO profiles (id, workspace_id, label) VALUES (?, ?, ?)",
+        profiles or [("pf-1", "ws-1", "Profile 1")],
+    )
+    conn.executemany(
+        "INSERT INTO wallets (id, label, kind, profile_id, config_json)"
+        " VALUES (?, ?, ?, ?, ?)",
+        rows,
+    )
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?, ?)",
+        ("context_workspace", default_workspace),
+    )
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?, ?)",
+        ("context_profile", default_profile),
+    )
+    return conn
+
+
+class ResolveLightningConnectionTest(unittest.TestCase):
     def test_resolves_lightning_wallet_by_label_case_insensitive(self) -> None:
-        conn = self._conn_with_wallets([("w1", "Home Node", "coreln")])
+        conn = _scoped_lightning_conn(
+            [("w1", "Home Node", "coreln", "pf-1", "{}")]
+        )
         row = resolve_lightning_connection(conn, "home node")
         self.assertEqual(row["id"], "w1")
         self.assertEqual(row["kind"], "coreln")
+        self.assertEqual(row["profile_id"], "pf-1")
+        # Resolver returns parsed config + the derived backend_name field.
+        self.assertEqual(row["config"], {})
+        self.assertIsNone(row["backend_name"])
 
     def test_empty_ref_raises_validation(self) -> None:
-        conn = self._conn_with_wallets([])
+        conn = _scoped_lightning_conn([])
         with self.assertRaises(AppError) as ctx:
             resolve_lightning_connection(conn, "")
         self.assertEqual(ctx.exception.code, "validation")
 
     def test_not_found_raises_not_found(self) -> None:
-        conn = self._conn_with_wallets([("w1", "Vault", "descriptor")])
+        conn = _scoped_lightning_conn(
+            [("w1", "Vault", "descriptor", "pf-1", "{}")]
+        )
         with self.assertRaises(AppError) as ctx:
             resolve_lightning_connection(conn, "missing-id")
         self.assertEqual(ctx.exception.code, "not_found")
 
     def test_non_lightning_kind_raises_validation(self) -> None:
-        conn = self._conn_with_wallets([("w1", "Vault", "descriptor")])
+        conn = _scoped_lightning_conn(
+            [("w1", "Vault", "descriptor", "pf-1", "{}")]
+        )
         with self.assertRaises(AppError) as ctx:
             resolve_lightning_connection(conn, "w1")
         self.assertEqual(ctx.exception.code, "validation")
 
+    def test_resolves_lightning_wallet_scoped_to_profile(self) -> None:
+        # Two profiles share the wallet label "Home Node" — the resolver
+        # must pick the one in the active profile, not row 0 of a global
+        # query. Without profile scoping the daemon would happily snapshot
+        # the wrong operator's node.
+        conn = _scoped_lightning_conn(
+            [
+                ("w-prof1", "Home Node", "lnd", "pf-1", "{}"),
+                ("w-prof2", "Home Node", "coreln", "pf-2", "{}"),
+            ],
+            profiles=[
+                ("pf-1", "ws-1", "Profile 1"),
+                ("pf-2", "ws-1", "Profile 2"),
+            ],
+        )
+        # Active context (pf-1) picks the LND wallet.
+        row = resolve_lightning_connection(conn, "Home Node")
+        self.assertEqual(row["id"], "w-prof1")
+        self.assertEqual(row["kind"], "lnd")
+        # Override picks the CLN wallet from the other profile.
+        row = resolve_lightning_connection(
+            conn, "Home Node", profile_ref="Profile 2"
+        )
+        self.assertEqual(row["id"], "w-prof2")
+        self.assertEqual(row["kind"], "coreln")
+
+    def test_resolver_returns_backend_name_from_config_json(self) -> None:
+        # The LND/CLN adapters need to find their configured backend row
+        # by name; the daemon's _resolve_backend_row keys off the
+        # ``backend_name`` field the resolver now exposes. Without this,
+        # adapter calls fall into ``config_error`` because the backend
+        # row is never located.
+        conn = _scoped_lightning_conn(
+            [("w1", "Home Node", "lnd", "pf-1", '{"backend": "my-lnd"}')]
+        )
+        row = resolve_lightning_connection(conn, "w1")
+        self.assertEqual(row["backend_name"], "my-lnd")
+        self.assertEqual(row["config"], {"backend": "my-lnd"})
+
+    def test_resolver_tolerates_malformed_config_json(self) -> None:
+        # A wallet with corrupted config_json should still resolve for
+        # read-only paths (snapshot / profitability) — adapters fall back
+        # to their defaults when no backend_name is set.
+        conn = _scoped_lightning_conn(
+            [("w1", "Home Node", "lnd", "pf-1", "{not-json")]
+        )
+        row = resolve_lightning_connection(conn, "w1")
+        self.assertEqual(row["config"], {})
+        self.assertIsNone(row["backend_name"])
+
 
 class LightningDaemonPayloadTest(unittest.TestCase):
     def _conn_with_lightning_wallet(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(":memory:")
-        conn.row_factory = sqlite3.Row
-        conn.execute(
-            "CREATE TABLE wallets (id TEXT PRIMARY KEY, label TEXT, kind TEXT)"
+        return _scoped_lightning_conn(
+            [("w-1", "Home CLN", "coreln", "pf-1", '{"backend": "home-backend"}')]
         )
-        conn.execute(
-            "INSERT INTO wallets (id, label, kind) VALUES (?, ?, ?)",
-            ("w-1", "Home CLN", "coreln"),
-        )
-        return conn
 
     @contextmanager
     def _adapter_temporarily_unregistered(self, kind: str) -> Iterator[None]:

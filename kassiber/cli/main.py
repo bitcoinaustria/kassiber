@@ -242,9 +242,16 @@ def _lightning_window_days(value: str) -> int:
 
 
 def _cli_build_lightning_snapshot(
-    conn: sqlite3.Connection, ref: str, *, window_days: int
+    conn: sqlite3.Connection,
+    ref: str,
+    *,
+    window_days: int,
+    workspace_ref: str | None = None,
+    profile_ref: str | None = None,
 ) -> tuple[dict[str, Any], core_lightning.NodeSnapshot]:
-    connection = core_lightning.resolve_lightning_connection(conn, ref)
+    connection = core_lightning.resolve_lightning_connection(
+        conn, ref, workspace_ref=workspace_ref, profile_ref=profile_ref
+    )
     kind = str(connection["kind"])
     adapter = core_lightning.resolve_adapter(kind)
     if adapter is None:
@@ -262,10 +269,19 @@ def _cli_build_lightning_snapshot(
 
 
 def _cli_lightning_profitability_payload(
-    conn: sqlite3.Connection, ref: str, *, window_days: int
+    conn: sqlite3.Connection,
+    ref: str,
+    *,
+    window_days: int,
+    workspace_ref: str | None = None,
+    profile_ref: str | None = None,
 ) -> dict[str, Any]:
     connection, snapshot = _cli_build_lightning_snapshot(
-        conn, ref, window_days=window_days
+        conn,
+        ref,
+        window_days=window_days,
+        workspace_ref=workspace_ref,
+        profile_ref=profile_ref,
     )
     report = core_lightning.build_profitability_report(
         connection_id=str(connection.get("id") or ""),
@@ -282,9 +298,15 @@ def _cli_export_lightning_profitability_csv(
     file_path: str,
     *,
     window_days: int,
+    workspace_ref: str | None = None,
+    profile_ref: str | None = None,
 ) -> dict[str, Any]:
     connection, snapshot = _cli_build_lightning_snapshot(
-        conn, ref, window_days=window_days
+        conn,
+        ref,
+        window_days=window_days,
+        workspace_ref=workspace_ref,
+        profile_ref=profile_ref,
     )
     report = core_lightning.build_profitability_report(
         connection_id=str(connection.get("id") or ""),
@@ -2978,7 +3000,11 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             return emit(
                 args,
                 _cli_lightning_profitability_payload(
-                    conn, args.connection, window_days=args.window_days
+                    conn,
+                    args.connection,
+                    window_days=args.window_days,
+                    workspace_ref=args.workspace,
+                    profile_ref=args.profile,
                 ),
             )
         if args.reports_command == "export-lightning-profitability-csv":
@@ -2989,6 +3015,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.connection,
                     args.file,
                     window_days=args.window_days,
+                    workspace_ref=args.workspace,
+                    profile_ref=args.profile,
                 ),
             )
         if args.reports_command == "commercial-subledger":

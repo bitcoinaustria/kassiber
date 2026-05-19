@@ -41,6 +41,13 @@ NodeChannelState = Literal[
 
 NodeForwardStatus = Literal["settled", "failed", "offered"]
 
+#: Runtime-enforced allowlist matching :data:`NodeForwardStatus`. The
+#: ``Literal`` alias above is a type-checker hint only; the frozen set
+#: lets :meth:`NodeForward.__post_init__` reject e.g. ``status="bogus"``
+#: at construction time so adapters cannot smuggle raw node state codes
+#: into the wire payload by accident.
+_NODE_FORWARD_STATUSES: frozenset[str] = frozenset({"settled", "failed", "offered"})
+
 #: Categorical failure reasons for :class:`NodeForward`. Adapters MUST map
 #: raw node error strings into one of these buckets and use ``"other"``
 #: when the underlying code doesn't fit. Keeping this categorical prevents
@@ -56,6 +63,22 @@ NodeForwardFailureReason = Literal[
     "insufficient_balance",
     "other",
 ]
+
+#: Runtime-enforced allowlist matching :data:`NodeForwardFailureReason`.
+#: The ``Literal`` alias above is type-checker-only. Without this set,
+#: an adapter that writes ``failure_reason="failure_source_pubkey=02..."``
+#: would silently pass through to the wire payload — exactly the Tier-1
+#: leak the categorical enum exists to prevent. Adapters that need a
+#: bucket for an unknown failure type use ``"other"``.
+_NODE_FORWARD_FAILURE_REASONS: frozenset[str] = frozenset({
+    "temporary_channel_failure",
+    "unknown_next_peer",
+    "fee_insufficient",
+    "incorrect_payment_details",
+    "expiry_too_soon",
+    "insufficient_balance",
+    "other",
+})
 
 # Short-channel-id format check. Two structured representations are
 # accepted, matching the two adapter ecosystems:
@@ -184,6 +207,29 @@ class NodeForward:
     def __post_init__(self) -> None:
         assert_lightning_field_format(self.in_short_channel_id)
         assert_lightning_field_format(self.out_short_channel_id)
+        # ``status`` and ``failure_reason`` are ``Literal`` aliases — that
+        # is a type-checker hint only. Enforce the allowlist at construction
+        # time so an adapter cannot ship a raw node code (e.g.
+        # ``failure_reason='failure_source_pubkey=02...'``) through what
+        # looks like a categorical field. See docs/reference/lightning-opsec.md.
+        if self.status not in _NODE_FORWARD_STATUSES:
+            raise ValueError(
+                "NodeForward.status must be one of"
+                f" {sorted(_NODE_FORWARD_STATUSES)}; got {self.status!r}."
+                " Adapters: map raw node states to a category before"
+                " populating."
+            )
+        if (
+            self.failure_reason is not None
+            and self.failure_reason not in _NODE_FORWARD_FAILURE_REASONS
+        ):
+            raise ValueError(
+                "NodeForward.failure_reason must be one of"
+                f" {sorted(_NODE_FORWARD_FAILURE_REASONS)};"
+                f" got {self.failure_reason!r}. Adapters: map raw node"
+                " errors to a category before populating (use 'other'"
+                " when the underlying code does not fit)."
+            )
 
 
 @dataclass(frozen=True)

@@ -5247,13 +5247,32 @@ def _lightning_adapter_unavailable_error(kind: str) -> AppError:
     )
 
 
+def _lightning_connection_args(
+    args: dict[str, Any],
+) -> tuple[str | None, str | None, str | None]:
+    """Pull (ref, workspace_ref, profile_ref) out of an envelope args dict.
+
+    The daemon accepts ``connection``/``wallet``/``label`` as aliases for
+    the wallet ref so the desktop and CLI can share request shapes. The
+    workspace/profile refs come straight from the envelope so the
+    resolver can scope by profile (wallet labels are only unique per
+    profile).
+    """
+    ref = args.get("connection") or args.get("wallet") or args.get("label")
+    workspace_ref = args.get("workspace") if isinstance(args.get("workspace"), str) else None
+    profile_ref = args.get("profile") if isinstance(args.get("profile"), str) else None
+    return ref, workspace_ref, profile_ref
+
+
 def _lightning_node_snapshot_payload(
     conn: sqlite3.Connection,
     runtime_config: dict[str, object],
     args: dict[str, Any],
 ) -> dict[str, Any]:
-    ref = args.get("connection") or args.get("wallet") or args.get("label")
-    connection = core_lightning.resolve_lightning_connection(conn, ref)
+    ref, workspace_ref, profile_ref = _lightning_connection_args(args)
+    connection = core_lightning.resolve_lightning_connection(
+        conn, ref, workspace_ref=workspace_ref, profile_ref=profile_ref
+    )
     kind = str(connection["kind"])
     adapter = core_lightning.resolve_adapter(kind)
     if adapter is None:
@@ -5287,8 +5306,10 @@ def _lightning_node_snapshot_payload_for_ai(
     channels and forwards) is dropped via
     :func:`core_lightning.snapshot_to_dict_for_ai` before serializing.
     """
-    ref = args.get("connection") or args.get("wallet") or args.get("label")
-    connection = core_lightning.resolve_lightning_connection(conn, ref)
+    ref, workspace_ref, profile_ref = _lightning_connection_args(args)
+    connection = core_lightning.resolve_lightning_connection(
+        conn, ref, workspace_ref=workspace_ref, profile_ref=profile_ref
+    )
     kind = str(connection["kind"])
     adapter = core_lightning.resolve_adapter(kind)
     if adapter is None:
@@ -5312,8 +5333,10 @@ def _lightning_profitability_payload(
     runtime_config: dict[str, object],
     args: dict[str, Any],
 ) -> dict[str, Any]:
-    ref = args.get("connection") or args.get("wallet") or args.get("label")
-    connection = core_lightning.resolve_lightning_connection(conn, ref)
+    ref, workspace_ref, profile_ref = _lightning_connection_args(args)
+    connection = core_lightning.resolve_lightning_connection(
+        conn, ref, workspace_ref=workspace_ref, profile_ref=profile_ref
+    )
     kind = str(connection["kind"])
     adapter = core_lightning.resolve_adapter(kind)
     if adapter is None:
@@ -5346,8 +5369,10 @@ def _lightning_profitability_payload_for_ai(
     answers profitability questions; the per-channel detail belongs in
     the desktop UI surface, not in AI tool output.
     """
-    ref = args.get("connection") or args.get("wallet") or args.get("label")
-    connection = core_lightning.resolve_lightning_connection(conn, ref)
+    ref, workspace_ref, profile_ref = _lightning_connection_args(args)
+    connection = core_lightning.resolve_lightning_connection(
+        conn, ref, workspace_ref=workspace_ref, profile_ref=profile_ref
+    )
     kind = str(connection["kind"])
     adapter = core_lightning.resolve_adapter(kind)
     if adapter is None:
