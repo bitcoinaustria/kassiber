@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import sqlite3
 import unittest
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterator
 
 from kassiber.core import lightning as core_lightning
 from kassiber.core.lightning import (
@@ -108,6 +109,28 @@ class _FakeAdapter:
         window_days: int = 30,
     ) -> NodeSnapshot:
         return _snapshot_with_routing()
+
+
+@contextmanager
+def _adapter_registered(kind: str, adapter: Any) -> Iterator[None]:
+    """Register ``adapter`` for ``kind``, restoring the previous value on exit.
+
+    The scaffold tests share a process with LND/CLN adapter PRs that
+    auto-register real adapters on import (`kassiber.core.lightning.lnd`,
+    `kassiber.core.lightning.cln`). Plain register/unregister-in-finally
+    would remove the real adapter when a scaffold test finishes; this
+    helper saves whatever was registered before and restores it on the
+    way out, so test ordering does not matter.
+    """
+    previous = resolve_adapter(kind)
+    register_adapter(kind, adapter)
+    try:
+        yield
+    finally:
+        if previous is None:
+            unregister_adapter(kind)
+        else:
+            register_adapter(kind, previous)
 
 
 class LightningTypesTest(unittest.TestCase):
@@ -295,14 +318,19 @@ class LightningAiPayloadTest(unittest.TestCase):
 
 
 class LightningRegistryTest(unittest.TestCase):
+    # Use a sentinel kind that real LND/CLN adapters never register under,
+    # so registry-mechanism tests cannot remove the production adapters
+    # when those PRs land.
+    _SENTINEL_KIND = "test-fake-scaffold-kind"
+
     def test_register_and_resolve_adapter(self) -> None:
-        adapter = _FakeAdapter(kind="lnd")
-        register_adapter("lnd", adapter)
+        adapter = _FakeAdapter(kind=self._SENTINEL_KIND)
+        register_adapter(self._SENTINEL_KIND, adapter)
         try:
-            self.assertIs(resolve_adapter("lnd"), adapter)
+            self.assertIs(resolve_adapter(self._SENTINEL_KIND), adapter)
         finally:
-            unregister_adapter("lnd")
-        self.assertIsNone(resolve_adapter("lnd"))
+            unregister_adapter(self._SENTINEL_KIND)
+        self.assertIsNone(resolve_adapter(self._SENTINEL_KIND))
 
     def test_register_rejects_empty_kind(self) -> None:
         with self.assertRaises(ValueError):
@@ -312,17 +340,15 @@ class LightningRegistryTest(unittest.TestCase):
         self.assertIsNone(resolve_adapter("not-registered-xyz"))
 
     def test_registered_kinds_reports_current_registry(self) -> None:
-        register_adapter("lnd", _FakeAdapter(kind="lnd"))
-        register_adapter("coreln", _FakeAdapter(kind="coreln"))
-        try:
+        # Use save-and-restore so a real LND/CLN adapter (auto-registered
+        # at daemon/CLI import time once #154/#155 land) is preserved.
+        with _adapter_registered("lnd", _FakeAdapter(kind="lnd")), \
+                _adapter_registered("coreln", _FakeAdapter(kind="coreln")):
             kinds = registered_kinds()
             self.assertIn("lnd", kinds)
             self.assertIn("coreln", kinds)
             # Sorted output keeps the error-hint stable across runs.
             self.assertEqual(list(kinds), sorted(kinds))
-        finally:
-            unregister_adapter("lnd")
-            unregister_adapter("coreln")
 
 
 class LightningForwardFailureReasonTest(unittest.TestCase):
@@ -488,15 +514,35 @@ class LightningDaemonPayloadTest(unittest.TestCase):
         )
         return conn
 
+    @contextmanager
+    def _adapter_temporarily_unregistered(self, kind: str) -> Iterator[None]:
+        """Remove an adapter for the test, restore on the way out.
+
+        Once #154/#155 land, the real LND/CLN adapters auto-register at
+        daemon import time. The "without registration" assertions need
+        the kind to be unregistered for the duration of the test only;
+        we restore whatever was there afterward so other tests in the
+        suite still see the production adapter.
+        """
+        previous = resolve_adapter(kind)
+        unregister_adapter(kind)
+        try:
+            yield
+        finally:
+            if previous is not None:
+                register_adapter(kind, previous)
+
     def test_snapshot_payload_returns_adapter_unavailable_without_registration(
         self,
     ) -> None:
         from kassiber.daemon import _lightning_node_snapshot_payload
 
         conn = self._conn_with_lightning_wallet()
-        unregister_adapter("coreln")
-        with self.assertRaises(AppError) as ctx:
-            _lightning_node_snapshot_payload(conn, {}, {"connection": "w-1"})
+        with self._adapter_temporarily_unregistered("coreln"):
+            with self.assertRaises(AppError) as ctx:
+                _lightning_node_snapshot_payload(
+                    conn, {}, {"connection": "w-1"}
+                )
         self.assertEqual(ctx.exception.code, "lightning_adapter_unavailable")
         self.assertFalse(ctx.exception.retryable)
 
@@ -506,9 +552,11 @@ class LightningDaemonPayloadTest(unittest.TestCase):
         from kassiber.daemon import _lightning_profitability_payload
 
         conn = self._conn_with_lightning_wallet()
-        unregister_adapter("coreln")
-        with self.assertRaises(AppError) as ctx:
-            _lightning_profitability_payload(conn, {}, {"connection": "w-1"})
+        with self._adapter_temporarily_unregistered("coreln"):
+            with self.assertRaises(AppError) as ctx:
+                _lightning_profitability_payload(
+                    conn, {}, {"connection": "w-1"}
+                )
         self.assertEqual(ctx.exception.code, "lightning_adapter_unavailable")
 
     def test_snapshot_payload_merges_connection_block_when_adapter_registered(
@@ -517,13 +565,10 @@ class LightningDaemonPayloadTest(unittest.TestCase):
         from kassiber.daemon import _lightning_node_snapshot_payload
 
         conn = self._conn_with_lightning_wallet()
-        register_adapter("coreln", _FakeAdapter(kind="coreln"))
-        try:
+        with _adapter_registered("coreln", _FakeAdapter(kind="coreln")):
             payload = _lightning_node_snapshot_payload(
                 conn, {}, {"connection": "w-1"}
             )
-        finally:
-            unregister_adapter("coreln")
         self.assertEqual(
             payload["connection"],
             {"id": "w-1", "label": "Home CLN", "kind": "coreln"},
@@ -537,13 +582,10 @@ class LightningDaemonPayloadTest(unittest.TestCase):
         from kassiber.daemon import _lightning_profitability_payload
 
         conn = self._conn_with_lightning_wallet()
-        register_adapter("coreln", _FakeAdapter(kind="coreln"))
-        try:
+        with _adapter_registered("coreln", _FakeAdapter(kind="coreln")):
             payload = _lightning_profitability_payload(
                 conn, {}, {"connection": "w-1"}
             )
-        finally:
-            unregister_adapter("coreln")
         self.assertEqual(payload["connection"]["id"], "w-1")
         self.assertEqual(payload["summary"]["netProfitSat"], 3_280)
         self.assertGreaterEqual(len(payload["channels"]), 1)
