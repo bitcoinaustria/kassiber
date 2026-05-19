@@ -922,10 +922,16 @@ function ChannelDetailBody({
   const capacity = Math.max(1, channel.capacitySat);
   const localPct = (channel.localBalanceSat / capacity) * 100;
   const remotePct = (channel.remoteBalanceSat / capacity) * 100;
+  // Only show "% of node" for channels included in the totalCapacitySat
+  // denominator. The seed contract excludes closed and pending channels
+  // from the totals; showing their share against the live denominator
+  // would imply they still contribute to current node capacity.
+  const showSharePct =
+    channel.state === "active" || channel.state === "inactive";
   const sharePct =
-    totalCapacitySat > 0
+    showSharePct && totalCapacitySat > 0
       ? Math.round((channel.capacitySat / totalCapacitySat) * 100)
-      : 0;
+      : null;
   const explorerHref = explorerHrefForOutpoint(channel.fundingOutpoint);
   const lastActivityRel = relativeFrom(channel.lastActivityAt);
   return (
@@ -982,7 +988,7 @@ function ChannelDetailBody({
           </div>
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
             <span>Capacity {fmtSat(channel.capacitySat)}</span>
-            <span>{sharePct}% of node</span>
+            {sharePct !== null ? <span>{sharePct}% of node</span> : null}
           </div>
         </div>
 

@@ -219,6 +219,14 @@ export function ConnectionDetail() {
   }
 
   if (isNodeConnection(connection.kind)) {
+    // Node detail intentionally diverges from the wallet detail: it
+    // does NOT expose the per-connection edit/remove dropdown menu.
+    // The wallet edit dialog edits descriptor / source_file / btcpay
+    // store / gap_limit fields that have no node analogue — a node's
+    // alias, pubkey, and channel set are reported by the node itself,
+    // not user-editable. Connection-level remove still flows through
+    // the Connections list (where the bulk edit/remove path lives);
+    // wiring a node-only Remove dialog here is tracked as follow-up.
     return (
       <NodeConnectionContainer
         connection={connection}
