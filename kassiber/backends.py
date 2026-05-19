@@ -77,7 +77,7 @@ DEFAULT_BACKENDS = {
     },
 }
 
-BACKEND_KINDS = {"bitcoinrpc", "btcpay", "custom", "electrum", "esplora", "liquid-esplora", "lnd", "mempool"}
+BACKEND_KINDS = {"bitcoinrpc", "btcpay", "coreln", "custom", "electrum", "esplora", "liquid-esplora", "lnd", "mempool"}
 DEFAULT_ENV_FILENAME = "backends.env"
 DEFAULT_BACKEND_SETTING = "default_backend"
 BOOTSTRAP_DEFAULT_BACKEND_SETTING = "bootstrap_default_backend"
@@ -103,14 +103,23 @@ BACKEND_RESERVED_FIELDS = BACKEND_DB_FIELDS | BACKEND_RUNTIME_METADATA_FIELDS
 BACKEND_BOOLEAN_CONFIG_FIELDS = {"insecure"}
 BACKEND_CONFIG_FIELDS = {
     "certificate",
+    "commando_peer_id",
     "cookiefile",
     "insecure",
+    "lightning_cli",
+    "lightning_dir",
     "password",
+    "rpc_file",
     "username",
     "walletprefix",
 }
 BACKEND_CONFIG_KEY_ALIASES = {
+    "commando": "commando_peer_id",
+    "commando_id": "commando_peer_id",
     "cookie_file": "cookiefile",
+    "lightningdir": "lightning_dir",
+    "lightning_directory": "lightning_dir",
+    "rpcfile": "rpc_file",
     "rpcpassword": "password",
     "rpc_password": "password",
     "rpcuser": "username",
@@ -124,7 +133,11 @@ BACKEND_CLEAR_FIELD_ALIASES = {
     "notes": "notes",
     "insecure": "insecure",
     "certificate": "certificate",
+    "commando-peer-id": "commando_peer_id",
     "cookiefile": "cookiefile",
+    "lightning-cli": "lightning_cli",
+    "lightning-dir": "lightning_dir",
+    "rpc-file": "rpc_file",
     "username": "username",
     "password": "password",
     "wallet-prefix": "walletprefix",
@@ -133,6 +146,9 @@ BACKEND_OUTPUT_PRESENCE_FIELDS = {
     "has_auth_header": ("auth_header",),
     "has_token": ("token",),
     "has_certificate": ("certificate",),
+    "has_commando_peer_id": ("commando_peer_id",),
+    "has_lightning_dir": ("lightning_dir",),
+    "has_rpc_file": ("rpc_file",),
     "has_cookiefile": ("cookiefile", "cookie_file"),
     "has_username": ("username", "rpcuser", "rpc_user"),
     "has_password": ("password", "rpcpassword", "rpc_password"),

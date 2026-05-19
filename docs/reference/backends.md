@@ -120,6 +120,7 @@ Current backend kinds:
 - `bitcoinrpc`
 - `btcpay`
 - `lnd`
+- `coreln`
 - `liquid-esplora`
 - `custom`
 
@@ -164,15 +165,23 @@ xxd -p -c 256 readonly.macaroon | \
     --token-stdin
 ```
 
-The desktop reads the LND node snapshot via `ui.connections.node.snapshot`
-and the profitability summary via `ui.reports.lightning_profitability`,
-both of which dispatch through the shared Lightning adapter registry. The
-adapter is strictly read-only: it calls `getinfo`, channel and balance
-endpoints, forwarding history, payments, invoices, and the fee report,
-but never opens, closes, or pays. Adapters drop preimages, encoded
-bolt11 strings, onion route hops, route hints, and
-`failure_source_pubkey` before any payload reaches the local DB. Private
-channels surface with `peer_pubkey=null` by default.
+Core Lightning-specific fields:
+
+- `TOKEN` for a commando rune when using the least-privilege remote path
+- `COMMANDO_PEER_ID`
+- `LIGHTNING_CLI`
+- `LIGHTNING_DIR`
+- `RPC_FILE`
+
+Both Lightning adapters expose the desktop node snapshot via
+`ui.connections.node.snapshot` and the profitability summary via
+`ui.reports.lightning_profitability`, dispatching through the shared
+Lightning adapter registry. The adapters are strictly read-only: they
+call `getinfo`, channel and balance endpoints, forwarding history,
+payments, invoices, and the fee report, but never open, close, or pay.
+Adapters drop preimages, encoded bolt11 strings, onion route hops,
+route hints, and `failure_source_pubkey` before any payload reaches the
+local DB. Private channels surface with `peer_pubkey=null` by default.
 
 BTCPay backends now serve two separate Kassiber flows:
 
@@ -195,6 +204,66 @@ The backend CLI now accepts the common backend-specific knobs directly:
 - `--insecure` for Electrum TLS bypass testing against servers you control
 - `--cookiefile` or `--username` / `--password` for Bitcoin Core RPC auth
 - `--wallet-prefix` for Bitcoin Core watch-only wallet naming
+- `--lightning-cli`, `--lightning-dir`, `--rpc-file`, and
+  `--commando-peer-id` for Core Lightning
+
+### Core Lightning read-only sync
+
+Core Lightning node sync is intentionally read-only from Kassiber's side.
+The adapter only calls `getinfo`, `bkpr-list*`, and a curated subset of
+`list*` RPC methods; it never calls payment, invoice creation, channel
+mutation, wallet mutation, or signing methods, and the allowlist in
+`CLN_ALLOWED_METHODS` rejects any unsupported method at the transport
+boundary even if the rune would permit it.
+
+Preferred least-privilege setup is a commando rune restricted to read
+and bookkeeper methods with a rate cap:
+
+```bash
+lightning-cli commando-rune restrictions='[["method^list","method^get","method^bkpr-list","method=summary"],["method/listdatastore"],["rate=60"]]'
+```
+
+Store that rune through stdin or an fd so it does not land in shell
+history. Kassiber passes the rune through the `LIGHTNING_RUNE`
+environment variable when invoking `lightning-cli`, so it never appears
+in `/proc/<pid>/cmdline`:
+
+```bash
+printf %s "$CLN_READONLY_RUNE" | python3 -m kassiber backends create cln \
+  --kind coreln \
+  --url cln://commando \
+  --commando-peer-id <node-id> \
+  --token-stdin
+
+python3 -m kassiber wallets create \
+  --label routing-node \
+  --kind coreln \
+  --backend cln
+
+python3 -m kassiber wallets sync --wallet routing-node
+python3 -m kassiber reports lightning-profitability --connection routing-node
+python3 -m kassiber reports export-lightning-profitability-csv \
+  --connection routing-node \
+  --file /tmp/kassiber-lightning-profitability.csv
+```
+
+In the desktop app, add Core Lightning from Settings -> Sync backends.
+The Core Lightning form stores the backend and creates the matching
+read-only node connection so normal wallet sync can refresh it.
+
+Local RPC-file use is also supported for operators who run Kassiber on
+the same machine as `lightningd`, but local RPC access is not
+least-privilege on its own. Prefer the commando rune path when you want
+the connection itself to be unable to pay, create invoices, close
+channels, or mutate wallet state.
+
+Persisted CLN records follow the discard policy in
+[lightning-opsec.md](lightning-opsec.md): forwards are aggregated to
+day-per-channel rows (no per-forward log of "X paid Y through me"),
+balance snapshots are daily-bucketed (no fresh row per sync), invoice
+events from `bkpr-listincome` become wallet transactions (routed events
+do not, avoiding the double-count with the per-forward aggregate), and
+no raw RPC payloads are stored on disk.
 
 ### BTCPay Greenfield API
 

@@ -44,7 +44,7 @@ Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the 
 
 ## Right now
 
-- [ ] Land a Lightning sync adapter on top of the
+- [x] Land Lightning adapters on top of the
   [`kassiber.core.lightning`](kassiber/core/lightning/) scaffold. The
   scaffold ships the `NodeSnapshot` / `NodeChannel` / `NodeForward`
   shapes, a `LightningAdapter` Protocol with `register_adapter` /
@@ -53,11 +53,11 @@ Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the 
   `ui.reports.lightning_profitability`), CLI commands
   (`reports lightning-profitability`,
   `reports export-lightning-profitability-csv`), AI tool registrations,
-  and the desktop wiring. Adapters need only implement the Protocol and
-  call `register_adapter("lnd" | "coreln", …)` on import. See PRs #154
-  (LND) and #155 (Core Lightning) for in-flight adapter work; both should
-  rebase to consume the scaffold rather than reinvent the CLI / daemon
-  surface.
+  and the desktop wiring. The adapters ship as stacked PRs on the
+  shared scaffold: PR #158 adds `kassiber/core/lightning/lnd.py`
+  (replacing #154) and PR #159 adds `kassiber/core/lightning/cln.py`
+  (replacing #155); both PRs are scoped to a single adapter so review
+  stays focused per-implementation.
 - [ ] Design an opt-in encrypted Lightning **evidence vault** for
   operators who need proof-of-payment for legal disputes, full invoice
   replay for corrupted-bookkeeper recovery, or chain-of-custody records

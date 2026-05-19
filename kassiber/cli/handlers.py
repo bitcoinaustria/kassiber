@@ -34,6 +34,7 @@ from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
 from ..core import imports as core_imports
+from ..core.lightning import cln as core_lightning_cln
 from ..core import metadata as core_metadata
 from ..core import pricing
 from ..core import rates as core_rates
@@ -1497,9 +1498,9 @@ WALLET_KIND_CATALOG = {
         "requires": ["addresses|source_file"],
     },
     "coreln": {
-        "summary": "Core Lightning CSV-derived wallet (deposits/withdrawals from node exports).",
-        "config_fields": ["source_file", "source_format"],
-        "requires": [],
+        "summary": "Core Lightning node wallet; read-only live sync through a coreln backend.",
+        "config_fields": ["backend"],
+        "requires": ["backend"],
     },
     "lnd": {
         "summary": "LND CSV-derived wallet (deposits/withdrawals from node exports).",
@@ -1867,6 +1868,17 @@ def _wallet_sync_hooks(commit=True):
             runtime_config,
             profile,
             wallet,
+            commit=commit,
+        ),
+        sync_core_lightning_wallet=lambda conn, runtime_config, profile, wallet: core_lightning_cln.sync_core_lightning_wallet(
+            conn,
+            profile,
+            wallet,
+            resolve_backend(
+                runtime_config,
+                json.loads(wallet["config_json"] or "{}").get("backend"),
+            ),
+            _import_coordinator_hooks(),
             commit=commit,
         ),
     )

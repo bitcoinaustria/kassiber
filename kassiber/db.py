@@ -321,6 +321,60 @@ CREATE TABLE IF NOT EXISTS backends (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS lightning_node_syncs (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+    backend_name TEXT NOT NULL,
+    node_id TEXT,
+    node_alias TEXT,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    status TEXT NOT NULL,
+    fetched_counts_json TEXT NOT NULL DEFAULT '{}',
+    error_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_lightning_node_syncs_wallet_started
+    ON lightning_node_syncs(wallet_id, started_at DESC);
+
+CREATE TABLE IF NOT EXISTS lightning_node_records (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+    backend_name TEXT NOT NULL,
+    node_id TEXT,
+    record_type TEXT NOT NULL,
+    external_id TEXT NOT NULL,
+    occurred_at TEXT NOT NULL,
+    account TEXT,
+    peer_id TEXT,
+    channel_id TEXT,
+    direction TEXT,
+    amount_msat INTEGER NOT NULL DEFAULT 0,
+    fee_msat INTEGER NOT NULL DEFAULT 0,
+    tag TEXT,
+    status TEXT,
+    currency TEXT,
+    payment_hash TEXT,
+    txid TEXT,
+    outpoint TEXT,
+    sync_id TEXT REFERENCES lightning_node_syncs(id) ON DELETE SET NULL,
+    raw_json TEXT NOT NULL DEFAULT '{}',
+    first_seen_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(profile_id, wallet_id, backend_name, record_type, external_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_lightning_node_records_profile_type_time
+    ON lightning_node_records(profile_id, record_type, occurred_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_lightning_node_records_wallet_type_time
+    ON lightning_node_records(wallet_id, record_type, occurred_at DESC);
+
 CREATE TABLE IF NOT EXISTS rates_cache (
     pair TEXT NOT NULL,
     timestamp TEXT NOT NULL,

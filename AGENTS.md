@@ -330,6 +330,6 @@ uv run python -m kassiber ai chat --help
 - No descriptor/xpub-native live sync through `bitcoinrpc` yet.
 - No self-hosted Liquid `elements_rpc` backend yet.
 - No BTCPay invoice/payment provenance ingest yet beyond confirmed on-chain wallet history plus comment/label carry-through from wallet-configured BTCPay sync.
-- LND (`kind="lnd"`) is implemented as a read-only node snapshot adapter behind the shared scaffold; Core Lightning (`coreln`) and NWC (`nwc`) kinds are declared but do not sync yet.
+- LND (`kind="lnd"`) and Core Lightning (`coreln`) are implemented as read-only node snapshot adapters behind the shared scaffold (`kassiber/core/lightning/lnd.py` and `kassiber/core/lightning/cln.py`); NWC (`nwc`) is declared but does not sync yet.
 - No REST/server mode or multi-user auth yet.
 - Generic cross-asset carrying-value is still unsupported: outside Austrian profiles, BTC ↔ LBTC peg-ins/peg-outs and submarine swaps remain audit-linked SELL + BUY pairs rather than a cost-basis-carry primitive.
