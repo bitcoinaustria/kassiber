@@ -313,6 +313,99 @@ class LndAdapterFetchSnapshotTest(unittest.TestCase):
         # Opsec policy: private channel surfaces peer_pubkey=None.
         self.assertIsNone(private.peer_pubkey)
 
+    def test_private_channel_with_pubkey_alias_falls_back_to_neutral_label(
+        self,
+    ) -> None:
+        """Regression for the Codex H-3 finding: when LND omits
+        ``peer_alias`` for a private channel, the previous fallback
+        ``row.get("peer_alias") or remote_pubkey or "unknown"`` serialized
+        the peer pubkey under ``peerAlias``, bypassing the ``peer_pubkey``
+        opsec guard. The fallback for private channels must be a neutral
+        placeholder."""
+
+        leaked_pubkey = "03" + "cc" * 32
+        row = {
+            "active": True,
+            "chan_id": "999",
+            "channel_point": ("ff" * 32) + ":0",
+            "remote_pubkey": leaked_pubkey,
+            # LND omits the alias (or returns an empty string) — this
+            # is the leak scenario the fix targets.
+            "peer_alias": "",
+            "capacity": "500000",
+            "local_balance": "200000",
+            "remote_balance": "300000",
+            "private": True,
+            "initiator": False,
+        }
+        channel = core_lnd._map_channel(row, closed=False)
+        # Both the structured pubkey field and the alias must not leak
+        # the remote pubkey for a private channel.
+        self.assertIsNone(channel.peer_pubkey)
+        self.assertNotIn(leaked_pubkey, channel.peer_alias)
+        self.assertEqual(channel.peer_alias, "private peer")
+        # Defense in depth: serialize through the scaffold's dict shape
+        # and confirm the pubkey is nowhere in the payload — even a
+        # transitive leak through `peerAlias` would surface here.
+        from kassiber.core.lightning import snapshot_to_dict
+        from kassiber.core.lightning.types import (
+            NodeRoutingSnapshot,
+            NodeSnapshot,
+        )
+
+        snapshot = NodeSnapshot(
+            alias="leaky-node",
+            pubkey="02" + "aa" * 32,
+            network="mainnet",
+            implementation_version=None,
+            peer_count=0,
+            block_height=None,
+            onchain_balance_sat=0,
+            total_local_balance_sat=0,
+            total_remote_balance_sat=0,
+            total_capacity_sat=0,
+            channels=(channel,),
+            closed_channels=(),
+            routing=NodeRoutingSnapshot(
+                window_label="Last 30 days",
+                routing_revenue_sat=0,
+                payment_cost_sat=0,
+                rebalance_cost_sat=0,
+                onchain_cost_sat=0,
+                net_profit_sat=0,
+                forward_count=0,
+                payment_count=0,
+                rebalance_count=0,
+            ),
+            forwards=(),
+        )
+        self.assertNotIn(leaked_pubkey, json.dumps(snapshot_to_dict(snapshot)))
+
+    def test_private_channel_with_pubkey_shaped_alias_keeps_alias(self) -> None:
+        """If LND surfaces an alias for a private channel — even one that
+        happens to look like a pubkey — we keep it. The opsec rule is to
+        not leak the pubkey via FALLBACK, not to second-guess the alias
+        the peer chose to expose. ``peer_pubkey`` is still ``None``."""
+
+        # An alias that happens to resemble a hex pubkey. The adapter
+        # treats it as the peer's chosen identity, NOT a leak source.
+        pubkey_shaped_alias = "03" + "ee" * 32
+        row = {
+            "active": True,
+            "chan_id": "888",
+            "channel_point": ("ee" * 32) + ":2",
+            "remote_pubkey": "03" + "dd" * 32,
+            "peer_alias": pubkey_shaped_alias,
+            "capacity": "400000",
+            "local_balance": "100000",
+            "remote_balance": "300000",
+            "private": True,
+            "initiator": True,
+        }
+        channel = core_lnd._map_channel(row, closed=False)
+        self.assertIsNone(channel.peer_pubkey)
+        self.assertEqual(channel.peer_alias, pubkey_shaped_alias)
+
     def test_payment_sanitization_drops_preimage_bolt11_and_failure_source(
         self,
     ) -> None:

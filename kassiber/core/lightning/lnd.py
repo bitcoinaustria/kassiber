@@ -315,9 +315,22 @@ def _map_channel(
     fee_row = (fee_lookup or {}).get(str(chan_id or ""), {})
     forward_row = (forwards_per_channel or {}).get(str(chan_id or ""), {})
     channel_id = chan_id or str(channel_point or "")
+    # Opsec: for private channels, the alias fallback must never reach
+    # back to `remote_pubkey` — that would leak the pubkey under a
+    # different field and bypass the `peer_pubkey=None` guard above. We
+    # use the same neutral placeholder the desktop shows for null
+    # `peer_pubkey` (see NodeConnectionDetail.tsx). When LND DID give us
+    # an alias for a private channel we keep it as-is: that's the peer's
+    # chosen identity, and the opsec rule is to not leak the pubkey via
+    # FALLBACK, not to second-guess what LND surfaces.
+    raw_alias = row.get("peer_alias")
+    if is_private:
+        peer_alias = str(raw_alias) if raw_alias else "private peer"
+    else:
+        peer_alias = str(raw_alias or remote_pubkey or "unknown")
     return NodeChannel(
         id=channel_id,
-        peer_alias=str(row.get("peer_alias") or remote_pubkey or "unknown"),
+        peer_alias=peer_alias,
         peer_pubkey=peer_pubkey,
         capacity_sat=_int(row.get("capacity")),
         local_balance_sat=_int(row.get("local_balance")),
