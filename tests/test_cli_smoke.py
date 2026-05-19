@@ -60,6 +60,15 @@ _BULLBITCOIN_LN_ORDERS_CSV = """ORDER_NUMBER,ORDER_TYPE,ORDER_SUBTYPE,MESSAGE,OR
 1004,Fiat Payment,Market Order,,order-ln-1,600.00,USD,0.01000000,BTC,60000.00,USD,SEPA Transfer (USD),Bitcoin Lightning,Completed,Completed,Completed,2026-04-18 09:40:00.000Z,2026-04-18 09:50:00.000Z,2026-04-18 09:51:00.000Z,60000.00,USD,bull-ln-buy-tx,lnbc1example
 """
 
+_COINFINITY_EXISTING_CSV = """date,txid,direction,asset,amount,fee,fiat_value,fiat_rate,kind,description,counterparty
+2026-05-11T13:19:36Z,coinfinity-buy-tx,inbound,BTC,0.00147403,0,100.00,68872.40,deposit,Synced from self custody wallet,Synced from node
+"""
+
+_COINFINITY_ORDERS_CSV = """"Order ID",Type,Date,"Amount EUR","Amount Crypto",Crypto,"Rate EUR","Mining Fee Crypto","Mining Fee EUR","Service Fee EUR","Total Fee EUR",Address,Transaction,"LN Invoice","Transaction type"
+BCBC-229A-AB,sell,"2026-05-11 13:19:36",100.00,0.00147403,BTC,68872.400000000000000000000000,,,1.52,1.52,bc1qcoinfinityreceive,coinfinity-buy-tx,,Onchain
+BFBC-EAC9-38,buy,"2026-02-20 13:50:45",3000.00,0.05153544,BTC,57337.700000000000000000000000,0.00000134,0.08,45.00,45.08,bc1qcoinfinitysell,coinfinity-sell-tx,,Onchain
+"""
+
 _TWENTYONEBITCOIN_EXISTING_CSV = """date,txid,direction,asset,amount,fee,fiat_value,fiat_rate,kind,description,counterparty
 2022-06-01T03:00:42Z,21bitcoin:2,inbound,BTC,0.00049106,0,36.93,75204.25,buy,Synced from wallet,Synced from 21bitcoin
 2022-10-07T16:31:20Z,l1-withdrawal-tx,outbound,BTC,0.00040000,0.00001000,,,withdrawal,Synced withdrawal,Synced from 21bitcoin
@@ -2664,6 +2673,144 @@ class AccountBucketBehaviorTest(unittest.TestCase):
         self.assertEqual(buy["pricing_external_ref"], "order-ln-1")
         self.assertEqual(buy["fiat_value_exact"], "600.00")
         self.assertEqual(buy["fiat_rate_exact"], "60000.00")
+
+    def test_z_coinfinity_csv_enriches_existing_wallet_transaction(self):
+        existing_csv = Path(self._tmp.name) / "coinfinity-existing-wallet.csv"
+        existing_csv.write_text(_COINFINITY_EXISTING_CSV, encoding="utf-8")
+        coinfinity_csv = Path(self._tmp.name) / "coinfinity-orders.csv"
+        coinfinity_csv.write_text(_COINFINITY_ORDERS_CSV, encoding="utf-8")
+
+        self._cli(
+            "profiles", "create",
+            "--workspace", "Buckets",
+            "--fiat-currency", "EUR",
+            "--tax-country", "generic",
+            "Coinfinity Euro",
+        )
+        self._cli(
+            "wallets", "create",
+            "--workspace", "Buckets",
+            "--profile", "Coinfinity Euro",
+            "--label", "Coinfinity Self Custody",
+            "--kind", "custom",
+        )
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Buckets",
+            "--profile", "Coinfinity Euro",
+            "--wallet", "Coinfinity Self Custody",
+            "--file", str(existing_csv),
+        )
+
+        payload = self._cli(
+            "wallets", "import-coinfinity",
+            "--workspace", "Buckets",
+            "--profile", "Coinfinity Euro",
+            "--wallet", "Coinfinity Self Custody",
+            "--file", str(coinfinity_csv),
+        )
+        self.assertEqual(payload["kind"], "wallets.import-coinfinity")
+        self.assertEqual(payload["data"]["input_format"], "coinfinity_csv")
+        self.assertEqual(payload["data"]["coinfinity_rows"], 2)
+        self.assertEqual(payload["data"]["imported"], 0)
+        self.assertEqual(payload["data"]["updated"], 1)
+        self.assertEqual(payload["data"]["matched"], 1)
+        self.assertEqual(payload["data"]["skipped_unmatched"], 1)
+        self.assertEqual(payload["data"]["skipped"], 2)
+
+        payload = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "Coinfinity Euro",
+            "--wallet", "Coinfinity Self Custody",
+        )
+        buy = payload["data"][0]
+        self.assertEqual(buy["external_id"], "coinfinity-buy-tx")
+        self.assertEqual(buy["kind"], "buy")
+        self.assertEqual(buy["pricing_source_kind"], "exchange_execution")
+        self.assertEqual(buy["pricing_provider"], "Coinfinity")
+        self.assertEqual(buy["pricing_method"], "coinfinity_csv")
+        self.assertEqual(buy["pricing_pair"], "BTC-EUR")
+        self.assertEqual(buy["pricing_external_ref"], "BCBC-229A-AB")
+        self.assertEqual(buy["fiat_value_exact"], "101.52")
+        self.assertEqual(
+            buy["fiat_rate_exact"],
+            "68872.400000000000000000000000",
+        )
+
+    def test_z_coinfinity_csv_full_import_flags_wallet_gap_rows(self):
+        existing_csv = Path(self._tmp.name) / "coinfinity-full-existing-wallet.csv"
+        existing_csv.write_text(_COINFINITY_EXISTING_CSV, encoding="utf-8")
+        coinfinity_csv = Path(self._tmp.name) / "coinfinity-full-orders.csv"
+        coinfinity_csv.write_text(_COINFINITY_ORDERS_CSV, encoding="utf-8")
+
+        self._cli(
+            "profiles", "create",
+            "--workspace", "Buckets",
+            "--fiat-currency", "EUR",
+            "--tax-country", "generic",
+            "Coinfinity Full Euro",
+        )
+        self._cli(
+            "wallets", "create",
+            "--workspace", "Buckets",
+            "--profile", "Coinfinity Full Euro",
+            "--label", "Coinfinity Receive Wallet",
+            "--kind", "custom",
+        )
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Buckets",
+            "--profile", "Coinfinity Full Euro",
+            "--wallet", "Coinfinity Receive Wallet",
+            "--file", str(existing_csv),
+        )
+
+        payload = self._cli(
+            "wallets", "import-coinfinity",
+            "--workspace", "Buckets",
+            "--profile", "Coinfinity Full Euro",
+            "--file", str(coinfinity_csv),
+            "--mode", "full",
+        )
+        data = payload["data"]
+        self.assertEqual(data["scope"], "book")
+        self.assertEqual(data["mode"], "full")
+        self.assertEqual(data["wallet"], "Coinfinity")
+        self.assertEqual(data["coinfinity_rows"], 2)
+        self.assertEqual(data["imported"], 2)
+        self.assertEqual(data["matched"], 1)
+        self.assertEqual(data["unmatched"], 1)
+        self.assertEqual(data["excluded"], 2)
+
+        payload = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "Coinfinity Full Euro",
+            "--wallet", "Coinfinity",
+            "--order", "asc",
+        )
+        records = payload["data"]
+        self.assertEqual(len(records), 2)
+        self.assertTrue(all(record["excluded"] for record in records))
+        tags_by_external_id = {
+            record["external_id"]: {tag["code"] for tag in record["tags"]}
+            for record in records
+        }
+        self.assertIn(
+            "coinfinity-matched",
+            tags_by_external_id["coinfinity-buy-tx"],
+        )
+        self.assertIn(
+            "coinfinity-wallet-gap",
+            tags_by_external_id["coinfinity-sell-tx"],
+        )
+        sell = next(
+            record for record in records if record["external_id"] == "coinfinity-sell-tx"
+        )
+        self.assertEqual(sell["kind"], "sell")
+        self.assertEqual(sell["fee_msat"], 134000)
+        self.assertEqual(sell["fiat_value_exact"], "2954.92")
 
     def test_z_21bitcoin_csv_enriches_existing_wallet_transaction(self):
         existing_csv = Path(self._tmp.name) / "21bitcoin-existing-wallet.csv"

@@ -199,12 +199,13 @@ committing.
 for wallet-scoped CSV/JSON imports. Wallet CSV import results include
 `inserted_records`, `updated_records`, and `unchanged` so the desktop can show
 what changed after an exchange CSV import. For
-`source_format="bullbitcoin_csv"`, `wallet` is optional. The default
-`mode="relevant"` treats the export as book-wide exchange evidence and enriches
-only unique matching transactions in the active profile. `mode="full"` imports
-all normalized Bull Bitcoin rows into the selected or default provider wallet
-as excluded evidence, then flags each row as `matched`, `unmatched`, or
-`ambiguous` against this book's wallet transactions. For
+`source_format="bullbitcoin_csv"` or `source_format="coinfinity_csv"`, `wallet`
+is optional. The default `mode="relevant"` treats the export as book-wide
+exchange evidence and enriches only unique matching transactions in the active
+profile. `mode="full"` imports all normalized provider rows into the selected
+or default provider wallet as excluded evidence, then flags each row as
+`matched`, `unmatched`, or `ambiguous` against this book's wallet transactions.
+Coinfinity imports return `coinfinity_rows`. For
 `source_format="21bitcoin_csv"`, the default `mode="full"` imports active
 custodial ledger rows into the selected or default `21bitcoin` wallet; explicit
 `mode="relevant"` keeps the evidence-only matching behavior for L1 withdrawal
@@ -218,7 +219,8 @@ rows plus Lightning and on-chain wallet activity. It keeps Lightning payment
 hashes when exported, skips fiat-only platform rows, and returns `strike_rows`.
 The result also includes `matched`, `skipped_unmatched`, and
 `skipped_ambiguous` in relevant mode, or `matched`, `unmatched`, `ambiguous`,
-`excluded`, and `reconciliation_records` in Bull Bitcoin/Pocket full mode.
+`excluded`, and `reconciliation_records` in Bull Bitcoin/Coinfinity/Pocket full
+mode.
 
 `ui.connections.sources` returns the daemon's authoritative catalog of
 supported wallet kinds (with summary/config-fields metadata) and the

@@ -57,7 +57,7 @@ interface SetupFormState {
   gapLimit: string;
   targetWallet: string;
   sourceFile: string;
-  sourceFormat: "csv" | "json" | "phoenix_csv" | "river_csv" | "bullbitcoin_csv" | "21bitcoin_csv" | "strike_csv";
+  sourceFormat: "csv" | "json" | "phoenix_csv" | "river_csv" | "bullbitcoin_csv" | "coinfinity_csv" | "21bitcoin_csv" | "strike_csv";
   bullImportMode: "relevant" | "full";
   btcpayStoreId: string;
   btcpayPaymentMethodId: string;
@@ -84,6 +84,7 @@ interface SyncResult {
   excluded?: number;
   updated?: number;
   bullbitcoin_rows?: number;
+  coinfinity_rows?: number;
   twentyonebitcoin_rows?: number;
   strike_rows?: number;
   inserted_records?: ImportChangeRecord[];
@@ -167,6 +168,7 @@ interface ImportFileResult {
   excluded?: number;
   updated?: number;
   bullbitcoin_rows?: number;
+  coinfinity_rows?: number;
   twentyonebitcoin_rows?: number;
   strike_rows?: number;
   inserted_records?: ImportChangeRecord[];
@@ -184,7 +186,11 @@ function supportsDescriptorSync(backend: BackendOption) {
 }
 
 function isExchangeEvidenceFormat(sourceFormat?: string) {
-  return sourceFormat === "bullbitcoin_csv" || sourceFormat === "21bitcoin_csv";
+  return (
+    sourceFormat === "bullbitcoin_csv" ||
+    sourceFormat === "coinfinity_csv" ||
+    sourceFormat === "21bitcoin_csv"
+  );
 }
 
 function sourceFileFilters(source: ConnectionSource) {
@@ -196,6 +202,9 @@ function sourceFileFilters(source: ConnectionSource) {
   }
   if (source.sourceFormat === "bullbitcoin_csv") {
     return [{ name: "Bull Bitcoin CSV", extensions: ["csv"] }];
+  }
+  if (source.sourceFormat === "coinfinity_csv") {
+    return [{ name: "Coinfinity CSV", extensions: ["csv"] }];
   }
   if (source.sourceFormat === "21bitcoin_csv") {
     return [{ name: "21bitcoin CSV", extensions: ["csv"] }];
@@ -2007,6 +2016,7 @@ export function AddConnectionDialog({
       excluded: result.excluded,
       updated: result.updated,
       bullbitcoin_rows: result.bullbitcoin_rows,
+      coinfinity_rows: result.coinfinity_rows,
       twentyonebitcoin_rows: result.twentyonebitcoin_rows,
       strike_rows: result.strike_rows,
       inserted_records: result.inserted_records,
@@ -2025,6 +2035,7 @@ export function AddConnectionDialog({
     const hiddenRecords = Math.max(0, changedRecords.length - shownRecords.length);
     const rowsRead =
       lastImportResult.bullbitcoin_rows ??
+      lastImportResult.coinfinity_rows ??
       lastImportResult.twentyonebitcoin_rows ??
       lastImportResult.strike_rows ??
       lastImportResult.imported + lastImportResult.skipped;

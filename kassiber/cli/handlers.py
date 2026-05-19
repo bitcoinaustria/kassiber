@@ -140,6 +140,7 @@ WALLET_KINDS = [
     "phoenix",
     "river",
     "bullbitcoin",
+    "coinfinity",
     "21bitcoin",
     "pocketbitcoin",
     "strike",
@@ -1527,6 +1528,11 @@ WALLET_KIND_CATALOG = {
         "config_fields": ["source_file", "source_format"],
         "requires": [],
     },
+    "coinfinity": {
+        "summary": "Coinfinity order CSV importer for exact buy/sell execution pricing.",
+        "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
     "21bitcoin": {
         "summary": "21bitcoin custodial platform CSV importer with exact trade pricing.",
         "config_fields": ["source_file", "source_format"],
@@ -1551,6 +1557,7 @@ WALLET_KIND_CATALOG = {
 
 
 DEFAULT_BULLBITCOIN_WALLET_LABEL = "Bull Bitcoin"
+DEFAULT_COINFINITY_WALLET_LABEL = "Coinfinity"
 DEFAULT_TWENTYONEBITCOIN_WALLET_LABEL = "21bitcoin"
 DEFAULT_POCKETBITCOIN_WALLET_LABEL = "Pocket Bitcoin"
 DEFAULT_STRIKE_WALLET_LABEL = "Strike"
@@ -1562,6 +1569,9 @@ def _get_or_create_provider_import_wallet(conn, profile, input_format, wallet_re
     if input_format == "21bitcoin_csv":
         default_label = DEFAULT_TWENTYONEBITCOIN_WALLET_LABEL
         wallet_kind = "21bitcoin"
+    elif input_format == "coinfinity_csv":
+        default_label = DEFAULT_COINFINITY_WALLET_LABEL
+        wallet_kind = "coinfinity"
     elif input_format == "pocketbitcoin_csv":
         default_label = DEFAULT_POCKETBITCOIN_WALLET_LABEL
         wallet_kind = "pocketbitcoin"

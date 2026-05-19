@@ -20,6 +20,7 @@ from ..importers import (
     exchange_evidence_rows_key,
     is_btcpay_format,
     is_bullbitcoin_format,
+    is_coinfinity_format,
     is_exchange_evidence_format,
     is_phoenix_format,
     is_pocketbitcoin_format,
@@ -62,8 +63,14 @@ POCKETBITCOIN_RECONCILIATION_TAGS = {
     "unmatched": ("pocketbitcoin-wallet-gap", "Pocket Bitcoin wallet gap"),
     "ambiguous": ("pocketbitcoin-ambiguous", "Pocket Bitcoin ambiguous"),
 }
+COINFINITY_RECONCILIATION_TAGS = {
+    "matched": ("coinfinity-matched", "Coinfinity matched"),
+    "unmatched": ("coinfinity-wallet-gap", "Coinfinity wallet gap"),
+    "ambiguous": ("coinfinity-ambiguous", "Coinfinity ambiguous"),
+}
 EXCHANGE_EVIDENCE_RECONCILIATION_TAGS = {
     "bullbitcoin_csv": BULLBITCOIN_RECONCILIATION_TAGS,
+    "coinfinity_csv": COINFINITY_RECONCILIATION_TAGS,
     "21bitcoin_csv": TWENTYONEBITCOIN_RECONCILIATION_TAGS,
     "pocketbitcoin_csv": POCKETBITCOIN_RECONCILIATION_TAGS,
 }
@@ -1506,7 +1513,11 @@ def import_file_into_wallet(
         apply_btcpay=is_btcpay_format(input_format),
         apply_phoenix=is_phoenix_format(input_format),
         apply_river=is_river_format(input_format),
-        match_existing_only=is_bullbitcoin_format(input_format) or is_pocketbitcoin_format(input_format),
+        match_existing_only=(
+            is_bullbitcoin_format(input_format)
+            or is_coinfinity_format(input_format)
+            or is_pocketbitcoin_format(input_format)
+        ),
         report_updates=is_exchange_evidence_format(input_format) or is_strike_format(input_format),
         commit=False,
     )

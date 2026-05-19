@@ -58,7 +58,7 @@ export interface ConnectionSource {
   docsHref?: string;
   setupKind?: SetupKind;
   walletKind?: string;
-  sourceFormat?: "csv" | "json" | "phoenix_csv" | "river_csv" | "bullbitcoin_csv" | "21bitcoin_csv" | "strike_csv";
+  sourceFormat?: "csv" | "json" | "phoenix_csv" | "river_csv" | "bullbitcoin_csv" | "coinfinity_csv" | "21bitcoin_csv" | "strike_csv";
   chain?: "bitcoin" | "liquid";
   network?: string;
   details: string[];
@@ -524,14 +524,22 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "coinfinity",
     title: "Coinfinity",
-    description: "Bitcoin broker activity import.",
+    description: "Order CSV import for exact buy/sell execution pricing.",
     category: "exchanges",
     image: coinfinityIcon,
     imageFrameClassName: lightLogoFrame,
     imageClassName: "size-8",
-    status: "planned",
+    status: "ready",
     pathLabel: "CSV import",
-    details: ["Dedicated parser is not wired yet"],
+    formatLabel: "coinfinity_csv",
+    docsHref: "https://coinfinity.co/",
+    setupKind: "file-enrichment",
+    walletKind: "coinfinity",
+    sourceFormat: "coinfinity_csv",
+    details: [
+      "BTC/EUR order rows preserve exact Coinfinity execution pricing",
+      "Book-wide imports can enrich relevant rows or import the shared export with reconciliation flags",
+    ],
   },
   {
     id: "bitpanda",

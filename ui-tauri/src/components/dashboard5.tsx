@@ -1700,6 +1700,7 @@ function railForConnection(kind: string, label: string): BalanceRail {
     case "bitpanda":
     case "river":
     case "bullbitcoin":
+    case "coinfinity":
     case "strike":
     case "csv":
     case "bip329":

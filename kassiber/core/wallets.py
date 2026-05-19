@@ -36,6 +36,7 @@ WALLET_KINDS = [
     "phoenix",
     "river",
     "bullbitcoin",
+    "coinfinity",
     "21bitcoin",
     "pocketbitcoin",
     "strike",
@@ -505,6 +506,11 @@ WALLET_KIND_CATALOG = {
     },
     "bullbitcoin": {
         "summary": "Bull Bitcoin order CSV importer for exact buy/sell execution pricing.",
+        "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
+    "coinfinity": {
+        "summary": "Coinfinity order CSV importer for exact buy/sell execution pricing.",
         "config_fields": ["source_file", "source_format"],
         "requires": [],
     },

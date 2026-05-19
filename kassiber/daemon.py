@@ -5133,6 +5133,7 @@ _UI_WALLET_SOURCE_FORMATS = {
     "phoenix_csv",
     "river_csv",
     "bullbitcoin_csv",
+    "coinfinity_csv",
     "21bitcoin_csv",
     "pocketbitcoin_csv",
     "strike_csv",
@@ -5627,7 +5628,7 @@ def _import_wallet_file_payload(
             hint="Choose a supported file format.",
             retryable=False,
         )
-    if source_format in {"bullbitcoin_csv", "pocketbitcoin_csv"}:
+    if source_format in {"bullbitcoin_csv", "coinfinity_csv", "pocketbitcoin_csv"}:
         wallet_ref = _optional_str_arg(args, "wallet")
         import_mode = (
             _optional_str_arg(args, "mode")

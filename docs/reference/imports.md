@@ -10,6 +10,7 @@ Kassiber can ingest transactions and metadata from several sources. Imported dat
 - Phoenix CSV exports
 - River Bitcoin Activity / Account Activity CSV exports
 - Bull Bitcoin order CSV exports
+- Coinfinity order CSV exports
 - 21bitcoin transaction CSV exports
 - Pocket Bitcoin account CSV exports
 - Strike CSV exports
@@ -20,6 +21,7 @@ Format references used by the dedicated importers:
 - BTCPay Greenfield API: <https://docs.btcpayserver.org/Development/GreenFieldExample/>
 - River Account Activity CSV: <https://support.river.com/hc/en-us/articles/45513824178963-How-do-I-download-my-account-activity>
 - Bull Bitcoin order CSV export from the Bull account order history
+- Coinfinity order CSV export from the Coinfinity account order history
 - 21bitcoin transaction CSV export from the 21bitcoin app
 - Pocket Bitcoin account CSV export
 - Strike CSV export from Strike transaction history
@@ -341,6 +343,55 @@ python3 -m kassiber wallets update --wallet treasury \
 
 python3 -m kassiber wallets sync --wallet treasury
 ```
+
+## Coinfinity
+
+Kassiber supports Coinfinity order CSV exports as exchange evidence. Coinfinity
+orders often settle directly on-chain, so the import mirrors the Bull Bitcoin
+flow: rows are matched book-wide against existing wallet transactions by
+transaction id, asset, amount, and direction. Relevant mode enriches the real
+wallet row; full mode imports excluded provider evidence and flags gaps.
+
+Import directly:
+
+```bash
+python3 -m kassiber wallets import-coinfinity \
+  --file /path/to/coinfinity-orders.csv
+```
+
+The default `--mode relevant` enriches only rows that uniquely match existing
+transactions anywhere in the active profile.
+
+`--mode full` imports every normalized Coinfinity order into the selected
+wallet, or into a default `Coinfinity` wallet when no wallet is supplied. Full
+mode keeps the imported provider rows excluded from accounting by default and
+adds reconciliation tags:
+
+- `coinfinity-matched` means the Coinfinity row matched one existing wallet
+  transaction in this book
+- `coinfinity-wallet-gap` means no matching wallet transaction was found in
+  this book; the row may be a missing wallet sync or may belong to another book
+- `coinfinity-ambiguous` means more than one wallet transaction matched and
+  the row needs review
+
+```bash
+python3 -m kassiber wallets import-coinfinity \
+  --mode full \
+  --file /path/to/coinfinity-orders.csv
+```
+
+Behavior:
+
+- Coinfinity `sell` rows are user BTC buys, because Coinfinity sold BTC to the
+  user; Kassiber records them as inbound `buy` transactions
+- Coinfinity `buy` rows are user BTC sells, because Coinfinity bought BTC from
+  the user; Kassiber records them as outbound `sell` transactions
+- `Amount EUR` plus `Total Fee EUR` is used as the exact buy cost basis
+- `Amount EUR` minus `Total Fee EUR` is used as the exact sell proceeds
+- `Mining Fee Crypto` is stored as the BTC fee on outbound sell rows when
+  present
+- relevant imports are match-existing-only and never create standalone
+  transactions; full imports create excluded evidence rows
 
 ## 21bitcoin
 
