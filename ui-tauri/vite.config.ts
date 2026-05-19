@@ -94,6 +94,8 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.connections.btcpay.create",
   "ui.connections.btcpay.discover",
   "ui.connections.btcpay.test",
+  "ui.connections.node.snapshot",
+  "ui.reports.lightning_profitability",
   "ui.metadata.bip329.import",
   "ui.wallets.update",
   "ui.wallets.delete",

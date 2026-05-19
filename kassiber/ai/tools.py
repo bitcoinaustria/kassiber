@@ -335,6 +335,79 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         summary_template="Read portfolio summary",
     ),
     ToolEntry(
+        name="ui.reports.lightning_profitability",
+        description=(
+            "Read the aggregate routing-profitability summary for a Lightning "
+            "connection: routing revenue, payment cost, rebalance cost, on-chain "
+            "cost, net profit, and counts plus window label. AI variant is "
+            "redacted per docs/reference/lightning-opsec.md Tier 3 — the "
+            "connection id and per-channel covers-open-cost rows are omitted "
+            "because per-channel peer aliases and short channel ids identify "
+            "third parties. Requires a registered Lightning adapter; returns an "
+            "error envelope when no LND/CLN sync is installed."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["connection"],
+            "properties": {
+                "connection": {
+                    "type": "string",
+                    "description": (
+                        "Lightning connection identifier (wallet id or label) to"
+                        " report on."
+                    ),
+                },
+                "window_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 365,
+                    "description": "Routing window in days (default 30).",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_reports_lightning_profitability",
+        daemon_kind="ui.reports.lightning_profitability",
+        summary_template="Read Lightning profitability",
+    ),
+    ToolEntry(
+        name="ui.connections.node.snapshot",
+        description=(
+            "Read an operational Lightning node snapshot: channels with "
+            "local/remote balances, peer count, on-chain balance, fee policies, "
+            "and routing window summary. AI variant is redacted per "
+            "docs/reference/lightning-opsec.md Tier 3 — operator pubkey, channel "
+            "funding outpoints, short channel ids, peer pubkeys and peer aliases "
+            "(including on forwards) are omitted; the operator's own connection "
+            "label is kept. Returns an error envelope when no Lightning adapter "
+            "is registered for the connection's kind."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["connection"],
+            "properties": {
+                "connection": {
+                    "type": "string",
+                    "description": (
+                        "Lightning connection identifier (wallet id or label)."
+                    ),
+                },
+                "window_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 365,
+                    "description": "Routing/forwards window in days (default 30).",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_connections_node_snapshot",
+        daemon_kind="ui.connections.node.snapshot",
+        summary_template="Read Lightning node snapshot",
+    ),
+    ToolEntry(
         name="ui.reports.tax_summary",
         description=(
             "Read exact processed tax-summary rows by year and asset, including "

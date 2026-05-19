@@ -688,7 +688,9 @@ function ChannelRow({
               blurClass(hideSensitive),
             )}
           >
-            {fmtPubkey(channel.peerPubkey)}
+            {channel.peerPubkey
+              ? fmtPubkey(channel.peerPubkey)
+              : "private peer"}
             {channel.shortChannelId ? ` · ${channel.shortChannelId}` : ""}
           </span>
         </button>
@@ -997,16 +999,27 @@ function ChannelDetailBody({
             Peer
           </h4>
           <DetailRow label="Alias" value={channel.peerAlias} />
-          <DetailRow
-            label="Public key"
-            value={
-              <span className={blurClass(hideSensitive)}>
-                {channel.peerPubkey}
-              </span>
-            }
-            mono
-            copy
-          />
+          {channel.peerPubkey ? (
+            <DetailRow
+              label="Public key"
+              value={
+                <span className={blurClass(hideSensitive)}>
+                  {channel.peerPubkey}
+                </span>
+              }
+              mono
+              copy
+            />
+          ) : (
+            <DetailRow
+              label="Public key"
+              value={
+                <span className="text-muted-foreground">
+                  Hidden — private channel
+                </span>
+              }
+            />
+          )}
         </div>
 
         <div className="space-y-2.5">

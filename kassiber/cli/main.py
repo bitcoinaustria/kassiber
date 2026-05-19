@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import sqlite3
 import sys
@@ -92,6 +93,7 @@ from .handlers import (
 from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
+from ..core import lightning as core_lightning
 from ..core import metadata as core_metadata
 from ..core import rates as core_rates
 from ..core import reports as core_reports
@@ -217,6 +219,114 @@ def _add_austrian_e1kv_report_args(parser: argparse.ArgumentParser) -> None:
 def _add_austrian_e1kv_pdf_args(parser: argparse.ArgumentParser) -> None:
     _add_austrian_e1kv_report_args(parser)
     parser.add_argument("--file", required=True)
+
+
+def _lightning_window_days(value: str) -> int:
+    """argparse ``type`` for the ``--window-days`` flag.
+
+    Mirrors the daemon's ``_coerce_int(default=30, minimum=1, maximum=365)``
+    so the CLI rejects out-of-range values at parse time instead of silently
+    clamping further down.
+    """
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise argparse.ArgumentTypeError(
+            f"--window-days must be an integer (got {value!r})"
+        ) from exc
+    if parsed < 1 or parsed > 365:
+        raise argparse.ArgumentTypeError(
+            f"--window-days must be between 1 and 365 (got {parsed})"
+        )
+    return parsed
+
+
+def _cli_build_lightning_snapshot(
+    conn: sqlite3.Connection,
+    ref: str,
+    *,
+    window_days: int,
+    workspace_ref: str | None = None,
+    profile_ref: str | None = None,
+) -> tuple[dict[str, Any], core_lightning.NodeSnapshot]:
+    connection = core_lightning.resolve_lightning_connection(
+        conn, ref, workspace_ref=workspace_ref, profile_ref=profile_ref
+    )
+    kind = str(connection["kind"])
+    adapter = core_lightning.resolve_adapter(kind)
+    if adapter is None:
+        registered = ", ".join(core_lightning.registered_kinds()) or "<none>"
+        raise AppError(
+            f"No Lightning sync adapter is registered for kind '{kind}'.",
+            code="lightning_adapter_unavailable",
+            hint=(
+                f"Registered Lightning kinds: {registered}. Install the matching"
+                " Lightning sync (LND or Core Lightning)."
+            ),
+        )
+    snapshot = adapter.fetch_node_snapshot(connection, None, window_days=window_days)
+    return connection, snapshot
+
+
+def _cli_lightning_profitability_payload(
+    conn: sqlite3.Connection,
+    ref: str,
+    *,
+    window_days: int,
+    workspace_ref: str | None = None,
+    profile_ref: str | None = None,
+) -> dict[str, Any]:
+    connection, snapshot = _cli_build_lightning_snapshot(
+        conn,
+        ref,
+        window_days=window_days,
+        workspace_ref=workspace_ref,
+        profile_ref=profile_ref,
+    )
+    report = core_lightning.build_profitability_report(
+        connection_id=str(connection.get("id") or ""),
+        connection_label=str(connection.get("label") or ""),
+        connection_kind=str(connection.get("kind") or ""),
+        snapshot=snapshot,
+    )
+    return report.to_envelope_payload()
+
+
+def _cli_export_lightning_profitability_csv(
+    conn: sqlite3.Connection,
+    ref: str,
+    file_path: str,
+    *,
+    window_days: int,
+    workspace_ref: str | None = None,
+    profile_ref: str | None = None,
+) -> dict[str, Any]:
+    connection, snapshot = _cli_build_lightning_snapshot(
+        conn,
+        ref,
+        window_days=window_days,
+        workspace_ref=workspace_ref,
+        profile_ref=profile_ref,
+    )
+    report = core_lightning.build_profitability_report(
+        connection_id=str(connection.get("id") or ""),
+        connection_label=str(connection.get("label") or ""),
+        connection_kind=str(connection.get("kind") or ""),
+        snapshot=snapshot,
+    )
+    rows = core_lightning.profitability_csv_rows(report)
+    with open(file_path, "w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerows(rows)
+    return {
+        "connection": {
+            "id": connection.get("id"),
+            "label": connection.get("label"),
+            "kind": connection.get("kind"),
+        },
+        "file": file_path,
+        "rows": len(rows) - 1,
+    }
 
 
 def _source_funds_hooks() -> core_source_funds.SourceFundsHooks:
@@ -1358,6 +1468,39 @@ def build_parser() -> argparse.ArgumentParser:
     export_xlsx.add_argument("--wallet")
     export_xlsx.add_argument("--file", required=True)
     export_xlsx.add_argument("--history-limit", type=int, default=0)
+
+    lightning_profitability = reports_sub.add_parser("lightning-profitability")
+    lightning_profitability.add_argument("--workspace")
+    lightning_profitability.add_argument("--profile")
+    lightning_profitability.add_argument(
+        "--connection",
+        required=True,
+        help="Lightning connection (wallet id or label) to report on.",
+    )
+    lightning_profitability.add_argument(
+        "--window-days",
+        type=_lightning_window_days,
+        default=30,
+        help="Routing window in days (1-365, default 30).",
+    )
+
+    export_lightning_profitability_csv = reports_sub.add_parser(
+        "export-lightning-profitability-csv"
+    )
+    export_lightning_profitability_csv.add_argument("--workspace")
+    export_lightning_profitability_csv.add_argument("--profile")
+    export_lightning_profitability_csv.add_argument(
+        "--connection",
+        required=True,
+        help="Lightning connection (wallet id or label) to export.",
+    )
+    export_lightning_profitability_csv.add_argument(
+        "--window-days",
+        type=_lightning_window_days,
+        default=30,
+        help="Routing window in days (1-365, default 30).",
+    )
+    export_lightning_profitability_csv.add_argument("--file", required=True)
 
     commercial_subledger = reports_sub.add_parser("commercial-subledger")
     commercial_subledger.add_argument("--workspace")
@@ -2851,6 +2994,29 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     report_hooks,
                     wallet_ref=args.wallet,
                     history_limit=args.history_limit,
+                ),
+            )
+        if args.reports_command == "lightning-profitability":
+            return emit(
+                args,
+                _cli_lightning_profitability_payload(
+                    conn,
+                    args.connection,
+                    window_days=args.window_days,
+                    workspace_ref=args.workspace,
+                    profile_ref=args.profile,
+                ),
+            )
+        if args.reports_command == "export-lightning-profitability-csv":
+            return emit(
+                args,
+                _cli_export_lightning_profitability_csv(
+                    conn,
+                    args.connection,
+                    args.file,
+                    window_days=args.window_days,
+                    workspace_ref=args.workspace,
+                    profile_ref=args.profile,
                 ),
             )
         if args.reports_command == "commercial-subledger":
