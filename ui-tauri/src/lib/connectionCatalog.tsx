@@ -79,7 +79,7 @@ export const sourceIcon = (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="10" fill="${background}"/><text x="20" y="24" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="10" font-weight="700" fill="${foreground}">${label}</text></svg>`,
   )}`;
 
-const lightLogoFrame = "bg-white";
+const lightLogoFrame = "bg-white shadow-sm shadow-zinc-950/5 dark:bg-white dark:shadow-black/30";
 
 export const CONNECTION_CATEGORIES: ConnectionCategoryItem[] = [
   { id: "wallets", label: "Wallets", icon: Wallet },
@@ -528,7 +528,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     category: "exchanges",
     image: coinfinityIcon,
     imageFrameClassName: lightLogoFrame,
-    imageClassName: "size-8",
+    imageClassName: "size-9 rounded-lg",
     status: "ready",
     pathLabel: "CSV import",
     formatLabel: "coinfinity_csv",
