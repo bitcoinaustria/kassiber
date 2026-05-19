@@ -241,6 +241,22 @@ class LightningTypesTest(unittest.TestCase):
                 short_channel_id="not a real scid",
             )
 
+    def test_lnd_uint64_short_channel_id_form_is_accepted(self) -> None:
+        # LND returns chan_id as a uint64-encoded decimal string. The
+        # scaffold accepts that alongside the CLN BOLT-7 form so adapter
+        # authors do not have to decode at the boundary.
+        channel = NodeChannel(
+            id="ch-lnd",
+            peer_alias="peer",
+            peer_pubkey="02" + "ab" * 32,
+            capacity_sat=500_000,
+            local_balance_sat=250_000,
+            remote_balance_sat=250_000,
+            state="active",
+            short_channel_id="970751541567488",
+        )
+        self.assertEqual(channel.short_channel_id, "970751541567488")
+
     def test_invalid_funding_outpoint_format_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
             NodeChannel(

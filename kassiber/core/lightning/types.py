@@ -57,12 +57,17 @@ NodeForwardFailureReason = Literal[
     "other",
 ]
 
-# Short-channel-id format check: BOLT-7 style ``<block>x<tx>x<output>``.
-# Permissive on length so testnet / regtest values fit; rejects whitespace,
-# colons, slashes, and the kind of free-text adapters might paste in by
-# mistake. The check is format-only — it does not validate that the block
-# height exists.
-_SHORT_CHANNEL_ID_RE = re.compile(r"^[0-9]+x[0-9]+x[0-9]+$")
+# Short-channel-id format check. Two structured representations are
+# accepted, matching the two adapter ecosystems:
+#   - BOLT-7 ``<block>x<tx>x<output>`` (Core Lightning native form).
+#   - Decimal uint64 (LND native form — chan_id encodes block/tx/output
+#     in a single 64-bit integer; LND's REST returns it as a numeric
+#     string).
+# Both are 1..20 digit / 'x'-separated structured identifiers; the
+# regex still rejects whitespace, colons, slashes, hex pubkeys, JSON
+# braces, and other free-text smuggling. The check is format-only — it
+# does not validate that the block height or chan_id exists.
+_SHORT_CHANNEL_ID_RE = re.compile(r"^(?:[0-9]+x[0-9]+x[0-9]+|[0-9]{1,20})$")
 # Outpoint format check: 64-hex txid + ``:`` + non-negative integer vout.
 _OUTPOINT_RE = re.compile(r"^[0-9a-fA-F]{64}:[0-9]+$")
 
@@ -71,16 +76,19 @@ def assert_lightning_field_format(value: str | None) -> None:
     """Lightweight format-only validator for ``short_channel_id``-shaped fields.
 
     Adapters may legitimately omit the field (``None``); when present it
-    must look like a BOLT-7 short channel id. The check is intentionally
-    format-only — it does not verify the block height exists. The point
-    is to reject obvious smuggling (free text, JSON blobs, pubkeys) at
-    the construction boundary.
+    must look like a structured short channel id — either BOLT-7
+    ``<block>x<tx>x<output>`` (Core Lightning native form) or a decimal
+    uint64 (LND native form). The check is intentionally format-only —
+    it does not verify the block height exists. The point is to reject
+    obvious smuggling (free text, JSON blobs, hex pubkeys) at the
+    construction boundary.
     """
     if value is None:
         return
     if not isinstance(value, str) or not _SHORT_CHANNEL_ID_RE.match(value):
         raise ValueError(
-            "short_channel_id must look like '<block>x<tx>x<output>' (BOLT-7);"
+            "short_channel_id must look like '<block>x<tx>x<output>' (BOLT-7)"
+            " or a decimal uint64 (LND);"
             f" got {value!r}. Adapters: keep raw node strings out of typed fields."
         )
 
