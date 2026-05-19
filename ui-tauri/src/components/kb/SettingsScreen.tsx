@@ -90,6 +90,12 @@ import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 import { setSessionUnlockPassphrase } from "@/store/sessionLock";
 import { useUiStore, type AppLockPolicy } from "@/store/ui";
 import type { AiModelsListData, AiModelRow } from "@/lib/aiCapabilities";
+import {
+  CLN_PRESENCE_SENTINEL_COMMANDO_PEER,
+  CLN_PRESENCE_SENTINEL_LIGHTNING_DIR,
+  CLN_PRESENCE_SENTINEL_RPC_FILE,
+  coreLightningBackendModeValid,
+} from "@/lib/lightning";
 import { screenPanelClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import {
@@ -451,9 +457,13 @@ function backendRowToSettingsBackend(row: BackendSettingsRow): Backend {
     health: row.is_default ? "default" : row.source || row.kind || "configured",
     on: row.has_url !== false,
     auth: backendAuthLabel(row),
-    commandoPeerId: row.has_commando_peer_id ? "Configured peer" : undefined,
-    lightningDir: row.has_lightning_dir ? "Configured directory" : undefined,
-    rpcFile: row.has_rpc_file ? "Configured RPC file" : undefined,
+    commandoPeerId: row.has_commando_peer_id
+      ? CLN_PRESENCE_SENTINEL_COMMANDO_PEER
+      : undefined,
+    lightningDir: row.has_lightning_dir
+      ? CLN_PRESENCE_SENTINEL_LIGHTNING_DIR
+      : undefined,
+    rpcFile: row.has_rpc_file ? CLN_PRESENCE_SENTINEL_RPC_FILE : undefined,
     trustSsl: row.insecure,
   };
 }
@@ -3896,18 +3906,20 @@ function BackendModal({
       setAuthVal("");
       setAuthVal2("");
       setCommandoPeerId(
-        initial.commandoPeerId === "Configured peer"
+        initial.commandoPeerId === CLN_PRESENCE_SENTINEL_COMMANDO_PEER
           ? ""
           : initial.commandoPeerId ?? "",
       );
       setLightningCli(initial.lightningCli ?? "");
       setLightningDir(
-        initial.lightningDir === "Configured directory"
+        initial.lightningDir === CLN_PRESENCE_SENTINEL_LIGHTNING_DIR
           ? ""
           : initial.lightningDir ?? "",
       );
       setRpcFile(
-        initial.rpcFile === "Configured RPC file" ? "" : initial.rpcFile ?? "",
+        initial.rpcFile === CLN_PRESENCE_SENTINEL_RPC_FILE
+          ? ""
+          : initial.rpcFile ?? "",
       );
       setElectrumHost(parsedElectrum.host);
       setElectrumPort(parsedElectrum.port);
@@ -4038,10 +4050,36 @@ function BackendModal({
     }
   };
 
+  // Editing an existing Core Lightning backend keeps redacted-but-set fields
+  // from being treated as missing. The daemon never returns the rune itself;
+  // it only signals presence via `auth === "apikey"` and the "Configured *"
+  // sentinel strings used elsewhere in this file.
+  const initialCoreLnHasRune =
+    isCoreLightning && initial?.auth === "apikey";
+  const initialCoreLnHasCommandoPeer =
+    isCoreLightning &&
+    initial?.commandoPeerId === CLN_PRESENCE_SENTINEL_COMMANDO_PEER;
+  const initialCoreLnHasLightningDir =
+    isCoreLightning &&
+    initial?.lightningDir === CLN_PRESENCE_SENTINEL_LIGHTNING_DIR;
+  const initialCoreLnHasRpcFile =
+    isCoreLightning && initial?.rpcFile === CLN_PRESENCE_SENTINEL_RPC_FILE;
+
+  const coreLightningModeValid = coreLightningBackendModeValid({
+    commandoPeerId: commandoPeerId.trim(),
+    rune: authVal.trim(),
+    lightningDir: lightningDir.trim(),
+    rpcFile: rpcFile.trim(),
+    hadRune: initialCoreLnHasRune,
+    hadCommandoPeerId: initialCoreLnHasCommandoPeer,
+    hadLightningDir: initialCoreLnHasLightningDir,
+    hadRpcFile: initialCoreLnHasRpcFile,
+  });
+
   const canAdd =
     name.trim().length > 0 &&
     effectiveUrl.length > 0 &&
-    (!isCoreLightning || Boolean(commandoPeerId.trim() && authVal.trim()));
+    (!isCoreLightning || coreLightningModeValid);
   const save = async () => {
     if (!canAdd) return;
     const normalizedUrl = effectiveUrl;
@@ -4287,7 +4325,9 @@ function BackendModal({
                 <div>
                   <Label>Core Lightning access</Label>
                   <p className="text-xs text-muted-foreground">
-                    Use a restricted commando rune for least-privilege read-only sync.
+                    Use a restricted commando rune for least-privilege read-only sync,
+                    or point at a local lightning-dir / rpc-file when running on the
+                    same host.
                   </p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
