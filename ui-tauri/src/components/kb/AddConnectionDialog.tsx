@@ -624,6 +624,7 @@ export function AddConnectionDialog({
     const intent: DeferredConnectionSetup = {
       sourceId: selected.id,
       reason: `Adding ${selected.title}`,
+      backendKind: selected.walletKind,
     };
     setDeferredConnectionSetup(intent);
     onOpenChange(false);

@@ -88,7 +88,11 @@ import {
 import type { ExplorerSettings } from "@/lib/explorer";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 import { setSessionUnlockPassphrase } from "@/store/sessionLock";
-import { useUiStore, type AppLockPolicy } from "@/store/ui";
+import {
+  useUiStore,
+  type AppLockPolicy,
+  type DeferredConnectionSetup,
+} from "@/store/ui";
 import type { AiModelsListData, AiModelRow } from "@/lib/aiCapabilities";
 import {
   CLN_PRESENCE_SENTINEL_COMMANDO_PEER,
@@ -543,9 +547,7 @@ function backendPayload(backend: Backend): Record<string, unknown> {
 
 const backendIntegrationImage: Partial<Record<Net, string>> = {
   BTC: bitcoinIcon,
-  LN: coreLightningIcon,
   LIQUID: liquidIcon,
-  LN: lightningLabsIcon,
 };
 
 const brandLogoFrame =
@@ -621,7 +623,7 @@ function backendIntegrationArt(backend: Backend): Pick<
     return {
       image: lightningLabsIcon,
       className: "size-8",
-      imageFrameClassName: brandLogoFrame,
+      imageFrameClassName: "border-neutral-700 bg-neutral-950",
     };
   }
   return {
@@ -711,6 +713,9 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const [editingBackendId, setEditingBackendId] = React.useState<string | null>(
     null,
   );
+  const [initialBackendTypeId, setInitialBackendTypeId] =
+    React.useState<SyncBackendNetwork["id"] | null>(null);
+  const deferredBackendDialogKeyRef = React.useRef<string | null>(null);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [deletePassphrase, setDeletePassphrase] = React.useState("");
   const [deleteConfirm, setDeleteConfirm] = React.useState("");
@@ -926,15 +931,28 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     setPassphraseOpen(true);
   };
 
-  const openAddBackend = () => {
+  const openAddBackend = React.useCallback((typeId?: SyncBackendNetwork["id"]) => {
     setEditingBackendId(null);
+    setInitialBackendTypeId(typeId ?? null);
     setBackendDialogOpen(true);
-  };
+  }, []);
 
   const openEditBackend = (backend: Backend) => {
     setEditingBackendId(backend.id);
+    setInitialBackendTypeId(null);
     setBackendDialogOpen(true);
   };
+
+  React.useEffect(() => {
+    const typeId = backendTypeIdForConnectionSetup(deferredConnectionSetup);
+    if (!typeId) return;
+    const key = `${deferredConnectionSetup?.sourceId ?? ""}:${
+      deferredConnectionSetup?.backendKind ?? ""
+    }`;
+    if (deferredBackendDialogKeyRef.current === key) return;
+    deferredBackendDialogKeyRef.current = key;
+    openAddBackend(typeId);
+  }, [deferredConnectionSetup, openAddBackend]);
 
   const onSaveBackend = async (backend: Backend) => {
     const payload = backendPayload(backend);
@@ -1270,7 +1288,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       return;
     }
     if (integration.id === "sync-add-backend") {
-      openAddBackend();
+      openAddBackend(backendTypeIdForConnectionSetup(deferredConnectionSetup));
       return;
     }
     if (integration.id === "ai-providers") {
@@ -1716,9 +1734,11 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         <BackendModal
           open={backendDialogOpen}
           initial={editingBackend}
+          initialTypeId={initialBackendTypeId ?? undefined}
           onClose={() => {
             setBackendDialogOpen(false);
             setEditingBackendId(null);
+            setInitialBackendTypeId(null);
           }}
           onSave={onSaveBackend}
         />
@@ -3560,36 +3580,23 @@ function NetworkBadge({ net }: { net: Net }) {
   );
 }
 
-function NetworkMark({ net }: { net: Net }) {
-  const image =
-    net === "LIQUID"
-      ? liquidIcon
-      : net === "BTC"
-        ? bitcoinIcon
-        : net === "LN"
-          ? coreLightningIcon
-          : null;
-  if (image) {
-    return (
-      <span
-        className={cn(
-          "flex size-9 shrink-0 items-center justify-center rounded-md border p-1.5",
-          brandLogoFrame,
-        )}
-        aria-hidden="true"
-      >
-        <img
-          src={image}
-          alt=""
-          className={cn(
-            "size-6 object-contain",
-            net === "LIQUID" && "scale-150",
-          )}
-        />
-      </span>
-    );
-  }
-  return <NetworkBadge net={net} />;
+function NetworkMark({ type }: { type: SyncBackendNetwork }) {
+  if (!type.icon) return <NetworkBadge net={type.net} />;
+  return (
+    <span
+      className={cn(
+        "flex size-9 shrink-0 items-center justify-center rounded-md border p-1.5",
+        type.iconFrameClassName ?? brandLogoFrame,
+      )}
+      aria-hidden="true"
+    >
+      <img
+        src={type.icon}
+        alt=""
+        className={cn("size-6 object-contain", type.iconClassName)}
+      />
+    </span>
+  );
 }
 
 function PresetMark({
@@ -3616,7 +3623,11 @@ function PresetMark({
       <span
         className={cn(
           "flex size-8 shrink-0 items-center justify-center rounded-md border p-1.5",
-          brandLogoFrame,
+          preset.protocol === "coreln"
+            ? "border-neutral-600 bg-[#494120]"
+            : preset.protocol === "lnd"
+              ? "border-neutral-700 bg-neutral-950"
+              : brandLogoFrame,
         )}
         aria-hidden="true"
       >
@@ -3682,10 +3693,14 @@ interface SyncBackendPreset {
 }
 
 interface SyncBackendNetwork {
-  id: "bitcoin" | "liquid" | "lightning";
+  id: "bitcoin" | "liquid" | "coreln" | "lnd";
   label: string;
   net: Net;
   desc: string;
+  icon: string;
+  iconClassName?: string;
+  iconFrameClassName?: string;
+  subtitle?: string;
   presets: SyncBackendPreset[];
 }
 
@@ -3695,6 +3710,8 @@ const SYNC_BACKEND_NETWORKS: SyncBackendNetwork[] = [
     label: "Bitcoin",
     net: "BTC",
     desc: "Backends used by Bitcoin watch-only wallets.",
+    icon: bitcoinIcon,
+    subtitle: "Bitcoin",
     presets: [
       {
         id: "mempool",
@@ -3720,10 +3737,13 @@ const SYNC_BACKEND_NETWORKS: SyncBackendNetwork[] = [
     ],
   },
   {
-    id: "lightning",
-    label: "Core Lightning",
+    id: "coreln",
+    label: "Core-LN",
     net: "LN",
     desc: "Read-only Core Lightning node accounting sync.",
+    icon: coreLightningIcon,
+    iconFrameClassName: "border-neutral-600 bg-[#494120]",
+    subtitle: "Lightning",
     presets: [
       {
         id: "core-lightning",
@@ -3739,6 +3759,9 @@ const SYNC_BACKEND_NETWORKS: SyncBackendNetwork[] = [
     label: "Liquid",
     net: "LIQUID",
     desc: "Backends used by Liquid watch-only wallets.",
+    icon: liquidIcon,
+    iconClassName: "scale-150",
+    subtitle: "Liquid",
     presets: [
       {
         id: "liquid-electrum",
@@ -3757,10 +3780,13 @@ const SYNC_BACKEND_NETWORKS: SyncBackendNetwork[] = [
     ],
   },
   {
-    id: "lightning",
-    label: "Lightning",
+    id: "lnd",
+    label: "LND",
     net: "LN",
     desc: "Read-only Lightning node history for profitability reports.",
+    icon: lightningLabsIcon,
+    iconFrameClassName: "border-neutral-700 bg-neutral-950",
+    subtitle: "Lightning",
     presets: [
       {
         id: "lnd",
@@ -3779,6 +3805,21 @@ const AUTH_MODES: Array<{ id: string; label: string }> = [
   { id: "basic", label: "User + pass" },
   { id: "bearer", label: "Bearer token" },
 ];
+
+function normalizedBackendKind(kind: string | null | undefined): string {
+  return (kind ?? "").toLowerCase().replace(/-/g, "");
+}
+
+function backendTypeIdForConnectionSetup(
+  intent: DeferredConnectionSetup | null,
+): SyncBackendNetwork["id"] | undefined {
+  const kind = normalizedBackendKind(intent?.backendKind);
+  if (kind === "coreln") return "coreln";
+  if (kind === "lnd") return "lnd";
+  if (intent?.sourceId === "core-ln") return "coreln";
+  if (intent?.sourceId === "lnd") return "lnd";
+  return undefined;
+}
 
 type TestState = "idle" | "testing" | "ok" | "fail";
 
@@ -3813,6 +3854,7 @@ function buildElectrumUrl({ host, port, useSsl }: ElectrumEndpointParts): string
 interface BackendModalProps {
   open: boolean;
   initial: Backend | null;
+  initialTypeId?: SyncBackendNetwork["id"];
   onClose: () => void;
   onSave: (backend: Backend) => void | Promise<void>;
 }
@@ -3820,6 +3862,7 @@ interface BackendModalProps {
 function BackendModal({
   open,
   initial,
+  initialTypeId,
   onClose,
   onSave,
 }: BackendModalProps) {
@@ -3890,7 +3933,13 @@ function BackendModal({
     if (!open) return;
     if (initial) {
       const parsedElectrum = parseElectrumEndpoint(initial.url);
+      const initialKind = normalizedBackendKind(initial.kind);
       const initialType =
+        SYNC_BACKEND_NETWORKS.find((candidate) =>
+          candidate.presets.some(
+            (preset) => normalizedBackendKind(preset.protocol) === initialKind,
+          ),
+        ) ??
         SYNC_BACKEND_NETWORKS.find((candidate) => candidate.net === initial.net) ??
         SYNC_BACKEND_NETWORKS[0];
       const initialPreset =
@@ -3935,10 +3984,15 @@ function BackendModal({
       return;
     }
 
-    setTypeId("bitcoin");
-    setPresetId("mempool");
-    setName(DEFAULT_BACKEND_NAME);
-    setUrl(DEFAULT_BACKEND_URL);
+    const nextType =
+      SYNC_BACKEND_NETWORKS.find((candidate) => candidate.id === initialTypeId) ??
+      SYNC_BACKEND_NETWORKS[0];
+    const nextPreset =
+      nextType.presets.find((candidate) => !candidate.disabled) ?? null;
+    setTypeId(nextType.id);
+    setPresetId(nextPreset?.id ?? "custom");
+    setName(nextPreset?.name ?? DEFAULT_BACKEND_NAME);
+    setUrl(nextPreset?.url ?? DEFAULT_BACKEND_URL);
     setAuth("none");
     setAuthVal("");
     setAuthVal2("");
@@ -3953,7 +4007,7 @@ function BackendModal({
     setTestState("idle");
     setTestLog("");
     setSaveState("idle");
-  }, [initial, open]);
+  }, [initial, initialTypeId, open]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -3961,11 +4015,7 @@ function BackendModal({
     if (preset) {
       setUrl(preset.url);
       setName(preset.name);
-      if (preset.protocol === "lnd") {
-        setAuth("apikey");
-      } else if (preset.protocol !== "bitcoinrpc") {
-        setAuth("none");
-      }
+      setAuth(preset.protocol === "lnd" ? "apikey" : "none");
       if (preset.protocol === "electrum") {
         const parsed = parseElectrumEndpoint(preset.url);
         setElectrumHost(parsed.host);
@@ -3975,8 +4025,8 @@ function BackendModal({
     } else if (presetId === "custom") {
       setUrl("");
       setName("");
+      setAuth("none");
     }
-    setAuth("none");
     setAuthVal("");
     setAuthVal2("");
     setCommandoPeerId("");
@@ -4200,17 +4250,13 @@ function BackendModal({
                       )}
                       onClick={() => onPickType(backendType.id)}
                     >
-                      <NetworkMark net={backendType.net} />
+                      <NetworkMark type={backendType} />
                       <span className="min-w-0 space-y-0.5">
                         <span className="block text-sm leading-tight font-medium">
                           {backendType.label}
                         </span>
                         <span className="block text-xs leading-tight text-muted-foreground">
-                          {backendType.net === "BTC"
-                            ? "Bitcoin"
-                            : backendType.net === "LIQUID"
-                              ? "Liquid"
-                              : "Lightning"}
+                          {backendType.subtitle ?? backendType.net}
                         </span>
                       </span>
                     </Button>

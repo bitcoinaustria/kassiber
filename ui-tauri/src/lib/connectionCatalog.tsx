@@ -354,11 +354,13 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     description: "Lightning Network Daemon read-only profitability data.",
     category: "lightning",
     image: lightningLabsIcon,
+    imageFrameClassName: "bg-neutral-950",
     imageClassName: "size-8",
     status: "ready",
     pathLabel: "Lightning node",
     formatLabel: "LND REST",
     setupKind: "backend-settings",
+    walletKind: "lnd",
     details: [
       "Stores host, TLS certificate, and read-only macaroon presence",
       "Reads channels, forwards, payments, invoices, and fee snapshots; drops preimages, encoded bolt11 strings, route hops, and route hints at the boundary",

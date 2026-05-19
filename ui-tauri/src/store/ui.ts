@@ -130,6 +130,7 @@ export interface SourceFundsDraft {
 export interface DeferredConnectionSetup {
   sourceId: string;
   reason: string;
+  backendKind?: string;
 }
 
 export interface UiState {
