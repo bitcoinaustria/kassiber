@@ -12,9 +12,10 @@ The adapter is the discard boundary for Tier-1 sensitive fields:
 
 - ``payment_preimage``, ``payment_secret``, encoded ``bolt11`` blobs, onion
   ``route`` hops, route hints from received invoices, and
-  ``failure_source_pubkey`` / ``erring_node`` are dropped before any of this
-  data crosses the adapter boundary. The :class:`NodeSnapshot` shapes do not
-  even have somewhere to put them.
+  ``failure_source_pubkey`` / ``erring_node`` are dropped at the RPC transport
+  boundary via per-resource ``_sanitize_*`` helpers, so the in-memory
+  :class:`CoreLightningSnapshot` never carries them. The :class:`NodeSnapshot`
+  shapes do not even have somewhere to put them.
 - Private channels (``private=true``) surface with ``peer_pubkey=None`` —
   the peer chose private gossip for a reason and Kassiber will not undo that
   decision unless the operator explicitly opts in.
@@ -71,7 +72,6 @@ CLN_ALLOWED_METHODS: tuple[str, ...] = (
     "listforwards",
     "listpays",
     "listinvoices",
-    "listtransactions",
     "bkpr-listincome",
     "bkpr-listbalances",
 )
@@ -92,10 +92,14 @@ RpcCall = Callable[[str, Sequence[str] | None], Mapping[str, Any]]
 class CoreLightningSnapshot:
     """Curated RPC payload bundle.
 
-    All Tier-1 sensitive fields (preimages, payment_secrets, bolt11 blobs,
-    onion hops, route hints from received invoices, failure_source_pubkey)
-    are dropped before being placed on this object, so downstream callers
-    cannot accidentally leak them.
+    Raw RPC responses NEVER reach this object. ``fetch_core_lightning_snapshot``
+    passes each row through a per-resource ``_sanitize_*`` helper at the
+    transport boundary, dropping every Tier-1 sensitive field (preimages,
+    payment_secrets, bolt11 blobs, onion hops, route hints from received
+    invoices, failure_source_pubkey / erring_node) before constructing the
+    snapshot. The reshape helpers below operate exclusively on these typed
+    collections, so a future caller, debug dump, or accidental persistence
+    path cannot leak fields the snapshot never held in the first place.
     """
 
     node_id: str
@@ -103,7 +107,14 @@ class CoreLightningSnapshot:
     network: str
     implementation_version: str | None
     block_height: int | None
-    method_payloads: Mapping[str, Mapping[str, Any]]
+    peer_count: int
+    channels: tuple[Mapping[str, Any], ...]
+    funds_outputs: tuple[Mapping[str, Any], ...]
+    forwards: tuple[Mapping[str, Any], ...]
+    pays: tuple[Mapping[str, Any], ...]
+    invoices: tuple[Mapping[str, Any], ...]
+    income_events: tuple[Mapping[str, Any], ...]
+    balance_accounts: tuple[Mapping[str, Any], ...]
     errors: Mapping[str, str]
 
 
@@ -336,6 +347,191 @@ def call_core_lightning(
     return payload if isinstance(payload, Mapping) else {"result": payload}
 
 
+_PEER_CHANNEL_KEEP: tuple[str, ...] = (
+    "peer_id",
+    "peer_alias",
+    "alias",
+    "peer_connected",
+    "private",
+    "is_private",
+    "channel_id",
+    "short_channel_id",
+    "state",
+    "status",
+    "total_msat",
+    "amount_msat",
+    "funding_msat",
+    "to_us_msat",
+    "our_amount_msat",
+    "their_amount_msat",
+    "opener",
+    "funder",
+    "fee_base_msat",
+    "fee_proportional_millionths",
+    "opened_at",
+    "closed_at",
+    "funding",
+    "funding_txid",
+    "funding_outnum",
+    "funding_outpoint",
+)
+
+_LISTFUNDS_OUTPUT_KEEP: tuple[str, ...] = (
+    "status",
+    "reserved_to_block",
+    "amount_msat",
+)
+
+_FORWARD_KEEP: tuple[str, ...] = (
+    "in_channel",
+    "out_channel",
+    "fee_msat",
+    "in_msat",
+    "out_msat",
+    "status",
+    "received_time",
+    "resolved_time",
+)
+
+_PAY_KEEP: tuple[str, ...] = (
+    "payment_hash",
+    "amount_msat",
+    "amount_sent_msat",
+    "status",
+    "created_at",
+    "completed_at",
+    "destination",
+    "rebalance",
+)
+
+_INVOICE_KEEP: tuple[str, ...] = (
+    "label",
+    "payment_hash",
+    "amount_msat",
+    "amount_received_msat",
+    "status",
+    "paid_at",
+    "created_at",
+    "description",
+)
+
+_INCOME_KEEP: tuple[str, ...] = (
+    "account",
+    "tag",
+    "credit_msat",
+    "debit_msat",
+    "currency",
+    "timestamp",
+    "payment_id",
+    "description",
+    "txid",
+)
+
+_BALANCE_ACCOUNT_KEEP: tuple[str, ...] = (
+    "account",
+    "peer_id",
+    "balances",
+    "account_closed",
+)
+
+
+def _pick(row: Mapping[str, Any], keys: Sequence[str]) -> dict[str, Any]:
+    """Return a dict containing only ``keys`` that are present in ``row``."""
+    return {key: row[key] for key in keys if key in row}
+
+
+def _sanitize_peer_channel(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Curate one listpeerchannels row.
+
+    Drops every Tier-1 sensitive field by virtue of the allowlist:
+    ``htlcs`` (preimages), ``last_routing_failure``, peer announcement
+    fragments, etc. never enter the snapshot.
+    """
+    curated = _pick(row, _PEER_CHANNEL_KEEP)
+    funding = curated.get("funding")
+    if isinstance(funding, Mapping):
+        curated["funding"] = _pick(funding, ("txid", "funding_txid", "output", "outnum"))
+    return curated
+
+
+def _sanitize_listfunds_output(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Curate one listfunds output.
+
+    Drops on-chain ``address`` / ``redeemscript`` / wallet ``output`` keys to
+    avoid leaking the operator's L1 receive addresses through the snapshot.
+    """
+    return _pick(row, _LISTFUNDS_OUTPUT_KEEP)
+
+
+def _sanitize_forward(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Curate one listforwards row.
+
+    Drops ``failcode`` / ``failreason`` / ``erring_node`` / payment_hash and
+    every other forward field that would let a future caller correlate "X
+    paid Y through me" patterns.
+    """
+    return _pick(row, _FORWARD_KEEP)
+
+
+def _sanitize_pay(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Curate one listpays row.
+
+    Drops ``preimage`` / ``bolt11`` / ``route`` / ``erroronion`` / partial-id
+    fields. Keeps ``payment_hash`` (needed for dedupe against bookkeeper
+    rebalance_fee events).
+    """
+    return _pick(row, _PAY_KEEP)
+
+
+def _sanitize_invoice(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Curate one listinvoices row.
+
+    Drops ``payment_preimage`` / ``payment_secret`` / ``bolt11`` / ``routes``
+    (route hints would leak third-party private-channel peers).
+    """
+    return _pick(row, _INVOICE_KEEP)
+
+
+def _sanitize_income_event(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Curate one bkpr-listincome row.
+
+    Drops free-text ``origin`` blobs that bookkeeper may attach to certain
+    income categories. Keeps ``txid`` (used to filter out L1 collisions) and
+    ``payment_id`` (used as the cross-resource payment_hash for dedupe).
+    """
+    return _pick(row, _INCOME_KEEP)
+
+
+def _sanitize_balance_account(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Curate one bkpr-listbalances account entry.
+
+    Trims the inner ``balances`` list to ``balance_msat`` only and drops the
+    rest of the bookkeeper-internal metadata.
+    """
+    curated = _pick(row, _BALANCE_ACCOUNT_KEEP)
+    balances = curated.get("balances")
+    if isinstance(balances, list):
+        curated["balances"] = [
+            _pick(entry, ("balance_msat", "coin_type"))
+            for entry in balances
+            if isinstance(entry, Mapping)
+        ]
+    return curated
+
+
+def _sanitize_list(
+    payload: Mapping[str, Any] | None,
+    field: str,
+    sanitizer: Callable[[Mapping[str, Any]], Mapping[str, Any]],
+) -> tuple[Mapping[str, Any], ...]:
+    if not isinstance(payload, Mapping):
+        return ()
+    rows = payload.get(field)
+    if not isinstance(rows, list):
+        return ()
+    return tuple(sanitizer(row) for row in rows if isinstance(row, Mapping))
+
+
 def fetch_core_lightning_snapshot(
     backend: Mapping[str, Any],
     *,
@@ -343,36 +539,56 @@ def fetch_core_lightning_snapshot(
 ) -> CoreLightningSnapshot:
     """Drive ``call_core_lightning`` once per allowed method.
 
-    Returns a :class:`CoreLightningSnapshot` with the raw RPC payloads kept
-    only for the subsequent reshape steps. Callers must not persist
-    ``method_payloads`` directly — the reshape helpers below curate them
-    into opsec-safe shapes before anything reaches SQLite or a
-    :class:`NodeSnapshot`.
+    Every raw RPC response is passed through a per-resource ``_sanitize_*``
+    helper before the snapshot is constructed, so the in-memory
+    :class:`CoreLightningSnapshot` cannot carry preimages, bolt11 strings,
+    onion routes, payment_secrets, route hints from received invoices, or
+    ``erring_node`` markers. The reshape helpers below operate exclusively on
+    these curated typed collections.
     """
     caller = rpc_call or (lambda method, args=None: call_core_lightning(backend, method, args))
-    info = caller("getinfo", None)
+
+    def _safe_call(method: str) -> Mapping[str, Any] | None:
+        try:
+            return caller(method, None)
+        except AppError as exc:
+            errors[method] = str(exc)
+            return None
+
+    errors: dict[str, str] = {}
+    info_raw = caller("getinfo", None)
+    info = info_raw if isinstance(info_raw, Mapping) else {}
     node_id = str_or_none(info.get("id")) or ""
     node_alias = str_or_none(info.get("alias")) or ""
     network = str_or_none(info.get("network")) or ""
     implementation_version = str_or_none(info.get("version"))
     block_height_raw = info.get("blockheight")
     block_height = int(block_height_raw) if isinstance(block_height_raw, (int, float)) else None
-    payloads: dict[str, Mapping[str, Any]] = {"getinfo": info}
-    errors: dict[str, str] = {}
-    for method in CLN_ALLOWED_METHODS:
-        if method == "getinfo":
-            continue
-        try:
-            payloads[method] = caller(method, None)
-        except AppError as exc:
-            errors[method] = str(exc)
+    peer_count_raw = info.get("num_peers")
+    peer_count = int(peer_count_raw) if isinstance(peer_count_raw, (int, float)) else 0
+
+    funds_payload = _safe_call("listfunds")
+    channels_payload = _safe_call("listpeerchannels")
+    forwards_payload = _safe_call("listforwards")
+    pays_payload = _safe_call("listpays")
+    invoices_payload = _safe_call("listinvoices")
+    income_payload = _safe_call("bkpr-listincome")
+    balances_payload = _safe_call("bkpr-listbalances")
+
     return CoreLightningSnapshot(
         node_id=node_id,
         node_alias=node_alias,
         network=network,
         implementation_version=implementation_version,
         block_height=block_height,
-        method_payloads=payloads,
+        peer_count=peer_count,
+        channels=_sanitize_list(channels_payload, "channels", _sanitize_peer_channel),
+        funds_outputs=_sanitize_list(funds_payload, "outputs", _sanitize_listfunds_output),
+        forwards=_sanitize_list(forwards_payload, "forwards", _sanitize_forward),
+        pays=_sanitize_list(pays_payload, "pays", _sanitize_pay),
+        invoices=_sanitize_list(invoices_payload, "invoices", _sanitize_invoice),
+        income_events=_sanitize_list(income_payload, "income_events", _sanitize_income_event),
+        balance_accounts=_sanitize_list(balances_payload, "accounts", _sanitize_balance_account),
         errors=errors,
     )
 
@@ -483,9 +699,7 @@ def _build_peer_alias_map(snapshot: CoreLightningSnapshot) -> dict[str, str]:
     aliases: dict[str, str] = {}
     # Aliases come most reliably from listpeerchannels' per-peer fields or
     # from listnodes (which we don't call). Fall back to short ids.
-    for channel in snapshot.method_payloads.get("listpeerchannels", {}).get("channels", []) or []:
-        if not isinstance(channel, Mapping):
-            continue
+    for channel in snapshot.channels:
         peer_id = str_or_none(channel.get("peer_id"))
         alias = str_or_none(channel.get("peer_alias") or channel.get("alias"))
         if peer_id and alias:
@@ -494,11 +708,8 @@ def _build_peer_alias_map(snapshot: CoreLightningSnapshot) -> dict[str, str]:
 
 
 def _onchain_balance_msat(snapshot: CoreLightningSnapshot) -> int:
-    outputs = snapshot.method_payloads.get("listfunds", {}).get("outputs") or []
     total = 0
-    for entry in outputs:
-        if not isinstance(entry, Mapping):
-            continue
+    for entry in snapshot.funds_outputs:
         if str_or_none(entry.get("status")) not in {"confirmed", "unconfirmed", None}:
             continue
         if str_or_none(entry.get("reserved_to_block")):
@@ -519,11 +730,8 @@ def _forward_status(value: Any) -> NodeForwardStatus:
 def _build_forwards(
     snapshot: CoreLightningSnapshot, peer_alias_map: Mapping[str, str]
 ) -> tuple[NodeForward, ...]:
-    forwards_raw = snapshot.method_payloads.get("listforwards", {}).get("forwards") or []
     results: list[NodeForward] = []
-    for forward in forwards_raw:
-        if not isinstance(forward, Mapping):
-            continue
+    for forward in snapshot.forwards:
         in_channel = str_or_none(forward.get("in_channel"))
         out_channel = str_or_none(forward.get("out_channel"))
         results.append(
@@ -563,53 +771,51 @@ def _build_forwards(
 def _routing_summary(
     snapshot: CoreLightningSnapshot, window_days: int
 ) -> NodeRoutingSnapshot | None:
-    forwards = snapshot.method_payloads.get("listforwards", {}).get("forwards") or []
-    pays = snapshot.method_payloads.get("listpays", {}).get("pays") or []
-    income = snapshot.method_payloads.get("bkpr-listincome", {}).get("income_events") or []
-
     settled_forwards = [
-        row for row in forwards if isinstance(row, Mapping) and _forward_status(row.get("status")) == "settled"
+        row for row in snapshot.forwards if _forward_status(row.get("status")) == "settled"
     ]
     routing_revenue_msat = sum(_parse_msat(row.get("fee_msat")) for row in settled_forwards)
     forward_count = len(settled_forwards)
 
+    # Cost split between user payments and rebalances:
+    # - Payment fees come from listpays (the operator-visible cost).
+    # - Rebalance fees come from bkpr-listincome `rebalance_fee` events
+    #   (the bookkeeper's canonical view). We deliberately do NOT add the
+    #   fee from a rebalance-tagged listpays row because that same fee will
+    #   already appear as a bookkeeper rebalance_fee event for the same
+    #   payment_hash. Adding both double-counts (M-1).
+    # - Rebalance _count_ stays driven by listpays because the bookkeeper
+    #   rebalance_fee event collapses multi-part rebalances under one fee
+    #   row, while listpays carries one row per attempt.
     payment_cost_msat = 0
     payment_count = 0
-    rebalance_cost_msat = 0
     rebalance_count = 0
-    for pay in pays:
-        if not isinstance(pay, Mapping):
-            continue
+    for pay in snapshot.pays:
         if str_or_none(pay.get("status")) not in {"complete", "completed", "paid"}:
+            continue
+        if pay.get("rebalance"):
+            rebalance_count += 1
             continue
         amount_sent = _parse_msat(pay.get("amount_sent_msat"))
         amount = _parse_msat(pay.get("amount_msat"))
         fee = max(0, amount_sent - amount)
-        is_rebalance = bool(pay.get("rebalance"))
-        if is_rebalance:
-            rebalance_cost_msat += fee
-            rebalance_count += 1
-        else:
-            payment_cost_msat += fee
-            payment_count += 1
+        payment_cost_msat += fee
+        payment_count += 1
 
-    # P1 fix #3 — rebalance_fee bookkeeper events ARE the fee (amount_msat
-    # holds the fee, not principal + fee). Sum amount_msat once.
-    for event in income:
-        if not isinstance(event, Mapping):
-            continue
-        tag = (str_or_none(event.get("tag")) or "").lower()
-        if tag != "rebalance_fee":
-            continue
-        rebalance_cost_msat += _parse_msat(event.get("debit_msat") or event.get("credit_msat"))
-
+    rebalance_cost_msat = 0
     onchain_cost_msat = 0
-    for event in income:
-        if not isinstance(event, Mapping):
-            continue
+    for event in snapshot.income_events:
         tag = (str_or_none(event.get("tag")) or "").lower()
-        if tag in {"onchain_fee", "onchain_fees"}:
-            onchain_cost_msat += _parse_msat(event.get("debit_msat") or event.get("credit_msat"))
+        if tag == "rebalance_fee":
+            # bookkeeper-canonical view: ``debit_msat`` IS the fee, not
+            # principal + fee.
+            rebalance_cost_msat += _parse_msat(
+                event.get("debit_msat") or event.get("credit_msat")
+            )
+        elif tag in {"onchain_fee", "onchain_fees"}:
+            onchain_cost_msat += _parse_msat(
+                event.get("debit_msat") or event.get("credit_msat")
+            )
 
     if not (
         forward_count
@@ -637,10 +843,7 @@ def _routing_summary(
 
 def _per_channel_routing(snapshot: CoreLightningSnapshot) -> dict[str, int]:
     earned_per_channel: dict[str, int] = {}
-    forwards = snapshot.method_payloads.get("listforwards", {}).get("forwards") or []
-    for row in forwards:
-        if not isinstance(row, Mapping):
-            continue
+    for row in snapshot.forwards:
         if _forward_status(row.get("status")) != "settled":
             continue
         out_channel = str_or_none(row.get("out_channel")) or ""
@@ -656,10 +859,7 @@ def build_node_snapshot(
     snapshot: CoreLightningSnapshot, *, window_days: int
 ) -> NodeSnapshot:
     peer_alias_map = _build_peer_alias_map(snapshot)
-    channels_raw = snapshot.method_payloads.get("listpeerchannels", {}).get("channels") or []
-    channels = tuple(
-        _node_channel(row, peer_alias_map) for row in channels_raw if isinstance(row, Mapping)
-    )
+    channels = tuple(_node_channel(row, peer_alias_map) for row in snapshot.channels)
     earned_per_channel = _per_channel_routing(snapshot)
     enriched_channels = tuple(
         (
@@ -686,8 +886,6 @@ def build_node_snapshot(
         _parse_msat({"msat": channel.capacity_sat * 1000}) for channel in open_channels
     )
 
-    info = snapshot.method_payloads.get("getinfo", {})
-    peer_count = int(info.get("num_peers") or 0)
     onchain_balance_msat = _onchain_balance_msat(snapshot)
 
     routing = _routing_summary(snapshot, window_days)
@@ -697,7 +895,7 @@ def build_node_snapshot(
         alias=snapshot.node_alias,
         pubkey=snapshot.node_id,
         network=snapshot.network or "mainnet",
-        peer_count=peer_count,
+        peer_count=snapshot.peer_count,
         onchain_balance_sat=_msat_to_sat(onchain_balance_msat),
         total_local_balance_sat=_msat_to_sat(total_local_msat),
         total_remote_balance_sat=_msat_to_sat(total_remote_msat),
@@ -762,9 +960,7 @@ def _aggregate_forwards(
     through me" patterns.
     """
     buckets: dict[tuple[str, str], MutableMapping[str, Any]] = {}
-    for row in snapshot.method_payloads.get("listforwards", {}).get("forwards") or []:
-        if not isinstance(row, Mapping):
-            continue
+    for row in snapshot.forwards:
         if _forward_status(row.get("status")) != "settled":
             continue
         occurred = _timestamp(row.get("resolved_time") or row.get("received_time"))
@@ -920,12 +1116,9 @@ def _balance_snapshot_records(
     in the hash, so every sync added fresh rows. We bucket on the date so a
     given day's snapshot UPDATEs rather than appends.
     """
-    accounts = snapshot.method_payloads.get("bkpr-listbalances", {}).get("accounts") or []
     bucket_day = synced_at[:10] if synced_at and len(synced_at) >= 10 else synced_at
     records: list[dict[str, Any]] = []
-    for account in accounts:
-        if not isinstance(account, Mapping):
-            continue
+    for account in snapshot.balance_accounts:
         balances = account.get("balances") if isinstance(account.get("balances"), list) else []
         total_msat = sum(
             _parse_msat(entry.get("balance_msat"))
@@ -968,21 +1161,18 @@ def snapshot_records(snapshot: CoreLightningSnapshot, synced_at: str) -> list[di
     peer_alias_map = _build_peer_alias_map(snapshot)
     records: list[dict[str, Any]] = []
     records.extend(_aggregate_forwards(snapshot, peer_alias_map))
-    for invoice in snapshot.method_payloads.get("listinvoices", {}).get("invoices") or []:
-        if isinstance(invoice, Mapping):
-            record = _invoice_record(invoice)
-            if record is not None:
-                records.append(record)
-    for pay in snapshot.method_payloads.get("listpays", {}).get("pays") or []:
-        if isinstance(pay, Mapping):
-            record = _pay_record(pay)
-            if record is not None:
-                records.append(record)
-    for event in snapshot.method_payloads.get("bkpr-listincome", {}).get("income_events") or []:
-        if isinstance(event, Mapping):
-            record = _income_invoice_record(event)
-            if record is not None:
-                records.append(record)
+    for invoice in snapshot.invoices:
+        record = _invoice_record(invoice)
+        if record is not None:
+            records.append(record)
+    for pay in snapshot.pays:
+        record = _pay_record(pay)
+        if record is not None:
+            records.append(record)
+    for event in snapshot.income_events:
+        record = _income_invoice_record(event)
+        if record is not None:
+            records.append(record)
     records.extend(_balance_snapshot_records(snapshot, synced_at))
     return records
 

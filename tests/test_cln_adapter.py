@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -111,7 +112,7 @@ def _canned_payloads(extra: dict[str, Any] | None = None) -> dict[str, Any]:
                     "completed_at": 1_700_000_041,
                     "destination": "02" + "dd" * 32,
                     # Opsec: preimage, bolt11, route hops must be discarded.
-                    "preimage": "11" * 32,
+                    "preimage": "1f" * 32,
                     "bolt11": "lnbc1pjexample",
                     "route": [
                         {"id": "02" + "ee" * 32, "channel": "100x1x0"},
@@ -133,8 +134,8 @@ def _canned_payloads(extra: dict[str, Any] | None = None) -> dict[str, Any]:
                     # Opsec: preimage / bolt11 / payment_secret must be
                     # discarded. Route hints in invoices you paid would
                     # leak someone else's private-channel peers.
-                    "payment_preimage": "ab" * 32,
-                    "payment_secret": "cd" * 32,
+                    "payment_preimage": "a1" * 32,
+                    "payment_secret": "c1" * 32,
                     "bolt11": "lnbc1pjinvoice",
                     "routes": [
                         [
@@ -242,9 +243,9 @@ class FetchNodeSnapshotTest(unittest.TestCase):
         )
         records = core_cln.snapshot_records(snapshot_blob, "2026-05-18T12:00:00Z")
         forbidden_substrings = (
-            "11" * 32,  # pay preimage
-            "ab" * 32,  # invoice preimage
-            "cd" * 32,  # invoice payment_secret
+            "1f" * 32,  # pay preimage
+            "a1" * 32,  # invoice preimage
+            "c1" * 32,  # invoice payment_secret
             "lnbc1pjexample",
             "lnbc1pjinvoice",
             "02" + "ba" * 32,  # erring_node
@@ -415,6 +416,156 @@ class RebalanceCostFormulaTest(unittest.TestCase):
         self.assertIsNotNone(snapshot.routing)
         # 3000 msat = 3 sat (truncated). Principal is NOT added.
         self.assertEqual(snapshot.routing.rebalance_cost_sat, 3)
+
+    def test_rebalance_fee_in_both_listpays_and_bookkeeper_counts_once(self) -> None:
+        # M-2: prior implementation summed `fee` from completed
+        # rebalance-tagged `listpays` rows AND ``bkpr-listincome
+        # rebalance_fee`` events, double-counting the same 3-sat fee. The
+        # bookkeeper view is canonical; listpays only contributes the count.
+        payloads = _canned_payloads(
+            {
+                "listpays": {
+                    "pays": [
+                        {
+                            "payment_hash": "55" * 32,
+                            "amount_msat": "100000msat",
+                            "amount_sent_msat": "103000msat",
+                            "status": "complete",
+                            "rebalance": True,
+                            "created_at": 1_700_000_080,
+                            "completed_at": 1_700_000_081,
+                            "destination": "02" + "44" * 32,
+                        }
+                    ]
+                },
+                "bkpr-listincome": {
+                    "income_events": [
+                        {
+                            "account": "742x1x0",
+                            "tag": "rebalance_fee",
+                            "debit_msat": "3000msat",
+                            "credit_msat": "0msat",
+                            "timestamp": 1_700_000_081,
+                            "payment_id": "55" * 32,
+                        }
+                    ]
+                },
+            }
+        )
+        snapshot_blob = core_cln.fetch_core_lightning_snapshot(
+            {"kind": "coreln", "name": "cln", "url": "cln://local"},
+            rpc_call=_rpc(payloads),
+        )
+        snapshot = core_cln.build_node_snapshot(snapshot_blob, window_days=30)
+        self.assertIsNotNone(snapshot.routing)
+        # 3000 msat -> 3 sat, counted ONCE (not 6 like the pre-fix bug).
+        self.assertEqual(snapshot.routing.rebalance_cost_sat, 3)
+        self.assertEqual(snapshot.routing.rebalance_count, 1)
+
+
+def _walk(value: Any):
+    """Recursive iterator over every primitive value reachable from ``value``."""
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            yield from _walk(key)
+            yield from _walk(item)
+    elif isinstance(value, (list, tuple, set, frozenset)):
+        for item in value:
+            yield from _walk(item)
+    else:
+        yield value
+
+
+def _snapshot_to_walkable(snapshot: core_cln.CoreLightningSnapshot) -> dict[str, Any]:
+    # frozen dataclass -> dict so the recursive walker sees every field.
+    from dataclasses import asdict
+
+    return asdict(snapshot)
+
+
+class SnapshotObjectSanitizationTest(unittest.TestCase):
+    """H-4: the snapshot object itself must never carry Tier-1 fields, even
+    before the reshape helpers run. Earlier revisions stored raw RPC payloads
+    on ``method_payloads`` and relied on reshape to strip sensitive fields —
+    a future debug dump or accidental persistence path could leak them. The
+    fetcher now sanitizes at the transport boundary."""
+
+    def _build_snapshot(self) -> core_cln.CoreLightningSnapshot:
+        return core_cln.fetch_core_lightning_snapshot(
+            {"kind": "coreln", "name": "cln", "url": "cln://local"},
+            rpc_call=_rpc(_canned_payloads()),
+        )
+
+    def test_snapshot_object_contains_no_raw_sensitive_fields(self) -> None:
+        snapshot = self._build_snapshot()
+        forbidden_strings = (
+            "1f" * 32,  # pay preimage
+            "a1" * 32,  # invoice preimage (payment_preimage)
+            "c1" * 32,  # invoice payment_secret
+            "lnbc1pjexample",  # pay bolt11
+            "lnbc1pjinvoice",  # invoice bolt11
+            "02" + "ba" * 32,  # erring_node
+            "02" + "11" * 32,  # invoice route-hint pubkey
+            "02" + "ee" * 32,  # listpays route hop pubkey
+            "02" + "ff" * 32,  # listpays route hop pubkey
+            "100x1x0",  # route hop channel
+            "200x1x0",  # route hop channel
+            "999x1x0",  # invoice route hint short channel id
+        )
+        forbidden_keys = {
+            "payment_preimage",
+            "preimage",
+            "payment_secret",
+            "bolt11",
+            "route",
+            "routes",
+            "route_hints",
+            "erring_node",
+            "failcode",
+            "failreason",
+            "failure_reason",
+            "failure_source_pubkey",
+        }
+        walkable = _snapshot_to_walkable(snapshot)
+
+        leaked_keys: list[str] = []
+
+        def _scan_keys(value: Any) -> None:
+            if isinstance(value, Mapping):
+                for key, item in value.items():
+                    if isinstance(key, str) and key.lower() in forbidden_keys:
+                        leaked_keys.append(key)
+                    _scan_keys(item)
+            elif isinstance(value, (list, tuple, set, frozenset)):
+                for item in value:
+                    _scan_keys(item)
+
+        _scan_keys(walkable)
+        self.assertEqual(leaked_keys, [], msg=f"forbidden keys present: {leaked_keys}")
+
+        values = list(_walk(walkable))
+        text_values = [value for value in values if isinstance(value, str)]
+        serialized_blob = "\n".join(text_values)
+        for needle in forbidden_strings:
+            self.assertNotIn(
+                needle,
+                serialized_blob,
+                msg=f"snapshot leaked sensitive substring {needle!r}",
+            )
+
+    def test_snapshot_typed_collections_replace_method_payloads(self) -> None:
+        # The migration away from ``method_payloads`` is what makes the
+        # leak-by-construction impossible. Pin the API shape so a future
+        # refactor that reintroduces raw RPC blobs trips this test.
+        snapshot = self._build_snapshot()
+        self.assertFalse(hasattr(snapshot, "method_payloads"))
+        self.assertIsInstance(snapshot.channels, tuple)
+        self.assertIsInstance(snapshot.forwards, tuple)
+        self.assertIsInstance(snapshot.pays, tuple)
+        self.assertIsInstance(snapshot.invoices, tuple)
+        self.assertIsInstance(snapshot.income_events, tuple)
+        self.assertIsInstance(snapshot.balance_accounts, tuple)
+        self.assertIsInstance(snapshot.funds_outputs, tuple)
 
 
 if __name__ == "__main__":  # pragma: no cover
