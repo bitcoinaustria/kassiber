@@ -58,7 +58,7 @@ export interface ConnectionSource {
   docsHref?: string;
   setupKind?: SetupKind;
   walletKind?: string;
-  sourceFormat?: "csv" | "json" | "phoenix_csv" | "river_csv" | "bullbitcoin_csv" | "21bitcoin_csv" | "strike_csv";
+  sourceFormat?: "csv" | "json" | "phoenix_csv" | "river_csv" | "bullbitcoin_csv" | "coinfinity_csv" | "21bitcoin_csv" | "strike_csv";
   chain?: "bitcoin" | "liquid";
   network?: string;
   details: string[];
@@ -79,7 +79,7 @@ export const sourceIcon = (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="10" fill="${background}"/><text x="20" y="24" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="10" font-weight="700" fill="${foreground}">${label}</text></svg>`,
   )}`;
 
-const lightLogoFrame = "bg-white";
+const lightLogoFrame = "bg-white shadow-sm shadow-zinc-950/5 dark:bg-white dark:shadow-black/30";
 
 export const CONNECTION_CATEGORIES: ConnectionCategoryItem[] = [
   { id: "wallets", label: "Wallets", icon: Wallet },
@@ -524,14 +524,22 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "coinfinity",
     title: "Coinfinity",
-    description: "Bitcoin broker activity import.",
+    description: "Order CSV import for exact buy/sell execution pricing.",
     category: "exchanges",
     image: coinfinityIcon,
     imageFrameClassName: lightLogoFrame,
-    imageClassName: "size-8",
-    status: "planned",
+    imageClassName: "size-9 rounded-lg",
+    status: "ready",
     pathLabel: "CSV import",
-    details: ["Dedicated parser is not wired yet"],
+    formatLabel: "coinfinity_csv",
+    docsHref: "https://coinfinity.co/",
+    setupKind: "file-enrichment",
+    walletKind: "coinfinity",
+    sourceFormat: "coinfinity_csv",
+    details: [
+      "BTC/EUR order rows preserve exact Coinfinity execution pricing",
+      "Book-wide imports can enrich relevant rows or import the shared export with reconciliation flags",
+    ],
   },
   {
     id: "bitpanda",

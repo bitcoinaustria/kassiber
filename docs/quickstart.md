@@ -93,8 +93,8 @@ supported kinds. See [reference/backends.md](reference/backends.md) for
 configuring sync backends (the built-in defaults are listed in
 [SECURITY.md](../SECURITY.md#the-big-gotcha-not-running-your-own-node)).
 
-For CSV / JSON imports (BTCPay, Phoenix, River, Bull Bitcoin, 21bitcoin,
-Pocket Bitcoin, generic), see
+For CSV / JSON imports (BTCPay, Phoenix, River, Bull Bitcoin, Coinfinity,
+21bitcoin, Pocket Bitcoin, generic), see
 [reference/imports.md](reference/imports.md).
 
 ## 3. Pair transfers and swaps

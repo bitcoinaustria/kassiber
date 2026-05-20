@@ -15,6 +15,7 @@ const PROTOCOL_LABELS: Record<ConnectionKind, string> = {
   bitpanda: "EXCHANGE",
   river: "EXCHANGE",
   bullbitcoin: "EXCHANGE",
+  coinfinity: "EXCHANGE",
   strike: "PLATFORM",
   phoenix: "LIGHTNING",
   custom: "CUSTOM",

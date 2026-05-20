@@ -27,6 +27,9 @@ Import format families live here:
     Bitcoin on-chain, Lightning, or Liquid <-> fiat orders are normalized
     to exchange execution pricing, keyed by the exported transaction id
     when present.
+  - Coinfinity (`coinfinity_csv`) — order export CSV. BTC/EUR broker rows
+    are normalized as exact exchange execution evidence, with fiat fees
+    folded into the taxable buy/sell value.
   - 21bitcoin (`21bitcoin_csv`) — transaction CSV export. BTC-side trades
     and withdrawals are normalized as a custodial platform ledger; fiat-only
     cash rows are skipped.
@@ -100,6 +103,8 @@ def load_import_records(file_path, input_format):
         return load_river_csv_records(file_path)
     if input_format == "bullbitcoin_csv":
         return load_bullbitcoin_csv_records(file_path)
+    if input_format == "coinfinity_csv":
+        return load_coinfinity_csv_records(file_path)
     if input_format == "21bitcoin_csv":
         return load_twentyonebitcoin_csv_records(file_path)
     if input_format == "pocketbitcoin_csv":
@@ -468,7 +473,9 @@ def _bullbitcoin_completed(record):
 
 def normalize_bullbitcoin_record(record):
     """Turn one Bull Bitcoin order-export row into the common import shape."""
-    sanitized = {str(key).strip(): value for key, value in record.items() if key is not None}
+    sanitized = {
+        str(key).strip(): value for key, value in record.items() if key is not None
+    }
     if not _bullbitcoin_completed(sanitized):
         return None
 
@@ -564,6 +571,131 @@ def load_bullbitcoin_csv_records(file_path):
 
 def is_bullbitcoin_format(input_format):
     return input_format == "bullbitcoin_csv"
+
+
+# -- Coinfinity --------------------------------------------------------------
+
+
+_COINFINITY_REQUIRED_COLUMNS = (
+    "Order ID",
+    "Type",
+    "Date",
+    "Amount EUR",
+    "Amount Crypto",
+    "Crypto",
+    "Rate EUR",
+    "Mining Fee Crypto",
+    "Total Fee EUR",
+    "Transaction",
+)
+
+_COINFINITY_CRYPTO_CURRENCIES = {"BTC", "XBT"}
+
+
+def _coinfinity_user_direction(order_type):
+    """Map Coinfinity's broker-side type to the user's BTC movement."""
+    value = str(order_type or "").strip().casefold()
+    if value == "sell":
+        return "inbound", "buy"
+    if value == "buy":
+        return "outbound", "sell"
+    return None, None
+
+
+def normalize_coinfinity_record(record, index=0):
+    """Turn one Coinfinity order-export row into the common import shape."""
+    sanitized = {str(key).strip(): value for key, value in record.items() if key is not None}
+    direction, kind = _coinfinity_user_direction(_get_cell(sanitized, "Type"))
+    if direction is None or kind is None:
+        return None
+
+    currency = _currency_cell(_get_cell(sanitized, "Crypto"))
+    if currency not in _COINFINITY_CRYPTO_CURRENCIES:
+        return None
+    asset = "BTC" if currency == "XBT" else currency
+    amount = _decimal_cell(_get_cell(sanitized, "Amount Crypto"))
+    fiat_amount = _decimal_cell(_get_cell(sanitized, "Amount EUR"))
+    fee_fiat = _decimal_cell(_get_cell(sanitized, "Total Fee EUR")) or Decimal("0")
+    if amount is None or fiat_amount is None:
+        raise AppError("Coinfinity CSV has a BTC/EUR row with an empty amount")
+
+    if direction == "inbound":
+        fiat_value = abs(fiat_amount) + abs(fee_fiat)
+        btc_fee = Decimal("0")
+    else:
+        fiat_value = max(Decimal("0"), abs(fiat_amount) - abs(fee_fiat))
+        btc_fee = _decimal_cell(_get_cell(sanitized, "Mining Fee Crypto")) or Decimal(
+            "0"
+        )
+
+    fiat_rate = _decimal_cell(_get_cell(sanitized, "Rate EUR"))
+    occurred_at = _get_cell(sanitized, "Date")
+    order_ref = str_or_none(_get_cell(sanitized, "Order ID")) or (
+        f"coinfinity:{occurred_at}:{direction}:{asset}:{amount}:{index}"
+    )
+    transaction_ref = str_or_none(_get_cell(sanitized, "Transaction"))
+    lightning_ref = str_or_none(_get_cell(sanitized, "LN Invoice"))
+    external_id = transaction_ref or lightning_ref or f"coinfinity:{order_ref}"
+    transaction_type = str_or_none(_get_cell(sanitized, "Transaction type"))
+    description = f"Coinfinity {kind}"
+    if transaction_type:
+        description = f"{description} - {transaction_type}"
+    payload = {
+        "txid": external_id,
+        "occurred_at": occurred_at,
+        "direction": direction,
+        "asset": asset,
+        "amount": abs(amount),
+        "fee": abs(btc_fee),
+        "fiat_rate": (
+            fiat_rate
+            if fiat_rate is not None
+            else (fiat_value / abs(amount) if amount else None)
+        ),
+        "fiat_value": fiat_value,
+        "fiat_currency": "EUR",
+        "pricing_source_kind": "exchange_execution",
+        "pricing_provider": "Coinfinity",
+        "pricing_pair": f"{asset}-EUR",
+        "pricing_timestamp": occurred_at,
+        "pricing_method": "coinfinity_csv",
+        "pricing_external_ref": order_ref,
+        "pricing_quality": "exact",
+        "kind": kind,
+        "description": description,
+        "counterparty": "Coinfinity",
+        "raw_json": json.dumps(json_ready(sanitized), sort_keys=True),
+    }
+    if not transaction_ref and not lightning_ref:
+        payload["_exchange_evidence_match_by_economics"] = True
+        payload["_exchange_evidence_match_time_tolerance_seconds"] = 172800
+    return payload
+
+
+def load_coinfinity_csv_records(file_path):
+    """Load Coinfinity order-export CSV rows."""
+    with open(file_path, "r", encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        return []
+    header = {_normalized_column_key(column) for column in rows[0].keys()}
+    missing = [
+        column
+        for column in _COINFINITY_REQUIRED_COLUMNS
+        if _normalized_column_key(column) not in header
+    ]
+    if missing:
+        raise AppError("Coinfinity CSV is missing required columns: " + ", ".join(missing))
+    normalized = []
+    for index, row in enumerate(rows, start=1):
+        record = normalize_coinfinity_record(row, index=index)
+        if record is not None:
+            normalized.append(record)
+    return normalized
+
+
+def is_coinfinity_format(input_format):
+    return input_format == "coinfinity_csv"
 
 
 # -- Pocket Bitcoin ----------------------------------------------------------
@@ -1181,12 +1313,19 @@ def is_strike_format(input_format):
 
 
 def is_exchange_evidence_format(input_format):
-    return input_format in {"bullbitcoin_csv", "21bitcoin_csv", "pocketbitcoin_csv"}
+    return input_format in {
+        "bullbitcoin_csv",
+        "coinfinity_csv",
+        "21bitcoin_csv",
+        "pocketbitcoin_csv",
+    }
 
 
 def exchange_evidence_label(input_format):
     if input_format == "bullbitcoin_csv":
         return "Bull Bitcoin"
+    if input_format == "coinfinity_csv":
+        return "Coinfinity"
     if input_format == "21bitcoin_csv":
         return "21bitcoin"
     if input_format == "pocketbitcoin_csv":
@@ -1197,6 +1336,8 @@ def exchange_evidence_label(input_format):
 def exchange_evidence_rows_key(input_format):
     if input_format == "bullbitcoin_csv":
         return "bullbitcoin_rows"
+    if input_format == "coinfinity_csv":
+        return "coinfinity_rows"
     if input_format == "21bitcoin_csv":
         return "twentyonebitcoin_rows"
     if input_format == "pocketbitcoin_csv":

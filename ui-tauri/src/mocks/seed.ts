@@ -25,6 +25,7 @@ export type ConnectionKind =
   | "bitpanda"
   | "river"
   | "bullbitcoin"
+  | "coinfinity"
   | "strike"
   | "phoenix"
   | "custom"

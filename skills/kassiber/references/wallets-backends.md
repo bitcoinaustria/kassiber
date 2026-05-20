@@ -247,6 +247,18 @@ and cash legs. Kassiber skips fiat-only cash rows and preserves buy/sell cash
 legs as exact `exchange_execution` pricing from provider `River`; BTC-only rows
 with an exported Bitcoin price use that value as a River `fmv_provider` sample.
 
+Bull Bitcoin / Coinfinity exchange evidence:
+
+```bash
+kassiber wallets import-bull --file /path/to/bull-orders.csv
+kassiber wallets import-coinfinity --file /path/to/coinfinity-orders.csv
+```
+
+These imports default to `--mode relevant`: they enrich unique matching wallet
+transactions anywhere in the current book and do not create standalone rows.
+Use `--mode full` only when the shared provider export itself should be kept as
+excluded evidence with matched / wallet-gap / ambiguous reconciliation tags.
+
 Generic files:
 
 ```bash
