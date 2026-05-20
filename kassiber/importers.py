@@ -666,7 +666,7 @@ def normalize_coinfinity_record(record, index=0):
         "counterparty": "Coinfinity",
         "raw_json": json.dumps(json_ready(sanitized), sort_keys=True),
     }
-    if not transaction_ref:
+    if not transaction_ref and not lightning_ref:
         payload["_exchange_evidence_match_by_economics"] = True
         payload["_exchange_evidence_match_time_tolerance_seconds"] = 172800
     return payload

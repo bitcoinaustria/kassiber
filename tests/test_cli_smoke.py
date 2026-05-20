@@ -69,6 +69,15 @@ BCBC-229A-AB,sell,"2026-05-11 13:19:36",100.00,0.00147403,BTC,68872.400000000000
 BFBC-EAC9-38,buy,"2026-02-20 13:50:45",3000.00,0.05153544,BTC,57337.700000000000000000000000,0.00000134,0.08,45.00,45.08,bc1qcoinfinitysell,coinfinity-sell-tx,,Onchain
 """
 
+_COINFINITY_LN_EXISTING_CSV = """date,txid,direction,asset,amount,fee,fiat_value,fiat_rate,kind,description,counterparty
+2026-05-12T08:00:00Z,lnbc1coinfinityinvoice,inbound,BTC,0.01000000,0,500.00,50000.00,deposit,Synced from LN wallet,Synced from lightning
+2026-05-12T08:10:00Z,lnbc1otherinvoice,inbound,BTC,0.01000000,0,500.00,50000.00,deposit,Synced from LN wallet,Synced from lightning
+"""
+
+_COINFINITY_LN_ORDERS_CSV = """"Order ID",Type,Date,"Amount EUR","Amount Crypto",Crypto,"Rate EUR","Mining Fee Crypto","Mining Fee EUR","Service Fee EUR","Total Fee EUR",Address,Transaction,"LN Invoice","Transaction type"
+BCBC-LN-01,sell,"2026-05-12 08:00:00",500.00,0.01000000,BTC,50000.00,,,5.00,5.00,,,"lnbc1coinfinityinvoice",Lightning
+"""
+
 _TWENTYONEBITCOIN_EXISTING_CSV = """date,txid,direction,asset,amount,fee,fiat_value,fiat_rate,kind,description,counterparty
 2022-06-01T03:00:42Z,21bitcoin:2,inbound,BTC,0.00049106,0,36.93,75204.25,buy,Synced from wallet,Synced from 21bitcoin
 2022-10-07T16:31:20Z,l1-withdrawal-tx,outbound,BTC,0.00040000,0.00001000,,,withdrawal,Synced withdrawal,Synced from 21bitcoin
@@ -2811,6 +2820,61 @@ class AccountBucketBehaviorTest(unittest.TestCase):
         self.assertEqual(sell["kind"], "sell")
         self.assertEqual(sell["fee_msat"], 134000)
         self.assertEqual(sell["fiat_value_exact"], "2954.92")
+
+    def test_z_coinfinity_csv_matches_ln_invoice_before_economics(self):
+        existing_csv = Path(self._tmp.name) / "coinfinity-ln-existing-wallet.csv"
+        existing_csv.write_text(_COINFINITY_LN_EXISTING_CSV, encoding="utf-8")
+        coinfinity_csv = Path(self._tmp.name) / "coinfinity-ln-orders.csv"
+        coinfinity_csv.write_text(_COINFINITY_LN_ORDERS_CSV, encoding="utf-8")
+
+        self._cli(
+            "profiles", "create",
+            "--workspace", "Buckets",
+            "--fiat-currency", "EUR",
+            "--tax-country", "generic",
+            "Coinfinity Lightning Euro",
+        )
+        self._cli(
+            "wallets", "create",
+            "--workspace", "Buckets",
+            "--profile", "Coinfinity Lightning Euro",
+            "--label", "Coinfinity Lightning Wallet",
+            "--kind", "custom",
+        )
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Buckets",
+            "--profile", "Coinfinity Lightning Euro",
+            "--wallet", "Coinfinity Lightning Wallet",
+            "--file", str(existing_csv),
+        )
+
+        payload = self._cli(
+            "wallets", "import-coinfinity",
+            "--workspace", "Buckets",
+            "--profile", "Coinfinity Lightning Euro",
+            "--wallet", "Coinfinity Lightning Wallet",
+            "--file", str(coinfinity_csv),
+        )
+        self.assertEqual(payload["data"]["matched"], 1)
+        self.assertEqual(payload["data"]["updated"], 1)
+        self.assertEqual(payload["data"]["skipped_unmatched"], 0)
+
+        payload = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "Coinfinity Lightning Euro",
+            "--wallet", "Coinfinity Lightning Wallet",
+            "--sort", "occurred-at",
+            "--order", "asc",
+        )
+        matched, other = payload["data"]
+        self.assertEqual(matched["external_id"], "lnbc1coinfinityinvoice")
+        self.assertEqual(matched["pricing_provider"], "Coinfinity")
+        self.assertEqual(matched["pricing_external_ref"], "BCBC-LN-01")
+        self.assertEqual(matched["fiat_value_exact"], "505.00")
+        self.assertEqual(other["external_id"], "lnbc1otherinvoice")
+        self.assertIsNone(other["pricing_provider"])
 
     def test_z_21bitcoin_csv_enriches_existing_wallet_transaction(self):
         existing_csv = Path(self._tmp.name) / "21bitcoin-existing-wallet.csv"
