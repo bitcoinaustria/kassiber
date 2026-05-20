@@ -124,14 +124,14 @@ describe("dispatchMenuIntent — open-settings re-fires the section event", () =
   it("navigates and emits the section side effect", () => {
     const deps = makeDeps();
     dispatchMenuIntent(
-      { action: "open-settings", section: "privacy" },
+      { action: "open-settings", section: "bitcoin" },
       deps,
     );
     expect(deps.navigate).toHaveBeenCalledWith({
       to: "/settings",
-      hash: "privacy",
+      hash: "bitcoin",
     });
-    expect(deps.emitSettingsSection).toHaveBeenCalledWith("privacy");
+    expect(deps.emitSettingsSection).toHaveBeenCalledWith("bitcoin");
   });
 
   it("emits null when no section is provided", () => {

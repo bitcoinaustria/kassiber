@@ -192,7 +192,7 @@ export const PUBLIC_BACKEND_DEFAULTS: readonly BackendPreviewRow[] = [
     kind: "Electrum",
     url: "ssl://index.bitcoin-austria.at:50002",
   },
-  { name: "liquid", kind: "Electrum", url: "ssl://les.bullbitcoin.com:995" },
+  { name: "liquid", kind: "Explorer API", url: "https://liquid.network/api" },
 ];
 
 export const AI_PROVIDER_KIND_LABELS: Record<AiProviderKind, string> = {

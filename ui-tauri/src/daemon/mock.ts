@@ -106,6 +106,7 @@ type MockBackendSettingsRow = {
   has_username?: boolean;
   has_password?: boolean;
   insecure?: boolean;
+  infrastructure_owner?: string;
 };
 
 let mockBackendSettingsRows: MockBackendSettingsRow[] = [
@@ -120,11 +121,11 @@ let mockBackendSettingsRows: MockBackendSettingsRow[] = [
     has_url: true,
   },
   {
-    name: "liquid-electrum",
-    kind: "electrum",
+    name: "liquid",
+    kind: "liquid-esplora",
     chain: "liquid",
     network: "liquidv1",
-    url: "ssl://les.bullbitcoin.com:995",
+    url: "https://liquid.network/api",
     source: "mock",
     has_url: true,
   },
@@ -200,6 +201,11 @@ function mockBackendRowFromArgs(
       typeof config.insecure === "boolean"
         ? config.insecure
         : existing?.insecure,
+    infrastructure_owner:
+      typeof config.infrastructure_owner === "string" &&
+      config.infrastructure_owner.trim()
+        ? config.infrastructure_owner.trim()
+        : existing?.infrastructure_owner,
   };
   return row;
 }
@@ -1730,16 +1736,17 @@ export const mockDaemon: DaemonTransport = {
           url,
           trust_self_signed: trustSelfSigned,
           logs: [
-            `Opening Electrum connection to ${url}`,
+            `Preview mode: simulated Electrum test for ${url}`,
+            "No network request was made.",
             trustSelfSigned
-              ? "Certificate verification: self-signed certificate trusted for this test."
+              ? "Certificate verification: self-signed certificate would be trusted for this test."
               : certificate
-                ? `Certificate verification: pinned certificate ${certificate}.`
-                : "Certificate verification: system trust store.",
+                ? `Certificate verification: would use pinned certificate ${certificate}.`
+                : "Certificate verification: would use system trust store.",
             proxy ? `Proxy: ${proxy}.` : "Proxy: disabled.",
-            "Connected.",
-            "Server version: Fulcrum 2.0 on protocol version 1.4.2",
-            "Server banner: Connected to a Fulcrum 2.0 server",
+            "Simulated result: connected.",
+            "Simulated server version: Fulcrum 2.0 on protocol version 1.4.2",
+            "Simulated server banner: Connected to a Fulcrum 2.0 server",
           ],
         } as T,
       };
@@ -1769,11 +1776,11 @@ export const mockDaemon: DaemonTransport = {
           url,
           status: 200,
           logs: [
-            `$ curl -fsS -L --max-time 10 -H 'Accept: application/json' ${url}`,
-            `> GET ${url}`,
-            "< HTTP 200 OK",
-            "< content-type: application/json",
-            "< body: 256 bytes sampled",
+            `Preview mode: simulated HTTP test for ${url}`,
+            "No network request was made.",
+            "Simulated response: HTTP 200 OK",
+            "Simulated content-type: application/json",
+            "Simulated body: 256 bytes sampled",
           ],
         } as T,
       };

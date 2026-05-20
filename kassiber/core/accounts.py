@@ -367,6 +367,7 @@ def list_backends(runtime_config):
                 "auth_header": backend.get("auth_header", ""),
                 "token": backend.get("token", ""),
                 "cookiefile": backend.get("cookiefile", ""),
+                "infrastructure_owner": backend.get("infrastructure_owner", ""),
                 "username": backend.get("username", ""),
                 "password": backend.get("password", ""),
             }

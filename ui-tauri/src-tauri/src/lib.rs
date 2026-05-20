@@ -108,25 +108,34 @@ const DEEP_LINK_ROUTE_HOSTS: &[(&str, &str)] = &[
     ("diagnostics", "/logs"),
 ];
 
-// Mirrors the React `SETTINGS_SECTION_INTEGRATION` map in
+// Mirrors the React `settingsSectionForHash` map in
 // `ui-tauri/src/components/kb/settingsSections.ts`. Aliases (`sync` →
-// backends, `assistant` → ai) are accepted at the deep-link boundary so the
-// Rust allowlist matches the panel-resolution logic on the React side; the
-// React helper does the final hash → integration-id lookup.
+// bitcoin, `assistant` → ai) are accepted at the deep-link boundary so the
+// Rust allowlist matches the section-resolution logic on the React side; the
+// React helper does the final hash → section-id lookup.
 const DEEP_LINK_SETTINGS_SECTIONS: &[&str] = &[
+    "appearance",
     "privacy",
     "developer",
     "logs",
     "display",
+    "explorer",
+    "explorers",
+    "bitcoin",
+    "lightning",
+    "liquid",
+    "market",
     "desktop",
     "terminal",
     "security",
+    "lock",
     "backends",
     "sync",
     "rates",
     "ai",
     "assistant",
     "data",
+    "storage",
 ];
 
 const ALLOWED_DAEMON_KINDS: &[&str] = &[
@@ -2700,6 +2709,22 @@ mod tests {
         assert_eq!(
             parse("kassiber://settings/privacy"),
             Some(open_settings_action(Some("privacy")))
+        );
+        assert_eq!(
+            parse("kassiber://settings/appearance"),
+            Some(open_settings_action(Some("appearance")))
+        );
+        assert_eq!(
+            parse("kassiber://settings/bitcoin"),
+            Some(open_settings_action(Some("bitcoin")))
+        );
+        assert_eq!(
+            parse("kassiber://settings/lightning"),
+            Some(open_settings_action(Some("lightning")))
+        );
+        assert_eq!(
+            parse("kassiber://settings/liquid"),
+            Some(open_settings_action(Some("liquid")))
         );
         assert_eq!(
             parse("kassiber://settings/desktop"),
