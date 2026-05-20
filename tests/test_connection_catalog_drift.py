@@ -92,6 +92,7 @@ _DESKTOP_COMMERCIAL_RECONCILIATION_KINDS = (
     "ui.btcpay.provenance.suggest",
     "ui.btcpay.provenance.links",
     "ui.btcpay.provenance.review",
+    "ui.transactions.commercial_context",
     "ui.documents.list",
     "ui.documents.create",
     "ui.documents.attach",

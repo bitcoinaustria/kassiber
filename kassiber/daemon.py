@@ -232,6 +232,7 @@ SUPPORTED_KINDS = (
     "ui.btcpay.provenance.suggest",
     "ui.btcpay.provenance.links",
     "ui.btcpay.provenance.review",
+    "ui.transactions.commercial_context",
     "ui.documents.list",
     "ui.documents.create",
     "ui.documents.attach",
@@ -1425,6 +1426,20 @@ def _ui_commercial_payload(
             reconciliation_state=args.get("reconciliation_state"),
             commercial_kind=args.get("commercial_kind"),
             notes=args.get("notes"),
+        )
+    if kind == "ui.transactions.commercial_context":
+        transaction = args.get("transaction")
+        if not isinstance(transaction, str) or not transaction:
+            raise AppError(
+                "ui.transactions.commercial_context requires args.transaction",
+                code="validation",
+            )
+        return core_commercial.get_transaction_commercial_context(
+            conn,
+            None,
+            None,
+            transaction,
+            hooks,
         )
     if kind == "ui.documents.list":
         return {
@@ -7374,6 +7389,7 @@ def handle_request(
         "ui.btcpay.provenance.suggest",
         "ui.btcpay.provenance.links",
         "ui.btcpay.provenance.review",
+        "ui.transactions.commercial_context",
         "ui.documents.list",
         "ui.documents.create",
         "ui.documents.attach",

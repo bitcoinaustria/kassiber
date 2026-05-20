@@ -434,11 +434,24 @@ def _normalize_invoice_provenance(store_id, invoice):
     payments = invoice.get("payments") or []
     if not isinstance(payments, list):
         payments = []
+    metadata = _invoice_metadata(invoice)
+    order_id = _str_or_none(invoice.get("orderId") or metadata.get("orderId"))
+    origin = _invoice_origin(invoice, metadata, order_id)
     return {
         "store_id": store_id,
         "invoice": invoice,
         "invoice_id": str(invoice_id),
-        "order_id": _str_or_none(invoice.get("orderId") or _metadata_value(invoice, "orderId")),
+        "order_id": order_id,
+        "order_url": _str_or_none(metadata.get("orderUrl") or invoice.get("orderUrl")),
+        "payment_request_id": _str_or_none(
+            metadata.get("paymentRequestId")
+            or metadata.get("payment_request_id")
+            or invoice.get("paymentRequestId")
+        ),
+        "origin_kind": origin["kind"],
+        "origin_app_id": origin["app_id"],
+        "origin_label": origin["label"],
+        "origin_url": origin["url"],
         "status": _str_or_none(invoice.get("status")),
         "created_at": _btcpay_time(invoice.get("createdTime") or invoice.get("created")),
         "currency": _str_or_none(invoice.get("currency")),
@@ -502,10 +515,74 @@ def _normalize_invoice_payment(invoice, payment):
     }
 
 
-def _metadata_value(invoice, key):
+def _invoice_metadata(invoice):
     metadata = invoice.get("metadata")
     if isinstance(metadata, dict):
-        return metadata.get(key)
+        return metadata
+    return {}
+
+
+def _invoice_origin(invoice, metadata, order_id):
+    order_url = _str_or_none(metadata.get("orderUrl") or invoice.get("orderUrl"))
+    app_id = _str_or_none(
+        metadata.get("appId")
+        or metadata.get("app_id")
+        or metadata.get("applicationId")
+    )
+    app_name = _str_or_none(
+        metadata.get("appName")
+        or metadata.get("app_name")
+        or metadata.get("applicationName")
+    )
+    item_desc = _str_or_none(metadata.get("itemDesc") or metadata.get("itemDescription"))
+    pos_data = metadata.get("posData")
+    pos_label = _pos_data_label(pos_data)
+    payment_request_id = _str_or_none(
+        metadata.get("paymentRequestId")
+        or metadata.get("payment_request_id")
+        or invoice.get("paymentRequestId")
+    )
+
+    lower_order_url = (order_url or "").lower()
+    lower_order_id = (order_id or "").lower()
+    if pos_data is not None or "/pos" in lower_order_url or lower_order_id.startswith("pos"):
+        return {
+            "kind": "pos",
+            "app_id": app_id,
+            "label": app_name or item_desc or pos_label or order_id,
+            "url": order_url,
+        }
+    if app_id or app_name:
+        return {
+            "kind": "app",
+            "app_id": app_id,
+            "label": app_name or item_desc or order_id,
+            "url": order_url,
+        }
+    if order_url or order_id:
+        return {
+            "kind": "external_order",
+            "app_id": None,
+            "label": item_desc or order_id,
+            "url": order_url,
+        }
+    if payment_request_id:
+        return {
+            "kind": "payment_request",
+            "app_id": None,
+            "label": item_desc or payment_request_id,
+            "url": None,
+        }
+    return {"kind": "unknown", "app_id": None, "label": item_desc, "url": order_url}
+
+
+def _pos_data_label(pos_data):
+    if not isinstance(pos_data, dict):
+        return None
+    for key in ("title", "name", "itemDesc", "itemDescription", "description"):
+        value = _str_or_none(pos_data.get(key))
+        if value:
+            return value
     return None
 
 

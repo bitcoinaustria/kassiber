@@ -247,6 +247,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.btcpay.provenance.suggest",
     "ui.btcpay.provenance.links",
     "ui.btcpay.provenance.review",
+    "ui.transactions.commercial_context",
     "ui.documents.list",
     "ui.documents.create",
     "ui.documents.attach",

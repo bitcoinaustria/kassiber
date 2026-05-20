@@ -147,12 +147,16 @@ python3 -m kassiber btcpay provenance review \
 
 `btcpay provenance sync` stores stable invoice/payment ids, raw BTCPay payload
 snapshots, transaction ids/payment hashes when present, and exact fiat facts
-from the invoice/payment record. `suggest` creates deterministic review items
-from txid/payment-hash matches and document/invoice references. Only `review`
+from the invoice/payment record. It also normalizes safe invoice metadata for
+the desktop transaction detail view: payment-request ids, order ids, order
+URLs, and origin hints such as BTCPay POS/app/external-order. Raw BTCPay
+invoice JSON remains backend provenance and is not exposed to the desktop
+detail panel. `suggest` creates deterministic review items from
+txid/payment-hash matches and document/invoice references. Only `review`
 applies authoritative `btcpay_invoice` / `btcpay_payment` pricing or a
-commercial kind such as `income` to the wallet transaction; unreviewed
-BTCPay file imports and wallet-history sync remain conservative
-`deposit` / `withdrawal` transport rows.
+commercial kind such as `income` to the wallet transaction; unreviewed BTCPay
+file imports and wallet-history sync remain conservative `deposit` /
+`withdrawal` transport rows.
 
 External evidence uses the same managed attachment store as transaction
 attachments:
