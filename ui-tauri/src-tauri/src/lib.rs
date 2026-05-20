@@ -2350,11 +2350,13 @@ mod tests {
         menu_action_for_id, navigate_action, open_settings_action, path_is_on_path,
         terminal_command_contents, terminal_command_path_hint, validated_attachment_file_path,
         validated_external_url, TerminalCommandFileState, TerminalCommandPaths,
-        ALLOWED_DAEMON_KINDS, MENU_HELP_DOCS, MENU_LOCK_APP, MENU_NAV_ASSISTANT, MENU_NAV_REPORTS,
-        MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN, MENU_UI_SCALE_DECREASE,
-        MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET, MENU_WORKFLOW_CONNECTIONS_IMPORTS,
-        MENU_WORKFLOW_OPEN_REPORTS, MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL,
-        TERMINAL_COMMAND_MARKER,
+        ALLOWED_DAEMON_KINDS, DEEP_LINK_SETTINGS_SECTIONS, MENU_HELP_DOCS, MENU_LOCK_APP,
+        MENU_NAV_ASSISTANT, MENU_NAV_REPORTS, MENU_OPEN_SETTINGS, MENU_SETTINGS_AI,
+        MENU_SETTINGS_BACKENDS, MENU_SETTINGS_DATA, MENU_SETTINGS_DISPLAY, MENU_SETTINGS_GENERAL,
+        MENU_SETTINGS_PRIVACY, MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN,
+        MENU_UI_SCALE_DECREASE, MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET,
+        MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
+        MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL, TERMINAL_COMMAND_MARKER,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -2639,10 +2641,23 @@ mod tests {
 
     #[test]
     fn native_menu_ids_map_to_webview_actions() {
-        assert_eq!(
-            menu_action_for_id(MENU_SETTINGS_SECURITY),
-            Some(open_settings_action(Some("security")))
-        );
+        let settings_items = [
+            (MENU_OPEN_SETTINGS, None),
+            (MENU_SETTINGS_GENERAL, None),
+            (MENU_SETTINGS_PRIVACY, Some("privacy")),
+            (MENU_SETTINGS_DISPLAY, Some("display")),
+            (MENU_SETTINGS_SECURITY, Some("security")),
+            (MENU_SETTINGS_BACKENDS, Some("backends")),
+            (MENU_SETTINGS_AI, Some("ai")),
+            (MENU_SETTINGS_DATA, Some("data")),
+        ];
+        for (menu_id, section) in settings_items {
+            assert_eq!(
+                menu_action_for_id(menu_id),
+                Some(open_settings_action(section)),
+                "settings menu id {menu_id} should route to {section:?}"
+            );
+        }
         assert_eq!(
             menu_action_for_id(MENU_NAV_REPORTS),
             Some(navigate_action("/reports"))
@@ -2706,34 +2721,13 @@ mod tests {
             parse("kassiber://settings"),
             Some(open_settings_action(None))
         );
-        assert_eq!(
-            parse("kassiber://settings/privacy"),
-            Some(open_settings_action(Some("privacy")))
-        );
-        assert_eq!(
-            parse("kassiber://settings/appearance"),
-            Some(open_settings_action(Some("appearance")))
-        );
-        assert_eq!(
-            parse("kassiber://settings/bitcoin"),
-            Some(open_settings_action(Some("bitcoin")))
-        );
-        assert_eq!(
-            parse("kassiber://settings/lightning"),
-            Some(open_settings_action(Some("lightning")))
-        );
-        assert_eq!(
-            parse("kassiber://settings/liquid"),
-            Some(open_settings_action(Some("liquid")))
-        );
-        assert_eq!(
-            parse("kassiber://settings/desktop"),
-            Some(open_settings_action(Some("desktop")))
-        );
-        assert_eq!(
-            parse("kassiber://settings/terminal"),
-            Some(open_settings_action(Some("terminal")))
-        );
+        for section in DEEP_LINK_SETTINGS_SECTIONS {
+            assert_eq!(
+                parse(&format!("kassiber://settings/{section}")),
+                Some(open_settings_action(Some(*section))),
+                "settings deep link section {section} should be accepted"
+            );
+        }
         // Unknown sections degrade to "open settings" without a section
         // rather than failing — the user still arrives at the right surface
         // and the menu fallback already handles the missing-hash case.

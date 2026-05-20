@@ -184,6 +184,7 @@ interface BackendSettingsRow {
   has_lightning_dir?: boolean;
   has_rpc_file?: boolean;
   insecure?: boolean;
+  tor_proxy?: string;
   infrastructure_owner?: string;
 }
 
@@ -472,6 +473,26 @@ function normalizeInfrastructureOwnership(
   return undefined;
 }
 
+function parseProxyEndpoint(
+  value: string | null | undefined,
+): { host: string; port: string } | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.includes("://")) {
+    try {
+      const parsed = new URL(trimmed);
+      return parsed.hostname && parsed.port
+        ? { host: parsed.hostname, port: parsed.port }
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  const match = trimmed.match(/^(.*):(\d+)$/);
+  if (!match) return undefined;
+  return { host: match[1].replace(/^\[|\]$/g, ""), port: match[2] };
+}
+
 function backendRowToSettingsBackend(row: BackendSettingsRow): Backend {
   const net = backendNetFromRow(row);
   const name = row.name || "backend";
@@ -495,6 +516,7 @@ function backendRowToSettingsBackend(row: BackendSettingsRow): Backend {
       : undefined,
     rpcFile: row.has_rpc_file ? CLN_PRESENCE_SENTINEL_RPC_FILE : undefined,
     trustSsl: row.insecure,
+    proxy: parseProxyEndpoint(row.tor_proxy),
     infrastructureOwner: normalizeInfrastructureOwnership(
       row.infrastructure_owner,
     ),
@@ -567,6 +589,8 @@ function backendPayload(backend: Backend): Record<string, unknown> {
   }
   if (backend.proxy?.host && backend.proxy.port) {
     payload.tor_proxy = `${backend.proxy.host}:${backend.proxy.port}`;
+  } else if (backend.proxy === null) {
+    clear.add("tor_proxy");
   }
   if (Object.keys(config).length > 0) {
     payload.config = config;
@@ -649,7 +673,7 @@ function backendsForLayer(backends: Backend[], layer: NetworkLayer): Backend[] {
 function backendTrust(backend: Backend) {
   return backendTrustFromEndpoint(
     backend.url || "",
-    Boolean(backend.proxy?.host),
+    Boolean(backend.proxy),
     backend.infrastructureOwner,
   );
 }
@@ -1141,6 +1165,11 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       ...DEFAULT_RATE_BACKENDS,
     ];
   }, [backendSettingsQuery.data]);
+
+  React.useEffect(() => {
+    if (!backendSettingsQuery.data?.data?.backends) return;
+    setExplorerSettings(deriveExplorerSettings(backends));
+  }, [backendSettingsQuery.data, backends, setExplorerSettings]);
 
   const editingBackend = React.useMemo(
     () => backends.find((backend) => backend.id === editingBackendId) ?? null,
@@ -4263,8 +4292,8 @@ function PrivacySettingsPanel({
         <div>
           <h3 className="text-sm font-semibold">What leaves this machine</h3>
           <p className="text-sm text-muted-foreground">
-            Kassiber is local-first. These are the only surfaces that send
-            anything off this device — grouped by what each one can see.
+            Kassiber is local-first. Network endpoints are grouped by what each
+            one can see; assistant prompt exposure is shown separately below.
           </p>
         </div>
 
@@ -4281,7 +4310,9 @@ function PrivacySettingsPanel({
             ? `${counts.remote} third-party endpoint${
                 counts.remote === 1 ? "" : "s"
               } can see your queries. Mark your own nodes as yours, or route over Tor.`
-            : "No third-party endpoints can see your queries."}
+            : aiFeaturesEnabled
+              ? "No third-party network endpoints can see your queries. Review assistant providers below for prompt exposure."
+              : "No third-party endpoints can see your queries."}
         </p>
 
         <div className="grid gap-2 sm:grid-cols-3">
@@ -4984,10 +5015,16 @@ function BackendModal({
   const selectedKindIsExplorerApi =
     selectedBackendKind === "esplora" ||
     selectedBackendKind === "liquid-esplora";
+  const effectiveInfrastructureOwner =
+    type.net === "LN"
+      ? undefined
+      : !initial && backendSource === "custom"
+        ? inferredInfrastructureOwnership(effectiveUrl)
+        : infrastructureOwner;
   const connectionTrust = backendTrustFromEndpoint(
     effectiveUrl,
     showElectrumEndpointParts && useProxy && Boolean(proxyHost.trim()),
-    backendSource === "custom" ? "self" : infrastructureOwner,
+    effectiveInfrastructureOwner,
   );
   const ConnectionTrustIcon = connectionTrust.icon;
 
@@ -5096,7 +5133,7 @@ function BackendModal({
           setElectrumPort,
           setElectrumUseSsl,
         });
-        setInfrastructureOwner("self");
+        setInfrastructureOwner(inferredInfrastructureOwnership(preset.url));
       }
       setAuth(preset.protocol === "lnd" ? "apikey" : "none");
       if (backendSource === "preset" && preset.protocol === "electrum") {
@@ -5109,7 +5146,7 @@ function BackendModal({
       setUrl("");
       setName("");
       setAuth("none");
-      setInfrastructureOwner("self");
+      setInfrastructureOwner("third_party");
     }
     setAuthVal("");
     setAuthVal2("");
@@ -5276,7 +5313,7 @@ function BackendModal({
           (showElectrumEndpointParts && electrumUseSsl) || isLnd
             ? trustSsl
             : undefined,
-        infrastructureOwner: type.net !== "LN" ? infrastructureOwner : undefined,
+        infrastructureOwner: effectiveInfrastructureOwner,
         certificate:
           ((showElectrumEndpointParts && electrumUseSsl && !trustSsl) || isLnd) &&
           certificate.trim()
@@ -5513,7 +5550,7 @@ function BackendModal({
               </div>
             ) : null}
 
-            {type.net !== "LN" && backendSource === "preset" ? (
+            {type.net !== "LN" ? (
               <div
                 className={cn(
                   "flex items-start gap-2 rounded-md border p-3 text-xs",

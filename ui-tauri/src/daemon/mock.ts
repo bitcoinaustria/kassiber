@@ -105,7 +105,11 @@ type MockBackendSettingsRow = {
   has_token?: boolean;
   has_username?: boolean;
   has_password?: boolean;
+  has_commando_peer_id?: boolean;
+  has_lightning_dir?: boolean;
+  has_rpc_file?: boolean;
   insecure?: boolean;
+  tor_proxy?: string;
   infrastructure_owner?: string;
 };
 
@@ -197,10 +201,31 @@ function mockBackendRowFromArgs(
       : typeof config.password === "string" && config.password.trim()
         ? true
         : existing?.has_password,
+    has_commando_peer_id: clear.has("commando_peer_id")
+      ? false
+      : typeof config.commando_peer_id === "string" &&
+          config.commando_peer_id.trim()
+        ? true
+        : existing?.has_commando_peer_id,
+    has_lightning_dir: clear.has("lightning_dir")
+      ? false
+      : typeof config.lightning_dir === "string" && config.lightning_dir.trim()
+        ? true
+        : existing?.has_lightning_dir,
+    has_rpc_file: clear.has("rpc_file")
+      ? false
+      : typeof config.rpc_file === "string" && config.rpc_file.trim()
+        ? true
+        : existing?.has_rpc_file,
     insecure:
       typeof config.insecure === "boolean"
         ? config.insecure
         : existing?.insecure,
+    tor_proxy: clear.has("tor_proxy")
+      ? undefined
+      : typeof args.tor_proxy === "string" && args.tor_proxy.trim()
+        ? args.tor_proxy.trim()
+        : existing?.tor_proxy,
     infrastructure_owner:
       typeof config.infrastructure_owner === "string" &&
       config.infrastructure_owner.trim()

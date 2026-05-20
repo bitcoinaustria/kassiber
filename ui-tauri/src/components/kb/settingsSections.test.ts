@@ -7,27 +7,35 @@ describe("settings section hash mapping", () => {
   // the in-app section rail all funnel through this helper. Pinning the
   // canonical sections + the alias map makes accidental rename or removal of a
   // section id a test failure rather than a runtime "panel never re-opens" bug.
-  it("maps each Rust deep-link slug to a section", () => {
-    expect(settingsSectionForHash("privacy")).toBe("security-privacy");
-    expect(settingsSectionForHash("developer")).toBe("desktop-developer");
-    expect(settingsSectionForHash("logs")).toBe("desktop-developer");
-    expect(settingsSectionForHash("display")).toBe("general-appearance");
-    expect(settingsSectionForHash("security")).toBe("security-lock");
-    expect(settingsSectionForHash("backends")).toBe("network-bitcoin");
-    expect(settingsSectionForHash("sync")).toBe("network-bitcoin");
-    expect(settingsSectionForHash("rates")).toBe("network-market");
-    expect(settingsSectionForHash("ai")).toBe("assistant-ai");
-    expect(settingsSectionForHash("data")).toBe("data-storage");
-  });
+  it("maps every Rust deep-link slug to a section", () => {
+    const expected = {
+      appearance: "general-appearance",
+      privacy: "security-privacy",
+      developer: "desktop-developer",
+      logs: "desktop-developer",
+      display: "general-appearance",
+      explorer: "network-bitcoin",
+      explorers: "network-bitcoin",
+      bitcoin: "network-bitcoin",
+      lightning: "network-lightning",
+      liquid: "network-liquid",
+      market: "network-market",
+      desktop: "desktop-terminal",
+      terminal: "desktop-terminal",
+      security: "security-lock",
+      lock: "security-lock",
+      backends: "network-bitcoin",
+      sync: "network-bitcoin",
+      rates: "network-market",
+      ai: "assistant-ai",
+      assistant: "assistant-ai",
+      data: "data-storage",
+      storage: "data-storage",
+    } as const;
 
-  it("maps the canonical layer-forward slugs", () => {
-    expect(settingsSectionForHash("appearance")).toBe("general-appearance");
-    expect(settingsSectionForHash("explorers")).toBe("network-bitcoin");
-    expect(settingsSectionForHash("bitcoin")).toBe("network-bitcoin");
-    expect(settingsSectionForHash("lightning")).toBe("network-lightning");
-    expect(settingsSectionForHash("liquid")).toBe("network-liquid");
-    expect(settingsSectionForHash("market")).toBe("network-market");
-    expect(settingsSectionForHash("terminal")).toBe("desktop-terminal");
+    for (const [slug, section] of Object.entries(expected)) {
+      expect(settingsSectionForHash(slug)).toBe(section);
+    }
   });
 
   it("treats menu aliases as equivalents", () => {
