@@ -481,7 +481,12 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Split commercial annotations from RP2-facing tax primitives during journal preparation
 - [x] Accountant-facing export of matched BTC subledger rows with document references
 - [ ] Opt-in local AI extraction and tie-breaking only after deterministic matching is solid
-- [ ] Build the richer desktop visual reconciliation workflow on top of the new `ui.btcpay.provenance.*` and `ui.documents.*` daemon-safe surfaces
+- [ ] Build the richer desktop visual reconciliation workflow on top of
+  the new `ui.btcpay.provenance.*` and `ui.documents.*` daemon-safe
+  surfaces. The transaction detail sheet now has a first-pass commercial
+  provenance panel for BTCPay payment -> invoice -> payment-request/app-origin
+  -> document context; the remaining work is the dedicated reconciliation
+  queue/workbench for reviewing and resolving suggestions at scale.
 - [ ] Richer transfer pairing for multi-leg self-transfers, including
   one-outbound/multiple-inbound same-txid moves that should not linger as
   swap-review noise

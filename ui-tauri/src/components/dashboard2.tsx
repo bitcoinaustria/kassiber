@@ -77,6 +77,7 @@ import {
   ExplorerOpenDialog,
   NewTransactionDialog,
   type AttachmentItem,
+  type CommercialContextData,
   type JournalEventItem,
   type SourceFundsLinkItem,
   TransactionDetailSheet,
@@ -2685,6 +2686,11 @@ const TransactionsTable = ({
     { transaction: detailTransaction?.id ?? "", limit: 20 },
     { enabled: Boolean(detailTransaction) },
   );
+  const commercialContextQuery = useDaemon<CommercialContextData>(
+    "ui.transactions.commercial_context",
+    { transaction: detailTransaction?.id ?? "" },
+    { enabled: Boolean(detailTransaction) },
+  );
   const explorerTarget = explorerTransaction
     ? explorerForTransaction(explorerTransaction, explorerSettings)
     : null;
@@ -2783,6 +2789,7 @@ const TransactionsTable = ({
   const sourceFundsLinks =
     sourceFundsLinksQuery.data?.data?.links ?? [];
   const journalEvents = journalEventsQuery.data?.data?.events ?? [];
+  const commercialContext = commercialContextQuery.data?.data;
 
   const hasActiveFilters =
     chartSelection !== null ||
@@ -3801,6 +3808,8 @@ const TransactionsTable = ({
         attachments={detailTransaction ? attachmentItems : undefined}
         sourceFundsLinks={sourceFundsLinks}
         journalEvents={journalEvents}
+        commercialContext={commercialContext}
+        commercialContextLoading={commercialContextQuery.isLoading}
         onAddAttachmentFiles={async (paths) => {
           if (!detailTransaction) return;
           for (const path of paths) {

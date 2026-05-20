@@ -1267,6 +1267,122 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.transactions.commercial_context") {
+      const args = (req.args ?? {}) as { transaction?: unknown };
+      const transactionId = typeof args.transaction === "string" ? args.transaction : "";
+      return {
+        kind: "ui.transactions.commercial_context",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          transaction_id: transactionId,
+          transaction_external_id: transactionId === "tx1" ? "mock-btcpay-txid" : "",
+          links:
+            transactionId === "tx1"
+              ? [
+                  {
+                    id: "commercial-link-1",
+                    invoice_id: "inv-demo-1",
+                    payment_id: "pay-demo-1",
+                    document_id: "doc-demo-1",
+                    document_label: "Invoice demo-1",
+                    link_type: "btcpay_payment_transaction",
+                    state: "reviewed",
+                    confidence: "exact",
+                    reconciliation_state: "matched",
+                    commercial_kind: "income",
+                    reviewed_at: "2026-04-18T14:24:00Z",
+                  },
+                ]
+              : [],
+          btcpay:
+            transactionId === "tx1"
+              ? [
+                  {
+                    link: {
+                      id: "commercial-link-1",
+                      invoice_id: "inv-demo-1",
+                      payment_id: "pay-demo-1",
+                      document_id: "doc-demo-1",
+                      document_label: "Invoice demo-1",
+                      link_type: "btcpay_payment_transaction",
+                      state: "reviewed",
+                      confidence: "exact",
+                      reconciliation_state: "matched",
+                      commercial_kind: "income",
+                      reviewed_at: "2026-04-18T14:24:00Z",
+                    },
+                    payment: {
+                      id: "btcpay-payment-1",
+                      record_type: "payment",
+                      invoice_id: "inv-demo-1",
+                      payment_id: "pay-demo-1",
+                      order_id: "order-demo-1",
+                      status: "Settled",
+                      occurred_at: "2026-04-18T14:22:00Z",
+                      asset: "BTC",
+                      amount_msat: 125000000,
+                      amount: 0.00125,
+                      payment_request_id: "pr-demo-1",
+                      origin_kind: "pos",
+                      origin_app_id: "",
+                      origin_label: "Demo checkout",
+                      fiat_currency: "EUR",
+                      fiat_value_exact: "75.00",
+                      fiat_rate_exact: "60000.00",
+                      pricing_timestamp: "2026-04-18T14:22:00Z",
+                      updated_at: "2026-04-18T14:24:00Z",
+                    },
+                    invoice: {
+                      id: "btcpay-invoice-1",
+                      record_type: "invoice",
+                      invoice_id: "inv-demo-1",
+                      payment_id: "",
+                      order_id: "order-demo-1",
+                      status: "Settled",
+                      occurred_at: "2026-04-18T14:20:00Z",
+                      asset: "",
+                      amount_msat: null,
+                      amount: null,
+                      payment_request_id: "pr-demo-1",
+                      origin_kind: "pos",
+                      origin_app_id: "",
+                      origin_label: "Demo checkout",
+                      fiat_currency: "EUR",
+                      fiat_value_exact: "75.00",
+                      fiat_rate_exact: "",
+                      pricing_timestamp: "2026-04-18T14:20:00Z",
+                      updated_at: "2026-04-18T14:24:00Z",
+                    },
+                    payment_request: {
+                      id: "pr-demo-1",
+                      label: "Demo checkout",
+                      status: "Settled",
+                    },
+                    origin: {
+                      kind: "pos",
+                      app_id: "",
+                      label: "Demo checkout",
+                    },
+                  },
+                ]
+              : [],
+          documents:
+            transactionId === "tx1"
+              ? [
+                  {
+                    id: "doc-demo-1",
+                    document_type: "invoice",
+                    label: "Invoice demo-1",
+                    external_ref: "inv-demo-1",
+                    review_state: "reviewed",
+                  },
+                ]
+              : [],
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.attachments.list") {
       const args = (req.args ?? {}) as { transaction?: unknown };
       const tx = typeof args.transaction === "string" ? args.transaction : "";

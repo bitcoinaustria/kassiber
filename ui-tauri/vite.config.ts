@@ -143,6 +143,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.btcpay.provenance.suggest",
   "ui.btcpay.provenance.links",
   "ui.btcpay.provenance.review",
+  "ui.transactions.commercial_context",
   "ui.documents.list",
   "ui.documents.create",
   "ui.documents.attach",

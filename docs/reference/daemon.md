@@ -264,6 +264,15 @@ store reference resolve. It returns
 propagates the same structured error codes (`auth_error`, `not_found`,
 `network_error`) the sync path uses. Nothing is persisted.
 
+`ui.transactions.commercial_context` reads the reviewed or suggested
+commercial provenance for one transaction. It joins wallet transactions to
+BTCPay payments, their parent invoices, payment-request ids when present,
+normalized origin hints such as POS/app/external-order, and linked external
+documents. The payload is a redacted UI read model; it does not expose raw
+BTCPay invoice JSON, rejected matches, payment hashes, destination addresses,
+full origin URLs, payment-method configuration, descriptors, xpubs, or API
+tokens.
+
 `ui.metadata.bip329.import` accepts `file` and optional `wallet`, then imports
 BIP329 JSONL labels into the active profile and bridges transaction labels to
 matching local transactions.

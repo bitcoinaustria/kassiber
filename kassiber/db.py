@@ -452,6 +452,11 @@ CREATE TABLE IF NOT EXISTS btcpay_provenance_records (
     txid TEXT,
     payment_hash TEXT,
     destination TEXT,
+    payment_request_id TEXT,
+    origin_kind TEXT,
+    origin_app_id TEXT,
+    origin_label TEXT,
+    origin_url TEXT,
     fiat_currency TEXT,
     fiat_value_exact TEXT,
     fiat_rate_exact TEXT,
@@ -1044,6 +1049,11 @@ def _ensure_commercial_reconciliation_schema(conn):
             txid TEXT,
             payment_hash TEXT,
             destination TEXT,
+            payment_request_id TEXT,
+            origin_kind TEXT,
+            origin_app_id TEXT,
+            origin_label TEXT,
+            origin_url TEXT,
             fiat_currency TEXT,
             fiat_value_exact TEXT,
             fiat_rate_exact TEXT,
@@ -1062,6 +1072,16 @@ def _ensure_commercial_reconciliation_schema(conn):
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_btcpay_provenance_profile_txid "
         "ON btcpay_provenance_records(profile_id, txid) WHERE txid IS NOT NULL"
+    )
+    ensure_column(conn, "btcpay_provenance_records", "payment_request_id", "TEXT")
+    ensure_column(conn, "btcpay_provenance_records", "origin_kind", "TEXT")
+    ensure_column(conn, "btcpay_provenance_records", "origin_app_id", "TEXT")
+    ensure_column(conn, "btcpay_provenance_records", "origin_label", "TEXT")
+    ensure_column(conn, "btcpay_provenance_records", "origin_url", "TEXT")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_btcpay_provenance_profile_payment_request "
+        "ON btcpay_provenance_records(profile_id, payment_request_id) "
+        "WHERE payment_request_id IS NOT NULL"
     )
     conn.execute(
         """

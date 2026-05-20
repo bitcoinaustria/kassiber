@@ -112,8 +112,18 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
         self.conn.close()
         self.tmp.cleanup()
 
-    def _upsert_invoice_payment(self, *, raw_payment=None, asset="BTC"):
+    def _upsert_invoice_payment(self, *, raw_payment=None, raw_invoice=None, asset="BTC"):
         workspace, profile = _hooks().resolve_scope(self.conn)
+        invoice = {
+            "id": "inv-1",
+            "metadata": {
+                "paymentRequestId": "pr-1",
+                "orderUrl": "https://btcpay.example/apps/pos",
+                "posData": {"title": "Coffee beans"},
+            },
+        }
+        if raw_invoice:
+            invoice.update(raw_invoice)
         commercial.upsert_btcpay_provenance(
             self.conn,
             workspace,
@@ -128,7 +138,11 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
                     "created_at": "2026-01-01T11:59:00Z",
                     "currency": "EUR",
                     "amount": "500.00",
-                    "invoice": {"id": "inv-1"},
+                    "payment_request_id": "pr-1",
+                    "origin_kind": "pos",
+                    "origin_label": "Coffee beans",
+                    "origin_url": "https://btcpay.example/apps/pos",
+                    "invoice": invoice,
                     "payments": [
                         {
                             "payment_id": "pay-1",
@@ -182,6 +196,11 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
                         "createdTime": 1760000000,
                         "currency": "EUR",
                         "amount": "500.00",
+                        "metadata": {
+                            "paymentRequestId": "pr-1",
+                            "orderUrl": "https://btcpay.example/apps/pos",
+                            "posData": {"title": "Coffee beans"},
+                        },
                         "payments": [
                             {
                                 "id": "pay-1",
@@ -207,8 +226,76 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
 
         self.assertEqual(len(invoices), 1)
         self.assertEqual(invoices[0]["invoice_id"], "inv-1")
+        self.assertEqual(invoices[0]["payment_request_id"], "pr-1")
+        self.assertEqual(invoices[0]["origin_kind"], "pos")
+        self.assertEqual(invoices[0]["origin_label"], "Coffee beans")
+        self.assertEqual(invoices[0]["origin_url"], "https://btcpay.example/apps/pos")
         self.assertEqual(invoices[0]["payments"][0]["txid"], "a" * 64)
         self.assertIn("/api/v1/stores/store-1/invoices?", opener.urls[0])
+
+    def test_transaction_commercial_context_includes_btcpay_origin_chain(self):
+        self._upsert_invoice_payment()
+        document = self._create_matching_document()
+        link_id = self._suggested_transaction_link_id()
+        reviewed = commercial.review_link(
+            self.conn,
+            None,
+            None,
+            link_id,
+            _hooks(),
+            state="reviewed",
+            commercial_kind="income",
+        )
+        self.assertEqual(reviewed["state"], "reviewed")
+
+        context = commercial.get_transaction_commercial_context(
+            self.conn,
+            None,
+            None,
+            "tx",
+            _hooks(),
+        )
+
+        self.assertEqual(context["transaction_id"], "tx")
+        self.assertEqual(len(context["btcpay"]), 1)
+        match = context["btcpay"][0]
+        self.assertEqual(match["payment"]["invoice_id"], "inv-1")
+        self.assertNotIn("payment_hash", match["payment"])
+        self.assertNotIn("destination", match["payment"])
+        self.assertNotIn("txid", match["payment"])
+        self.assertNotIn("origin_url", match["payment"])
+        self.assertEqual(match["invoice"]["payment_request_id"], "pr-1")
+        self.assertEqual(match["payment_request"]["id"], "pr-1")
+        self.assertEqual(match["origin"]["kind"], "pos")
+        self.assertEqual(match["origin"]["label"], "Coffee beans")
+        self.assertNotIn("url", match["origin"])
+        self.assertEqual(context["documents"][0]["id"], document["id"])
+        self.assertEqual(context["documents"][0]["external_ref"], "inv-1")
+
+    def test_transaction_commercial_context_omits_rejected_links(self):
+        self._upsert_invoice_payment()
+        link_id = self._suggested_transaction_link_id()
+
+        commercial.review_link(
+            self.conn,
+            None,
+            None,
+            link_id,
+            _hooks(),
+            state="rejected",
+        )
+
+        context = commercial.get_transaction_commercial_context(
+            self.conn,
+            None,
+            None,
+            "tx",
+            _hooks(),
+        )
+
+        self.assertEqual(context["links"], [])
+        self.assertEqual(context["btcpay"], [])
+        self.assertEqual(context["documents"], [])
 
     def test_reviewed_link_applies_btcpay_price_and_commercial_kind(self):
         workspace, profile = _hooks().resolve_scope(self.conn)

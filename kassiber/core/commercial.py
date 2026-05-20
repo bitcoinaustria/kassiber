@@ -156,6 +156,11 @@ def upsert_btcpay_provenance(
             txid=None,
             payment_hash=None,
             destination=None,
+            payment_request_id=invoice.get("payment_request_id"),
+            origin_kind=invoice.get("origin_kind"),
+            origin_app_id=invoice.get("origin_app_id"),
+            origin_label=invoice.get("origin_label"),
+            origin_url=invoice.get("origin_url") or invoice.get("order_url"),
             fiat_currency=invoice.get("currency"),
             fiat_value_exact=_exact(invoice.get("amount")),
             fiat_rate_exact=None,
@@ -194,6 +199,11 @@ def upsert_btcpay_provenance(
                 txid=payment.get("txid"),
                 payment_hash=payment.get("payment_hash"),
                 destination=payment.get("destination"),
+                payment_request_id=invoice.get("payment_request_id"),
+                origin_kind=invoice.get("origin_kind"),
+                origin_app_id=invoice.get("origin_app_id"),
+                origin_label=invoice.get("origin_label"),
+                origin_url=invoice.get("origin_url") or invoice.get("order_url"),
                 fiat_currency=payment.get("invoice_currency") or invoice.get("currency"),
                 fiat_value_exact=_exact(fiat_value),
                 fiat_rate_exact=_exact(rate),
@@ -231,6 +241,11 @@ def _upsert_record(
     txid,
     payment_hash,
     destination,
+    payment_request_id,
+    origin_kind,
+    origin_app_id,
+    origin_label,
+    origin_url,
     fiat_currency,
     fiat_value_exact,
     fiat_rate_exact,
@@ -250,7 +265,9 @@ def _upsert_record(
             SET backend_name = ?, store_id = ?, payment_method_id = ?, record_type = ?,
                 invoice_id = ?, payment_id = ?, order_id = ?, status = ?, occurred_at = ?,
                 asset = ?, amount = ?, txid = ?, payment_hash = ?, destination = ?,
-                fiat_currency = ?, fiat_value_exact = ?, fiat_rate_exact = ?,
+                payment_request_id = ?, origin_kind = ?, origin_app_id = ?,
+                origin_label = ?, origin_url = ?, fiat_currency = ?,
+                fiat_value_exact = ?, fiat_rate_exact = ?,
                 pricing_timestamp = ?, raw_json = ?, updated_at = ?
             WHERE id = ?
             """,
@@ -269,6 +286,11 @@ def _upsert_record(
                 txid,
                 payment_hash,
                 destination,
+                payment_request_id,
+                origin_kind,
+                origin_app_id,
+                origin_label,
+                origin_url,
                 fiat_currency,
                 fiat_value_exact,
                 fiat_rate_exact,
@@ -286,9 +308,10 @@ def _upsert_record(
             id, workspace_id, profile_id, backend_name, store_id, payment_method_id,
             record_type, stable_key, invoice_id, payment_id, order_id, status,
             occurred_at, asset, amount, txid, payment_hash, destination,
+            payment_request_id, origin_kind, origin_app_id, origin_label, origin_url,
             fiat_currency, fiat_value_exact, fiat_rate_exact, pricing_timestamp,
             raw_json, created_at, updated_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             row_id,
@@ -309,6 +332,11 @@ def _upsert_record(
             txid,
             payment_hash,
             destination,
+            payment_request_id,
+            origin_kind,
+            origin_app_id,
+            origin_label,
+            origin_url,
             fiat_currency,
             fiat_value_exact,
             fiat_rate_exact,
@@ -857,6 +885,98 @@ def list_links(conn, workspace_ref, profile_ref, hooks: CommercialHooks, *, stat
     return [_link_payload(row) for row in rows]
 
 
+def get_transaction_commercial_context(
+    conn,
+    workspace_ref,
+    profile_ref,
+    transaction_ref,
+    hooks: CommercialHooks,
+):
+    _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    tx = hooks.resolve_transaction(conn, profile["id"], transaction_ref)
+    rows = conn.execute(
+        """
+        SELECT cl.*, p.invoice_id, p.payment_id,
+               d.label AS document_label,
+               p.id AS payment_record_id, p.record_type AS payment_record_type,
+               p.invoice_id AS payment_invoice_id,
+               p.payment_id AS payment_payment_id, p.order_id AS payment_order_id,
+               p.status AS payment_status, p.occurred_at AS payment_occurred_at,
+               p.asset AS payment_asset, p.amount AS payment_amount,
+               p.payment_request_id AS payment_payment_request_id,
+               p.origin_kind AS payment_origin_kind,
+               p.origin_app_id AS payment_origin_app_id,
+               p.origin_label AS payment_origin_label,
+               p.fiat_currency AS payment_fiat_currency,
+               p.fiat_value_exact AS payment_fiat_value_exact,
+               p.fiat_rate_exact AS payment_fiat_rate_exact,
+               p.pricing_timestamp AS payment_pricing_timestamp,
+               p.updated_at AS payment_updated_at,
+               inv.id AS invoice_record_id, inv.record_type AS invoice_record_type,
+               inv.invoice_id AS invoice_invoice_id,
+               inv.payment_id AS invoice_payment_id,
+               inv.order_id AS invoice_order_id,
+               inv.status AS invoice_status,
+               inv.occurred_at AS invoice_occurred_at,
+               inv.asset AS invoice_asset,
+               inv.amount AS invoice_amount,
+               inv.payment_request_id AS invoice_payment_request_id,
+               inv.origin_kind AS invoice_origin_kind,
+               inv.origin_app_id AS invoice_origin_app_id,
+               inv.origin_label AS invoice_origin_label,
+               inv.fiat_currency AS invoice_fiat_currency,
+               inv.fiat_value_exact AS invoice_fiat_value_exact,
+               inv.fiat_rate_exact AS invoice_fiat_rate_exact,
+               inv.pricing_timestamp AS invoice_pricing_timestamp,
+               inv.updated_at AS invoice_updated_at,
+               d.id AS ctx_document_id,
+               d.document_type AS ctx_document_type,
+               d.label AS ctx_document_label,
+               d.external_ref AS ctx_document_external_ref,
+               d.review_state AS ctx_document_review_state
+        FROM commercial_links cl
+        LEFT JOIN btcpay_provenance_records p ON p.id = cl.btcpay_record_id
+        LEFT JOIN btcpay_provenance_records inv
+          ON inv.profile_id = cl.profile_id
+         AND inv.store_id = p.store_id
+         AND inv.invoice_id = p.invoice_id
+         AND inv.record_type = 'invoice'
+        LEFT JOIN external_documents d ON d.id = cl.document_id
+        WHERE cl.profile_id = ? AND cl.transaction_id = ?
+          AND cl.state IN ('suggested', 'reviewed')
+        ORDER BY cl.reviewed_at DESC, cl.created_at DESC, cl.id DESC
+        """,
+        (profile["id"], tx["id"]),
+    ).fetchall()
+    documents: dict[str, dict[str, Any]] = {}
+    btcpay_matches = []
+    links = []
+    for row in rows:
+        link = _link_context_payload(row)
+        links.append(link)
+        if row["ctx_document_id"]:
+            documents[row["ctx_document_id"]] = _document_context_payload(row)
+        payment = _btcpay_record_context_payload(row, "payment")
+        invoice = _btcpay_record_context_payload(row, "invoice")
+        if payment or invoice:
+            btcpay_matches.append(
+                {
+                    "link": link,
+                    "payment": payment,
+                    "invoice": invoice,
+                    "payment_request": _payment_request_context(payment, invoice),
+                    "origin": _origin_context(payment, invoice),
+                }
+            )
+    return {
+        "transaction_id": tx["id"],
+        "transaction_external_id": tx["external_id"] or "",
+        "links": links,
+        "btcpay": btcpay_matches,
+        "documents": list(documents.values()),
+    }
+
+
 def get_link(conn, profile_id, link_ref):
     row = conn.execute(
         """
@@ -1216,11 +1336,95 @@ def _record_payload(row):
         "amount": float(msat_to_btc(row["amount"])) if row["amount"] is not None else None,
         "txid": row["txid"] or "",
         "payment_hash": row["payment_hash"] or "",
+        "payment_request_id": row["payment_request_id"] or "",
+        "origin_kind": row["origin_kind"] or "",
+        "origin_app_id": row["origin_app_id"] or "",
+        "origin_label": row["origin_label"] or "",
+        "origin_url": row["origin_url"] or "",
         "fiat_currency": row["fiat_currency"] or "",
         "fiat_value_exact": row["fiat_value_exact"] or "",
         "fiat_rate_exact": row["fiat_rate_exact"] or "",
         "pricing_timestamp": row["pricing_timestamp"] or "",
         "updated_at": row["updated_at"],
+    }
+
+
+def _document_context_payload(row):
+    return {
+        "id": row["ctx_document_id"],
+        "document_type": row["ctx_document_type"],
+        "label": row["ctx_document_label"],
+        "external_ref": row["ctx_document_external_ref"] or "",
+        "review_state": row["ctx_document_review_state"],
+    }
+
+
+def _btcpay_record_context_payload(row, prefix):
+    record_id = row[f"{prefix}_record_id"]
+    if not record_id:
+        return None
+    amount_msat = row[f"{prefix}_amount"]
+    return {
+        "id": record_id,
+        "record_type": row[f"{prefix}_record_type"],
+        "invoice_id": row[f"{prefix}_invoice_id"] or "",
+        "payment_id": row[f"{prefix}_payment_id"] or "",
+        "order_id": row[f"{prefix}_order_id"] or "",
+        "status": row[f"{prefix}_status"] or "",
+        "occurred_at": row[f"{prefix}_occurred_at"] or "",
+        "asset": row[f"{prefix}_asset"] or "",
+        "amount_msat": amount_msat,
+        "amount": float(msat_to_btc(amount_msat)) if amount_msat is not None else None,
+        "payment_request_id": row[f"{prefix}_payment_request_id"] or "",
+        "origin_kind": row[f"{prefix}_origin_kind"] or "",
+        "origin_app_id": row[f"{prefix}_origin_app_id"] or "",
+        "origin_label": row[f"{prefix}_origin_label"] or "",
+        "fiat_currency": row[f"{prefix}_fiat_currency"] or "",
+        "fiat_value_exact": row[f"{prefix}_fiat_value_exact"] or "",
+        "fiat_rate_exact": row[f"{prefix}_fiat_rate_exact"] or "",
+        "pricing_timestamp": row[f"{prefix}_pricing_timestamp"] or "",
+        "updated_at": row[f"{prefix}_updated_at"],
+    }
+
+
+def _payment_request_context(payment, invoice):
+    source = invoice or payment
+    if not source or not source.get("payment_request_id"):
+        return None
+    return {
+        "id": source["payment_request_id"],
+        "label": source.get("origin_label") or source["payment_request_id"],
+        "status": source.get("status") or "",
+    }
+
+
+def _origin_context(payment, invoice):
+    source = invoice or payment
+    if not source:
+        return None
+    kind = source.get("origin_kind") or ""
+    if not kind or kind == "unknown":
+        return None
+    return {
+        "kind": kind,
+        "app_id": source.get("origin_app_id") or "",
+        "label": source.get("origin_label") or "",
+    }
+
+
+def _link_context_payload(row):
+    return {
+        "id": row["id"],
+        "invoice_id": row["invoice_id"] or "",
+        "payment_id": row["payment_id"] or "",
+        "document_id": row["document_id"] or "",
+        "document_label": row["document_label"] or "",
+        "link_type": row["link_type"],
+        "state": row["state"],
+        "confidence": row["confidence"],
+        "reconciliation_state": row["reconciliation_state"],
+        "commercial_kind": row["commercial_kind"] or "",
+        "reviewed_at": row["reviewed_at"] or "",
     }
 
 
@@ -1310,6 +1514,7 @@ __all__ = [
     "build_reviewed_subledger_rows",
     "create_document",
     "export_reviewed_subledger_csv",
+    "get_transaction_commercial_context",
     "list_btcpay_records",
     "list_documents",
     "list_links",
