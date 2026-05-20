@@ -10,10 +10,10 @@ import {
   Archive,
   Bitcoin,
   Bot,
+  Check,
   CheckCircle2,
-  ChevronDown,
+  Copy,
   Database,
-  Download,
   Droplets,
   ExternalLink,
   Eye,
@@ -65,16 +65,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
 import coreLightningIcon from "@/assets/integrations/core-lightning.svg";
@@ -101,10 +92,16 @@ import {
   openExternalUrl,
 } from "@/daemon/transport";
 import { normalizeExplorerBaseUrl, type ExplorerSettings } from "@/lib/explorer";
+import {
+  backendTrustFromEndpoint,
+  inferredInfrastructureOwnership,
+  type InfrastructureOwnership,
+} from "@/lib/backendTrust";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 import { setSessionUnlockPassphrase } from "@/store/sessionLock";
 import {
   useUiStore,
+  DEFAULT_APP_SCALE,
   MAX_APP_SCALE,
   MIN_APP_SCALE,
   type AppLockPolicy,
@@ -139,7 +136,6 @@ const KRAKEN_MARKET_DATA_BLOG_URL =
   "https://blog.kraken.com/product/api/unlocked-3-the-market-data-feeds-systematic-traders-use";
 
 type Net = "BTC" | "LIQUID" | "LN" | "FX";
-type InfrastructureOwnership = "self" | "third_party";
 
 interface Backend {
   id: string;
@@ -476,11 +472,6 @@ function normalizeInfrastructureOwnership(
   return undefined;
 }
 
-function inferredInfrastructureOwnership(url: string): InfrastructureOwnership {
-  const trust = backendTrustFromEndpoint(url);
-  return trust.posture === "on-device" ? "self" : "third_party";
-}
-
 function backendRowToSettingsBackend(row: BackendSettingsRow): Backend {
   const net = backendNetFromRow(row);
   const name = row.name || "backend";
@@ -653,83 +644,9 @@ function backendsForLayer(backends: Backend[], layer: NetworkLayer): Backend[] {
   );
 }
 
-type TrustPosture = "on-device" | "shielded" | "remote";
-
-interface TrustInfo {
-  posture: TrustPosture;
-  label: string;
-  note: string;
-  icon: LucideIcon;
-  className: string;
-}
-
-function backendTrustFromEndpoint(
-  url: string,
-  hasProxy = false,
-  ownership?: InfrastructureOwnership,
-): TrustInfo {
-  const normalizedUrl = url.toLowerCase();
-  if (ownership === "self") {
-    return {
-      posture: "on-device",
-      label: "Your infrastructure",
-      note: "Marked as infrastructure you operate. Address queries still go to this endpoint, so keep its hosting and logs in your trust boundary.",
-      icon: ShieldCheck,
-      className:
-        "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-    };
-  }
-  const isOnion = normalizedUrl.includes(".onion");
-  const isLocal =
-    /(?:\/\/|@)(?:127\.0\.0\.1|0\.0\.0\.0|localhost|\[::1\])(?::\d+)?(?:\/|$)/.test(
-      normalizedUrl,
-    ) ||
-    normalizedUrl.includes("://localhost") ||
-    normalizedUrl.includes(".local:") ||
-    normalizedUrl.endsWith(".local");
-  if (isLocal) {
-    return {
-      posture: "on-device",
-      label: "On device",
-      note: "Runs on this machine — address queries never leave your device.",
-      icon: ShieldCheck,
-      className:
-        "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-    };
-  }
-  if (isOnion || hasProxy) {
-    return {
-      posture: "shielded",
-      label:
-        ownership === "third_party"
-          ? isOnion
-            ? "Third-party via Tor"
-            : "Third-party via proxy"
-          : isOnion
-            ? "Tor"
-            : "Via proxy",
-      note: isOnion
-        ? "Reached over Tor — this server cannot tie your queries to your IP address."
-        : "Routed through a proxy — your IP address stays hidden from this server.",
-      icon: Network,
-      className: "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300",
-    };
-  }
-  return {
-    posture: "remote",
-    label: "Third-party server",
-    note: "This provider can observe the addresses you look up. Use your own infrastructure or a proxy if that is not acceptable.",
-    icon: ShieldOff,
-    className:
-      "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  };
-}
-
-// Heuristic trust read used to communicate the privacy posture of a backend.
-// It is intentionally conservative: anything that is not clearly on-device or
-// Tor/proxy-shielded is treated as a third party that can observe queried
-// addresses. No hardcoded service allowlists — the URL shape tells the story.
-function backendTrust(backend: Backend): TrustInfo {
+// Resolve the privacy posture for a configured backend. The pure logic lives
+// in `@/lib/backendTrust` so it can be unit-tested without this component.
+function backendTrust(backend: Backend) {
   return backendTrustFromEndpoint(
     backend.url || "",
     Boolean(backend.proxy?.host),
@@ -770,14 +687,20 @@ function backendExplorerBaseUrl(backend: Backend): string | null {
   }
 }
 
-function explorerSettingsPatchForBackend(
-  backend: Backend,
-): Partial<ExplorerSettings> | null {
-  const baseUrl = backendExplorerBaseUrl(backend);
-  if (!baseUrl) return null;
-  if (backend.net === "BTC") return { bitcoinBaseUrl: baseUrl };
-  if (backend.net === "LIQUID") return { liquidBaseUrl: baseUrl };
-  return null;
+// Transaction-explorer links are derived from the configured Explorer-API
+// backends rather than stored separately, so this stays the single source of
+// truth: recompute it from the full backend list after any add/edit/delete.
+// An empty base falls back to the public default (see `@/lib/explorer`).
+function deriveExplorerSettings(backends: Backend[]): ExplorerSettings {
+  const baseForNet = (net: Net) =>
+    backends
+      .filter((backend) => backend.net === net)
+      .map(backendExplorerBaseUrl)
+      .find((value): value is string => Boolean(value)) ?? "";
+  return {
+    bitcoinBaseUrl: baseForNet("BTC"),
+    liquidBaseUrl: baseForNet("LIQUID"),
+  };
 }
 
 function explorerHostLabel(baseUrl: string): string {
@@ -1331,11 +1254,11 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         });
       }
     }
-    const explorerPatch = explorerSettingsPatchForBackend(backend);
-    if (explorerPatch) {
-      setExplorerSettings(explorerPatch);
-    }
-    await backendSettingsQuery.refetch();
+    const refreshed = await backendSettingsQuery.refetch();
+    const refreshedBackends = (refreshed.data?.data?.backends ?? []).map(
+      backendRowToSettingsBackend,
+    );
+    setExplorerSettings(deriveExplorerSettings(refreshedBackends));
     setBackendDialogOpen(false);
     setEditingBackendId(null);
   };
@@ -1346,6 +1269,21 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     );
     if (!ok) return;
     await deleteBackend.mutateAsync({ name: backend.id });
+    const refreshed = await backendSettingsQuery.refetch();
+    const refreshedBackends = (refreshed.data?.data?.backends ?? []).map(
+      backendRowToSettingsBackend,
+    );
+    setExplorerSettings(deriveExplorerSettings(refreshedBackends));
+  };
+
+  const onSetBackendOwnership = async (
+    backend: Backend,
+    ownership: InfrastructureOwnership,
+  ) => {
+    await updateBackend.mutateAsync({
+      ...backendPayload({ ...backend, infrastructureOwner: ownership }),
+      name: backend.id,
+    });
     await backendSettingsQuery.refetch();
   };
 
@@ -1670,6 +1608,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             onAdd={() => openAddBackend("bitcoin")}
             onEdit={openEditBackend}
             onDelete={onDeleteBackend}
+            onSetOwnership={onSetBackendOwnership}
           />
         );
       case "network-lightning":
@@ -1680,6 +1619,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             onAdd={() => openAddBackend("lnd")}
             onEdit={openEditBackend}
             onDelete={onDeleteBackend}
+            onSetOwnership={onSetBackendOwnership}
           />
         );
       case "network-liquid":
@@ -1690,6 +1630,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             onAdd={() => openAddBackend("liquid")}
             onEdit={openEditBackend}
             onDelete={onDeleteBackend}
+            onSetOwnership={onSetBackendOwnership}
           />
         );
       case "network-market":
@@ -1703,7 +1644,8 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             setClearClipboard={setClearClipboard}
             backends={backends}
             aiFeaturesEnabled={aiFeaturesEnabled}
-            onManageConnections={() => goToSection("network-bitcoin")}
+            onEditBackend={openEditBackend}
+            onSetBackendOwnership={onSetBackendOwnership}
             onManageAi={() => goToSection("assistant-ai")}
           />
         );
@@ -1735,6 +1677,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         return (
           <DataAndStoragePanel
             status={status ?? null}
+            onOpenImports={() => void navigate({ to: "/imports" })}
             onResetWelcome={onResetWorkspace}
             onResetBook={openResetBookData}
             resetBookDisabled={resetBookData.isPending || !resetBookAvailable}
@@ -1758,6 +1701,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
           <DeveloperToolsSettingsPanel
             enabled={developerToolsEnabled}
             setEnabled={setDeveloperToolsEnabled}
+            onOpenLogs={() => void navigate({ to: "/logs" })}
           />
         );
       default:
@@ -2182,6 +2126,53 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   );
 }
 
+function PlannedBadge({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-md border border-dashed border-border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground",
+        className,
+      )}
+    >
+      Planned
+    </span>
+  );
+}
+
+function CopyButton({
+  value,
+  label,
+}: {
+  value: string;
+  label: string;
+}) {
+  const [copied, setCopied] = React.useState(false);
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard?.writeText(value);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard can be unavailable (e.g. browser permissions); ignore.
+    }
+  };
+  return (
+    <Button
+      type="button"
+      size="icon-sm"
+      variant="ghost"
+      aria-label={label}
+      onClick={() => void onCopy()}
+    >
+      {copied ? (
+        <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+      ) : (
+        <Copy className="size-3.5" aria-hidden="true" />
+      )}
+    </Button>
+  );
+}
+
 interface SettingsSwitchRowProps {
   label: string;
   description: string;
@@ -2324,10 +2315,37 @@ function AppearanceSettingsPanel({
           >
             <Plus className="size-4" aria-hidden="true" />
           </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={resetAppScale}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={resetAppScale}
+            disabled={appScale === DEFAULT_APP_SCALE}
+          >
             Reset
           </Button>
         </div>
+      </section>
+
+      <section className="space-y-2">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold">Language</h3>
+          <PlannedBadge />
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Kassiber is English-only today. German (Deutsch) translations are in
+          progress.
+        </p>
+        <Tabs value="en">
+          <TabsList>
+            <TabsTrigger value="en" disabled>
+              English
+            </TabsTrigger>
+            <TabsTrigger value="de" disabled>
+              Deutsch
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       </section>
     </div>
   );
@@ -2336,9 +2354,11 @@ function AppearanceSettingsPanel({
 function DeveloperToolsSettingsPanel({
   enabled,
   setEnabled,
+  onOpenLogs,
 }: {
   enabled: boolean;
   setEnabled: (enabled: boolean) => void;
+  onOpenLogs: () => void;
 }) {
   const bytes = useAppLogBufferSize();
   return (
@@ -2357,6 +2377,18 @@ function DeveloperToolsSettingsPanel({
         checked={enabled}
         onCheckedChange={setEnabled}
       />
+      {enabled ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-fit"
+          onClick={onOpenLogs}
+        >
+          <ExternalLink className="size-4" aria-hidden="true" />
+          Open Logs
+        </Button>
+      ) : null}
       <div className="rounded-md border bg-background p-3 text-sm">
         <p className="font-medium">In-memory log buffer</p>
         <p className="text-muted-foreground">
@@ -2466,37 +2498,29 @@ function TerminalCommandSettingsPanel({
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="settings-terminal-command">Command</Label>
-              <Input
-                id="settings-terminal-command"
-                readOnly
-                value={status.commandPath || "loading..."}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="settings-terminal-target">Desktop executable</Label>
-              <Input
-                id="settings-terminal-target"
-                readOnly
-                value={status.targetPath || "loading..."}
-              />
-            </div>
+            <PathField
+              id="settings-terminal-command"
+              label="Command"
+              value={status.commandPath || null}
+            />
+            <PathField
+              id="settings-terminal-target"
+              label="Desktop executable"
+              value={status.targetPath || null}
+            />
           </div>
 
-          <div className="rounded-md border bg-background p-3 text-sm">
-            <p className="font-mono">kassiber status</p>
+          <div className="space-y-1.5">
+            <Label>Verify it works</Label>
+            <CommandLine command="kassiber status" />
           </div>
 
           {!status.pathOnPath ? (
-            <div className="space-y-1.5">
-              <Label htmlFor="settings-terminal-path">PATH update</Label>
-              <Input
-                id="settings-terminal-path"
-                readOnly
-                value={status.pathHint}
-              />
-            </div>
+            <PathField
+              id="settings-terminal-path"
+              label="PATH update"
+              value={status.pathHint || null}
+            />
           ) : null}
         </div>
       ) : (
@@ -2535,43 +2559,122 @@ function SecuritySettingsPanel({
   onLockNow: () => void;
   onChangePassphrase: () => void;
 }) {
+  const biometricActionable = encryptedWorkspace && touchIdPlatformSupported;
+  const biometricStatus = touchIdStatusPending
+    ? "Checking enrollment…"
+    : touchIdConfigured
+      ? "Enrolled"
+      : "Not enrolled";
+  const biometricDetail = encryptedWorkspace
+    ? touchIdPlatformSupported
+      ? touchIdConfigured
+        ? "Saved for these books in this macOS user account."
+        : touchIdStatusReason
+          ? `Not set up: ${touchIdStatusReason}`
+          : "Verify the database passphrase once to save it in macOS Keychain."
+      : "Touch ID unlock is available in the macOS desktop app."
+    : "Available after these books use SQLCipher encryption.";
+
   return (
-    <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
-      <div className="space-y-3">
+    <div className="space-y-6">
+      {/* Encryption status + the two primary actions, surfaced first. */}
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <KeyRound className="size-4" aria-hidden="true" />
+          <h3 className="text-sm font-semibold">Database encryption</h3>
+        </div>
+        <div className="rounded-md border bg-background p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 space-y-1.5">
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium",
+                  encryptedWorkspace
+                    ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                    : "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                )}
+              >
+                {encryptedWorkspace ? (
+                  <ShieldCheck className="size-3" aria-hidden="true" />
+                ) : (
+                  <ShieldOff className="size-3" aria-hidden="true" />
+                )}
+                {encryptedWorkspace ? "Encrypted · SQLCipher" : "Not encrypted"}
+              </span>
+              <p className="max-w-prose text-sm text-muted-foreground">
+                {encryptedWorkspace
+                  ? "Locking closes the daemon's database handle; unlocking reopens the local SQLCipher database with your passphrase."
+                  : "These books are stored unencrypted on this device. Lock still returns to the lock screen, but the data on disk is not protected by a passphrase."}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={onLockNow}
+              >
+                <Lock className="size-4" aria-hidden="true" />
+                Lock now
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={onChangePassphrase}
+                disabled={!encryptedWorkspace}
+              >
+                <KeyRound className="size-4" aria-hidden="true" />
+                Change passphrase
+              </Button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* App lock */}
+      <section className="space-y-3">
         <div className="flex items-center gap-2">
           <Lock className="size-4" aria-hidden="true" />
           <h3 className="text-sm font-semibold">App lock</h3>
         </div>
-        <SettingsSwitchRow
-          label="Auto-lock when idle"
-          description="Require passphrase after inactivity."
-          checked={appLockPolicy.autoLockWhenIdle}
-          onCheckedChange={(checked) =>
-            setAppLockPolicy({ autoLockWhenIdle: checked })
-          }
-        />
-        <div
-          className={cn(
-            "space-y-2 rounded-md border bg-background p-3",
-            !appLockPolicy.autoLockWhenIdle && "pointer-events-none opacity-50",
-          )}
-        >
-          <Label>Idle timeout</Label>
-          <div className="flex flex-wrap gap-2">
-            {[1, 5, 15, 30, 60].map((minutes) => (
-              <Button
-                key={minutes}
-                type="button"
-                variant={
-                  appLockPolicy.idleMinutes === minutes ? "default" : "outline"
-                }
-                size="sm"
-                onClick={() => setAppLockPolicy({ idleMinutes: minutes })}
-              >
-                {minutes}m
-              </Button>
-            ))}
+        <div className="rounded-md border bg-background p-3">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 space-y-1">
+              <Label className="text-sm font-medium">Auto-lock when idle</Label>
+              <p className="text-sm text-muted-foreground">
+                Require the passphrase again after a period of inactivity.
+              </p>
+            </div>
+            <Switch
+              checked={appLockPolicy.autoLockWhenIdle}
+              onCheckedChange={(checked) =>
+                setAppLockPolicy({ autoLockWhenIdle: checked })
+              }
+            />
           </div>
+          {appLockPolicy.autoLockWhenIdle ? (
+            <div className="mt-3 space-y-2 border-t pt-3">
+              <Label className="text-xs text-muted-foreground">Lock after</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {[1, 5, 15, 30, 60].map((minutes) => (
+                  <Button
+                    key={minutes}
+                    type="button"
+                    size="sm"
+                    variant={
+                      appLockPolicy.idleMinutes === minutes
+                        ? "default"
+                        : "outline"
+                    }
+                    onClick={() => setAppLockPolicy({ idleMinutes: minutes })}
+                  >
+                    {minutes}m
+                  </Button>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
         <SettingsSwitchRow
           label="Require passphrase on launch"
@@ -2593,38 +2696,34 @@ function SecuritySettingsPanel({
             setAppLockPolicy({ lockOnWindowClose: checked })
           }
         />
-        <div className="space-y-3 rounded-md border bg-background p-3">
-          <div className="flex items-center gap-2">
-            <Fingerprint className="size-4" aria-hidden="true" />
-            <h3 className="text-sm font-semibold">Biometric unlock</h3>
-          </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      </section>
+
+      {/* Biometric unlock */}
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Fingerprint className="size-4" aria-hidden="true" />
+          <h3 className="text-sm font-semibold">Biometric unlock</h3>
+        </div>
+        <div className="rounded-md border bg-background p-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0 space-y-1">
-              <p className="text-sm font-medium">
-                {touchIdStatusPending
-                  ? "Checking Touch ID enrollment"
-                  : touchIdConfigured
-                    ? "Touch ID unlock enrolled"
-                    : "Touch ID unlock not enrolled"}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {encryptedWorkspace
-                  ? touchIdPlatformSupported
-                    ? touchIdConfigured
-                      ? "Saved for these books in this macOS user account."
-                      : touchIdStatusReason
-                        ? `Not set up: ${touchIdStatusReason}`
-                        : "Verify the database passphrase once and save it in macOS Keychain."
-                    : "Touch ID unlock is available in the macOS desktop app."
-                  : "Available after these books use SQLCipher encryption."}
-              </p>
+              <div className="flex items-center gap-2">
+                {touchIdConfigured ? (
+                  <CheckCircle2
+                    className="size-4 text-emerald-600 dark:text-emerald-400"
+                    aria-hidden="true"
+                  />
+                ) : null}
+                <p className="text-sm font-medium">Touch ID · {biometricStatus}</p>
+              </div>
+              <p className="text-sm text-muted-foreground">{biometricDetail}</p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex shrink-0 flex-wrap gap-2">
               <Button
                 type="button"
                 size="sm"
                 variant="ghost"
-                disabled={!encryptedWorkspace || !touchIdPlatformSupported}
+                disabled={!biometricActionable}
                 onClick={onRefreshTouchId}
               >
                 <RefreshCw className="size-4" aria-hidden="true" />
@@ -2635,7 +2734,7 @@ function SecuritySettingsPanel({
                   type="button"
                   size="sm"
                   variant="outline"
-                  disabled={!encryptedWorkspace || !touchIdPlatformSupported}
+                  disabled={!biometricActionable}
                   onClick={onForgetTouchId}
                 >
                   Forget
@@ -2645,7 +2744,7 @@ function SecuritySettingsPanel({
                   type="button"
                   size="sm"
                   variant="outline"
-                  disabled={!encryptedWorkspace || !touchIdPlatformSupported}
+                  disabled={!biometricActionable}
                   onClick={onEnrollTouchId}
                 >
                   Set up
@@ -2653,58 +2752,27 @@ function SecuritySettingsPanel({
               )}
             </div>
           </div>
-        </div>
-        <div className="flex flex-col gap-3 rounded-md border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0 space-y-1">
-            <p className="text-sm font-medium">
-              Session unlock preference
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Remember whether this device should offer biometric unlock on the lock screen.
-            </p>
+          <div className="mt-3 flex items-start justify-between gap-4 border-t pt-3">
+            <div className="min-w-0 space-y-1">
+              <Label className="text-sm font-medium">
+                Offer biometric unlock on the lock screen
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Remember this device's biometric unlock preference between
+                sessions.
+              </p>
+            </div>
+            <Switch
+              checked={appLockPolicy.touchIdUnlock && touchIdConfigured}
+              disabled={!encryptedWorkspace || !touchIdConfigured}
+              onCheckedChange={(checked) =>
+                setAppLockPolicy({ touchIdUnlock: checked })
+              }
+            />
           </div>
-          <Switch
-            checked={appLockPolicy.touchIdUnlock && touchIdConfigured}
-            disabled={!encryptedWorkspace || !touchIdConfigured}
-            onCheckedChange={(checked) =>
-              setAppLockPolicy({ touchIdUnlock: checked })
-            }
-          />
         </div>
-      </div>
-      <div className="space-y-4 rounded-md border border-primary/15 bg-background p-4">
-        <div className="space-y-1">
-          <h3 className="flex items-center gap-2 text-sm font-semibold">
-            {appLockPolicy.touchIdUnlock ? (
-              <Fingerprint className="size-4" aria-hidden="true" />
-            ) : (
-              <KeyRound className="size-4" aria-hidden="true" />
-            )}
-            Security boundary
-          </h3>
-          <p className="m-0 text-sm leading-6 text-muted-foreground">
-            Lock closes the daemon database handle for encrypted books.
-            Unlocking reopens the local SQLCipher database with the passphrase.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" size="sm" variant="outline" onClick={onLockNow}>
-            <Lock className="size-4" aria-hidden="true" />
-            Lock now
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={onChangePassphrase}
-            disabled={!encryptedWorkspace}
-          >
-            <KeyRound className="size-4" aria-hidden="true" />
-            Change passphrase
-          </Button>
-        </div>
-      </div>
-    </section>
+      </section>
+    </div>
   );
 }
 
@@ -2907,7 +2975,36 @@ function MarketDataPanel({ backends }: { backends: Backend[] }) {
 
       <div className="space-y-2">
         <p className="text-sm font-medium">Rate providers</p>
-        <BackendTable backends={rateBackends} />
+        <div className="grid gap-2">
+          {rateBackends.map((backend, index) => (
+            <div
+              key={backend.id}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background p-3"
+            >
+              <div className="min-w-0 space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium">{backend.name}</span>
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide",
+                      index === 0
+                        ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                        : "border-border bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {index === 0 ? "Primary" : "Fallback"}
+                  </span>
+                </div>
+                <p className="truncate font-mono text-xs text-muted-foreground">
+                  {backend.url}
+                </p>
+              </div>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {backend.health}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="rounded-md border bg-background p-3">
@@ -3248,135 +3345,106 @@ function MarketDataPanel({ backends }: { backends: Backend[] }) {
   );
 }
 
-function BackendTable({
-  backends,
-  actions = false,
-  onEdit,
-  onDelete,
-}: {
-  backends: Backend[];
-  actions?: boolean;
-  onEdit?: (backend: Backend) => void;
-  onDelete?: (backend: Backend) => void;
-}) {
+function CommandLine({ command }: { command: string }) {
   return (
-    <div className="overflow-x-auto rounded-md border bg-background">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-muted/50 hover:bg-muted/50">
-            <TableHead>Backend</TableHead>
-            <TableHead>Network</TableHead>
-            <TableHead>Health</TableHead>
-            <TableHead>Auth</TableHead>
-            <TableHead className="text-right">Status</TableHead>
-            {actions ? <TableHead className="text-right">Actions</TableHead> : null}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {backends.map((backend) => (
-            <TableRow key={backend.id}>
-              <TableCell className="min-w-[240px]">
-                <div className="font-medium">{backend.name}</div>
-                <div className="max-w-[360px] truncate text-xs text-muted-foreground">
-                  {backend.url}
-                </div>
-              </TableCell>
-              <TableCell>
-                <NetworkBadge net={backend.net} />
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {backend.health}
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {backend.auth}
-              </TableCell>
-              <TableCell className="text-right">
-                <StatusBadge active={backend.on} />
-              </TableCell>
-              {actions ? (
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-1">
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="ghost"
-                      aria-label={`Edit ${backend.name}`}
-                      onClick={() => onEdit?.(backend)}
-                    >
-                      <Pencil className="size-3.5" aria-hidden="true" />
-                    </Button>
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="ghost"
-                      aria-label={`Delete ${backend.name}`}
-                      onClick={() => onDelete?.(backend)}
-                    >
-                      <Trash2 className="size-3.5" aria-hidden="true" />
-                    </Button>
-                  </div>
-                </TableCell>
-              ) : null}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+    <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-1.5">
+      <code className="min-w-0 flex-1 truncate font-mono text-xs">{command}</code>
+      <CopyButton value={command} label={`Copy "${command}"`} />
     </div>
   );
 }
 
-function DataSettingsPanel({ status }: { status: StatusData | null }) {
+function PathField({
+  id,
+  label,
+  value,
+}: {
+  id: string;
+  label: string;
+  value: string | null;
+}) {
   return (
-    <section className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Archive className="size-4 text-muted-foreground" aria-hidden="true" />
-        <h3 className="text-sm font-semibold">Backups, labels &amp; imports</h3>
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <div className="flex items-center gap-1">
+        <Input
+          id={id}
+          readOnly
+          value={value ?? "loading…"}
+          className="font-mono text-xs"
+        />
+        {value ? <CopyButton value={value} label={`Copy ${label}`} /> : null}
       </div>
-      <div className="grid gap-2 sm:grid-cols-3">
-        <Button type="button" variant="outline" className="justify-start">
-          <Download className="size-4" aria-hidden="true" />
-          Backup
-        </Button>
-        <Button type="button" variant="outline" className="justify-start">
-          <Upload className="size-4" aria-hidden="true" />
-          Restore
-        </Button>
-        <Button type="button" variant="outline" className="justify-start">
-          <FileInput className="size-4" aria-hidden="true" />
-          Logs
-        </Button>
-      </div>
-      <Separator />
-      <div className="grid gap-2 sm:grid-cols-3">
-        <Button type="button" variant="secondary" className="justify-start">
-          Import BIP-329
-        </Button>
-        <Button type="button" variant="secondary" className="justify-start">
-          Export BIP-329
-        </Button>
-        <Button type="button" variant="secondary" className="justify-start">
-          Import CSV
-        </Button>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="settings-data-root">Data root</Label>
-          <Input
+    </div>
+  );
+}
+
+function DataSettingsPanel({
+  status,
+  onOpenImports,
+}: {
+  status: StatusData | null;
+  onOpenImports: () => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <FileInput className="size-4 text-muted-foreground" aria-hidden="true" />
+          <h3 className="text-sm font-semibold">Import data</h3>
+        </div>
+        <div className="flex flex-col gap-3 rounded-md border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="max-w-prose text-sm text-muted-foreground">
+            Bring in exchange CSV exports, on-chain history, and BIP-329 labels
+            from the import tools.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0"
+            onClick={onOpenImports}
+          >
+            <FileInput className="size-4" aria-hidden="true" />
+            Open import tools
+          </Button>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Archive className="size-4 text-muted-foreground" aria-hidden="true" />
+          <h3 className="text-sm font-semibold">Backup &amp; restore</h3>
+        </div>
+        <div className="space-y-2 rounded-md border bg-background p-4">
+          <p className="max-w-prose text-sm text-muted-foreground">
+            Encrypted <span className="font-mono">tar | age</span> backups are
+            created from the CLI. Run these in a terminal that has the kassiber
+            command installed:
+          </p>
+          <CommandLine command="kassiber backup export" />
+          <CommandLine command="kassiber backup import <file.age>" />
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <HardDrive className="size-4 text-muted-foreground" aria-hidden="true" />
+          <h3 className="text-sm font-semibold">Local database</h3>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <PathField
             id="settings-data-root"
-            readOnly
-            value={status?.data_root ?? "loading..."}
+            label="Data root"
+            value={status?.data_root ?? null}
           />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="settings-db-path">Database</Label>
-          <Input
+          <PathField
             id="settings-db-path"
-            readOnly
-            value={status?.database ?? "loading..."}
+            label="Database"
+            value={status?.database ?? null}
           />
         </div>
-      </div>
-    </section>
+      </section>
+    </div>
   );
 }
 
@@ -3474,40 +3542,34 @@ function AiProvidersPanel({
         <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
           Could not load AI providers.
         </div>
+      ) : data.providers.length === 0 ? (
+        <div className="rounded-md border border-dashed bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+          No providers configured yet.
+        </div>
       ) : (
-        <div className="overflow-x-auto rounded-md border bg-background">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50 hover:bg-muted/50">
-                <TableHead>Provider</TableHead>
-                <TableHead>Posture</TableHead>
-                <TableHead>Default model</TableHead>
-                <TableHead>Auth</TableHead>
-                <TableHead>Storage</TableHead>
-                <TableHead className="text-right">Default</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.providers.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={7}
-                    className="text-center text-sm text-muted-foreground"
-                  >
-                    No providers configured.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                data.providers.map((row) => (
-                  <TableRow key={row.name}>
-                    <TableCell className="min-w-[220px]">
-                      <div className="font-medium">{row.name}</div>
-                      <div className="max-w-[320px] truncate text-xs text-muted-foreground">
-                        {row.base_url}
-                      </div>
-                    </TableCell>
-                    <TableCell>
+        <div className="grid gap-3">
+          {data.providers.map((row) => {
+            const showNativeMove = Boolean(
+              nativeStoreId &&
+                nativeAvailable &&
+                row.secret_ref?.store_id === "sqlcipher_inline" &&
+                row.has_api_key,
+            );
+            const showSqlcipherMove = Boolean(
+              row.secret_ref?.store_id &&
+                row.secret_ref.store_id !== "sqlcipher_inline",
+            );
+            const showFooter =
+              !row.is_default || showNativeMove || showSqlcipherMove;
+            return (
+              <div
+                key={row.name}
+                className="space-y-3 rounded-md border bg-background p-4"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{row.name}</span>
                       <span
                         className={cn(
                           "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide",
@@ -3516,111 +3578,123 @@ function AiProvidersPanel({
                       >
                         {row.kind === "tee" ? "TEE" : row.kind}
                       </span>
-                    </TableCell>
-                    <TableCell className="max-w-[340px] whitespace-normal break-words font-mono text-xs">
-                      <AiProviderModelSummary row={row} />
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {row.has_api_key ? "Bearer" : "none"}
-                    </TableCell>
-                    <TableCell className="min-w-[170px] text-xs text-muted-foreground">
-                      <div>{aiSecretStoreLabel(row.secret_ref?.store_id)}</div>
-                      <div className="font-mono">{aiSecretStateLabel(row.secret_ref?.state)}</div>
-                    </TableCell>
-                    <TableCell className="text-right">
                       {row.is_default ? (
-                        <span
-                          className={cn(
-                            "inline-flex rounded-md border px-2 py-1 text-xs font-medium",
-                            "border-primary/25 bg-primary/10 text-primary",
-                          )}
-                        >
+                        <span className="inline-flex items-center rounded-md border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
                           Default
                         </span>
-                      ) : (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={setDefault.isPending}
-                          onClick={() => setDefault.mutate({ name: row.name })}
-                        >
-                          Set default
-                        </Button>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          type="button"
-                          size="icon-sm"
-                          variant="ghost"
-                          aria-label={`Edit ${row.name}`}
-                          onClick={() => setEditingName(row.name)}
-                        >
-                          <Pencil className="size-3.5" aria-hidden="true" />
-                        </Button>
-                        {nativeStoreId &&
-                        nativeAvailable &&
-                        row.secret_ref?.store_id === "sqlcipher_inline" &&
-                        row.has_api_key ? (
-                          <Button
-                            type="button"
-                            size="icon-sm"
-                            variant="ghost"
-                            aria-label={`Move ${row.name} key to native storage`}
-                            disabled={moveProviderKey.isPending}
-                            onClick={() =>
-                              moveProviderKey.mutate({
-                                name: row.name,
-                                store_id: nativeStoreId,
-                              })
-                            }
-                          >
-                            <ShieldCheck className="size-3.5" aria-hidden="true" />
-                          </Button>
-                        ) : null}
-                        {row.secret_ref?.store_id &&
-                        row.secret_ref.store_id !== "sqlcipher_inline" ? (
-                          <Button
-                            type="button"
-                            size="icon-sm"
-                            variant="ghost"
-                            aria-label={`Move ${row.name} key to SQLCipher storage`}
-                            disabled={moveProviderKey.isPending || !row.has_api_key}
-                            onClick={() =>
-                              moveProviderKey.mutate({
-                                name: row.name,
-                                store_id: "sqlcipher_inline",
-                              })
-                            }
-                          >
-                            <Database className="size-3.5" aria-hidden="true" />
-                          </Button>
-                        ) : null}
-                        <Button
-                          type="button"
-                          size="icon-sm"
-                          variant="ghost"
-                          aria-label={`Delete ${row.name}`}
-                          disabled={row.is_default || deleteProvider.isPending}
-                          onClick={() => {
-                            const ok = window.confirm(
-                              `Delete AI provider '${row.name}'? Cannot be undone.`,
-                            );
-                            if (!ok) return;
-                            deleteProvider.mutate({ name: row.name });
-                          }}
-                        >
-                          <Trash2 className="size-3.5" aria-hidden="true" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                      ) : null}
+                    </div>
+                    <p className="truncate font-mono text-xs text-muted-foreground">
+                      {row.base_url}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label={`Edit ${row.name}`}
+                      onClick={() => setEditingName(row.name)}
+                    >
+                      <Pencil className="size-3.5" aria-hidden="true" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label={`Delete ${row.name}`}
+                      disabled={row.is_default || deleteProvider.isPending}
+                      onClick={() => {
+                        const ok = window.confirm(
+                          `Delete AI provider '${row.name}'? Cannot be undone.`,
+                        );
+                        if (!ok) return;
+                        deleteProvider.mutate({ name: row.name });
+                      }}
+                    >
+                      <Trash2 className="size-3.5" aria-hidden="true" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="grid gap-x-4 gap-y-2 text-xs sm:grid-cols-3">
+                  <div className="min-w-0 space-y-0.5">
+                    <p className="text-muted-foreground">Default model</p>
+                    <p className="break-words font-mono">
+                      <AiProviderModelSummary row={row} />
+                    </p>
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="text-muted-foreground">Auth</p>
+                    <p>{row.has_api_key ? "Bearer key" : "None"}</p>
+                  </div>
+                  <div className="min-w-0 space-y-0.5">
+                    <p className="text-muted-foreground">Key storage</p>
+                    <p>
+                      {aiSecretStoreLabel(row.secret_ref?.store_id)}{" "}
+                      <span className="font-mono text-muted-foreground">
+                        · {aiSecretStateLabel(row.secret_ref?.state)}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                {showFooter ? (
+                  <div className="flex flex-wrap gap-2 border-t pt-3">
+                    {!row.is_default ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={setDefault.isPending}
+                        onClick={() => setDefault.mutate({ name: row.name })}
+                      >
+                        Set as default
+                      </Button>
+                    ) : null}
+                    {nativeStoreId &&
+                    nativeAvailable &&
+                    row.secret_ref?.store_id === "sqlcipher_inline" &&
+                    row.has_api_key ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={moveProviderKey.isPending}
+                        onClick={() =>
+                          moveProviderKey.mutate({
+                            name: row.name,
+                            store_id: nativeStoreId,
+                          })
+                        }
+                      >
+                        <ShieldCheck className="size-4" aria-hidden="true" />
+                        Move key to {aiSecretStoreLabel(nativeStoreId)}
+                      </Button>
+                    ) : null}
+                    {row.secret_ref?.store_id &&
+                    row.secret_ref.store_id !== "sqlcipher_inline" ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={moveProviderKey.isPending || !row.has_api_key}
+                        onClick={() =>
+                          moveProviderKey.mutate({
+                            name: row.name,
+                            store_id: "sqlcipher_inline",
+                          })
+                        }
+                      >
+                        <Database className="size-4" aria-hidden="true" />
+                        Move key to database
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -3673,15 +3747,37 @@ function NetworkLayerPanel({
   onAdd,
   onEdit,
   onDelete,
+  onSetOwnership,
 }: {
   layer: NetworkLayer;
   backends: Backend[];
   onAdd: () => void;
   onEdit: (backend: Backend) => void;
   onDelete: (backend: Backend) => void;
+  onSetOwnership: (
+    backend: Backend,
+    ownership: InfrastructureOwnership,
+  ) => Promise<void>;
 }) {
   const meta = NETWORK_LAYER_META[layer];
   const layerBackends = backendsForLayer(backends, layer);
+  // Infrastructure ownership is only modelled for chain indexers, matching the
+  // backend dialog (Lightning connections are always your own node).
+  const canOwn = layer === "bitcoin" || layer === "liquid";
+  const [pendingOwnershipId, setPendingOwnershipId] = React.useState<
+    string | null
+  >(null);
+  const handleOwnership = async (
+    backend: Backend,
+    ownership: InfrastructureOwnership,
+  ) => {
+    setPendingOwnershipId(backend.id);
+    try {
+      await onSetOwnership(backend, ownership);
+    } finally {
+      setPendingOwnershipId(null);
+    }
+  };
   const explorerLinkBase =
     layer === "lightning"
       ? null
@@ -3720,8 +3816,13 @@ function NetworkLayerPanel({
             <BackendLayerCard
               key={backend.id}
               backend={backend}
+              canOwn={canOwn}
+              ownershipPending={pendingOwnershipId === backend.id}
               onEdit={() => onEdit(backend)}
               onDelete={() => onDelete(backend)}
+              onSetOwnership={(ownership) =>
+                void handleOwnership(backend, ownership)
+              }
             />
           ))}
         </div>
@@ -3746,16 +3847,23 @@ function NetworkLayerPanel({
 
 function BackendLayerCard({
   backend,
+  canOwn,
+  ownershipPending,
   onEdit,
   onDelete,
+  onSetOwnership,
 }: {
   backend: Backend;
+  canOwn: boolean;
+  ownershipPending: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  onSetOwnership: (ownership: InfrastructureOwnership) => void;
 }) {
   const trust = backendTrust(backend);
   const TrustIcon = trust.icon;
   const explorerBaseUrl = backendExplorerBaseUrl(backend);
+  const isSelf = backend.infrastructureOwner === "self";
   return (
     <div className="rounded-md border bg-background p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -3767,7 +3875,12 @@ function BackendLayerCard({
                 Default
               </span>
             ) : null}
-            <StatusBadge active={backend.on} />
+            {!backend.on ? (
+              <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                <AlertTriangle className="size-3" aria-hidden="true" />
+                No endpoint
+              </span>
+            ) : null}
           </div>
           <p className="truncate font-mono text-xs text-muted-foreground">
             {backend.url}
@@ -3812,41 +3925,248 @@ function BackendLayerCard({
             Links: {explorerHostLabel(explorerBaseUrl)}
           </span>
         ) : null}
+        {canOwn || !backend.isDefault ? (
+          <div className="ml-auto flex items-center gap-1.5">
+            {!backend.isDefault ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled
+                title="Setting the default backend from the desktop app is coming soon — use the CLI: kassiber backends set-default"
+              >
+                Set as default
+                <PlannedBadge className="ml-1" />
+              </Button>
+            ) : null}
+            {canOwn ? (
+              <Button
+                type="button"
+                size="sm"
+                variant={isSelf ? "secondary" : "ghost"}
+                disabled={ownershipPending}
+                onClick={() => onSetOwnership(isSelf ? "third_party" : "self")}
+              >
+                {isSelf ? "Yours" : "Mark as mine"}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
       <p className="mt-2 text-xs text-muted-foreground">{trust.note}</p>
     </div>
   );
 }
 
-function ExposureStat({
-  icon: Icon,
-  tone,
-  count,
-  label,
-  hint,
-}: {
-  icon: LucideIcon;
-  tone: "ok" | "info" | "warn";
-  count: number;
+type ExposureFilter = "first" | "shielded" | "remote";
+
+const EXPOSURE_FILTERS: Array<{
+  id: ExposureFilter;
   label: string;
   hint: string;
+  icon: LucideIcon;
+  iconClass: string;
+  barClass: string;
+}> = [
+  {
+    id: "first",
+    label: "First-party",
+    hint: "On your machine or infrastructure you operate",
+    icon: ShieldCheck,
+    iconClass: "text-emerald-600 dark:text-emerald-400",
+    barClass: "bg-emerald-500",
+  },
+  {
+    id: "shielded",
+    label: "Tor / proxy",
+    hint: "IP hidden, queries still seen",
+    icon: Network,
+    iconClass: "text-sky-600 dark:text-sky-400",
+    barClass: "bg-sky-500",
+  },
+  {
+    id: "remote",
+    label: "Third-party",
+    hint: "Can observe your queries",
+    icon: ShieldOff,
+    iconClass: "text-amber-600 dark:text-amber-400",
+    barClass: "bg-amber-500",
+  },
+];
+
+function backendExposureFilter(backend: Backend): ExposureFilter {
+  const posture = backendTrust(backend).posture;
+  if (posture === "on-device" || posture === "self-hosted") return "first";
+  if (posture === "shielded") return "shielded";
+  return "remote";
+}
+
+interface ExposureGroupDef {
+  id: string;
+  title: string;
+  subtitle: string;
+  nets: Net[];
+  canOwn: boolean;
+  canEdit: boolean;
+}
+
+// Group outbound network surfaces by the kind of data each one actually sees,
+// which is more meaningful than a flat backend list.
+const EXPOSURE_GROUPS: ExposureGroupDef[] = [
+  {
+    id: "addresses",
+    title: "Addresses & balances",
+    subtitle: "Indexers that resolve the addresses and UTXOs you look up.",
+    nets: ["BTC", "LIQUID"],
+    canOwn: true,
+    canEdit: true,
+  },
+  {
+    id: "lightning",
+    title: "Lightning node",
+    subtitle: "Reads channel and payment history from your own node.",
+    nets: ["LN"],
+    canOwn: false,
+    canEdit: true,
+  },
+  {
+    id: "market",
+    title: "Market prices",
+    subtitle: "Sees which pairs you price — never your wallet addresses.",
+    nets: ["FX"],
+    canOwn: false,
+    canEdit: false,
+  },
+];
+
+function ExposurePostureBar({
+  counts,
+}: {
+  counts: Record<ExposureFilter, number>;
 }) {
-  const toneClass =
-    tone === "ok"
-      ? "text-emerald-600 dark:text-emerald-400"
-      : tone === "info"
-        ? "text-sky-600 dark:text-sky-400"
-        : count > 0
-          ? "text-amber-600 dark:text-amber-400"
-          : "text-muted-foreground";
+  const total = counts.first + counts.shielded + counts.remote;
+  if (total === 0) {
+    return (
+      <div
+        className="h-2 w-full overflow-hidden rounded-full bg-muted"
+        aria-hidden="true"
+      />
+    );
+  }
   return (
-    <div className="rounded-md border bg-background p-3">
+    <div
+      className="flex h-2 w-full overflow-hidden rounded-full bg-muted"
+      role="img"
+      aria-label={`${counts.first} first-party, ${counts.shielded} Tor or proxy, ${counts.remote} third-party network surfaces`}
+    >
+      {EXPOSURE_FILTERS.map((filter) =>
+        counts[filter.id] > 0 ? (
+          <div
+            key={filter.id}
+            className={filter.barClass}
+            style={{ width: `${(counts[filter.id] / total) * 100}%` }}
+          />
+        ) : null,
+      )}
+    </div>
+  );
+}
+
+function ExposureFilterTile({
+  filter,
+  count,
+  active,
+  onClick,
+}: {
+  filter: (typeof EXPOSURE_FILTERS)[number];
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const Icon = filter.icon;
+  const dim = filter.id === "remote" && count === 0;
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "rounded-md border bg-background p-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        active && "border-foreground/30 bg-muted ring-1 ring-foreground/10",
+      )}
+    >
       <div className="flex items-center gap-2">
-        <Icon className={cn("size-4", toneClass)} aria-hidden="true" />
+        <Icon
+          className={cn("size-4", dim ? "text-muted-foreground" : filter.iconClass)}
+          aria-hidden="true"
+        />
         <span className="font-mono text-lg tabular-nums">{count}</span>
       </div>
-      <p className="mt-1 text-sm font-medium">{label}</p>
-      <p className="text-xs text-muted-foreground">{hint}</p>
+      <p className="mt-1 text-sm font-medium">{filter.label}</p>
+      <p className="text-xs text-muted-foreground">{filter.hint}</p>
+    </button>
+  );
+}
+
+function ExposureEndpointRow({
+  backend,
+  canOwn,
+  canEdit,
+  pending,
+  onEdit,
+  onSetOwnership,
+}: {
+  backend: Backend;
+  canOwn: boolean;
+  canEdit: boolean;
+  pending: boolean;
+  onEdit: () => void;
+  onSetOwnership: (ownership: InfrastructureOwnership) => void;
+}) {
+  const trust = backendTrust(backend);
+  const TrustIcon = trust.icon;
+  const isSelf = backend.infrastructureOwner === "self";
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 p-3">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium">{backend.name}</p>
+        <p className="truncate text-xs text-muted-foreground">
+          {backendProtocolLabel(backend)} · {endpointHostLabel(backend.url)}
+        </p>
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium",
+            trust.className,
+          )}
+        >
+          <TrustIcon className="size-3" aria-hidden="true" />
+          {trust.label}
+        </span>
+        {canOwn ? (
+          <Button
+            type="button"
+            size="sm"
+            variant={isSelf ? "secondary" : "ghost"}
+            disabled={pending}
+            onClick={() => onSetOwnership(isSelf ? "third_party" : "self")}
+          >
+            {isSelf ? "Yours" : "Mark as mine"}
+          </Button>
+        ) : null}
+        {canEdit ? (
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            aria-label={`Edit ${backend.name}`}
+            onClick={onEdit}
+          >
+            <Pencil className="size-3.5" aria-hidden="true" />
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -3858,7 +4178,8 @@ function PrivacySettingsPanel({
   setClearClipboard,
   backends,
   aiFeaturesEnabled,
-  onManageConnections,
+  onEditBackend,
+  onSetBackendOwnership,
   onManageAi,
 }: {
   hideSensitive: boolean;
@@ -3867,25 +4188,51 @@ function PrivacySettingsPanel({
   setClearClipboard: (value: boolean) => void;
   backends: Backend[];
   aiFeaturesEnabled: boolean;
-  onManageConnections: () => void;
+  onEditBackend: (backend: Backend) => void;
+  onSetBackendOwnership: (
+    backend: Backend,
+    ownership: InfrastructureOwnership,
+  ) => Promise<void>;
   onManageAi: () => void;
 }) {
-  const [exposureExpanded, setExposureExpanded] = React.useState(false);
-  const syncBackends = backends.filter((backend) => backend.net !== "FX");
-  const postureCount = (posture: TrustPosture) =>
-    syncBackends.filter((backend) => backendTrust(backend).posture === posture)
-      .length;
-  const onDeviceCount = postureCount("on-device");
-  const shieldedCount = postureCount("shielded");
-  const remoteCount = postureCount("remote");
-  const outboundSurfaceCount =
-    shieldedCount + remoteCount + (aiFeaturesEnabled ? 1 : 0);
-  const exposureSummary =
-    outboundSurfaceCount > 0
-      ? `${outboundSurfaceCount} outbound surface${
-          outboundSurfaceCount === 1 ? "" : "s"
-        } configured`
-      : "No outbound surfaces configured";
+  const [filter, setFilter] = React.useState<ExposureFilter | null>(null);
+  const [pendingOwnershipId, setPendingOwnershipId] = React.useState<
+    string | null
+  >(null);
+
+  // Only enabled backends actually send traffic off the machine.
+  const enabled = React.useMemo(
+    () => backends.filter((backend) => backend.on),
+    [backends],
+  );
+  const counts = React.useMemo(() => {
+    const next: Record<ExposureFilter, number> = {
+      first: 0,
+      shielded: 0,
+      remote: 0,
+    };
+    enabled.forEach((backend) => {
+      next[backendExposureFilter(backend)] += 1;
+    });
+    return next;
+  }, [enabled]);
+
+  const activeFilterLabel = EXPOSURE_FILTERS.find(
+    (entry) => entry.id === filter,
+  )?.label;
+
+  const handleOwnership = async (
+    backend: Backend,
+    ownership: InfrastructureOwnership,
+  ) => {
+    setPendingOwnershipId(backend.id);
+    try {
+      await onSetBackendOwnership(backend, ownership);
+    } finally {
+      setPendingOwnershipId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <section className="space-y-3">
@@ -3912,133 +4259,124 @@ function PrivacySettingsPanel({
         />
       </section>
 
-      <section className="rounded-md border bg-background">
-        <button
-          type="button"
-          className="flex w-full items-start justify-between gap-4 rounded-t-md px-3 py-3 text-left transition-colors hover:bg-muted/40"
-          aria-expanded={exposureExpanded}
-          onClick={() => setExposureExpanded((expanded) => !expanded)}
-        >
-          <span className="min-w-0 space-y-1">
-            <span className="block text-sm font-semibold">
-              What leaves this machine
-            </span>
-            <span className="block text-sm text-muted-foreground">
-              Kassiber is local-first. Network backends and enabled assistant
-              providers are the outbound surfaces.
-            </span>
-          </span>
-          <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-            {exposureSummary}
-            <ChevronDown
-              className={cn(
-                "size-4 transition-transform",
-                exposureExpanded ? "rotate-180" : "",
-              )}
-              aria-hidden="true"
-            />
-          </span>
-        </button>
-        <div className="grid gap-2 border-t p-3 sm:grid-cols-3">
-          <ExposureStat
-            icon={ShieldCheck}
-            tone="ok"
-            count={onDeviceCount}
-            label="On device"
-            hint="Queries never leave your machine"
-          />
-          <ExposureStat
-            icon={Network}
-            tone="info"
-            count={shieldedCount}
-            label="Tor / proxy"
-            hint="IP hidden from the server"
-          />
-          <ExposureStat
-            icon={ShieldOff}
-            tone="warn"
-            count={remoteCount}
-            label="Remote"
-            hint="Can observe queried addresses"
-          />
+      <section className="space-y-3">
+        <div>
+          <h3 className="text-sm font-semibold">What leaves this machine</h3>
+          <p className="text-sm text-muted-foreground">
+            Kassiber is local-first. These are the only surfaces that send
+            anything off this device — grouped by what each one can see.
+          </p>
         </div>
-        {exposureExpanded ? (
-          <div className="space-y-4 border-t p-3">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-3">
-                <h4 className="text-sm font-medium">Network backends</h4>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="shrink-0"
-                  onClick={onManageConnections}
-                >
-                  Review network
-                </Button>
-              </div>
-              <div className="divide-y rounded-md border">
-                {syncBackends.length > 0 ? (
-                  syncBackends.map((backend) => {
-                    const trust = backendTrust(backend);
-                    const TrustIcon = trust.icon;
-                    return (
-                      <div
-                        key={backend.id}
-                        className="grid gap-2 p-3 text-sm sm:grid-cols-[1fr_140px_160px]"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate font-medium">
-                            {backend.name}
-                          </p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            {backendProtocolLabel(backend)} ·{" "}
-                            {endpointHostLabel(backend.url)}
-                          </p>
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {backend.net}
-                        </div>
-                        <div
-                          className={cn(
-                            "flex items-center gap-2 rounded-md border px-2 py-1 text-xs",
-                            trust.className,
-                          )}
-                        >
-                          <TrustIcon className="size-3.5" aria-hidden="true" />
-                          <span className="truncate">{trust.label}</span>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <p className="p-3 text-sm text-muted-foreground">
-                    No network backends configured.
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="flex flex-col gap-2 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0 space-y-1">
-                <h4 className="text-sm font-medium">Assistant prompts</h4>
-                <p className="text-sm text-muted-foreground">
-                  {aiFeaturesEnabled
-                    ? "Assistant features are enabled. Local providers keep prompts on this machine; remote and CLI providers can see prompt content."
-                    : "Assistant features are off. Provider settings can stay saved without sending prompts."}
-                </p>
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="shrink-0"
-                onClick={onManageAi}
-              >
-                Review AI providers
-              </Button>
-            </div>
+
+        <ExposurePostureBar counts={counts} />
+        <p
+          className={cn(
+            "text-xs",
+            counts.remote > 0
+              ? "text-amber-600 dark:text-amber-400"
+              : "text-muted-foreground",
+          )}
+        >
+          {counts.remote > 0
+            ? `${counts.remote} third-party endpoint${
+                counts.remote === 1 ? "" : "s"
+              } can see your queries. Mark your own nodes as yours, or route over Tor.`
+            : "No third-party endpoints can see your queries."}
+        </p>
+
+        <div className="grid gap-2 sm:grid-cols-3">
+          {EXPOSURE_FILTERS.map((entry) => (
+            <ExposureFilterTile
+              key={entry.id}
+              filter={entry}
+              count={counts[entry.id]}
+              active={filter === entry.id}
+              onClick={() =>
+                setFilter((current) => (current === entry.id ? null : entry.id))
+              }
+            />
+          ))}
+        </div>
+
+        {filter ? (
+          <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span>Showing {activeFilterLabel} surfaces only.</span>
+            <button
+              type="button"
+              className="underline-offset-4 hover:underline"
+              onClick={() => setFilter(null)}
+            >
+              Clear filter
+            </button>
           </div>
         ) : null}
+
+        {EXPOSURE_GROUPS.map((group) => {
+          const all = enabled.filter((backend) =>
+            group.nets.includes(backend.net),
+          );
+          if (all.length === 0) return null;
+          const rows = filter
+            ? all.filter((backend) => backendExposureFilter(backend) === filter)
+            : all;
+          return (
+            <div key={group.id} className="space-y-2">
+              <div>
+                <p className="text-sm font-medium">{group.title}</p>
+                <p className="text-xs text-muted-foreground">
+                  {group.subtitle}
+                </p>
+              </div>
+              {rows.length > 0 ? (
+                <div className="divide-y rounded-md border bg-background">
+                  {rows.map((backend) => (
+                    <ExposureEndpointRow
+                      key={backend.id}
+                      backend={backend}
+                      canOwn={group.canOwn}
+                      canEdit={group.canEdit}
+                      pending={pendingOwnershipId === backend.id}
+                      onEdit={() => onEditBackend(backend)}
+                      onSetOwnership={(ownership) =>
+                        void handleOwnership(backend, ownership)
+                      }
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                  None match the {activeFilterLabel} filter.
+                </p>
+              )}
+            </div>
+          );
+        })}
+
+        <div className="space-y-2">
+          <div>
+            <p className="text-sm font-medium">Assistant prompts</p>
+            <p className="text-xs text-muted-foreground">
+              Prompt content — which can include book data — leaves only if you
+              enable a remote or CLI provider.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 rounded-md border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              {aiFeaturesEnabled
+                ? "Enabled. Local providers keep prompts on this machine; remote and CLI providers can see prompt content."
+                : "Disabled. Provider settings stay saved without sending prompts."}
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="shrink-0"
+              onClick={onManageAi}
+            >
+              Review AI providers
+            </Button>
+          </div>
+        </div>
       </section>
     </div>
   );
@@ -4046,6 +4384,7 @@ function PrivacySettingsPanel({
 
 function DataAndStoragePanel({
   status,
+  onOpenImports,
   onResetWelcome,
   onResetBook,
   resetBookDisabled,
@@ -4053,6 +4392,7 @@ function DataAndStoragePanel({
   deleteBooksDisabled,
 }: {
   status: StatusData | null;
+  onOpenImports: () => void;
   onResetWelcome: () => void;
   onResetBook: () => void;
   resetBookDisabled: boolean;
@@ -4061,7 +4401,7 @@ function DataAndStoragePanel({
 }) {
   return (
     <div className="space-y-6">
-      <DataSettingsPanel status={status} />
+      <DataSettingsPanel status={status} onOpenImports={onOpenImports} />
 
       <section className="space-y-3 rounded-md border border-destructive/30 bg-destructive/5 p-4">
         <div className="space-y-1">
@@ -4239,21 +4579,6 @@ function selectorButtonClass(active: boolean) {
     active
       ? "border-foreground/50 bg-muted text-foreground ring-1 ring-foreground/10 hover:bg-muted/90 dark:border-white/45 dark:bg-white/[0.10] dark:text-white dark:ring-white/10 dark:hover:bg-white/[0.14]"
       : "border-border bg-background hover:border-foreground/35 hover:bg-muted dark:border-white/20 dark:bg-white/[0.04] dark:text-white dark:hover:border-white/40 dark:hover:bg-white/[0.08]",
-  );
-}
-
-function StatusBadge({ active }: { active: boolean }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium",
-        active
-          ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-          : "border-border bg-muted text-muted-foreground",
-      )}
-    >
-      {active ? "Active" : "Idle"}
-    </span>
   );
 }
 
