@@ -68,10 +68,10 @@ DEFAULT_BACKENDS = {
     },
     "liquid": {
         "name": "liquid",
-        "kind": "electrum",
+        "kind": "liquid-esplora",
         "chain": "liquid",
         "network": "liquidv1",
-        "url": "ssl://les.bullbitcoin.com:995",
+        "url": "https://liquid.network/api",
         "batch_size": 100,
         "source": "built-in default",
     },
@@ -168,7 +168,7 @@ BACKEND_SAFE_OUTPUT_FIELDS = (
     "default",
     "is_default",
 )
-BACKEND_SAFE_CONFIG_OUTPUT_FIELDS = ("insecure", "walletprefix")
+BACKEND_SAFE_CONFIG_OUTPUT_FIELDS = ("infrastructure_owner", "insecure", "walletprefix")
 
 
 def _canonicalize_backend_field_name(field_name):

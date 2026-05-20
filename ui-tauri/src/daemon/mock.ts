@@ -105,7 +105,12 @@ type MockBackendSettingsRow = {
   has_token?: boolean;
   has_username?: boolean;
   has_password?: boolean;
+  has_commando_peer_id?: boolean;
+  has_lightning_dir?: boolean;
+  has_rpc_file?: boolean;
   insecure?: boolean;
+  tor_proxy?: string;
+  infrastructure_owner?: string;
 };
 
 let mockBackendSettingsRows: MockBackendSettingsRow[] = [
@@ -120,11 +125,11 @@ let mockBackendSettingsRows: MockBackendSettingsRow[] = [
     has_url: true,
   },
   {
-    name: "liquid-electrum",
-    kind: "electrum",
+    name: "liquid",
+    kind: "liquid-esplora",
     chain: "liquid",
     network: "liquidv1",
-    url: "ssl://les.bullbitcoin.com:995",
+    url: "https://liquid.network/api",
     source: "mock",
     has_url: true,
   },
@@ -196,10 +201,36 @@ function mockBackendRowFromArgs(
       : typeof config.password === "string" && config.password.trim()
         ? true
         : existing?.has_password,
+    has_commando_peer_id: clear.has("commando_peer_id")
+      ? false
+      : typeof config.commando_peer_id === "string" &&
+          config.commando_peer_id.trim()
+        ? true
+        : existing?.has_commando_peer_id,
+    has_lightning_dir: clear.has("lightning_dir")
+      ? false
+      : typeof config.lightning_dir === "string" && config.lightning_dir.trim()
+        ? true
+        : existing?.has_lightning_dir,
+    has_rpc_file: clear.has("rpc_file")
+      ? false
+      : typeof config.rpc_file === "string" && config.rpc_file.trim()
+        ? true
+        : existing?.has_rpc_file,
     insecure:
       typeof config.insecure === "boolean"
         ? config.insecure
         : existing?.insecure,
+    tor_proxy: clear.has("tor_proxy")
+      ? undefined
+      : typeof args.tor_proxy === "string" && args.tor_proxy.trim()
+        ? args.tor_proxy.trim()
+        : existing?.tor_proxy,
+    infrastructure_owner:
+      typeof config.infrastructure_owner === "string" &&
+      config.infrastructure_owner.trim()
+        ? config.infrastructure_owner.trim()
+        : existing?.infrastructure_owner,
   };
   return row;
 }
@@ -1846,16 +1877,17 @@ export const mockDaemon: DaemonTransport = {
           url,
           trust_self_signed: trustSelfSigned,
           logs: [
-            `Opening Electrum connection to ${url}`,
+            `Preview mode: simulated Electrum test for ${url}`,
+            "No network request was made.",
             trustSelfSigned
-              ? "Certificate verification: self-signed certificate trusted for this test."
+              ? "Certificate verification: self-signed certificate would be trusted for this test."
               : certificate
-                ? `Certificate verification: pinned certificate ${certificate}.`
-                : "Certificate verification: system trust store.",
+                ? `Certificate verification: would use pinned certificate ${certificate}.`
+                : "Certificate verification: would use system trust store.",
             proxy ? `Proxy: ${proxy}.` : "Proxy: disabled.",
-            "Connected.",
-            "Server version: Fulcrum 2.0 on protocol version 1.4.2",
-            "Server banner: Connected to a Fulcrum 2.0 server",
+            "Simulated result: connected.",
+            "Simulated server version: Fulcrum 2.0 on protocol version 1.4.2",
+            "Simulated server banner: Connected to a Fulcrum 2.0 server",
           ],
         } as T,
       };
@@ -1885,11 +1917,11 @@ export const mockDaemon: DaemonTransport = {
           url,
           status: 200,
           logs: [
-            `$ curl -fsS -L --max-time 10 -H 'Accept: application/json' ${url}`,
-            `> GET ${url}`,
-            "< HTTP 200 OK",
-            "< content-type: application/json",
-            "< body: 256 bytes sampled",
+            `Preview mode: simulated HTTP test for ${url}`,
+            "No network request was made.",
+            "Simulated response: HTTP 200 OK",
+            "Simulated content-type: application/json",
+            "Simulated body: 256 bytes sampled",
           ],
         } as T,
       };

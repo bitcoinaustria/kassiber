@@ -24,7 +24,7 @@ const PUBLIC_EXPLORERS: Record<ExplorerNetwork, { label: string; baseUrl: string
   liquid: { label: "Liquid Network", baseUrl: "https://liquid.network" },
 };
 
-function normalizeExplorerBaseUrl(baseUrl: string) {
+export function normalizeExplorerBaseUrl(baseUrl: string) {
   return baseUrl.trim().replace(/\/+$/, "").replace(/\/api$/i, "");
 }
 

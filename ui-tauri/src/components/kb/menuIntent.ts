@@ -29,17 +29,28 @@ export type AppRoutePath =
 // native menu — drop them from this union and Rust would emit strings the
 // type system says are impossible.
 export type SettingsMenuSection =
+  | "appearance"
   | "privacy"
   | "developer"
   | "logs"
   | "display"
+  | "explorer"
+  | "explorers"
+  | "bitcoin"
+  | "lightning"
+  | "liquid"
+  | "market"
   | "security"
+  | "lock"
   | "backends"
   | "sync"
   | "rates"
   | "ai"
   | "assistant"
-  | "data";
+  | "data"
+  | "storage"
+  | "desktop"
+  | "terminal";
 
 export type NativeMenuPayload =
   | { action: "lock-app" | "toggle-sensitive" }
