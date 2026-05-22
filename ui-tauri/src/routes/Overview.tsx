@@ -1,4 +1,4 @@
-import { Dashboard5 } from "@/components/dashboard5";
+import { OverviewDashboard } from "@/components/overview-dashboard";
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { useDaemon } from "@/daemon/client";
 import { MOCK_OVERVIEW, type OverviewSnapshot } from "@/mocks/seed";
@@ -23,7 +23,7 @@ export function Overview() {
       : MOCK_OVERVIEW;
 
   return (
-    <Dashboard5
+    <OverviewDashboard
       snapshot={snapshot}
       isSnapshotRefreshing={hasLiveOverview && isFetching}
     />
