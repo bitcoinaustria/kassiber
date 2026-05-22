@@ -2,7 +2,6 @@ import { formatBtc } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
 import {
-  type TreasuryChartPoint,
   activityFlowColors,
   activityFlowLabels,
   blurClass,
@@ -10,7 +9,8 @@ import {
   formatEurPrice,
   formatPortfolioMoney,
   statusLabels,
-} from "./shared";
+  type TreasuryChartPoint,
+} from "./model";
 
 export interface TreasuryTooltipPayload {
   dataKey?: string | number;

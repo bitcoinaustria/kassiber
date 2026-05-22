@@ -12,7 +12,7 @@ import {
   formatCompactDisplayMoney,
   latestPortfolioBalanceBtc,
   numberFormatter,
-} from "./shared";
+} from "./model";
 
 export const StatsCards = ({
   snapshot,

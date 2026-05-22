@@ -1,4 +1,4 @@
-import { OverviewDashboard } from "@/components/overview-dashboard";
+import { OverviewDashboard } from "@/components/overview-dashboard/OverviewDashboard";
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { useDaemon } from "@/daemon/client";
 import { MOCK_OVERVIEW, type OverviewSnapshot } from "@/mocks/seed";

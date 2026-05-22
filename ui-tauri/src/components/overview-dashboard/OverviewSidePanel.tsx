@@ -26,7 +26,7 @@ import {
   holdingsChartConfig,
   transactionsDriverSearch,
   useHoverHighlight,
-} from "./shared";
+} from "./model";
 
 export const BalanceDriversCard = ({
   snapshot,
@@ -138,7 +138,7 @@ export const BalanceDriversCard = ({
   );
 };
 
-const HoldingsBySourceChart = ({
+export const HoldingsBySourceChart = ({
   snapshot,
   hideSensitive,
   currency,
@@ -383,7 +383,7 @@ const HoldingsBySourceChart = ({
   );
 };
 
-export const SideChartsSection = ({
+export const OverviewSidePanel = ({
   className,
   snapshot,
   hideSensitive,

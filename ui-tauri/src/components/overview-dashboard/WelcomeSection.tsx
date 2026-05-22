@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
 
-import { buildOverviewReadiness, readinessToneStyles } from "./shared";
+import { buildOverviewReadiness, readinessToneStyles } from "./model";
 
 export const WelcomeSection = ({
   onAddConnection,

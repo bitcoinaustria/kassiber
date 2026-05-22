@@ -12,24 +12,72 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
-import { ActivityMarkerSlider } from "./ActivityMarkers";
 import {
+  activityFlowColors,
+  activityFlowKeys,
+  activityFlowLabels,
   ACTIVITY_MARKER_INPUT_STEP_BTC,
+  ACTIVITY_MARKER_SLIDER_MARKS,
+  activityMarkerSliderValue,
+  blurClass,
+  clampActivityMarkerMinimum,
   DEFAULT_INCOMING_MARKER_MIN_BTC,
   DEFAULT_OUTGOING_MARKER_MIN_BTC,
+  formatEditableActivityMarkerMinimum,
+  periodKeys,
+  periodLabels,
+  serializeActivityMarkerMinimum,
   type TimePeriod,
   type TreasuryChartSeriesKey,
   type TreasuryLegendItem,
   type TreasurySeriesVisibility,
-  activityFlowColors,
-  activityFlowKeys,
-  activityFlowLabels,
-  blurClass,
-  clampActivityMarkerMinimum,
-  formatEditableActivityMarkerMinimum,
-  periodKeys,
-  periodLabels,
-} from "./shared";
+} from "./model";
+
+export function ActivityMarkerSlider({
+  id,
+  label,
+  value,
+  color,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: number;
+  color: string;
+  onChange: (value: number) => void;
+}) {
+  const marksId = `${id}-marks`;
+  return (
+    <div className="mt-3 space-y-2">
+      <input
+        aria-label={label}
+        className="h-2 w-full cursor-pointer"
+        list={marksId}
+        min={0}
+        max={ACTIVITY_MARKER_SLIDER_MARKS.length - 1}
+        step={1}
+        type="range"
+        value={activityMarkerSliderValue(value)}
+        style={{ accentColor: color }}
+        onChange={(event) =>
+          onChange(ACTIVITY_MARKER_SLIDER_MARKS[Number(event.currentTarget.value)] ?? 0)
+        }
+      />
+      <datalist id={marksId}>
+        {ACTIVITY_MARKER_SLIDER_MARKS.map((mark, index) => (
+          <option key={mark} value={index} label={serializeActivityMarkerMinimum(mark)} />
+        ))}
+      </datalist>
+      <div className="flex justify-between text-[10px] text-muted-foreground">
+        {ACTIVITY_MARKER_SLIDER_MARKS.map((mark) => (
+          <span key={mark} className="tabular-nums">
+            {serializeActivityMarkerMinimum(mark)}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export type ChartControlsSheetProps = {
   open: boolean;

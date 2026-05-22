@@ -11,11 +11,11 @@ import { useUiStore } from "@/store/ui";
 
 import { BooksHealthPanel } from "./BooksHealthPanel";
 import { RecentTransactionsTable } from "./RecentTransactionsTable";
-import { RevenueFlowChart } from "./RevenueFlowChart";
-import { SideChartsSection } from "./SideChartsSection";
+import { BtcActivityChart } from "./BtcActivityChart";
+import { OverviewSidePanel } from "./OverviewSidePanel";
 import { StatsCards } from "./StatsCards";
+import { toDashboardTransaction, transactionRecords } from "./model";
 import { WelcomeSection } from "./WelcomeSection";
-import { toDashboardTransaction, transactionRecords } from "./shared";
 
 export const OverviewDashboard = ({
   className,
@@ -71,7 +71,7 @@ export const OverviewDashboard = ({
       />
       <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="grid min-w-0 gap-3">
-          <RevenueFlowChart
+          <BtcActivityChart
             snapshot={snapshot}
             hideSensitive={hideSensitive}
             currency={currency}
@@ -85,7 +85,7 @@ export const OverviewDashboard = ({
           />
         </div>
         <div className="grid min-w-0 gap-3">
-          <SideChartsSection
+          <OverviewSidePanel
             snapshot={snapshot}
             hideSensitive={hideSensitive}
             currency={currency}

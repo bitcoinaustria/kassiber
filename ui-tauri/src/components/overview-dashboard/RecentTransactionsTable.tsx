@@ -22,8 +22,6 @@ import { formatBtc, MISSING_FIAT_LABEL, type Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
 import {
-  type Transaction,
-  type TransactionStatus,
   blurClass,
   currencyFormatter,
   formatSignedDisplayMoney,
@@ -34,7 +32,9 @@ import {
   transactionBtc,
   transactionDetailHref,
   transactionStatuses,
-} from "./shared";
+  type Transaction,
+  type TransactionStatus,
+} from "./model";
 
 export const RecentTransactionsTable = ({
   className,

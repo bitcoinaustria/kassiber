@@ -142,6 +142,14 @@ export type TreasuryBrushChange = {
   endIndex?: number;
 };
 
+export type ActivityScatterDotProps = {
+  cx?: number;
+  cy?: number;
+  size?: number;
+  payload?: TreasuryChartPoint;
+  activeSeries: TreasuryChartSeriesKey | null;
+};
+
 export type ActivityMarkerView = {
   activityPoints: TreasuryChartPoint[];
   chartDisplayData: TreasuryChartPoint[];
@@ -379,7 +387,7 @@ export const holdingsChartConfig = {
   other: { label: "Other", theme: palette.quaternary },
 } satisfies ChartConfig;
 
-export const statsData: StatItem[] = [
+const statsData: StatItem[] = [
   {
     title: "Portfolio value",
     previousValue: 198502,
@@ -1090,7 +1098,6 @@ export function activityMarkerSliderValue(value: number) {
   return closestIndex;
 }
 
-
 export function compactEventId(value: string | undefined) {
   if (!value) return null;
   if (value.length <= 18) return value;
@@ -1131,7 +1138,6 @@ export const activityFlowKeys: ActivityFlow[] = [
   "transfer",
   "fee",
 ];
-
 
 export function activityTxs(snapshot: OverviewSnapshot): TreasuryActivityEvent[] {
   const txs = snapshot.activityTxs?.length ? snapshot.activityTxs : snapshot.txs;
@@ -1936,16 +1942,6 @@ export const readinessToneStyles: Record<OverviewHealthTone, string> = {
     "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
   alert: "border-red-500/25 bg-red-500/10 text-red-700 dark:text-red-300",
   neutral: "border-border bg-muted/45 text-foreground",
-};
-
-export const healthToneStyles: Record<OverviewHealthTone, string> = {
-  good: "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/25 dark:text-emerald-300 dark:ring-emerald-400/20",
-  warning:
-    "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/25 dark:text-amber-300 dark:ring-amber-400/20",
-  alert:
-    "bg-red-50 text-red-700 ring-red-600/15 dark:bg-red-900/25 dark:text-red-300 dark:ring-red-400/20",
-  neutral:
-    "bg-zinc-50 text-zinc-700 ring-zinc-500/20 dark:bg-zinc-800/70 dark:text-zinc-300 dark:ring-zinc-400/20",
 };
 
 export const statusStyles: Record<TransactionStatus, string> = {

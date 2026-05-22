@@ -32,29 +32,16 @@ import { formatBtc, type Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
 
-import { ActivityScatterDot } from "./ActivityMarkers";
-import { ChartControlsSheet, ActivityLegendSwatch } from "./ChartControlsSheet";
-import { ChartStat, PortfolioInspector } from "./PortfolioInspector";
-import { TreasuryTooltip } from "./TreasuryTooltip";
+import { ActivityScatterDot } from "./ActivityScatterDot";
+import { ChartControlsSheet } from "./ChartControlsSheet";
+import { ChartStat } from "./ChartStat";
 import {
+  activityMarkerView,
+  buildTreasuryChartStats,
+  blurClass,
+  defaultTreasurySeriesVisibility,
   DEFAULT_INCOMING_MARKER_MIN_BTC,
   DEFAULT_OUTGOING_MARKER_MIN_BTC,
-  INCOMING_MARKER_MIN_PARAM,
-  LEGACY_INCOMING_MARKER_MIN_PARAM,
-  LEGACY_OUTGOING_MARKER_MIN_PARAM,
-  OUTGOING_MARKER_MIN_PARAM,
-  type PortfolioChartMouseState,
-  type TimePeriod,
-  type TreasuryBrushChange,
-  type TreasuryBrushRange,
-  type TreasuryChartPoint,
-  type TreasuryChartSeriesKey,
-  type TreasuryLegendItem,
-  type TreasurySeriesVisibility,
-  activityMarkerView,
-  blurClass,
-  buildTreasuryChartStats,
-  defaultTreasurySeriesVisibility,
   enrichTreasuryChartData,
   formatBtcAxis,
   formatEurPrice,
@@ -64,7 +51,11 @@ import {
   getDataForPeriod,
   initialActivityMarkerMinimumFromUrl,
   initialTimePeriodFromUrl,
+  INCOMING_MARKER_MIN_PARAM,
+  LEGACY_INCOMING_MARKER_MIN_PARAM,
+  LEGACY_OUTGOING_MARKER_MIN_PARAM,
   normalizeTreasuryBrushRange,
+  OUTGOING_MARKER_MIN_PARAM,
   periodShortLabels,
   portfolioAxisTicks,
   portfolioChartColors,
@@ -74,9 +65,20 @@ import {
   treasuryPrimaryValue,
   useHoverHighlight,
   useResolvedColorMode,
-} from "./shared";
+  type PortfolioChartMouseState,
+  type TimePeriod,
+  type TreasuryBrushChange,
+  type TreasuryBrushRange,
+  type TreasuryChartPoint,
+  type TreasuryChartSeriesKey,
+  type TreasuryLegendItem,
+  type TreasurySeriesVisibility,
+} from "./model";
+import { PortfolioInspector } from "./PortfolioInspector";
+import { ActivityLegendSwatch } from "./ChartControlsSheet";
+import { TreasuryTooltip } from "./TreasuryTooltip";
 
-export const RevenueFlowChart = ({
+export const BtcActivityChart = ({
   snapshot,
   hideSensitive,
   currency,

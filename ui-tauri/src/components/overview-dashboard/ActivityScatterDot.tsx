@@ -2,69 +2,11 @@ import { useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 
 import {
-  ACTIVITY_MARKER_SLIDER_MARKS,
   activityFlowColors,
   activityFlowLabels,
-  activityMarkerSliderValue,
-  serializeActivityMarkerMinimum,
   transactionDetailHref,
-  type TreasuryChartPoint,
-  type TreasuryChartSeriesKey,
-} from "./shared";
-
-export type ActivityScatterDotProps = {
-  cx?: number;
-  cy?: number;
-  size?: number;
-  payload?: TreasuryChartPoint;
-  activeSeries: TreasuryChartSeriesKey | null;
-};
-
-export function ActivityMarkerSlider({
-  id,
-  label,
-  value,
-  color,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  value: number;
-  color: string;
-  onChange: (value: number) => void;
-}) {
-  const marksId = `${id}-marks`;
-  return (
-    <div className="mt-3 space-y-2">
-      <input
-        aria-label={label}
-        className="h-2 w-full cursor-pointer"
-        list={marksId}
-        min={0}
-        max={ACTIVITY_MARKER_SLIDER_MARKS.length - 1}
-        step={1}
-        type="range"
-        value={activityMarkerSliderValue(value)}
-        style={{ accentColor: color }}
-        onChange={(event) =>
-          onChange(ACTIVITY_MARKER_SLIDER_MARKS[Number(event.currentTarget.value)] ?? 0)
-        }
-      />
-      <datalist id={marksId}>
-        {ACTIVITY_MARKER_SLIDER_MARKS.map((mark, index) => (
-          <option key={mark} value={index} label={serializeActivityMarkerMinimum(mark)} />
-        ))}
-      </datalist>
-      <div className="flex justify-between text-[10px] text-muted-foreground">
-        {ACTIVITY_MARKER_SLIDER_MARKS.map((mark) => (
-          <span key={mark} className="tabular-nums">
-            {serializeActivityMarkerMinimum(mark)}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
+  type ActivityScatterDotProps,
+} from "./model";
 
 export function ActivityScatterDot({
   cx,

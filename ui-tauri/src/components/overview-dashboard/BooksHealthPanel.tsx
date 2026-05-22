@@ -8,8 +8,18 @@ import type { OverviewSnapshot } from "@/mocks/seed";
 import {
   buildOverviewHealthItems,
   buildPrimaryOverviewAction,
-  healthToneStyles,
-} from "./shared";
+  type OverviewHealthTone,
+} from "./model";
+
+const healthToneStyles: Record<OverviewHealthTone, string> = {
+  good: "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/25 dark:text-emerald-300 dark:ring-emerald-400/20",
+  warning:
+    "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/25 dark:text-amber-300 dark:ring-amber-400/20",
+  alert:
+    "bg-red-50 text-red-700 ring-red-600/15 dark:bg-red-900/25 dark:text-red-300 dark:ring-red-400/20",
+  neutral:
+    "bg-zinc-50 text-zinc-700 ring-zinc-500/20 dark:bg-zinc-800/70 dark:text-zinc-300 dark:ring-zinc-400/20",
+};
 
 export const BooksHealthPanel = ({
   className,
