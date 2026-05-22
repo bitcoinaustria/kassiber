@@ -55,7 +55,8 @@ export function useWalletSyncAction() {
   const syncAll = React.useCallback(
     (options?: WalletSyncOptions) => {
       // Honor in-flight syncs from any other `useDaemonMutation("ui.wallets.sync")`
-      // instance — this hook is mounted in dashboard2/dashboard5/AppShell, so a
+      // instance — this hook is mounted in the transactions dashboard,
+      // overview dashboard, and AppShell, so a
       // sync started from one surface should block a duplicate from another.
       const otherSyncInFlight =
         queryClient.isMutating({

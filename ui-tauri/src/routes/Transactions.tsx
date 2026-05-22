@@ -1,5 +1,5 @@
 import {
-  Dashboard2,
+  TransactionsDashboard,
   type SwapCandidateReference,
 } from "@/components/dashboard2";
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
@@ -75,7 +75,7 @@ export function Transactions() {
         : undefined;
 
   return (
-    <Dashboard2
+    <TransactionsDashboard
       transactions={transactions}
       nowRate={nowRate}
       swapCandidates={swapCandidates}
