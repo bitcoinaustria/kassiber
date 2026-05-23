@@ -1,7 +1,5 @@
-import {
-  TransactionsDashboard,
-  type SwapCandidateReference,
-} from "@/components/dashboard2";
+import { TransactionsDashboard } from "@/components/transactions/dashboard/TransactionsDashboard";
+import { type SwapCandidateReference } from "@/components/transactions/dashboard/model";
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { useDaemon } from "@/daemon/client";
 import {
