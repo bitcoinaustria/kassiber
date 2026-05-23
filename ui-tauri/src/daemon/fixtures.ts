@@ -494,8 +494,8 @@ export const fixtures: Record<string, unknown> = {
     graph: {
       nodes: [
         { id: "source:1", node_type: "source", source_type: "fiat_purchase", label: "Reviewed exchange purchase", asset: "BTC" },
-        { id: "tx:1", node_type: "transaction", label: "withdraw-1", wallet: "Exchange", asset: "BTC" },
-        { id: "tx:2", node_type: "transaction", label: "target deposit", wallet: "Multisig Vault", asset: "BTC" },
+        { id: "tx1", node_type: "transaction", label: "withdraw-1", wallet: "Exchange", asset: "BTC" },
+        { id: "tx2", node_type: "transaction", label: "target deposit", wallet: "Multisig Vault", asset: "BTC" },
       ],
       edges: [
         { id: "link:1", link_type: "manual_source", state: "reviewed", method: "manual", allocation_amount: 0.15, asset: "BTC", allocation_policy: "explicit" },
@@ -568,7 +568,7 @@ export const fixtures: Record<string, unknown> = {
         transaction_count: 1,
         source_count: 0,
         nodes: [
-          { id: "tx:2", node_type: "transaction", label: "target deposit", wallet: "Multisig Vault", asset: "BTC", required_amount: 0.15, occurred_at: "2024-11-05T10:12:00Z", external_id: "mock-target-deposit" },
+          { id: "tx2", node_type: "transaction", label: "target deposit", wallet: "Multisig Vault", asset: "BTC", required_amount: 0.15, occurred_at: "2024-11-05T10:12:00Z", external_id: "mock-target-deposit" },
         ],
       },
       {
@@ -607,7 +607,7 @@ export const fixtures: Record<string, unknown> = {
           distance_to_target: 0,
           nodes: [
             {
-              id: "tx:2",
+              id: "tx2",
               node_type: "transaction",
               kind: "inbound",
               label: "target deposit",
@@ -623,7 +623,7 @@ export const fixtures: Record<string, unknown> = {
         {
           id: "link:1",
           from: "source:1",
-          to: "tx:2",
+          to: "tx2",
           link_type: "manual_source",
           asset: "BTC",
           amount: 0.15,
@@ -643,6 +643,14 @@ export const fixtures: Record<string, unknown> = {
       attachments: [{ id: "att:1", label: "Exchange statement", attachment_type: "file" }],
       privacy_note: "Txids disclose on-chain neighbors to the recipient. Chain observations are context, not proof of ownership.",
       excluded: ["descriptors", "xpubs", "wallet files", "seeds", "backend tokens", "unrelated wallet history"],
+    },
+    diagrams: {
+      flow_svg:
+        '<svg viewBox="0 0 500 70" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="20" width="120" height="34" rx="4" fill="#ecfdf5" stroke="#16a34a"/><text x="8" y="33" font-family="Helvetica,Arial,sans-serif" font-size="8" font-weight="700" fill="#222222">Fiat purchase</text><text x="8" y="46" font-family="Courier,monospace" font-size="7" fill="#222222">0.30000000 BTC</text><line x1="124" y1="37" x2="184" y2="37" stroke="#666666" stroke-width="2.5"/><polyline points="184,37 179,34 179,40" fill="#666666"/><text x="153" y="32" font-family="Helvetica,Arial,sans-serif" font-size="6" font-weight="700" fill="#666666" text-anchor="middle">100.0%</text><rect x="190" y="20" width="120" height="34" rx="4" fill="#ffffff" stroke="#d9d9d9"/><text x="196" y="33" font-family="Helvetica,Arial,sans-serif" font-size="8" font-weight="700" fill="#222222">Cold storage</text><text x="196" y="46" font-family="Courier,monospace" font-size="7" fill="#222222">0.30000000 BTC</text><line x1="312" y1="37" x2="372" y2="37" stroke="#666666" stroke-width="2.5"/><polyline points="372,37 367,34 367,40" fill="#666666"/><rect x="378" y="20" width="120" height="34" rx="4" fill="#ffffff" stroke="#e3000f" stroke-width="1.2"/><text x="384" y="33" font-family="Helvetica,Arial,sans-serif" font-size="8" font-weight="700" fill="#222222">Broker deposit</text><text x="384" y="46" font-family="Courier,monospace" font-size="7" fill="#222222">0.30000000 BTC</text></svg>',
+      source_mix_ring_svg:
+        '<svg viewBox="0 0 240 100" xmlns="http://www.w3.org/2000/svg"><circle cx="49" cy="50" r="45" fill="#2563eb"/><circle cx="49" cy="50" r="26" fill="#ffffff"/><text x="49" y="50" font-family="Helvetica,Arial,sans-serif" font-size="9" font-weight="700" fill="#222222" text-anchor="middle">0.30000000</text><text x="49" y="60" font-family="Helvetica,Arial,sans-serif" font-size="6" fill="#666666" text-anchor="middle">BTC explained</text><rect x="104" y="46" width="7" height="7" fill="#2563eb"/><text x="115" y="52" font-family="Helvetica,Arial,sans-serif" font-size="6.4" fill="#222222">fiat purchase  100.0%</text></svg>',
+      data_source_ring_svg:
+        '<svg viewBox="0 0 240 100" xmlns="http://www.w3.org/2000/svg"><circle cx="49" cy="50" r="45" fill="#0ea5e9"/><circle cx="49" cy="50" r="26" fill="#ffffff"/><text x="49" y="50" font-family="Helvetica,Arial,sans-serif" font-size="9" font-weight="700" fill="#222222" text-anchor="middle">3</text><text x="49" y="60" font-family="Helvetica,Arial,sans-serif" font-size="6" fill="#666666" text-anchor="middle">transactions</text><rect x="104" y="46" width="7" height="7" fill="#0ea5e9"/><text x="115" y="52" font-family="Helvetica,Arial,sans-serif" font-size="6.4" fill="#222222">wallet  100.0%</text></svg>',
     },
   },
   "ui.source_funds.cases.save": {
@@ -679,8 +687,8 @@ export const fixtures: Record<string, unknown> = {
     graph: {
       nodes: [
         { id: "source:1", node_type: "source", source_type: "fiat_purchase", label: "Reviewed exchange purchase", asset: "BTC" },
-        { id: "tx:1", node_type: "transaction", label: "withdraw-1", wallet: "Exchange", asset: "BTC" },
-        { id: "tx:2", node_type: "transaction", label: "target deposit", wallet: "Multisig Vault", asset: "BTC" },
+        { id: "tx1", node_type: "transaction", label: "withdraw-1", wallet: "Exchange", asset: "BTC" },
+        { id: "tx2", node_type: "transaction", label: "target deposit", wallet: "Multisig Vault", asset: "BTC" },
       ],
       edges: [
         { id: "link:1", link_type: "manual_source", state: "reviewed", method: "manual", allocation_amount: 0.15, asset: "BTC", allocation_policy: "explicit" },

@@ -222,6 +222,7 @@ SUPPORTED_KINDS = (
     "ui.source_funds.suggest",
     "ui.source_funds.evidence.list",
     "ui.source_funds.export_pdf",
+    "ui.source_funds.export_bundle",
     "ui.source_funds.coverage",
     "ui.source_funds.recipients.list",
     "ui.source_funds.recipients.create",
@@ -1725,6 +1726,8 @@ def _ui_source_funds_payload(
             max_depth=_resolve_report_depth(args.get("max_depth")),
             save_case=False,
             recipient_ref=recipient_ref,
+            include_diagrams=True,
+            report_options=args.get("report_options") if isinstance(args.get("report_options"), dict) else None,
         )
 
     if kind == "ui.source_funds.cases.save":
@@ -1758,6 +1761,8 @@ def _ui_source_funds_payload(
             save_case=True,
             case_label=case_label,
             recipient_ref=recipient_ref,
+            include_diagrams=True,
+            report_options=args.get("report_options") if isinstance(args.get("report_options"), dict) else None,
         )
 
     if kind == "ui.source_funds.cases.list":
@@ -1860,6 +1865,25 @@ def _ui_source_funds_payload(
                 "filename": Path(payload["file"]).name,
             }
         )
+        return payload
+
+    if kind == "ui.source_funds.export_bundle":
+        case_ref = args.get("case")
+        if case_ref is not None and not isinstance(case_ref, str):
+            raise AppError("ui.source_funds.export_bundle case must be a string", code="validation")
+        path = _managed_report_export_path(ctx.data_root, "kassiber-source-funds-bundle", ".zip")
+        payload = dict(
+            core_source_funds.export_bundle(
+                conn,
+                None,
+                None,
+                path,
+                hooks,
+                data_root=ctx.data_root,
+                case_ref=case_ref,
+            )
+        )
+        payload["filename"] = Path(payload["file"]).name
         return payload
 
     raise AppError(f"unsupported source-funds daemon export kind: {kind}", code="validation")
@@ -7362,6 +7386,7 @@ def handle_request(
         "ui.source_funds.suggest",
         "ui.source_funds.evidence.list",
         "ui.source_funds.export_pdf",
+        "ui.source_funds.export_bundle",
         "ui.source_funds.coverage",
         "ui.source_funds.recipients.list",
         "ui.source_funds.recipients.create",

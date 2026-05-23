@@ -213,9 +213,23 @@ source-of-funds documents:
 The shipped local report envelope now carries those sections as structured
 fields instead of PDF-only prose: `overview`, `narrative`, `data_sources`,
 `simplified_flow`, `flow_levels`, `source_mix`, `graph`, `findings`,
-`disclosure_preview`, and `report_context`. The narrative and simplified chart
-model are generated deterministically from the saved review graph on the user's
-machine. They must not call an external AI service or upgrade weak heuristics
+`disclosure_preview`, `report_context`, and (when requested) `diagrams`. The
+narrative and simplified chart model are generated deterministically from the
+saved review graph on the user's machine.
+
+Diagrams are rendered by a single on-device substrate
+([kassiber/core/source_funds_diagram.py](../../kassiber/core/source_funds_diagram.py)):
+one `reportlab.graphics` `Drawing` per chart (a weighted Sankey-style
+simplified flow with value-share edge percentages and a Bitcoin-native legend,
+plus source-mix and data-source donut rings). The same builder renders the
+native-vector chart embedded in the PDF and a web-safe SVG string for the
+desktop disclosure preview, so the two cannot drift. SVG rendering is opt-in
+via `build_report(..., include_diagrams=True)`; the `compute_coverage` sweep
+leaves it off so its repeated per-transaction `build_report` calls never pay for
+chart rendering. When `include_diagrams` is set the `diagrams` SVGs are frozen
+into the case snapshot alongside the rest of the disclosure payload. `simplified_flow`
+edges now also carry `percent_of_target` (target amount = 100% base; trading
+gains/losses and fees are never folded into source percentages). They must not call an external AI service or upgrade weak heuristics
 into proof. The simplified chart follows reviewed local sources, wallet
 transfers, and consolidation-style reviewed hops. CoinJoin/PayJoin traversal is
 deferred for now and rendered as an explicit privacy boundary, not as proof
@@ -351,6 +365,20 @@ The first implementation adds the conservative, testable core path:
 - PDF sections for source overview, local narrative, data-source rollups, source
   mix, a simplified boxes-and-arrows flow path, level-by-level flow rows,
   transaction details, review gates, disclosure preview, and limitations
+- a single on-device diagram substrate
+  ([kassiber/core/source_funds_diagram.py](../../kassiber/core/source_funds_diagram.py))
+  that renders a weighted Sankey-style simplified flow (value-share edge
+  percentages, Bitcoin-native legend) plus source-mix / data-source donut rings,
+  emitted both as native-vector PDF charts and as web-safe SVG strings frozen in
+  the case snapshot; the desktop Export step embeds those same SVGs so the
+  preview matches the PDF, and the cover gains an at-a-glance strip and mini-flow
+- advanced, snapshot-frozen presentation options via `build_report(...,
+  report_options=...)`, stored as `envelope["report_options"]`. The first option
+  is `diagram_detail` (`summary` clusters long paths; `detailed` shows more hops
+  before clustering), exposed as `reports source-funds --diagram-detail`, the
+  daemon `report_options` arg, and a desktop Export-step control. New options
+  (section toggles, amount precision, masking) should follow the same
+  normalize-store-freeze pattern so simple UX stays the default
 - a basic Austrian/EUR report context with bilingual title, evidence checklist,
   and a checked-in fictitious demo generator at
   `scripts/generate-source-funds-demo-report.py`
