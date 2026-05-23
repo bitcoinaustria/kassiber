@@ -134,6 +134,7 @@ export interface SourceFundsDraft {
   plannedDestination?: string;
   plannedNote?: string;
   revealMode?: string;
+  diagramDetail?: "summary" | "detailed";
   selectedRecipientId?: string;
   currentStep?: "setup" | "review" | "export";
 }

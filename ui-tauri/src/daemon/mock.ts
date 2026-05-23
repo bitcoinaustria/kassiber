@@ -3390,6 +3390,38 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.source_funds.preview") {
+      // Echo target_amount / reveal_mode so the planned-sale amount field has a
+      // visible effect in the mock preview (the real daemon recomputes the
+      // report from these args).
+      const base = fixtures["ui.source_funds.preview"] as Record<string, unknown>;
+      const reqArgs = (req.args ?? {}) as {
+        target_amount?: unknown;
+        reveal_mode?: unknown;
+      };
+      const parsedAmount =
+        typeof reqArgs.target_amount === "number"
+          ? reqArgs.target_amount
+          : typeof reqArgs.target_amount === "string" && reqArgs.target_amount.trim()
+            ? Number(reqArgs.target_amount)
+            : null;
+      const clone = structuredClone(base) as Record<string, unknown>;
+      if (parsedAmount != null && Number.isFinite(parsedAmount) && parsedAmount > 0) {
+        clone.target = {
+          ...(clone.target as Record<string, unknown>),
+          required_amount: parsedAmount,
+        };
+        clone.overview = {
+          ...(clone.overview as Record<string, unknown>),
+          target_amount: parsedAmount,
+        };
+      }
+      if (typeof reqArgs.reveal_mode === "string" && reqArgs.reveal_mode) {
+        clone.reveal_mode = reqArgs.reveal_mode;
+      }
+      return { kind: req.kind, schema_version: 1, data: clone as T };
+    }
+
     const fixture = fixtures[req.kind];
     if (fixture === undefined) {
       return {
