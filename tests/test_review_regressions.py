@@ -472,7 +472,7 @@ class ReviewRegressionTest(unittest.TestCase):
                     btc_to_msat("1.0"),
                     50_000,
                     50_000,
-                    50_000,
+                    None,
                     None,
                     None,
                     "Initial funding",
@@ -554,8 +554,10 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(overview["connections"][0]["label"], "Cold Wallet")
         self.assertAlmostEqual(overview["connections"][0]["balance"], 0.899)
         self.assertAlmostEqual(overview["balanceSeries"][-1], 0.899)
+        self.assertEqual(overview["fiat"]["fiatCurrency"], "EUR")
         self.assertAlmostEqual(overview["fiat"]["eurBalance"], 58_435)
-        self.assertAlmostEqual(overview["fiat"]["eurCostBasis"], 50_000)
+        self.assertAlmostEqual(overview["fiat"]["eurCostBasis"], 44_950)
+        self.assertAlmostEqual(overview["fiat"]["eurUnrealized"], 13_485)
         self.assertGreaterEqual(len(overview["portfolioSeries"]), 2)
         self.assertAlmostEqual(overview["portfolioSeries"][-1]["balanceBtc"], 0.899)
         self.assertAlmostEqual(overview["portfolioSeries"][-1]["valueEur"], 58_435)

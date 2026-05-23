@@ -50,6 +50,7 @@ def _empty_overview_snapshot() -> dict[str, Any]:
         "balanceSeries": [0.0] * 12,
         "portfolioSeries": [],
         "fiat": {
+            "fiatCurrency": "EUR",
             "eurBalance": 0.0,
             "eurCostBasis": 0.0,
             "eurUnrealized": 0.0,
@@ -1041,6 +1042,29 @@ def _portfolio_cost_basis_by_transaction(
     return by_transaction
 
 
+def _current_portfolio_cost_basis(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> float:
+    rows = conn.execute(
+        """
+        SELECT quantity, fiat_value, cost_basis
+        FROM journal_entries
+        WHERE profile_id = ? AND asset = 'BTC'
+        ORDER BY occurred_at ASC, created_at ASC, id ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    cost_basis = 0.0
+    for row in rows:
+        quantity = int(row["quantity"] or 0)
+        if quantity >= 0:
+            cost_basis += float(row["fiat_value"] or 0)
+        else:
+            cost_basis -= float(row["cost_basis"] or 0)
+    return cost_basis
+
+
 def _portfolio_series(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -1108,18 +1132,11 @@ def _portfolio_series(
 def _fiat_snapshot(
     conn: sqlite3.Connection,
     profile_id: str,
+    fiat_currency: str,
     price_eur: float,
     balances: dict[str, float],
-) -> dict[str, float]:
+) -> dict[str, Any]:
     market_value = sum(balances.values()) * price_eur
-    cost_row = conn.execute(
-        """
-        SELECT SUM(COALESCE(cost_basis, 0)) AS cost_basis
-        FROM journal_entries
-        WHERE profile_id = ? AND entry_type IN ('acquisition', 'income', 'transfer_in')
-        """,
-        (profile_id,),
-    ).fetchone()
     realized_row = conn.execute(
         """
         SELECT SUM(COALESCE(gain_loss, 0)) AS gain_loss
@@ -1130,8 +1147,9 @@ def _fiat_snapshot(
         """,
         (profile_id,),
     ).fetchone()
-    cost_basis = float(cost_row["cost_basis"] or 0)
+    cost_basis = _current_portfolio_cost_basis(conn, profile_id)
     return {
+        "fiatCurrency": str(fiat_currency or "EUR").upper(),
         "eurBalance": float(market_value),
         "eurCostBasis": cost_basis,
         "eurUnrealized": float(market_value - cost_basis),
@@ -1180,7 +1198,13 @@ def build_overview_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     # processed journal rows do not make a wallet with imported funds look
     # empty in the GUI.
     balances = _transaction_wallet_balances(conn, profile["id"])
-    fiat = _fiat_snapshot(conn, profile["id"], price_eur, balances)
+    fiat = _fiat_snapshot(
+        conn,
+        profile["id"],
+        profile["fiat_currency"],
+        price_eur,
+        balances,
+    )
     snapshot = {
         "priceEur": price_eur,
         "priceUsd": price_usd,

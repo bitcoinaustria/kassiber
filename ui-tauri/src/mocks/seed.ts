@@ -236,6 +236,7 @@ export interface Tx {
 }
 
 export interface FiatSnapshot {
+  fiatCurrency?: string | null;
   eurBalance: number;
   eurCostBasis: number;
   eurUnrealized: number;
@@ -777,6 +778,7 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
     { date: "2026-04-30", label: "2026-04-30", balanceBtc: 4.38, valueEur: 312_842.77, costBasisEur: 198_502.40 },
   ],
   fiat: {
+    fiatCurrency: "EUR",
     eurBalance: 312_842.77,
     eurCostBasis: 198_502.40,
     eurUnrealized: 114_340.37,

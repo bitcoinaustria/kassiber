@@ -356,6 +356,7 @@ export const BtcActivityChart = ({
     const gainPct = visibleCostBasis
       ? (gainEur / Math.abs(visibleCostBasis)) * 100
       : null;
+    const fiatCurrency = (snapshot.fiat.fiatCurrency || "EUR").toUpperCase();
     const incomingActivityPoints = activityPoints.filter(
       (point) => point.eventFlow === "incoming",
     );
@@ -530,7 +531,7 @@ export const BtcActivityChart = ({
                   )}
                 >
                   {gainEur >= 0 ? "+ " : "- "}
-                  {Math.abs(gainPct).toFixed(2)}% unrealized
+                  {Math.abs(gainPct).toFixed(2)}% unrealized ({fiatCurrency})
                 </span>
               )}
             </div>
