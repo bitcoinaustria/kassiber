@@ -7,6 +7,7 @@ import {
   ChevronDown,
   Check,
   ExternalLink,
+  Eye,
   FileCheck,
   FileDown,
   GitBranch,
@@ -24,6 +25,11 @@ import { Trans, useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
+import { type Transaction } from "@/components/transactions";
+import { TransactionDetailController } from "@/components/transactions/dashboard/TransactionDetailController";
+import { toDashboardTransaction } from "@/components/transactions/dashboard/model";
+import { useCurrency } from "@/lib/currency";
+import { type Tx } from "@/mocks/seed";
 import {
   Card,
   CardContent,
@@ -268,6 +274,11 @@ type SourceFundsPreview = {
       external_id?: string;
     }[];
   }[];
+  diagrams?: {
+    flow_svg?: string;
+    source_mix_ring_svg?: string;
+    data_source_ring_svg?: string;
+  };
   case?: {
     id: string;
     status: string;
@@ -648,10 +659,12 @@ function TransactionTargetRow({
   row,
   active,
   onSelect,
+  onOpenDetails,
 }: {
   row: TransactionRow;
   active: boolean;
   onSelect: () => void;
+  onOpenDetails: () => void;
 }) {
   const { t } = useTranslation("sourceFunds");
   const flow = txFlow(row);
@@ -678,14 +691,17 @@ function TransactionTargetRow({
     row.counter || row.description || row.note || txid || t("transactionRow.fallbackDescription");
 
   return (
-    <button
-      type="button"
+    <div
       className={[
-        "w-full rounded-md border px-3 py-2 text-left transition-colors",
+        "flex items-stretch gap-1 rounded-md border transition-colors",
         active ? "border-primary bg-primary/5" : "hover:bg-muted/45",
       ].join(" ")}
-      onClick={onSelect}
     >
+      <button
+        type="button"
+        className="min-w-0 flex-1 px-3 py-2 text-left"
+        onClick={onSelect}
+      >
       <div className="grid min-w-0 gap-3 md:grid-cols-[minmax(0,1fr)_140px_150px_130px] md:items-center">
         <div className="flex min-w-0 items-start gap-3">
           <span
@@ -726,7 +742,17 @@ function TransactionTargetRow({
           </span>
         </div>
       </div>
-    </button>
+      </button>
+      <button
+        type="button"
+        className="flex shrink-0 items-center border-l px-2.5 text-muted-foreground transition-colors hover:text-foreground"
+        onClick={onOpenDetails}
+        aria-label="View transaction details"
+        title="View details"
+      >
+        <Eye className="size-4" aria-hidden="true" />
+      </button>
+    </div>
   );
 }
 
@@ -759,6 +785,12 @@ export function SourceFunds() {
     "planned_exchange_sale" | "existing_transaction"
   >(persistedDraft?.reportPurpose ?? "planned_exchange_sale");
   const [target, setTarget] = useState(persistedDraft?.target ?? "");
+  const [detailTransaction, setDetailTransaction] = useState<Transaction | null>(
+    null,
+  );
+  const currency = useCurrency();
+  const hideSensitive = useUiStore((state) => state.hideSensitive);
+  const explorerSettings = useUiStore((state) => state.explorerSettings);
   const [targetAmount, setTargetAmount] = useState(
     persistedDraft?.targetAmount ?? "",
   );
@@ -777,6 +809,9 @@ export function SourceFunds() {
   );
   const [revealMode, setRevealMode] = useState(
     persistedDraft?.revealMode ?? "standard",
+  );
+  const [diagramDetail, setDiagramDetail] = useState<"summary" | "detailed">(
+    persistedDraft?.diagramDetail ?? "summary",
   );
   const [selectedRecipientId, setSelectedRecipientId] = useState<string>(
     persistedDraft?.selectedRecipientId ?? "",
@@ -902,6 +937,17 @@ export function SourceFunds() {
     });
     return mapping;
   }, [rows]);
+  // Open the shared transaction detail panel for a transaction id (used by the
+  // picker's details affordance, the review gates, and the flow path nodes).
+  const openTxDetailById = (txId: string) => {
+    if (!txId) return;
+    const index = rows.findIndex(
+      (row) => row.id === txId || row.transaction_id === txId || txRef(row) === txId,
+    );
+    if (index >= 0) {
+      setDetailTransaction(toDashboardTransaction(rows[index] as unknown as Tx, index));
+    }
+  };
 
   const previewArgs = {
     target_transaction: selectedTarget,
@@ -915,6 +961,7 @@ export function SourceFunds() {
       reportPurpose === "planned_exchange_sale" ? plannedNote || undefined : undefined,
     reveal_mode: revealMode,
     recipient: selectedRecipientId || undefined,
+    report_options: { diagram_detail: diagramDetail },
   };
   const preview = useDaemon<SourceFundsPreview>(
     "ui.source_funds.preview",
@@ -1081,6 +1128,7 @@ export function SourceFunds() {
       plannedDestination,
       plannedNote,
       revealMode,
+      diagramDetail,
       selectedRecipientId,
       currentStep,
     });
@@ -1093,6 +1141,7 @@ export function SourceFunds() {
     plannedDestination,
     plannedNote,
     revealMode,
+    diagramDetail,
     selectedRecipientId,
     currentStep,
   ]);
@@ -1336,33 +1385,14 @@ export function SourceFunds() {
                 </div>
               )}
               {currentStep === "setup" && (
-              planned ? (
-                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_160px_150px]">
-                  <Field label={targetLabel} htmlFor="sof-target">
-                    <select
-                      id="sof-target"
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                      value={selectedTarget}
-                      onChange={(event) => setTarget(event.target.value)}
-                    >
-                      {rows.map((row) => (
-                        <option key={txRef(row)} value={txRef(row)}>
-                          {txLabel(row)}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <ReportControlFields
-                    amountLabel={amountLabel}
-                    targetAmount={targetAmount}
-                    selectedTx={selectedTx}
-                    revealMode={revealMode}
-                    onAmountChange={setTargetAmount}
-                    onRevealModeChange={setRevealMode}
-                  />
-                </div>
-              ) : (
                 <div className="space-y-3">
+                  {planned && (
+                    <p className="text-xs text-muted-foreground">
+                      The sale hasn't happened yet, so pick the existing
+                      transaction that currently holds the coins you intend to
+                      sell. The report traces history backward from here.
+                    </p>
+                  )}
                   <div className="grid gap-3 lg:grid-cols-[180px_150px_minmax(0,1fr)]">
                     <ReportControlFields
                       amountLabel={amountLabel}
@@ -1551,6 +1581,10 @@ export function SourceFunds() {
                               row={row}
                               active={txRef(row) === selectedTarget}
                               onSelect={() => setTarget(txRef(row))}
+                              onOpenDetails={() => {
+                                setTarget(txRef(row));
+                                openTxDetailById(txRef(row));
+                              }}
                             />
                           ))}
                         </div>
@@ -1558,7 +1592,6 @@ export function SourceFunds() {
                     </div>
                   </div>
                 </div>
-              )
               )}
               {currentStep === "setup" && planned && (
                 <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
@@ -1586,6 +1619,7 @@ export function SourceFunds() {
                   report={report}
                   bulkReviewable={bulkReviewableSuggestions.length}
                   manualReview={manualSuggestionCount}
+                  onOpenTransaction={openTxDetailById}
                 />
               )}
 
@@ -1648,6 +1682,7 @@ export function SourceFunds() {
                     report={report}
                     bulkReviewable={bulkReviewableSuggestions.length}
                     manualReview={manualSuggestionCount}
+                    onOpenTransaction={openTxDetailById}
                   />
                   <RecipientPicker
                     recipients={recipientsQuery.data?.data?.recipients ?? []}
@@ -2183,6 +2218,11 @@ export function SourceFunds() {
                 <GateRow
                   key={`${finding.code}-${finding.ref ?? ""}-${finding.message}`}
                   finding={finding}
+                  onOpenTransaction={
+                    finding.ref && txById.has(finding.ref)
+                      ? () => openTxDetailById(finding.ref as string)
+                      : undefined
+                  }
                 />
               ))}
               {report && blockers.length === 0 && warnings.length === 0 && (
@@ -2190,6 +2230,41 @@ export function SourceFunds() {
                   {t("gates.clear")}
                 </div>
               )}
+            </CardContent>
+          </Card>
+          )}
+
+          {currentStep === "export" && report?.diagrams?.flow_svg && (
+          <Card>
+            <CardHeader className="border-b">
+              <CardTitle className="text-base">Report visuals</CardTitle>
+              <CardDescription>
+                Rendered on this device — identical to the exported PDF.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 p-4">
+              <Field label="Diagram detail" htmlFor="sof-diagram-detail">
+                <select
+                  id="sof-diagram-detail"
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                  value={diagramDetail}
+                  onChange={(event) =>
+                    setDiagramDetail(event.target.value === "detailed" ? "detailed" : "summary")
+                  }
+                >
+                  <option value="summary">Summary — cluster long paths (default)</option>
+                  <option value="detailed">Detailed — show more hops before clustering</option>
+                </select>
+              </Field>
+              <ReportDiagram svg={report.diagrams.flow_svg} label="Simplified flow path" />
+              <ReportDiagram
+                svg={report.diagrams.source_mix_ring_svg}
+                label="Source mix"
+              />
+              <ReportDiagram
+                svg={report.diagrams.data_source_ring_svg}
+                label="Data sources"
+              />
             </CardContent>
           </Card>
           )}
@@ -2313,6 +2388,15 @@ export function SourceFunds() {
         </div>
         )}
       </div>
+      <TransactionDetailController
+        transaction={detailTransaction}
+        hideSensitive={hideSensitive}
+        currency={currency}
+        explorerSettings={explorerSettings}
+        onOpenChange={(open) => {
+          if (!open) setDetailTransaction(null);
+        }}
+      />
     </div>
   );
 }
@@ -2372,10 +2456,12 @@ function CaseBrief({
   report,
   bulkReviewable,
   manualReview,
+  onOpenTransaction,
 }: {
   report?: SourceFundsPreview;
   bulkReviewable: number;
   manualReview: number;
+  onOpenTransaction?: (txId: string) => void;
 }) {
   const { t } = useTranslation("sourceFunds");
   const overview = report?.overview;
@@ -2470,15 +2556,88 @@ function CaseBrief({
           </div>
         </div>
       </div>
-      <FlowPathPreview flow={report?.simplified_flow} />
+      <FlowPathPreview
+        flow={report?.simplified_flow}
+        onOpenTransaction={onOpenTransaction}
+      />
     </section>
+  );
+}
+
+// Maps the on-device (light, print-matching) diagram palette to a dark-mode
+// palette. The frozen SVG stays light so it matches the exported PDF; the app
+// recolours it for the dark theme on screen only.
+const DARK_SVG_SUBS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/#222222/gi, "#e5e7eb"], // ink / text
+  [/#666666/gi, "#9ca3af"], // muted text
+  [/#d9d9d9/gi, "#3f3f46"], // hairlines
+  [/#ffffff/gi, "#09090b"], // surfaces / donut hole / neutral fills
+  [/#f7f7f7/gi, "#18181b"], // soft surface
+  [/#ecfdf5/gi, "#06281f"], // root-source fill
+  [/#16a34a/gi, "#34d399"], // root-source / income
+  [/#fffbeb/gi, "#2a1d07"], // attestation fill
+  [/#d97706/gi, "#fbbf24"], // attestation / manual
+  [/#fff7ed/gi, "#2a1607"], // privacy fill
+  [/#ea580c/gi, "#fb923c"], // privacy stroke / edge
+  [/#e3000f/gi, "#f87171"], // target / accent
+  [/#2563eb/gi, "#60a5fa"], // swap edge / fiat purchase / wallet
+  [/#dbeafe/gi, "#1e3a5f"], // swap legend chip
+  [/#0ea5e9/gi, "#38bdf8"], // exchange
+  [/#65a30d/gi, "#a3e635"], // mining
+  [/#a855f7/gi, "#c084fc"], // gift
+  [/#0891b2/gi, "#22d3ee"], // blockchain
+  [/#6b7280/gi, "#9ca3af"], // unknown
+  [/#dc2626/gi, "#f87171"], // fallback red
+];
+
+function toDarkSvg(svg: string): string {
+  return DARK_SVG_SUBS.reduce((acc, [pattern, color]) => acc.replace(pattern, color), svg);
+}
+
+function useIsDark(): boolean {
+  const [dark, setDark] = useState(
+    () =>
+      typeof document !== "undefined" &&
+      document.documentElement.classList.contains("dark"),
+  );
+  useEffect(() => {
+    const root = document.documentElement;
+    const sync = () => setDark(root.classList.contains("dark"));
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+  return dark;
+}
+
+function ReportDiagram({ svg, label }: { svg?: string; label: string }) {
+  const dark = useIsDark();
+  if (!svg) {
+    return null;
+  }
+  // Rendered on-device; embedded as a sandboxed <img> so any user-supplied
+  // label text in the SVG can never execute as markup. Recoloured for dark mode.
+  const themed = dark ? toDarkSvg(svg) : svg;
+  const src = `data:image/svg+xml;utf8,${encodeURIComponent(themed)}`;
+  return (
+    <figure className="space-y-1">
+      <img
+        src={src}
+        alt={label}
+        className="w-full rounded-md border bg-white dark:bg-zinc-950"
+      />
+      <figcaption className="text-xs text-muted-foreground">{label}</figcaption>
+    </figure>
   );
 }
 
 function FlowPathPreview({
   flow,
+  onOpenTransaction,
 }: {
   flow?: SourceFundsPreview["simplified_flow"];
+  onOpenTransaction?: (txId: string) => void;
 }) {
   const { t } = useTranslation("sourceFunds");
   const levels = flow?.levels ?? [];
@@ -2513,29 +2672,50 @@ function FlowPathPreview({
                     {level.role ? pretty(level.role) : t("flowPath.fallbackRole")}
                   </div>
                   <div className="space-y-1">
-                    {nodes.map((node) => (
-                      <div
-                        key={node.id}
-                        className={[
-                          "rounded border px-2 py-1",
-                          node.deferred_privacy_hop
-                            ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
-                            : level.role === "target"
-                              ? "border-primary/35 bg-primary/5"
-                              : "bg-muted/25",
-                        ].join(" ")}
-                      >
-                        <div className="truncate text-xs font-medium">
-                          {node.label || node.id}
+                    {nodes.map((node) => {
+                      const clickable =
+                        node.node_type === "transaction" &&
+                        Boolean(onOpenTransaction);
+                      const nodeClassName = [
+                        "block w-full rounded border px-2 py-1 text-left",
+                        node.deferred_privacy_hop
+                          ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
+                          : level.role === "target"
+                            ? "border-primary/35 bg-primary/5"
+                            : "bg-muted/25",
+                        clickable
+                          ? "cursor-pointer transition-colors hover:border-primary/50"
+                          : "",
+                      ].join(" ");
+                      const nodeContent = (
+                        <>
+                          <div className="truncate text-xs font-medium">
+                            {node.label || node.id}
+                          </div>
+                          <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                            {pretty(node.kind || node.node_type || "")}
+                            {node.amount != null
+                              ? ` · ${formatBtc(node.amount, node.asset || "BTC")}`
+                              : ""}
+                          </div>
+                        </>
+                      );
+                      return clickable ? (
+                        <button
+                          key={node.id}
+                          type="button"
+                          className={nodeClassName}
+                          onClick={() => onOpenTransaction?.(node.id)}
+                          title="Open transaction details"
+                        >
+                          {nodeContent}
+                        </button>
+                      ) : (
+                        <div key={node.id} className={nodeClassName}>
+                          {nodeContent}
                         </div>
-                        <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                          {pretty(node.kind || node.node_type || "")}
-                          {node.amount != null
-                            ? ` · ${formatBtc(node.amount, node.asset || "BTC")}`
-                            : ""}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {hidden > 0 && (
                       <div className="rounded border border-dashed px-2 py-1 text-xs text-muted-foreground">
                         {t("flowPath.more", { count: hidden })}
@@ -2579,34 +2759,56 @@ function WizardProgress({
   const { t } = useTranslation("sourceFunds");
   const currentIndex = WIZARD_STEPS.findIndex((step) => step.id === currentStep);
   return (
-    <div className="grid gap-2 md:grid-cols-3">
+    <nav className="flex items-center" aria-label="Progress">
       {WIZARD_STEPS.map((step, index) => {
         const active = step.id === currentStep;
         const done = index < currentIndex;
+        const isLast = index === WIZARD_STEPS.length - 1;
         return (
-          <button
+          <div
             key={step.id}
-            type="button"
-            className={[
-              "rounded-md border px-3 py-2 text-left text-sm transition-colors",
-              active
-                ? "border-primary bg-primary/5"
-                : done
-                  ? "bg-muted/60"
-                  : "hover:bg-muted/40",
-            ].join(" ")}
-            onClick={() => onStep(step.id)}
+            className={isLast ? "flex items-center" : "flex flex-1 items-center"}
           >
-            <span className="block text-xs text-muted-foreground">
-              {t("wizard.step", { index: index + 1 })}
-            </span>
-            <span className="block font-medium">
-              {t(`wizard.steps.${step.id}`)}
-            </span>
-          </button>
+            <button
+              type="button"
+              onClick={() => onStep(step.id)}
+              aria-current={active ? "step" : undefined}
+              className="flex items-center gap-2 rounded-full text-left"
+            >
+              <span
+                className={[
+                  "flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition-colors",
+                  active
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : done
+                      ? "border-primary/40 bg-primary/15 text-primary"
+                      : "border-border bg-muted text-muted-foreground",
+                ].join(" ")}
+              >
+                {index + 1}
+              </span>
+              <span
+                className={[
+                  "text-sm font-medium transition-colors",
+                  active ? "text-foreground" : "text-muted-foreground",
+                ].join(" ")}
+              >
+                {t(`wizard.steps.${step.id}`)}
+              </span>
+            </button>
+            {!isLast && (
+              <span
+                aria-hidden="true"
+                className={[
+                  "mx-3 h-px flex-1 transition-colors",
+                  index < currentIndex ? "bg-primary/40" : "bg-border",
+                ].join(" ")}
+              />
+            )}
+          </div>
         );
       })}
-    </div>
+    </nav>
   );
 }
 
@@ -2990,7 +3192,13 @@ function RecipientPreferenceAdvisory({
   );
 }
 
-function GateRow({ finding }: { finding: SourceFundsFinding }) {
+function GateRow({
+  finding,
+  onOpenTransaction,
+}: {
+  finding: SourceFundsFinding;
+  onOpenTransaction?: () => void;
+}) {
   const { t } = useTranslation("sourceFunds");
   const blocker = finding.severity === "blocker";
   const headline = finding.next_step?.headline?.trim();
@@ -3015,6 +3223,16 @@ function GateRow({ finding }: { finding: SourceFundsFinding }) {
             </span>
           )}
         </div>
+      )}
+      {onOpenTransaction && (
+        <button
+          type="button"
+          className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[var(--color-accent)] hover:underline"
+          onClick={onOpenTransaction}
+        >
+          <Eye className="size-3.5" aria-hidden="true" />
+          Open transaction to fix
+        </button>
       )}
     </div>
   );
