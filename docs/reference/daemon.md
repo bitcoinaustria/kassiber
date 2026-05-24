@@ -61,6 +61,8 @@ daemon for the exact current allowlist:
       "ui.profiles.create",
       "ui.profiles.switch",
       "ui.rates.summary",
+      "ui.rates.kraken_csv.import",
+      "ui.rates.rebuild",
       "ui.workspace.health",
       "ui.workspace.create",
       "ui.workspace.delete",

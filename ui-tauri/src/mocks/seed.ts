@@ -206,6 +206,12 @@ export interface Tx {
   pricingSourceKind?: string | null;
   pricingQuality?: string | null;
   pricingExternalRef?: string | null;
+  pricingProvider?: string | null;
+  pricingPair?: string | null;
+  pricingTimestamp?: string | null;
+  pricingFetchedAt?: string | null;
+  pricingGranularity?: string | null;
+  pricingMethod?: string | null;
   reviewStatus?: string | null;
   taxable?: boolean | null;
   atRegime?: string | null;

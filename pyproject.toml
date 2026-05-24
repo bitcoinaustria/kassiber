@@ -31,3 +31,9 @@ include-package-data = true
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["kassiber*"]
+
+[tool.setuptools.package-data]
+kassiber = [
+  "data/rates/kraken/btc_daily/*.csv",
+  "data/rates/kraken/btc_daily/README.md",
+]

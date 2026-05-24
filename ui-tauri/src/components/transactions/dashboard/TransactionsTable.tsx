@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import * as React from "react";
+import { useNavigate } from "@tanstack/react-router";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -68,6 +69,7 @@ import {
   formatShortTxid,
   formatSignedDisplayMoney,
   parseManualDecimal,
+  pricingCacheSummary,
   pricingSelectionValue,
   pricingSourceLabel,
   pricingSourceStyles,
@@ -140,6 +142,7 @@ const TransactionsTable = ({
   resetTableFiltersToken: number;
   isRefreshing?: boolean;
 }) => {
+  const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
   const [dateFilter, setDateFilter] = React.useState<string>("all");
   const [flowFilter, setFlowFilter] = React.useState<string>("all");
@@ -1096,9 +1099,10 @@ const TransactionsTable = ({
                       >
                         {draft.pricingSourceKind === "manual_override"
                           ? `${draft.manualCurrency} ${draft.manualValue || "value pending"}`
-                          : txn.rate
-                            ? `${currencyFormatter.format(txn.rate)} / BTC`
-                            : "Awaiting price"}
+                          : pricingCacheSummary(txn) ??
+                            (txn.rate
+                              ? `${currencyFormatter.format(txn.rate)} / BTC`
+                              : "Awaiting price")}
                       </p>
                     </TableCell>
                     <TableCell className="hidden xl:table-cell">
@@ -1373,6 +1377,11 @@ const TransactionsTable = ({
           });
         }}
         isUnpairing={unpairTransfer.isPending}
+        onOpenMarketDataSettings={() => {
+          setDetailTransaction(null);
+          updateTransactionDetailParams(null);
+          void navigate({ to: "/settings", hash: "market" });
+        }}
         hasNext={
           detailTransaction
             ? filteredTransactions.findIndex(

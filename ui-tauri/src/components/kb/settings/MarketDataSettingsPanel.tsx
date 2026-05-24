@@ -55,6 +55,8 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
   );
   const [pendingKrakenOperation, setPendingKrakenOperation] =
     React.useState<KrakenRatesImportOperation | null>(null);
+  const [pendingBundledKrakenImport, setPendingBundledKrakenImport] =
+    React.useState(false);
   const [rateRebuildOpen, setRateRebuildOpen] = React.useState(false);
   const [rateRebuildResult, setRateRebuildResult] =
     React.useState<RateRebuildData | null>(null);
@@ -105,12 +107,17 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
     }
   };
 
-  const startKrakenImport = async (operation: KrakenRatesImportOperation) => {
+  const startKrakenImport = async (
+    operation: KrakenRatesImportOperation,
+    options: { bundled?: boolean } = {},
+  ) => {
     let archivePath = krakenArchivePath.trim();
     setKrakenImportError(null);
     setKrakenImportResult(null);
 
-    if (!archivePath && isFilePickerAvailable) {
+    if (options.bundled) {
+      archivePath = "";
+    } else if (!archivePath && isFilePickerAvailable) {
       const selected = await pickFile({
         title:
           operation === "full"
@@ -132,15 +139,16 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       setKrakenArchivePath(selected);
     }
 
-    if (!archivePath) {
+    if (!options.bundled && !archivePath) {
       setKrakenImportError("Enter a local Kraken CSV or ZIP path.");
       return;
     }
 
     setPendingKrakenOperation(operation);
+    setPendingBundledKrakenImport(Boolean(options.bundled));
     try {
       const envelope = await importKrakenRates.mutateAsync({
-        path: archivePath,
+        ...(options.bundled ? { use_bundled: true } : { path: archivePath }),
         operation,
       });
       setKrakenImportResult(envelope.data ?? null);
@@ -150,6 +158,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       );
     } finally {
       setPendingKrakenOperation(null);
+      setPendingBundledKrakenImport(false);
     }
   };
 
@@ -404,7 +413,8 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
           <div className="min-w-0">
             <p className="text-sm font-medium">Kraken offline history</p>
             <p className="text-xs text-muted-foreground">
-              One-minute Bitcoin candles from a local Kraken CSV or ZIP archive.
+              Bitcoin EUR/USD minute candles from a local Kraken CSV/ZIP
+              archive, plus bundled daily values for fallback coverage.
             </p>
             <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
               <a
@@ -434,74 +444,112 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
           </span>
         </div>
 
-        <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-          <Input
-            value={krakenArchivePath}
-            onChange={(event) => setKrakenArchivePath(event.target.value)}
-            placeholder="~/Downloads/Kraken_OHLCVT.zip or extracted folder"
-            aria-label="Kraken CSV, ZIP, or folder path"
-            disabled={isImportingKraken}
-          />
-          <div className="flex gap-2">
+        <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 p-3">
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm font-medium">
+              Kraken offline history: minute data
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Import local Kraken BTC-EUR and BTC-USD one-minute candles for
+              exact transaction pricing windows.
+            </p>
+          </div>
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <Input
+              value={krakenArchivePath}
+              onChange={(event) => setKrakenArchivePath(event.target.value)}
+              placeholder="~/Downloads/Kraken_OHLCVT.zip, CSV, or extracted folder"
+              aria-label="Kraken CSV, ZIP, or folder path"
+              disabled={isImportingKraken}
+            />
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1 sm:flex-none"
+                onClick={() => void chooseKrakenArchive()}
+                disabled={!isFilePickerAvailable || isImportingKraken}
+                title={
+                  isFilePickerAvailable
+                    ? "Choose CSV or ZIP"
+                    : "Use the path field in browser mode"
+                }
+              >
+                <Upload className="size-4" aria-hidden="true" />
+                File
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1 sm:flex-none"
+                onClick={() => void chooseKrakenDirectory()}
+                disabled={!isFilePickerAvailable || isImportingKraken}
+                title={
+                  isFilePickerAvailable
+                    ? "Choose extracted folder"
+                    : "Use the path field in browser mode"
+                }
+              >
+                <FileInput className="size-4" aria-hidden="true" />
+                Folder
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
             <Button
               type="button"
-              variant="outline"
-              className="flex-1 sm:flex-none"
-              onClick={() => void chooseKrakenArchive()}
-              disabled={!isFilePickerAvailable || isImportingKraken}
-              title={
-                isFilePickerAvailable
-                  ? "Choose CSV or ZIP"
-                  : "Use the path field in browser mode"
-              }
+              onClick={() => void startKrakenImport("full")}
+              disabled={isImportingKraken}
             >
-              <Upload className="size-4" aria-hidden="true" />
-              File
+              {pendingKrakenOperation === "full" && !pendingBundledKrakenImport ? (
+                <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Database className="size-4" aria-hidden="true" />
+              )}
+              Full minute history
             </Button>
             <Button
               type="button"
               variant="outline"
-              className="flex-1 sm:flex-none"
-              onClick={() => void chooseKrakenDirectory()}
-              disabled={!isFilePickerAvailable || isImportingKraken}
-              title={
-                isFilePickerAvailable
-                  ? "Choose extracted folder"
-                  : "Use the path field in browser mode"
-              }
+              onClick={() => void startKrakenImport("incremental")}
+              disabled={isImportingKraken}
             >
-              <FileInput className="size-4" aria-hidden="true" />
-              Folder
+              {pendingKrakenOperation === "incremental" ? (
+                <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <RefreshCw className="size-4" aria-hidden="true" />
+              )}
+              Incremental minute update
             </Button>
           </div>
         </div>
 
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-          <Button
-            type="button"
-            onClick={() => void startKrakenImport("full")}
-            disabled={isImportingKraken}
-          >
-            {pendingKrakenOperation === "full" ? (
-              <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <Database className="size-4" aria-hidden="true" />
-            )}
-            Full history
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => void startKrakenImport("incremental")}
-            disabled={isImportingKraken}
-          >
-            {pendingKrakenOperation === "incremental" ? (
-              <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <RefreshCw className="size-4" aria-hidden="true" />
-            )}
-            Incremental update
-          </Button>
+        <div className="mt-3 rounded-md border bg-muted/30 p-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 space-y-1">
+              <p className="text-sm font-medium">Bundled daily values fallback</p>
+              <p className="text-xs text-muted-foreground">
+                Import bundled Kraken BTC-EUR and BTC-USD daily values from
+                2013 through Q1 2026 for coarse fallback coverage.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0"
+              onClick={() => void startKrakenImport("full", { bundled: true })}
+              disabled={isImportingKraken}
+            >
+              {pendingBundledKrakenImport ? (
+                <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Database className="size-4" aria-hidden="true" />
+              )}
+              Import daily values
+            </Button>
+          </div>
         </div>
 
         {krakenImportError ? (
@@ -520,7 +568,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
                   ? `${formatCount(importedTotals.samples)} rows across ${formatCount(
                       importedTotals.pairs,
                     )} pair${importedTotals.pairs === 1 ? "" : "s"}`
-                  : "No Bitcoin minute rows imported"}
+                  : "No Bitcoin rows imported"}
               </span>
             </div>
             {importedPairs.length ? (
@@ -535,7 +583,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
                       {formatKrakenRange(row)}
                     </span>
                     <span className="text-muted-foreground sm:text-right">
-                      {formatCount(row.samples)} rows
+                      {formatCount(row.samples)} {row.granularity ?? ""} rows
                     </span>
                   </div>
                 ))}

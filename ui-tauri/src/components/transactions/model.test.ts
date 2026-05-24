@@ -5,6 +5,7 @@ import {
   formatCounterDisplayMoney,
   formatDisplayMoney,
   formatSignedDisplayMoney,
+  pricingCacheSummary,
   type Transaction,
 } from "./model";
 
@@ -94,5 +95,20 @@ describe("money formatting", () => {
     expect(formatDisplayMoney(null, 0.01, "eur")).toBe("Unpriced");
     expect(formatSignedDisplayMoney(null, 0.01, "eur")).toBe("Unpriced");
     expect(formatCounterDisplayMoney(null, 0.01, "btc")).toBe("Unpriced");
+  });
+});
+
+describe("pricing provenance", () => {
+  it("summarizes provider cache provenance for transaction surfaces", () => {
+    expect(
+      pricingCacheSummary({
+        ...txWithTags([]),
+        pricingSourceKind: "fmv_provider",
+        pricingQuality: "coarse_fallback",
+        pricingProvider: "kraken-csv",
+        pricingPair: "BTC-EUR",
+        pricingGranularity: "daily",
+      }),
+    ).toBe("Kraken CSV · BTC-EUR · daily · Coarse fallback");
   });
 });
