@@ -20,6 +20,7 @@ import {
   Repeat2,
   RotateCcw,
   Save,
+  SlidersHorizontal,
   Tags,
   X,
 } from "lucide-react";
@@ -68,7 +69,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { MISSING_FIAT_LABEL, type Currency } from "@/lib/currency";
-import { formatShortDate } from "@/lib/date";
 import { isFilePickerAvailable, pickFiles } from "@/lib/filePicker";
 import { cn } from "@/lib/utils";
 import type { ExplorerSettings } from "@/lib/explorer";
@@ -92,7 +92,7 @@ import {
   formatShortTxid,
   formatSignedDisplayMoney,
   parseManualDecimal,
-  pricingCacheSummary,
+  pricingPriceMoment,
   pricingProviderLabel,
   pricingQualityLabel,
   pricingSelectionValue,
@@ -1369,7 +1369,10 @@ export function TransactionDetailSheet({
     localDraft.pricingSourceKind,
     localDraft.pricingQuality,
   );
-  const rateCacheSummary = pricingCacheSummary(transaction);
+  const hasCacheProvenance = Boolean(
+    transaction.pricingProvider || transaction.pricingPair,
+  );
+  const pricePoint = pricingPriceMoment(transaction);
   const isExactPricing = localDraft.pricingQuality === "exact";
   const isCoarsePricing = localDraft.pricingQuality === "coarse_fallback";
   const isProviderSamplePricing = localDraft.pricingQuality === "provider_sample";
@@ -2245,7 +2248,7 @@ export function TransactionDetailSheet({
                           hint="Current cached spot rate. Useful for sanity-checking a manual override."
                         />
                       </div>
-                      {rateCacheSummary ? (
+                      {hasCacheProvenance ? (
                         <div
                           className={cn(
                             "rounded-md border bg-background p-3",
@@ -2254,19 +2257,14 @@ export function TransactionDetailSheet({
                           )}
                         >
                           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                            <div>
-                              <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase text-muted-foreground">
-                                {isCoarsePricing ? (
-                                  <AlertTriangle
-                                    className="size-3 text-amber-600 dark:text-amber-400"
-                                    aria-hidden="true"
-                                  />
-                                ) : null}
-                                Rate cache source
-                              </div>
-                              <div className="mt-1 text-sm font-semibold">
-                                {rateCacheSummary}
-                              </div>
+                            <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase text-muted-foreground">
+                              {isCoarsePricing ? (
+                                <AlertTriangle
+                                  className="size-3 text-amber-600 dark:text-amber-400"
+                                  aria-hidden="true"
+                                />
+                              ) : null}
+                              Rate cache source
                             </div>
                             <Badge variant="outline" className="rounded-md">
                               {pricingQualityLabel(localDraft.pricingQuality)}
@@ -2292,10 +2290,10 @@ export function TransactionDetailSheet({
                             </div>
                             <div>
                               <span className="font-medium text-foreground">
-                                Price timestamp
+                                {pricePoint.label}
                               </span>
                               <br />
-                              {formatShortDate(transaction.pricingTimestamp)}
+                              {pricePoint.value}
                             </div>
                           </div>
                           {transaction.pricingMethod ? (
@@ -2334,29 +2332,30 @@ export function TransactionDetailSheet({
                                     size="sm"
                                     onClick={openMarketDataSettings}
                                   >
-                                    <RotateCcw
+                                    <SlidersHorizontal
                                       className="size-3.5"
                                       aria-hidden="true"
                                     />
-                                    Live minute rates
+                                    Open rate settings
                                   </Button>
                                 ) : null}
                               </div>
                             </div>
-                          ) : isExactPricing ? (
-                            <div className="mt-3 rounded-md border bg-emerald-500/10 p-3 text-xs text-muted-foreground">
-                              <div className="font-medium text-foreground">
-                                Exact pricing evidence
-                              </div>
-                              <p className="mt-1">
-                                This row is marked exact because it comes from a
-                                reviewed manual value or source-provided fiat
-                                record.
-                              </p>
-                            </div>
                           ) : null}
                         </div>
-                      ) : isPricingMissing ? (
+                      ) : null}
+                      {isExactPricing && !hasCacheProvenance ? (
+                        <div className="rounded-md border bg-emerald-500/10 p-3 text-xs text-muted-foreground">
+                          <div className="font-medium text-foreground">
+                            Exact pricing evidence
+                          </div>
+                          <p className="mt-1">
+                            This row is marked exact because it comes from a
+                            reviewed manual value or source-provided fiat record.
+                          </p>
+                        </div>
+                      ) : null}
+                      {isPricingMissing && !hasCacheProvenance ? (
                         <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
                           <div className="flex items-start gap-2">
                             <AlertTriangle
@@ -2369,7 +2368,7 @@ export function TransactionDetailSheet({
                               </div>
                               <p className="mt-1 text-xs text-muted-foreground">
                                 Newer transactions can sit ahead of the local
-                                rate cache. Fetch live minute rates, or enter an
+                                rate cache. Import or fetch rates, or enter an
                                 exact reviewed value.
                               </p>
                               <div className="mt-3 flex flex-wrap gap-2">
@@ -2380,11 +2379,11 @@ export function TransactionDetailSheet({
                                     size="sm"
                                     onClick={openMarketDataSettings}
                                   >
-                                    <RotateCcw
+                                    <SlidersHorizontal
                                       className="size-3.5"
                                       aria-hidden="true"
                                     />
-                                    Try live minute rate
+                                    Open rate settings
                                   </Button>
                                 ) : null}
                                 <Button

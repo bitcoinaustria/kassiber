@@ -2,6 +2,7 @@ import { CheckCircle2, Clock, RotateCcw, XCircle } from "lucide-react";
 import type * as React from "react";
 
 import { formatBtc, MISSING_FIAT_LABEL, type Currency } from "@/lib/currency";
+import { formatShortDate } from "@/lib/date";
 import {
   explorerTargetForTransaction,
   type ExplorerSettings,
@@ -650,9 +651,27 @@ export function pricingCacheSummary(txn: Transaction) {
     pricingProviderLabel(txn.pricingProvider),
     txn.pricingPair ?? null,
     txn.pricingGranularity ?? null,
-    txn.pricingQuality ? pricingQualityLabel(txn.pricingQuality) : null,
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : null;
+}
+
+// Daily Kraken candles are stored at their close (next-day 00:00 UTC), so the
+// raw timestamp reads as the day after the trade. Surface the trading day for
+// daily granularity and the precise timestamp otherwise.
+export function pricingPriceMoment(txn: Transaction): {
+  label: string;
+  value: string;
+} {
+  const ts = txn.pricingTimestamp;
+  if (!ts) return { label: "Price timestamp", value: "—" };
+  if (txn.pricingGranularity === "daily") {
+    const closeMs = Date.parse(ts);
+    if (!Number.isNaN(closeMs)) {
+      const tradingDay = new Date(closeMs - 24 * 60 * 60 * 1000);
+      return { label: "Trading day", value: tradingDay.toISOString().slice(0, 10) };
+    }
+  }
+  return { label: "Price timestamp", value: formatShortDate(ts) };
 }
 
 export function pricingOptionForValue(

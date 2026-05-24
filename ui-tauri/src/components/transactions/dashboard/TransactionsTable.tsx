@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   ArrowDownRight,
   ArrowLeftRight,
   ArrowUpRight,
@@ -1080,29 +1081,40 @@ const TransactionsTable = ({
                       </p>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
-                      <span
-                        className={cn(
-                          "inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium sm:text-xs",
-                          pricingSourceStyles[rowPricingValue],
-                        )}
-                      >
-                        {pricingSourceLabel(
-                          draft.pricingSourceKind,
-                          draft.pricingQuality,
-                        )}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={cn(
+                            "inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium sm:text-xs",
+                            pricingSourceStyles[rowPricingValue],
+                          )}
+                        >
+                          {pricingSourceLabel(
+                            draft.pricingSourceKind,
+                            draft.pricingQuality,
+                          )}
+                        </span>
+                        {draft.pricingQuality === "coarse_fallback" ? (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+                            title="Coarse daily fallback price — review before relying on it"
+                          >
+                            <AlertTriangle className="size-3" aria-hidden="true" />
+                            Coarse
+                          </span>
+                        ) : null}
+                      </div>
                       <p
                         className={cn(
                           "mt-1 truncate text-[10px] text-muted-foreground sm:text-xs",
                           blurClass(hideSensitive),
                         )}
+                        title={pricingCacheSummary(txn) ?? undefined}
                       >
                         {draft.pricingSourceKind === "manual_override"
                           ? `${draft.manualCurrency} ${draft.manualValue || "value pending"}`
-                          : pricingCacheSummary(txn) ??
-                            (txn.rate
-                              ? `${currencyFormatter.format(txn.rate)} / BTC`
-                              : "Awaiting price")}
+                          : txn.rate
+                            ? `${currencyFormatter.format(txn.rate)} / BTC`
+                            : "Awaiting price"}
                       </p>
                     </TableCell>
                     <TableCell className="hidden xl:table-cell">

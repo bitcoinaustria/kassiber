@@ -6,6 +6,7 @@ import {
   formatDisplayMoney,
   formatSignedDisplayMoney,
   pricingCacheSummary,
+  pricingPriceMoment,
   type Transaction,
 } from "./model";
 
@@ -99,7 +100,7 @@ describe("money formatting", () => {
 });
 
 describe("pricing provenance", () => {
-  it("summarizes provider cache provenance for transaction surfaces", () => {
+  it("summarizes provider cache provenance without flattening the quality tier", () => {
     expect(
       pricingCacheSummary({
         ...txWithTags([]),
@@ -109,6 +110,26 @@ describe("pricing provenance", () => {
         pricingPair: "BTC-EUR",
         pricingGranularity: "daily",
       }),
-    ).toBe("Kraken CSV · BTC-EUR · daily · Coarse fallback");
+    ).toBe("Kraken CSV · BTC-EUR · daily");
+  });
+
+  it("reports the trading day for daily candles stored at their close", () => {
+    expect(
+      pricingPriceMoment({
+        ...txWithTags([]),
+        pricingGranularity: "daily",
+        pricingTimestamp: "2024-05-02T00:00:00Z",
+      }),
+    ).toEqual({ label: "Trading day", value: "2024-05-01" });
+  });
+
+  it("reports the precise timestamp for minute candles", () => {
+    expect(
+      pricingPriceMoment({
+        ...txWithTags([]),
+        pricingGranularity: "minute",
+        pricingTimestamp: "2024-05-01T00:02:00Z",
+      }),
+    ).toEqual({ label: "Price timestamp", value: "2024-05-01 00:02" });
   });
 });
