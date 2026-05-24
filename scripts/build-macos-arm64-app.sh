@@ -56,6 +56,7 @@ run uv run --python "$PYTHON_VERSION" --with pyinstaller==6.20.0 pyinstaller \
   --specpath build \
   --paths . \
   --add-data "$skill_refs_add_data" \
+  --collect-data kassiber \
   --collect-submodules embit \
   --collect-data embit \
   --collect-submodules rp2 \
@@ -76,6 +77,16 @@ case "$sidecar_arch" in
 esac
 
 run dist/kassiber-cli --help
+
+kraken_smoke_root="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-kraken-bundled-smoke.XXXXXX")"
+kraken_smoke_out="$kraken_smoke_root/daemon.jsonl"
+printf '{"request_id":"kraken-bundled-1","kind":"ui.rates.kraken_csv.import","args":{"use_bundled":true}}\n{"request_id":"shutdown-1","kind":"daemon.shutdown"}\n' \
+  | dist/kassiber-cli --data-root "$kraken_smoke_root/data" daemon \
+  > "$kraken_smoke_out"
+grep '"kind":"ui.rates.kraken_csv.import"' "$kraken_smoke_out" >/dev/null
+grep '"bundled":true' "$kraken_smoke_out" >/dev/null
+grep '"pairs":2' "$kraken_smoke_out" >/dev/null
+grep '"rows":9129' "$kraken_smoke_out" >/dev/null
 
 mkdir -p "$BINARIES_DIR"
 find "$BINARIES_DIR" -maxdepth 1 -type f -name 'kassiber-cli-*' -delete

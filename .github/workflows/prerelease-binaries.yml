@@ -89,6 +89,7 @@ jobs:
             --name kassiber \
             --paths . \
             --add-data "$skill_refs_add_data" \
+            --collect-data kassiber \
             --collect-submodules embit \
             --collect-data embit \
             --collect-submodules rp2 \
@@ -104,6 +105,15 @@ jobs:
           set -euo pipefail
           ./dist/kassiber --help >/dev/null
           ./dist/kassiber --data-root "$RUNNER_TEMP/kassiber-status-smoke" --machine status >/dev/null
+
+          kraken_root="$RUNNER_TEMP/kassiber-kraken-bundled-smoke"
+          printf '{"request_id":"kraken-bundled-1","kind":"ui.rates.kraken_csv.import","args":{"use_bundled":true}}\n{"request_id":"shutdown-1","kind":"daemon.shutdown"}\n' \
+            | ./dist/kassiber --data-root "$kraken_root" daemon \
+            > "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl"
+          grep '"kind":"ui.rates.kraken_csv.import"' "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" >/dev/null
+          grep '"bundled":true' "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" >/dev/null
+          grep '"pairs":2' "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" >/dev/null
+          grep '"rows":9129' "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" >/dev/null
 
           at_root="$RUNNER_TEMP/kassiber-at-smoke"
           ./dist/kassiber --data-root "$at_root" --machine init >/dev/null
@@ -401,6 +411,7 @@ jobs:
             --name kassiber-cli \
             --paths . \
             --add-data "$skill_refs_add_data" \
+            --collect-data kassiber \
             --collect-submodules embit \
             --collect-data embit \
             --collect-submodules rp2 \
@@ -423,6 +434,15 @@ jobs:
             > "$RUNNER_TEMP/cli-sidecar-smoke.jsonl"
           grep '"kind":"daemon.ready"' "$RUNNER_TEMP/cli-sidecar-smoke.jsonl"
           grep '"kind":"daemon.shutdown"' "$RUNNER_TEMP/cli-sidecar-smoke.jsonl"
+
+          kraken_root="$RUNNER_TEMP/kassiber-cli-sidecar-kraken-bundled-smoke"
+          printf '{"request_id":"kraken-bundled-1","kind":"ui.rates.kraken_csv.import","args":{"use_bundled":true}}\n{"request_id":"shutdown-1","kind":"daemon.shutdown"}\n' \
+            | "$sidecar" --data-root "$kraken_root" daemon \
+            > "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl"
+          grep '"kind":"ui.rates.kraken_csv.import"' "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl" >/dev/null
+          grep '"bundled":true' "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl" >/dev/null
+          grep '"pairs":2' "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl" >/dev/null
+          grep '"rows":9129' "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl" >/dev/null
 
           descriptor_root="$RUNNER_TEMP/kassiber-cli-sidecar-descriptor-smoke"
           "$sidecar" --data-root "$descriptor_root" --machine init >/dev/null
