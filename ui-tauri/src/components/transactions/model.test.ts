@@ -113,12 +113,26 @@ describe("pricing provenance", () => {
     ).toBe("Kraken CSV · BTC-EUR · daily");
   });
 
-  it("reports the trading day for daily candles stored at their close", () => {
+  it("shifts the Kraken OHLCVT close back to the trading day", () => {
     expect(
       pricingPriceMoment({
         ...txWithTags([]),
         pricingGranularity: "daily",
+        pricingProvider: "kraken-csv",
+        pricingMethod: "ohlcvt_csv",
         pricingTimestamp: "2024-05-02T00:00:00Z",
+      }),
+    ).toEqual({ label: "Trading day", value: "2024-05-01" });
+  });
+
+  it("does not shift non-Kraken daily rows that are already day-stamped", () => {
+    expect(
+      pricingPriceMoment({
+        ...txWithTags([]),
+        pricingGranularity: "daily",
+        pricingProvider: "coingecko",
+        pricingMethod: "market_chart",
+        pricingTimestamp: "2024-05-01T00:00:00Z",
       }),
     ).toEqual({ label: "Trading day", value: "2024-05-01" });
   });

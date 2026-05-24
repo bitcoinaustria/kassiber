@@ -918,6 +918,10 @@ const TransactionsTable = ({
                   draft.pricingSourceKind,
                   draft.pricingQuality,
                 );
+                const rowPricingSummary =
+                  draft.pricingSourceKind === "manual_override"
+                    ? null
+                    : pricingCacheSummary(txn);
                 const StatusIcon = transactionStatusIcons[draft.reviewStatus];
                 const explorer = explorerForTransaction(txn, explorerSettings);
                 const flow = displayFlow(txn);
@@ -1108,7 +1112,6 @@ const TransactionsTable = ({
                           "mt-1 truncate text-[10px] text-muted-foreground sm:text-xs",
                           blurClass(hideSensitive),
                         )}
-                        title={pricingCacheSummary(txn) ?? undefined}
                       >
                         {draft.pricingSourceKind === "manual_override"
                           ? `${draft.manualCurrency} ${draft.manualValue || "value pending"}`
@@ -1116,6 +1119,14 @@ const TransactionsTable = ({
                             ? `${currencyFormatter.format(txn.rate)} / BTC`
                             : "Awaiting price"}
                       </p>
+                      {rowPricingSummary ? (
+                        <p
+                          className="truncate text-[10px] text-muted-foreground/80"
+                          title={rowPricingSummary}
+                        >
+                          {rowPricingSummary}
+                        </p>
+                      ) : null}
                     </TableCell>
                     <TableCell className="hidden xl:table-cell">
                       <div className="flex flex-wrap gap-1">

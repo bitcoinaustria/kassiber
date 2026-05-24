@@ -655,9 +655,11 @@ export function pricingCacheSummary(txn: Transaction) {
   return parts.length ? parts.join(" · ") : null;
 }
 
-// Daily Kraken candles are stored at their close (next-day 00:00 UTC), so the
-// raw timestamp reads as the day after the trade. Surface the trading day for
-// daily granularity and the precise timestamp otherwise.
+// Daily rows are surfaced as a trading day rather than a raw timestamp. The
+// Kraken OHLCVT importer stores its daily candles at the close (next-day 00:00
+// UTC), so those need a one-day shift; other daily sources (CoinGecko, manual)
+// already timestamp the row at the day it represents, so they must not be
+// shifted.
 export function pricingPriceMoment(txn: Transaction): {
   label: string;
   value: string;
@@ -665,10 +667,16 @@ export function pricingPriceMoment(txn: Transaction): {
   const ts = txn.pricingTimestamp;
   if (!ts) return { label: "Price timestamp", value: "—" };
   if (txn.pricingGranularity === "daily") {
-    const closeMs = Date.parse(ts);
-    if (!Number.isNaN(closeMs)) {
-      const tradingDay = new Date(closeMs - 24 * 60 * 60 * 1000);
-      return { label: "Trading day", value: tradingDay.toISOString().slice(0, 10) };
+    const ms = Date.parse(ts);
+    if (!Number.isNaN(ms)) {
+      const isKrakenDailyClose =
+        txn.pricingProvider === "kraken-csv" &&
+        txn.pricingMethod === "ohlcvt_csv";
+      const dayMs = isKrakenDailyClose ? ms - 24 * 60 * 60 * 1000 : ms;
+      return {
+        label: "Trading day",
+        value: new Date(dayMs).toISOString().slice(0, 10),
+      };
     }
   }
   return { label: "Price timestamp", value: formatShortDate(ts) };
