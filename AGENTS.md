@@ -199,6 +199,38 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 - Treat code, README, AGENTS.md, and TODO.md as current truth. Treat
   `docs/plan/` as concise guardrails; if code and plans drift, inspect code and
   update the docs in the same change.
+- Frontend package management uses `pnpm` under `ui-tauri/`; use the
+  `packageManager` pin in `ui-tauri/package.json`. Keep
+  `ui-tauri/pnpm-lock.yaml` committed with any `ui-tauri/package.json` change,
+  do not add npm/yarn lockfiles, and do not bypass the pnpm 90-day minimum
+  release-age policy in `ui-tauri/.npmrc` without explicit owner approval.
+- Do not run `npx ...@latest`, `pnpm dlx ...@latest`, shadcn blocks, or other
+  remote scaffolders that can rewrite project files unless the user explicitly
+  approves that exact run. Treat approved scaffolder runs as overwrites and log
+  them in `AGENT_OVERWRITES.md`.
+- Any dependency change must explain why existing local code or the standard
+  library is not enough, keep the relevant lockfile in the same commit, update
+  `THIRD_PARTY_LICENSES.md`, and update README/setup docs if runtime or install
+  expectations change.
+- Do not overwrite, regenerate, or scaffold over existing files unless the user
+  explicitly grants that specific overwrite. Record every approved overwrite in
+  `AGENT_OVERWRITES.md` with the date, files, approval source, reason, and
+  command/tool used. If an overwrite happens accidentally, stop, document it in
+  that file, and report it before continuing.
+- When committing is in scope, prefer small reviewable commits for cohesive
+  behavior/test/doc slices instead of one large end-of-branch dump. Commit after
+  each coherent green checkpoint when practical, separate refactors from feature
+  behavior, and keep each commit easy to inspect on its own.
+- Favor component-based UI implementation and focused modules. Do not grow
+  multi-thousand-line files when a clear split by component, hook, helper, or
+  domain responsibility would make the code easier to review; avoid purely
+  mechanical splits that do not improve ownership or readability. When touching
+  a UI file over roughly 800 lines or a Python file over roughly 1200 lines,
+  consider an extraction and mention why a split was or was not made.
+- Keep generated or scaffolded code isolated from hand-written behavior changes
+  in commits whenever practical. Mark generated files clearly when the generator
+  supports it, and avoid editing generated output by hand unless that exception
+  is documented near the change.
 - Keep Kassiber as the BTC-side subledger and reconciliation layer; invoice issuance, VAT workflow, and the company general ledger stay outside Kassiber.
 - For merchant and document-linked flows, keep provenance capture, commercial matching, and RP2-facing tax normalization as separate layers.
 - Prefer standard-library solutions unless a dependency clearly buys a lot.
