@@ -5,6 +5,8 @@ import {
   formatCounterDisplayMoney,
   formatDisplayMoney,
   formatSignedDisplayMoney,
+  pricingCacheSummary,
+  pricingPriceMoment,
   type Transaction,
 } from "./model";
 
@@ -94,5 +96,54 @@ describe("money formatting", () => {
     expect(formatDisplayMoney(null, 0.01, "eur")).toBe("Unpriced");
     expect(formatSignedDisplayMoney(null, 0.01, "eur")).toBe("Unpriced");
     expect(formatCounterDisplayMoney(null, 0.01, "btc")).toBe("Unpriced");
+  });
+});
+
+describe("pricing provenance", () => {
+  it("summarizes provider cache provenance without flattening the quality tier", () => {
+    expect(
+      pricingCacheSummary({
+        ...txWithTags([]),
+        pricingSourceKind: "fmv_provider",
+        pricingQuality: "coarse_fallback",
+        pricingProvider: "kraken-csv",
+        pricingPair: "BTC-EUR",
+        pricingGranularity: "daily",
+      }),
+    ).toBe("Kraken CSV · BTC-EUR · daily");
+  });
+
+  it("shifts the Kraken OHLCVT close back to the trading day", () => {
+    expect(
+      pricingPriceMoment({
+        ...txWithTags([]),
+        pricingGranularity: "daily",
+        pricingProvider: "kraken-csv",
+        pricingMethod: "ohlcvt_csv",
+        pricingTimestamp: "2024-05-02T00:00:00Z",
+      }),
+    ).toEqual({ label: "Trading day", value: "2024-05-01" });
+  });
+
+  it("does not shift non-Kraken daily rows that are already day-stamped", () => {
+    expect(
+      pricingPriceMoment({
+        ...txWithTags([]),
+        pricingGranularity: "daily",
+        pricingProvider: "coingecko",
+        pricingMethod: "market_chart",
+        pricingTimestamp: "2024-05-01T00:00:00Z",
+      }),
+    ).toEqual({ label: "Trading day", value: "2024-05-01" });
+  });
+
+  it("reports the precise timestamp for minute candles", () => {
+    expect(
+      pricingPriceMoment({
+        ...txWithTags([]),
+        pricingGranularity: "minute",
+        pricingTimestamp: "2024-05-01T00:02:00Z",
+      }),
+    ).toEqual({ label: "Price timestamp", value: "2024-05-01 00:02" });
   });
 });

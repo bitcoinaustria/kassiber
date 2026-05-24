@@ -76,7 +76,8 @@ workflow almost nobody else covers.
   average); Austrian § 27b EStG with E 1kv PDF / XLSX / CSV; summary,
   balance sheet, capital gains, portfolio, balance history; local
   BTC-USD / BTC-EUR rates cache (Coinbase + CoinGecko fallback + Kraken
-  OHLCVT local archive).
+  OHLCVT local archive, plus bundled BTC-only Kraken offline history for
+  daily values).
 - **Sovereign storage** — SQLite system of record; optional SQLCipher 4
   passphrase encryption; single-file `tar | age` backups recoverable with
   stock `age` + `tar` + `sqlcipher` even if Kassiber disappears.

@@ -105,12 +105,14 @@ export interface KrakenRatesImportSummaryRow {
   skipped_files: number;
   first_timestamp: string | null;
   last_timestamp: string | null;
+  granularity?: string | null;
 }
 
 export interface KrakenRatesImportData {
   source: "kraken-csv";
   operation: KrakenRatesImportOperation;
   path: string;
+  bundled?: boolean;
   pair: string | null;
   summary: KrakenRatesImportSummaryRow[];
   totals: {

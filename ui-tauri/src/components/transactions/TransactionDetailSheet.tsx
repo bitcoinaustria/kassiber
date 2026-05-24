@@ -20,6 +20,7 @@ import {
   Repeat2,
   RotateCcw,
   Save,
+  SlidersHorizontal,
   Tags,
   X,
 } from "lucide-react";
@@ -91,6 +92,9 @@ import {
   formatShortTxid,
   formatSignedDisplayMoney,
   parseManualDecimal,
+  pricingPriceMoment,
+  pricingProviderLabel,
+  pricingQualityLabel,
   pricingSelectionValue,
   pricingSourceLabel,
   tagSuggestions,
@@ -1207,6 +1211,7 @@ export function TransactionDetailSheet({
   onRemoveAttachment,
   onUnpair,
   isUnpairing,
+  onOpenMarketDataSettings,
   onOpenChange,
   onOpenExplorer,
   onSave,
@@ -1233,6 +1238,7 @@ export function TransactionDetailSheet({
   onRemoveAttachment?: (item: AttachmentItem) => void;
   onUnpair?: (pairId: string) => void | Promise<void>;
   isUnpairing?: boolean;
+  onOpenMarketDataSettings?: () => void;
   onOpenChange: (open: boolean) => void;
   onOpenExplorer: (transaction: Transaction) => void;
   onSave: (
@@ -1363,6 +1369,13 @@ export function TransactionDetailSheet({
     localDraft.pricingSourceKind,
     localDraft.pricingQuality,
   );
+  const hasCacheProvenance = Boolean(
+    transaction.pricingProvider || transaction.pricingPair,
+  );
+  const pricePoint = pricingPriceMoment(transaction);
+  const isExactPricing = localDraft.pricingQuality === "exact";
+  const isCoarsePricing = localDraft.pricingQuality === "coarse_fallback";
+  const isProviderSamplePricing = localDraft.pricingQuality === "provider_sample";
   const sourceRecordId = transaction.explorerId ?? transaction.txnId;
   const sourceName = transaction.wallet || transaction.paymentMethod;
   const sourceType = transaction.sourceType ?? transaction.paymentMethod;
@@ -1380,7 +1393,8 @@ export function TransactionDetailSheet({
   const quarantineReason = transaction.quarantineReason ?? null;
   const hasJournalQuarantine = Boolean(quarantineReason) && !localDraft.excluded;
   const hasPricingBlocker = isPricingMissing && !localDraft.excluded;
-  const showReviewBanner = hasJournalQuarantine || hasPricingBlocker;
+  const showReviewBanner =
+    activeTab !== "pricing" && (hasJournalQuarantine || hasPricingBlocker);
   const confLabel = confirmationsLabel(transaction.confirmations);
   const dirtyTags = dirty.tags;
   const dirtyLabel = dirty.label;
@@ -1531,6 +1545,14 @@ export function TransactionDetailSheet({
   const jumpToManualPrice = () => {
     setActiveTab("pricing");
     setTimeout(() => manualPriceRef.current?.focus(), 0);
+  };
+  const chooseExactManualPrice = () => {
+    updateDraft("pricingSourceKind", "manual_override");
+    updateDraft("pricingQuality", "exact");
+    jumpToManualPrice();
+  };
+  const openMarketDataSettings = () => {
+    onOpenMarketDataSettings?.();
   };
   const setExcluded = () => updateDraft("excluded", true);
   const normalizedQuarantineReason = quarantineReason
@@ -2226,6 +2248,158 @@ export function TransactionDetailSheet({
                           hint="Current cached spot rate. Useful for sanity-checking a manual override."
                         />
                       </div>
+                      {hasCacheProvenance ? (
+                        <div
+                          className={cn(
+                            "rounded-md border bg-background p-3",
+                            isCoarsePricing &&
+                              "border-amber-500/40 bg-amber-500/10",
+                          )}
+                        >
+                          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase text-muted-foreground">
+                              {isCoarsePricing ? (
+                                <AlertTriangle
+                                  className="size-3 text-amber-600 dark:text-amber-400"
+                                  aria-hidden="true"
+                                />
+                              ) : null}
+                              Rate cache source
+                            </div>
+                            <Badge variant="outline" className="rounded-md">
+                              {pricingQualityLabel(localDraft.pricingQuality)}
+                            </Badge>
+                          </div>
+                          <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+                            <div>
+                              <span className="font-medium text-foreground">
+                                Provider
+                              </span>
+                              <br />
+                              {pricingProviderLabel(transaction.pricingProvider) ??
+                                "Unknown"}
+                            </div>
+                            <div>
+                              <span className="font-medium text-foreground">
+                                Pair / granularity
+                              </span>
+                              <br />
+                              {[transaction.pricingPair, transaction.pricingGranularity]
+                                .filter(Boolean)
+                                .join(" · ") || "Unknown"}
+                            </div>
+                            <div>
+                              <span className="font-medium text-foreground">
+                                {pricePoint.label}
+                              </span>
+                              <br />
+                              {pricePoint.value}
+                            </div>
+                          </div>
+                          {transaction.pricingMethod ? (
+                            <p className="mt-2 text-xs text-muted-foreground">
+                              Method: {transaction.pricingMethod}
+                            </p>
+                          ) : null}
+                          {isCoarsePricing || isProviderSamplePricing ? (
+                            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border bg-background/70 p-3">
+                              <div className="min-w-0 text-xs text-muted-foreground">
+                                <div className="font-medium text-foreground">
+                                  {isCoarsePricing
+                                    ? "Fallback only"
+                                    : "Provider sample"}
+                                </div>
+                                <p className="mt-1">
+                                  {isCoarsePricing
+                                    ? "Daily Kraken values are coarse coverage and stay reviewable until you confirm a better source."
+                                    : "Minute market candles are sampled provider rates, not exchange execution evidence."}
+                                </p>
+                              </div>
+                              <div className="flex shrink-0 flex-wrap gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={chooseExactManualPrice}
+                                >
+                                  <Save className="size-3.5" aria-hidden="true" />
+                                  Exact manual price
+                                </Button>
+                                {onOpenMarketDataSettings ? (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={openMarketDataSettings}
+                                  >
+                                    <SlidersHorizontal
+                                      className="size-3.5"
+                                      aria-hidden="true"
+                                    />
+                                    Open rate settings
+                                  </Button>
+                                ) : null}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {isExactPricing && !hasCacheProvenance ? (
+                        <div className="rounded-md border bg-emerald-500/10 p-3 text-xs text-muted-foreground">
+                          <div className="font-medium text-foreground">
+                            Exact pricing evidence
+                          </div>
+                          <p className="mt-1">
+                            This row is marked exact because it comes from a
+                            reviewed manual value or source-provided fiat record.
+                          </p>
+                        </div>
+                      ) : null}
+                      {isPricingMissing && !hasCacheProvenance ? (
+                        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle
+                              className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400"
+                              aria-hidden="true"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="text-sm font-medium">
+                                No cached spot yet
+                              </div>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Newer transactions can sit ahead of the local
+                                rate cache. Import or fetch rates, or enter an
+                                exact reviewed value.
+                              </p>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {onOpenMarketDataSettings ? (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={openMarketDataSettings}
+                                  >
+                                    <SlidersHorizontal
+                                      className="size-3.5"
+                                      aria-hidden="true"
+                                    />
+                                    Open rate settings
+                                  </Button>
+                                ) : null}
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={chooseExactManualPrice}
+                                >
+                                  <Save className="size-3.5" aria-hidden="true" />
+                                  Manual exact price
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   </TabsContent>
 

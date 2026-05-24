@@ -11,6 +11,7 @@ from unittest.mock import patch
 from kassiber.core import rates as core_rates
 from kassiber.core import pricing
 from kassiber.core.rates import get_cached_rate_at_or_before
+from kassiber.core.ui_snapshot import build_transactions_snapshot
 from kassiber.daemon import _rates_kraken_csv_import_payload, _rates_rebuild_payload
 from kassiber.db import open_db, set_setting
 from kassiber.errors import AppError
@@ -19,9 +20,15 @@ from kassiber.errors import AppError
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 XBTEUR_FIXTURE = FIXTURES / "XBTEUR_1.csv"
+BUNDLED_KRAKEN_BTC_DAILY = (
+    ROOT / "kassiber" / "data" / "rates" / "kraken" / "btc_daily"
+)
 
 XBTUSD_CSV = """1714521600,65000.00,65010.00,64990.00,65005.50,0.5000,10
 1714521660,65005.50,65020.00,65000.00,65012.25,0.2500,4
+"""
+
+XBTUSD_DAILY_CSV = """1714521600,65000.00,65100.00,64900.00,65050.00,1.5000,20
 """
 
 
@@ -255,6 +262,7 @@ class KrakenCsvRatesTest(unittest.TestCase):
 
         self.assertEqual(len(payload["data"]), 1)
         self.assertEqual(payload["data"][0]["pair"], "BTC-EUR")
+        self.assertEqual(payload["data"][0]["skipped_files"], 2)
         conn = self._connect()
         pairs = [
             row["pair"]
@@ -300,6 +308,306 @@ class KrakenCsvRatesTest(unittest.TestCase):
             ).fetchall()
         ]
         self.assertEqual(pairs, ["BTC-EUR"])
+
+    def test_daily_kraken_csv_ingests_with_daily_granularity(self):
+        archive_dir = self.tmp_path / "btc_daily"
+        archive_dir.mkdir()
+        (archive_dir / "XBTUSD_1440.csv").write_text(
+            XBTUSD_DAILY_CSV,
+            encoding="utf-8",
+        )
+
+        payload = self._run_json(
+            "rates",
+            "sync",
+            "--source",
+            "kraken-csv",
+            "--path",
+            str(archive_dir),
+            "--pair",
+            "BTC/USD",
+        )
+
+        self.assertEqual(len(payload["data"]), 1)
+        summary = payload["data"][0]
+        self.assertEqual(summary["pair"], "BTC-USD")
+        self.assertEqual(summary["samples"], 1)
+        self.assertEqual(summary["granularity"], "daily")
+        self.assertEqual(summary["first_timestamp"], "2024-05-02T00:00:00Z")
+
+        conn = self._connect()
+        row = conn.execute(
+            """
+            SELECT timestamp, rate_exact, granularity, open_rate_exact,
+                   high_rate_exact, low_rate_exact, close_rate_exact,
+                   volume_exact, trades
+            FROM rates_cache
+            WHERE pair = 'BTC-USD'
+            """,
+        ).fetchone()
+        self.assertEqual(row["timestamp"], "2024-05-02T00:00:00Z")
+        self.assertEqual(row["rate_exact"], "65050.00")
+        self.assertEqual(row["granularity"], "daily")
+        self.assertEqual(row["open_rate_exact"], "65000.00")
+        self.assertEqual(row["high_rate_exact"], "65100.00")
+        self.assertEqual(row["low_rate_exact"], "64900.00")
+        self.assertEqual(row["close_rate_exact"], "65050.00")
+        self.assertEqual(row["volume_exact"], "1.5000")
+        self.assertEqual(row["trades"], 20)
+        self.assertIsNone(
+            get_cached_rate_at_or_before(
+                conn,
+                "BTC-USD",
+                "2024-05-01T12:00:00Z",
+            )
+        )
+        cached_rate = get_cached_rate_at_or_before(
+            conn,
+            "BTC-USD",
+            "2024-05-02T12:00:00Z",
+        )
+        self.assertIsNotNone(cached_rate)
+        self.assertEqual(cached_rate["timestamp"], "2024-05-02T00:00:00Z")
+        self.assertEqual(cached_rate["rate_exact"], "65050.00")
+
+    def test_kraken_zip_prefers_minute_candles_when_daily_is_also_present(self):
+        archive = self.tmp_path / "Kraken_OHLCVT.zip"
+        with zipfile.ZipFile(archive, "w") as zf:
+            zf.writestr("XBTUSD_1.csv", XBTUSD_CSV)
+            zf.writestr("XBTUSD_1440.csv", XBTUSD_DAILY_CSV)
+
+        payload = self._run_json(
+            "rates",
+            "sync",
+            "--source",
+            "kraken-csv",
+            "--path",
+            str(archive),
+            "--pair",
+            "BTC/USD",
+        )
+
+        self.assertEqual(len(payload["data"]), 1)
+        summary = payload["data"][0]
+        self.assertEqual(summary["samples"], 2)
+        self.assertEqual(summary["granularity"], "minute")
+        self.assertEqual(summary["skipped_files"], 1)
+
+        conn = self._connect()
+        rows = conn.execute(
+            """
+            SELECT timestamp, granularity, rate_exact
+            FROM rates_cache
+            WHERE pair = 'BTC-USD'
+            ORDER BY timestamp
+            """
+        ).fetchall()
+        self.assertEqual(
+            [
+                (row["timestamp"], row["granularity"], row["rate_exact"])
+                for row in rows
+            ],
+            [
+                ("2024-05-01T00:01:00Z", "minute", "65005.50"),
+                ("2024-05-01T00:02:00Z", "minute", "65012.25"),
+            ],
+        )
+
+    def test_kraken_csv_counts_skipped_files_before_selected_member_pass(self):
+        archive = self.tmp_path / "Kraken_OHLCVT.zip"
+        with zipfile.ZipFile(archive, "w") as zf:
+            zf.writestr("XBTUSD_1.csv", XBTUSD_CSV)
+            zf.writestr("XBTUSD_1440.csv", XBTUSD_DAILY_CSV)
+            zf.writestr("XBTEUR_1.csv", XBTEUR_FIXTURE.read_text(encoding="utf-8"))
+            zf.writestr("ETHUSD_1.csv", XBTUSD_CSV)
+            zf.writestr("XBTJPY_1.csv", XBTUSD_CSV)
+            zf.writestr("README.txt", "not a csv")
+
+        payload = self._run_json(
+            "rates",
+            "sync",
+            "--source",
+            "kraken-csv",
+            "--path",
+            str(archive),
+            "--pair",
+            "BTC/USD",
+        )
+
+        self.assertEqual(len(payload["data"]), 1)
+        summary = payload["data"][0]
+        self.assertEqual(summary["pair"], "BTC-USD")
+        self.assertEqual(summary["granularity"], "minute")
+        self.assertEqual(summary["samples"], 2)
+        self.assertEqual(summary["skipped_files"], 5)
+
+    def test_kraken_csv_skips_duplicate_normalized_pair_interval_members(self):
+        archive = self.tmp_path / "Kraken_OHLCVT.zip"
+        with zipfile.ZipFile(archive, "w") as zf:
+            zf.writestr("XBTUSD_1440.csv", XBTUSD_DAILY_CSV)
+            zf.writestr("XXBTZUSD_1440.csv", "1714521600,66000,66100,65900,66050,2,21\n")
+
+        payload = self._run_json(
+            "rates",
+            "sync",
+            "--source",
+            "kraken-csv",
+            "--path",
+            str(archive),
+            "--pair",
+            "BTC/USD",
+        )
+
+        self.assertEqual(len(payload["data"]), 1)
+        summary = payload["data"][0]
+        self.assertEqual(summary["pair"], "BTC-USD")
+        self.assertEqual(summary["granularity"], "daily")
+        self.assertEqual(summary["samples"], 1)
+        self.assertEqual(summary["skipped_files"], 1)
+        conn = self._connect()
+        row = conn.execute(
+            "SELECT COUNT(*) AS count, rate_exact FROM rates_cache WHERE pair = 'BTC-USD'"
+        ).fetchone()
+        self.assertEqual(row["count"], 1)
+        self.assertEqual(row["rate_exact"], "65050.00")
+
+    def test_bundled_kraken_btc_daily_rates_import_eur_and_usd_only(self):
+        self.assertEqual(
+            sorted(path.name for path in BUNDLED_KRAKEN_BTC_DAILY.glob("*.csv")),
+            ["XBTEUR_1440.csv", "XBTUSD_1440.csv"],
+        )
+
+        payload = self._run_json(
+            "rates",
+            "sync",
+            "--source",
+            "kraken-csv",
+            "--path",
+            str(BUNDLED_KRAKEN_BTC_DAILY),
+        )
+
+        self.assertEqual(len(payload["data"]), 2)
+        summaries = {summary["pair"]: summary for summary in payload["data"]}
+        self.assertEqual(sorted(summaries), ["BTC-EUR", "BTC-USD"])
+        self.assertEqual(summaries["BTC-EUR"]["samples"], 4581)
+        self.assertEqual(summaries["BTC-EUR"]["granularity"], "daily")
+        self.assertEqual(
+            summaries["BTC-EUR"]["first_timestamp"],
+            "2013-09-11T00:00:00Z",
+        )
+        self.assertEqual(
+            summaries["BTC-EUR"]["last_timestamp"],
+            "2026-04-01T00:00:00Z",
+        )
+        self.assertEqual(summaries["BTC-USD"]["samples"], 4548)
+        self.assertEqual(summaries["BTC-USD"]["granularity"], "daily")
+        self.assertEqual(
+            summaries["BTC-USD"]["first_timestamp"],
+            "2013-10-07T00:00:00Z",
+        )
+        self.assertEqual(
+            summaries["BTC-USD"]["last_timestamp"],
+            "2026-04-01T00:00:00Z",
+        )
+
+        conn = self._connect()
+        rows = conn.execute(
+            """
+            SELECT pair, COUNT(*) AS count, MIN(timestamp) AS first_timestamp,
+                   MAX(timestamp) AS last_timestamp
+            FROM rates_cache
+            GROUP BY pair
+            ORDER BY pair
+            """
+        ).fetchall()
+        self.assertEqual(
+            [
+                (
+                    row["pair"],
+                    row["count"],
+                    row["first_timestamp"],
+                    row["last_timestamp"],
+                )
+                for row in rows
+            ],
+            [
+                (
+                    "BTC-EUR",
+                    4581,
+                    "2013-09-11T00:00:00Z",
+                    "2026-04-01T00:00:00Z",
+                ),
+                (
+                    "BTC-USD",
+                    4548,
+                    "2013-10-07T00:00:00Z",
+                    "2026-04-01T00:00:00Z",
+                ),
+            ],
+        )
+
+    def test_desktop_daemon_imports_bundled_kraken_btc_daily_seed(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+
+        payload = _rates_kraken_csv_import_payload(
+            conn,
+            {"operation": "full", "use_bundled": True},
+        )
+
+        self.assertTrue(payload["bundled"])
+        self.assertEqual(payload["source"], "kraken-csv")
+        self.assertEqual(payload["operation"], "full")
+        self.assertEqual(payload["totals"]["pairs"], 2)
+        self.assertEqual(payload["totals"]["samples"], 9129)
+        summaries = {row["pair"]: row for row in payload["summary"]}
+        self.assertEqual(summaries["BTC-EUR"]["samples"], 4581)
+        self.assertEqual(summaries["BTC-USD"]["samples"], 4548)
+        self.assertEqual(summaries["BTC-EUR"]["granularity"], "daily")
+        self.assertEqual(summaries["BTC-USD"]["granularity"], "daily")
+
+    def test_transaction_snapshot_exposes_rate_cache_pricing_provenance(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+        self._seed_transaction_needing_rate(conn)
+        set_setting(conn, "context_workspace", "workspace-1")
+        set_setting(conn, "context_profile", "profile-1")
+        conn.execute(
+            """
+            UPDATE transactions
+            SET fiat_rate = 65050.0,
+                fiat_value = 65.05,
+                fiat_price_source = ?,
+                fiat_rate_exact = '65050.00',
+                fiat_value_exact = '65.05',
+                pricing_source_kind = ?,
+                pricing_provider = ?,
+                pricing_pair = 'BTC-EUR',
+                pricing_timestamp = '2024-05-02T00:00:00Z',
+                pricing_fetched_at = '2026-05-24T00:00:00Z',
+                pricing_granularity = 'daily',
+                pricing_method = 'ohlcvt_csv',
+                pricing_quality = ?
+            WHERE id = 'tx-1'
+            """,
+            (
+                pricing.LEGACY_SOURCE_RATES_CACHE,
+                pricing.SOURCE_FMV_PROVIDER,
+                core_rates.RATE_SOURCE_KRAKEN_CSV,
+                pricing.QUALITY_COARSE_FALLBACK,
+            ),
+        )
+        conn.commit()
+
+        tx = build_transactions_snapshot(conn, {"limit": 5})["txs"][0]
+        self.assertEqual(tx["pricingSourceKind"], pricing.SOURCE_FMV_PROVIDER)
+        self.assertEqual(tx["pricingQuality"], pricing.QUALITY_COARSE_FALLBACK)
+        self.assertEqual(tx["pricingProvider"], core_rates.RATE_SOURCE_KRAKEN_CSV)
+        self.assertEqual(tx["pricingPair"], "BTC-EUR")
+        self.assertEqual(tx["pricingTimestamp"], "2024-05-02T00:00:00Z")
+        self.assertEqual(tx["pricingFetchedAt"], "2026-05-24T00:00:00Z")
+        self.assertEqual(tx["pricingGranularity"], "daily")
+        self.assertEqual(tx["pricingMethod"], "ohlcvt_csv")
 
     def test_default_sync_uses_coinbase_exchange_and_maps_lhoc_tuple(self):
         conn = open_db(str(self.data_root))

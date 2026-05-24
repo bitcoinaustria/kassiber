@@ -2,6 +2,7 @@ import { CheckCircle2, Clock, RotateCcw, XCircle } from "lucide-react";
 import type * as React from "react";
 
 import { formatBtc, MISSING_FIAT_LABEL, type Currency } from "@/lib/currency";
+import { formatShortDate } from "@/lib/date";
 import {
   explorerTargetForTransaction,
   type ExplorerSettings,
@@ -33,6 +34,12 @@ export type Transaction = {
   pricingSourceKind?: PricingSourceKind | null;
   pricingQuality?: PricingQuality | null;
   pricingExternalRef?: string | null;
+  pricingProvider?: string | null;
+  pricingPair?: string | null;
+  pricingTimestamp?: string | null;
+  pricingFetchedAt?: string | null;
+  pricingGranularity?: string | null;
+  pricingMethod?: string | null;
   reviewStatus?: TransactionStatus | null;
   taxable?: boolean | null;
   atRegime?: AustrianDraftRegime | null;
@@ -616,6 +623,63 @@ export function pricingSourceLabel(
 ) {
   const value = pricingSelectionValue(sourceKind, quality);
   return options.find((option) => option.value === value)?.label ?? value;
+}
+
+export function pricingProviderLabel(provider: string | null | undefined) {
+  const normalized = (provider ?? "").trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === "kraken-csv") return "Kraken CSV";
+  if (normalized === "coinbase-exchange") return "Coinbase Exchange";
+  if (normalized === "coingecko") return "CoinGecko";
+  if (normalized === "manual") return "Manual";
+  return normalized
+    .split(/[-_ ]+/)
+    .filter(Boolean)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+export function pricingQualityLabel(quality: PricingQuality | null | undefined) {
+  if (quality === "coarse_fallback") return "Coarse fallback";
+  if (quality === "provider_sample") return "Provider sample";
+  if (quality === "exact") return "Exact";
+  return "Missing";
+}
+
+export function pricingCacheSummary(txn: Transaction) {
+  const parts = [
+    pricingProviderLabel(txn.pricingProvider),
+    txn.pricingPair ?? null,
+    txn.pricingGranularity ?? null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+// Daily rows are surfaced as a trading day rather than a raw timestamp. The
+// Kraken OHLCVT importer stores its daily candles at the close (next-day 00:00
+// UTC), so those need a one-day shift; other daily sources (CoinGecko, manual)
+// already timestamp the row at the day it represents, so they must not be
+// shifted.
+export function pricingPriceMoment(txn: Transaction): {
+  label: string;
+  value: string;
+} {
+  const ts = txn.pricingTimestamp;
+  if (!ts) return { label: "Price timestamp", value: "—" };
+  if (txn.pricingGranularity === "daily") {
+    const ms = Date.parse(ts);
+    if (!Number.isNaN(ms)) {
+      const isKrakenDailyClose =
+        txn.pricingProvider === "kraken-csv" &&
+        txn.pricingMethod === "ohlcvt_csv";
+      const dayMs = isKrakenDailyClose ? ms - 24 * 60 * 60 * 1000 : ms;
+      return {
+        label: "Trading day",
+        value: new Date(dayMs).toISOString().slice(0, 10),
+      };
+    }
+  }
+  return { label: "Price timestamp", value: formatShortDate(ts) };
 }
 
 export function pricingOptionForValue(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from importlib import resources
 import io
 import json
 import logging
@@ -36,6 +37,7 @@ _KRAKEN_STABLECOIN_QUOTES = {"DAI", "USDC", "USDT"}
 _KRAKEN_SUPPORTED_QUOTES = {"EUR", "USD"}
 _KRAKEN_BATCH_SIZE = 10_000
 _COINBASE_MAX_CANDLES = 300
+_BUNDLED_KRAKEN_BTC_DAILY_PATH = "data/rates/kraken/btc_daily"
 
 
 _RATE_UPSERT_SQL = """
@@ -1174,8 +1176,33 @@ def _sync_rates_coinbase_exchange(
     return summary
 
 
-def _kraken_csv_members(path):
+def _kraken_csv_member_names(path):
     source_path = Path(path).expanduser()
+    if not source_path.exists():
+        raise AppError(
+            f"Rate source path does not exist: {source_path}",
+            code="not_found",
+            hint="Pass --path to a Kraken OHLCVT .csv file, .zip archive, or extracted directory",
+        )
+    if source_path.is_dir():
+        return sorted(
+            csv_path.name
+            for csv_path in source_path.glob("*.csv")
+            if csv_path.is_file()
+        )
+    if source_path.suffix.lower() == ".zip":
+        with zipfile.ZipFile(source_path) as archive:
+            return sorted(
+                name
+                for name in archive.namelist()
+                if not archive.getinfo(name).is_dir()
+            )
+    return [source_path.name]
+
+
+def _kraken_csv_members(path, selected_names=None):
+    source_path = Path(path).expanduser()
+    selected = set(selected_names) if selected_names is not None else None
     if not source_path.exists():
         raise AppError(
             f"Rate source path does not exist: {source_path}",
@@ -1186,6 +1213,8 @@ def _kraken_csv_members(path):
         for csv_path in sorted(source_path.glob("*.csv")):
             if not csv_path.is_file():
                 continue
+            if selected is not None and csv_path.name not in selected:
+                continue
             with csv_path.open("r", encoding="utf-8", newline="") as handle:
                 yield csv_path.name, handle
         return
@@ -1195,10 +1224,14 @@ def _kraken_csv_members(path):
                 info = archive.getinfo(name)
                 if info.is_dir():
                     continue
+                if selected is not None and name not in selected:
+                    continue
                 with archive.open(info) as raw:
                     text = io.TextIOWrapper(raw, encoding="utf-8", newline="")
                     yield name, text
     else:
+        if selected is not None and source_path.name not in selected:
+            return
         with source_path.open("r", encoding="utf-8", newline="") as handle:
             yield source_path.name, handle
 
@@ -1226,17 +1259,18 @@ def _normalize_kraken_pair_code(pair_code):
 def _kraken_member_pair(member_name):
     base = Path(member_name).name
     if not base.lower().endswith(".csv"):
-        return None, "not_csv"
+        return None, None, "not_csv"
     stem = base[:-4]
     pair_code, sep, interval = stem.rpartition("_")
     if not sep or not pair_code or not interval:
-        return None, "invalid_filename"
-    if interval != "1":
-        return None, "unsupported_interval"
-    return _normalize_kraken_pair_code(pair_code)
+        return None, None, "invalid_filename"
+    if interval not in {"1", "1440"}:
+        return None, None, "unsupported_interval"
+    normalized_pair, skip_reason = _normalize_kraken_pair_code(pair_code)
+    return normalized_pair, int(interval), skip_reason
 
 
-def _parse_kraken_csv_row(row, member_name, line_number):
+def _parse_kraken_csv_row(row, member_name, line_number, interval_minutes):
     if len(row) != 7:
         raise AppError(
             f"Expected 7 columns, got {len(row)}",
@@ -1249,7 +1283,10 @@ def _parse_kraken_csv_row(row, member_name, line_number):
         timestamp_seconds = int(timestamp_raw)
         timestamp = _iso_z(datetime.fromtimestamp(timestamp_seconds, tz=timezone.utc))
         close_timestamp = _iso_z(
-            datetime.fromtimestamp(timestamp_seconds + 60, tz=timezone.utc)
+            datetime.fromtimestamp(
+                timestamp_seconds + (int(interval_minutes) * 60),
+                tz=timezone.utc,
+            )
         )
         open_value = pricing.decimal_from_exact(open_raw)
         high_value = pricing.decimal_from_exact(high_raw)
@@ -1294,9 +1331,10 @@ def _sync_rates_kraken_csv(conn, pair=None, path=None, commit=True):
     fetched_at = _iso_z(datetime.now(timezone.utc))
     summaries = {}
     skipped_files = 0
+    unique_members = {}
 
-    for member_name, handle in _kraken_csv_members(path):
-        normalized_pair, skip_reason = _kraken_member_pair(member_name)
+    for member_name in _kraken_csv_member_names(path):
+        normalized_pair, interval_minutes, skip_reason = _kraken_member_pair(member_name)
         if skip_reason:
             skipped_files += 1
             logger.info("Skipping Kraken CSV member %s: %s", member_name, skip_reason)
@@ -1304,6 +1342,44 @@ def _sync_rates_kraken_csv(conn, pair=None, path=None, commit=True):
         if pair_filter and normalized_pair != pair_filter:
             skipped_files += 1
             continue
+        key = (normalized_pair, interval_minutes)
+        if key in unique_members:
+            skipped_files += 1
+            logger.info(
+                "Skipping duplicate Kraken CSV member %s for %s interval %s; using %s",
+                member_name,
+                normalized_pair,
+                interval_minutes,
+                unique_members[key],
+            )
+            continue
+        unique_members[key] = member_name
+
+    selected_by_pair = {}
+    for (normalized_pair, interval_minutes), member_name in sorted(
+        unique_members.items(),
+        key=lambda item: (item[0][0], item[0][1], item[1]),
+    ):
+        current = selected_by_pair.get(normalized_pair)
+        if current is None:
+            selected_by_pair[normalized_pair] = (interval_minutes, member_name)
+            continue
+        current_interval, _ = current
+        if interval_minutes < current_interval:
+            skipped_files += 1
+            selected_by_pair[normalized_pair] = (interval_minutes, member_name)
+        else:
+            skipped_files += 1
+
+    member_intervals = {
+        member_name: (normalized_pair, interval_minutes)
+        for normalized_pair, (interval_minutes, member_name) in selected_by_pair.items()
+    }
+    selected_names = set(member_intervals)
+
+    for member_name, handle in _kraken_csv_members(path, selected_names=selected_names):
+        normalized_pair, interval_minutes = member_intervals[member_name]
+        granularity = "minute" if interval_minutes == 1 else "daily"
 
         summary = summaries.setdefault(
             normalized_pair,
@@ -1317,7 +1393,7 @@ def _sync_rates_kraken_csv(conn, pair=None, path=None, commit=True):
                 "skipped_files": 0,
                 "first_timestamp": None,
                 "last_timestamp": None,
-                "granularity": "minute",
+                "granularity": granularity,
                 "method": "ohlcvt_csv",
                 "fetched_at": fetched_at,
             },
@@ -1327,7 +1403,12 @@ def _sync_rates_kraken_csv(conn, pair=None, path=None, commit=True):
         reader = csv.reader(handle)
         for line_number, row in enumerate(reader, start=1):
             try:
-                candle = _parse_kraken_csv_row(row, member_name, line_number)
+                candle = _parse_kraken_csv_row(
+                    row,
+                    member_name,
+                    line_number,
+                    interval_minutes,
+                )
             except AppError as exc:
                 summary["skipped_rows"] += 1
                 logger.warning("Skipping Kraken CSV row: %s", exc)
@@ -1346,7 +1427,7 @@ def _sync_rates_kraken_csv(conn, pair=None, path=None, commit=True):
                     candle["close"],
                     RATE_SOURCE_KRAKEN_CSV,
                     fetched_at,
-                    "minute",
+                    granularity,
                     "ohlcvt_csv",
                     open_rate=candle["open"],
                     high_rate=candle["high"],
@@ -1368,6 +1449,21 @@ def _sync_rates_kraken_csv(conn, pair=None, path=None, commit=True):
     if commit:
         conn.commit()
     return [summaries[pair] for pair in sorted(summaries)]
+
+
+def bundled_kraken_btc_daily_path():
+    return resources.files("kassiber").joinpath(_BUNDLED_KRAKEN_BTC_DAILY_PATH)
+
+
+def sync_bundled_kraken_btc_daily(conn, pair=None, commit=True):
+    resource = bundled_kraken_btc_daily_path()
+    with resources.as_file(resource) as path:
+        return str(path), _sync_rates_kraken_csv(
+            conn,
+            pair=pair,
+            path=str(path),
+            commit=commit,
+        )
 
 
 def sync_rates(
@@ -1455,6 +1551,7 @@ __all__ = [
     "rebuild_rates_cache",
     "require_supported_pair",
     "set_manual_rate",
+    "sync_bundled_kraken_btc_daily",
     "sync_rates",
     "transaction_price_missing_sql",
     "transaction_price_missing_sql_unqualified",

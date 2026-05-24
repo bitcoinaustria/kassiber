@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   ArrowDownRight,
   ArrowLeftRight,
   ArrowUpRight,
@@ -16,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import * as React from "react";
+import { useNavigate } from "@tanstack/react-router";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -68,6 +70,7 @@ import {
   formatShortTxid,
   formatSignedDisplayMoney,
   parseManualDecimal,
+  pricingCacheSummary,
   pricingSelectionValue,
   pricingSourceLabel,
   pricingSourceStyles,
@@ -140,6 +143,7 @@ const TransactionsTable = ({
   resetTableFiltersToken: number;
   isRefreshing?: boolean;
 }) => {
+  const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
   const [dateFilter, setDateFilter] = React.useState<string>("all");
   const [flowFilter, setFlowFilter] = React.useState<string>("all");
@@ -914,6 +918,10 @@ const TransactionsTable = ({
                   draft.pricingSourceKind,
                   draft.pricingQuality,
                 );
+                const rowPricingSummary =
+                  draft.pricingSourceKind === "manual_override"
+                    ? null
+                    : pricingCacheSummary(txn);
                 const StatusIcon = transactionStatusIcons[draft.reviewStatus];
                 const explorer = explorerForTransaction(txn, explorerSettings);
                 const flow = displayFlow(txn);
@@ -1077,17 +1085,28 @@ const TransactionsTable = ({
                       </p>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
-                      <span
-                        className={cn(
-                          "inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium sm:text-xs",
-                          pricingSourceStyles[rowPricingValue],
-                        )}
-                      >
-                        {pricingSourceLabel(
-                          draft.pricingSourceKind,
-                          draft.pricingQuality,
-                        )}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={cn(
+                            "inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium sm:text-xs",
+                            pricingSourceStyles[rowPricingValue],
+                          )}
+                        >
+                          {pricingSourceLabel(
+                            draft.pricingSourceKind,
+                            draft.pricingQuality,
+                          )}
+                        </span>
+                        {draft.pricingQuality === "coarse_fallback" ? (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+                            title="Coarse daily fallback price — review before relying on it"
+                          >
+                            <AlertTriangle className="size-3" aria-hidden="true" />
+                            Coarse
+                          </span>
+                        ) : null}
+                      </div>
                       <p
                         className={cn(
                           "mt-1 truncate text-[10px] text-muted-foreground sm:text-xs",
@@ -1100,6 +1119,14 @@ const TransactionsTable = ({
                             ? `${currencyFormatter.format(txn.rate)} / BTC`
                             : "Awaiting price"}
                       </p>
+                      {rowPricingSummary ? (
+                        <p
+                          className="truncate text-[10px] text-muted-foreground/80"
+                          title={rowPricingSummary}
+                        >
+                          {rowPricingSummary}
+                        </p>
+                      ) : null}
                     </TableCell>
                     <TableCell className="hidden xl:table-cell">
                       <div className="flex flex-wrap gap-1">
@@ -1373,6 +1400,11 @@ const TransactionsTable = ({
           });
         }}
         isUnpairing={unpairTransfer.isPending}
+        onOpenMarketDataSettings={() => {
+          setDetailTransaction(null);
+          updateTransactionDetailParams(null);
+          void navigate({ to: "/settings", hash: "market" });
+        }}
         hasNext={
           detailTransaction
             ? filteredTransactions.findIndex(

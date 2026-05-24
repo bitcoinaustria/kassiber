@@ -2158,12 +2158,19 @@ def _rates_kraken_csv_import_payload(
     conn: sqlite3.Connection,
     args: dict[str, Any],
 ) -> dict[str, Any]:
+    use_bundled = bool(args.get("use_bundled") or args.get("bundled"))
     path = args.get("path")
-    if not isinstance(path, str) or not path.strip():
+    if not use_bundled and (not isinstance(path, str) or not path.strip()):
         raise AppError(
             "ui.rates.kraken_csv.import requires args.path",
             code="validation",
-            hint="Choose a local Kraken OHLCVT .zip or .csv archive.",
+            hint="Choose a local Kraken OHLCVT .zip or .csv archive, or use the bundled BTC daily seed.",
+            retryable=False,
+        )
+    if use_bundled and path is not None and not isinstance(path, str):
+        raise AppError(
+            "ui.rates.kraken_csv.import path must be a string",
+            code="validation",
             retryable=False,
         )
 
@@ -2189,13 +2196,19 @@ def _rates_kraken_csv_import_payload(
         if isinstance(pair_arg, str) and pair_arg.strip()
         else None
     )
-    archive_path = path.strip()
-    summary = core_rates.sync_rates(
-        conn,
-        pair=pair,
-        source=core_rates.RATE_SOURCE_KRAKEN_CSV,
-        path=archive_path,
-    )
+    if use_bundled:
+        archive_path, summary = core_rates.sync_bundled_kraken_btc_daily(
+            conn,
+            pair=pair,
+        )
+    else:
+        archive_path = path.strip()
+        summary = core_rates.sync_rates(
+            conn,
+            pair=pair,
+            source=core_rates.RATE_SOURCE_KRAKEN_CSV,
+            path=archive_path,
+        )
     skipped_files = [
         row.get("skipped_files") for row in summary if isinstance(row, dict)
     ]
@@ -2203,6 +2216,7 @@ def _rates_kraken_csv_import_payload(
         "source": core_rates.RATE_SOURCE_KRAKEN_CSV,
         "operation": operation,
         "path": archive_path,
+        "bundled": use_bundled,
         "pair": pair,
         "summary": summary,
         "totals": {

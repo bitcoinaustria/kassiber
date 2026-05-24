@@ -43,9 +43,20 @@ In the current tested RP2 install path, one runtime dependency worth calling out
 | --- | --- | --- |
 | `pycountry` | More restrictive than the surrounding MIT/BSD/Apache-style deps in the observed RP2 stack | LGPL-2.1-only |
 
+## Bundled source data
+
+Kassiber also bundles a small Bitcoin-only subset of Kraken offline history for
+daily OHLCVT values used as local fallback pricing data.
+
+| Data | Files | Role | License / redistribution status |
+| --- | --- | --- | --- |
+| Kraken BTC daily OHLCVT history | `kassiber/data/rates/kraken/btc_daily/*.csv` | Offline fallback rates for `BTC-EUR` and `BTC-USD` | Unknown / not specified in the local export; review before public release redistribution |
+
 ## Practical notes
 
 - Preserve upstream notices and license texts when redistributing Kassiber with bundled third-party code.
+- Treat bundled market-data redistribution status as release-blocking until the
+  source terms are reviewed.
 - If Kassiber adds another direct runtime dependency, add it here with short credit and license info.
 - If a dependency introduces a notable licensing constraint, call that out here too.
 - For a full release-time dependency inventory, prefer generated tooling or release artifacts over expanding this file by hand.
