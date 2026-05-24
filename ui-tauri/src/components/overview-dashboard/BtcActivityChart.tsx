@@ -82,10 +82,12 @@ export const BtcActivityChart = ({
   snapshot,
   hideSensitive,
   currency,
+  onOpenTransactionDetail,
 }: {
   snapshot: OverviewSnapshot;
   hideSensitive: boolean;
   currency: Currency;
+  onOpenTransactionDetail?: (transactionId: string) => void;
 }) => {
   const [period, setPeriod] =
     React.useState<TimePeriod>(initialTimePeriodFromUrl);
@@ -837,6 +839,7 @@ export const BtcActivityChart = ({
                         <ActivityScatterDot
                           {...props}
                           activeSeries={activeSeries}
+                          onOpenTransactionDetail={onOpenTransactionDetail}
                         />
                       )}
                       isAnimationActive={false}

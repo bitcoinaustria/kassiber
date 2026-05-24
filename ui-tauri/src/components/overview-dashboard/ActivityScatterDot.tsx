@@ -14,6 +14,7 @@ export function ActivityScatterDot({
   size,
   payload,
   activeSeries,
+  onOpenTransactionDetail,
 }: ActivityScatterDotProps) {
   const navigate = useNavigate();
   if (
@@ -29,47 +30,72 @@ export function ActivityScatterDot({
   const transactionId = payload.eventTransactionId ?? payload.eventId;
   const openTransactionDetail = () => {
     if (!transactionId) return;
+    if (onOpenTransactionDetail) {
+      onOpenTransactionDetail(transactionId);
+      return;
+    }
     void navigate({ to: transactionDetailHref(transactionId) });
   };
-  const handleClick = (event: React.MouseEvent<SVGCircleElement>) => {
+  const handleClick = (event: React.MouseEvent<SVGGElement>) => {
     if (!transactionId) return;
     event.preventDefault();
     event.stopPropagation();
     openTransactionDetail();
   };
-  const handleKeyDown = (event: React.KeyboardEvent<SVGCircleElement>) => {
+  const handleMouseUp = (event: React.MouseEvent<SVGGElement>) => {
+    if (!transactionId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openTransactionDetail();
+  };
+  const handleKeyDown = (event: React.KeyboardEvent<SVGGElement>) => {
     if (!transactionId || (event.key !== "Enter" && event.key !== " ")) return;
     event.preventDefault();
     event.stopPropagation();
     openTransactionDetail();
   };
 
+  const interactiveProps = transactionId
+    ? {
+        "aria-label": `Open ${activityFlowLabels[payload.eventFlow]} transaction`,
+        focusable: true,
+        onClick: handleClick,
+        onKeyDown: handleKeyDown,
+        onMouseUp: handleMouseUp,
+        onMouseDown: (event: React.MouseEvent<SVGGElement>) =>
+          event.preventDefault(),
+        role: "button",
+        style: { cursor: "pointer" },
+        tabIndex: 0,
+      }
+    : {
+        focusable: false,
+        style: { cursor: "default" },
+        tabIndex: -1,
+      };
+
   return (
-    <circle
-      className="recharts-scatter-symbol"
-      cx={cx}
-      cy={cy}
-      r={radius}
-      aria-label={
-        transactionId
-          ? `Open ${activityFlowLabels[payload.eventFlow]} transaction`
-          : undefined
-      }
-      fill={activityFlowColors[payload.eventFlow]}
-      fillOpacity={
-        activeSeries === null || activeSeries === "events" ? 0.92 : 0.28
-      }
-      focusable={transactionId ? true : false}
-      onClick={handleClick}
-      onKeyDown={handleKeyDown}
-      onMouseDown={(event) => event.preventDefault()}
-      role={transactionId ? "button" : undefined}
-      stroke="var(--background)"
-      strokeWidth={2.5}
-      style={{
-        cursor: transactionId ? "pointer" : "default",
-      }}
-      tabIndex={transactionId ? 0 : -1}
-    />
+    <g {...interactiveProps}>
+      <circle
+        cx={cx}
+        cy={cy}
+        r={Math.max(radius + 6, 10)}
+        fill="transparent"
+        pointerEvents="all"
+      />
+      <circle
+        className="recharts-scatter-symbol"
+        cx={cx}
+        cy={cy}
+        r={radius}
+        fill={activityFlowColors[payload.eventFlow]}
+        fillOpacity={
+          activeSeries === null || activeSeries === "events" ? 0.92 : 0.28
+        }
+        pointerEvents="none"
+        stroke="var(--background)"
+        strokeWidth={2.5}
+      />
+    </g>
   );
 }

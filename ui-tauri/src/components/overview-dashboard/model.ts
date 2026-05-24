@@ -148,6 +148,7 @@ export type ActivityScatterDotProps = {
   size?: number;
   payload?: TreasuryChartPoint;
   activeSeries: TreasuryChartSeriesKey | null;
+  onOpenTransactionDetail?: (transactionId: string) => void;
 };
 
 export type ActivityMarkerView = {
