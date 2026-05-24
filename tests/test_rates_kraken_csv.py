@@ -32,6 +32,29 @@ XBTUSD_DAILY_CSV = """1714521600,65000.00,65100.00,64900.00,65050.00,1.5000,20
 """
 
 
+class _MemoryResourceFile:
+    def __init__(self, name, content):
+        self.name = name
+        self._content = content
+
+    def is_file(self):
+        return True
+
+    def read_bytes(self):
+        return self._content
+
+
+class _MemoryResourceDir:
+    def __init__(self, children):
+        self._children = children
+
+    def iterdir(self):
+        return iter(self._children)
+
+    def __str__(self):
+        return "memory://kassiber/data/rates/kraken/btc_daily"
+
+
 class KrakenCsvRatesTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory(prefix="kassiber-kraken-rates-")
@@ -565,6 +588,41 @@ class KrakenCsvRatesTest(unittest.TestCase):
         self.assertEqual(summaries["BTC-USD"]["samples"], 4548)
         self.assertEqual(summaries["BTC-EUR"]["granularity"], "daily")
         self.assertEqual(summaries["BTC-USD"]["granularity"], "daily")
+
+    def test_bundled_kraken_import_supports_non_filesystem_resources(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+        fake_resource = _MemoryResourceDir(
+            [
+                _MemoryResourceFile(
+                    "XBTUSD_1440.csv",
+                    XBTUSD_DAILY_CSV.encode("utf-8"),
+                )
+            ]
+        )
+
+        with patch.object(
+            core_rates,
+            "bundled_kraken_btc_daily_path",
+            return_value=fake_resource,
+        ):
+            archive_path, summary = core_rates.sync_bundled_kraken_btc_daily(
+                conn,
+                pair="BTC-USD",
+            )
+
+        self.assertEqual(
+            archive_path,
+            "memory://kassiber/data/rates/kraken/btc_daily",
+        )
+        self.assertEqual(len(summary), 1)
+        self.assertEqual(summary[0]["pair"], "BTC-USD")
+        self.assertEqual(summary[0]["granularity"], "daily")
+        self.assertEqual(summary[0]["samples"], 1)
+        row = conn.execute(
+            "SELECT COUNT(*) AS count FROM rates_cache WHERE pair = 'BTC-USD'"
+        ).fetchone()
+        self.assertEqual(row["count"], 1)
 
     def test_transaction_snapshot_exposes_rate_cache_pricing_provenance(self):
         conn = open_db(str(self.data_root))

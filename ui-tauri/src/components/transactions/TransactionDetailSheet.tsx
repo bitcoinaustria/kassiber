@@ -1394,7 +1394,7 @@ export function TransactionDetailSheet({
   const hasJournalQuarantine = Boolean(quarantineReason) && !localDraft.excluded;
   const hasPricingBlocker = isPricingMissing && !localDraft.excluded;
   const showReviewBanner =
-    activeTab !== "pricing" && (hasJournalQuarantine || hasPricingBlocker);
+    hasJournalQuarantine || (activeTab !== "pricing" && hasPricingBlocker);
   const confLabel = confirmationsLabel(transaction.confirmations);
   const dirtyTags = dirty.tags;
   const dirtyLabel = dirty.label;

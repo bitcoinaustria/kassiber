@@ -6,6 +6,7 @@ import io
 import json
 import logging
 from pathlib import Path
+import tempfile
 import zipfile
 from datetime import datetime, timedelta, timezone
 from urllib import error as urlerror
@@ -1457,11 +1458,23 @@ def bundled_kraken_btc_daily_path():
 
 def sync_bundled_kraken_btc_daily(conn, pair=None, commit=True):
     resource = bundled_kraken_btc_daily_path()
-    with resources.as_file(resource) as path:
-        return str(path), _sync_rates_kraken_csv(
+    if isinstance(resource, Path):
+        return str(resource), _sync_rates_kraken_csv(
             conn,
             pair=pair,
-            path=str(path),
+            path=str(resource),
+            commit=commit,
+        )
+    display_path = str(resource)
+    with tempfile.TemporaryDirectory(prefix="kassiber-kraken-btc-daily-") as tmp:
+        tmp_path = Path(tmp)
+        for child in resource.iterdir():
+            if child.is_file():
+                (tmp_path / child.name).write_bytes(child.read_bytes())
+        return display_path, _sync_rates_kraken_csv(
+            conn,
+            pair=pair,
+            path=str(tmp_path),
             commit=commit,
         )
 
