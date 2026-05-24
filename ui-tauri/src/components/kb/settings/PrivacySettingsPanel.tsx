@@ -1,12 +1,9 @@
 import * as React from "react";
 import {
-  Database,
   Network,
   Pencil,
-  RadioTower,
   ShieldCheck,
   ShieldOff,
-  Upload,
   type LucideIcon,
 } from "lucide-react";
 
@@ -97,37 +94,12 @@ export const EXPOSURE_GROUPS: ExposureGroupDef[] = [
     id: "market",
     title: "Market prices",
     subtitle:
-      "Live providers see pair and time-window requests, not wallet addresses.",
+      "Offline history stays local. Live providers only see pair and time window.",
     nets: ["FX"],
     canOwn: false,
     canEdit: false,
   },
 ];
-
-const MARKET_PRICE_PRIVACY = [
-  {
-    title: "Offline history",
-    description:
-      "Bundled BTC-EUR and BTC-USD daily values are read from the app bundle. Importing them does not contact Kraken.",
-    icon: Database,
-  },
-  {
-    title: "Local Kraken archives",
-    description:
-      "CSV or ZIP backfills are read from a file you choose. Kassiber does not upload the archive or its path.",
-    icon: Upload,
-  },
-  {
-    title: "Live rate fetches",
-    description:
-      "Coinbase Exchange minute windows and CoinGecko fallback calls can reveal the fiat pair and requested time window, but not addresses, txids, amounts, notes, or labels.",
-    icon: RadioTower,
-  },
-] satisfies Array<{
-  title: string;
-  description: string;
-  icon: LucideIcon;
-}>;
 
 export function ExposurePostureBar({
   counts,
@@ -411,7 +383,6 @@ export function PrivacySettingsPanel({
           const rows = filter
             ? all.filter((backend) => backendExposureFilter(backend) === filter)
             : all;
-          const showMarketPrivacy = group.id === "market" && !filter;
           return (
             <div key={group.id} className="space-y-2">
               <div>
@@ -441,30 +412,6 @@ export function PrivacySettingsPanel({
                   None match the {activeFilterLabel} filter.
                 </p>
               )}
-              {showMarketPrivacy ? (
-                <div className="grid gap-2 lg:grid-cols-3">
-                  {MARKET_PRICE_PRIVACY.map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <div
-                        key={item.title}
-                        className="rounded-md border bg-background p-3"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Icon
-                            className="size-4 text-muted-foreground"
-                            aria-hidden="true"
-                          />
-                          <p className="text-sm font-medium">{item.title}</p>
-                        </div>
-                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                          {item.description}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
             </div>
           );
         })}
