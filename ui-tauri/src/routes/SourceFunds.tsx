@@ -8,6 +8,7 @@ import {
   Check,
   ExternalLink,
   Eye,
+  Info,
   FileCheck,
   FileDown,
   GitBranch,
@@ -1393,8 +1394,12 @@ export function SourceFunds() {
                 </div>
               )}
               {currentStep === "setup" && planned && (
-                <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-                  {t("purpose.plannedHint")}
+                <div className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <Info
+                    className="mt-0.5 size-4 shrink-0 opacity-70"
+                    aria-hidden="true"
+                  />
+                  <p>{t("purpose.plannedHint")}</p>
                 </div>
               )}
               {currentStep === "setup" && (
@@ -1406,7 +1411,7 @@ export function SourceFunds() {
                       sell. The report traces history backward from here.
                     </p>
                   )}
-                  <div className="grid gap-3 lg:grid-cols-[180px_150px_minmax(0,1fr)]">
+                  <div className="grid gap-3 sm:grid-cols-[180px_150px]">
                     <ReportControlFields
                       amountLabel={amountLabel}
                       targetAmount={targetAmount}
@@ -1415,19 +1420,6 @@ export function SourceFunds() {
                       onAmountChange={setTargetAmount}
                       onRevealModeChange={setRevealMode}
                     />
-                    {selectedTx && (
-                      <div className="self-end rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                        {t("setup.selected", {
-                          date: txDate(selectedTx, t),
-                          wallet: txWallet(selectedTx),
-                          txid: shortId(
-                            selectedTx.external_id ||
-                              selectedTx.externalId ||
-                              selectedTx.id,
-                          ),
-                        })}
-                      </div>
-                    )}
                   </div>
                   <div className="rounded-md border">
                     <div className="flex flex-col gap-3 border-b p-3 lg:flex-row lg:items-center lg:justify-between">
