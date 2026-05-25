@@ -379,6 +379,21 @@ The first implementation adds the conservative, testable core path:
   daemon `report_options` arg, and a desktop Export-step control. New options
   (section toggles, amount precision, masking) should follow the same
   normalize-store-freeze pattern so simple UX stays the default
+- a recipient-ready evidence bundle: `reports export-source-funds-bundle --case
+  ...` (and the `ui.source_funds.export_bundle` daemon kind) zips the report PDF,
+  the original evidence files attached to disclosed sources, and a SHA-256
+  `manifest.json`. It reuses the same export gate as the PDF and is reveal-mode
+  scoped: `standard`/`full` include the files, `labels_only`/`minimal` record
+  them as `withheld_by_reveal_mode`. The report references originals by hash; it
+  never transcribes them (`attachments.resolve_attachment_files` resolves the
+  on-disk files).
+- a desktop target picker rendered as the transaction table (parity with the
+  Transactions screen) and the shared, editable transaction detail panel
+  ([TransactionDetailController](../../ui-tauri/src/components/transactions/dashboard/TransactionDetailController.tsx))
+  wired into the workflow: the picker's details affordance, review-step gate
+  findings, and flow-path transaction nodes all open it. Because daemon
+  mutations invalidate the source-of-funds queries, fixing pricing / exclusion /
+  evidence there re-evaluates the gates, coverage, and source mix automatically.
 - a basic Austrian/EUR report context with bilingual title, evidence checklist,
   and a checked-in fictitious demo generator at
   `scripts/generate-source-funds-demo-report.py`
