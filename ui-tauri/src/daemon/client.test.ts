@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   daemonMutationKey,
+  mutationAdvancesDaemonSession,
   parseDaemonAuthRequiredEventDetail,
   shouldHandleDaemonAuthRequiredEvent,
 } from "./client";
@@ -70,6 +71,15 @@ describe("daemon mutation key", () => {
     );
     expect(daemonMutationKey("real", "ui.journals.process")).not.toEqual(
       daemonMutationKey("real", "ui.wallets.sync"),
+    );
+  });
+});
+
+describe("daemon session advancing mutations", () => {
+  it("advances after profile switches so cached pages cannot cross books", () => {
+    expect(mutationAdvancesDaemonSession("ui.profiles.switch")).toBe(true);
+    expect(mutationAdvancesDaemonSession("ui.transactions.metadata.update")).toBe(
+      false,
     );
   });
 });

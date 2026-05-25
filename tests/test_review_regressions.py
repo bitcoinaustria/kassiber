@@ -1466,6 +1466,27 @@ class ReviewRegressionTest(unittest.TestCase):
             [row["id"] for row in limited["txs"]],
             ["swap-in-leg", "older-income"],
         )
+        first_page = build_transactions_snapshot(conn, {"limit": 1})
+        self.assertEqual([row["id"] for row in first_page["txs"]], ["swap-in-leg"])
+        self.assertTrue(first_page["hasMore"])
+        self.assertTrue(first_page["nextCursor"])
+        second_page = build_transactions_snapshot(
+            conn,
+            {"limit": 1, "cursor": first_page["nextCursor"]},
+        )
+        self.assertEqual([row["id"] for row in second_page["txs"]], ["older-income"])
+        self.assertFalse(second_page["hasMore"])
+        self.assertIsNone(second_page["nextCursor"])
+        with self.assertRaises(AppError) as changed_cursor_filter:
+            build_transactions_snapshot(
+                conn,
+                {
+                    "limit": 1,
+                    "cursor": first_page["nextCursor"],
+                    "asset": "BTC",
+                },
+            )
+        self.assertEqual(changed_cursor_filter.exception.code, "validation")
 
         outbound = build_transactions_snapshot(
             conn,
@@ -1484,6 +1505,82 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(len(outbound_search["txs"]), 1)
         self.assertEqual(outbound_search["txs"][0]["id"], "swap-out-leg")
         self.assertEqual(outbound_search["txs"][0]["type"], "Swap")
+        list_search = build_transactions_snapshot(
+            conn,
+            {"query": "older income", "limit": 10},
+        )
+        self.assertEqual([row["id"] for row in list_search["txs"]], ["older-income"])
+        self.assertEqual(list_search["filters"]["query"], "older income")
+
+    def test_ui_transactions_snapshot_cursor_roundtrips_sort_ties(self):
+        self._bootstrap_wallet(label="Cursor Sort")
+        for index, tx_id in enumerate(
+            [
+                "cursor-sort-a",
+                "cursor-sort-b",
+                "cursor-sort-c",
+                "cursor-sort-d",
+            ],
+        ):
+            self._insert_transaction(
+                wallet_label="Cursor Sort",
+                tx_id=tx_id,
+                occurred_at=f"2024-01-01T00:00:0{index}Z",
+                amount_msat=100_000_000,
+            )
+
+        db_path = self.data_root / "kassiber.sqlite3"
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            """
+            UPDATE transactions
+            SET fee = ?, fiat_value = ?
+            WHERE id LIKE 'cursor-sort-%'
+            """,
+            (1_000, 42.0),
+        )
+        conn.commit()
+        self.addCleanup(conn.close)
+
+        for sort in ("occurred-at", "amount", "fee", "fiat-value"):
+            for order in ("asc", "desc"):
+                with self.subTest(sort=sort, order=order):
+                    first_page = build_transactions_snapshot(
+                        conn,
+                        {
+                            "query": "cursor-sort",
+                            "limit": 2,
+                            "sort": sort,
+                            "order": order,
+                        },
+                    )
+                    self.assertTrue(first_page["hasMore"])
+                    self.assertTrue(first_page["nextCursor"])
+                    second_page = build_transactions_snapshot(
+                        conn,
+                        {
+                            "query": "cursor-sort",
+                            "limit": 2,
+                            "sort": sort,
+                            "order": order,
+                            "cursor": first_page["nextCursor"],
+                        },
+                    )
+                    ids = [
+                        row["id"]
+                        for row in [*first_page["txs"], *second_page["txs"]]
+                    ]
+                    self.assertEqual(len(ids), 4)
+                    self.assertEqual(len(set(ids)), 4)
+                    self.assertEqual(set(ids), {
+                        "cursor-sort-a",
+                        "cursor-sort-b",
+                        "cursor-sort-c",
+                        "cursor-sort-d",
+                    })
+                    self.assertFalse(second_page["hasMore"])
+                    self.assertIsNone(second_page["nextCursor"])
 
     def test_report_transfer_rows_derive_missing_swap_fee(self):
         context = {
