@@ -112,6 +112,7 @@ from .core.ui_snapshot import (
     build_rates_summary_snapshot,
     build_report_blockers_snapshot,
     build_transactions_extremes_snapshot,
+    build_transactions_resolve_snapshot,
     build_transactions_search_snapshot,
     build_transactions_snapshot,
     build_wallets_list_snapshot,
@@ -179,6 +180,7 @@ SUPPORTED_KINDS = (
     "ui.overview.snapshot",
     "ui.transactions.list",
     "ui.transactions.extremes",
+    "ui.transactions.resolve",
     "ui.transactions.search",
     "ui.transactions.metadata.update",
     "ui.attachments.list",
@@ -3163,6 +3165,8 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                 payload = build_transactions_snapshot(conn, call.arguments)
             elif entry.daemon_kind == "ui.transactions.extremes":
                 payload = build_transactions_extremes_snapshot(conn, call.arguments)
+            elif entry.daemon_kind == "ui.transactions.resolve":
+                payload = build_transactions_resolve_snapshot(conn, call.arguments)
             elif entry.daemon_kind == "ui.transactions.search":
                 payload = build_transactions_search_snapshot(conn, call.arguments)
             elif entry.daemon_kind == "ui.wallets.list":
@@ -7084,6 +7088,18 @@ def handle_request(
                 build_envelope(
                     "ui.transactions.search",
                     build_transactions_search_snapshot(ctx.conn, request.get("args")),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.transactions.resolve":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.transactions.resolve",
+                    build_transactions_resolve_snapshot(ctx.conn, request.get("args")),
                 ),
                 request_id,
             ),

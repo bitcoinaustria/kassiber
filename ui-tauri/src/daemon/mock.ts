@@ -2223,6 +2223,30 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.transactions.resolve") {
+      const query =
+        typeof req.args?.query === "string" ? req.args.query.trim().toLowerCase() : "";
+      const transactionList = fixtures["ui.transactions.list"] as {
+        txs?: Array<{
+          id?: string;
+          externalId?: string;
+          explorerId?: string;
+        }>;
+      };
+      const transaction =
+        transactionList.txs?.find((tx) =>
+          [tx.id, tx.externalId, tx.explorerId]
+            .filter(Boolean)
+            .some((value) => value?.toLowerCase() === query),
+        ) ?? null;
+      return {
+        kind: "ui.transactions.resolve",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: { transaction, query } as T,
+      };
+    }
+
     const fixture = fixtures[req.kind];
     if (fixture === undefined) {
       return {

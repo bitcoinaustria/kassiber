@@ -677,6 +677,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.overview.snapshot", ready["data"]["supported_kinds"])
             self.assertIn("ui.transactions.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.transactions.extremes", ready["data"]["supported_kinds"])
+            self.assertIn("ui.transactions.resolve", ready["data"]["supported_kinds"])
             self.assertIn("ui.transactions.search", ready["data"]["supported_kinds"])
             self.assertIn("ui.transactions.metadata.update", ready["data"]["supported_kinds"])
             self.assertIn("ui.wallets.list", ready["data"]["supported_kinds"])
