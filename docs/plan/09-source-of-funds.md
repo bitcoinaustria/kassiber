@@ -376,9 +376,13 @@ The first implementation adds the conservative, testable core path:
   report_options=...)`, stored as `envelope["report_options"]`. The first option
   is `diagram_detail` (`summary` clusters long paths; `detailed` shows more hops
   before clustering), exposed as `reports source-funds --diagram-detail`, the
-  daemon `report_options` arg, and a desktop Export-step control. New options
-  (section toggles, amount precision, masking) should follow the same
-  normalize-store-freeze pattern so simple UX stays the default
+  daemon `report_options` arg, and a desktop Export-step control. The same
+  normalize-store-freeze pattern now also carries `amount_precision`
+  (`btc`/`sats`), `mask_recipient`, and `omit_sections` (verbose PDF sections
+  from `OPTIONAL_REPORT_SECTIONS`), each exposed via `reports source-funds`
+  flags (`--amount-precision`, `--mask-recipient`, `--omit-section`) and
+  Export-step controls. Further options should follow the same pattern so
+  simple UX stays the default
 - a recipient-ready evidence bundle: `reports export-source-funds-bundle --case
   ...` (and the `ui.source_funds.export_bundle` daemon kind) zips the report PDF,
   the original evidence files attached to disclosed sources, and a SHA-256

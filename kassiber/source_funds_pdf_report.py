@@ -104,6 +104,21 @@ class _SourceFundsPdfBuilder:
         self.fonts = fonts
         self.snapshot_hash = snapshot_hash
         self.styles = self._styles()
+        options = report.get("report_options") or {}
+        self.amount_precision = str(options.get("amount_precision") or "btc")
+        self.mask_recipient = bool(options.get("mask_recipient"))
+        self.omitted_sections = set(options.get("omit_sections") or [])
+
+    def amt(self, value: Any, asset: Any = "") -> str:
+        """Format a BTC amount honoring the advanced amount-precision option."""
+        if value is None or value == "":
+            return ""
+        if self.amount_precision == "sats":
+            sats = int((_decimal(value) * Decimal(100_000_000)).to_integral_value())
+            rendered = f"{sats:,} sats".replace(",", " ")
+            return rendered
+        suffix = f" {asset}" if asset else ""
+        return f"{_btc(value)}{suffix}"
 
     def _styles(self) -> dict[str, Any]:
         ParagraphStyle = self.rl["ParagraphStyle"]
@@ -279,18 +294,23 @@ class _SourceFundsPdfBuilder:
             ("Purpose", purpose.get("label", "Already completed transaction")),
             ("Reveal mode", self.report.get("reveal_mode", "")),
             (target_label, target.get("label", "")),
-            ("Amount", f"{_btc(target.get('required_amount'))} {target.get('asset', '')}"),
+            ("Amount", self.amt(target.get("required_amount"), target.get("asset", ""))),
             ("Exportable", str(bool(self.report.get("explain_gates", {}).get("exportable")))),
             ("Snapshot hash", self.snapshot_hash),
         ]
+        recipient_name = "(recipient masked)" if self.mask_recipient else recipient.get("label", "")
         if recipient:
-            rows.insert(6, ("Recipient", f"{recipient.get('label', '')} ({recipient.get('kind', '')})"))
+            rows.insert(6, ("Recipient", f"{recipient_name} ({recipient.get('kind', '')})"))
         overview = self.report.get("overview") or {}
         recipient_cell = (
-            recipient.get("label")
-            or purpose.get("planned_destination")
-            or target.get("wallet")
-            or "(self)"
+            "(recipient masked)"
+            if self.mask_recipient
+            else (
+                recipient.get("label")
+                or purpose.get("planned_destination")
+                or target.get("wallet")
+                or "(self)"
+            )
         )
         glance = self.table(
             [
@@ -298,7 +318,7 @@ class _SourceFundsPdfBuilder:
                 [
                     _datetime(overview.get("target_date") or target.get("occurred_at")),
                     recipient_cell,
-                    f"{_btc(target.get('required_amount'))} {target.get('asset', '')}",
+                    self.amt(target.get("required_amount"), target.get("asset", "")),
                     _fiat(overview.get("target_fiat_value"), overview.get("target_fiat_currency"))
                     or "(not priced)",
                 ],
@@ -407,7 +427,7 @@ class _SourceFundsPdfBuilder:
         target = self.report.get("target") or {}
         time_range = overview.get("time_range") or {}
         story: list[Any] = [self.p("Source of Funds Overview", "h1")]
-        target_amount = _amount_with_asset(
+        target_amount = self.amt(
             overview.get("target_amount"),
             overview.get("target_asset") or target.get("asset"),
         )
@@ -511,7 +531,7 @@ class _SourceFundsPdfBuilder:
             rows.append(
                 [
                     _label(row.get("source_type")),
-                    _btc(row.get("amount")),
+                    self.amt(row.get("amount")),
                     self.report.get("allocations", {}).get("asset", ""),
                     _pct(row.get("percent_of_target")),
                     row.get("count", 0),
@@ -573,7 +593,7 @@ class _SourceFundsPdfBuilder:
         for level in levels:
             for node in level.get("nodes") or []:
                 node_type = node.get("source_type") or node.get("direction") or node.get("node_type")
-                amount = _amount_with_asset(
+                amount = self.amt(
                     node.get("required_amount") if node.get("required_amount") is not None else node.get("amount"),
                     node.get("asset"),
                 )
@@ -606,7 +626,7 @@ class _SourceFundsPdfBuilder:
                         _node_time(node),
                         node.get("wallet", ""),
                         _label(node.get("direction")),
-                        _btc(node.get("required_amount") if node.get("required_amount") is not None else node.get("amount")),
+                        self.amt(node.get("required_amount") if node.get("required_amount") is not None else node.get("amount")),
                         node.get("asset", ""),
                         _fiat(node.get("fiat_value"), node.get("fiat_currency")),
                         node.get("external_id") or node.get("label", ""),
@@ -638,7 +658,7 @@ class _SourceFundsPdfBuilder:
                     _label(edge.get("link_type")),
                     edge.get("state", ""),
                     _label(edge.get("method")),
-                    f"{_btc(edge.get('allocation_amount'))} {edge.get('asset', '')}",
+                    self.amt(edge.get("allocation_amount"), edge.get("asset", "")),
                     _label(edge.get("allocation_policy")),
                     edge.get("explanation") or "",
                 ]
@@ -668,7 +688,7 @@ class _SourceFundsPdfBuilder:
                         node.get("label", ""),
                         _datetime(node.get("acquired_at")),
                         node.get("asset", ""),
-                        _btc(node.get("required_amount")),
+                        self.amt(node.get("required_amount")),
                         " | ".join(details),
                     ]
                 )
@@ -686,7 +706,7 @@ class _SourceFundsPdfBuilder:
                         node.get("label", ""),
                         _datetime(node.get("occurred_at")),
                         node.get("asset", ""),
-                        _btc(node.get("required_amount")),
+                        self.amt(node.get("required_amount")),
                         " | ".join(details),
                     ]
                 )
@@ -755,22 +775,27 @@ class _SourceFundsPdfBuilder:
     def build(self) -> list[Any]:
         story = self.cover()
         story.append(self.rl["PageBreak"]())
-        for section in (
-            self.overview(),
-            self.narrative(),
-            self.simplified_flow(),
-            self.data_sources(),
-            self.evidence_checklist(),
-            self.review_gates(),
-            self.source_mix(),
-            self.flow_levels(),
-            self.transaction_details(),
-            self.flow_links(),
-            self.graph_nodes(),
-            self.disclosure_preview(),
-            self.limitations(),
-        ):
-            story.extend(section)
+        # (section_key, builder) — keyed sections can be omitted via the
+        # advanced `omit_sections` option; None keys are always included.
+        sections: list[tuple[str | None, Any]] = [
+            (None, self.overview),
+            (None, self.narrative),
+            (None, self.simplified_flow),
+            (None, self.data_sources),
+            (None, self.evidence_checklist),
+            (None, self.review_gates),
+            (None, self.source_mix),
+            ("flow_levels", self.flow_levels),
+            ("transaction_details", self.transaction_details),
+            ("flow_links", self.flow_links),
+            ("graph_nodes", self.graph_nodes),
+            (None, self.disclosure_preview),
+            (None, self.limitations),
+        ]
+        for key, builder in sections:
+            if key and key in self.omitted_sections:
+                continue
+            story.extend(builder())
             story.append(self.spacer(7))
         return story
 

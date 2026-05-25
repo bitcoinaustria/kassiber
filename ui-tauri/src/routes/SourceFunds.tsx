@@ -786,6 +786,9 @@ export function SourceFunds() {
   const [diagramDetail, setDiagramDetail] = useState<"summary" | "detailed">(
     persistedDraft?.diagramDetail ?? "summary",
   );
+  const [amountPrecision, setAmountPrecision] = useState<"btc" | "sats">("btc");
+  const [maskRecipient, setMaskRecipient] = useState(false);
+  const [omitSections, setOmitSections] = useState<string[]>([]);
   const [selectedRecipientId, setSelectedRecipientId] = useState<string>(
     persistedDraft?.selectedRecipientId ?? "",
   );
@@ -934,7 +937,12 @@ export function SourceFunds() {
       reportPurpose === "planned_exchange_sale" ? plannedNote || undefined : undefined,
     reveal_mode: revealMode,
     recipient: selectedRecipientId || undefined,
-    report_options: { diagram_detail: diagramDetail },
+    report_options: {
+      diagram_detail: diagramDetail,
+      amount_precision: amountPrecision,
+      mask_recipient: maskRecipient,
+      omit_sections: omitSections,
+    },
   };
   const preview = useDaemon<SourceFundsPreview>(
     "ui.source_funds.preview",
@@ -2193,6 +2201,58 @@ export function SourceFunds() {
                   <option value="detailed">Detailed — show more hops before clustering</option>
                 </select>
               </Field>
+              <Field label="Amount precision" htmlFor="sof-amount-precision">
+                <select
+                  id="sof-amount-precision"
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                  value={amountPrecision}
+                  onChange={(event) =>
+                    setAmountPrecision(event.target.value === "sats" ? "sats" : "btc")
+                  }
+                >
+                  <option value="btc">BTC (8 decimals)</option>
+                  <option value="sats">Sats (whole numbers)</option>
+                </select>
+              </Field>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="size-4 rounded border"
+                  checked={maskRecipient}
+                  onChange={(event) => setMaskRecipient(event.target.checked)}
+                />
+                Mask recipient label in the report
+              </label>
+              <div className="space-y-1">
+                <div className="text-sm font-medium">Omit sections (leaner report)</div>
+                {(
+                  [
+                    ["flow_levels", "Flow diagram data"],
+                    ["transaction_details", "Transaction details"],
+                    ["flow_links", "Reviewed flow links"],
+                    ["graph_nodes", "Disclosure graph nodes"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <label
+                    key={key}
+                    className="flex items-center gap-2 text-sm text-muted-foreground"
+                  >
+                    <input
+                      type="checkbox"
+                      className="size-4 rounded border"
+                      checked={omitSections.includes(key)}
+                      onChange={(event) =>
+                        setOmitSections((current) =>
+                          event.target.checked
+                            ? [...current, key]
+                            : current.filter((section) => section !== key),
+                        )
+                      }
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
               <ReportDiagram svg={report.diagrams.flow_svg} label="Simplified flow path" />
               <ReportDiagram
                 svg={report.diagrams.source_mix_ring_svg}

@@ -1108,6 +1108,66 @@ class SourceFundsCliTest(unittest.TestCase):
                 )
             )
 
+    def test_report_options_precision_masking_and_section_omission(self):
+        """Advanced report options (amount precision, recipient masking, and
+        section omission) normalize into the snapshot and shape the PDF."""
+        import shutil
+        import subprocess
+
+        self._seed_exportable_disclosure_path()
+        report = self.cli(
+            "reports",
+            "source-funds",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            "disclosure-target",
+            "--target-amount",
+            "0.10000000",
+            "--reveal-mode",
+            "standard",
+            "--amount-precision",
+            "sats",
+            "--mask-recipient",
+            "--omit-section",
+            "graph_nodes",
+            "--omit-section",
+            "flow_links",
+            "--save-case",
+        )["data"]
+        options = report["report_options"]
+        self.assertEqual(options["amount_precision"], "sats")
+        self.assertTrue(options["mask_recipient"])
+        self.assertEqual(set(options["omit_sections"]), {"graph_nodes", "flow_links"})
+
+        pdf_path = self.root / "options.pdf"
+        self.cli(
+            "reports",
+            "export-source-funds-pdf",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--case",
+            report["case"]["id"],
+            "--file",
+            str(pdf_path),
+        )
+        if shutil.which("pdftotext"):
+            extracted = subprocess.run(
+                ["pdftotext", "-layout", str(pdf_path), "-"],
+                check=True,
+                text=True,
+                capture_output=True,
+            ).stdout
+            self.assertIn("sats", extracted)
+            self.assertIn("(recipient masked)", extracted)
+            self.assertNotIn("Disclosure Graph Nodes", extracted)
+            self.assertNotIn("Reviewed Flow Links", extracted)
+            self.assertIn("Source of Funds Overview", extracted)
+
     def test_austrian_eur_basic_source_funds_pdf_context(self):
         exchange_withdraw_txid = "4e9f0b7d8c6a5b4c3d2e1f0099887766554433221100ffeeddccbbaa99887766"
         cold_consolidation_txid = "6f1e2d3c4b5a69788776655443322110ffeeddccbbaa00998877665544332211"
