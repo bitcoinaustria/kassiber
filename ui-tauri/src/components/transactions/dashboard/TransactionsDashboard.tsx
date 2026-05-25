@@ -34,20 +34,28 @@ import {
 const TransactionsDashboard = ({
   className,
   transactions = MOCK_TRANSACTIONS,
+  tableTransactions,
   nowRate = MOCK_OVERVIEW.priceEur,
   swapCandidates,
   swapCandidateTotal,
   isDataRefreshing = false,
+  hasMoreTransactions = false,
+  isLoadingMoreTransactions = false,
+  onLoadMoreTransactions,
   focusedTransaction,
   deepLinkedTransactionId,
   deepLinkedTransactionTab,
 }: {
   className?: string;
   transactions?: TransactionsList;
+  tableTransactions?: TransactionsList;
   nowRate?: number | null;
   swapCandidates?: SwapCandidateReference[];
   swapCandidateTotal?: number | null;
   isDataRefreshing?: boolean;
+  hasMoreTransactions?: boolean;
+  isLoadingMoreTransactions?: boolean;
+  onLoadMoreTransactions?: () => void;
   focusedTransaction?: TransactionsList["txs"][number] | null;
   deepLinkedTransactionId?: string | null;
   deepLinkedTransactionTab?: string;
@@ -90,6 +98,25 @@ const TransactionsDashboard = ({
     },
     [focusedTransaction, transactions.txs],
   );
+  const tableSourceRecords = React.useMemo(() => {
+    const txs = (tableTransactions ?? transactions).txs.length
+      ? [...(tableTransactions ?? transactions).txs]
+      : [];
+    if (
+      focusedTransaction &&
+      !txs.some(
+        (tx) =>
+          tx.id === focusedTransaction.id ||
+          (Boolean(tx.externalId) &&
+            tx.externalId === focusedTransaction.externalId) ||
+          (Boolean(tx.explorerId) &&
+            tx.explorerId === focusedTransaction.explorerId),
+      )
+    ) {
+      txs.unshift(focusedTransaction);
+    }
+    return txs.length ? txs.map(toDashboardTransaction) : transactionRecords;
+  }, [focusedTransaction, tableTransactions, transactions]);
   const allPeriodRecords = React.useMemo(
     () => sortTransactionsByDateDesc(records),
     [records],
@@ -103,7 +130,7 @@ const TransactionsDashboard = ({
   );
   const focusedRecord = React.useMemo(() => {
     if (!focusedTransaction) return null;
-    return records.find(
+    return tableSourceRecords.find(
       (record) =>
         record.id === focusedTransaction.id ||
         (Boolean(focusedTransaction.externalId) &&
@@ -111,25 +138,31 @@ const TransactionsDashboard = ({
         (Boolean(focusedTransaction.explorerId) &&
           record.explorerId === focusedTransaction.explorerId),
     ) ?? null;
-  }, [focusedTransaction, records]);
+  }, [focusedTransaction, tableSourceRecords]);
+  const tablePeriodRecords = React.useMemo(
+    () =>
+      period === "all"
+        ? sortTransactionsByDateDesc(tableSourceRecords)
+        : recordsForPeriod(tableSourceRecords, period),
+    [period, tableSourceRecords],
+  );
   const tableRecords = React.useMemo(() => {
     if (
       !focusedRecord ||
-      periodRecords.some((record) => record.id === focusedRecord.id)
+      tablePeriodRecords.some((record) => record.id === focusedRecord.id)
     ) {
-      return periodRecords;
+      return tablePeriodRecords;
     }
-    return [focusedRecord, ...periodRecords];
-  }, [focusedRecord, periodRecords]);
-  const periodSwapCandidateIds = React.useMemo(
+    return [focusedRecord, ...tablePeriodRecords];
+  }, [focusedRecord, tablePeriodRecords]);
+  const tableSwapCandidateIds = React.useMemo(
     () =>
       new Set(
-        buildSwapCandidates(periodRecords, swapCandidates).flatMap((candidate) => [
-          candidate.in.id,
-          candidate.out.id,
-        ]),
+        buildSwapCandidates(tablePeriodRecords, swapCandidates).flatMap(
+          (candidate) => [candidate.in.id, candidate.out.id],
+        ),
       ),
-    [periodRecords, swapCandidates],
+    [tablePeriodRecords, swapCandidates],
   );
   const handlePeriodChange = React.useCallback((nextPeriod: PeriodKey) => {
     setPeriod(nextPeriod);
@@ -212,7 +245,7 @@ const TransactionsDashboard = ({
         currency={currency}
         nowRate={nowRate}
         explorerSettings={explorerSettings}
-        swapCandidateIds={periodSwapCandidateIds}
+        swapCandidateIds={tableSwapCandidateIds}
         chartSelection={flowChartSelection}
         quickFilter={quickFilter}
         breakdownSelection={breakdownSelection}
@@ -221,6 +254,9 @@ const TransactionsDashboard = ({
         onBreakdownSelectionChange={setBreakdownSelection}
         resetTableFiltersToken={resetTableFiltersToken}
         isRefreshing={showRefreshSkeleton}
+        hasMoreRecords={hasMoreTransactions}
+        isLoadingMoreRecords={isLoadingMoreTransactions}
+        onLoadMoreRecords={onLoadMoreTransactions}
         deepLinkedTransactionId={deepLinkedTransactionId}
         deepLinkedTransactionTab={deepLinkedTransactionTab}
       />

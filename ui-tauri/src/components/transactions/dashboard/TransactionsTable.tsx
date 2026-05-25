@@ -127,6 +127,9 @@ const TransactionsTable = ({
   onBreakdownSelectionChange,
   resetTableFiltersToken,
   isRefreshing,
+  hasMoreRecords = false,
+  isLoadingMoreRecords = false,
+  onLoadMoreRecords,
   deepLinkedTransactionId,
   deepLinkedTransactionTab = "details",
 }: {
@@ -144,6 +147,9 @@ const TransactionsTable = ({
   onBreakdownSelectionChange: (selection: BreakdownSelection | null) => void;
   resetTableFiltersToken: number;
   isRefreshing?: boolean;
+  hasMoreRecords?: boolean;
+  isLoadingMoreRecords?: boolean;
+  onLoadMoreRecords?: () => void;
   deepLinkedTransactionId?: string | null;
   deepLinkedTransactionTab?: string;
 }) => {
@@ -1272,6 +1278,18 @@ const TransactionsTable = ({
             {isRefreshing ? "" : `of ${filteredTransactions.length}`}
           </span>
         </div>
+
+        {hasMoreRecords && onLoadMoreRecords ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-2"
+            onClick={onLoadMoreRecords}
+            disabled={isLoadingMoreRecords}
+          >
+            {isLoadingMoreRecords ? "Loading" : "Load more"}
+          </Button>
+        ) : null}
 
         <div className="flex items-center gap-1">
           <Button
