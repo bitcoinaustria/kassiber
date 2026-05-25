@@ -45,15 +45,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
-import { useDaemon, useDaemonMutation } from "@/daemon/client";
-import { openAttachmentFile, openExternalUrl } from "@/daemon/transport";
 import { cn } from "@/lib/utils";
 import { type Currency } from "@/lib/currency";
 import { type ExplorerSettings } from "@/lib/explorer";
-import { useUiStore } from "@/store/ui";
+import { TransactionDetailController } from "./TransactionDetailController";
 import {
   ExplorerOpenDialog,
-  TransactionDetailSheet,
   allPaymentMethods,
   allTransactionFlows,
   allTransactionStatuses,
@@ -67,7 +64,6 @@ import {
   formatDisplayMoney,
   formatShortTxid,
   formatSignedDisplayMoney,
-  parseManualDecimal,
   pricingSelectionValue,
   pricingSourceLabel,
   pricingSourceStyles,
@@ -78,15 +74,12 @@ import {
   transactionStatusIcons,
   transactionStatusLabels,
   transactionStatusStyles,
-  type CommercialContextData,
   type Transaction,
-  type TransactionEditDraft,
   type TransactionFlow,
   type TransactionStatus,
 } from "@/components/transactions";
 import {
   PAGE_SIZE_OPTIONS,
-  attachmentRecordToItem,
   breakdownSelectionLabel,
   dateFilterOptions,
   filterChipClassName,
@@ -98,14 +91,9 @@ import {
   quickFilterLabel,
   readTransactionDetailParams,
   updateTransactionDetailParams,
-  type AttachmentOpenData,
-  type AttachmentRecord,
-  type AttachmentsListData,
   type BreakdownSelection,
   type FeeFilter,
   type FlowChartSelection,
-  type JournalEventsData,
-  type SourceFundsLinksData,
   type TableQuickFilter,
 } from "./model";
 
@@ -156,38 +144,6 @@ const TransactionsTable = ({
   const [detailInitialTab, setDetailInitialTab] = React.useState("details");
   const pendingDetailLinkRef = React.useRef(readTransactionDetailParams());
   const tableRef = React.useRef<HTMLDivElement>(null);
-  const [drafts, setDrafts] = React.useState<Record<string, TransactionEditDraft>>(
-    {},
-  );
-  const [saveError, setSaveError] = React.useState<string | null>(null);
-  const metadataUpdate = useDaemonMutation("ui.transactions.metadata.update");
-  const attachmentAdd = useDaemonMutation<AttachmentRecord>("ui.attachments.add");
-  const attachmentRemove = useDaemonMutation<AttachmentRecord>(
-    "ui.attachments.remove",
-  );
-  const attachmentOpen =
-    useDaemonMutation<AttachmentOpenData>("ui.attachments.open");
-  const unpairTransfer = useDaemonMutation("ui.transfers.unpair");
-  const attachmentsQuery = useDaemon<AttachmentsListData>(
-    "ui.attachments.list",
-    { transaction: detailTransaction?.id ?? "" },
-    { enabled: Boolean(detailTransaction) },
-  );
-  const sourceFundsLinksQuery = useDaemon<SourceFundsLinksData>(
-    "ui.source_funds.links.list",
-    { target_transaction: detailTransaction?.id ?? "" },
-    { enabled: Boolean(detailTransaction) },
-  );
-  const journalEventsQuery = useDaemon<JournalEventsData>(
-    "ui.journals.events.list",
-    { transaction: detailTransaction?.id ?? "", limit: 20 },
-    { enabled: Boolean(detailTransaction) },
-  );
-  const commercialContextQuery = useDaemon<CommercialContextData>(
-    "ui.transactions.commercial_context",
-    { transaction: detailTransaction?.id ?? "" },
-    { enabled: Boolean(detailTransaction) },
-  );
   const explorerTarget = explorerTransaction
     ? explorerForTransaction(explorerTransaction, explorerSettings)
     : null;
@@ -197,96 +153,17 @@ const TransactionsTable = ({
     [swapCandidateIds],
   );
   const getDraft = React.useCallback(
-    (txn: Transaction) => drafts[txn.id] ?? draftForTransaction(txn),
-    [drafts],
+    (txn: Transaction) => draftForTransaction(txn),
+    [],
   );
-  const saveTransactionDraft = React.useCallback(
-    async (transactionId: string, draft: TransactionEditDraft) => {
-      setSaveError(null);
-      const sourceTransaction = records.find((txn) => txn.id === transactionId);
-      const baseline = sourceTransaction
-        ? drafts[transactionId] ?? draftForTransaction(sourceTransaction)
-        : null;
-      const persistedTagCodes = new Set(
-        (sourceTransaction?.tags ?? []).map((tag) => tag.toLowerCase()),
-      );
-      const shouldPersistLabel =
-        draft.label &&
-        draft.label !== "Unlabeled" &&
-        (persistedTagCodes.has(draft.label.toLowerCase()) ||
-          draft.label !== baseline?.label);
-      const tags = [
-        shouldPersistLabel ? draft.label : "",
-        ...draft.tags,
-      ].filter(Boolean);
-      const pricingDirty = baseline
-        ? draft.pricingSourceKind !== baseline.pricingSourceKind ||
-          draft.pricingQuality !== baseline.pricingQuality ||
-          draft.manualCurrency !== baseline.manualCurrency ||
-          draft.manualPrice !== baseline.manualPrice ||
-          draft.manualValue !== baseline.manualValue ||
-          draft.manualSource !== baseline.manualSource
-        : false;
-      const reviewTaxDirty = baseline
-        ? draft.reviewStatus !== baseline.reviewStatus ||
-          draft.taxable !== baseline.taxable ||
-          draft.atRegime !== baseline.atRegime ||
-          draft.atCategory !== baseline.atCategory
-        : false;
-      const manualPrice = parseManualDecimal(draft.manualPrice);
-      const manualValue = parseManualDecimal(draft.manualValue);
-      await metadataUpdate.mutateAsync({
-        transaction: transactionId,
-        note: draft.note.trim() ? draft.note : null,
-        tags: Array.from(new Set(tags)),
-        excluded: draft.excluded,
-        ...(reviewTaxDirty
-          ? {
-              review_status: draft.reviewStatus,
-              taxable: draft.taxable,
-              at_regime: draft.atRegime,
-              at_category: draft.atCategory,
-            }
-          : {}),
-        ...(pricingDirty
-          ? {
-              pricing_source_kind: draft.pricingSourceKind,
-              pricing_quality: draft.pricingQuality,
-              fiat_currency: draft.manualCurrency.trim().toUpperCase(),
-              fiat_rate: manualPrice === null ? null : draft.manualPrice,
-              fiat_value: manualValue === null ? null : draft.manualValue,
-              pricing_external_ref: draft.manualSource.trim() || null,
-            }
-          : {}),
-      });
-      setDrafts((current) => ({
-        ...current,
-        [transactionId]: draft,
-      }));
-    },
-    [drafts, metadataUpdate, records],
-  );
-
   const openTransactionDetail = React.useCallback(
     (txn: Transaction, tab = "details") => {
-      setSaveError(null);
       setDetailInitialTab(tab);
       setDetailTransaction(txn);
       updateTransactionDetailParams(txn.id, tab);
     },
     [],
   );
-  const attachmentItems = React.useMemo(
-    () =>
-      (attachmentsQuery.data?.data?.attachments ?? []).map(
-        attachmentRecordToItem,
-      ),
-    [attachmentsQuery.data],
-  );
-  const sourceFundsLinks =
-    sourceFundsLinksQuery.data?.data?.links ?? [];
-  const journalEvents = journalEventsQuery.data?.data?.events ?? [];
-  const commercialContext = commercialContextQuery.data?.data;
 
   const hasActiveFilters =
     chartSelection !== null ||
@@ -1292,133 +1169,21 @@ const TransactionsTable = ({
         target={explorerTarget}
         onTransactionChange={setExplorerTransaction}
       />
-      <TransactionDetailSheet
+      <TransactionDetailController
         transaction={detailTransaction}
-        draft={detailTransaction ? getDraft(detailTransaction) : null}
         initialTab={detailInitialTab}
         hideSensitive={hideSensitive}
         currency={currency}
         explorerSettings={explorerSettings}
-        isSaving={metadataUpdate.isPending}
-        saveError={saveError}
         nowRate={nowRate}
-        attachments={detailTransaction ? attachmentItems : undefined}
-        sourceFundsLinks={sourceFundsLinks}
-        journalEvents={journalEvents}
-        commercialContext={commercialContext}
-        commercialContextLoading={commercialContextQuery.isLoading}
-        onAddAttachmentFiles={async (paths) => {
-          if (!detailTransaction) return;
-          for (const path of paths) {
-            await attachmentAdd.mutateAsync({
-              transaction: detailTransaction.id,
-              file_path: path,
-            });
-          }
-          useUiStore.getState().addNotification({
-            title: "Files attached",
-            body: `${paths.length} file${paths.length === 1 ? "" : "s"} copied into Kassiber attachments.`,
-            tone: "success",
-            dedupeKey: `attachments-files-${detailTransaction.id}`,
-          });
-        }}
-        onAddAttachmentLinks={async (urls) => {
-          if (!detailTransaction) return;
-          for (const url of urls) {
-            await attachmentAdd.mutateAsync({
-              transaction: detailTransaction.id,
-              url,
-            });
-          }
-          useUiStore.getState().addNotification({
-            title: "Links attached",
-            body: `${urls.length} link${urls.length === 1 ? "" : "s"} stored as attachment references.`,
-            tone: "success",
-            dedupeKey: `attachments-links-${detailTransaction.id}`,
-          });
-        }}
-        onOpenAttachment={async (item) => {
-          const result = await attachmentOpen.mutateAsync({
-            attachment: item.id,
-          });
-          const data = result.data;
-          if (!data) return;
-          if (data.target_type === "url" && data.url) {
-            await openExternalUrl(data.url);
-            return;
-          }
-          if (data.target_type === "file" && data.path) {
-            await openAttachmentFile(data.path);
-          }
-        }}
-        onRemoveAttachment={async (item) => {
-          await attachmentRemove.mutateAsync({ attachment: item.id });
-          useUiStore.getState().addNotification({
-            title: "Attachment removed",
-            body: item.kind === "file" ? "Attachment record and copied file removed." : "Attachment link removed.",
-            tone: "success",
-            dedupeKey: `attachment-remove-${item.id}`,
-          });
-        }}
-        onUnpair={async (pairId) => {
-          await unpairTransfer.mutateAsync({ pair_id: pairId });
-          setDetailTransaction((current) =>
-            current?.pair?.id === pairId ? { ...current, pair: undefined } : current,
-          );
-          useUiStore.getState().addNotification({
-            title: "Pair removed",
-            body: "This movement is no longer linked to the other leg.",
-            tone: "success",
-            dedupeKey: `transfer-unpair-${pairId}`,
-          });
-        }}
-        isUnpairing={unpairTransfer.isPending}
-        hasNext={
-          detailTransaction
-            ? filteredTransactions.findIndex(
-                (txn) => txn.id === detailTransaction.id,
-              ) <
-              filteredTransactions.length - 1
-            : false
-        }
+        navList={filteredTransactions}
         onOpenChange={(open) => {
           if (!open) {
             setDetailTransaction(null);
-            setSaveError(null);
             updateTransactionDetailParams(null);
           }
         }}
-        onOpenExplorer={(transaction) => setExplorerTransaction(transaction)}
-        onSave={async (transactionId, draft) => {
-          try {
-            await saveTransactionDraft(transactionId, draft);
-          } catch (error) {
-            setSaveError(
-              error instanceof Error ? error.message : "Could not save metadata.",
-            );
-            throw error;
-          }
-        }}
-        onSaveAndNext={async (transactionId, draft) => {
-          try {
-            await saveTransactionDraft(transactionId, draft);
-            const idx = filteredTransactions.findIndex(
-              (txn) => txn.id === transactionId,
-            );
-            const next = filteredTransactions[idx + 1];
-            if (next) {
-              openTransactionDetail(next, detailInitialTab);
-            } else {
-              setDetailTransaction(null);
-              updateTransactionDetailParams(null);
-            }
-          } catch (error) {
-            setSaveError(
-              error instanceof Error ? error.message : "Could not save metadata.",
-            );
-            throw error;
-          }
-        }}
+        onNavigate={(txn, tab) => openTransactionDetail(txn, tab)}
       />
     </>
   );
