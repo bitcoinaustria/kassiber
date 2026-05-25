@@ -2349,14 +2349,16 @@ export function SourceFunds() {
                 ))}
               </div>
               <ReportDiagram svg={report.diagrams.flow_svg} label="Simplified flow path" />
-              <ReportDiagram
-                svg={report.diagrams.source_mix_ring_svg}
-                label="Source mix"
-              />
-              <ReportDiagram
-                svg={report.diagrams.data_source_ring_svg}
-                label="Data sources"
-              />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <ReportDiagram
+                  svg={report.diagrams.source_mix_ring_svg}
+                  label="Source mix"
+                />
+                <ReportDiagram
+                  svg={report.diagrams.data_source_ring_svg}
+                  label="Data sources"
+                />
+              </div>
             </CardContent>
           </Card>
           )}
