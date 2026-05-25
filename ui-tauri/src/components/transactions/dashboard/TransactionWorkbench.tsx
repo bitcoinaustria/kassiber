@@ -690,6 +690,7 @@ const TransactionWorkbench = ({
                 <Bar
                   dataKey="incoming"
                   fill={flowColors.incoming}
+                  isAnimationActive={false}
                   radius={[2, 2, 0, 0]}
                   cursor="pointer"
                   onClick={(data: FlowChartClickData) =>
@@ -713,6 +714,7 @@ const TransactionWorkbench = ({
                 <Bar
                   dataKey="outgoing"
                   fill={flowColors.outgoing}
+                  isAnimationActive={false}
                   radius={[0, 0, 2, 2]}
                   cursor="pointer"
                   onClick={(data: FlowChartClickData) =>
@@ -736,6 +738,7 @@ const TransactionWorkbench = ({
                 <Bar
                   dataKey="transfers"
                   fill={flowColors.transfer}
+                  isAnimationActive={false}
                   radius={[2, 2, 0, 0]}
                   cursor="pointer"
                   onClick={(data: FlowChartClickData) =>
@@ -759,6 +762,7 @@ const TransactionWorkbench = ({
                 <Bar
                   dataKey="swaps"
                   fill={flowColors.swap}
+                  isAnimationActive={false}
                   radius={[2, 2, 0, 0]}
                   cursor="pointer"
                   onClick={(data: FlowChartClickData) =>
