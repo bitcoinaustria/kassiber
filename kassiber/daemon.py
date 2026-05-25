@@ -119,7 +119,12 @@ from .core.ui_snapshot import (
     build_workspace_health_snapshot,
 )
 from .core.sync_backends import ElectrumClient
-from .backends import BACKEND_KINDS, load_runtime_config, merge_db_backends
+from .backends import (
+    BACKEND_KINDS,
+    load_runtime_config,
+    merge_db_backends,
+    wallet_backend_references,
+)
 from .db import (
     ensure_data_root,
     open_db,
@@ -5220,6 +5225,7 @@ def _backend_options_payload(ctx: "DaemonContext") -> dict[str, Any]:
     default_backend = str(ctx.runtime_config.get("default_backend") or "")
     allowed_fields = {
         "name",
+        "display_name",
         "kind",
         "chain",
         "network",
@@ -5259,8 +5265,13 @@ def _backend_options_payload(ctx: "DaemonContext") -> dict[str, Any]:
 
 
 def _backend_settings_list_payload(ctx: "DaemonContext") -> dict[str, Any]:
+    backends = core_accounts.list_backends(ctx.runtime_config)
+    for backend in backends:
+        name = backend.get("name")
+        if isinstance(name, str) and name:
+            backend["wallet_refs"] = wallet_backend_references(ctx.conn, name)
     return {
-        "backends": core_accounts.list_backends(ctx.runtime_config),
+        "backends": backends,
         "summary": {
             "count": len(ctx.runtime_config.get("backends", {})),
             "default_backend": str(ctx.runtime_config.get("default_backend") or "") or None,

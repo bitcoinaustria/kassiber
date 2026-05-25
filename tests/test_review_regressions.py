@@ -3899,6 +3899,55 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(stored_config["username"], "rpcuser")
         self.assertEqual(stored_config["password"], "rpcpass")
 
+    def test_backend_display_name_is_safe_editable_metadata(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+
+        payload, result = self._run_json(
+            "backends",
+            "create",
+            "liquid-home",
+            "--kind",
+            "liquid-esplora",
+            "--chain",
+            "liquid",
+            "--network",
+            "liquidv1",
+            "--url",
+            "https://liquid.network/api",
+            "--display-name",
+            "Liquid desk node",
+        )
+        self._assert_ok(payload, result, "backends.create")
+        self.assertEqual(payload["data"]["name"], "liquid-home")
+        self.assertEqual(payload["data"]["display_name"], "Liquid desk node")
+
+        payload, result = self._run_json(
+            "backends",
+            "update",
+            "liquid-home",
+            "--display-name",
+            "Liquid office node",
+        )
+        self._assert_ok(payload, result, "backends.update")
+        self.assertEqual(payload["data"]["name"], "liquid-home")
+        self.assertEqual(payload["data"]["display_name"], "Liquid office node")
+
+        payload, result = self._run_json("backends", "list")
+        self._assert_ok(payload, result, "backends.list")
+        rows = {row["name"]: row for row in payload["data"]}
+        self.assertEqual(rows["liquid-home"]["display_name"], "Liquid office node")
+
+        db_path = self.data_root / "kassiber.sqlite3"
+        conn = sqlite3.connect(db_path)
+        row = conn.execute(
+            "SELECT name, config_json FROM backends WHERE name = 'liquid-home'"
+        ).fetchone()
+        conn.close()
+        self.assertEqual(row[0], "liquid-home")
+        stored_config = json.loads(row[1])
+        self.assertEqual(stored_config["display_name"], "Liquid office node")
+
     def test_backend_outputs_hide_alias_credentials_and_unknown_config(self):
         env_file = self.case_dir / "backend-aliases.env"
         env_file.write_text(
@@ -3930,7 +3979,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertNotIn("rpcpassword", payload["data"])
         self.assertNotIn("api_key", payload["data"])
 
-    def test_backends_delete_refuses_when_wallets_reference_backend(self):
+    def test_backends_delete_detaches_wallet_backend_references(self):
         self._bootstrap_profile()
 
         payload, result = self._run_json(
@@ -3955,10 +4004,25 @@ class ReviewRegressionTest(unittest.TestCase):
         self._assert_ok(payload, result, "backends.set-default")
 
         payload, result = self._run_json("backends", "delete", "mempool")
-        self.assertEqual(result.returncode, 1, msg=payload)
-        self.assertEqual(payload.get("kind"), "error")
-        self.assertEqual(payload["error"]["code"], "conflict")
-        self.assertIn("Main/Default/Tracked", payload["error"]["hint"])
+        self._assert_ok(payload, result, "backends.delete")
+        self.assertTrue(payload["data"]["deleted"])
+        self.assertEqual(
+            payload["data"]["detached_wallet_refs"],
+            ["Main/Default/Tracked"],
+        )
+
+        payload, result = self._run_json(
+            "wallets",
+            "get",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--wallet",
+            "Tracked",
+        )
+        self._assert_ok(payload, result, "wallets.get")
+        self.assertNotIn("backend", payload["data"]["config"])
 
     def test_metadata_record_mutations_roundtrip_and_invalidate_journals(self):
         self._bootstrap_wallet(label="Meta")

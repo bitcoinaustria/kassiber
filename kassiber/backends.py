@@ -105,6 +105,7 @@ BACKEND_CONFIG_FIELDS = {
     "certificate",
     "commando_peer_id",
     "cookiefile",
+    "display_name",
     "insecure",
     "lightning_cli",
     "lightning_dir",
@@ -117,6 +118,7 @@ BACKEND_CONFIG_KEY_ALIASES = {
     "commando": "commando_peer_id",
     "commando_id": "commando_peer_id",
     "cookie_file": "cookiefile",
+    "display_label": "display_name",
     "lightningdir": "lightning_dir",
     "lightning_directory": "lightning_dir",
     "rpcfile": "rpc_file",
@@ -135,6 +137,7 @@ BACKEND_CLEAR_FIELD_ALIASES = {
     "certificate": "certificate",
     "commando-peer-id": "commando_peer_id",
     "cookiefile": "cookiefile",
+    "display-name": "display_name",
     "lightning-cli": "lightning_cli",
     "lightning-dir": "lightning_dir",
     "rpc-file": "rpc_file",
@@ -168,7 +171,12 @@ BACKEND_SAFE_OUTPUT_FIELDS = (
     "default",
     "is_default",
 )
-BACKEND_SAFE_CONFIG_OUTPUT_FIELDS = ("infrastructure_owner", "insecure", "walletprefix")
+BACKEND_SAFE_CONFIG_OUTPUT_FIELDS = (
+    "display_name",
+    "infrastructure_owner",
+    "insecure",
+    "walletprefix",
+)
 
 
 def _canonicalize_backend_field_name(field_name):
@@ -527,6 +535,45 @@ def _wallet_backend_references(conn, backend_name):
     return matches
 
 
+def wallet_backend_references(conn, backend_name):
+    """Return workspace/profile/wallet labels for wallets using a backend."""
+    return _wallet_backend_references(conn, backend_name)
+
+
+def _clear_wallet_backend_references(conn, backend_name):
+    rows = conn.execute(
+        """
+        SELECT
+            w.id,
+            w.label AS wallet_label,
+            p.label AS profile_label,
+            ws.label AS workspace_label,
+            w.config_json
+        FROM wallets w
+        JOIN profiles p ON p.id = w.profile_id
+        JOIN workspaces ws ON ws.id = w.workspace_id
+        ORDER BY ws.label ASC, p.label ASC, w.label ASC
+        """
+    ).fetchall()
+    detached = []
+    for row in rows:
+        try:
+            config = json.loads(row["config_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if str_or_none(config.get("backend")) != backend_name:
+            continue
+        config.pop("backend", None)
+        conn.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps(config, sort_keys=True), row["id"]),
+        )
+        detached.append(
+            f"{row['workspace_label']}/{row['profile_label']}/{row['wallet_label']}"
+        )
+    return detached
+
+
 def _load_bootstrap_backend_tombstones(conn):
     raw = get_setting(conn, BOOTSTRAP_BACKEND_TOMBSTONES_SETTING)
     if not raw:
@@ -869,7 +916,7 @@ def update_db_backend(conn, name, updates):
         raise AppError(
             "backends update requires at least one field to change",
             code="validation",
-            hint="Pass one or more of --kind, --url, --chain, --network, --auth-header, --token, --batch-size, --timeout, --tor-proxy, --insecure, --certificate, --cookiefile, --username, --password, --wallet-prefix, --notes, or --clear <field>",
+            hint="Pass one or more of --kind, --url, --chain, --network, --auth-header, --token, --batch-size, --timeout, --tor-proxy, --insecure, --certificate, --cookiefile, --display-name, --username, --password, --wallet-prefix, --notes, or --clear <field>",
         )
     unsupported_clear_fields = clear_fields - set(BACKEND_CLEAR_FIELD_ALIASES.values())
     if unsupported_clear_fields:
@@ -989,20 +1036,17 @@ def delete_db_backend(conn, name):
             f"Backend '{name}' is the stored default; clear it with `kassiber backends clear-default` first",
             code="conflict",
         )
-    wallet_refs = _wallet_backend_references(conn, name)
-    if wallet_refs:
-        raise AppError(
-            f"Backend '{name}' is still referenced by wallet configuration",
-            code="conflict",
-            hint=f"Repoint or update these wallets first: {', '.join(wallet_refs[:5])}",
-            details={"wallet_refs": wallet_refs},
-        )
+    detached_wallet_refs = _clear_wallet_backend_references(conn, name)
     conn.execute("DELETE FROM backends WHERE name = ?", (name,))
     tombstones = _load_bootstrap_backend_tombstones(conn)
     tombstones.add(name)
     _save_bootstrap_backend_tombstones(conn, tombstones)
     conn.commit()
-    return {"name": name, "deleted": True}
+    return {
+        "name": name,
+        "deleted": True,
+        "detached_wallet_refs": detached_wallet_refs,
+    }
 
 
 def set_default_backend(conn, runtime_config, name, commit=True):

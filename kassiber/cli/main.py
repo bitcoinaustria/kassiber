@@ -186,6 +186,8 @@ def _backend_extra_config(args: argparse.Namespace) -> dict[str, object] | None:
         config["rpc_file"] = args.rpc_file
     if getattr(args, "commando_peer_id", None) is not None:
         config["commando_peer_id"] = args.commando_peer_id
+    if getattr(args, "display_name", None) is not None:
+        config["display_name"] = args.display_name
     username = read_secret_from_args(args, "username")
     if username is not None:
         config["username"] = username
@@ -495,6 +497,7 @@ def build_parser() -> argparse.ArgumentParser:
     backends_create.add_argument("--lightning-dir", dest="lightning_dir")
     backends_create.add_argument("--rpc-file", dest="rpc_file")
     backends_create.add_argument("--commando-peer-id", dest="commando_peer_id")
+    backends_create.add_argument("--display-name", dest="display_name")
     backends_create.add_argument(
         "--username",
         help="DEPRECATED — exposes secrets in shell history; prefer --username-stdin",
@@ -537,6 +540,7 @@ def build_parser() -> argparse.ArgumentParser:
     backends_update.add_argument("--lightning-dir", dest="lightning_dir")
     backends_update.add_argument("--rpc-file", dest="rpc_file")
     backends_update.add_argument("--commando-peer-id", dest="commando_peer_id")
+    backends_update.add_argument("--display-name", dest="display_name")
     backends_update.add_argument(
         "--username",
         help="DEPRECATED — prefer --username-stdin",

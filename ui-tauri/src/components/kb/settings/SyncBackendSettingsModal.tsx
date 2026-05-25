@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   RefreshCw,
   Server,
+  Trash2,
   XCircle,
 } from "lucide-react";
 
@@ -466,6 +467,7 @@ export interface SyncBackendSettingsModalProps {
   initial: Backend | null;
   initialTypeId?: SyncBackendNetwork["id"];
   onClose: () => void;
+  onDelete?: (backend: Backend) => void | Promise<void>;
   onSave: (backend: Backend) => void | Promise<void>;
 }
 
@@ -474,6 +476,7 @@ export function SyncBackendSettingsModal({
   initial,
   initialTypeId,
   onClose,
+  onDelete,
   onSave,
 }: SyncBackendSettingsModalProps) {
   const testElectrum = useDaemonMutation<{
@@ -530,7 +533,7 @@ export function SyncBackendSettingsModal({
     scopedTypes,
   });
   const publicPresets = React.useMemo(() => publicBackendPresets(type), [type]);
-  const showTypePicker = scopedTypes.length > 1;
+  const showTypePicker = !isEditing && scopedTypes.length > 1;
   const showSourcePicker = !isEditing && type.net !== "LN";
   const showPresetPicker =
     !isEditing && publicPresets.length > 0 && backendSource === "preset";
@@ -565,9 +568,7 @@ export function SyncBackendSettingsModal({
   const effectiveInfrastructureOwner =
     type.net === "LN"
       ? undefined
-      : !initial && backendSource === "custom"
-        ? inferredInfrastructureOwnership(effectiveUrl)
-        : infrastructureOwner;
+      : infrastructureOwner;
   const connectionTrust = backendTrustFromEndpoint(
     effectiveUrl,
     showElectrumEndpointParts && useProxy && Boolean(proxyHost.trim()),
@@ -931,6 +932,18 @@ export function SyncBackendSettingsModal({
               </section>
             ) : null}
 
+            {isEditing ? (
+              <section className="flex items-center gap-3 rounded-md border bg-muted/10 p-3">
+                <NetworkMark type={type} />
+                <div className="min-w-0">
+                  <Label>Connection type</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {type.label} · {preset?.label ?? selectedBackendKind}
+                  </p>
+                </div>
+              </section>
+            ) : null}
+
             {showSourcePicker ? (
               <section className="space-y-3">
                 <div>
@@ -1029,11 +1042,10 @@ export function SyncBackendSettingsModal({
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   placeholder="My home node"
-                  disabled={isEditing}
                 />
                 {isEditing ? (
                   <p className="text-xs text-muted-foreground">
-                    Backend names are stable because wallets may reference them.
+                    Internal backend id: {initial?.id}
                   </p>
                 ) : null}
               </div>
@@ -1098,25 +1110,46 @@ export function SyncBackendSettingsModal({
             ) : null}
 
             {type.net !== "LN" ? (
-              <div
-                className={cn(
-                  "flex items-start gap-2 rounded-md border p-3 text-xs",
-                  connectionTrust.className,
-                )}
-              >
-                <ConnectionTrustIcon
-                  className="mt-0.5 size-4 shrink-0"
-                  aria-hidden="true"
-                />
-                <div>
-                  <div className="text-sm font-medium">
-                    {connectionTrust.label}
+              <section className="space-y-3 rounded-md border p-3">
+                <div
+                  className={cn(
+                    "flex items-start gap-2 rounded-md border p-3 text-xs",
+                    connectionTrust.className,
+                  )}
+                >
+                  <ConnectionTrustIcon
+                    className="mt-0.5 size-4 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <div className="text-sm font-medium">
+                      {connectionTrust.label}
+                    </div>
+                    <p className="mt-0.5 leading-relaxed">
+                      {connectionTrust.note}
+                    </p>
                   </div>
-                  <p className="mt-0.5 leading-relaxed">
-                    {connectionTrust.note}
-                  </p>
                 </div>
-              </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <Label>Infrastructure owner</Label>
+                    <p className="text-xs text-muted-foreground">
+                      This only changes privacy labeling; it does not change the endpoint.
+                    </p>
+                  </div>
+                  <Tabs
+                    value={infrastructureOwner}
+                    onValueChange={(value) =>
+                      setInfrastructureOwner(value as InfrastructureOwnership)
+                    }
+                  >
+                    <TabsList className="w-full sm:w-fit">
+                      <TabsTrigger value="self">Mine</TabsTrigger>
+                      <TabsTrigger value="third_party">Third-party</TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
+              </section>
             ) : null}
 
             {isCoreLightning && (
@@ -1465,28 +1498,47 @@ export function SyncBackendSettingsModal({
           </div>
         </ScrollArea>
 
-        <DialogFooter className="border-t px-6 py-4">
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            disabled={!canAdd || isSavingBackend || testState === "testing"}
-            onClick={() => {
-              void save();
-            }}
-          >
-            {isSavingBackend ? (
-              <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
+        <DialogFooter className="flex-row items-center justify-between gap-3 border-t px-6 py-4 sm:justify-between">
+          <div>
+            {initial && onDelete ? (
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                className="text-muted-foreground hover:text-destructive"
+                aria-label={`Delete ${initial.name}`}
+                title={`Delete ${initial.name}`}
+                onClick={() => {
+                  void onDelete(initial);
+                }}
+              >
+                <Trash2 className="size-3.5" aria-hidden="true" />
+              </Button>
             ) : null}
-            {isSavingBackend
-              ? "Connecting…"
-              : testState === "ok"
-                ? isEditing
-                  ? "Save backend"
-                  : "Add sync backend"
-                : "Connect & save"}
-          </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={!canAdd || isSavingBackend || testState === "testing"}
+              onClick={() => {
+                void save();
+              }}
+            >
+              {isSavingBackend ? (
+                <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
+              ) : null}
+              {isSavingBackend
+                ? "Connecting…"
+                : testState === "ok"
+                  ? isEditing
+                    ? "Save backend"
+                    : "Add sync backend"
+                  : "Connect & save"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

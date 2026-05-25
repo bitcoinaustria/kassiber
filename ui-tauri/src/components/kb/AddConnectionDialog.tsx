@@ -94,6 +94,7 @@ interface SyncResult {
 
 interface BackendOption {
   name: string;
+  display_name?: string;
   kind: string;
   chain?: string;
   network?: string;
@@ -111,6 +112,11 @@ interface BackendOptionsData {
     chain: string;
     network: string;
   }>;
+}
+
+function backendOptionLabel(backend: BackendOption): string {
+  const label = backend.display_name?.trim() || backend.name;
+  return label === backend.name ? label : `${label} (${backend.name})`;
 }
 
 interface BtcpayDiscoveryData {
@@ -971,7 +977,7 @@ export function AddConnectionDialog({
           </option>
           {options.map((backend) => (
             <option key={backend.name} value={backend.name}>
-              {backend.name}
+              {backendOptionLabel(backend)}
               {backend.is_default ? " (default)" : ""}
               {backend.kind ? ` · ${backend.kind}` : ""}
             </option>
@@ -1424,7 +1430,7 @@ export function AddConnectionDialog({
                 </option>
                 {btcpayBackends.map((backend) => (
                   <option key={backend.name} value={backend.name}>
-                    {backend.name}
+                    {backendOptionLabel(backend)}
                     {backend.is_default ? " (default)" : ""}
                   </option>
                 ))}

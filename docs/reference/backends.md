@@ -56,6 +56,7 @@ Create and manage SQLite-backed backends:
 
 ```bash
 python3 -m kassiber backends create myelectrum --kind electrum --url ssl://index.bitcoin-austria.at:50002
+python3 -m kassiber backends update myelectrum --display-name "Home Fulcrum"
 python3 -m kassiber backends update myelectrum --batch-size 50 --timeout 60
 python3 -m kassiber backends update core --clear username --clear password --clear cookiefile
 python3 -m kassiber backends create core --kind bitcoinrpc --url http://127.0.0.1:8332 --cookiefile ~/.bitcoin/.cookie --wallet-prefix kassiber
@@ -106,7 +107,8 @@ Important runtime rules:
 
 - read-only commands like `status`, `backends list`, and `backends get` do not import bootstrap-backed config into SQLite; `kassiber init` and backend mutation commands that need canonical bootstrap rows are the explicit bootstrap-import flows
 - deleting a bootstrap-backed backend suppresses the built-in/default bootstrap copy, but a backend currently present in `backends.env` is treated as an explicit restore signal and will appear in the runtime view again
-- `backends delete` refuses to remove a backend while any wallet still references it; repoint those wallets first
+- `backends delete` removes that backend from wallet config; affected wallets cannot sync again until you assign another backend
+- `--display-name` changes the user-facing label without changing the stable backend name that wallets reference
 - process-level `KASSIBER_BACKEND_*` overrides still win for the current process even when a backend has already been imported into SQLite
 - config-backed auth fields can be scrubbed with `backends update --clear ...`; clearing removes the stored key from SQLite instead of leaving the old value behind
 
@@ -131,6 +133,7 @@ Common fields:
 - `TIMEOUT`
 - `CHAIN`
 - `NETWORK`
+- `DISPLAY_NAME`
 
 Electrum-specific fields:
 

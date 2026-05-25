@@ -94,6 +94,7 @@ const mockOverviewSnapshot = () =>
 
 type MockBackendSettingsRow = {
   name: string;
+  display_name?: string;
   kind: string;
   chain: string;
   network: string;
@@ -123,6 +124,7 @@ let mockBackendSettingsRows: MockBackendSettingsRow[] = [
     source: "mock",
     is_default: true,
     has_url: true,
+    display_name: "mempool.bitcoin-austria.at",
   },
   {
     name: "liquid",
@@ -132,6 +134,7 @@ let mockBackendSettingsRows: MockBackendSettingsRow[] = [
     url: "https://liquid.network/api",
     source: "mock",
     has_url: true,
+    display_name: "Liquid Network",
   },
 ];
 
@@ -179,6 +182,10 @@ function mockBackendRowFromArgs(
         ? args.url.trim()
         : existing?.url ?? "https://example.invalid/api",
     source: "mock",
+    display_name:
+      typeof config.display_name === "string" && config.display_name.trim()
+        ? config.display_name.trim()
+        : existing?.display_name,
     is_default: existing?.is_default,
     has_url: true,
     has_auth_header: clear.has("auth_header") || clear.has("auth-header")

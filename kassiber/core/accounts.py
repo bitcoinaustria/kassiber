@@ -371,6 +371,7 @@ def list_backends(runtime_config):
                 "insecure": backend.get("insecure", ""),
                 "certificate": backend.get("certificate", ""),
                 "commando_peer_id": backend.get("commando_peer_id", ""),
+                "display_name": backend.get("display_name", ""),
                 "lightning_dir": backend.get("lightning_dir", ""),
                 "rpc_file": backend.get("rpc_file", ""),
                 "infrastructure_owner": backend.get("infrastructure_owner", ""),

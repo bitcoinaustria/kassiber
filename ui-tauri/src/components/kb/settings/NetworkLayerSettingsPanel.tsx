@@ -1,9 +1,7 @@
-import * as React from "react";
-import { AlertTriangle, Pencil, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { AlertTriangle, Pencil, Plus, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { InfrastructureOwnership } from "@/lib/backendTrust";
 import { PlannedBadge } from "./SettingsControls";
 import {
   backendExplorerBaseUrl,
@@ -47,38 +45,14 @@ export function NetworkLayerSettingsPanel({
   backends,
   onAdd,
   onEdit,
-  onDelete,
-  onSetOwnership,
 }: {
   layer: NetworkLayer;
   backends: Backend[];
   onAdd: () => void;
   onEdit: (backend: Backend) => void;
-  onDelete: (backend: Backend) => void;
-  onSetOwnership: (
-    backend: Backend,
-    ownership: InfrastructureOwnership,
-  ) => Promise<void>;
 }) {
   const meta = NETWORK_LAYER_META[layer];
   const layerBackends = backendsForLayer(backends, layer);
-  // Infrastructure ownership is only modelled for chain indexers, matching the
-  // backend dialog (Lightning connections are always your own node).
-  const canOwn = layer === "bitcoin" || layer === "liquid";
-  const [pendingOwnershipId, setPendingOwnershipId] = React.useState<
-    string | null
-  >(null);
-  const handleOwnership = async (
-    backend: Backend,
-    ownership: InfrastructureOwnership,
-  ) => {
-    setPendingOwnershipId(backend.id);
-    try {
-      await onSetOwnership(backend, ownership);
-    } finally {
-      setPendingOwnershipId(null);
-    }
-  };
   const explorerLinkBase =
     layer === "lightning"
       ? null
@@ -117,13 +91,7 @@ export function NetworkLayerSettingsPanel({
             <BackendLayerCard
               key={backend.id}
               backend={backend}
-              canOwn={canOwn}
-              ownershipPending={pendingOwnershipId === backend.id}
               onEdit={() => onEdit(backend)}
-              onDelete={() => onDelete(backend)}
-              onSetOwnership={(ownership) =>
-                void handleOwnership(backend, ownership)
-              }
             />
           ))}
         </div>
@@ -148,23 +116,14 @@ export function NetworkLayerSettingsPanel({
 
 export function BackendLayerCard({
   backend,
-  canOwn,
-  ownershipPending,
   onEdit,
-  onDelete,
-  onSetOwnership,
 }: {
   backend: Backend;
-  canOwn: boolean;
-  ownershipPending: boolean;
   onEdit: () => void;
-  onDelete: () => void;
-  onSetOwnership: (ownership: InfrastructureOwnership) => void;
 }) {
   const trust = backendTrust(backend);
   const TrustIcon = trust.icon;
   const explorerBaseUrl = backendExplorerBaseUrl(backend);
-  const isSelf = backend.infrastructureOwner === "self";
   return (
     <div className="rounded-md border bg-background p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -197,15 +156,6 @@ export function BackendLayerCard({
           >
             <Pencil className="size-3.5" aria-hidden="true" />
           </Button>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            aria-label={`Delete ${backend.name}`}
-            onClick={onDelete}
-          >
-            <Trash2 className="size-3.5" aria-hidden="true" />
-          </Button>
         </div>
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -226,31 +176,18 @@ export function BackendLayerCard({
             Links: {explorerHostLabel(explorerBaseUrl)}
           </span>
         ) : null}
-        {canOwn || !backend.isDefault ? (
+        {!backend.isDefault ? (
           <div className="ml-auto flex items-center gap-1.5">
-            {!backend.isDefault ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                disabled
-                title="Setting the default backend from the desktop app is coming soon — use the CLI: kassiber backends set-default"
-              >
-                Set as default
-                <PlannedBadge className="ml-1" />
-              </Button>
-            ) : null}
-            {canOwn ? (
-              <Button
-                type="button"
-                size="sm"
-                variant={isSelf ? "secondary" : "ghost"}
-                disabled={ownershipPending}
-                onClick={() => onSetOwnership(isSelf ? "third_party" : "self")}
-              >
-                {isSelf ? "Yours" : "Mark as mine"}
-              </Button>
-            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled
+              title="Setting the default backend from the desktop app is coming soon — use the CLI: kassiber backends set-default"
+            >
+              Set as default
+              <PlannedBadge className="ml-1" />
+            </Button>
           </div>
         ) : null}
       </div>
