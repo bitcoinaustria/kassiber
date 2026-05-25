@@ -1168,6 +1168,60 @@ class SourceFundsCliTest(unittest.TestCase):
             self.assertNotIn("Reviewed Flow Links", extracted)
             self.assertIn("Source of Funds Overview", extracted)
 
+    def test_reveal_overrides_hide_and_show_specific_transactions(self):
+        """Per-node reveal overrides win over the global reveal mode:
+        'hide' redacts a txid the mode would show; 'show' reveals one the
+        mode would drop. Overrides freeze into report_options."""
+        self._seed_exportable_disclosure_path()
+        target_id = self._tx_id("Target", "disclosure-target")
+        parent_id = self._tx_id("Parent", "disclosure-parent")
+
+        # Baseline: standard mode reveals the target txid.
+        base = self._source_funds_report(reveal_mode="standard")
+        self.assertIn("disclosure-target", base["disclosure_preview"]["txids"])
+
+        # Hide the target txid even though standard mode would show it.
+        hidden = self.cli(
+            "reports",
+            "source-funds",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            "disclosure-target",
+            "--target-amount",
+            "0.10000000",
+            "--reveal-mode",
+            "standard",
+            "--reveal-override",
+            f"{target_id}=hide",
+        )["data"]
+        self.assertEqual(
+            hidden["report_options"]["reveal_overrides"], {target_id: "hide"}
+        )
+        self.assertNotIn("disclosure-target", hidden["disclosure_preview"]["txids"])
+        self.assertEqual(hidden["target"]["external_id"], "")
+
+        # Reveal a parent txid that minimal mode would otherwise drop.
+        shown = self.cli(
+            "reports",
+            "source-funds",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            "disclosure-target",
+            "--target-amount",
+            "0.10000000",
+            "--reveal-mode",
+            "minimal",
+            "--reveal-override",
+            f"{parent_id}=show",
+        )["data"]
+        self.assertIn("disclosure-parent", shown["disclosure_preview"]["txids"])
+
     def test_austrian_eur_basic_source_funds_pdf_context(self):
         exchange_withdraw_txid = "4e9f0b7d8c6a5b4c3d2e1f0099887766554433221100ffeeddccbbaa99887766"
         cold_consolidation_txid = "6f1e2d3c4b5a69788776655443322110ffeeddccbbaa00998877665544332211"

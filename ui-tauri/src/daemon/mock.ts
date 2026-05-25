@@ -2231,6 +2231,7 @@ export const mockDaemon: DaemonTransport = {
       const reqArgs = (req.args ?? {}) as {
         target_amount?: unknown;
         reveal_mode?: unknown;
+        report_options?: { reveal_overrides?: Record<string, string> };
       };
       const parsedAmount =
         typeof reqArgs.target_amount === "number"
@@ -2251,6 +2252,27 @@ export const mockDaemon: DaemonTransport = {
       }
       if (typeof reqArgs.reveal_mode === "string" && reqArgs.reveal_mode) {
         clone.reveal_mode = reqArgs.reveal_mode;
+      }
+      // Apply per-node reveal overrides so the disclosure preview flips live.
+      const overrides = reqArgs.report_options?.reveal_overrides ?? {};
+      if (Object.keys(overrides).length > 0) {
+        const graph = clone.graph as { nodes?: Record<string, unknown>[] } | undefined;
+        const hidden = new Set<string>();
+        for (const node of graph?.nodes ?? []) {
+          const id = String(node.transaction_id ?? "");
+          if (overrides[id] === "hide") {
+            if (node.external_id) hidden.add(String(node.external_id));
+            node.external_id = "";
+          }
+        }
+        if (hidden.size > 0) {
+          const preview = clone.disclosure_preview as
+            | { txids?: string[] }
+            | undefined;
+          if (preview && Array.isArray(preview.txids)) {
+            preview.txids = preview.txids.filter((txid) => !hidden.has(txid));
+          }
+        }
       }
       return { kind: req.kind, schema_version: 1, data: clone as T };
     }

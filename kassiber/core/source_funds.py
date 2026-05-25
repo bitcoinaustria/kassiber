@@ -256,7 +256,22 @@ def _timestamp_after(left: Any, right: Any) -> bool:
     return bool(left_ts and right_ts and left_ts > right_ts)
 
 
-def _public_tx_id(row: Mapping[str, Any], reveal_mode: str, *, is_target: bool = False) -> str:
+def _public_tx_id(
+    row: Mapping[str, Any],
+    reveal_mode: str,
+    *,
+    is_target: bool = False,
+    overrides: Mapping[str, str] | None = None,
+) -> str:
+    # Per-node overrides (keyed by Kassiber transaction id) win over the global
+    # reveal mode: "hide" always redacts the txid; "show" reveals it even when
+    # the mode would otherwise drop it. The user is the disclosure boundary.
+    if overrides:
+        decision = overrides.get(row["id"])
+        if decision == "hide":
+            return ""
+        if decision == "show":
+            return row["external_id"] or row["id"]
     if reveal_mode == "labels_only":
         return ""
     if reveal_mode == "minimal" and not is_target:
@@ -359,11 +374,19 @@ def _normalize_report_options(report_options: Mapping[str, Any] | None) -> dict[
             if str(item).strip().lower() in OPTIONAL_REPORT_SECTIONS
         }
     )
+    raw_overrides = options.get("reveal_overrides") or {}
+    reveal_overrides: dict[str, str] = {}
+    if isinstance(raw_overrides, Mapping):
+        for key, value in raw_overrides.items():
+            decision = str(value).strip().lower()
+            if str(key) and decision in ("show", "hide"):
+                reveal_overrides[str(key)] = decision
     return {
         "diagram_detail": detail,
         "amount_precision": precision,
         "mask_recipient": bool(options.get("mask_recipient")),
         "omit_sections": omit_sections,
+        "reveal_overrides": reveal_overrides,
     }
 
 
@@ -407,9 +430,15 @@ def _report_context(profile: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _tx_label(row: Mapping[str, Any], reveal_mode: str, *, is_target: bool = False) -> str:
+def _tx_label(
+    row: Mapping[str, Any],
+    reveal_mode: str,
+    *,
+    is_target: bool = False,
+    overrides: Mapping[str, str] | None = None,
+) -> str:
     wallet = row["wallet_label"] if "wallet_label" in row.keys() else row.get("wallet", "")
-    public_id = _public_tx_id(row, reveal_mode, is_target=is_target)
+    public_id = _public_tx_id(row, reveal_mode, is_target=is_target, overrides=overrides)
     if public_id:
         return public_id
     return f"{wallet} {row['direction']} {row['asset']} {float(msat_to_btc(row['amount'])):.8f}"
@@ -1590,6 +1619,7 @@ def _tx_node(
     required_msat: int | None,
     *,
     is_target: bool = False,
+    overrides: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     # ``id`` and ``transaction_id`` carry the Kassiber-internal UUID at
     # every reveal mode. The UUID is random per database, has no
@@ -1604,7 +1634,7 @@ def _tx_node(
         "id": f"tx:{row['id']}",
         "node_type": "transaction",
         "transaction_id": row["id"],
-        "label": _tx_label(row, reveal_mode, is_target=is_target),
+        "label": _tx_label(row, reveal_mode, is_target=is_target, overrides=overrides),
         "wallet": row["wallet_label"],
         "occurred_at": row["occurred_at"],
         "direction": row["direction"],
@@ -1613,7 +1643,7 @@ def _tx_node(
         "amount_msat": int(row["amount"]),
         "required_amount": _btc_value(required_msat),
         "required_amount_msat": required_msat,
-        "external_id": _public_tx_id(row, reveal_mode, is_target=is_target),
+        "external_id": _public_tx_id(row, reveal_mode, is_target=is_target, overrides=overrides),
         "fiat_currency": row["fiat_currency"] or "",
         "fiat_value": row["fiat_value"],
         "pricing_source_kind": row["pricing_source_kind"] or row["fiat_price_source"] or "",
@@ -2122,6 +2152,8 @@ def build_report(
         recipient_ref=recipient_ref,
     )
     mode = _normalize_reveal_mode(resolved_mode)
+    normalized_options = _normalize_report_options(report_options)
+    reveal_overrides = normalized_options["reveal_overrides"]
     purpose = _normalize_report_purpose(report_purpose)
     target_amount_msat = _amount_msat(target_amount, label="--target-amount") if target_amount not in (None, "") else int(target["amount"])
     if target_amount_msat <= 0:
@@ -2183,8 +2215,8 @@ def build_report(
             continue
         node_id = f"tx:{tx_id}"
         is_target_tx = tx_id == target["id"]
-        nodes[node_id] = _tx_node(tx, mode, required_msat, is_target=is_target_tx)
-        disclosed_txid = _public_tx_id(tx, mode, is_target=is_target_tx)
+        nodes[node_id] = _tx_node(tx, mode, required_msat, is_target=is_target_tx, overrides=reveal_overrides)
+        disclosed_txid = _public_tx_id(tx, mode, is_target=is_target_tx, overrides=reveal_overrides)
         if disclosed_txid:
             disclosure_txids.add(disclosed_txid)
             explorer_link = _public_explorer_link(
@@ -2415,7 +2447,7 @@ def build_report(
                             "A self-transfer link declares a different asset than its parent or target transaction.",
                             ref=link["id"],
                         )
-                nodes[f"tx:{from_tx_id}"] = _tx_node(from_tx, mode, int(parent_required))
+                nodes[f"tx:{from_tx_id}"] = _tx_node(from_tx, mode, int(parent_required), overrides=reveal_overrides)
                 if from_tx_id in path:
                     _add_finding(
                         findings,
@@ -2436,7 +2468,7 @@ def build_report(
                         )
                     tx_required_assets[from_tx_id] = existing_asset or link_from_asset
                     tx_requirements_msat[from_tx_id] += parent_required
-                    nodes[f"tx:{from_tx_id}"] = _tx_node(from_tx, mode, int(tx_requirements_msat[from_tx_id]))
+                    nodes[f"tx:{from_tx_id}"] = _tx_node(from_tx, mode, int(tx_requirements_msat[from_tx_id]), overrides=reveal_overrides)
                     if tx_requirements_msat[from_tx_id] > int(from_tx["amount"]):
                         _add_finding(
                             findings,
@@ -2511,7 +2543,7 @@ def build_report(
         "workspace": workspace["label"],
         "profile": profile["label"],
         "report_context": _report_context(profile),
-        "report_options": _normalize_report_options(report_options),
+        "report_options": normalized_options,
         "purpose": {
             "type": purpose,
             "label": "Planned exchange sale" if purpose == "planned_exchange_sale" else "Already completed transaction",
@@ -2536,6 +2568,7 @@ def build_report(
             mode,
             target_amount_msat,
             is_target=True,
+            overrides=reveal_overrides,
         ),
         "reveal_mode": mode,
         "graph": {
