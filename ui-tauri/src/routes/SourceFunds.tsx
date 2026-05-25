@@ -24,6 +24,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -381,6 +382,7 @@ const LINK_TYPES = [
 const CONFIDENCE_LEVELS = ["exact", "strong", "weak", "unknown"];
 const REVEAL_MODES = ["labels_only", "minimal", "standard", "full"];
 const NO_ATTACHMENT = "__none__";
+const NO_RECIPIENT = "__none__";
 const WIZARD_STEPS = [
   { id: "setup", label: "Setup" },
   { id: "review", label: "Review" },
@@ -1452,93 +1454,99 @@ export function SourceFunds() {
                           onOpenChange={setShowAdvancedTargetFilters}
                         >
                           <CollapsibleContent className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-                            <select
-                              className="h-9 rounded-md border bg-background px-3 text-sm"
+                            <Select
                               value={targetDirectionFilter}
-                              onChange={(event) =>
-                                setTargetDirectionFilter(event.target.value)
-                              }
-                              aria-label="Filter by direction"
+                              onValueChange={setTargetDirectionFilter}
                             >
-                              <option value="all">All flows</option>
-                              <option value="incoming">Incoming</option>
-                              <option value="outgoing">Outgoing</option>
-                              <option value="transfer">Transfer</option>
-                              <option value="swap">Swap</option>
-                            </select>
-                            <select
-                              className="h-9 rounded-md border bg-background px-3 text-sm"
+                              <SelectTrigger className="h-9 w-full" aria-label="Filter by direction">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All flows</SelectItem>
+                                <SelectItem value="incoming">Incoming</SelectItem>
+                                <SelectItem value="outgoing">Outgoing</SelectItem>
+                                <SelectItem value="transfer">Transfer</SelectItem>
+                                <SelectItem value="swap">Swap</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Select
                               value={targetDateFilter}
-                              onChange={(event) =>
-                                setTargetDateFilter(event.target.value)
-                              }
-                              aria-label="Filter by date"
+                              onValueChange={setTargetDateFilter}
                             >
-                              <option value="all">All dates</option>
-                              <option value="today">Today</option>
-                              <option value="yesterday">Yesterday</option>
-                              <option value="7days">Last 7 days</option>
-                              <option value="30days">Last 30 days</option>
-                              <option value="older">Older</option>
-                            </select>
-                            <select
-                              className="h-9 rounded-md border bg-background px-3 text-sm"
+                              <SelectTrigger className="h-9 w-full" aria-label="Filter by date">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All dates</SelectItem>
+                                <SelectItem value="today">Today</SelectItem>
+                                <SelectItem value="yesterday">Yesterday</SelectItem>
+                                <SelectItem value="7days">Last 7 days</SelectItem>
+                                <SelectItem value="30days">Last 30 days</SelectItem>
+                                <SelectItem value="older">Older</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Select
                               value={targetStatusFilter}
-                              onChange={(event) =>
-                                setTargetStatusFilter(event.target.value)
-                              }
-                              aria-label="Filter by status"
+                              onValueChange={setTargetStatusFilter}
                             >
-                              <option value="all">All statuses</option>
-                              <option value="confirmed">Confirmed</option>
-                              <option value="pending">Pending</option>
-                              <option value="review">Needs review</option>
-                            </select>
-                            <select
-                              className="h-9 rounded-md border bg-background px-3 text-sm"
+                              <SelectTrigger className="h-9 w-full" aria-label="Filter by status">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All statuses</SelectItem>
+                                <SelectItem value="confirmed">Confirmed</SelectItem>
+                                <SelectItem value="pending">Pending</SelectItem>
+                                <SelectItem value="review">Needs review</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Select
                               value={targetNetworkFilter}
-                              onChange={(event) =>
-                                setTargetNetworkFilter(event.target.value)
-                              }
-                              aria-label="Filter by network"
+                              onValueChange={setTargetNetworkFilter}
                             >
-                              <option value="all">All networks</option>
-                              {targetNetworkOptions.map((network) => (
-                                <option key={network} value={network}>
-                                  {network}
-                                </option>
-                              ))}
-                            </select>
-                            <select
-                              className="h-9 rounded-md border bg-background px-3 text-sm"
+                              <SelectTrigger className="h-9 w-full" aria-label="Filter by network">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All networks</SelectItem>
+                                {targetNetworkOptions.map((network) => (
+                                  <SelectItem key={network} value={network}>
+                                    {network}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Select
                               value={targetAssetFilter}
-                              onChange={(event) =>
-                                setTargetAssetFilter(event.target.value)
-                              }
-                              aria-label="Filter by asset"
+                              onValueChange={setTargetAssetFilter}
                             >
-                              <option value="all">All assets</option>
-                              {targetAssetOptions.map((asset) => (
-                                <option key={asset} value={asset}>
-                                  {asset}
-                                </option>
-                              ))}
-                            </select>
-                            <select
-                              className="h-9 rounded-md border bg-background px-3 text-sm xl:col-span-2"
+                              <SelectTrigger className="h-9 w-full" aria-label="Filter by asset">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All assets</SelectItem>
+                                {targetAssetOptions.map((asset) => (
+                                  <SelectItem key={asset} value={asset}>
+                                    {asset}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Select
                               value={targetWalletFilter}
-                              onChange={(event) =>
-                                setTargetWalletFilter(event.target.value)
-                              }
-                              aria-label="Filter by wallet"
+                              onValueChange={setTargetWalletFilter}
                             >
-                              <option value="all">All wallets</option>
-                              {targetWalletOptions.map((wallet) => (
-                                <option key={wallet} value={wallet}>
-                                  {wallet}
-                                </option>
-                              ))}
-                            </select>
+                              <SelectTrigger className="h-9 w-full xl:col-span-2" aria-label="Filter by wallet">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All wallets</SelectItem>
+                                {targetWalletOptions.map((wallet) => (
+                                  <SelectItem key={wallet} value={wallet}>
+                                    {wallet}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </CollapsibleContent>
                         </Collapsible>
                       </div>
@@ -2201,37 +2209,41 @@ export function SourceFunds() {
             </CardHeader>
             <CardContent className="space-y-4 p-4">
               <Field label="Diagram detail" htmlFor="sof-diagram-detail">
-                <select
-                  id="sof-diagram-detail"
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                <Select
                   value={diagramDetail}
-                  onChange={(event) =>
-                    setDiagramDetail(event.target.value === "detailed" ? "detailed" : "summary")
+                  onValueChange={(value) =>
+                    setDiagramDetail(value === "detailed" ? "detailed" : "summary")
                   }
                 >
-                  <option value="summary">Summary — cluster long paths (default)</option>
-                  <option value="detailed">Detailed — show more hops before clustering</option>
-                </select>
+                  <SelectTrigger id="sof-diagram-detail" className="h-10 w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="summary">Summary — cluster long paths (default)</SelectItem>
+                    <SelectItem value="detailed">Detailed — show more hops before clustering</SelectItem>
+                  </SelectContent>
+                </Select>
               </Field>
               <Field label="Amount precision" htmlFor="sof-amount-precision">
-                <select
-                  id="sof-amount-precision"
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                <Select
                   value={amountPrecision}
-                  onChange={(event) =>
-                    setAmountPrecision(event.target.value === "sats" ? "sats" : "btc")
+                  onValueChange={(value) =>
+                    setAmountPrecision(value === "sats" ? "sats" : "btc")
                   }
                 >
-                  <option value="btc">BTC (8 decimals)</option>
-                  <option value="sats">Sats (whole numbers)</option>
-                </select>
+                  <SelectTrigger id="sof-amount-precision" className="h-10 w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="btc">BTC (8 decimals)</SelectItem>
+                    <SelectItem value="sats">Sats (whole numbers)</SelectItem>
+                  </SelectContent>
+                </Select>
               </Field>
               <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="size-4 rounded border"
+                <Checkbox
                   checked={maskRecipient}
-                  onChange={(event) => setMaskRecipient(event.target.checked)}
+                  onCheckedChange={(checked) => setMaskRecipient(checked === true)}
                 />
                 Mask recipient label in the report
               </label>
@@ -2249,13 +2261,11 @@ export function SourceFunds() {
                     key={key}
                     className="flex items-center gap-2 text-sm text-muted-foreground"
                   >
-                    <input
-                      type="checkbox"
-                      className="size-4 rounded border"
+                    <Checkbox
                       checked={omitSections.includes(key)}
-                      onChange={(event) =>
+                      onCheckedChange={(checked) =>
                         setOmitSections((current) =>
-                          event.target.checked
+                          checked === true
                             ? [...current, key]
                             : current.filter((section) => section !== key),
                         )
@@ -2881,18 +2891,18 @@ function SelectField({
 }) {
   return (
     <Field label={label} htmlFor={id}>
-      <select
-        id={id}
-        className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {pretty(option)}
-          </option>
-        ))}
-      </select>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger id={id} className="h-10 w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option} value={option}>
+              {pretty(option)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </Field>
   );
 }
@@ -2912,19 +2922,18 @@ function TransactionSelect({
 }) {
   return (
     <Field label={label} htmlFor={id}>
-      <select
-        id={id}
-        className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">Select transaction</option>
-        {rows.map((row) => (
-          <option key={txRef(row)} value={txRef(row)}>
-            {txLabel(row)}
-          </option>
-        ))}
-      </select>
+      <Select value={value || undefined} onValueChange={onChange}>
+        <SelectTrigger id={id} className="h-10 w-full">
+          <SelectValue placeholder="Select transaction" />
+        </SelectTrigger>
+        <SelectContent>
+          {rows.map((row) => (
+            <SelectItem key={txRef(row)} value={txRef(row)}>
+              {txLabel(row)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </Field>
   );
 }
@@ -2942,19 +2951,19 @@ function EvidenceSelect({
 }) {
   return (
     <Field label="Evidence" htmlFor={id}>
-      <select
-        id={id}
-        className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value={NO_ATTACHMENT}>No attachment</option>
-        {evidence.map((item) => (
-          <option key={item.id} value={item.id}>
-            {[item.label, item.wallet, item.external_id].filter(Boolean).join(" · ")}
-          </option>
-        ))}
-      </select>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger id={id} className="h-10 w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NO_ATTACHMENT}>No attachment</SelectItem>
+          {evidence.map((item) => (
+            <SelectItem key={item.id} value={item.id}>
+              {[item.label, item.wallet, item.external_id].filter(Boolean).join(" · ")}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </Field>
   );
 }
@@ -3178,27 +3187,34 @@ function RecipientPicker({
         The recipient's preferred reveal mode is shown as advisory below;
         your reveal-mode choice is what gets exported.
       </div>
-      <select
-        className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-        value={selectedRecipientId}
-        onChange={(event) => {
-          const next = recipients.find((r) => r.id === event.target.value) ?? null;
+      <Select
+        value={selectedRecipientId || NO_RECIPIENT}
+        onValueChange={(value) => {
+          if (value === NO_RECIPIENT) {
+            onSelectRecipient(null);
+            return;
+          }
+          const next = recipients.find((r) => r.id === value) ?? null;
           if (next && next.active === false) return;
           onSelectRecipient(next);
         }}
-        aria-label="Recipient"
       >
-        <option value="">(no recipient)</option>
-        {recipients.map((recipient) => {
-          const inactive = recipient.active === false;
-          return (
-            <option key={recipient.id} value={recipient.id} disabled={inactive}>
-              {recipient.label} - {pretty(recipient.kind)} - {pretty(recipient.default_reveal_mode)}
-              {inactive ? " (inactive)" : ""}
-            </option>
-          );
-        })}
-      </select>
+        <SelectTrigger className="h-9 w-full" aria-label="Recipient">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NO_RECIPIENT}>(no recipient)</SelectItem>
+          {recipients.map((recipient) => {
+            const inactive = recipient.active === false;
+            return (
+              <SelectItem key={recipient.id} value={recipient.id} disabled={inactive}>
+                {recipient.label} - {pretty(recipient.kind)} - {pretty(recipient.default_reveal_mode)}
+                {inactive ? " (inactive)" : ""}
+              </SelectItem>
+            );
+          })}
+        </SelectContent>
+      </Select>
       {selected && selected.notes && (
         <div className="mt-2 text-xs opacity-80">{selected.notes}</div>
       )}
