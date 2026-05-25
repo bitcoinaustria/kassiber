@@ -7,6 +7,7 @@ import {
   formatSignedDisplayMoney,
   pricingCacheSummary,
   pricingPriceMoment,
+  shouldShowSourceExternalId,
   type Transaction,
 } from "./model";
 
@@ -145,5 +146,25 @@ describe("pricing provenance", () => {
         pricingTimestamp: "2024-05-01T00:02:00Z",
       }),
     ).toEqual({ label: "Price timestamp", value: "2024-05-01 00:02" });
+  });
+});
+
+describe("source identifiers", () => {
+  it("hides source external id when it duplicates the displayed transaction id", () => {
+    expect(
+      shouldShowSourceExternalId({
+        txnId: "1641779af4",
+        explorerId: "1641779af4",
+      }),
+    ).toBe(false);
+  });
+
+  it("shows source external id when it differs from the explorer transaction id", () => {
+    expect(
+      shouldShowSourceExternalId({
+        txnId: "btcpay-payment-42",
+        explorerId: "1641779af4",
+      }),
+    ).toBe(true);
   });
 });

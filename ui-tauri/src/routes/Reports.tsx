@@ -1221,9 +1221,11 @@ function ReportFilesPanel({
 }
 
 function HandoffScopePanel() {
+  const [expanded, setExpanded] = useState(false);
+
   return (
     <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
-      <div className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-5">
+      <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5">
         <div className="flex min-w-0 items-center gap-2">
           <span
             className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground"
@@ -1240,15 +1242,36 @@ function HandoffScopePanel() {
             </p>
           </div>
         </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="size-8 shrink-0"
+          aria-label={
+            expanded ? "Collapse handoff scope" : "Expand handoff scope"
+          }
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          <ChevronDown
+            className={cn(
+              "size-4 text-muted-foreground transition-transform",
+              expanded && "rotate-180",
+            )}
+            aria-hidden="true"
+          />
+        </Button>
       </div>
 
-      <div className="px-4 pt-3 pb-4 sm:px-5">
-        <div className="divide-y rounded-lg border bg-background/50">
-          {HANDOFF_EXPORT_MODES.map((mode) => (
-            <HandoffModeRow key={mode.id} mode={mode} />
-          ))}
+      {expanded ? (
+        <div className="px-4 pb-4 sm:px-5">
+          <div className="divide-y rounded-lg border bg-background/50">
+            {HANDOFF_EXPORT_MODES.map((mode) => (
+              <HandoffModeRow key={mode.id} mode={mode} />
+            ))}
+          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }

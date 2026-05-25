@@ -97,6 +97,7 @@ import {
   pricingQualityLabel,
   pricingSelectionValue,
   pricingSourceLabel,
+  shouldShowSourceExternalId,
   tagSuggestions,
   transactionBtc,
   transactionFlow,
@@ -1343,6 +1344,8 @@ export function TransactionDetailSheet({
   const StatusIcon = transactionStatusIcons[localDraft.reviewStatus];
   const flow = transactionFlow(transaction);
   const explorer = explorerForTransaction(transaction, explorerSettings);
+  const transactionDisplayId = transaction.explorerId ?? transaction.txnId;
+  const showSourceExternalId = shouldShowSourceExternalId(transaction);
   const amountBtc = transactionBtc(transaction);
   const feeBtc = transaction.feeBtc ?? 0;
   const feeEur = transaction.feeEur ?? null;
@@ -1786,10 +1789,8 @@ export function TransactionDetailSheet({
                     <div className="grid gap-3 sm:grid-cols-3">
                       <DetailField
                         label="Transaction ID"
-                        value={formatShortTxid(
-                          transaction.explorerId ?? transaction.txnId,
-                        )}
-                        copyValue={transaction.explorerId ?? transaction.txnId}
+                        value={formatShortTxid(transactionDisplayId)}
+                        copyValue={transactionDisplayId}
                         hidden={hideSensitive}
                         hint="Canonical on-chain identifier or import row id, depending on the source."
                       />
@@ -1847,11 +1848,13 @@ export function TransactionDetailSheet({
                           label="Counterparty"
                           value={transaction.counterparty}
                         />
-                        <LedgerRow
-                          label="External id"
-                          value={formatShortTxid(transaction.txnId)}
-                          hint="Wallet/exchange internal id. Different from the on-chain Transaction ID for off-chain sources."
-                        />
+                        {showSourceExternalId ? (
+                          <LedgerRow
+                            label="External id"
+                            value={formatShortTxid(transaction.txnId)}
+                            hint="Wallet/exchange internal id. Different from the on-chain Transaction ID for off-chain sources."
+                          />
+                        ) : null}
                       </div>
                       <div className="overflow-hidden rounded-md border">
                         <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
