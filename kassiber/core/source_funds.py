@@ -22,6 +22,13 @@ from .source_funds_hints import enrich_findings_with_next_steps
 
 REVEAL_MODES = ("labels_only", "minimal", "standard", "full")
 REPORT_PURPOSES = ("existing_transaction", "planned_exchange_sale")
+# Verbose PDF sections that the advanced panel can omit for a leaner report.
+OPTIONAL_REPORT_SECTIONS = (
+    "flow_levels",
+    "transaction_details",
+    "flow_links",
+    "graph_nodes",
+)
 SOURCE_TYPES = (
     "fiat_purchase",
     "exchange_withdrawal",
@@ -370,7 +377,25 @@ def _normalize_report_options(report_options: Mapping[str, Any] | None) -> dict[
     detail = str(options.get("diagram_detail") or "summary").strip().lower()
     if detail not in ("summary", "detailed"):
         detail = "summary"
-    return {"diagram_detail": detail}
+    precision = str(options.get("amount_precision") or "btc").strip().lower()
+    if precision not in ("btc", "sats"):
+        precision = "btc"
+    raw_omit = options.get("omit_sections") or []
+    if isinstance(raw_omit, str):
+        raw_omit = [raw_omit]
+    omit_sections = sorted(
+        {
+            str(item).strip().lower()
+            for item in raw_omit
+            if str(item).strip().lower() in OPTIONAL_REPORT_SECTIONS
+        }
+    )
+    return {
+        "diagram_detail": detail,
+        "amount_precision": precision,
+        "mask_recipient": bool(options.get("mask_recipient")),
+        "omit_sections": omit_sections,
+    }
 
 
 def _report_context(profile: Mapping[str, Any]) -> dict[str, Any]:

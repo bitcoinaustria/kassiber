@@ -2063,6 +2063,24 @@ def build_parser() -> argparse.ArgumentParser:
         default="summary",
         help="Simplified-flow detail: 'summary' clusters long paths, 'detailed' shows more hops.",
     )
+    source_funds_report.add_argument(
+        "--amount-precision",
+        choices=("btc", "sats"),
+        default="btc",
+        help="Render report amounts as BTC (8dp) or whole sats.",
+    )
+    source_funds_report.add_argument(
+        "--mask-recipient",
+        action="store_true",
+        help="Mask the recipient label in the exported report.",
+    )
+    source_funds_report.add_argument(
+        "--omit-section",
+        action="append",
+        choices=list(core_source_funds.OPTIONAL_REPORT_SECTIONS),
+        default=[],
+        help="Omit a verbose PDF section (repeatable).",
+    )
     source_funds_report.add_argument("--save-case", action="store_true")
     source_funds_report.add_argument("--case-label")
     source_funds_report.add_argument("--recipient")
@@ -3964,7 +3982,12 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 case_label=args.case_label,
                 recipient_ref=args.recipient,
                 include_diagrams=True,
-                report_options={"diagram_detail": args.diagram_detail},
+                report_options={
+                    "diagram_detail": args.diagram_detail,
+                    "amount_precision": args.amount_precision,
+                    "mask_recipient": args.mask_recipient,
+                    "omit_sections": args.omit_section,
+                },
             )
             if args.format in {"table", "plain"}:
                 return emit(args, "\n".join(core_source_funds.build_report_lines(report, source_funds_hooks)))
