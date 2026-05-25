@@ -16,6 +16,8 @@ import {
   LabelList,
   ReferenceLine,
   Tooltip,
+  usePlotArea,
+  useXAxisScale,
   XAxis,
   YAxis,
 } from "recharts";
@@ -123,6 +125,47 @@ interface ChartTooltipProps {
   metric: FlowChartMetric;
 }
 
+function FlowBucketClickAreas({
+  rows,
+  onBucketClick,
+}: {
+  rows: FlowChartPoint[];
+  onBucketClick: (point: FlowChartPoint) => void;
+}) {
+  const plotArea = usePlotArea();
+  const xScale = useXAxisScale();
+  if (!plotArea || !xScale || rows.length === 0) return null;
+
+  const fallbackWidth = plotArea.width / rows.length;
+
+  return (
+    <g aria-hidden="true">
+      {rows.map((row) => {
+        const start = xScale(row.date, { position: "start" });
+        const end = xScale(row.date, { position: "end" });
+        const x = start ?? xScale(row.date);
+        if (x === undefined || !Number.isFinite(x)) return null;
+        const width =
+          end !== undefined && Number.isFinite(end)
+            ? Math.max(1, end - x)
+            : fallbackWidth;
+        return (
+          <rect
+            key={`bucket-click-${row.bucketKey}`}
+            x={x}
+            y={plotArea.y}
+            width={width}
+            height={plotArea.height}
+            fill="transparent"
+            cursor="pointer"
+            onClick={() => onBucketClick(row)}
+          />
+        );
+      })}
+    </g>
+  );
+}
+
 const TransactionWorkbench = ({
   period,
   records,
@@ -213,10 +256,15 @@ const TransactionWorkbench = ({
   const yDomain = flowAxisDomain(visibleChartRows, chartMetric);
   const flowChartCellProps = React.useCallback(
     (row: FlowChartPoint, segment: FlowChartSegment) => {
-      const selected =
-        chartSelection?.segment === segment &&
-        (chartSelection.bucketKey === null ||
-          chartSelection.bucketKey === row.bucketKey);
+      const sameBucket =
+        chartSelection?.bucketKey === null ||
+        chartSelection?.bucketKey === row.bucketKey;
+      const selected = Boolean(
+        chartSelection &&
+          sameBucket &&
+          (chartSelection.segment === null ||
+            chartSelection.segment === segment),
+      );
       const dimmed = Boolean(chartSelection && !selected);
       return {
         fillOpacity: dimmed ? 0.32 : 1,
@@ -225,6 +273,30 @@ const TransactionWorkbench = ({
       };
     },
     [chartSelection],
+  );
+  const selectFlowBucket = React.useCallback(
+    (point: FlowChartPoint) => {
+      if (flowPointTotal(point) === 0) return;
+      onQuickFilterChange(null);
+      onBreakdownSelectionChange(null);
+      onTableFiltersReset();
+      onFlowSelectionChange({
+        id: `${period}:${point.bucketKey}:all:${chartMode}`,
+        period,
+        bucketKey: point.bucketKey,
+        bucketLabel: point.date,
+        segment: null,
+        mode: chartMode,
+      });
+    },
+    [
+      chartMode,
+      onBreakdownSelectionChange,
+      onFlowSelectionChange,
+      onQuickFilterChange,
+      onTableFiltersReset,
+      period,
+    ],
   );
   const handleFlowChartClick = React.useCallback(
     (data: FlowChartClickData, segment: FlowChartSegment) => {
@@ -686,6 +758,10 @@ const TransactionWorkbench = ({
                     pointerEvents: "none",
                     zIndex: 30,
                   }}
+                />
+                <FlowBucketClickAreas
+                  rows={visibleChartRows}
+                  onBucketClick={selectFlowBucket}
                 />
                 <Bar
                   dataKey="incoming"

@@ -51,7 +51,7 @@ type FlowChartSelection = {
   period: PeriodKey;
   bucketKey: string | null;
   bucketLabel: string;
-  segment: FlowChartSegment;
+  segment: FlowChartSegment | null;
   mode: FlowChartMode;
 };
 
@@ -926,7 +926,10 @@ function matchesTransactionDeepLink(txn: Transaction, transactionId: string) {
 }
 
 function flowChartSelectionLabel(selection: FlowChartSelection) {
-  return `${selection.bucketLabel} · ${flowChartSegmentLabels[selection.segment]} · ${
+  const segmentLabel = selection.segment
+    ? flowChartSegmentLabels[selection.segment]
+    : "All flows";
+  return `${selection.bucketLabel} · ${segmentLabel} · ${
     flowChartModeLabels[selection.mode]
   }`;
 }
@@ -953,6 +956,8 @@ function matchesFlowChartSelection(
     const bucket = bucketTransactionDate(parsedDate, selection.period);
     if (bucket.key !== selection.bucketKey) return false;
   }
+
+  if (selection.segment === null) return true;
 
   const flow = displayFlow(txn);
   if (selection.segment === "transfers") {
