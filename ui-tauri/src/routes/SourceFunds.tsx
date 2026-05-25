@@ -1339,6 +1339,7 @@ export function SourceFunds() {
     <div className={screenShellClassName}>
       <div className="grid gap-4">
         <div className="space-y-4">
+          <TracedCoverageHero coverage={coverageQuery.data?.data} />
           <OptionalSection
             open={showCoverage}
             onOpenChange={setShowCoverage}
@@ -3023,6 +3024,85 @@ function coverageSummary(
     amount: traced.toFixed(8),
     count: coverage.totals.tx_count,
   });
+}
+
+const COVERAGE_BUCKET_BARS: Record<keyof SourceFundsCoverageBuckets, string> = {
+  fully_traced: "bg-emerald-500",
+  attested: "bg-sky-500",
+  in_review: "bg-amber-500",
+  untraced: "bg-rose-500",
+  not_classified: "bg-muted-foreground/40",
+};
+
+function TracedCoverageHero({ coverage }: { coverage?: SourceFundsCoverage }) {
+  const totals = coverage?.totals;
+  const total = totals?.amount ?? 0;
+  const txCount = totals?.tx_count ?? 0;
+  const buckets = totals?.buckets;
+  if (!coverage || txCount === 0) {
+    return null;
+  }
+  const pct = (name: keyof SourceFundsCoverageBuckets) =>
+    total > 0 ? ((buckets?.[name]?.amount ?? 0) / total) * 100 : 0;
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="text-xs uppercase tracking-wide text-muted-foreground">
+              Inbound history traced
+            </div>
+            <div className="mt-0.5 flex items-baseline gap-2">
+              <span className="font-mono text-3xl font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">
+                {pct("fully_traced").toFixed(1)}%
+              </span>
+              <span className="text-sm text-muted-foreground">
+                fully traced · {txCount} inbound tx
+              </span>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+            {COVERAGE_BUCKET_ORDER.filter(
+              (name) => name === "fully_traced" || (buckets?.[name]?.amount ?? 0) > 0,
+            ).map((name) => (
+              <span key={name} className="inline-flex items-center gap-1.5">
+                <span className={`size-2.5 rounded-sm ${COVERAGE_BUCKET_BARS[name]}`} />
+                <span className="text-muted-foreground">
+                  {COVERAGE_BUCKET_LABELS[name]}
+                </span>
+                <span className={`font-medium ${COVERAGE_BUCKET_TONES[name]}`}>
+                  {pct(name).toFixed(1)}%
+                </span>
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-muted">
+          {COVERAGE_BUCKET_ORDER.map((name) => {
+            const percent = pct(name);
+            return percent > 0 ? (
+              <div
+                key={name}
+                className={COVERAGE_BUCKET_BARS[name]}
+                style={{ width: `${percent}%` }}
+                title={`${COVERAGE_BUCKET_LABELS[name]}: ${percent.toFixed(1)}%`}
+              />
+            ) : null;
+          })}
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Attested ({pct("attested").toFixed(1)}%) is prior-history attestation,
+          shown separately — not counted as fully traced.
+        </p>
+        {coverage.truncation?.truncated && (
+          <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+            Partial: {txCount} of {coverage.truncation.inbound_total_count} inbound
+            transactions classified.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 function CoveragePanel({
