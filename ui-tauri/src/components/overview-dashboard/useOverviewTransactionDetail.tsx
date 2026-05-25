@@ -12,13 +12,13 @@ import {
 import {
   matchesTransactionDeepLink,
   readTransactionDetailParams,
-  toDashboardTransaction,
   updateTransactionDetailParams,
 } from "@/components/transactions/dashboard/model";
 import { useDaemonMutation } from "@/daemon/client";
 import type { Currency } from "@/lib/currency";
 import type { ExplorerSettings } from "@/lib/explorer";
 import type { OverviewSnapshot } from "@/mocks/seed";
+import { overviewDetailTransactions } from "./overviewTransactionDetailModel";
 
 type OverviewTransactionDetailOptions = {
   snapshot: OverviewSnapshot;
@@ -45,8 +45,8 @@ export function useOverviewTransactionDetail({
   const pendingDetailLinkRef = React.useRef(readTransactionDetailParams());
   const metadataUpdate = useDaemonMutation("ui.transactions.metadata.update");
   const transactions = React.useMemo(
-    () => snapshot.txs.map(toDashboardTransaction),
-    [snapshot.txs],
+    () => overviewDetailTransactions(snapshot),
+    [snapshot],
   );
   const getDraft = React.useCallback(
     (txn: Transaction) => drafts[txn.id] ?? draftForTransaction(txn),

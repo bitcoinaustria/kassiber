@@ -17,6 +17,7 @@ export function ActivityScatterDot({
   onOpenTransactionDetail,
 }: ActivityScatterDotProps) {
   const navigate = useNavigate();
+  const openedOnPointerDownRef = React.useRef(false);
   if (
     typeof cx !== "number" ||
     typeof cy !== "number" ||
@@ -36,16 +37,21 @@ export function ActivityScatterDot({
     }
     void navigate({ to: transactionDetailHref(transactionId) });
   };
+  const handlePointerDown = (event: React.PointerEvent<SVGGElement>) => {
+    if (!transactionId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openedOnPointerDownRef.current = true;
+    openTransactionDetail();
+  };
   const handleClick = (event: React.MouseEvent<SVGGElement>) => {
     if (!transactionId) return;
     event.preventDefault();
     event.stopPropagation();
-    openTransactionDetail();
-  };
-  const handleMouseUp = (event: React.MouseEvent<SVGGElement>) => {
-    if (!transactionId) return;
-    event.preventDefault();
-    event.stopPropagation();
+    if (openedOnPointerDownRef.current) {
+      openedOnPointerDownRef.current = false;
+      return;
+    }
     openTransactionDetail();
   };
   const handleKeyDown = (event: React.KeyboardEvent<SVGGElement>) => {
@@ -58,10 +64,12 @@ export function ActivityScatterDot({
   const interactiveProps = transactionId
     ? {
         "aria-label": `Open ${activityFlowLabels[payload.eventFlow]} transaction`,
+        className: "group/activity-marker outline-none",
+        "data-activity-marker": true,
         focusable: true,
         onClick: handleClick,
         onKeyDown: handleKeyDown,
-        onMouseUp: handleMouseUp,
+        onPointerDown: handlePointerDown,
         onMouseDown: (event: React.MouseEvent<SVGGElement>) =>
           event.preventDefault(),
         role: "button",
@@ -84,7 +92,7 @@ export function ActivityScatterDot({
         pointerEvents="all"
       />
       <circle
-        className="recharts-scatter-symbol"
+        className="recharts-scatter-symbol transition-transform duration-100 ease-out group-hover/activity-marker:scale-110 group-focus/activity-marker:scale-110"
         cx={cx}
         cy={cy}
         r={radius}
@@ -95,6 +103,7 @@ export function ActivityScatterDot({
         pointerEvents="none"
         stroke="var(--background)"
         strokeWidth={2.5}
+        style={{ transformBox: "fill-box", transformOrigin: "center" }}
       />
     </g>
   );
