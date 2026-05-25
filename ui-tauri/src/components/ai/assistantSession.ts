@@ -31,6 +31,7 @@ export interface AssistantSessionContextValue {
   isStreaming: boolean;
   error: { code: string; message: string } | null;
   pendingConsent: AiToolConsentRequest | null;
+  queuedPrompts: string[];
   selection: AssistantModelSelection | null;
   thinkingEffort: AssistantThinkingEffort;
   returnPath: AssistantReturnPath;

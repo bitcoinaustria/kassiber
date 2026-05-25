@@ -15,6 +15,7 @@ import {
   ChevronUp,
   Maximize2,
   MessageSquareText,
+  Trash2,
 } from "lucide-react";
 
 import Ai02 from "@/components/ai-02";
@@ -42,15 +43,18 @@ export function ScreenAssistantMockup({
     abort,
     error,
     pendingConsent,
+    queuedPrompts,
     sendConsent,
     selection,
     setSelection,
     thinkingEffort,
     setThinkingEffort,
     sendPrompt,
+    reset,
   } = useAssistantSession();
 
   const hasThread = messages.length > 0;
+  const queuedPromptCount = queuedPrompts.length;
   const compact = collapsed && !hasThread && !isInteracting;
   const showThread = hasThread && !isThreadCollapsed;
   const modelPickerEnabled = !compact || hasThread || isStreaming;
@@ -103,6 +107,7 @@ export function ScreenAssistantMockup({
               {isStreaming ? (
                 <span className="ml-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase text-primary">
                   Generating
+                  {queuedPromptCount > 0 ? ` - ${queuedPromptCount} queued` : ""}
                 </span>
               ) : null}
               <Button
@@ -118,6 +123,17 @@ export function ScreenAssistantMockup({
                 >
                   <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
                 </Link>
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="rounded-full text-muted-foreground hover:text-destructive"
+                onClick={reset}
+                aria-label="Clear chat"
+                title="Clear chat"
+              >
+                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
               </Button>
               <Button
                 type="button"
@@ -160,6 +176,7 @@ export function ScreenAssistantMockup({
               {isStreaming ? (
                 <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase text-primary">
                   Generating
+                  {queuedPromptCount > 0 ? ` - ${queuedPromptCount} queued` : ""}
                 </span>
               ) : null}
               <ChevronUp className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
