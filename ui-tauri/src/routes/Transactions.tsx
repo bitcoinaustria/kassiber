@@ -1,5 +1,11 @@
+import { useRouterState } from "@tanstack/react-router";
+import * as React from "react";
+
 import { TransactionsDashboard } from "@/components/transactions/dashboard/TransactionsDashboard";
-import { type SwapCandidateReference } from "@/components/transactions/dashboard/model";
+import {
+  readTransactionDetailParams,
+  type SwapCandidateReference,
+} from "@/components/transactions/dashboard/model";
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { useDaemon } from "@/daemon/client";
 import {
@@ -27,11 +33,21 @@ function isCrossAssetCandidate(candidate: SwapCandidateReference) {
 
 export function Transactions() {
   const dataMode = useUiStore((state) => state.dataMode);
+  const routeSearch = useRouterState({ select: (state) => state.location.search });
+  const detailParams = React.useMemo(
+    () => readTransactionDetailParams(),
+    [routeSearch],
+  );
   const { data, isLoading, isFetching } = useDaemon<TransactionsList>(
     "ui.transactions.list",
     {
       limit: 500,
     },
+  );
+  const focusedTransaction = useDaemon<{ transaction?: TransactionsList["txs"][number] | null }>(
+    "ui.transactions.resolve",
+    { query: detailParams.transactionId ?? "" },
+    { enabled: Boolean(detailParams.transactionId) },
   );
   const overview = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
   const swapQuery = useDaemon<SuggestEnvelope>("ui.transfers.suggest");
@@ -79,6 +95,9 @@ export function Transactions() {
       swapCandidates={swapCandidates}
       swapCandidateTotal={swapCandidateTotal}
       isDataRefreshing={hasLiveTransactions && isFetching}
+      focusedTransaction={focusedTransaction.data?.data?.transaction ?? null}
+      deepLinkedTransactionId={detailParams.transactionId}
+      deepLinkedTransactionTab={detailParams.tab}
     />
   );
 }

@@ -1659,6 +1659,99 @@ def build_transactions_search_snapshot(
     }
 
 
+def build_transactions_resolve_snapshot(
+    conn: sqlite3.Connection,
+    args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    context = current_context_snapshot(conn)
+    if not context["workspace_id"] or not context["profile_id"]:
+        return {"transaction": None, "query": ""}
+
+    raw_args = _coerce_args(args)
+    unknown = sorted(set(raw_args) - {"query"})
+    if unknown:
+        raise AppError(
+            "ui.transactions.resolve received unsupported filters",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    query = raw_args.get("query")
+    if not isinstance(query, str) or not query.strip():
+        raise AppError(
+            "ui.transactions.resolve query must be a non-empty string",
+            code="validation",
+            retryable=False,
+        )
+    query = query.strip()
+    id_candidates = [query]
+    if query.lower() not in id_candidates:
+        id_candidates.append(query.lower())
+    external_id_candidates = list(id_candidates)
+    if query.upper() not in external_id_candidates:
+        external_id_candidates.append(query.upper())
+    select_sql = """
+        SELECT
+            t.id,
+            t.external_id AS external_id,
+            t.occurred_at,
+            t.confirmed_at,
+            w.label AS wallet,
+            t.direction,
+            t.asset,
+            t.amount,
+            t.fee,
+            t.fiat_currency,
+            t.fiat_value,
+            t.fiat_rate,
+            t.pricing_source_kind,
+            t.pricing_quality,
+            t.pricing_external_ref,
+            t.pricing_provider,
+            t.pricing_pair,
+            t.pricing_timestamp,
+            t.pricing_fetched_at,
+            t.pricing_granularity,
+            t.pricing_method,
+            t.review_status,
+            t.taxability_override,
+            t.at_regime_override,
+            t.at_category_override,
+            COALESCE(t.kind, '') AS kind,
+            COALESCE(t.description, '') AS description,
+            COALESCE(t.counterparty, '') AS counterparty,
+            COALESCE(t.note, '') AS note,
+            t.excluded,
+            jq.reason AS quarantine_reason
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
+    """
+    order_limit_sql = " ORDER BY t.occurred_at DESC, t.created_at DESC, t.id DESC LIMIT 1"
+    id_placeholders = ", ".join("?" for _ in id_candidates)
+    row = conn.execute(
+        select_sql
+        + f"""
+        WHERE t.profile_id = ?
+          AND t.id IN ({id_placeholders})
+        """,
+        (context["profile_id"], *id_candidates),
+    ).fetchone()
+    if row is None:
+        external_id_placeholders = ", ".join("?" for _ in external_id_candidates)
+        row = conn.execute(
+            select_sql
+            + f"""
+            WHERE t.profile_id = ?
+              AND t.external_id IN ({external_id_placeholders})
+            """
+            + order_limit_sql,
+            (context["profile_id"], *external_id_candidates),
+        ).fetchone()
+    transaction = _transaction_rows_to_ui(conn, [row])[0] if row else None
+    return {"transaction": transaction, "query": query}
+
+
 def _snapshot_year(rows: list[sqlite3.Row]) -> int:
     for row in rows:
         occurred_at = row["occurred_at"] or ""

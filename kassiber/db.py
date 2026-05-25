@@ -162,6 +162,9 @@ CREATE TABLE IF NOT EXISTS transaction_tags (
     PRIMARY KEY (transaction_id, tag_id)
 );
 
+CREATE INDEX IF NOT EXISTS idx_transactions_profile_external_id
+    ON transactions(profile_id, external_id) WHERE external_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS journal_entries (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

@@ -157,6 +157,20 @@ type SearchResult = {
   keywords: string[];
   to: AppRoutePath | "/connections/$connectionId";
   connectionId?: string;
+  transactionId?: string;
+};
+
+type ResolvedTransactionSearch = {
+  transaction?: {
+    id: string;
+    externalId?: string | null;
+    explorerId?: string | null;
+    account?: string;
+    type?: string;
+    counter?: string;
+    date?: string;
+  } | null;
+  query: string;
 };
 
 type NotificationItem = Omit<AppNotification, "createdAt"> & {
@@ -438,8 +452,38 @@ function buildSearchResults(
   query: string,
   aiFeaturesEnabled: boolean,
   developerToolsEnabled: boolean,
+  resolvedTransaction?: ResolvedTransactionSearch | null,
 ): SearchResult[] {
   if (!query.trim()) return [];
+
+  const resolvedTransactionResult: SearchResult[] =
+    resolvedTransaction?.transaction &&
+    resolvedTransaction.query.trim().toLowerCase() === query.trim().toLowerCase()
+      ? [
+          {
+            id: `resolved-tx:${resolvedTransaction.transaction.id}`,
+            title: "Open transaction",
+            detail: [
+              resolvedTransaction.transaction.account,
+              resolvedTransaction.transaction.type,
+              resolvedTransaction.transaction.date,
+            ]
+              .filter(Boolean)
+              .join(" · "),
+            keywords: [
+              "transaction",
+              "tx",
+              "txid",
+              resolvedTransaction.transaction.id,
+              resolvedTransaction.transaction.externalId ?? "",
+              resolvedTransaction.transaction.explorerId ?? "",
+              resolvedTransaction.transaction.counter ?? "",
+            ],
+            to: "/transactions" as const,
+            transactionId: resolvedTransaction.transaction.id,
+          },
+        ]
+      : [];
 
   const dynamicResults: SearchResult[] = [
     ...(snapshot?.connections.map((connection) => ({
@@ -496,6 +540,7 @@ function buildSearchResults(
   ];
 
   return [
+    ...resolvedTransactionResult,
     ...STATIC_SEARCH_RESULTS.filter((result) => {
       if (!aiFeaturesEnabled && result.to === "/assistant") return false;
       if (!developerToolsEnabled && result.to === "/logs") return false;
@@ -510,6 +555,14 @@ function buildSearchResults(
 function nextSearchIndex(current: number, delta: number, total: number) {
   if (total <= 0) return 0;
   return (current + delta + total) % total;
+}
+
+function isTransactionLookupQuery(query: string) {
+  const trimmed = query.trim();
+  return (
+    /^[0-9a-fA-F]{12,64}$/.test(trimmed) ||
+    /^tx[:_-]?[a-zA-Z0-9:_-]+$/.test(trimmed)
+  );
 }
 
 function notificationRouteFor(title: string): AppRoutePath | undefined {
@@ -1689,6 +1742,12 @@ function AppDashboardHeader({
     { enabled: daemonEnabled },
   );
   const snapshot = data?.data;
+  const shouldResolveTransaction = isTransactionLookupQuery(searchQuery);
+  const resolvedTransaction = useDaemon<ResolvedTransactionSearch>(
+    "ui.transactions.resolve",
+    { query: searchQuery.trim() },
+    { enabled: daemonEnabled && shouldResolveTransaction },
+  );
   const searchResults = React.useMemo(
     () =>
       buildSearchResults(
@@ -1696,8 +1755,15 @@ function AppDashboardHeader({
         searchQuery,
         aiFeaturesEnabled,
         developerToolsEnabled,
+        resolvedTransaction.data?.data ?? null,
       ),
-    [snapshot, searchQuery, aiFeaturesEnabled, developerToolsEnabled],
+    [
+      snapshot,
+      searchQuery,
+      aiFeaturesEnabled,
+      developerToolsEnabled,
+      resolvedTransaction.data?.data,
+    ],
   );
   const searchListId = React.useId();
   const searchActiveId = searchResults[activeSearchIndex]?.id
@@ -1712,6 +1778,13 @@ function AppDashboardHeader({
         void navigate({
           to: "/connections/$connectionId",
           params: { connectionId: result.connectionId },
+        });
+        return;
+      }
+      if (result.to === "/transactions" && result.transactionId) {
+        void navigate({
+          to: "/transactions",
+          search: { tx: result.transactionId },
         });
         return;
       }
