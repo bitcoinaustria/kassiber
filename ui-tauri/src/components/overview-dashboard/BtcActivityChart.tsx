@@ -238,6 +238,18 @@ export const BtcActivityChart = ({
     setIncomingMarkerMinimumBtc(DEFAULT_INCOMING_MARKER_MIN_BTC);
     setOutgoingMarkerMinimumBtc(DEFAULT_OUTGOING_MARKER_MIN_BTC);
   }, []);
+  const openActivityPointTransaction = React.useCallback(
+    (point: unknown) => {
+      if (!onOpenTransactionDetail) return;
+      const payload =
+        (point as { payload?: TreasuryChartPoint } | null)?.payload ??
+        (point as TreasuryChartPoint | null);
+      const transactionId = payload?.eventTransactionId ?? payload?.eventId;
+      if (!transactionId) return;
+      onOpenTransactionDetail(transactionId);
+    },
+    [onOpenTransactionDetail],
+  );
   const activityMarkerMinimumForPoint = React.useCallback(
     (point: TreasuryChartPoint) => {
       if (point.eventFlow === "incoming") return incomingMarkerMinimumBtc;
@@ -835,6 +847,7 @@ export const BtcActivityChart = ({
                       dataKey="eventBalanceBtc"
                       name="Activity"
                       fill="transparent"
+                      onClick={openActivityPointTransaction}
                       shape={(props) => (
                         <ActivityScatterDot
                           {...props}
