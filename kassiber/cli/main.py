@@ -1808,6 +1808,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         help="Omit a verbose PDF section (repeatable).",
     )
+    source_funds_report.add_argument(
+        "--reveal-override",
+        action="append",
+        default=[],
+        metavar="TXID=show|hide",
+        help="Per-transaction reveal override (repeatable): '<tx-id>=show' or '<tx-id>=hide'.",
+    )
     source_funds_report.add_argument("--save-case", action="store_true")
     source_funds_report.add_argument("--case-label")
     source_funds_report.add_argument("--recipient")
@@ -3579,6 +3586,11 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     "amount_precision": args.amount_precision,
                     "mask_recipient": args.mask_recipient,
                     "omit_sections": args.omit_section,
+                    "reveal_overrides": dict(
+                        item.split("=", 1)
+                        for item in (args.reveal_override or [])
+                        if "=" in item
+                    ),
                 },
             )
             if args.format in {"table", "plain"}:

@@ -789,6 +789,9 @@ export function SourceFunds() {
   const [amountPrecision, setAmountPrecision] = useState<"btc" | "sats">("btc");
   const [maskRecipient, setMaskRecipient] = useState(false);
   const [omitSections, setOmitSections] = useState<string[]>([]);
+  const [revealOverrides, setRevealOverrides] = useState<
+    Record<string, "show" | "hide">
+  >({});
   const [selectedRecipientId, setSelectedRecipientId] = useState<string>(
     persistedDraft?.selectedRecipientId ?? "",
   );
@@ -942,6 +945,7 @@ export function SourceFunds() {
       amount_precision: amountPrecision,
       mask_recipient: maskRecipient,
       omit_sections: omitSections,
+      reveal_overrides: revealOverrides,
     },
   };
   const preview = useDaemon<SourceFundsPreview>(
@@ -2278,6 +2282,21 @@ export function SourceFunds() {
             <CardContent className="space-y-4 p-4 text-sm">
               <DisclosureNarrative report={report} />
               <DisclosureTxidList report={report} />
+              <DisclosureNodeOverrides
+                report={report}
+                overrides={revealOverrides}
+                onChange={(id, decision) =>
+                  setRevealOverrides((current) => {
+                    const next = { ...current };
+                    if (decision) {
+                      next[id] = decision;
+                    } else {
+                      delete next[id];
+                    }
+                    return next;
+                  })
+                }
+              />
               <DisclosureList
                 label="Evidence"
                 values={(report?.disclosure_preview.attachments ?? []).map(
@@ -3259,6 +3278,88 @@ function EmptyState({ text }: { text: string }) {
   return (
     <div className="rounded-md border px-3 py-6 text-center text-sm text-muted-foreground">
       {text}
+    </div>
+  );
+}
+
+function DisclosureNodeOverrides({
+  report,
+  overrides,
+  onChange,
+}: {
+  report?: SourceFundsPreview;
+  overrides: Record<string, "show" | "hide">;
+  onChange: (id: string, decision: "show" | "hide" | undefined) => void;
+}) {
+  const nodes = (report?.graph.nodes ?? []).filter(
+    (node) => stringValue(node.node_type) === "transaction",
+  );
+  if (nodes.length === 0) {
+    return null;
+  }
+  const buttonClass = (active: boolean, tone: "show" | "hide") =>
+    [
+      "rounded border px-2 py-0.5 text-[11px] transition-colors",
+      active
+        ? tone === "show"
+          ? "border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+          : "border-rose-500 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
+        : "text-muted-foreground hover:bg-muted/50",
+    ].join(" ");
+  return (
+    <div className="space-y-1">
+      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Per-transaction disclosure
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        Override the reveal mode for individual transactions. Changes update the
+        preview live and freeze into the exported case.
+      </p>
+      <div className="space-y-1">
+        {nodes.map((node) => {
+          const id = stringValue(node.transaction_id);
+          if (!id) {
+            return null;
+          }
+          const external = stringValue(node.external_id);
+          const decision = overrides[id];
+          return (
+            <div
+              key={id}
+              className="flex items-center justify-between gap-2 rounded-md border px-2 py-1"
+            >
+              <div className="min-w-0">
+                <div className="truncate text-xs">
+                  {stringValue(node.label) || id}
+                </div>
+                <div className="truncate font-mono text-[10px] text-muted-foreground">
+                  {external ? shortId(external) : "(redacted)"}
+                </div>
+              </div>
+              <div className="flex shrink-0 gap-1">
+                <button
+                  type="button"
+                  className={buttonClass(decision === "show", "show")}
+                  onClick={() =>
+                    onChange(id, decision === "show" ? undefined : "show")
+                  }
+                >
+                  Show
+                </button>
+                <button
+                  type="button"
+                  className={buttonClass(decision === "hide", "hide")}
+                  onClick={() =>
+                    onChange(id, decision === "hide" ? undefined : "hide")
+                  }
+                >
+                  Hide
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

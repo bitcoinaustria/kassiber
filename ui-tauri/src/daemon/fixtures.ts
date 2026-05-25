@@ -710,8 +710,8 @@ export const fixtures: Record<string, unknown> = {
     graph: {
       nodes: [
         { id: "source:1", node_type: "source", source_type: "fiat_purchase", label: "Reviewed exchange purchase", asset: "BTC" },
-        { id: "tx1", node_type: "transaction", label: "withdraw-1", wallet: "Exchange", asset: "BTC" },
-        { id: "tx2", node_type: "transaction", label: "target deposit", wallet: "Multisig Vault", asset: "BTC" },
+        { id: "tx1", node_type: "transaction", transaction_id: "tx1", external_id: SOURCE_FUNDS_FIXTURE_WITHDRAW_TXID, label: "withdraw-1", wallet: "Exchange", asset: "BTC" },
+        { id: "tx2", node_type: "transaction", transaction_id: "tx2", external_id: SOURCE_FUNDS_FIXTURE_TARGET_TXID, label: "target deposit", wallet: "Multisig Vault", asset: "BTC" },
       ],
       edges: [
         { id: "link:1", link_type: "manual_source", state: "reviewed", method: "manual", allocation_amount: 0.15, asset: "BTC", allocation_policy: "explicit" },
@@ -903,8 +903,8 @@ export const fixtures: Record<string, unknown> = {
     graph: {
       nodes: [
         { id: "source:1", node_type: "source", source_type: "fiat_purchase", label: "Reviewed exchange purchase", asset: "BTC" },
-        { id: "tx1", node_type: "transaction", label: "withdraw-1", wallet: "Exchange", asset: "BTC" },
-        { id: "tx2", node_type: "transaction", label: "target deposit", wallet: "Multisig Vault", asset: "BTC" },
+        { id: "tx1", node_type: "transaction", transaction_id: "tx1", external_id: SOURCE_FUNDS_FIXTURE_WITHDRAW_TXID, label: "withdraw-1", wallet: "Exchange", asset: "BTC" },
+        { id: "tx2", node_type: "transaction", transaction_id: "tx2", external_id: SOURCE_FUNDS_FIXTURE_TARGET_TXID, label: "target deposit", wallet: "Multisig Vault", asset: "BTC" },
       ],
       edges: [
         { id: "link:1", link_type: "manual_source", state: "reviewed", method: "manual", allocation_amount: 0.15, asset: "BTC", allocation_policy: "explicit" },
