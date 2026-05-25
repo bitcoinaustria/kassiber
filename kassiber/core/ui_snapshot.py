@@ -1684,9 +1684,13 @@ def build_transactions_resolve_snapshot(
             retryable=False,
         )
     query = query.strip()
-    normalized_query = query.lower()
-    row = conn.execute(
-        """
+    id_candidates = [query]
+    if query.lower() not in id_candidates:
+        id_candidates.append(query.lower())
+    external_id_candidates = list(id_candidates)
+    if query.upper() not in external_id_candidates:
+        external_id_candidates.append(query.upper())
+    select_sql = """
         SELECT
             t.id,
             t.external_id AS external_id,
@@ -1722,18 +1726,28 @@ def build_transactions_resolve_snapshot(
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
+    """
+    order_limit_sql = " ORDER BY t.occurred_at DESC, t.created_at DESC, t.id DESC LIMIT 1"
+    id_placeholders = ", ".join("?" for _ in id_candidates)
+    row = conn.execute(
+        select_sql
+        + f"""
         WHERE t.profile_id = ?
-          AND (
-            t.id = ?
-            OR t.external_id = ?
-            OR t.id = ?
-            OR t.external_id = ?
-          )
-        ORDER BY t.occurred_at DESC, t.created_at DESC, t.id DESC
-        LIMIT 1
+          AND t.id IN ({id_placeholders})
         """,
-        (context["profile_id"], query, query, normalized_query, normalized_query),
+        (context["profile_id"], *id_candidates),
     ).fetchone()
+    if row is None:
+        external_id_placeholders = ", ".join("?" for _ in external_id_candidates)
+        row = conn.execute(
+            select_sql
+            + f"""
+            WHERE t.profile_id = ?
+              AND t.external_id IN ({external_id_placeholders})
+            """
+            + order_limit_sql,
+            (context["profile_id"], *external_id_candidates),
+        ).fetchone()
     transaction = _transaction_rows_to_ui(conn, [row])[0] if row else None
     return {"transaction": transaction, "query": query}
 

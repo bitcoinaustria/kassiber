@@ -594,15 +594,36 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(transactions["txs"][1]["amountSat"], 100_000_000)
         self.assertEqual(transactions["txs"][1]["eur"], 50_000)
 
-        resolved_by_txid = build_transactions_resolve_snapshot(conn, {"query": "a" * 64})
+        resolved_by_txid = build_transactions_resolve_snapshot(conn, {"query": "A" * 64})
         self.assertEqual(resolved_by_txid["transaction"]["id"], "tx-ui-in")
         self.assertEqual(resolved_by_txid["transaction"]["explorerId"], "a" * 64)
+
+        conn.execute(
+            "UPDATE transactions SET external_id = ? WHERE id = ?",
+            ("A" * 64, "tx-ui-in"),
+        )
+        conn.commit()
+        resolved_by_lower_txid = build_transactions_resolve_snapshot(
+            conn,
+            {"query": "a" * 64},
+        )
+        self.assertEqual(resolved_by_lower_txid["transaction"]["id"], "tx-ui-in")
+        self.assertEqual(resolved_by_lower_txid["transaction"]["explorerId"], "A" * 64)
 
         resolved_by_id = build_transactions_resolve_snapshot(conn, {"query": "tx-ui-spend"})
         self.assertEqual(resolved_by_id["transaction"]["id"], "tx-ui-spend")
 
         missing = build_transactions_resolve_snapshot(conn, {"query": "b" * 64})
         self.assertIsNone(missing["transaction"])
+
+        with self.assertRaises(AppError) as empty_query:
+            build_transactions_resolve_snapshot(conn, {"query": "  "})
+        self.assertEqual(empty_query.exception.code, "validation")
+
+        with self.assertRaises(AppError) as unknown_filter:
+            build_transactions_resolve_snapshot(conn, {"query": "tx-ui-spend", "limit": 1})
+        self.assertEqual(unknown_filter.exception.code, "validation")
+        self.assertEqual(unknown_filter.exception.details, {"unknown": ["limit"]})
 
     def test_overview_connection_balances_use_raw_wallet_transactions_when_journals_are_partial(self):
         conn = open_db(self.data_root)
