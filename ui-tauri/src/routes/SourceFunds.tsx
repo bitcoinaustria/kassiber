@@ -24,6 +24,13 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { type Transaction } from "@/components/transactions";
 import { TransactionDetailController } from "@/components/transactions/dashboard/TransactionDetailController";
 import { toDashboardTransaction } from "@/components/transactions/dashboard/model";
@@ -616,18 +623,18 @@ function ReportControlFields({
         />
       </Field>
       <Field label="Reveal" htmlFor="sof-reveal">
-        <select
-          id="sof-reveal"
-          className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-          value={revealMode}
-          onChange={(event) => onRevealModeChange(event.target.value)}
-        >
-          {REVEAL_MODES.map((mode) => (
-            <option key={mode} value={mode}>
-              {pretty(mode)}
-            </option>
-          ))}
-        </select>
+        <Select value={revealMode} onValueChange={onRevealModeChange}>
+          <SelectTrigger id="sof-reveal" className="h-10 w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {REVEAL_MODES.map((mode) => (
+              <SelectItem key={mode} value={mode}>
+                {pretty(mode)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </Field>
     </>
   );
