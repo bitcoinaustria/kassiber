@@ -148,7 +148,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 
 ## Command surface
 
-- `init`, `status`, `daemon`, `context {show,current,set}`
+- `init`, `status`, `daemon`, `chat`, `context {show,current,set}`
 - `secrets {init,init-resume,change-passphrase,verify,status,migrate-credentials}`
 - `backup {export,import}`
 - `workspaces {list,create}`
@@ -168,7 +168,8 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `rates {pairs,sync,rebuild,latest,range,set}`
 - `diagnostics {collect}`
 - `ai providers {list,get,create,update,delete,set-default,clear-default}`
-- `ai {models,chat}`
+- `ai {models,chat}` — provider/model management plus legacy provider-only chat;
+  use top-level `chat` for the daemon-backed tool loop with consent/cancel parity.
 
 ## Pagination
 
@@ -336,6 +337,7 @@ uv run python -m kassiber reports export-austrian-e1kv-csv --help
 uv run python -m kassiber reports balance-history --help
 uv run python -m kassiber rates --help
 uv run python -m kassiber diagnostics collect --help
+uv run python -m kassiber chat --help
 uv run python -m kassiber ai --help
 uv run python -m kassiber ai providers --help
 uv run python -m kassiber ai providers create --help

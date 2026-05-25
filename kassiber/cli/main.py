@@ -118,6 +118,7 @@ from ..secrets.cli_input import (
 )
 from ..tax_policy import supported_tax_countries
 from ..wallet_descriptors import MAX_DESCRIPTOR_GAP_LIMIT
+from .chat import run_chat_command
 
 
 _AI_PROVIDER_KINDS_LIST = AI_PROVIDER_KINDS
@@ -456,6 +457,48 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("daemon")
     sub.add_parser("init")
     sub.add_parser("status")
+
+    chat = sub.add_parser(
+        "chat",
+        description="Interactive daemon-backed Kassiber AI assistant.",
+    )
+    chat.add_argument("prompt", nargs="?", help="One-shot prompt. Omit for REPL mode.")
+    chat.add_argument("--prompt", dest="prompt_text", help="One-shot prompt text.")
+    chat.add_argument("--provider", help="Provider name (defaults to the stored default)")
+    chat.add_argument("--model", help="Model id (defaults to the provider's default_model)")
+    chat.add_argument("--temperature", type=float)
+    chat.add_argument("--max-tokens", type=int)
+    chat.add_argument(
+        "--reasoning-effort",
+        choices=("auto", "low", "medium", "high"),
+        default="auto",
+        help="Forward a provider-specific reasoning effort option when supported.",
+    )
+    chat.add_argument(
+        "--tool-loop-max-iterations",
+        type=int,
+        default=8,
+        help="Maximum daemon tool-loop iterations for one assistant turn.",
+    )
+    chat.add_argument(
+        "--no-tools",
+        action="store_true",
+        help="Disable daemon AI tools for this chat.",
+    )
+    chat.add_argument(
+        "--yes",
+        action="store_true",
+        help="Non-interactively allow mutating AI tools for this chat session.",
+    )
+    chat.add_argument(
+        "--allow-tool",
+        action="append",
+        help=(
+            "Non-interactively allow only this mutating tool name; repeat or "
+            "pass comma-separated names. Other mutating tools still prompt on a TTY "
+            "or deny without one."
+        ),
+    )
 
     add_secrets_parser(sub)
     add_backup_parser(sub)
@@ -1743,6 +1786,11 @@ def build_parser() -> argparse.ArgumentParser:
 def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
     if args.command == "daemon":
         return daemon_runtime.run(conn, args)
+    if args.command == "chat":
+        result = run_chat_command(args)
+        if args.format == "json":
+            return emit(args, result.to_payload(), kind="chat")
+        return None
     if args.command == "init":
         return cmd_init(conn, args)
     if args.command == "status":
@@ -3305,6 +3353,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
 
 def command_needs_db(args: argparse.Namespace) -> bool:
     if args.command == "daemon":
+        return False
+    if args.command == "chat":
         return False
     if args.command == "backends" and getattr(args, "backends_command", None) == "kinds":
         return False

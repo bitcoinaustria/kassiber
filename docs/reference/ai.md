@@ -18,8 +18,8 @@ Two surfaces ship today:
   assistants.
 - An **in-app assistant** in the desktop UI that streams chat from an
   OpenAI-compatible endpoint or fixed Claude/Codex CLI adapter, plus a
-  parallel CLI surface (`kassiber ai providers …`, `kassiber ai models`,
-  `kassiber ai chat`) that reuses the same provider config.
+  parallel CLI surface (`kassiber chat`, `kassiber ai providers …`,
+  `kassiber ai models`) that reuses the same provider config.
 
 The repo-local skill helps an AI assistant use the Kassiber CLI safely and
 correctly for:
@@ -138,8 +138,22 @@ printf '%s\n' "$OPENAI_API_KEY" | kassiber ai providers create openai --base-url
 kassiber ai providers create claude-cli --base-url claude-cli://default --kind remote --acknowledge --default-model default
 kassiber ai providers set-default openai
 kassiber ai models
-kassiber ai chat "Summarise the last week of imports."
+kassiber chat "Summarise the last week of imports."
+kassiber chat
 ```
+
+`kassiber chat` is the CLI client for the same daemon-backed assistant used by
+the desktop UI. It starts a local daemon transport, sends `ai.chat` requests
+with `tools_enabled=true`, renders streaming deltas in the terminal, and sends
+`ai.tool_call.consent` decisions when mutating tools ask for approval. Omit the
+prompt for REPL mode; pass a prompt positionally or with `--prompt` for one
+turn. `kassiber ai chat` remains a provider-only compatibility command and
+does not run the daemon tool loop.
+
+For automation, `kassiber chat --yes "..."` approves mutating tool requests for
+that chat session without prompting. Prefer the narrower
+`--allow-tool ui.journals.process` form when a script should approve only one
+tool; unlisted mutating tools are denied without a TTY.
 
 Provider API-key entry supports `--api-key-stdin` and `--api-key-fd FD`. The
 legacy `--api-key <value>` form still works as a warning-on-use compatibility
@@ -198,7 +212,8 @@ with phases such as `preparing`, `connecting`, and `waiting_for_model`. These
 records are UI progress hints only; chain-of-thought is shown only when the
 provider emits inline `<think>` content or structured `reasoning` deltas.
 
-Pressing **Stop** sends `ai.chat.cancel` with
+Pressing **Stop** in the desktop UI, choosing cancel at a terminal consent
+prompt, or interrupting `kassiber chat` sends `ai.chat.cancel` with
 `args.target_request_id = <active ai.chat request_id>`. Cancellation is
 best-effort and cooperative: Kassiber stops forwarding deltas once the Python
 worker returns between provider chunks, then emits the terminal `ai.chat`
@@ -207,7 +222,7 @@ tokens already generated or in flight may still be billed.
 
 ## Tool use
 
-The in-app assistant can opt into a bounded tool loop with
+The desktop assistant and `kassiber chat` opt into a bounded tool loop with
 `ai.chat` top-level args:
 
 ```json
