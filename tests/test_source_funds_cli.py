@@ -1014,6 +1014,160 @@ class SourceFundsCliTest(unittest.TestCase):
         self.assertEqual(exported["snapshot_hash"], preview["case"]["snapshot_hash"])
         self.assertTrue(pdf_path.exists())
 
+    def test_export_bundle_ships_pdf_evidence_and_manifest(self):
+        """The bundle export zips the report PDF plus the original evidence
+        files attached to disclosed sources, with a SHA-256 manifest. In
+        ``standard`` reveal mode files are included; in ``labels_only`` the
+        files are withheld and only recorded as withheld in the manifest."""
+        import hashlib
+        import zipfile
+
+        self._seed_exportable_disclosure_path()
+
+        # standard mode: original evidence files are bundled.
+        preview = self._source_funds_report(reveal_mode="standard", save_case=True)
+        self.assertTrue(
+            preview["explain_gates"]["exportable"],
+            preview["explain_gates"]["blockers"],
+        )
+        bundle_path = self.root / "bundle.zip"
+        exported = self.cli(
+            "reports",
+            "export-source-funds-bundle",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--case",
+            preview["case"]["id"],
+            "--file",
+            str(bundle_path),
+        )["data"]
+        self.assertEqual(exported["format"], "zip")
+        self.assertEqual(exported["scope"], "source_funds")
+        self.assertEqual(exported["snapshot_hash"], preview["case"]["snapshot_hash"])
+        self.assertGreaterEqual(exported["evidence_files"], 1)
+        self.assertTrue(bundle_path.exists())
+
+        with zipfile.ZipFile(bundle_path) as archive:
+            names = set(archive.namelist())
+            self.assertIn("source-of-funds-report.pdf", names)
+            self.assertIn("manifest.json", names)
+            manifest = json.loads(archive.read("manifest.json"))
+            self.assertEqual(manifest["kind"], "kassiber.source_funds.bundle.manifest")
+            self.assertEqual(manifest["reveal_mode"], "standard")
+            self.assertEqual(
+                manifest["snapshot_hash"], preview["case"]["snapshot_hash"]
+            )
+            pdf_bytes = archive.read("source-of-funds-report.pdf")
+            self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+            self.assertEqual(
+                hashlib.sha256(pdf_bytes).hexdigest(),
+                manifest["report_pdf"]["sha256"],
+            )
+            file_items = [e for e in manifest["evidence"] if e.get("source") == "file"]
+            self.assertGreaterEqual(len(file_items), 1)
+            for item in file_items:
+                self.assertIn(item["filename"], names)
+                self.assertEqual(
+                    hashlib.sha256(archive.read(item["filename"])).hexdigest(),
+                    item["sha256"],
+                )
+            url_items = [e for e in manifest["evidence"] if e.get("source") == "url"]
+            self.assertTrue(
+                any(
+                    "exchange.example" in (item.get("source_url") or "")
+                    for item in url_items
+                )
+            )
+
+        # labels_only mode: evidence files are withheld by reveal mode.
+        preview_lo = self._source_funds_report(reveal_mode="labels_only", save_case=True)
+        bundle_lo = self.root / "bundle-labels-only.zip"
+        exported_lo = self.cli(
+            "reports",
+            "export-source-funds-bundle",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--case",
+            preview_lo["case"]["id"],
+            "--file",
+            str(bundle_lo),
+        )["data"]
+        self.assertEqual(exported_lo["evidence_files"], 0)
+        with zipfile.ZipFile(bundle_lo) as archive:
+            names = set(archive.namelist())
+            self.assertFalse(any(name.startswith("evidence/") for name in names))
+            manifest = json.loads(archive.read("manifest.json"))
+            self.assertTrue(
+                all(
+                    item.get("source") == "withheld_by_reveal_mode"
+                    for item in manifest["evidence"]
+                )
+            )
+
+    def test_report_options_precision_masking_and_section_omission(self):
+        """Advanced report options (amount precision, recipient masking, and
+        section omission) normalize into the snapshot and shape the PDF."""
+        import shutil
+        import subprocess
+
+        self._seed_exportable_disclosure_path()
+        report = self.cli(
+            "reports",
+            "source-funds",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            "disclosure-target",
+            "--target-amount",
+            "0.10000000",
+            "--reveal-mode",
+            "standard",
+            "--amount-precision",
+            "sats",
+            "--mask-recipient",
+            "--omit-section",
+            "graph_nodes",
+            "--omit-section",
+            "flow_links",
+            "--save-case",
+        )["data"]
+        options = report["report_options"]
+        self.assertEqual(options["amount_precision"], "sats")
+        self.assertTrue(options["mask_recipient"])
+        self.assertEqual(set(options["omit_sections"]), {"graph_nodes", "flow_links"})
+
+        pdf_path = self.root / "options.pdf"
+        self.cli(
+            "reports",
+            "export-source-funds-pdf",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--case",
+            report["case"]["id"],
+            "--file",
+            str(pdf_path),
+        )
+        if shutil.which("pdftotext"):
+            extracted = subprocess.run(
+                ["pdftotext", "-layout", str(pdf_path), "-"],
+                check=True,
+                text=True,
+                capture_output=True,
+            ).stdout
+            self.assertIn("sats", extracted)
+            self.assertIn("(recipient masked)", extracted)
+            self.assertNotIn("Disclosure Graph Nodes", extracted)
+            self.assertNotIn("Reviewed Flow Links", extracted)
+            self.assertIn("Source of Funds Overview", extracted)
+
     def test_austrian_eur_basic_source_funds_pdf_context(self):
         exchange_withdraw_txid = "4e9f0b7d8c6a5b4c3d2e1f0099887766554433221100ffeeddccbbaa99887766"
         cold_consolidation_txid = "6f1e2d3c4b5a69788776655443322110ffeeddccbbaa00998877665544332211"

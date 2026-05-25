@@ -213,9 +213,23 @@ source-of-funds documents:
 The shipped local report envelope now carries those sections as structured
 fields instead of PDF-only prose: `overview`, `narrative`, `data_sources`,
 `simplified_flow`, `flow_levels`, `source_mix`, `graph`, `findings`,
-`disclosure_preview`, and `report_context`. The narrative and simplified chart
-model are generated deterministically from the saved review graph on the user's
-machine. They must not call an external AI service or upgrade weak heuristics
+`disclosure_preview`, `report_context`, and (when requested) `diagrams`. The
+narrative and simplified chart model are generated deterministically from the
+saved review graph on the user's machine.
+
+Diagrams are rendered by a single on-device substrate
+([kassiber/core/source_funds_diagram.py](../../kassiber/core/source_funds_diagram.py)):
+one `reportlab.graphics` `Drawing` per chart (a weighted Sankey-style
+simplified flow with value-share edge percentages and a Bitcoin-native legend,
+plus source-mix and data-source donut rings). The same builder renders the
+native-vector chart embedded in the PDF and a web-safe SVG string for the
+desktop disclosure preview, so the two cannot drift. SVG rendering is opt-in
+via `build_report(..., include_diagrams=True)`; the `compute_coverage` sweep
+leaves it off so its repeated per-transaction `build_report` calls never pay for
+chart rendering. When `include_diagrams` is set the `diagrams` SVGs are frozen
+into the case snapshot alongside the rest of the disclosure payload. `simplified_flow`
+edges now also carry `percent_of_target` (target amount = 100% base; trading
+gains/losses and fees are never folded into source percentages). They must not call an external AI service or upgrade weak heuristics
 into proof. The simplified chart follows reviewed local sources, wallet
 transfers, and consolidation-style reviewed hops. CoinJoin/PayJoin traversal is
 deferred for now and rendered as an explicit privacy boundary, not as proof
@@ -351,6 +365,39 @@ The first implementation adds the conservative, testable core path:
 - PDF sections for source overview, local narrative, data-source rollups, source
   mix, a simplified boxes-and-arrows flow path, level-by-level flow rows,
   transaction details, review gates, disclosure preview, and limitations
+- a single on-device diagram substrate
+  ([kassiber/core/source_funds_diagram.py](../../kassiber/core/source_funds_diagram.py))
+  that renders a weighted Sankey-style simplified flow (value-share edge
+  percentages, Bitcoin-native legend) plus source-mix / data-source donut rings,
+  emitted both as native-vector PDF charts and as web-safe SVG strings frozen in
+  the case snapshot; the desktop Export step embeds those same SVGs so the
+  preview matches the PDF, and the cover gains an at-a-glance strip and mini-flow
+- advanced, snapshot-frozen presentation options via `build_report(...,
+  report_options=...)`, stored as `envelope["report_options"]`. The first option
+  is `diagram_detail` (`summary` clusters long paths; `detailed` shows more hops
+  before clustering), exposed as `reports source-funds --diagram-detail`, the
+  daemon `report_options` arg, and a desktop Export-step control. The same
+  normalize-store-freeze pattern now also carries `amount_precision`
+  (`btc`/`sats`), `mask_recipient`, and `omit_sections` (verbose PDF sections
+  from `OPTIONAL_REPORT_SECTIONS`), each exposed via `reports source-funds`
+  flags (`--amount-precision`, `--mask-recipient`, `--omit-section`) and
+  Export-step controls. Further options should follow the same pattern so
+  simple UX stays the default
+- a recipient-ready evidence bundle: `reports export-source-funds-bundle --case
+  ...` (and the `ui.source_funds.export_bundle` daemon kind) zips the report PDF,
+  the original evidence files attached to disclosed sources, and a SHA-256
+  `manifest.json`. It reuses the same export gate as the PDF and is reveal-mode
+  scoped: `standard`/`full` include the files, `labels_only`/`minimal` record
+  them as `withheld_by_reveal_mode`. The report references originals by hash; it
+  never transcribes them (`attachments.resolve_attachment_files` resolves the
+  on-disk files).
+- a desktop target picker rendered as the transaction table (parity with the
+  Transactions screen) and the shared, editable transaction detail panel
+  ([TransactionDetailController](../../ui-tauri/src/components/transactions/dashboard/TransactionDetailController.tsx))
+  wired into the workflow: the picker's details affordance, review-step gate
+  findings, and flow-path transaction nodes all open it. Because daemon
+  mutations invalidate the source-of-funds queries, fixing pricing / exclusion /
+  evidence there re-evaluates the gates, coverage, and source mix automatically.
 - a basic Austrian/EUR report context with bilingual title, evidence checklist,
   and a checked-in fictitious demo generator at
   `scripts/generate-source-funds-demo-report.py`

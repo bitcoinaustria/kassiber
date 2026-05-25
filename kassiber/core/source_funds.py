@@ -20,6 +20,13 @@ from .source_funds_hints import enrich_findings_with_next_steps
 
 REVEAL_MODES = ("labels_only", "minimal", "standard", "full")
 REPORT_PURPOSES = ("existing_transaction", "planned_exchange_sale")
+# Verbose PDF sections that the advanced panel can omit for a leaner report.
+OPTIONAL_REPORT_SECTIONS = (
+    "flow_levels",
+    "transaction_details",
+    "flow_links",
+    "graph_nodes",
+)
 SOURCE_TYPES = (
     "fiat_purchase",
     "exchange_withdrawal",
@@ -327,6 +334,37 @@ def _mapping_value(row: Mapping[str, Any], key: str, default: Any = "") -> Any:
     if hasattr(row, "get"):
         return row.get(key, default)
     return default
+
+
+def _normalize_report_options(report_options: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Normalize advanced, snapshot-frozen presentation options.
+
+    Defaults keep the simple path; everything here is meant to live behind the
+    desktop advanced panel. Unknown values fall back to the safe default.
+    """
+    options = report_options or {}
+    detail = str(options.get("diagram_detail") or "summary").strip().lower()
+    if detail not in ("summary", "detailed"):
+        detail = "summary"
+    precision = str(options.get("amount_precision") or "btc").strip().lower()
+    if precision not in ("btc", "sats"):
+        precision = "btc"
+    raw_omit = options.get("omit_sections") or []
+    if isinstance(raw_omit, str):
+        raw_omit = [raw_omit]
+    omit_sections = sorted(
+        {
+            str(item).strip().lower()
+            for item in raw_omit
+            if str(item).strip().lower() in OPTIONAL_REPORT_SECTIONS
+        }
+    )
+    return {
+        "diagram_detail": detail,
+        "amount_precision": precision,
+        "mask_recipient": bool(options.get("mask_recipient")),
+        "omit_sections": omit_sections,
+    }
 
 
 def _report_context(profile: Mapping[str, Any]) -> dict[str, Any]:
@@ -1873,11 +1911,16 @@ def _build_simplified_flow(report: Mapping[str, Any]) -> dict[str, Any]:
             }
         )
 
+    target_amount_msat = target.get("required_amount_msat") or target.get("amount_msat")
     simplified_edges = []
     for edge in edges:
         parent = str(edge.get("from") or "")
         child = str(edge.get("to") or "")
         if parent in included and child in included:
+            allocation_msat = edge.get("allocation_amount_msat")
+            percent_of_target = None
+            if target_amount_msat and allocation_msat is not None:
+                percent_of_target = round((allocation_msat / target_amount_msat) * 100, 4)
             simplified_edges.append(
                 {
                     "id": edge.get("id", ""),
@@ -1886,7 +1929,8 @@ def _build_simplified_flow(report: Mapping[str, Any]) -> dict[str, Any]:
                     "link_type": edge.get("link_type", ""),
                     "asset": edge.get("asset", ""),
                     "amount": edge.get("allocation_amount"),
-                    "amount_msat": edge.get("allocation_amount_msat"),
+                    "amount_msat": allocation_msat,
+                    "percent_of_target": percent_of_target,
                     "deferred_privacy_hop": edge.get("link_type") in PRIVACY_LINK_TYPES,
                 }
             )
@@ -1981,6 +2025,70 @@ def _add_report_shape(envelope: dict[str, Any]) -> None:
     }
 
 
+def attach_diagram_svgs(envelope: dict[str, Any]) -> None:
+    """Render the flow + rollup diagrams to frozen, embeddable SVG strings.
+
+    Called only when a diagram is actually shown (report preview, case save,
+    PDF export) so the hot ``compute_coverage`` path never pays for SVG
+    rendering. PDF and GUI derive from the same builder applied to the same
+    frozen ``simplified_flow`` data, so the embedded SVG matches the export.
+    """
+    from .._pdf_common import register_fonts, require_reportlab
+    from . import source_funds_diagram as diagram
+
+    rl = require_reportlab("Source-of-funds diagram")
+    rl["rl_config"].warnOnMissingFontGlyphs = 0
+    fonts = register_fonts(rl)
+    width = 500.0
+    overview = envelope.get("overview") or {}
+    options = envelope.get("report_options") or {}
+    max_levels, max_nodes = diagram.detail_thresholds(options.get("diagram_detail"))
+    diagrams: dict[str, Any] = {}
+
+    flow = envelope.get("simplified_flow") or {}
+    if flow.get("levels"):
+        diagrams["flow_svg"] = diagram.render_drawing_to_svg(
+            rl,
+            fonts,
+            diagram.build_flow_drawing(
+                rl, fonts, flow, width=width, max_levels=max_levels, max_nodes=max_nodes
+            ),
+        )
+
+    mix_segments = diagram.source_mix_segments(envelope)
+    if mix_segments:
+        diagrams["source_mix_ring_svg"] = diagram.render_drawing_to_svg(
+            rl,
+            fonts,
+            diagram.build_ring_drawing(
+                rl,
+                fonts,
+                mix_segments,
+                center_value=f"{float(overview.get('target_amount') or 0):.8f}",
+                center_label=f"{overview.get('target_asset') or 'BTC'} explained",
+                width=width,
+            ),
+        )
+
+    data_segments = diagram.data_source_segments(envelope)
+    if data_segments:
+        total_tx = int(sum(segment["value"] for segment in data_segments))
+        diagrams["data_source_ring_svg"] = diagram.render_drawing_to_svg(
+            rl,
+            fonts,
+            diagram.build_ring_drawing(
+                rl,
+                fonts,
+                data_segments,
+                center_value=str(total_tx),
+                center_label="transactions",
+                width=width,
+            ),
+        )
+
+    envelope["diagrams"] = diagrams
+
+
 def build_report(
     conn: sqlite3.Connection,
     workspace_ref: str | None,
@@ -1997,6 +2105,8 @@ def build_report(
     save_case: bool = False,
     case_label: str | None = None,
     recipient_ref: str | None = None,
+    include_diagrams: bool = False,
+    report_options: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     if max_depth <= 0:
         max_depth = 1
@@ -2401,6 +2511,7 @@ def build_report(
         "workspace": workspace["label"],
         "profile": profile["label"],
         "report_context": _report_context(profile),
+        "report_options": _normalize_report_options(report_options),
         "purpose": {
             "type": purpose,
             "label": "Planned exchange sale" if purpose == "planned_exchange_sale" else "Already completed transaction",
@@ -2473,6 +2584,8 @@ def build_report(
             "default_reveal_mode": recipient["default_reveal_mode"],
         }
     _add_report_shape(envelope)
+    if include_diagrams:
+        attach_diagram_svgs(envelope)
     if save_case:
         case = save_case_snapshot(
             conn,
@@ -2642,7 +2755,7 @@ def build_report_lines(report: Mapping[str, Any], hooks: SourceFundsHooks) -> li
             f"Profile:         {report['profile']}",
             f"Purpose:         {report.get('purpose', {}).get('label', 'Already completed transaction')}",
             f"Reveal mode:     {report['reveal_mode']}",
-            f"{'Funds anchor' if report.get('purpose', {}).get('type') == 'planned_exchange_sale' else 'Target'}:          {target['label']}",
+            f"{'Bitcoin being sold' if report.get('purpose', {}).get('type') == 'planned_exchange_sale' else 'Target'}:          {target['label']}",
             f"{'Planned amount' if report.get('purpose', {}).get('type') == 'planned_exchange_sale' else 'Target amount'}:   {target['required_amount']:.8f} {target['asset']}",
             f"Exportable:      {report['explain_gates']['exportable']}",
             "",
@@ -2832,3 +2945,213 @@ def export_pdf(
         }
     )
     return result
+
+
+def _sha256_file(path: Any) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _bundle_safe_name(label: str, original: str, suffix: str, used: set[str]) -> str:
+    base = (original or label or "evidence").strip()
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", base).strip("._") or "evidence"
+    stem, _, ext = cleaned.rpartition(".")
+    if ext and not stem:
+        stem, ext = cleaned, ""
+    if not ext and suffix:
+        ext = suffix.lstrip(".")
+    candidate = f"{stem or cleaned}.{ext}" if ext else (stem or cleaned)
+    index = 2
+    final = candidate
+    while final in used:
+        if ext:
+            final = f"{stem or cleaned}-{index}.{ext}"
+        else:
+            final = f"{candidate}-{index}"
+        index += 1
+    used.add(final)
+    return final
+
+
+def export_bundle(
+    conn: sqlite3.Connection,
+    workspace_ref: str | None,
+    profile_ref: str | None,
+    file_path: str,
+    hooks: SourceFundsHooks,
+    *,
+    data_root: str,
+    case_ref: str | None = None,
+) -> dict[str, Any]:
+    """Export a recipient-ready ZIP: the report PDF + the original evidence files.
+
+    The bundle ships the actual files the user attached to the disclosed
+    sources (not a Kassiber transcription), plus a ``manifest.json`` of
+    SHA-256 hashes so the recipient can verify the originals are untampered.
+    Evidence files are included only when the reveal mode discloses them
+    (``standard``/``full``); ``labels_only``/``minimal`` ship the PDF and a
+    manifest that records the evidence was withheld by reveal mode.
+    """
+    import shutil
+    import tempfile
+    import zipfile
+    from pathlib import Path as _Path
+
+    from .attachments import resolve_attachment_files
+
+    if not case_ref:
+        raise AppError(
+            "export-source-funds-bundle requires --case from a saved source-funds preview",
+            code="validation",
+            hint=(
+                "Run `reports source-funds --save-case ...` first, review the "
+                "disclosure preview, then export that case id as a bundle."
+            ),
+        )
+    report = load_case_snapshot(conn, workspace_ref, profile_ref, hooks, case_ref)
+    if not report["explain_gates"]["exportable"]:
+        raise AppError(
+            "Source-of-funds bundle export is blocked by unresolved review gates",
+            code="export_blocked",
+            hint="Run `reports source-funds --machine ...` and resolve every explain_gates.blockers item.",
+            details={"blockers": report["explain_gates"]["blockers"]},
+            retryable=False,
+        )
+
+    snapshot_hash = _snapshot_hash(report)
+    reveal_mode = _normalize_reveal_mode(report.get("reveal_mode"))
+    include_files = reveal_mode in {"standard", "full"}
+    generated_at = _now()
+
+    out_path = _Path(str(file_path)).expanduser()
+    if out_path.suffix.lower() != ".zip":
+        out_path = out_path.with_suffix(".zip")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    disclosed = list(report.get("disclosure_preview", {}).get("attachments") or [])
+    attachment_ids = [
+        str(item.get("id"))
+        for item in disclosed
+        if isinstance(item, Mapping) and item.get("id")
+    ]
+    resolved = (
+        resolve_attachment_files(conn, data_root, attachment_ids)
+        if (include_files and attachment_ids)
+        else {}
+    )
+
+    evidence_manifest: list[dict[str, Any]] = []
+    used_names: set[str] = set()
+    file_count = 0
+    url_count = 0
+    withheld_count = 0
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp = _Path(tmp_dir)
+        pdf_path = tmp / "source-of-funds-report.pdf"
+        write_source_funds_pdf(
+            str(pdf_path),
+            report=report,
+            generated_at=generated_at,
+            snapshot_hash=snapshot_hash,
+        )
+        pdf_sha = _sha256_file(pdf_path)
+        evidence_dir = tmp / "evidence"
+
+        for item in disclosed:
+            if not isinstance(item, Mapping):
+                continue
+            label = str(item.get("label") or "evidence")
+            attachment_type = str(item.get("attachment_type") or "")
+            info = resolved.get(str(item.get("id"))) if item.get("id") else None
+            if not include_files:
+                withheld_count += 1
+                evidence_manifest.append(
+                    {"label": label, "attachment_type": attachment_type, "source": "withheld_by_reveal_mode", "sha256": ""}
+                )
+                continue
+            if info and info.get("resolved_path"):
+                evidence_dir.mkdir(parents=True, exist_ok=True)
+                source = _Path(info["resolved_path"])
+                fname = _bundle_safe_name(label, info.get("original_filename") or "", source.suffix, used_names)
+                shutil.copy2(source, evidence_dir / fname)
+                sha = info.get("sha256") or _sha256_file(evidence_dir / fname)
+                evidence_manifest.append(
+                    {
+                        "label": label,
+                        "attachment_type": attachment_type,
+                        "source": "file",
+                        "filename": f"evidence/{fname}",
+                        "media_type": info.get("media_type") or "",
+                        "sha256": sha,
+                    }
+                )
+                file_count += 1
+            elif (info and info.get("url")) or item.get("source_url"):
+                evidence_manifest.append(
+                    {
+                        "label": label,
+                        "attachment_type": attachment_type,
+                        "source": "url",
+                        "source_url": (info.get("url") if info else None) or item.get("source_url") or "",
+                        "sha256": "",
+                    }
+                )
+                url_count += 1
+            else:
+                withheld_count += 1
+                evidence_manifest.append(
+                    {"label": label, "attachment_type": attachment_type, "source": "unavailable", "sha256": ""}
+                )
+
+        manifest = {
+            "kind": "kassiber.source_funds.bundle.manifest",
+            "schema_version": 1,
+            "generated_at": generated_at,
+            "workspace": report.get("workspace", ""),
+            "profile": report.get("profile", ""),
+            "case_id": (report.get("case") or {}).get("id") or case_ref,
+            "snapshot_hash": snapshot_hash,
+            "reveal_mode": reveal_mode,
+            "report_pdf": {"filename": "source-of-funds-report.pdf", "sha256": pdf_sha},
+            "evidence": evidence_manifest,
+            "note": (
+                "This bundle contains the Kassiber source-of-funds report and the original "
+                "evidence files attached to the disclosed sources. Verify each SHA-256 against "
+                "the report's Disclosure Preview. Kassiber references originals; it does not "
+                "transcribe or recompute them."
+            ),
+        }
+        manifest_path = tmp / "manifest.json"
+        manifest_path.write_text(
+            json.dumps(json_ready(manifest), indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+
+        if out_path.exists():
+            out_path.unlink()
+        with zipfile.ZipFile(out_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.write(pdf_path, "source-of-funds-report.pdf")
+            archive.write(manifest_path, "manifest.json")
+            if evidence_dir.exists():
+                for evidence_file in sorted(evidence_dir.iterdir()):
+                    archive.write(evidence_file, f"evidence/{evidence_file.name}")
+
+    return {
+        "file": str(out_path.resolve()),
+        "bytes": out_path.stat().st_size,
+        "format": "zip",
+        "scope": "source_funds",
+        "snapshot_hash": snapshot_hash,
+        "reveal_mode": reveal_mode,
+        "case_id": (report.get("case") or {}).get("id") or case_ref,
+        "target_transaction_id": report["target"]["transaction_id"],
+        "evidence_files": file_count,
+        "evidence_urls": url_count,
+        "evidence_withheld": withheld_count,
+        "evidence_total": len(evidence_manifest),
+        "exportable": True,
+    }

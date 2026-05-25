@@ -16,6 +16,14 @@ from ._pdf_common import (
     require_reportlab,
 )
 
+from .core.source_funds_diagram import (
+    build_flow_drawing,
+    build_ring_drawing,
+    data_source_segments,
+    detail_thresholds,
+    source_mix_segments,
+)
+
 
 def _btc(value: Any) -> str:
     return f"{_decimal(value).quantize(Decimal('0.00000001')):.8f}"
@@ -80,193 +88,6 @@ def _explorer_links_by_txid(report: Mapping[str, Any]) -> dict[str, Mapping[str,
     }
 
 
-def _fit_canvas_text(canvas: Any, text: Any, max_width: float, font: str, size: float) -> str:
-    rendered = str(text or "")
-    if canvas.stringWidth(rendered, font, size) <= max_width:
-        return rendered
-    suffix = "..."
-    available = max_width - canvas.stringWidth(suffix, font, size)
-    if available <= 0:
-        return suffix
-    while rendered and canvas.stringWidth(rendered, font, size) > available:
-        rendered = rendered[:-1]
-    return f"{rendered.rstrip()}{suffix}"
-
-
-def _make_simplified_flow_chart(rl: dict[str, Any], fonts: dict[str, str], flow: Mapping[str, Any]) -> Any:
-    Flowable = rl["Flowable"]
-
-    class SimplifiedFlowChart(Flowable):
-        def __init__(self) -> None:
-            super().__init__()
-            self._width = 0.0
-            self._height = 0.0
-            self._levels = self._visible_levels()
-
-        def _visible_levels(self) -> list[dict[str, Any]]:
-            levels = [dict(level) for level in flow.get("levels") or []]
-            if len(levels) > 6:
-                hidden = len(levels) - 5
-                levels = [
-                    *levels[:3],
-                    {
-                        "role": "omitted",
-                        "nodes": [
-                            {
-                                "id": "synthetic:omitted",
-                                "label": f"{hidden} path levels omitted",
-                                "kind": "continued path",
-                                "asset": "",
-                                "amount": None,
-                                "deferred_privacy_hop": False,
-                            }
-                        ],
-                    },
-                    *levels[-2:],
-                ]
-            visible: list[dict[str, Any]] = []
-            for level in levels:
-                nodes = list(level.get("nodes") or [])
-                if len(nodes) > 4:
-                    extra = len(nodes) - 3
-                    nodes = [
-                        *nodes[:3],
-                        {
-                            "id": f"synthetic:extra:{level.get('level', len(visible))}",
-                            "label": f"{extra} more items",
-                            "kind": "additional reviewed nodes",
-                            "asset": "",
-                            "amount": None,
-                            "deferred_privacy_hop": False,
-                        },
-                    ]
-                next_level = dict(level)
-                next_level["nodes"] = nodes
-                visible.append(next_level)
-            return visible
-
-        def wrap(self, availWidth: float, availHeight: float) -> tuple[float, float]:
-            max_rows = max((len(level.get("nodes") or []) for level in self._levels), default=1)
-            box_h = 34
-            row_gap = 8
-            self._width = availWidth
-            self._height = max(68, 18 + (max_rows * box_h) + max(0, max_rows - 1) * row_gap + 10)
-            return self._width, self._height
-
-        def _positions(self) -> dict[str, tuple[float, float, float, float]]:
-            level_count = max(1, len(self._levels))
-            col_gap = 8
-            box_h = 34
-            row_gap = 8
-            col_w = (self._width - col_gap * (level_count - 1)) / level_count
-            box_w = max(52, col_w)
-            usable_h = self._height - 18
-            positions: dict[str, tuple[float, float, float, float]] = {}
-            for col, level in enumerate(self._levels):
-                nodes = list(level.get("nodes") or [])
-                group_h = len(nodes) * box_h + max(0, len(nodes) - 1) * row_gap
-                base_y = max(4, (usable_h - group_h) / 2)
-                x = col * (col_w + col_gap)
-                for row, node in enumerate(nodes):
-                    y = base_y + (len(nodes) - row - 1) * (box_h + row_gap)
-                    node_id = str(node.get("id") or f"synthetic:{col}:{row}")
-                    positions[node_id] = (x, y, box_w, box_h)
-            return positions
-
-        def _draw_arrow(
-            self,
-            x1: float,
-            y1: float,
-            x2: float,
-            y2: float,
-            *,
-            deferred: bool,
-        ) -> None:
-            canvas = self.canv
-            colors = rl["colors"]
-            canvas.saveState()
-            canvas.setStrokeColor(colors.HexColor("#a3a3a3" if deferred else BRAND_MUTED))
-            canvas.setLineWidth(0.7)
-            if deferred:
-                canvas.setDash(2, 2)
-            end_x = max(x1 + 5, x2 - 5)
-            canvas.line(x1 + 2, y1, end_x, y2)
-            canvas.setDash()
-            canvas.line(end_x, y2, end_x - 4, y2 + 2.5)
-            canvas.line(end_x, y2, end_x - 4, y2 - 2.5)
-            canvas.restoreState()
-
-        def draw(self) -> None:
-            canvas = self.canv
-            colors = rl["colors"]
-            positions = self._positions()
-
-            for edge in flow.get("edges") or []:
-                from_box = positions.get(str(edge.get("from") or ""))
-                to_box = positions.get(str(edge.get("to") or ""))
-                if not from_box or not to_box:
-                    continue
-                from_x, from_y, from_w, from_h = from_box
-                to_x, to_y, _to_w, to_h = to_box
-                if to_x <= from_x:
-                    continue
-                self._draw_arrow(
-                    from_x + from_w,
-                    from_y + from_h / 2,
-                    to_x,
-                    to_y + to_h / 2,
-                    deferred=bool(edge.get("deferred_privacy_hop")),
-                )
-
-            for col, level in enumerate(self._levels):
-                role = _label(level.get("role") or "flow")
-                nodes = list(level.get("nodes") or [])
-                if not nodes:
-                    continue
-                first_box = positions.get(str(nodes[0].get("id") or ""))
-                if first_box:
-                    x, _y, w, _h = first_box
-                    canvas.setFont(fonts["bold"], 6.5)
-                    canvas.setFillColor(colors.HexColor(BRAND_MUTED))
-                    canvas.drawCentredString(x + w / 2, self._height - 7, role.upper())
-                for row, node in enumerate(nodes):
-                    box = positions.get(str(node.get("id") or f"synthetic:{col}:{row}"))
-                    if not box:
-                        continue
-                    x, y, w, h = box
-                    deferred = bool(node.get("deferred_privacy_hop"))
-                    is_target = level.get("role") == "target"
-                    is_source = node.get("node_type") == "source"
-                    fill = "#fff1f2" if deferred else BRAND_SOFT if is_source else "#ffffff"
-                    stroke = "#e3000f" if is_target or deferred else BRAND_LINE
-                    canvas.setFillColor(colors.HexColor(fill))
-                    canvas.setStrokeColor(colors.HexColor(stroke))
-                    canvas.setLineWidth(0.9 if is_target or deferred else 0.5)
-                    canvas.roundRect(x, y, w, h, 4, stroke=1, fill=1)
-
-                    label = _fit_canvas_text(canvas, node.get("label"), w - 8, fonts["bold"], 6.6)
-                    kind = "privacy hop deferred" if deferred else _label(node.get("kind"))
-                    kind = _fit_canvas_text(canvas, kind, w - 8, fonts["regular"], 5.8)
-                    amount = _fit_canvas_text(
-                        canvas,
-                        _amount_with_asset(node.get("amount"), node.get("asset")),
-                        w - 8,
-                        fonts["mono"],
-                        5.7,
-                    )
-                    canvas.setFillColor(colors.HexColor(BRAND_INK))
-                    canvas.setFont(fonts["bold"], 6.6)
-                    canvas.drawString(x + 4, y + h - 10, label)
-                    canvas.setFont(fonts["regular"], 5.8)
-                    canvas.setFillColor(colors.HexColor(BRAND_MUTED))
-                    canvas.drawString(x + 4, y + h - 20, kind)
-                    if amount:
-                        canvas.setFont(fonts["mono"], 5.7)
-                        canvas.drawString(x + 4, y + 6, amount)
-
-    return SimplifiedFlowChart()
-
-
 class _SourceFundsPdfBuilder:
     def __init__(
         self,
@@ -283,6 +104,21 @@ class _SourceFundsPdfBuilder:
         self.fonts = fonts
         self.snapshot_hash = snapshot_hash
         self.styles = self._styles()
+        options = report.get("report_options") or {}
+        self.amount_precision = str(options.get("amount_precision") or "btc")
+        self.mask_recipient = bool(options.get("mask_recipient"))
+        self.omitted_sections = set(options.get("omit_sections") or [])
+
+    def amt(self, value: Any, asset: Any = "") -> str:
+        """Format a BTC amount honoring the advanced amount-precision option."""
+        if value is None or value == "":
+            return ""
+        if self.amount_precision == "sats":
+            sats = int((_decimal(value) * Decimal(100_000_000)).to_integral_value())
+            rendered = f"{sats:,} sats".replace(",", " ")
+            return rendered
+        suffix = f" {asset}" if asset else ""
+        return f"{_btc(value)}{suffix}"
 
     def _styles(self) -> dict[str, Any]:
         ParagraphStyle = self.rl["ParagraphStyle"]
@@ -366,6 +202,15 @@ class _SourceFundsPdfBuilder:
     def spacer(self, height_mm: float) -> Any:
         return self.rl["Spacer"](1, height_mm * self.rl["mm"])
 
+    def _content_width(self) -> float:
+        return float(self.rl["A4"][0] - 34 * self.rl["mm"])
+
+    def _source_mix_segments(self) -> list[dict[str, Any]]:
+        return source_mix_segments(self.report)
+
+    def _data_source_segments(self) -> list[dict[str, Any]]:
+        return data_source_segments(self.report)
+
     def table(
         self,
         rows: Sequence[Sequence[Any]],
@@ -439,7 +284,7 @@ class _SourceFundsPdfBuilder:
         purpose = self.report.get("purpose", {})
         recipient = self.report.get("recipient") or {}
         context = self.report.get("report_context") or {}
-        target_label = "Funds anchor" if purpose.get("type") == "planned_exchange_sale" else "Target"
+        target_label = "Bitcoin being sold" if purpose.get("type") == "planned_exchange_sale" else "Target"
         rows: list[tuple[str, Any]] = [
             ("Generated at", self.generated_at),
             ("Workspace", self.report.get("workspace", "")),
@@ -449,12 +294,39 @@ class _SourceFundsPdfBuilder:
             ("Purpose", purpose.get("label", "Already completed transaction")),
             ("Reveal mode", self.report.get("reveal_mode", "")),
             (target_label, target.get("label", "")),
-            ("Amount", f"{_btc(target.get('required_amount'))} {target.get('asset', '')}"),
+            ("Amount", self.amt(target.get("required_amount"), target.get("asset", ""))),
             ("Exportable", str(bool(self.report.get("explain_gates", {}).get("exportable")))),
             ("Snapshot hash", self.snapshot_hash),
         ]
+        recipient_name = "(recipient masked)" if self.mask_recipient else recipient.get("label", "")
         if recipient:
-            rows.insert(6, ("Recipient", f"{recipient.get('label', '')} ({recipient.get('kind', '')})"))
+            rows.insert(6, ("Recipient", f"{recipient_name} ({recipient.get('kind', '')})"))
+        overview = self.report.get("overview") or {}
+        recipient_cell = (
+            "(recipient masked)"
+            if self.mask_recipient
+            else (
+                recipient.get("label")
+                or purpose.get("planned_destination")
+                or target.get("wallet")
+                or "(self)"
+            )
+        )
+        glance = self.table(
+            [
+                ["Date", "Recipient", "Amount", "Fiat value"],
+                [
+                    _datetime(overview.get("target_date") or target.get("occurred_at")),
+                    recipient_cell,
+                    self.amt(target.get("required_amount"), target.get("asset", "")),
+                    _fiat(overview.get("target_fiat_value"), overview.get("target_fiat_currency"))
+                    or "(not priced)",
+                ],
+            ],
+            widths=(40, 56, 40, 40),
+            compact=True,
+            right_columns={2, 3},
+        )
         story: list[Any] = [
             self.p(f"Kassiber {_report_title(self.report)}", "cover_title"),
             self.p(
@@ -462,6 +334,8 @@ class _SourceFundsPdfBuilder:
                 or "Reviewed local evidence disclosure from a saved immutable case snapshot.",
                 "cover_subtitle",
             ),
+            glance,
+            self.spacer(4),
             self.kv_table(rows),
         ]
         if purpose.get("type") == "planned_exchange_sale":
@@ -475,6 +349,22 @@ class _SourceFundsPdfBuilder:
                             ("Note", purpose.get("planned_note") or "(none)"),
                             ("Fiat-source note", purpose.get("fiat_purchase_note") or ""),
                         ]
+                    ),
+                ]
+            )
+        flow = self.report.get("simplified_flow") or {}
+        if flow.get("levels"):
+            story.extend(
+                [
+                    self.spacer(5),
+                    self.p("Flow at a Glance", "h2"),
+                    build_flow_drawing(
+                        self.rl,
+                        self.fonts,
+                        flow,
+                        width=self._content_width(),
+                        max_levels=4,
+                        max_nodes=2,
                     ),
                 ]
             )
@@ -537,7 +427,7 @@ class _SourceFundsPdfBuilder:
         target = self.report.get("target") or {}
         time_range = overview.get("time_range") or {}
         story: list[Any] = [self.p("Source of Funds Overview", "h1")]
-        target_amount = _amount_with_asset(
+        target_amount = self.amt(
             overview.get("target_amount"),
             overview.get("target_asset") or target.get("asset"),
         )
@@ -595,7 +485,18 @@ class _SourceFundsPdfBuilder:
         note = flow.get("note")
         if note:
             story.append(self.p(note, "small"))
-        story.append(_make_simplified_flow_chart(self.rl, self.fonts, flow))
+        options = self.report.get("report_options") or {}
+        max_levels, max_nodes = detail_thresholds(options.get("diagram_detail"))
+        story.append(
+            build_flow_drawing(
+                self.rl,
+                self.fonts,
+                flow,
+                width=self._content_width(),
+                max_levels=max_levels,
+                max_nodes=max_nodes,
+            )
+        )
         deferred = list(flow.get("deferred_privacy_hops") or [])
         if deferred:
             story.append(
@@ -612,12 +513,25 @@ class _SourceFundsPdfBuilder:
 
     def source_mix(self) -> list[Any]:
         story: list[Any] = [self.p("Source Mix", "h1")]
+        overview = self.report.get("overview") or {}
+        segments = self._source_mix_segments()
+        if segments:
+            story.append(
+                build_ring_drawing(
+                    self.rl,
+                    self.fonts,
+                    segments,
+                    center_value=_btc(overview.get("target_amount")),
+                    center_label=f"{overview.get('target_asset') or 'BTC'} explained",
+                    width=self._content_width(),
+                )
+            )
         rows = [["Source", "Amount", "Asset", "Share", "Count"]]
         for row in self.report.get("source_mix") or []:
             rows.append(
                 [
                     _label(row.get("source_type")),
-                    _btc(row.get("amount")),
+                    self.amt(row.get("amount")),
                     self.report.get("allocations", {}).get("asset", ""),
                     _pct(row.get("percent_of_target")),
                     row.get("count", 0),
@@ -633,6 +547,19 @@ class _SourceFundsPdfBuilder:
 
     def data_sources(self) -> list[Any]:
         story: list[Any] = [self.p("Data Sources", "h1")]
+        segments = self._data_source_segments()
+        if segments:
+            total_tx = int(sum(segment["value"] for segment in segments))
+            story.append(
+                build_ring_drawing(
+                    self.rl,
+                    self.fonts,
+                    segments,
+                    center_value=str(total_tx),
+                    center_label="transactions",
+                    width=self._content_width(),
+                )
+            )
         rows = [["Name", "Kind", "Transactions", "Sources", "Assets", "Period"]]
         for item in self.report.get("data_sources") or []:
             period = ""
@@ -666,7 +593,7 @@ class _SourceFundsPdfBuilder:
         for level in levels:
             for node in level.get("nodes") or []:
                 node_type = node.get("source_type") or node.get("direction") or node.get("node_type")
-                amount = _amount_with_asset(
+                amount = self.amt(
                     node.get("required_amount") if node.get("required_amount") is not None else node.get("amount"),
                     node.get("asset"),
                 )
@@ -699,7 +626,7 @@ class _SourceFundsPdfBuilder:
                         _node_time(node),
                         node.get("wallet", ""),
                         _label(node.get("direction")),
-                        _btc(node.get("required_amount") if node.get("required_amount") is not None else node.get("amount")),
+                        self.amt(node.get("required_amount") if node.get("required_amount") is not None else node.get("amount")),
                         node.get("asset", ""),
                         _fiat(node.get("fiat_value"), node.get("fiat_currency")),
                         node.get("external_id") or node.get("label", ""),
@@ -731,7 +658,7 @@ class _SourceFundsPdfBuilder:
                     _label(edge.get("link_type")),
                     edge.get("state", ""),
                     _label(edge.get("method")),
-                    f"{_btc(edge.get('allocation_amount'))} {edge.get('asset', '')}",
+                    self.amt(edge.get("allocation_amount"), edge.get("asset", "")),
                     _label(edge.get("allocation_policy")),
                     edge.get("explanation") or "",
                 ]
@@ -761,7 +688,7 @@ class _SourceFundsPdfBuilder:
                         node.get("label", ""),
                         _datetime(node.get("acquired_at")),
                         node.get("asset", ""),
-                        _btc(node.get("required_amount")),
+                        self.amt(node.get("required_amount")),
                         " | ".join(details),
                     ]
                 )
@@ -779,7 +706,7 @@ class _SourceFundsPdfBuilder:
                         node.get("label", ""),
                         _datetime(node.get("occurred_at")),
                         node.get("asset", ""),
-                        _btc(node.get("required_amount")),
+                        self.amt(node.get("required_amount")),
                         " | ".join(details),
                     ]
                 )
@@ -848,22 +775,27 @@ class _SourceFundsPdfBuilder:
     def build(self) -> list[Any]:
         story = self.cover()
         story.append(self.rl["PageBreak"]())
-        for section in (
-            self.overview(),
-            self.narrative(),
-            self.simplified_flow(),
-            self.data_sources(),
-            self.evidence_checklist(),
-            self.review_gates(),
-            self.source_mix(),
-            self.flow_levels(),
-            self.transaction_details(),
-            self.flow_links(),
-            self.graph_nodes(),
-            self.disclosure_preview(),
-            self.limitations(),
-        ):
-            story.extend(section)
+        # (section_key, builder) — keyed sections can be omitted via the
+        # advanced `omit_sections` option; None keys are always included.
+        sections: list[tuple[str | None, Any]] = [
+            (None, self.overview),
+            (None, self.narrative),
+            (None, self.simplified_flow),
+            (None, self.data_sources),
+            (None, self.evidence_checklist),
+            (None, self.review_gates),
+            (None, self.source_mix),
+            ("flow_levels", self.flow_levels),
+            ("transaction_details", self.transaction_details),
+            ("flow_links", self.flow_links),
+            ("graph_nodes", self.graph_nodes),
+            (None, self.disclosure_preview),
+            (None, self.limitations),
+        ]
+        for key, builder in sections:
+            if key and key in self.omitted_sections:
+                continue
+            story.extend(builder())
             story.append(self.spacer(7))
         return story
 

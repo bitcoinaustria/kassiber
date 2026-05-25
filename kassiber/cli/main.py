@@ -100,6 +100,7 @@ from ..core import rates as core_rates
 from ..core import reports as core_reports
 from ..core import source_funds as core_source_funds
 from ..core import source_funds_coverage as core_source_funds_coverage
+from ..core import source_funds_diagram
 from ..core import source_funds_recipients as core_source_funds_recipients
 from ..core import wallets as core_wallets
 from ..core.runtime import bootstrap_runtime, close_runtime, emit_error, resolve_output_format
@@ -1558,6 +1559,30 @@ def build_parser() -> argparse.ArgumentParser:
     source_funds_report.add_argument("--planned-note")
     source_funds_report.add_argument("--reveal-mode", choices=list(core_source_funds.REVEAL_MODES))
     source_funds_report.add_argument("--max-depth", type=int, default=8)
+    source_funds_report.add_argument(
+        "--diagram-detail",
+        choices=list(source_funds_diagram.DIAGRAM_DETAIL_LEVELS),
+        default="summary",
+        help="Simplified-flow detail: 'summary' clusters long paths, 'detailed' shows more hops.",
+    )
+    source_funds_report.add_argument(
+        "--amount-precision",
+        choices=("btc", "sats"),
+        default="btc",
+        help="Render report amounts as BTC (8dp) or whole sats.",
+    )
+    source_funds_report.add_argument(
+        "--mask-recipient",
+        action="store_true",
+        help="Mask the recipient label in the exported report.",
+    )
+    source_funds_report.add_argument(
+        "--omit-section",
+        action="append",
+        choices=list(core_source_funds.OPTIONAL_REPORT_SECTIONS),
+        default=[],
+        help="Omit a verbose PDF section (repeatable).",
+    )
     source_funds_report.add_argument("--save-case", action="store_true")
     source_funds_report.add_argument("--case-label")
     source_funds_report.add_argument("--recipient")
@@ -1577,6 +1602,12 @@ def build_parser() -> argparse.ArgumentParser:
     export_source_funds_pdf.add_argument("--planned-note")
     export_source_funds_pdf.add_argument("--reveal-mode", choices=list(core_source_funds.REVEAL_MODES))
     export_source_funds_pdf.add_argument("--file", required=True)
+
+    export_source_funds_bundle = reports_sub.add_parser("export-source-funds-bundle")
+    export_source_funds_bundle.add_argument("--workspace")
+    export_source_funds_bundle.add_argument("--profile")
+    export_source_funds_bundle.add_argument("--case")
+    export_source_funds_bundle.add_argument("--file", required=True)
 
     for report_name in ("export-austrian-e1kv-pdf", "export-austrian"):
         _add_austrian_e1kv_pdf_args(reports_sub.add_parser(report_name))
@@ -3103,6 +3134,13 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 save_case=args.save_case,
                 case_label=args.case_label,
                 recipient_ref=args.recipient,
+                include_diagrams=True,
+                report_options={
+                    "diagram_detail": args.diagram_detail,
+                    "amount_precision": args.amount_precision,
+                    "mask_recipient": args.mask_recipient,
+                    "omit_sections": args.omit_section,
+                },
             )
             if args.format in {"table", "plain"}:
                 return emit(args, "\n".join(core_source_funds.build_report_lines(report, source_funds_hooks)))
@@ -3123,6 +3161,19 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     planned_destination=args.planned_destination,
                     planned_note=args.planned_note,
                     reveal_mode=args.reveal_mode,
+                ),
+            )
+        if args.reports_command == "export-source-funds-bundle":
+            return emit(
+                args,
+                core_source_funds.export_bundle(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.file,
+                    _source_funds_hooks(),
+                    data_root=args.data_root,
+                    case_ref=args.case,
                 ),
             )
         if args.reports_command in {"export-austrian-e1kv-pdf", "export-austrian"}:
