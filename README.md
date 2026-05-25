@@ -28,7 +28,7 @@ email.
 
 Kassiber is **Bitcoin-native**: descriptors, xpubs, Esplora, Electrum,
 Bitcoin Core RPC, BTCPay Greenfield, Lightning, and Liquid — not "any of
-1,500 cryptocurrencies". L-BTC is in scope; altcoins are not. Stablecoin
+600 billion cryptocurrencies". L-BTC is in scope; altcoins are not. Stablecoin
 support is on the table for later, depending on future resources.
 
 Tax math runs locally through the open-source
