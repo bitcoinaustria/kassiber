@@ -113,6 +113,7 @@ import {
   setSessionUnlockPassphrase,
   verifySessionUnlockPassphrase,
 } from "@/store/sessionLock";
+import { isTransactionLookupQuery } from "@/lib/transactionLookup";
 import type { OverviewSnapshot } from "@/mocks/seed";
 import type { ProfilesSnapshot } from "@/mocks/profiles";
 import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
@@ -555,14 +556,6 @@ function buildSearchResults(
 function nextSearchIndex(current: number, delta: number, total: number) {
   if (total <= 0) return 0;
   return (current + delta + total) % total;
-}
-
-function isTransactionLookupQuery(query: string) {
-  const trimmed = query.trim();
-  return (
-    /^[0-9a-fA-F]{12,64}$/.test(trimmed) ||
-    /^tx[:_-]?[a-zA-Z0-9:_-]+$/.test(trimmed)
-  );
 }
 
 function notificationRouteFor(title: string): AppRoutePath | undefined {
