@@ -957,9 +957,17 @@ function matchesFlowChartSelection(
     if (bucket.key !== selection.bucketKey) return false;
   }
 
+  const flow = displayFlow(txn);
+  if (
+    selection.mode === "external" &&
+    flow !== "incoming" &&
+    flow !== "outgoing"
+  ) {
+    return false;
+  }
+
   if (selection.segment === null) return true;
 
-  const flow = displayFlow(txn);
   if (selection.segment === "transfers") {
     return flow === "transfer" || flow === "layer-transition";
   }

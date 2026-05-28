@@ -41,7 +41,9 @@ describe("transaction dashboard chart selection", () => {
       mode: "all",
     };
 
-    expect(flowChartSelectionLabel(selection)).toBe(`${bucket.label} · All flows · All`);
+    expect(flowChartSelectionLabel(selection)).toBe(
+      `${bucket.label} · All flows · All`,
+    );
     expect(
       matchesFlowChartSelection(
         transaction({ flow: "incoming" }),
@@ -57,6 +59,43 @@ describe("transaction dashboard chart selection", () => {
           date: "2026-05-15T12:00:00Z",
           flow: "incoming",
         }),
+        selection,
+        (txn) => txn.flow as TransactionFlow,
+      ),
+    ).toBe(false);
+  });
+
+  it("limits whole bucket selections to visible flows in external mode", () => {
+    const bucket = bucketTransactionDate(
+      new Date("2026-04-15T12:00:00Z"),
+      "1year",
+    );
+    const selection: FlowChartSelection = {
+      id: `1year:${bucket.key}:all:external`,
+      period: "1year",
+      bucketKey: bucket.key,
+      bucketLabel: bucket.label,
+      segment: null,
+      mode: "external",
+    };
+
+    expect(
+      matchesFlowChartSelection(
+        transaction({ flow: "incoming" }),
+        selection,
+        (txn) => txn.flow as TransactionFlow,
+      ),
+    ).toBe(true);
+    expect(
+      matchesFlowChartSelection(
+        transaction({ flow: "transfer" }),
+        selection,
+        (txn) => txn.flow as TransactionFlow,
+      ),
+    ).toBe(false);
+    expect(
+      matchesFlowChartSelection(
+        transaction({ flow: "swap" }),
         selection,
         (txn) => txn.flow as TransactionFlow,
       ),
