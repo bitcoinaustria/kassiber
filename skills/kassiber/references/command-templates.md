@@ -17,6 +17,25 @@ kassiber --format csv --output capital-gains.csv reports capital-gains
 
 Do not append `--machine` or `--format` after the subcommand tree.
 
+## AI chat
+
+Use top-level `chat` for the daemon-backed assistant:
+
+```bash
+kassiber chat "Summarise report blockers and suggest next actions."
+kassiber chat
+kassiber chat --allow-tool ui.journals.process "Refresh journals, then summarize blockers."
+kassiber chat --yes "Sync allowed wallets and summarize what changed."
+```
+
+`kassiber chat` mirrors the desktop Assistant and drives daemon `ai.chat`,
+`ai.tool_call.consent`, and `ai.chat.cancel`. Mutating tools prompt on a TTY.
+For scripts, `--allow-tool <daemon-tool-name>` approves only that tool;
+`--yes` approves all mutating tools for the chat session. Without a TTY and
+without an allow policy, mutating tool requests are denied and fed back to the
+model. Do not use `kassiber ai chat` when tool use, stale-journal refresh,
+consent, or cancellation are required; that command is provider-only.
+
 ## Fast paths
 
 Common requests should not require exploratory commands:

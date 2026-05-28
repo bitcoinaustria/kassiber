@@ -25,6 +25,7 @@ Use these without opening extra references when the request clearly matches:
 | Largest outbound transactions | `kassiber --machine transactions list --direction outbound --sort amount --order desc --limit 10` |
 | Smallest inbound transactions | `kassiber --machine transactions list --direction inbound --sort amount --order asc --limit 10` |
 | Smallest outbound transactions | `kassiber --machine transactions list --direction outbound --sort amount --order asc --limit 10` |
+| Ask the in-product assistant with tools | `kassiber chat "<question>"` |
 
 If a fast-path command returns a structured error, inspect the envelope and take the hinted next step. For example, stale reports usually mean running `kassiber --machine journals process` once, then retrying the same report.
 
@@ -68,6 +69,8 @@ If a fast-path command returns a structured error, inspect the envelope and take
 36. `kassiber secrets init` is a one-time migration from plaintext to SQLCipher. After it runs, the original plaintext file is preserved as `kassiber.pre-encryption.sqlite3.bak`; Kassiber refuses to overwrite an existing rollback file at that path. Advise the user to verify the encrypted DB opens (`kassiber secrets verify`) and then `rm` the `.bak` themselves once they trust the new file. Forgetting the passphrase means data loss — there is no recovery path and `.kassiber` backups do not help.
 37. `.kassiber` backup files are `tar | age` envelopes that wrap a SQLCipher copy of the DB plus the attachments tree and `backends.env`. They are recoverable with stock `age` + `tar` + `sqlcipher` even without Kassiber installed. Backup decryption uses an outer age passphrase (`--backup-passphrase-fd`) that is independent of the DB passphrase.
 38. The dotenv bootstrap (`backends.env`) is for non-secret addressing only: URLs, `KIND`, chain, network, batch sizes. Tokens, passwords, auth headers, and basic-auth usernames belong in the encrypted DB. If Kassiber warns at startup that the dotenv still has plaintext secrets, run `kassiber secrets migrate-credentials` (or `--dry-run` first) to lift them into the encrypted backends table; the file is rewritten with non-secret rows preserved and a `.pre-credentials-migration-<ts>.bak` snapshot is saved.
+39. Use `kassiber chat` for the daemon-backed assistant when the user wants tool-aware AI help from the CLI. It uses the same `ai.chat` / `ai.tool_call.consent` loop as the GUI; `kassiber ai chat` is provider-only and should not be described as tool-capable.
+40. For scripted `kassiber chat` runs, prefer `--allow-tool <daemon-tool-name>` over broad `--yes`. Without a TTY, unapproved mutating tool requests are denied and fed back to the model as `user_denied`.
 
 ## Gotchas
 
