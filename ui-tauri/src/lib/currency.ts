@@ -14,6 +14,49 @@ export type Currency = "btc" | "eur";
 
 export const MISSING_FIAT_LABEL = "Unpriced";
 
+/**
+ * Number-formatting locale for each supported fiat. Austrian EUR groups with
+ * dots and a comma decimal (`€ 1.234,56`); the others follow their home
+ * convention. Keep in sync with the report locales in mocks/reports.ts.
+ */
+const FIAT_LOCALES: Record<string, string> = {
+  EUR: "de-AT",
+  USD: "en-US",
+  CHF: "de-CH",
+  GBP: "en-GB",
+};
+
+/** Resolve the formatting locale for a fiat code; falls back to de-AT (EUR). */
+export function localeForFiat(code: string): string {
+  return FIAT_LOCALES[code.trim().toUpperCase()] ?? "de-AT";
+}
+
+const fiatFormatterCache = new Map<string, Intl.NumberFormat>();
+
+/**
+ * Cached locale-aware currency formatter for a fiat code, e.g.
+ * `fiatFormatter("EUR").format(1234.56) === "€ 1.234,56"` (de-AT) and
+ * `fiatFormatter("USD").format(1234.56) === "$1,234.56"` (en-US).
+ */
+export function fiatFormatter(code: string): Intl.NumberFormat {
+  const key = code.trim().toUpperCase();
+  let formatter = fiatFormatterCache.get(key);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(localeForFiat(key), {
+      style: "currency",
+      currency: key,
+    });
+    fiatFormatterCache.set(key, formatter);
+  }
+  return formatter;
+}
+
+/** Format an amount already denominated in `code`, locale-correct for it. */
+export function formatFiatAmount(value: number, code: string): string {
+  if (!Number.isFinite(value)) return MISSING_FIAT_LABEL;
+  return fiatFormatter(code).format(value);
+}
+
 export const useCurrency = () => useUiStore((s) => s.currency);
 
 interface FormatBtcOpts {

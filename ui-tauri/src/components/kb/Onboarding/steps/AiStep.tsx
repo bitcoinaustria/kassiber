@@ -24,6 +24,7 @@ import {
   TextField,
 } from "../fields";
 import {
+  OnboardingStepActions,
   OnboardingStepFrame,
   OnboardingStepLeftWrapper,
   OnboardingStepRightWrapper,
@@ -67,8 +68,8 @@ const AiPanel = ({ form }: { form: OnboardingForm }) => {
       ];
 
   return (
-    <div className="flex h-full items-center">
-      <div className="w-full max-w-lg rounded-lg border border-line bg-paper p-5 shadow-sm">
+    <div className="flex h-full items-start">
+      <div className="sticky top-8 w-full max-w-lg rounded-lg border border-line bg-paper p-5 shadow-sm">
         <div className="flex items-center gap-3">
           <div
             className={cn(
@@ -153,7 +154,13 @@ export const AiStep = ({
         totalSteps={totalSteps}
         goBack={goBack}
       >
-        <div className="flex h-full flex-col justify-between gap-6 py-4">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
+          className="flex h-full flex-col justify-between gap-6 py-4"
+        >
           <div className="space-y-5">
             <div className="space-y-3">
               <ChoiceCard
@@ -183,17 +190,13 @@ export const AiStep = ({
                   }
                 }}
               />
+              <ChoiceCard
+                active={disabledSelected}
+                title="Disable AI for now"
+                description="Hide the Assistant and floating chat. You can turn AI back on later in Settings."
+                onClick={() => update("aiSetupMode", "disabled")}
+              />
             </div>
-
-            <Button
-              type="button"
-              variant={disabledSelected ? "default" : "outline"}
-              className="w-full justify-center"
-              onClick={() => update("aiSetupMode", "disabled")}
-            >
-              <Power className="size-4" />
-              Disable AI for now
-            </Button>
 
             {(localSelected || remoteSelected) && (
               <div className="space-y-4 rounded-lg border border-line bg-paper-2 p-4">
@@ -250,10 +253,12 @@ export const AiStep = ({
             )}
           </div>
 
-          <Button onClick={onSubmit} className="w-full" disabled={!canContinue}>
-            Continue
-          </Button>
-        </div>
+          <OnboardingStepActions>
+            <Button type="submit" className="w-full" disabled={!canContinue}>
+              Continue
+            </Button>
+          </OnboardingStepActions>
+        </form>
       </OnboardingStepLeftWrapper>
       <OnboardingStepRightWrapper className="px-8 py-10">
         <AiPanel form={form} />

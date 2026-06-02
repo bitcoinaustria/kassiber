@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { DashboardIllustration } from "../DashboardIllustration";
 import { TextField } from "../fields";
 import {
+  OnboardingStepActions,
   OnboardingStepFrame,
   OnboardingStepLeftWrapper,
   OnboardingStepRightWrapper,
@@ -21,23 +22,27 @@ export const IdentityStep = ({
   return (
     <OnboardingStepFrame>
       <OnboardingStepLeftWrapper
-        title="Name your books"
-        eyebrow="Books"
+        title="Name your workspace"
+        eyebrow="Workspace"
         currentStep={currentStep}
         totalSteps={totalSteps}
         goBack={goBack}
       >
         <form
-          onSubmit={(event) => event.preventDefault()}
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
           className="space-y-6 py-4"
         >
           <div className="space-y-4 border-b border-line pb-6">
             <TextField
-              label="Books name"
+              label="Workspace name"
               name="workspace"
               value={form.workspace}
               placeholder="My Books"
-              description="This is the local books set shown in the app header."
+              autoFocus
+              description="Groups all your books. Shown in the app header."
               onChange={(value) => update("workspace", value)}
             />
             <details className="group rounded-md border border-line bg-paper-2 px-3 py-2">
@@ -46,28 +51,26 @@ export const IdentityStep = ({
               </summary>
               <div className="pt-4">
                 <TextField
-                  label="Books label"
+                  label="Profile name"
                   name="profile"
                   value={form.profile}
                   placeholder="Private"
                   onChange={(value) => update("profile", value)}
                 />
                 <p className="m-0 mt-2 text-xs leading-5 text-ink-2">
-                  Keep the default unless you plan to split these books into
-                  separate private, business, or tax books later.
+                  A profile is one set of books inside this workspace (e.g.
+                  private or business) and carries its own tax defaults. Add
+                  more later from Settings.
                 </p>
               </div>
             </details>
           </div>
 
-          <Button
-            type="submit"
-            onClick={onSubmit}
-            className="mt-4 w-full"
-            disabled={!canContinue}
-          >
-            Continue
-          </Button>
+          <OnboardingStepActions>
+            <Button type="submit" className="w-full" disabled={!canContinue}>
+              Continue
+            </Button>
+          </OnboardingStepActions>
         </form>
       </OnboardingStepLeftWrapper>
       <OnboardingStepRightWrapper className="px-8 py-10">

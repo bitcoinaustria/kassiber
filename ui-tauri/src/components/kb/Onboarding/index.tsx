@@ -9,9 +9,11 @@ import { dispatchDaemonAuthRequired } from "@/daemon/client";
 import {
   activateImportProject,
   canImportProjects,
+  canUseTouchIdPassphraseUnlock,
   clearImportProject,
   getTransport,
   selectImportProjectDirectory,
+  storeTouchIdPassphrase,
   type DaemonEnvelope,
   type ImportProjectSelection,
 } from "@/daemon/transport";
@@ -41,6 +43,7 @@ import { DatabaseStep } from "./steps/DatabaseStep";
 import { IdentityStep } from "./steps/IdentityStep";
 import { ImportProjectPanel } from "./ImportProjectPanel";
 import { StartChoicePanel } from "./StartChoicePanel";
+import { OnboardingStepper } from "./stepper";
 import { TaxStep } from "./steps/TaxStep";
 import type { OnboardingForm, OnboardingStep } from "./types";
 
@@ -52,17 +55,20 @@ interface OnboardingProps {
 const DEFAULT_STEPS: OnboardingStep[] = [
   {
     component: IdentityStep,
+    label: "Workspace",
     isComplete: (form) =>
       Boolean(form.workspace.trim() && form.profile.trim()),
   },
   {
     component: TaxStep,
+    label: "Accounting",
     isComplete: (form) =>
       form.taxCountry === "at" ||
       parseTaxLongTermDays(form.taxLongTermDays) !== null,
   },
   {
     component: ConnectionsStep,
+    label: "Connections",
     isComplete: (form) => {
       if (form.backendSetupMode === "skip") {
         return form.skipBackendsAcknowledged;
@@ -86,6 +92,7 @@ const DEFAULT_STEPS: OnboardingStep[] = [
   },
   {
     component: AiStep,
+    label: "AI",
     isComplete: (form) => {
       if (form.aiSetupMode !== "disabled") {
         if (aiBaseUrlHint(form.aiBaseUrl) !== null) return false;
@@ -101,6 +108,7 @@ const DEFAULT_STEPS: OnboardingStep[] = [
   },
   {
     component: DatabaseStep,
+    label: "Database",
     isComplete: (form) =>
       form.databaseMode === "plaintext"
         ? form.plaintextAcknowledged
@@ -135,6 +143,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const setIdentity = useUiStore((state) => state.setIdentity);
+  const setAppLockPolicy = useUiStore((state) => state.setAppLockPolicy);
   const dataMode = useUiStore((state) => state.dataMode);
   const setDataMode = useUiStore((state) => state.setDataMode);
   const preImportDataModeRef = useRef<DataMode | null>(null);
@@ -203,6 +212,19 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       }
       if (envelope.kind === "auth_required") {
         throw new Error("Database passphrase is required.");
+      }
+      // Best-effort: enroll the just-created passphrase for Touch ID unlock.
+      // Non-fatal — the encrypted DB already exists, so a Keychain failure
+      // shouldn't block onboarding; it can be retried later from Settings.
+      if (form.enableTouchId && canUseTouchIdPassphraseUnlock()) {
+        try {
+          const status = await storeTouchIdPassphrase(form.databasePassphrase);
+          if (status.configured) {
+            setAppLockPolicy({ touchIdUnlock: true });
+          }
+        } catch {
+          // Swallow: Touch ID stays optional and configurable post-setup.
+        }
       }
     }
 
@@ -549,15 +571,26 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
             onImport={beginImport}
           />
         ) : (
-          <step.component
-            form={form}
-            update={update}
-            onSubmit={handleSubmit}
-            canContinue={step.isComplete(form) && !submitting}
-            currentStep={currentStep}
-            totalSteps={activeSteps.length}
-            goBack={handleGoBack}
-          />
+          <>
+            <OnboardingStepper
+              labels={activeSteps.map((entry) => entry.label)}
+              current={currentStep}
+              onJump={(index) => {
+                setFinishError(null);
+                setCurrentStep(index);
+              }}
+            />
+            <step.component
+              form={form}
+              update={update}
+              onSubmit={handleSubmit}
+              canContinue={step.isComplete(form) && !submitting}
+              submitting={submitting}
+              currentStep={currentStep}
+              totalSteps={activeSteps.length}
+              goBack={handleGoBack}
+            />
+          </>
         )}
 
         {(finishError || (!importSelection && importError)) && (

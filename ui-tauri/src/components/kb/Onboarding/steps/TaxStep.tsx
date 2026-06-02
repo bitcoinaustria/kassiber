@@ -1,4 +1,6 @@
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { formatFiatAmount } from "@/lib/currency";
 
 import {
   FIAT_CURRENCIES,
@@ -7,13 +9,14 @@ import {
   taxLongTermDaysHint,
 } from "../constants";
 import { DashboardIllustration } from "../DashboardIllustration";
-import { ChoiceCard, NumberField, SelectField } from "../fields";
+import { NumberField, SelectField } from "../fields";
 import {
+  OnboardingStepActions,
   OnboardingStepFrame,
   OnboardingStepLeftWrapper,
   OnboardingStepRightWrapper,
 } from "../frame";
-import type { StepComponentProps } from "../types";
+import type { StepComponentProps, TaxCountry } from "../types";
 
 export const TaxStep = ({
   form,
@@ -35,50 +38,52 @@ export const TaxStep = ({
         totalSteps={totalSteps}
         goBack={goBack}
       >
-        <div className="flex h-full flex-col justify-between gap-6 py-4">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
+          className="flex h-full flex-col justify-between gap-6 py-4"
+        >
           <div className="space-y-6">
-            <div className="space-y-3">
-              <ChoiceCard
-                active={form.taxCountry === "at"}
-                title="Austria"
-                description="Use this if these books belong in an Austrian crypto-tax workflow. EUR and moving-average rules are selected by default."
-                onClick={() => {
-                  if (form.taxCountry === "at") return;
-                  update("taxCountry", "at");
+            <SelectField
+              label="Tax jurisdiction"
+              value={form.taxCountry}
+              options={["at", "generic"] as TaxCountry[]}
+              optionLabels={{ at: "Austria", generic: "Other / generic" }}
+              description={
+                isAustrian
+                  ? "Austrian crypto-tax workflow — EUR and moving-average rules apply."
+                  : "Country-neutral books with FIFO, LIFO, HIFO, or LOFO lot selection."
+              }
+              onChange={(value) => {
+                if (value === form.taxCountry) return;
+                update("taxCountry", value);
+                if (value === "at") {
                   update("fiatCurrency", "EUR");
                   update("gainsAlgorithm", GAINS_ALGORITHM_DEFAULTS.at);
-                }}
-              />
-              <ChoiceCard
-                active={form.taxCountry === "generic"}
-                title="Other or generic"
-                description="Use country-neutral books with FIFO, LIFO, HIFO, or LOFO lot selection."
-                onClick={() => {
-                  if (form.taxCountry === "generic") return;
-                  update("taxCountry", "generic");
+                } else {
                   update("gainsAlgorithm", GAINS_ALGORITHM_DEFAULTS.generic);
-                }}
-              />
-            </div>
+                }
+              }}
+            />
 
             <div className="grid gap-4 sm:grid-cols-2">
               <SelectField
                 label="Fiat currency"
                 value={form.fiatCurrency}
                 options={FIAT_CURRENCIES}
-                description="Reports and tax summaries use this as the books currency."
+                description={`Sample: ${formatFiatAmount(1234.56, form.fiatCurrency)}`}
                 onChange={(value) => update("fiatCurrency", value)}
               />
               {isAustrian ? (
                 <div className="space-y-2">
-                  <div className="text-sm font-medium text-ink">
-                    Accounting method
-                  </div>
-                  <div className="rounded-md border border-line bg-paper-2 px-3 py-2 text-sm font-medium text-ink">
+                  <Label>Accounting method</Label>
+                  <div className="flex h-9 items-center rounded-md border border-line bg-paper-2 px-3 text-sm text-ink">
                     Moving average
                   </div>
                   <p className="m-0 text-xs leading-5 text-ink-2">
-                    Older holdings can be marked later per wallet when needed.
+                    Older holdings can be marked later per wallet.
                   </p>
                 </div>
               ) : (
@@ -104,10 +109,12 @@ export const TaxStep = ({
             )}
           </div>
 
-          <Button onClick={onSubmit} className="w-full" disabled={!canContinue}>
-            Continue
-          </Button>
-        </div>
+          <OnboardingStepActions>
+            <Button type="submit" className="w-full" disabled={!canContinue}>
+              Continue
+            </Button>
+          </OnboardingStepActions>
+        </form>
       </OnboardingStepLeftWrapper>
       <OnboardingStepRightWrapper className="px-8 py-10">
         <DashboardIllustration

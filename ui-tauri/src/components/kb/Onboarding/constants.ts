@@ -29,6 +29,7 @@ export const DEFAULT_FORM: OnboardingForm = {
   databaseMode: "sqlcipher",
   databasePassphrase: "",
   databasePassphraseConfirm: "",
+  enableTouchId: true,
   recoveryAcknowledged: false,
   plaintextAcknowledged: false,
   migrateCredentials: true,
