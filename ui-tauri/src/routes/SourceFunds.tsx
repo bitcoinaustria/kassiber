@@ -251,6 +251,7 @@ type SourceFundsPreview = {
       nodes: {
         id: string;
         node_type?: string;
+        transaction_id?: string;
         kind?: string;
         label?: string;
         wallet?: string;
@@ -2708,8 +2709,10 @@ function FlowPathPreview({
                   </div>
                   <div className="space-y-1">
                     {nodes.map((node) => {
+                      const transactionId = stringValue(node.transaction_id);
                       const clickable =
                         node.node_type === "transaction" &&
+                        Boolean(transactionId) &&
                         Boolean(onOpenTransaction);
                       const nodeClassName = [
                         "block w-full rounded border px-2 py-1 text-left",
@@ -2740,7 +2743,7 @@ function FlowPathPreview({
                           key={node.id}
                           type="button"
                           className={nodeClassName}
-                          onClick={() => onOpenTransaction?.(node.id)}
+                          onClick={() => onOpenTransaction?.(transactionId)}
                           title="Open transaction details"
                         >
                           {nodeContent}

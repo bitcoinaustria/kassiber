@@ -1914,6 +1914,7 @@ def _compact_simplified_flow_node(
     return {
         "id": node.get("id", ""),
         "node_type": node.get("node_type", ""),
+        "transaction_id": node.get("transaction_id", ""),
         "kind": kind,
         "label": node.get("label", ""),
         "wallet": node.get("wallet", ""),
