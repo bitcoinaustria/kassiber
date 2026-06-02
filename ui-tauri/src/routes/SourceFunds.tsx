@@ -568,6 +568,17 @@ function txDateFilterValue(row: TransactionRow): string {
   return "older";
 }
 
+// Each range filter matches its own bucket plus the more-recent ones, so
+// "Last 7 days" / "Last 30 days" include today and yesterday rather than
+// excluding them. "today"/"yesterday"/"older" stay single buckets.
+const DATE_FILTER_BUCKETS: Record<string, ReadonlySet<string>> = {
+  today: new Set(["today"]),
+  yesterday: new Set(["yesterday"]),
+  "7days": new Set(["today", "yesterday", "7days"]),
+  "30days": new Set(["today", "yesterday", "7days", "30days"]),
+  older: new Set(["older"]),
+};
+
 function uniqueSorted(values: string[]) {
   return Array.from(new Set(values.filter(Boolean))).sort((a, b) =>
     a.localeCompare(b),
@@ -769,7 +780,7 @@ function TransactionTargetRow({
 function TransactionTargetHeader() {
   const { t } = useTranslation("sourceFunds");
   return (
-    <div className="hidden border-b bg-muted/35 px-5 py-2 text-xs font-medium text-muted-foreground md:grid md:grid-cols-[minmax(0,1fr)_140px_150px_130px]">
+    <div className="hidden border-b bg-muted/35 px-5 py-2 text-xs font-medium text-muted-foreground md:grid md:grid-cols-[minmax(0,1fr)_140px_150px_130px] md:gap-3">
       <span>{t("transactionRow.header.transaction")}</span>
       <span className="text-right">{t("transactionRow.header.amount")}</span>
       <span>{t("transactionRow.header.wallet")}</span>
@@ -892,8 +903,8 @@ export function SourceFunds() {
         targetDirectionFilter === "all" || txFlow(row) === targetDirectionFilter;
       const matchesDate =
         targetDateFilter === "all" ||
-        txDateFilterValue(row) === targetDateFilter ||
-        (targetDateFilter === "30days" && txDateFilterValue(row) === "7days");
+        (DATE_FILTER_BUCKETS[targetDateFilter]?.has(txDateFilterValue(row)) ??
+          true);
       const matchesStatus =
         targetStatusFilter === "all" || txStatus(row) === targetStatusFilter;
       const matchesNetwork =
