@@ -17,6 +17,7 @@ export function ActivityScatterDot({
   onOpenTransactionDetail,
 }: ActivityScatterDotProps) {
   const navigate = useNavigate();
+  const openedOnMouseUpRef = React.useRef(false);
   if (
     typeof cx !== "number" ||
     typeof cy !== "number" ||
@@ -40,12 +41,17 @@ export function ActivityScatterDot({
     if (!transactionId) return;
     event.preventDefault();
     event.stopPropagation();
+    if (openedOnMouseUpRef.current) {
+      openedOnMouseUpRef.current = false;
+      return;
+    }
     openTransactionDetail();
   };
   const handleMouseUp = (event: React.MouseEvent<SVGGElement>) => {
     if (!transactionId) return;
     event.preventDefault();
     event.stopPropagation();
+    openedOnMouseUpRef.current = true;
     openTransactionDetail();
   };
   const handleKeyDown = (event: React.KeyboardEvent<SVGGElement>) => {

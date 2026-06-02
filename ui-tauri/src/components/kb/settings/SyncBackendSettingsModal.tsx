@@ -1029,11 +1029,10 @@ export function SyncBackendSettingsModal({
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   placeholder="My home node"
-                  disabled={isEditing}
                 />
                 {isEditing ? (
                   <p className="text-xs text-muted-foreground">
-                    Backend names are stable because wallets may reference them.
+                    Changes the display label only; the backend id stays stable.
                   </p>
                 ) : null}
               </div>

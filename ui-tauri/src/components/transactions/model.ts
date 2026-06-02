@@ -7,6 +7,7 @@ import {
   MISSING_FIAT_LABEL,
   type Currency,
 } from "@/lib/currency";
+import { copyTextWithPolicy } from "@/lib/clipboard";
 import { formatShortDate } from "@/lib/date";
 import {
   explorerTargetForTransaction,
@@ -176,6 +177,15 @@ export type NewTransactionEvidence = {
   txidOrPermalink: string;
   preimage: string;
 };
+
+export function shouldShowSourceExternalId(
+  txn: Pick<Transaction, "txnId" | "explorerId">,
+) {
+  const sourceId = txn.txnId.trim();
+  if (!sourceId) return false;
+  const displayedId = txn.explorerId?.trim() || sourceId;
+  return sourceId !== displayedId;
+}
 
 export const SATS_PER_BTC = 100_000_000;
 
@@ -945,5 +955,5 @@ export function signedNewTransactionBtc(draft: NewTransactionDraft) {
 
 export function copyText(value: string | undefined) {
   if (!value || typeof navigator === "undefined") return;
-  navigator.clipboard?.writeText(value);
+  void copyTextWithPolicy(value);
 }

@@ -118,6 +118,8 @@ const EXTRA_TXS: Tx[] = [
 export interface TransactionsList {
   txs: Tx[];
   year: number;
+  nextCursor?: string | null;
+  hasMore?: boolean;
 }
 
 export const MOCK_TRANSACTIONS: TransactionsList = {

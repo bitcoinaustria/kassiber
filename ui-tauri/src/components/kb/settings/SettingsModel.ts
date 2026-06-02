@@ -46,10 +46,12 @@ export interface Backend {
     host: string;
     port: string;
   } | null;
+  walletRefs?: string[];
 }
 
 export interface BackendSettingsRow {
   name: string;
+  display_name?: string;
   kind?: string;
   chain?: string;
   network?: string;
@@ -68,6 +70,7 @@ export interface BackendSettingsRow {
   insecure?: boolean;
   tor_proxy?: string;
   infrastructure_owner?: string;
+  wallet_refs?: string[];
 }
 
 export interface BackendSettingsData {
@@ -348,9 +351,10 @@ export function parseProxyEndpoint(
 
 export function backendRowToSettingsBackend(row: BackendSettingsRow): Backend {
   const net = backendNetFromRow(row);
-  const name = row.name || "backend";
+  const id = row.name || "backend";
+  const name = row.display_name?.trim() || id;
   return {
-    id: name,
+    id,
     name,
     url: row.url || (row.has_url ? "Configured endpoint" : "Missing endpoint"),
     net,
@@ -373,6 +377,7 @@ export function backendRowToSettingsBackend(row: BackendSettingsRow): Backend {
     infrastructureOwner: normalizeInfrastructureOwnership(
       row.infrastructure_owner,
     ),
+    walletRefs: Array.isArray(row.wallet_refs) ? row.wallet_refs : [],
   };
 }
 
@@ -382,13 +387,16 @@ export function backendPayload(backend: Backend): Record<string, unknown> {
     backend.network ?? (backend.net === "LIQUID" ? "liquidv1" : "main");
   const auth = backend.auth ?? "none";
   const payload: Record<string, unknown> = {
-    name: backend.name,
+    name: backend.id || backend.name,
     kind: backend.kind ?? (backend.net === "LIQUID" ? "electrum" : "esplora"),
     url: backend.url,
     chain,
     network,
   };
   const config: Record<string, unknown> = {};
+  if (backend.name.trim()) {
+    config.display_name = backend.name.trim();
+  }
   if (typeof backend.trustSsl === "boolean") {
     config.insecure = backend.trustSsl;
   }

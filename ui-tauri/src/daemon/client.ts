@@ -6,11 +6,15 @@
  */
 
 import {
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
   type UseQueryOptions,
   type UseQueryResult,
+  type UseInfiniteQueryOptions,
+  type UseInfiniteQueryResult,
+  type InfiniteData,
 } from "@tanstack/react-query";
 import { getTransport, type DaemonEnvelope } from "./transport";
 import { useUiStore, type DataMode } from "@/store/ui";
@@ -184,8 +188,62 @@ export function useDaemon<T = unknown>(
   });
 }
 
+export function useDaemonInfinite<T = unknown>(
+  kind: string,
+  args: Record<string, unknown> | undefined,
+  getNextPageParam: (lastPage: DaemonEnvelope<T>) => unknown,
+  options?: Omit<
+    UseInfiniteQueryOptions<
+      DaemonEnvelope<T>,
+      Error,
+      InfiniteData<DaemonEnvelope<T>>,
+      readonly unknown[],
+      unknown
+    >,
+    "queryKey" | "queryFn" | "initialPageParam" | "getNextPageParam"
+  >,
+): UseInfiniteQueryResult<InfiniteData<DaemonEnvelope<T>>, Error> {
+  const dataMode = useUiStore((state) => state.dataMode);
+  const daemonSession = useUiStore((state) => state.daemonSession);
+  return useInfiniteQuery<
+    DaemonEnvelope<T>,
+    Error,
+    InfiniteData<DaemonEnvelope<T>>,
+    readonly unknown[],
+    unknown
+  >({
+    queryKey: daemonQueryKey(dataMode, daemonSession, kind, args),
+    initialPageParam: null,
+    queryFn: async ({ pageParam }) => {
+      const envelope = await getTransport(dataMode).invoke<T>({
+        kind,
+        args: {
+          ...(args ?? {}),
+          ...(typeof pageParam === "string" ? { cursor: pageParam } : {}),
+        },
+      });
+      if (envelope.kind === "auth_required") {
+        handleAuthRequired(envelope, daemonSession);
+      }
+      if (envelope.kind === "error" || envelope.error) {
+        throw new DaemonRequestError(kind, envelope);
+      }
+      return envelope;
+    },
+    getNextPageParam,
+    staleTime: 5 * 60 * 1000,
+    retry: (failureCount, error) =>
+      error instanceof DaemonAuthRequiredError ? false : failureCount < 3,
+    ...options,
+  });
+}
+
 export function daemonMutationKey(dataMode: DataMode, kind: string) {
   return ["daemon-mutation", dataMode, kind] as const;
+}
+
+export function mutationAdvancesDaemonSession(kind: string) {
+  return kind === "ui.profiles.switch";
 }
 
 export function useDaemonMutation<T = unknown>(
@@ -212,10 +270,14 @@ export function useDaemonMutation<T = unknown>(
       }
       return envelope;
     },
-    onSuccess: () =>
-      queryClient.invalidateQueries({
+    onSuccess: () => {
+      if (mutationAdvancesDaemonSession(kind)) {
+        useUiStore.getState().bumpDaemonSession();
+      }
+      return queryClient.invalidateQueries({
         queryKey: ["daemon", dataMode],
-      }),
+      });
+    },
   });
 }
 

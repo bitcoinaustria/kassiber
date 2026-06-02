@@ -45,6 +45,7 @@ from kassiber.core.ui_snapshot import (
     build_next_actions_snapshot,
     build_report_blockers_snapshot,
     build_transactions_search_snapshot,
+    build_transactions_resolve_snapshot,
     build_transactions_snapshot,
 )
 from kassiber.db import open_db, set_setting
@@ -592,6 +593,37 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(transactions["txs"][1]["quarantineReason"], "missing_spot_price")
         self.assertEqual(transactions["txs"][1]["amountSat"], 100_000_000)
         self.assertEqual(transactions["txs"][1]["eur"], 50_000)
+
+        resolved_by_txid = build_transactions_resolve_snapshot(conn, {"query": "A" * 64})
+        self.assertEqual(resolved_by_txid["transaction"]["id"], "tx-ui-in")
+        self.assertEqual(resolved_by_txid["transaction"]["explorerId"], "a" * 64)
+
+        conn.execute(
+            "UPDATE transactions SET external_id = ? WHERE id = ?",
+            ("A" * 64, "tx-ui-in"),
+        )
+        conn.commit()
+        resolved_by_lower_txid = build_transactions_resolve_snapshot(
+            conn,
+            {"query": "a" * 64},
+        )
+        self.assertEqual(resolved_by_lower_txid["transaction"]["id"], "tx-ui-in")
+        self.assertEqual(resolved_by_lower_txid["transaction"]["explorerId"], "A" * 64)
+
+        resolved_by_id = build_transactions_resolve_snapshot(conn, {"query": "tx-ui-spend"})
+        self.assertEqual(resolved_by_id["transaction"]["id"], "tx-ui-spend")
+
+        missing = build_transactions_resolve_snapshot(conn, {"query": "b" * 64})
+        self.assertIsNone(missing["transaction"])
+
+        with self.assertRaises(AppError) as empty_query:
+            build_transactions_resolve_snapshot(conn, {"query": "  "})
+        self.assertEqual(empty_query.exception.code, "validation")
+
+        with self.assertRaises(AppError) as unknown_filter:
+            build_transactions_resolve_snapshot(conn, {"query": "tx-ui-spend", "limit": 1})
+        self.assertEqual(unknown_filter.exception.code, "validation")
+        self.assertEqual(unknown_filter.exception.details, {"unknown": ["limit"]})
 
     def test_overview_connection_balances_use_raw_wallet_transactions_when_journals_are_partial(self):
         conn = open_db(self.data_root)
@@ -1434,6 +1466,27 @@ class ReviewRegressionTest(unittest.TestCase):
             [row["id"] for row in limited["txs"]],
             ["swap-in-leg", "older-income"],
         )
+        first_page = build_transactions_snapshot(conn, {"limit": 1})
+        self.assertEqual([row["id"] for row in first_page["txs"]], ["swap-in-leg"])
+        self.assertTrue(first_page["hasMore"])
+        self.assertTrue(first_page["nextCursor"])
+        second_page = build_transactions_snapshot(
+            conn,
+            {"limit": 1, "cursor": first_page["nextCursor"]},
+        )
+        self.assertEqual([row["id"] for row in second_page["txs"]], ["older-income"])
+        self.assertFalse(second_page["hasMore"])
+        self.assertIsNone(second_page["nextCursor"])
+        with self.assertRaises(AppError) as changed_cursor_filter:
+            build_transactions_snapshot(
+                conn,
+                {
+                    "limit": 1,
+                    "cursor": first_page["nextCursor"],
+                    "asset": "BTC",
+                },
+            )
+        self.assertEqual(changed_cursor_filter.exception.code, "validation")
 
         outbound = build_transactions_snapshot(
             conn,
@@ -1452,6 +1505,82 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(len(outbound_search["txs"]), 1)
         self.assertEqual(outbound_search["txs"][0]["id"], "swap-out-leg")
         self.assertEqual(outbound_search["txs"][0]["type"], "Swap")
+        list_search = build_transactions_snapshot(
+            conn,
+            {"query": "older income", "limit": 10},
+        )
+        self.assertEqual([row["id"] for row in list_search["txs"]], ["older-income"])
+        self.assertEqual(list_search["filters"]["query"], "older income")
+
+    def test_ui_transactions_snapshot_cursor_roundtrips_sort_ties(self):
+        self._bootstrap_wallet(label="Cursor Sort")
+        for index, tx_id in enumerate(
+            [
+                "cursor-sort-a",
+                "cursor-sort-b",
+                "cursor-sort-c",
+                "cursor-sort-d",
+            ],
+        ):
+            self._insert_transaction(
+                wallet_label="Cursor Sort",
+                tx_id=tx_id,
+                occurred_at=f"2024-01-01T00:00:0{index}Z",
+                amount_msat=100_000_000,
+            )
+
+        db_path = self.data_root / "kassiber.sqlite3"
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            """
+            UPDATE transactions
+            SET fee = ?, fiat_value = ?
+            WHERE id LIKE 'cursor-sort-%'
+            """,
+            (1_000, 42.0),
+        )
+        conn.commit()
+        self.addCleanup(conn.close)
+
+        for sort in ("occurred-at", "amount", "fee", "fiat-value"):
+            for order in ("asc", "desc"):
+                with self.subTest(sort=sort, order=order):
+                    first_page = build_transactions_snapshot(
+                        conn,
+                        {
+                            "query": "cursor-sort",
+                            "limit": 2,
+                            "sort": sort,
+                            "order": order,
+                        },
+                    )
+                    self.assertTrue(first_page["hasMore"])
+                    self.assertTrue(first_page["nextCursor"])
+                    second_page = build_transactions_snapshot(
+                        conn,
+                        {
+                            "query": "cursor-sort",
+                            "limit": 2,
+                            "sort": sort,
+                            "order": order,
+                            "cursor": first_page["nextCursor"],
+                        },
+                    )
+                    ids = [
+                        row["id"]
+                        for row in [*first_page["txs"], *second_page["txs"]]
+                    ]
+                    self.assertEqual(len(ids), 4)
+                    self.assertEqual(len(set(ids)), 4)
+                    self.assertEqual(set(ids), {
+                        "cursor-sort-a",
+                        "cursor-sort-b",
+                        "cursor-sort-c",
+                        "cursor-sort-d",
+                    })
+                    self.assertFalse(second_page["hasMore"])
+                    self.assertIsNone(second_page["nextCursor"])
 
     def test_report_transfer_rows_derive_missing_swap_fee(self):
         context = {
@@ -3770,6 +3899,55 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(stored_config["username"], "rpcuser")
         self.assertEqual(stored_config["password"], "rpcpass")
 
+    def test_backend_display_name_is_safe_editable_metadata(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+
+        payload, result = self._run_json(
+            "backends",
+            "create",
+            "liquid-home",
+            "--kind",
+            "liquid-esplora",
+            "--chain",
+            "liquid",
+            "--network",
+            "liquidv1",
+            "--url",
+            "https://liquid.network/api",
+            "--display-name",
+            "Liquid desk node",
+        )
+        self._assert_ok(payload, result, "backends.create")
+        self.assertEqual(payload["data"]["name"], "liquid-home")
+        self.assertEqual(payload["data"]["display_name"], "Liquid desk node")
+
+        payload, result = self._run_json(
+            "backends",
+            "update",
+            "liquid-home",
+            "--display-name",
+            "Liquid office node",
+        )
+        self._assert_ok(payload, result, "backends.update")
+        self.assertEqual(payload["data"]["name"], "liquid-home")
+        self.assertEqual(payload["data"]["display_name"], "Liquid office node")
+
+        payload, result = self._run_json("backends", "list")
+        self._assert_ok(payload, result, "backends.list")
+        rows = {row["name"]: row for row in payload["data"]}
+        self.assertEqual(rows["liquid-home"]["display_name"], "Liquid office node")
+
+        db_path = self.data_root / "kassiber.sqlite3"
+        conn = sqlite3.connect(db_path)
+        row = conn.execute(
+            "SELECT name, config_json FROM backends WHERE name = 'liquid-home'"
+        ).fetchone()
+        conn.close()
+        self.assertEqual(row[0], "liquid-home")
+        stored_config = json.loads(row[1])
+        self.assertEqual(stored_config["display_name"], "Liquid office node")
+
     def test_backend_outputs_hide_alias_credentials_and_unknown_config(self):
         env_file = self.case_dir / "backend-aliases.env"
         env_file.write_text(
@@ -3830,6 +4008,10 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload.get("kind"), "error")
         self.assertEqual(payload["error"]["code"], "conflict")
         self.assertIn("Main/Default/Tracked", payload["error"]["hint"])
+        self.assertEqual(
+            payload["error"]["details"],
+            {"wallet_refs": ["Main/Default/Tracked"]},
+        )
 
     def test_metadata_record_mutations_roundtrip_and_invalidate_journals(self):
         self._bootstrap_wallet(label="Meta")

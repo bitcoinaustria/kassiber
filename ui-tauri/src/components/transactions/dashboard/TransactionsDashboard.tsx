@@ -34,17 +34,31 @@ import {
 const TransactionsDashboard = ({
   className,
   transactions = MOCK_TRANSACTIONS,
+  tableTransactions,
   nowRate = MOCK_OVERVIEW.priceEur,
   swapCandidates,
   swapCandidateTotal,
   isDataRefreshing = false,
+  hasMoreTransactions = false,
+  isLoadingMoreTransactions = false,
+  onLoadMoreTransactions,
+  focusedTransaction,
+  deepLinkedTransactionId,
+  deepLinkedTransactionTab,
 }: {
   className?: string;
   transactions?: TransactionsList;
+  tableTransactions?: TransactionsList;
   nowRate?: number | null;
   swapCandidates?: SwapCandidateReference[];
   swapCandidateTotal?: number | null;
   isDataRefreshing?: boolean;
+  hasMoreTransactions?: boolean;
+  isLoadingMoreTransactions?: boolean;
+  onLoadMoreTransactions?: () => void;
+  focusedTransaction?: TransactionsList["txs"][number] | null;
+  deepLinkedTransactionId?: string | null;
+  deepLinkedTransactionTab?: string;
 }) => {
   const [period, setPeriod] = React.useState<PeriodKey>(initialPeriodFromUrl);
   const [newTxnOpen, setNewTxnOpen] = React.useState(false);
@@ -63,12 +77,46 @@ const TransactionsDashboard = ({
   const { syncAll, isSyncing } = useWalletSyncAction();
   const showRefreshSkeleton = isSyncing || isDataRefreshing;
   const records = React.useMemo(
-    () =>
-      transactions.txs.length
-        ? transactions.txs.map(toDashboardTransaction)
-        : transactionRecords,
-    [transactions.txs],
+    () => {
+      const txs = transactions.txs.length ? [...transactions.txs] : [];
+      if (
+        focusedTransaction &&
+        !txs.some(
+          (tx) =>
+            tx.id === focusedTransaction.id ||
+            (Boolean(tx.externalId) &&
+              tx.externalId === focusedTransaction.externalId) ||
+            (Boolean(tx.explorerId) &&
+              tx.explorerId === focusedTransaction.explorerId),
+        )
+      ) {
+        txs.unshift(focusedTransaction);
+      }
+      return txs.length
+        ? txs.map(toDashboardTransaction)
+        : transactionRecords;
+    },
+    [focusedTransaction, transactions.txs],
   );
+  const tableSourceRecords = React.useMemo(() => {
+    const txs = (tableTransactions ?? transactions).txs.length
+      ? [...(tableTransactions ?? transactions).txs]
+      : [];
+    if (
+      focusedTransaction &&
+      !txs.some(
+        (tx) =>
+          tx.id === focusedTransaction.id ||
+          (Boolean(tx.externalId) &&
+            tx.externalId === focusedTransaction.externalId) ||
+          (Boolean(tx.explorerId) &&
+            tx.explorerId === focusedTransaction.explorerId),
+      )
+    ) {
+      txs.unshift(focusedTransaction);
+    }
+    return txs.length ? txs.map(toDashboardTransaction) : transactionRecords;
+  }, [focusedTransaction, tableTransactions, transactions]);
   const allPeriodRecords = React.useMemo(
     () => sortTransactionsByDateDesc(records),
     [records],
@@ -80,15 +128,41 @@ const TransactionsDashboard = ({
         : recordsForPeriod(records, period),
     [allPeriodRecords, records, period],
   );
-  const periodSwapCandidateIds = React.useMemo(
+  const focusedRecord = React.useMemo(() => {
+    if (!focusedTransaction) return null;
+    return tableSourceRecords.find(
+      (record) =>
+        record.id === focusedTransaction.id ||
+        (Boolean(focusedTransaction.externalId) &&
+          record.txnId === focusedTransaction.externalId) ||
+        (Boolean(focusedTransaction.explorerId) &&
+          record.explorerId === focusedTransaction.explorerId),
+    ) ?? null;
+  }, [focusedTransaction, tableSourceRecords]);
+  const tablePeriodRecords = React.useMemo(
+    () =>
+      period === "all"
+        ? sortTransactionsByDateDesc(tableSourceRecords)
+        : recordsForPeriod(tableSourceRecords, period),
+    [period, tableSourceRecords],
+  );
+  const tableRecords = React.useMemo(() => {
+    if (
+      !focusedRecord ||
+      tablePeriodRecords.some((record) => record.id === focusedRecord.id)
+    ) {
+      return tablePeriodRecords;
+    }
+    return [focusedRecord, ...tablePeriodRecords];
+  }, [focusedRecord, tablePeriodRecords]);
+  const tableSwapCandidateIds = React.useMemo(
     () =>
       new Set(
-        buildSwapCandidates(periodRecords, swapCandidates).flatMap((candidate) => [
-          candidate.in.id,
-          candidate.out.id,
-        ]),
+        buildSwapCandidates(tablePeriodRecords, swapCandidates).flatMap(
+          (candidate) => [candidate.in.id, candidate.out.id],
+        ),
       ),
-    [periodRecords, swapCandidates],
+    [tablePeriodRecords, swapCandidates],
   );
   const handlePeriodChange = React.useCallback((nextPeriod: PeriodKey) => {
     setPeriod(nextPeriod);
@@ -166,12 +240,12 @@ const TransactionsDashboard = ({
       />
 
       <TransactionsTable
-        records={periodRecords}
+        records={tableRecords}
         hideSensitive={hideSensitive}
         currency={currency}
         nowRate={nowRate}
         explorerSettings={explorerSettings}
-        swapCandidateIds={periodSwapCandidateIds}
+        swapCandidateIds={tableSwapCandidateIds}
         chartSelection={flowChartSelection}
         quickFilter={quickFilter}
         breakdownSelection={breakdownSelection}
@@ -180,6 +254,11 @@ const TransactionsDashboard = ({
         onBreakdownSelectionChange={setBreakdownSelection}
         resetTableFiltersToken={resetTableFiltersToken}
         isRefreshing={showRefreshSkeleton}
+        hasMoreRecords={hasMoreTransactions}
+        isLoadingMoreRecords={isLoadingMoreTransactions}
+        onLoadMoreRecords={onLoadMoreTransactions}
+        deepLinkedTransactionId={deepLinkedTransactionId}
+        deepLinkedTransactionTab={deepLinkedTransactionTab}
       />
     </div>
   );

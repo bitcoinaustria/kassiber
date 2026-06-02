@@ -40,6 +40,8 @@ describe("UI persistence", () => {
   it("does not persist notification progress to localStorage", () => {
     const state = {
       ...useUiStore.getState(),
+      theme: "dark" as const,
+      clearClipboard: false,
       notifications: [
         {
           id: "notification-1",
@@ -54,6 +56,8 @@ describe("UI persistence", () => {
 
     const encoded = JSON.stringify(uiStatePartialForStorage(state));
     expect(encoded).not.toContain("secret-progress");
+    expect(encoded).toContain('"theme":"dark"');
+    expect(encoded).toContain('"clearClipboard":false');
   });
 
   it("normalizes persisted UI scale to the supported menu range", () => {

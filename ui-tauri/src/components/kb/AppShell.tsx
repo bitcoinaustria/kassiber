@@ -20,6 +20,7 @@ import {
   Database,
   Eye,
   EyeOff,
+  FileSearch,
   Fingerprint,
   Gauge,
   Heart,
@@ -124,6 +125,16 @@ import { PreAlphaBanner } from "./PreAlphaBanner";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { BookSwitcherPopover } from "./BookSwitcherPopover";
+import {
+  buildAppSearchResults,
+  isLikelyTransactionLookupQuery,
+  isSearchResultActivatable,
+  searchResultForActivation,
+  type RankedSearchResult,
+  type ResolvedTransactionLookup,
+  type SearchActionId,
+  type SearchIconKey,
+} from "./search";
 
 import {
   dispatchMenuIntent,
@@ -148,15 +159,6 @@ type RouteMeta = {
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   searchLabel: string;
   searchPlaceholder: string;
-};
-
-type SearchResult = {
-  id: string;
-  title: string;
-  detail: string;
-  keywords: string[];
-  to: AppRoutePath | "/connections/$connectionId";
-  connectionId?: string;
 };
 
 type NotificationItem = Omit<AppNotification, "createdAt"> & {
@@ -329,187 +331,49 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
   ],
 ];
 
-const STATIC_SEARCH_RESULTS: SearchResult[] = [
-  {
-    id: "route:overview",
-    title: "Overview",
-    detail: "Portfolio, balance, activity",
-    keywords: ["dashboard", "home", "balance", "portfolio"],
-    to: "/overview",
-  },
-  {
-    id: "route:transactions",
-    title: "Transactions",
-    detail: "Transaction rows and filters",
-    keywords: ["tx", "counterparty", "account", "amount", "import"],
-    to: "/transactions",
-  },
-  {
-    id: "route:connections",
-    title: "Wallets",
-    detail: "Wallets, imports, backends, and sync",
-    keywords: ["connections", "wallets", "xpub", "backend", "sync"],
-    to: "/connections",
-  },
-  {
-    id: "route:books",
-    title: "Books",
-    detail: "Books and tax settings",
-    keywords: ["book", "books", "tax", "country"],
-    to: "/books",
-  },
-  {
-    id: "route:source-of-funds",
-    title: "Source of Funds",
-    detail: "Wallet sources and local provenance summaries",
-    keywords: ["source", "funds", "wallet", "balance", "provenance"],
-    to: "/source-of-funds",
-  },
-  {
-    id: "route:journals",
-    title: "Ledger",
-    detail: "Processed tax ledger",
-    keywords: ["journal", "process", "entries", "fees", "basis", "ledger"],
-    to: "/journals",
-  },
-  {
-    id: "route:reports",
-    title: "Reports",
-    detail: "Capital gains and exports",
-    keywords: ["csv", "pdf", "xlsx", "tax", "austria", "e1kv"],
-    to: "/reports",
-  },
-  {
-    id: "route:quarantine",
-    title: "Quarantine",
-    detail: "Review ambiguous rows",
-    keywords: ["review", "issues", "missing", "price"],
-    to: "/quarantine",
-  },
-  {
-    id: "route:swaps-transfers",
-    title: "Swaps & Transfers",
-    detail: "Review candidate swap and transfer pairings",
-    keywords: ["swap", "swaps", "transfer", "transfers", "review", "pair"],
-    to: "/swaps",
-  },
-  {
-    id: "route:settings",
-    title: "Settings",
-    detail: "Preferences, integrations, local data",
-    keywords: ["preferences", "backends", "providers", "privacy", "lock"],
-    to: "/settings",
-  },
-  {
-    id: "route:logs",
-    title: "Logs",
-    detail: "Typed local log stream and redacted troubleshooting export",
-    keywords: ["log", "logs", "error", "daemon", "download"],
-    to: "/logs",
-  },
-  {
-    id: "route:assistant",
-    title: "Assistant",
-    detail: "Ask Kassiber",
-    keywords: ["chat", "ai", "tools"],
-    to: "/assistant",
-  },
-];
-
-function searchMatches(result: SearchResult, query: string) {
-  const terms = query
-    .trim()
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (!terms.length) return false;
-  const haystack = [
-    result.title,
-    result.detail,
-    ...result.keywords,
-  ]
-    .join(" ")
-    .toLowerCase();
-  return terms.every((term) => haystack.includes(term));
-}
-
-function buildSearchResults(
-  snapshot: OverviewSnapshot | undefined,
-  query: string,
-  aiFeaturesEnabled: boolean,
-  developerToolsEnabled: boolean,
-): SearchResult[] {
-  if (!query.trim()) return [];
-
-  const dynamicResults: SearchResult[] = [
-    ...(snapshot?.connections.map((connection) => ({
-      id: `connection:${connection.id}`,
-      title: connection.label,
-      detail: `${connection.kind.toUpperCase()} · ${connection.status}`,
-      keywords: [
-        "connection",
-        "wallet",
-        "sync",
-        connection.kind,
-        connection.status,
-      ],
-      to: "/connections/$connectionId" as const,
-      connectionId: connection.id,
-    })) ?? []),
-    ...(snapshot?.txs.map((tx) => ({
-      id: `tx:${tx.id}`,
-      title: `${tx.id} · ${tx.counter}`,
-      detail: `${tx.account} · ${tx.type} · ${tx.tag}`,
-      keywords: [
-        "transaction",
-        "transactions",
-        tx.id,
-        tx.account,
-        tx.counter,
-        tx.type,
-        tx.tag,
-      ],
-      to: "/transactions" as const,
-    })) ?? []),
-    ...(snapshot?.status?.needsJournals
-      ? [
-          {
-            id: "status:journals",
-            title: "Ledger needs processing",
-            detail: "Reports are stale until journal processing runs",
-            keywords: ["journal", "reports", "stale", "process"],
-            to: "/journals" as const,
-          },
-        ]
-      : []),
-    ...((snapshot?.status?.quarantines ?? 0) > 0
-      ? [
-          {
-            id: "status:quarantine",
-            title: "Transactions quarantined",
-            detail: `${snapshot?.status?.quarantines ?? 0} rows need review`,
-            keywords: ["quarantine", "review", "missing", "price"],
-            to: "/quarantine" as const,
-          },
-        ]
-      : []),
-  ];
-
-  return [
-    ...STATIC_SEARCH_RESULTS.filter((result) => {
-      if (!aiFeaturesEnabled && result.to === "/assistant") return false;
-      if (!developerToolsEnabled && result.to === "/logs") return false;
-      return true;
-    }),
-    ...dynamicResults,
-  ]
-    .filter((result) => searchMatches(result, query))
-    .slice(0, 8);
-}
-
 function nextSearchIndex(current: number, delta: number, total: number) {
   if (total <= 0) return 0;
   return (current + delta + total) % total;
+}
+
+const SEARCH_ICON_BY_KEY: Record<
+  SearchIconKey | string,
+  React.ComponentType<React.SVGProps<SVGSVGElement>>
+> = {
+  activity: Gauge,
+  assistant: MessageSquareText,
+  book: BookOpen,
+  database: Database,
+  file_search: FileSearch,
+  ledger: ClipboardList,
+  lock: LockKeyhole,
+  logs: TerminalSquare,
+  report: BarChart3,
+  search: Search,
+  settings: Settings,
+  shield: ShieldAlert,
+  sync: ArrowLeftRight,
+  transaction: ArrowLeftRight,
+  wallet: Wallet,
+};
+
+const SEARCH_CATEGORY_LABELS: Record<RankedSearchResult["category"], string> = {
+  action: "Action",
+  page: "Page",
+  report: "Report",
+  review_item: "Review",
+  setting: "Setting",
+  transaction: "Transaction",
+  wallet: "Wallet",
+};
+
+function searchResultIcon(result: RankedSearchResult) {
+  const key = result.iconKey ?? result.category;
+  return SEARCH_ICON_BY_KEY[key] ?? Search;
+}
+
+function exhaustiveSearchAction(actionId: never): never {
+  throw new Error(`Unhandled search action: ${actionId}`);
 }
 
 function notificationRouteFor(title: string): AppRoutePath | undefined {
@@ -1675,6 +1539,9 @@ function AppDashboardHeader({
   const clearNotifications = useUiStore((s) => s.clearNotifications);
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
+  const setDeferredConnectionSetup = useUiStore(
+    (s) => s.setDeferredConnectionSetup,
+  );
   const { runJournalProcessing, isProcessingJournals } =
     useJournalProcessingAction();
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -1689,35 +1556,104 @@ function AppDashboardHeader({
     { enabled: daemonEnabled },
   );
   const snapshot = data?.data;
+  const shouldResolveTransaction = isLikelyTransactionLookupQuery(searchQuery);
+  const resolvedTransaction = useDaemon<ResolvedTransactionLookup>(
+    "ui.transactions.resolve",
+    { query: searchQuery.trim() },
+    { enabled: daemonEnabled && shouldResolveTransaction },
+  );
   const searchResults = React.useMemo(
     () =>
-      buildSearchResults(
+      buildAppSearchResults({
         snapshot,
-        searchQuery,
+        query: searchQuery,
         aiFeaturesEnabled,
         developerToolsEnabled,
-      ),
-    [snapshot, searchQuery, aiFeaturesEnabled, developerToolsEnabled],
+        resolvedTransaction: resolvedTransaction.data?.data ?? null,
+        isResolvingTransaction:
+          shouldResolveTransaction &&
+          (resolvedTransaction.isFetching || resolvedTransaction.isLoading),
+      }),
+    [
+      snapshot,
+      searchQuery,
+      aiFeaturesEnabled,
+      developerToolsEnabled,
+      resolvedTransaction.data?.data,
+      resolvedTransaction.isFetching,
+      resolvedTransaction.isLoading,
+      shouldResolveTransaction,
+    ],
   );
   const searchListId = React.useId();
   const searchActiveId = searchResults[activeSearchIndex]?.id
     ? `search-result-${searchResults[activeSearchIndex].id.replace(/[^a-zA-Z0-9_-]/g, "-")}`
     : undefined;
+  const activateSearchAction = React.useCallback(
+    (actionId: SearchActionId) => {
+      switch (actionId) {
+        case "process-journals":
+          runJournalProcessing();
+          return;
+        case "add-wallet":
+        case "import-btcpay":
+          setDeferredConnectionSetup({
+            sourceId: actionId === "import-btcpay" ? "btcpay" : "descriptor",
+            reason: "Opened from global search",
+          });
+          void navigate({ to: "/connections" });
+          return;
+        default:
+          exhaustiveSearchAction(actionId);
+      }
+    },
+    [navigate, runJournalProcessing, setDeferredConnectionSetup],
+  );
   const activateSearchResult = React.useCallback(
-    (result: SearchResult | undefined) => {
+    (result: RankedSearchResult | undefined) => {
       if (!result) return;
+      const actionId = result.action?.id;
+      if (actionId) {
+        setSearchOpen(false);
+        setSearchQuery("");
+        activateSearchAction(actionId);
+        return;
+      }
+
+      const route = result.route;
+      if (!route) return;
       setSearchOpen(false);
       setSearchQuery("");
-      if (result.to === "/connections/$connectionId" && result.connectionId) {
+      if (
+        route.to === "/connections/$connectionId" &&
+        typeof route.params?.connectionId === "string"
+      ) {
         void navigate({
           to: "/connections/$connectionId",
-          params: { connectionId: result.connectionId },
+          params: { connectionId: route.params.connectionId },
         });
         return;
       }
-      void navigate({ to: result.to });
+      if (route.to === "/connections/$connectionId") return;
+      if (route.to === "/transactions" && typeof route.search?.tx === "string") {
+        void navigate({
+          to: "/transactions",
+          search: { tx: route.search.tx },
+        });
+        return;
+      }
+      if (route.to === "/settings" && route.hash) {
+        void navigate({ to: "/settings", hash: route.hash });
+        window.dispatchEvent(
+          new CustomEvent("kassiber:settings-section", {
+            detail: { section: route.hash },
+          }),
+        );
+        return;
+      }
+      void navigate({ to: route.to });
     },
-    [navigate],
+    [activateSearchAction, navigate],
   );
 
   React.useEffect(() => {
@@ -1930,7 +1866,7 @@ function AppDashboardHeader({
             aria-expanded={searchOpen}
             aria-controls={searchListId}
             aria-activedescendant={searchActiveId}
-            placeholder="Search Kassiber"
+            placeholder="Search pages, actions, transactions..."
             value={searchQuery}
             onChange={(event) => {
               setSearchQuery(event.target.value);
@@ -1952,7 +1888,10 @@ function AppDashboardHeader({
                 );
               } else if (event.key === "Enter") {
                 event.preventDefault();
-                activateSearchResult(searchResults[activeSearchIndex]);
+                activateSearchResult(
+                  searchResultForActivation(searchResults, activeSearchIndex) ??
+                    undefined,
+                );
               } else if (event.key === "Escape") {
                 setSearchOpen(false);
                 searchInputRef.current?.blur();
@@ -1974,6 +1913,8 @@ function AppDashboardHeader({
                 searchResults.map((result, index) => {
                   const active = index === activeSearchIndex;
                   const itemId = `search-result-${result.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+                  const ResultIcon = searchResultIcon(result);
+                  const activatable = isSearchResultActivatable(result);
                   return (
                     <button
                       key={result.id}
@@ -1981,19 +1922,34 @@ function AppDashboardHeader({
                       type="button"
                       role="option"
                       aria-selected={active}
+                      aria-disabled={!activatable}
                       onMouseDown={(event) => {
                         event.preventDefault();
                         activateSearchResult(result);
                       }}
                       onMouseEnter={() => setActiveSearchIndex(index)}
                       className={cn(
-                        "flex w-full flex-col gap-0.5 rounded-sm px-3 py-2 text-left text-sm",
+                        "grid w-full grid-cols-[auto_minmax(0,1fr)] gap-2 rounded-sm px-3 py-2 text-left text-sm",
                         active ? "bg-accent text-accent-foreground" : "",
                       )}
                     >
-                      <span className="font-medium">{result.title}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {result.detail}
+                      <span className="mt-0.5 flex size-7 items-center justify-center rounded-md border bg-background text-muted-foreground">
+                        <ResultIcon className="size-3.5" aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="truncate font-medium">
+                            {result.title}
+                          </span>
+                          <span className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                            {SEARCH_CATEGORY_LABELS[result.category]}
+                          </span>
+                        </span>
+                        {result.subtitle ? (
+                          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                            {result.subtitle}
+                          </span>
+                        ) : null}
                       </span>
                     </button>
                   );

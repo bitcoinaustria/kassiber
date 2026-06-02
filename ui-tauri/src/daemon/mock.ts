@@ -94,6 +94,7 @@ const mockOverviewSnapshot = () =>
 
 type MockBackendSettingsRow = {
   name: string;
+  display_name?: string;
   kind: string;
   chain: string;
   network: string;
@@ -123,6 +124,7 @@ let mockBackendSettingsRows: MockBackendSettingsRow[] = [
     source: "mock",
     is_default: true,
     has_url: true,
+    display_name: "mempool.bitcoin-austria.at",
   },
   {
     name: "liquid",
@@ -132,6 +134,7 @@ let mockBackendSettingsRows: MockBackendSettingsRow[] = [
     url: "https://liquid.network/api",
     source: "mock",
     has_url: true,
+    display_name: "Liquid Network",
   },
 ];
 
@@ -179,6 +182,10 @@ function mockBackendRowFromArgs(
         ? args.url.trim()
         : existing?.url ?? "https://example.invalid/api",
     source: "mock",
+    display_name:
+      typeof config.display_name === "string" && config.display_name.trim()
+        ? config.display_name.trim()
+        : existing?.display_name,
     is_default: existing?.is_default,
     has_url: true,
     has_auth_header: clear.has("auth_header") || clear.has("auth-header")
@@ -2220,6 +2227,30 @@ export const mockDaemon: DaemonTransport = {
             state: "ok",
           },
         } as T,
+      };
+    }
+
+    if (req.kind === "ui.transactions.resolve") {
+      const query =
+        typeof req.args?.query === "string" ? req.args.query.trim().toLowerCase() : "";
+      const transactionList = fixtures["ui.transactions.list"] as {
+        txs?: Array<{
+          id?: string;
+          externalId?: string;
+          explorerId?: string;
+        }>;
+      };
+      const transaction =
+        transactionList.txs?.find((tx) =>
+          [tx.id, tx.externalId, tx.explorerId]
+            .filter(Boolean)
+            .some((value) => value?.toLowerCase() === query),
+        ) ?? null;
+      return {
+        kind: "ui.transactions.resolve",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: { transaction, query } as T,
       };
     }
 

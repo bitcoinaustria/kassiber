@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import sqlite3
 from collections import defaultdict
@@ -20,6 +22,12 @@ from .wallets import wallet_btcpay_provenance_config
 
 MAX_UI_LIST_LIMIT = 500
 MAX_UI_PREVIEW_LIMIT = 100
+_UI_TRANSACTION_SORT_COLUMNS = {
+    "occurred-at": "t.occurred_at",
+    "amount": "t.amount",
+    "fiat-value": "COALESCE(t.fiat_value, 0)",
+    "fee": "t.fee",
+}
 _JOURNAL_DISPLAY_ENTRY_TYPE_SQL = """
 CASE
     WHEN je.at_category = 'neu_swap' THEN 'neutral_swap'
@@ -139,6 +147,109 @@ def _coerce_limit(
             retryable=False,
         )
     return min(limit, maximum)
+
+
+def _ui_transaction_cursor_filters(
+    context: dict[str, Any],
+    *,
+    direction: str | None,
+    asset: str | None,
+    wallet: str | None,
+    since: str | None,
+    until: str | None,
+    query: str | None,
+) -> dict[str, str]:
+    return {
+        "workspace_id": str(context.get("workspace_id") or ""),
+        "profile_id": str(context.get("profile_id") or ""),
+        "direction": direction or "",
+        "asset": asset or "",
+        "wallet": wallet or "",
+        "since": since or "",
+        "until": until or "",
+        "query": query or "",
+    }
+
+
+def _ui_transaction_cursor_value(row: sqlite3.Row, sort: str) -> int | float | str:
+    if sort == "occurred-at":
+        return row["occurred_at"] or ""
+    if sort == "amount":
+        return int(row["amount"] or 0)
+    if sort == "fee":
+        return int(row["fee"] or 0)
+    if sort == "fiat-value":
+        return float(row["fiat_value"] or 0)
+    raise AppError(
+        f"Unsupported transaction sort: {sort}",
+        code="validation",
+        hint="Use one of: occurred-at, amount, fiat-value, fee.",
+        retryable=False,
+    )
+
+
+def _encode_ui_transaction_cursor(
+    row: sqlite3.Row,
+    *,
+    sort: str,
+    order: str,
+    filters: dict[str, str],
+    skip_pairs: set[str] | None = None,
+) -> str:
+    payload = {
+        "sort": sort,
+        "order": order,
+        "filters": filters,
+        "value": _ui_transaction_cursor_value(row, sort),
+        "occurred_at": row["occurred_at"] or "",
+        "created_at": row["_created_at"] or "",
+        "id": row["id"],
+        "skip_pairs": sorted(skip_pairs or set()),
+    }
+    token = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+    return base64.urlsafe_b64encode(token.encode("utf-8")).decode("ascii").rstrip("=")
+
+
+def _decode_ui_transaction_cursor(
+    cursor: Any,
+    *,
+    sort: str,
+    order: str,
+    filters: dict[str, str],
+) -> dict[str, Any] | None:
+    if cursor in (None, ""):
+        return None
+    if not isinstance(cursor, str):
+        raise AppError("cursor must be a string", code="validation", retryable=False)
+    try:
+        padding = "=" * (-len(cursor) % 4)
+        decoded = base64.urlsafe_b64decode(cursor + padding).decode("utf-8")
+        payload = json.loads(decoded)
+        if payload.get("sort") != sort or payload.get("order") != order:
+            raise ValueError("cursor sort/order mismatch")
+        if payload.get("filters") != filters:
+            raise ValueError("cursor filter mismatch")
+        required = {
+            "sort",
+            "order",
+            "filters",
+            "value",
+            "occurred_at",
+            "created_at",
+            "id",
+        }
+        if not required.issubset(payload):
+            raise ValueError("missing cursor fields")
+        if not isinstance(payload.get("skip_pairs", []), list):
+            raise ValueError("invalid cursor skip_pairs")
+        return payload
+    except (ValueError, UnicodeDecodeError, binascii.Error, json.JSONDecodeError) as exc:
+        raise AppError(
+            "Invalid cursor",
+            code="validation",
+            hint="Pass the exact nextCursor value from the previous response; do not modify it or change filters.",
+            retryable=False,
+        ) from exc
 
 
 def _json_config(value: str | None) -> dict[str, Any]:
@@ -774,6 +885,8 @@ def _transaction_pair_display_meta(
         display_rate = _positive_float_or_none(raw_display_rate)
         base = {
             "pair_id": pair["id"],
+            "out_transaction_id": pair["out_transaction_id"],
+            "in_transaction_id": pair["in_transaction_id"],
             "pair_type": pair_type,
             "kind": pair["kind"],
             "policy": pair["policy"],
@@ -1249,35 +1362,68 @@ def build_overview_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     return snapshot
 
 
-def build_transactions_snapshot(
+def _build_transactions_page_snapshot(
     conn: sqlite3.Connection,
-    args: dict[str, Any] | None = None,
+    args: dict[str, Any] | None,
+    *,
+    kind: str,
+    default_limit: int,
+    maximum_limit: int,
+    require_query: bool = False,
 ) -> dict[str, Any]:
     context = current_context_snapshot(conn)
     if not context["workspace_id"] or not context["profile_id"]:
-        return {"txs": [], "year": datetime.now(timezone.utc).year}
+        filters: dict[str, Any] = {"limit": 0}
+        if require_query:
+            filters["query"] = ""
+        return {
+            "txs": [],
+            "year": datetime.now(timezone.utc).year,
+            "filters": filters,
+            "nextCursor": None,
+            "hasMore": False,
+        }
 
     raw_args = _coerce_args(args)
     unknown = sorted(
         set(raw_args)
         - {
             "limit",
+            "cursor",
+            "query",
             "direction",
             "asset",
             "wallet",
             "since",
+            "until",
             "sort",
             "order",
         }
     )
     if unknown:
         raise AppError(
-            "ui.transactions.list received unsupported filters",
+            f"{kind} received unsupported filters",
             code="validation",
             details={"unknown": unknown},
             retryable=False,
         )
-    limit = _coerce_limit(raw_args, default=100, maximum=MAX_UI_LIST_LIMIT)
+    query = raw_args.get("query")
+    if query is not None:
+        if not isinstance(query, str) or not query.strip():
+            raise AppError(
+                f"{kind} query must be a non-empty string",
+                code="validation",
+                retryable=False,
+            )
+        query = query.strip()
+    elif require_query:
+        raise AppError(
+            f"{kind} query must be a non-empty string",
+            code="validation",
+            retryable=False,
+        )
+
+    limit = _coerce_limit(raw_args, default=default_limit, maximum=maximum_limit)
     filters = ["t.profile_id = ?"]
     params: list[Any] = [context["profile_id"]]
     direction = raw_args.get("direction")
@@ -1315,15 +1461,41 @@ def build_transactions_snapshot(
         since_filter = _iso_z(_parse_iso_datetime(since, "since"))
         filters.append("t.occurred_at >= ?")
         params.append(since_filter)
+    until = raw_args.get("until")
+    until_filter = None
+    if until is not None:
+        if not isinstance(until, str) or not until.strip():
+            raise AppError("until must be an RFC3339 timestamp", code="validation")
+        until_filter = _iso_z(_parse_iso_datetime(until, "until"))
+        filters.append("t.occurred_at <= ?")
+        params.append(until_filter)
+    if query is not None:
+        filters.append(
+            """
+            (
+              lower(t.id) LIKE ?
+              OR lower(COALESCE(t.external_id, '')) LIKE ?
+              OR lower(COALESCE(t.kind, '')) LIKE ?
+              OR lower(COALESCE(t.description, '')) LIKE ?
+              OR lower(COALESCE(t.counterparty, '')) LIKE ?
+              OR lower(COALESCE(t.note, '')) LIKE ?
+              OR lower(w.label) LIKE ?
+              OR EXISTS (
+                SELECT 1
+                FROM transaction_tags tt
+                JOIN tags ON tags.id = tt.tag_id
+                WHERE tt.transaction_id = t.id
+                  AND lower(tags.label) LIKE ?
+              )
+            )
+            """
+        )
+        like = f"%{query.lower()}%"
+        params.extend([like] * 8)
 
     sort = raw_args.get("sort", "occurred-at")
-    sort_columns = {
-        "occurred-at": "t.occurred_at",
-        "amount": "t.amount",
-        "fiat-value": "COALESCE(t.fiat_value, 0)",
-        "fee": "t.fee",
-    }
-    if sort not in sort_columns:
+    sort_column = _UI_TRANSACTION_SORT_COLUMNS.get(sort)
+    if sort_column is None:
         raise AppError(
             "sort must be one of: occurred-at, amount, fiat-value, fee",
             code="validation",
@@ -1343,11 +1515,66 @@ def build_transactions_snapshot(
         order_by = f"t.occurred_at {order_sql}, t.created_at {order_sql}, t.id {order_sql}"
     else:
         order_by = (
-            f"{sort_columns[sort]} {order_sql}, "
+            f"{sort_column} {order_sql}, "
             "t.occurred_at DESC, t.created_at DESC, t.id DESC"
         )
-    raw_limit = limit * 2
-    params.append(raw_limit)
+    cursor_filters = _ui_transaction_cursor_filters(
+        context,
+        direction=direction,
+        asset=asset_filter,
+        wallet=wallet_filter,
+        since=since_filter,
+        until=until_filter,
+        query=query,
+    )
+    cursor_data = _decode_ui_transaction_cursor(
+        raw_args.get("cursor"),
+        sort=sort,
+        order=order,
+        filters=cursor_filters,
+    )
+    skip_pairs = set(cursor_data.get("skip_pairs", [])) if cursor_data else set()
+    if cursor_data:
+        if sort == "occurred-at":
+            op = ">" if order == "asc" else "<"
+            filters.append(
+                f"(t.occurred_at {op} ? OR "
+                f"(t.occurred_at = ? AND t.created_at {op} ?) OR "
+                f"(t.occurred_at = ? AND t.created_at = ? AND t.id {op} ?))"
+            )
+            params.extend(
+                [
+                    cursor_data["occurred_at"],
+                    cursor_data["occurred_at"],
+                    cursor_data["created_at"],
+                    cursor_data["occurred_at"],
+                    cursor_data["created_at"],
+                    cursor_data["id"],
+                ]
+            )
+        else:
+            primary_op = ">" if order == "asc" else "<"
+            filters.append(
+                f"({sort_column} {primary_op} ? OR "
+                f"({sort_column} = ? AND "
+                "(t.occurred_at < ? OR "
+                "(t.occurred_at = ? AND t.created_at < ?) OR "
+                "(t.occurred_at = ? AND t.created_at = ? AND t.id < ?))))"
+            )
+            params.extend(
+                [
+                    cursor_data["value"],
+                    cursor_data["value"],
+                    cursor_data["occurred_at"],
+                    cursor_data["occurred_at"],
+                    cursor_data["created_at"],
+                    cursor_data["occurred_at"],
+                    cursor_data["created_at"],
+                    cursor_data["id"],
+                ]
+            )
+    raw_limit = max(limit * 6, limit + 20)
+    params.append(raw_limit + 1)
 
     rows = conn.execute(
         f"""
@@ -1356,6 +1583,7 @@ def build_transactions_snapshot(
             t.external_id AS external_id,
             t.occurred_at,
             t.confirmed_at,
+            t.created_at AS _created_at,
             w.label AS wallet,
             t.direction,
             t.asset,
@@ -1392,19 +1620,56 @@ def build_transactions_snapshot(
         """,
         params,
     ).fetchall()
+    raw_has_more = len(rows) > raw_limit
+    rows_for_page = rows[:raw_limit]
+    page, consumed_row, has_more, next_skip_pairs = _transaction_rows_to_ui_page(
+        conn,
+        rows_for_page,
+        limit,
+        skip_pairs,
+    )
+    has_more = has_more or raw_has_more
+    next_cursor = (
+        _encode_ui_transaction_cursor(
+            consumed_row,
+            sort=sort,
+            order=order,
+            filters=cursor_filters,
+            skip_pairs=next_skip_pairs,
+        )
+        if has_more and consumed_row is not None
+        else None
+    )
     return {
-        "txs": _transaction_rows_to_ui(conn, rows)[:limit],
-        "year": _snapshot_year(rows),
+        "txs": page,
+        "year": _snapshot_year(rows_for_page),
         "filters": {
+            "query": query,
             "limit": limit,
             "direction": direction,
             "asset": asset_filter,
             "wallet": wallet_filter,
             "since": since_filter,
+            "until": until_filter,
             "sort": sort,
             "order": order,
         },
+        "nextCursor": next_cursor,
+        "hasMore": has_more,
     }
+
+
+def build_transactions_snapshot(
+    conn: sqlite3.Connection,
+    args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return _build_transactions_page_snapshot(
+        conn,
+        args,
+        kind="ui.transactions.list",
+        default_limit=100,
+        maximum_limit=MAX_UI_LIST_LIMIT,
+    )
 
 
 def build_transactions_extremes_snapshot(
@@ -1462,28 +1727,29 @@ def build_transactions_search_snapshot(
     conn: sqlite3.Connection,
     args: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    return _build_transactions_page_snapshot(
+        conn,
+        args,
+        kind="ui.transactions.search",
+        default_limit=25,
+        maximum_limit=100,
+        require_query=True,
+    )
+
+
+def build_transactions_resolve_snapshot(
+    conn: sqlite3.Connection,
+    args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     context = current_context_snapshot(conn)
     if not context["workspace_id"] or not context["profile_id"]:
-        return {"txs": [], "filters": {"query": "", "limit": 0}}
+        return {"transaction": None, "query": ""}
 
     raw_args = _coerce_args(args)
-    unknown = sorted(
-        set(raw_args)
-        - {
-            "query",
-            "limit",
-            "direction",
-            "asset",
-            "wallet",
-            "since",
-            "until",
-            "sort",
-            "order",
-        }
-    )
+    unknown = sorted(set(raw_args) - {"query"})
     if unknown:
         raise AppError(
-            "ui.transactions.search received unsupported filters",
+            "ui.transactions.resolve received unsupported filters",
             code="validation",
             details={"unknown": unknown},
             retryable=False,
@@ -1491,117 +1757,18 @@ def build_transactions_search_snapshot(
     query = raw_args.get("query")
     if not isinstance(query, str) or not query.strip():
         raise AppError(
-            "ui.transactions.search query must be a non-empty string",
+            "ui.transactions.resolve query must be a non-empty string",
             code="validation",
             retryable=False,
         )
     query = query.strip()
-    limit = _coerce_limit(raw_args, default=25, maximum=100)
-
-    filters = ["t.profile_id = ?"]
-    params: list[Any] = [context["profile_id"]]
-    direction = raw_args.get("direction")
-    if direction is not None:
-        if direction not in {"inbound", "outbound"}:
-            raise AppError(
-                "direction must be inbound or outbound",
-                code="validation",
-                details={"direction": direction},
-                retryable=False,
-            )
-        filters.append("t.direction = ?")
-        params.append(direction)
-    asset = raw_args.get("asset")
-    asset_filter = None
-    if asset is not None:
-        if not isinstance(asset, str) or not asset.strip():
-            raise AppError("asset must be a non-empty string", code="validation")
-        asset_filter = asset.strip().upper()
-        filters.append("upper(t.asset) = ?")
-        params.append(asset_filter)
-    wallet = raw_args.get("wallet")
-    wallet_filter = None
-    if wallet is not None:
-        if not isinstance(wallet, str) or not wallet.strip():
-            raise AppError("wallet must be a non-empty string", code="validation")
-        wallet_filter = wallet.strip()
-        filters.append("(t.wallet_id = ? OR lower(w.label) = lower(?))")
-        params.extend([wallet_filter, wallet_filter])
-    since = raw_args.get("since")
-    since_filter = None
-    if since is not None:
-        if not isinstance(since, str) or not since.strip():
-            raise AppError("since must be an RFC3339 timestamp", code="validation")
-        since_filter = _iso_z(_parse_iso_datetime(since, "since"))
-        filters.append("t.occurred_at >= ?")
-        params.append(since_filter)
-    until = raw_args.get("until")
-    until_filter = None
-    if until is not None:
-        if not isinstance(until, str) or not until.strip():
-            raise AppError("until must be an RFC3339 timestamp", code="validation")
-        until_filter = _iso_z(_parse_iso_datetime(until, "until"))
-        filters.append("t.occurred_at <= ?")
-        params.append(until_filter)
-
-    filters.append(
-        """
-        (
-          lower(t.id) LIKE ?
-          OR lower(COALESCE(t.external_id, '')) LIKE ?
-          OR lower(COALESCE(t.kind, '')) LIKE ?
-          OR lower(COALESCE(t.description, '')) LIKE ?
-          OR lower(COALESCE(t.counterparty, '')) LIKE ?
-          OR lower(COALESCE(t.note, '')) LIKE ?
-          OR lower(w.label) LIKE ?
-          OR EXISTS (
-            SELECT 1
-            FROM transaction_tags tt
-            JOIN tags ON tags.id = tt.tag_id
-            WHERE tt.transaction_id = t.id
-              AND lower(tags.label) LIKE ?
-          )
-        )
-        """
-    )
-    like = f"%{query.lower()}%"
-    params.extend([like] * 8)
-
-    sort = raw_args.get("sort", "occurred-at")
-    sort_columns = {
-        "occurred-at": "t.occurred_at",
-        "amount": "t.amount",
-        "fiat-value": "COALESCE(t.fiat_value, 0)",
-        "fee": "t.fee",
-    }
-    if sort not in sort_columns:
-        raise AppError(
-            "sort must be one of: occurred-at, amount, fiat-value, fee",
-            code="validation",
-            details={"sort": sort},
-            retryable=False,
-        )
-    order = raw_args.get("order", "desc")
-    if order not in {"asc", "desc"}:
-        raise AppError(
-            "order must be asc or desc",
-            code="validation",
-            details={"order": order},
-            retryable=False,
-        )
-    order_sql = str(order).upper()
-    if sort == "occurred-at":
-        order_by = f"t.occurred_at {order_sql}, t.created_at {order_sql}, t.id {order_sql}"
-    else:
-        order_by = (
-            f"{sort_columns[sort]} {order_sql}, "
-            "t.occurred_at DESC, t.created_at DESC, t.id DESC"
-        )
-    raw_limit = limit * 2
-    params.append(raw_limit)
-
-    rows = conn.execute(
-        f"""
+    id_candidates = [query]
+    if query.lower() not in id_candidates:
+        id_candidates.append(query.lower())
+    external_id_candidates = list(id_candidates)
+    if query.upper() not in external_id_candidates:
+        external_id_candidates.append(query.upper())
+    select_sql = """
         SELECT
             t.id,
             t.external_id AS external_id,
@@ -1637,26 +1804,30 @@ def build_transactions_search_snapshot(
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
-        WHERE {' AND '.join(filters)}
-        ORDER BY {order_by}
-        LIMIT ?
+    """
+    order_limit_sql = " ORDER BY t.occurred_at DESC, t.created_at DESC, t.id DESC LIMIT 1"
+    id_placeholders = ", ".join("?" for _ in id_candidates)
+    row = conn.execute(
+        select_sql
+        + f"""
+        WHERE t.profile_id = ?
+          AND t.id IN ({id_placeholders})
         """,
-        params,
-    ).fetchall()
-    return {
-        "txs": _transaction_rows_to_ui(conn, rows)[:limit],
-        "filters": {
-            "query": query,
-            "limit": limit,
-            "direction": direction,
-            "asset": asset_filter,
-            "wallet": wallet_filter,
-            "since": since_filter,
-            "until": until_filter,
-            "sort": sort,
-            "order": order,
-        },
-    }
+        (context["profile_id"], *id_candidates),
+    ).fetchone()
+    if row is None:
+        external_id_placeholders = ", ".join("?" for _ in external_id_candidates)
+        row = conn.execute(
+            select_sql
+            + f"""
+            WHERE t.profile_id = ?
+              AND t.external_id IN ({external_id_placeholders})
+            """
+            + order_limit_sql,
+            (context["profile_id"], *external_id_candidates),
+        ).fetchone()
+    transaction = _transaction_rows_to_ui(conn, [row])[0] if row else None
+    return {"transaction": transaction, "query": query}
 
 
 def _snapshot_year(rows: list[sqlite3.Row]) -> int:
@@ -3452,6 +3623,65 @@ def _transaction_rows_to_ui(
             rendered_pair_ids.add(pair_id)
         output.append(_transaction_row_to_ui(row, metadata_tags, pair_meta))
     return output
+
+
+def _transaction_rows_to_ui_page(
+    conn: sqlite3.Connection,
+    rows: list[sqlite3.Row],
+    limit: int,
+    skip_pairs: set[str] | None = None,
+) -> tuple[list[dict[str, Any]], sqlite3.Row | None, bool, set[str]]:
+    pair_meta_by_transaction = _transaction_pair_display_meta(conn, rows)
+    tags_by_transaction = _transaction_tags_by_transaction(
+        conn,
+        [row["id"] for row in rows],
+    )
+
+    output: list[dict[str, Any]] = []
+    pending_skip_pairs = set(skip_pairs or set())
+    rendered_pair_ids: set[str] = set()
+    rendered_pair_meta: dict[str, dict[str, Any]] = {}
+    consumed_ids: set[str] = set()
+    consumed_row: sqlite3.Row | None = None
+
+    for row in rows:
+        pair_meta = pair_meta_by_transaction.get(row["id"])
+        pair_id = str(pair_meta["pair_id"]) if pair_meta else None
+        row_would_render = not pair_id or (
+            pair_id not in pending_skip_pairs and pair_id not in rendered_pair_ids
+        )
+        if len(output) >= limit and row_would_render:
+            return output, consumed_row, True, pending_skip_pairs | {
+                rendered_pair_id
+                for rendered_pair_id, meta in rendered_pair_meta.items()
+                if meta.get("out_transaction_id") not in consumed_ids
+                or meta.get("in_transaction_id") not in consumed_ids
+            }
+
+        consumed_row = row
+        consumed_ids.add(str(row["id"]))
+
+        if pair_id:
+            if pair_id in pending_skip_pairs:
+                pending_skip_pairs.discard(pair_id)
+                continue
+            if pair_id in rendered_pair_ids:
+                continue
+            rendered_pair_ids.add(pair_id)
+            rendered_pair_meta[pair_id] = pair_meta or {}
+
+        metadata_tags = [
+            str(tag) for tag in tags_by_transaction.get(row["id"], []) if tag
+        ]
+        output.append(_transaction_row_to_ui(row, metadata_tags, pair_meta))
+
+    next_skip_pairs = pending_skip_pairs | {
+        rendered_pair_id
+        for rendered_pair_id, meta in rendered_pair_meta.items()
+        if meta.get("out_transaction_id") not in consumed_ids
+        or meta.get("in_transaction_id") not in consumed_ids
+    }
+    return output, consumed_row, False, next_skip_pairs
 
 
 def _activity_transaction_rows_to_ui(

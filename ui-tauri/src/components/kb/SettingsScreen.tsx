@@ -72,6 +72,8 @@ interface SettingsScreenProps {
 export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
+  const clearClipboard = useUiStore((s) => s.clearClipboard);
+  const setClearClipboard = useUiStore((s) => s.setClearClipboard);
   const currency = useUiStore((s) => s.currency);
   const setCurrency = useUiStore((s) => s.setCurrency);
   const theme = useUiStore((s) => s.theme);
@@ -140,7 +142,6 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const deleteBackend = useDaemonMutation<{ name: string; deleted: boolean }>(
     "ui.backends.delete",
   );
-  const [clearClipboard, setClearClipboard] = React.useState(true);
   const [backendDialogOpen, setBackendDialogOpen] = React.useState(false);
   const [editingBackendId, setEditingBackendId] = React.useState<string | null>(
     null,
@@ -424,8 +425,13 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   };
 
   const onDeleteBackend = async (backend: Backend) => {
+    const affectedWallets = backend.walletRefs ?? [];
+    const walletWarning =
+      affectedWallets.length > 0
+        ? `\n\nThese wallets use this backend and must be repointed first:\n- ${affectedWallets.join("\n- ")}`
+        : "\n\nWallets using this endpoint may need another backend before they can sync.";
     const ok = window.confirm(
-      `Delete backend '${backend.name}'?\n\nWallets using this endpoint may need another backend before they can sync.`,
+      `Delete backend '${backend.name}'?${walletWarning}`,
     );
     if (!ok) return;
     await deleteBackend.mutateAsync({ name: backend.id });
@@ -441,8 +447,8 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     ownership: InfrastructureOwnership,
   ) => {
     await updateBackend.mutateAsync({
-      ...backendPayload({ ...backend, infrastructureOwner: ownership }),
       name: backend.id,
+      config: { infrastructure_owner: ownership },
     });
     await backendSettingsQuery.refetch();
   };

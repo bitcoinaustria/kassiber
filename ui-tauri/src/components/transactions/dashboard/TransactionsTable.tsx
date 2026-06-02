@@ -127,6 +127,11 @@ const TransactionsTable = ({
   onBreakdownSelectionChange,
   resetTableFiltersToken,
   isRefreshing,
+  hasMoreRecords = false,
+  isLoadingMoreRecords = false,
+  onLoadMoreRecords,
+  deepLinkedTransactionId,
+  deepLinkedTransactionTab = "details",
 }: {
   records: Transaction[];
   hideSensitive: boolean;
@@ -142,6 +147,11 @@ const TransactionsTable = ({
   onBreakdownSelectionChange: (selection: BreakdownSelection | null) => void;
   resetTableFiltersToken: number;
   isRefreshing?: boolean;
+  hasMoreRecords?: boolean;
+  isLoadingMoreRecords?: boolean;
+  onLoadMoreRecords?: () => void;
+  deepLinkedTransactionId?: string | null;
+  deepLinkedTransactionTab?: string;
 }) => {
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
@@ -280,6 +290,33 @@ const TransactionsTable = ({
     },
     [],
   );
+  React.useEffect(() => {
+    if (!deepLinkedTransactionId) return;
+    if (
+      detailTransaction &&
+      matchesTransactionDeepLink(detailTransaction, deepLinkedTransactionId)
+    ) {
+      return;
+    }
+    const transaction = records.find((txn) =>
+      matchesTransactionDeepLink(txn, deepLinkedTransactionId),
+    );
+    if (transaction) {
+      pendingDetailLinkRef.current = { transactionId: null, tab: "details" };
+      openTransactionDetail(transaction, deepLinkedTransactionTab);
+      return;
+    }
+    pendingDetailLinkRef.current = {
+      transactionId: deepLinkedTransactionId,
+      tab: deepLinkedTransactionTab,
+    };
+  }, [
+    deepLinkedTransactionId,
+    deepLinkedTransactionTab,
+    detailTransaction,
+    openTransactionDetail,
+    records,
+  ]);
   const attachmentItems = React.useMemo(
     () =>
       (attachmentsQuery.data?.data?.attachments ?? []).map(
@@ -1241,6 +1278,18 @@ const TransactionsTable = ({
             {isRefreshing ? "" : `of ${filteredTransactions.length}`}
           </span>
         </div>
+
+        {hasMoreRecords && onLoadMoreRecords ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-2"
+            onClick={onLoadMoreRecords}
+            disabled={isLoadingMoreRecords}
+          >
+            {isLoadingMoreRecords ? "Loading" : "Load more"}
+          </Button>
+        ) : null}
 
         <div className="flex items-center gap-1">
           <Button
