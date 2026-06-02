@@ -1045,7 +1045,9 @@ export function SyncBackendSettingsModal({
                 />
                 {isEditing ? (
                   <p className="text-xs text-muted-foreground">
-                    Internal backend id: {initial?.id}
+                    Changes the display label only; the backend id stays stable:
+                    {" "}
+                    {initial?.id}
                   </p>
                 ) : null}
               </div>

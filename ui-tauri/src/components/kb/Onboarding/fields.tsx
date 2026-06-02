@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Check } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
@@ -19,6 +20,7 @@ export const TextField = ({
   placeholder,
   type = "text",
   autoComplete,
+  autoFocus,
   hint,
   description,
   disabled,
@@ -30,11 +32,16 @@ export const TextField = ({
   placeholder: string;
   type?: string;
   autoComplete?: string;
+  autoFocus?: boolean;
   hint?: string | null;
   description?: string | null;
   disabled?: boolean;
   onChange: (value: string) => void;
 }) => {
+  // Hold validation hints until the field has been touched or has content, so a
+  // pristine step never greets the user with a red error before they type.
+  const [touched, setTouched] = useState(false);
+  const showHint = Boolean(hint) && (touched || value.length > 0);
   return (
     <div className="space-y-2">
       <Label htmlFor={name}>{label}</Label>
@@ -43,15 +50,17 @@ export const TextField = ({
         name={name}
         type={type}
         autoComplete={autoComplete}
+        autoFocus={autoFocus}
         value={value}
         placeholder={placeholder}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
-        aria-invalid={hint ? true : undefined}
-        aria-describedby={hint ? `${name}-hint` : undefined}
+        onBlur={() => setTouched(true)}
+        aria-invalid={showHint ? true : undefined}
+        aria-describedby={showHint ? `${name}-hint` : undefined}
         className="w-full rounded-md border-line"
       />
-      {hint && (
+      {showHint && (
         <p
           id={`${name}-hint`}
           className="m-0 font-mono text-[10px] uppercase tracking-[0.08em] text-accent"
@@ -59,7 +68,7 @@ export const TextField = ({
           {hint}
         </p>
       )}
-      {!hint && description && (
+      {!showHint && description && (
         <p className="m-0 text-xs leading-5 text-ink-2">{description}</p>
       )}
     </div>
@@ -85,6 +94,8 @@ export const NumberField = ({
   hint?: string | null;
   description?: string | null;
 }) => {
+  const [touched, setTouched] = useState(false);
+  const showHint = Boolean(hint) && (touched || value.length > 0);
   return (
     <div className="space-y-2">
       <Label htmlFor={name}>{label}</Label>
@@ -97,11 +108,12 @@ export const NumberField = ({
         value={value}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
-        aria-invalid={hint ? true : undefined}
-        aria-describedby={hint ? `${name}-hint` : undefined}
+        onBlur={() => setTouched(true)}
+        aria-invalid={showHint ? true : undefined}
+        aria-describedby={showHint ? `${name}-hint` : undefined}
         className="w-full rounded-md border-line"
       />
-      {hint && (
+      {showHint && (
         <p
           id={`${name}-hint`}
           className="m-0 font-mono text-[10px] uppercase tracking-[0.08em] text-accent"
@@ -109,7 +121,7 @@ export const NumberField = ({
           {hint}
         </p>
       )}
-      {!hint && description && (
+      {!showHint && description && (
         <p className="m-0 text-xs leading-5 text-ink-2">{description}</p>
       )}
     </div>
@@ -120,12 +132,14 @@ export const SelectField = <T extends string>({
   label,
   value,
   options,
+  optionLabels,
   description,
   onChange,
 }: {
   label: string;
   value: T;
   options: T[];
+  optionLabels?: Partial<Record<T, string>>;
   description?: string | null;
   onChange: (value: T) => void;
 }) => {
@@ -139,7 +153,7 @@ export const SelectField = <T extends string>({
         <SelectContent>
           {options.map((option) => (
             <SelectItem key={option} value={option}>
-              {option}
+              {optionLabels?.[option] ?? option}
             </SelectItem>
           ))}
         </SelectContent>
@@ -170,7 +184,7 @@ export const ChoiceCard = ({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "flex min-h-[112px] cursor-pointer items-start gap-3 rounded-lg border p-4 text-left text-sm transition",
+        "flex min-h-[84px] cursor-pointer items-start gap-3 rounded-lg border p-3.5 text-left text-sm transition",
         active
           ? tone === "warning"
             ? "border-accent bg-[rgba(227,0,15,0.04)]"

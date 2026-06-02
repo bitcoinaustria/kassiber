@@ -40,6 +40,7 @@ import {
   TextField,
 } from "../fields";
 import {
+  OnboardingStepActions,
   OnboardingStepFrame,
   OnboardingStepLeftWrapper,
   OnboardingStepRightWrapper,
@@ -78,8 +79,8 @@ const ConnectionsPanel = ({ form }: { form: OnboardingForm }) => {
         : [{ name: "None", kind: "Manual import", url: "configure later" }];
 
   return (
-    <div className="flex h-full items-center">
-      <div className="w-full max-w-lg rounded-lg border border-line bg-paper p-5 shadow-sm">
+    <div className="flex h-full items-start">
+      <div className="sticky top-8 w-full max-w-lg rounded-lg border border-line bg-paper p-5 shadow-sm">
         <div className="flex items-center gap-3">
           <div
             className={cn(
@@ -234,7 +235,13 @@ export const ConnectionsStep = ({
         totalSteps={totalSteps}
         goBack={goBack}
       >
-        <div className="flex h-full flex-col justify-between gap-6 py-4">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
+          className="flex h-full flex-col justify-between gap-6 py-4"
+        >
           <div className="space-y-5">
             <div className="space-y-3">
               <ChoiceCard
@@ -414,15 +421,17 @@ export const ConnectionsStep = ({
                           {testState === "testing" ? "Testing" : "Test connection"}
                         </Button>
                         <span className="text-xs text-ink-2">
-                          Logs are shown below before you continue.
+                          Optional — check the endpoint is reachable.
                         </span>
                       </div>
-                      <textarea
-                        readOnly
-                        value={testLog}
-                        aria-label="Electrum test connection log"
-                        className="min-h-28 w-full resize-none rounded-md border border-line bg-paper p-3 font-mono text-xs leading-5 text-ink"
-                      />
+                      {(testState !== "idle" || testLog) && (
+                        <textarea
+                          readOnly
+                          value={testLog}
+                          aria-label="Electrum test connection log"
+                          className="min-h-28 w-full resize-none rounded-md border border-line bg-paper p-3 font-mono text-xs leading-5 text-ink"
+                        />
+                      )}
                     </div>
                   </>
                 ) : (
@@ -478,10 +487,12 @@ export const ConnectionsStep = ({
             )}
           </div>
 
-          <Button onClick={onSubmit} className="w-full" disabled={!canContinue}>
-            Continue
-          </Button>
-        </div>
+          <OnboardingStepActions>
+            <Button type="submit" className="w-full" disabled={!canContinue}>
+              Continue
+            </Button>
+          </OnboardingStepActions>
+        </form>
       </OnboardingStepLeftWrapper>
       <OnboardingStepRightWrapper className="px-8 py-10">
         <ConnectionsPanel form={form} />

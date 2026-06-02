@@ -19,7 +19,7 @@ export const OnboardingStepHeader = ({
   stepIndex,
   totalSteps,
   goBack,
-  showProgress = true,
+  showProgress = false,
 }: OnboardingStepHeaderProps) => {
   return (
     <div className="flex items-start gap-2">
@@ -44,6 +44,28 @@ export const OnboardingStepHeader = ({
           {title}
         </h3>
       </div>
+    </div>
+  );
+};
+
+/**
+ * Pins the primary step action to the bottom of the viewport while the form
+ * fields scroll, so "Continue" / "Open books" stays reachable on tall steps
+ * (e.g. the custom Electrum backend or the encrypted-database step). A short
+ * gradient mask fades scrolling content into the action bar.
+ */
+export const OnboardingStepActions = ({
+  children,
+}: {
+  children: ReactNode;
+}) => {
+  return (
+    <div className="sticky bottom-0 z-10 mt-2 bg-paper pt-4">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-t from-paper to-transparent"
+      />
+      {children}
     </div>
   );
 };
@@ -74,7 +96,7 @@ export const OnboardingStepLeftWrapper = ({
   showProgress?: boolean;
 }) => {
   return (
-    <div className="flex flex-1/2 justify-center px-5 py-6 sm:px-10 sm:py-10 md:py-16 lg:justify-start lg:pl-20">
+    <div className="flex flex-1/2 justify-center px-5 py-6 sm:px-10 sm:py-8 md:py-10 lg:justify-start lg:pl-20">
       <div className="flex h-full w-full max-w-md shrink-0 flex-col gap-6">
         <OnboardingStepHeader
           title={title}

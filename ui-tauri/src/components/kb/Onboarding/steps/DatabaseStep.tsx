@@ -1,10 +1,12 @@
-import { Database, KeyRound, LockKeyhole } from "lucide-react";
+import { Database, KeyRound, Loader2, LockKeyhole } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { canUseTouchIdPassphraseUnlock } from "@/daemon/transport";
 
 import { CheckRow, ChoiceCard, TextField } from "../fields";
 import { databasePassphraseHint } from "../constants";
 import {
+  OnboardingStepActions,
   OnboardingStepFrame,
   OnboardingStepLeftWrapper,
   OnboardingStepRightWrapper,
@@ -24,8 +26,8 @@ const DatabasePanel = ({ form }: { form: OnboardingForm }) => {
     ["Files", "reports and attachments stay as files"],
   ];
   return (
-    <div className="flex h-full items-center">
-      <div className="w-full max-w-lg rounded-lg border border-line bg-paper p-5 shadow-sm">
+    <div className="flex h-full items-start">
+      <div className="sticky top-8 w-full max-w-lg rounded-lg border border-line bg-paper p-5 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-md bg-ink text-paper">
             {form.databaseMode === "sqlcipher" ? (
@@ -73,8 +75,10 @@ export const DatabaseStep = ({
   onSubmit,
   goBack,
   canContinue = true,
+  submitting = false,
 }: StepComponentProps) => {
   const encrypted = form.databaseMode === "sqlcipher";
+  const touchIdAvailable = encrypted && canUseTouchIdPassphraseUnlock();
   const passphraseHint = encrypted
     ? databasePassphraseHint(
         form.databasePassphrase,
@@ -93,7 +97,13 @@ export const DatabaseStep = ({
         totalSteps={totalSteps}
         goBack={goBack}
       >
-        <div className="flex h-full flex-col justify-between gap-6 py-4">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
+          className="flex h-full flex-col justify-between gap-6 py-4"
+        >
           <div className="space-y-5">
             <div className="space-y-3">
               <ChoiceCard
@@ -123,6 +133,7 @@ export const DatabaseStep = ({
                     name="database-passphrase"
                     type="password"
                     autoComplete="new-password"
+                    autoFocus
                     value={form.databasePassphrase}
                     placeholder="At least 12 characters"
                     onChange={(value) => update("databasePassphrase", value)}
@@ -140,9 +151,8 @@ export const DatabaseStep = ({
                     }
                   />
                   <p className="m-0 text-xs leading-5 text-ink-2">
-                    The passphrase is sent only to the local daemon to create
-                    and unlock the database. Kassiber does not store it in the
-                    persisted UI books identity.
+                    Sent only to the local daemon to unlock the database — never
+                    stored in the UI.
                   </p>
                 </div>
                 <CheckRow
@@ -154,6 +164,17 @@ export const DatabaseStep = ({
                   label="I understand there is no passphrase recovery path."
                   description="If the passphrase is lost, the SQLCipher database cannot be opened."
                 />
+                {touchIdAvailable && (
+                  <CheckRow
+                    id="enable-touch-id"
+                    checked={form.enableTouchId}
+                    onCheckedChange={(checked) =>
+                      update("enableTouchId", checked)
+                    }
+                    label="Unlock with Touch ID"
+                    description="Store the passphrase in the macOS Keychain so you can unlock with Touch ID instead of typing it. Remove it anytime in Settings."
+                  />
+                )}
                 <details className="rounded-lg border border-line bg-paper-2 p-3">
                   <summary className="cursor-pointer text-sm font-medium text-ink marker:text-ink-3">
                     Existing backend credentials
@@ -184,14 +205,23 @@ export const DatabaseStep = ({
             )}
           </div>
 
-          <Button
-            onClick={onSubmit}
-            className="w-full"
-            disabled={!canOpenBooks || !canContinue}
-          >
-            Open books
-          </Button>
-        </div>
+          <OnboardingStepActions>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={!canOpenBooks || !canContinue}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  Opening books…
+                </>
+              ) : (
+                "Open books"
+              )}
+            </Button>
+          </OnboardingStepActions>
+        </form>
       </OnboardingStepLeftWrapper>
       <OnboardingStepRightWrapper className="px-8 py-10">
         <DatabasePanel form={form} />

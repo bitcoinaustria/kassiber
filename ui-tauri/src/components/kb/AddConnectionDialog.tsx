@@ -22,6 +22,7 @@ import {
   useDaemonStreamMutation,
 } from "@/daemon/client";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
+import { copyTextWithPolicy } from "@/lib/clipboard";
 import { useUiStore, type DeferredConnectionSetup } from "@/store/ui";
 import { cn } from "@/lib/utils";
 import {
@@ -415,7 +416,7 @@ export function AddConnectionDialog({
   const [copiedAddress, setCopiedAddress] = React.useState<string | null>(null);
   const copyAddress = React.useCallback(async (address: string) => {
     try {
-      await navigator.clipboard?.writeText(address);
+      await copyTextWithPolicy(address);
       setCopiedAddress(address);
       window.setTimeout(
         () =>

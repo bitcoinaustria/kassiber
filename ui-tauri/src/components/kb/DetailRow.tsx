@@ -2,6 +2,7 @@ import { type ReactNode, useState } from "react";
 import { Check, Copy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { copyTextWithPolicy } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 
 interface DetailRowProps {
@@ -40,7 +41,7 @@ function CopyButton({
   const [copied, setCopied] = useState(false);
   const onCopy = async () => {
     try {
-      await navigator.clipboard.writeText(value);
+      await copyTextWithPolicy(value);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1100);
     } catch {
