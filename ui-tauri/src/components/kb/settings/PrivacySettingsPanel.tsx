@@ -9,7 +9,6 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { InfrastructureOwnership } from "@/lib/backendTrust";
 import { SettingsSwitchRow } from "./SettingsControls";
 import {
   backendProtocolLabel,
@@ -67,7 +66,6 @@ export interface ExposureGroupDef {
   title: string;
   subtitle: string;
   nets: Net[];
-  canOwn: boolean;
   canEdit: boolean;
 }
 
@@ -79,7 +77,6 @@ export const EXPOSURE_GROUPS: ExposureGroupDef[] = [
     title: "Addresses & balances",
     subtitle: "Indexers that resolve the addresses and UTXOs you look up.",
     nets: ["BTC", "LIQUID"],
-    canOwn: true,
     canEdit: true,
   },
   {
@@ -87,7 +84,6 @@ export const EXPOSURE_GROUPS: ExposureGroupDef[] = [
     title: "Lightning node",
     subtitle: "Reads channel and payment history from your own node.",
     nets: ["LN"],
-    canOwn: false,
     canEdit: true,
   },
   {
@@ -96,7 +92,6 @@ export const EXPOSURE_GROUPS: ExposureGroupDef[] = [
     subtitle:
       "Offline history stays local. Live providers only see pair and time window.",
     nets: ["FX"],
-    canOwn: false,
     canEdit: false,
   },
 ];
@@ -172,62 +167,46 @@ export function ExposureFilterTile({
 
 export function ExposureEndpointRow({
   backend,
-  canOwn,
   canEdit,
-  pending,
   onEdit,
-  onSetOwnership,
 }: {
   backend: Backend;
-  canOwn: boolean;
   canEdit: boolean;
-  pending: boolean;
   onEdit: () => void;
-  onSetOwnership: (ownership: InfrastructureOwnership) => void;
 }) {
   const trust = backendTrust(backend);
   const TrustIcon = trust.icon;
-  const isSelf = backend.infrastructureOwner === "self";
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 p-3">
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium">{backend.name}</p>
-        <p className="truncate text-xs text-muted-foreground">
-          {backendProtocolLabel(backend)} · {endpointHostLabel(backend.url)}
-        </p>
-      </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-        <span
-          className={cn(
-            "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium",
-            trust.className,
-          )}
-        >
-          <TrustIcon className="size-3" aria-hidden="true" />
-          {trust.label}
-        </span>
-        {canOwn ? (
-          <Button
-            type="button"
-            size="sm"
-            variant={isSelf ? "secondary" : "ghost"}
-            disabled={pending}
-            onClick={() => onSetOwnership(isSelf ? "third_party" : "self")}
+    <div className="rounded-md border bg-background p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{backend.name}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {backendProtocolLabel(backend)} · {endpointHostLabel(backend.url)}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium",
+              trust.className,
+            )}
           >
-            {isSelf ? "Yours" : "Mark as mine"}
-          </Button>
-        ) : null}
-        {canEdit ? (
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            aria-label={`Edit ${backend.name}`}
-            onClick={onEdit}
-          >
-            <Pencil className="size-3.5" aria-hidden="true" />
-          </Button>
-        ) : null}
+            <TrustIcon className="size-3" aria-hidden="true" />
+            {trust.label}
+          </span>
+          {canEdit ? (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              aria-label={`Edit ${backend.name}`}
+              onClick={onEdit}
+            >
+              <Pencil className="size-3.5" aria-hidden="true" />
+            </Button>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -241,7 +220,6 @@ export function PrivacySettingsPanel({
   backends,
   aiFeaturesEnabled,
   onEditBackend,
-  onSetBackendOwnership,
   onManageAi,
 }: {
   hideSensitive: boolean;
@@ -251,16 +229,9 @@ export function PrivacySettingsPanel({
   backends: Backend[];
   aiFeaturesEnabled: boolean;
   onEditBackend: (backend: Backend) => void;
-  onSetBackendOwnership: (
-    backend: Backend,
-    ownership: InfrastructureOwnership,
-  ) => Promise<void>;
   onManageAi: () => void;
 }) {
   const [filter, setFilter] = React.useState<ExposureFilter | null>(null);
-  const [pendingOwnershipId, setPendingOwnershipId] = React.useState<
-    string | null
-  >(null);
 
   // Only enabled backends actually send traffic off the machine.
   const enabled = React.useMemo(
@@ -282,18 +253,6 @@ export function PrivacySettingsPanel({
   const activeFilterLabel = EXPOSURE_FILTERS.find(
     (entry) => entry.id === filter,
   )?.label;
-
-  const handleOwnership = async (
-    backend: Backend,
-    ownership: InfrastructureOwnership,
-  ) => {
-    setPendingOwnershipId(backend.id);
-    try {
-      await onSetBackendOwnership(backend, ownership);
-    } finally {
-      setPendingOwnershipId(null);
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -392,18 +351,13 @@ export function PrivacySettingsPanel({
                 </p>
               </div>
               {rows.length > 0 ? (
-                <div className="divide-y rounded-md border bg-background">
+                <div className="grid gap-2">
                   {rows.map((backend) => (
                     <ExposureEndpointRow
                       key={backend.id}
                       backend={backend}
-                      canOwn={group.canOwn}
                       canEdit={group.canEdit}
-                      pending={pendingOwnershipId === backend.id}
                       onEdit={() => onEditBackend(backend)}
-                      onSetOwnership={(ownership) =>
-                        void handleOwnership(backend, ownership)
-                      }
                     />
                   ))}
                 </div>

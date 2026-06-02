@@ -24,16 +24,18 @@ describe("mock daemon backend settings", () => {
     expect(created.data?.name).toBe("mock-extra");
 
     const updated = await mockDaemon.invoke<{
+      display_name?: string;
       has_auth_header?: boolean;
       has_username?: boolean;
     }>({
       kind: "ui.backends.update",
       args: {
         name: "mock-extra",
-        config: { username: "demo" },
+        config: { display_name: "Demo endpoint", username: "demo" },
         clear: ["auth_header"],
       },
     });
+    expect(updated.data?.display_name).toBe("Demo endpoint");
     expect(updated.data?.has_auth_header).toBe(false);
     expect(updated.data?.has_username).toBe(true);
 

@@ -178,15 +178,6 @@ export type NewTransactionEvidence = {
   preimage: string;
 };
 
-export function shouldShowSourceExternalId(
-  txn: Pick<Transaction, "txnId" | "explorerId">,
-) {
-  const sourceId = txn.txnId.trim();
-  if (!sourceId) return false;
-  const displayedId = txn.explorerId?.trim() || sourceId;
-  return sourceId !== displayedId;
-}
-
 export const SATS_PER_BTC = 100_000_000;
 
 // EUR amounts must read the same Austrian way everywhere (`€ 1.234,56`) — the
@@ -233,6 +224,15 @@ export function formatCounterDisplayMoney(eur: number | null, btc: number, curre
 export function formatShortTxid(txid: string) {
   if (txid.length <= 18) return txid;
   return `${txid.slice(0, 10)}...${txid.slice(-6)}`;
+}
+
+export function shouldShowSourceExternalId(
+  txn: Pick<Transaction, "txnId" | "explorerId">,
+) {
+  const sourceId = txn.txnId.trim();
+  if (!sourceId) return false;
+  const displayedId = txn.explorerId?.trim() || sourceId;
+  return sourceId !== displayedId;
 }
 
 function localDatetimeInputValue(date = new Date()) {

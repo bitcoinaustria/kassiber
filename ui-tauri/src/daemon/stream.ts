@@ -629,6 +629,13 @@ export function useAiChatStream(): UseAiChatStreamResult {
         }));
       } catch (caught) {
         if (!mountedRef.current) return;
+        if (controller.signal.aborted) {
+          updateAssistant((current) => ({
+            ...current,
+            status: "cancelled",
+          }));
+          return;
+        }
         const message =
           caught instanceof Error ? caught.message : String(caught);
         setError({ code: "stream_failed", message });
@@ -740,10 +747,12 @@ export function useAiChatStream(): UseAiChatStreamResult {
   }, [cancelActiveRequest, updateAssistant]);
 
   const reset = React.useCallback(() => {
+    cancelActiveRequest();
     setMessages([]);
+    setIsStreaming(false);
     setError(null);
     setPendingConsent(null);
-  }, []);
+  }, [cancelActiveRequest]);
 
   return {
     messages,

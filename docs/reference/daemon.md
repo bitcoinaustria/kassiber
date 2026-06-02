@@ -39,6 +39,7 @@ daemon for the exact current allowlist:
       "status",
       "ui.overview.snapshot",
       "ui.transactions.list",
+      "ui.transactions.resolve",
       "ui.transactions.metadata.update",
       "ui.wallets.list",
       "ui.backends.list",
@@ -124,6 +125,11 @@ treat this list (not the docs) as the source of truth for what the supervisor
 will pass through. Reveal kinds (see below) are included in the list but still
 require their own passphrase round-trip before the daemon returns raw secret
 material.
+
+`ui.transactions.resolve` is the narrow local lookup used by deep links and
+global search: it accepts a Kassiber transaction id or external transaction id
+scoped to the active profile and returns at most one safe transaction display
+row. It does not create a browser-side search index.
 
 `ai.providers.set_api_key` accepts
 `{"name":"provider","api_key":"..."}` or `{"name":"provider","api_key":null}`.

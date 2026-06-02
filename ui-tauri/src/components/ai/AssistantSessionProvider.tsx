@@ -38,8 +38,9 @@ export function AssistantSessionProvider({
     sendConsent,
     reset,
   } = useAiChatStream();
+  const [queuedPrompts, setQueuedPrompts] = React.useState<string[]>([]);
 
-  const sendPrompt = React.useCallback(
+  const dispatchPrompt = React.useCallback(
     (prompt: string) => {
       if (!selection?.model) return;
       const userMessages: AiChatRequest["messages"] = messages
@@ -71,10 +72,36 @@ export function AssistantSessionProvider({
     [messages, selection, send, thinkingEffort],
   );
 
+  const sendPrompt = React.useCallback(
+    (prompt: string) => {
+      const trimmed = prompt.trim();
+      if (!trimmed || !selection?.model) return;
+      if (isStreaming) {
+        setQueuedPrompts((current) => [...current, trimmed]);
+        return;
+      }
+      dispatchPrompt(trimmed);
+    },
+    [dispatchPrompt, isStreaming, selection],
+  );
+
+  React.useEffect(() => {
+    if (isStreaming || queuedPrompts.length === 0) return;
+    if (!selection?.model) return;
+    const [nextPrompt] = queuedPrompts;
+    setQueuedPrompts((current) => current.slice(1));
+    dispatchPrompt(nextPrompt);
+  }, [dispatchPrompt, isStreaming, queuedPrompts, selection]);
+
   const typedSendConsent = React.useCallback(
     (decision: AiToolConsentDecision) => sendConsent(decision),
     [sendConsent],
   );
+
+  const clearChat = React.useCallback(() => {
+    setQueuedPrompts([]);
+    reset();
+  }, [reset]);
 
   const value = React.useMemo<AssistantSessionContextValue>(
     () => ({
@@ -82,6 +109,7 @@ export function AssistantSessionProvider({
       isStreaming,
       error,
       pendingConsent,
+      queuedPrompts,
       selection,
       thinkingEffort,
       returnPath,
@@ -90,15 +118,16 @@ export function AssistantSessionProvider({
       sendPrompt,
       sendConsent: typedSendConsent,
       abort,
-      reset,
+      reset: clearChat,
     }),
     [
       abort,
+      clearChat,
       error,
       isStreaming,
       messages,
       pendingConsent,
-      reset,
+      queuedPrompts,
       returnPath,
       setSelection,
       selection,

@@ -61,6 +61,10 @@ export const fixtures: Record<string, unknown> = {
       order: "desc",
     },
   },
+  "ui.transactions.resolve": {
+    transaction: null,
+    query: "",
+  },
   "ui.wallets.sync": {
     results: MOCK_OVERVIEW.connections.map((connection) => ({
       wallet: connection.label,

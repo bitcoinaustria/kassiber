@@ -33,7 +33,6 @@ import {
   type TerminalCommandStatus,
   type TouchIdPassphraseStatus,
 } from "@/daemon/transport";
-import type { InfrastructureOwnership } from "@/lib/backendTrust";
 import { screenPanelClassName } from "@/lib/screen-layout";
 import { setSessionUnlockPassphrase } from "@/store/sessionLock";
 import { useUiStore } from "@/store/ui";
@@ -139,9 +138,11 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const createBackend = useDaemonMutation<BackendSettingsRow>("ui.backends.create");
   const updateBackend = useDaemonMutation<BackendSettingsRow>("ui.backends.update");
   const createWallet = useDaemonMutation("ui.wallets.create");
-  const deleteBackend = useDaemonMutation<{ name: string; deleted: boolean }>(
-    "ui.backends.delete",
-  );
+  const deleteBackend = useDaemonMutation<{
+    name: string;
+    deleted: boolean;
+    detached_wallet_refs?: string[];
+  }>("ui.backends.delete");
   const [backendDialogOpen, setBackendDialogOpen] = React.useState(false);
   const [editingBackendId, setEditingBackendId] = React.useState<string | null>(
     null,
@@ -422,14 +423,15 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     setExplorerSettings(deriveExplorerSettings(refreshedBackends));
     setBackendDialogOpen(false);
     setEditingBackendId(null);
+    setInitialBackendTypeId(null);
   };
 
   const onDeleteBackend = async (backend: Backend) => {
     const affectedWallets = backend.walletRefs ?? [];
     const walletWarning =
       affectedWallets.length > 0
-        ? `\n\nThese wallets use this backend and must be repointed first:\n- ${affectedWallets.join("\n- ")}`
-        : "\n\nWallets using this endpoint may need another backend before they can sync.";
+        ? `\n\nThese wallets will have no backend and cannot sync until you add one back:\n- ${affectedWallets.join("\n- ")}`
+        : "";
     const ok = window.confirm(
       `Delete backend '${backend.name}'?${walletWarning}`,
     );
@@ -440,17 +442,9 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       backendRowToSettingsBackend,
     );
     setExplorerSettings(deriveExplorerSettings(refreshedBackends));
-  };
-
-  const onSetBackendOwnership = async (
-    backend: Backend,
-    ownership: InfrastructureOwnership,
-  ) => {
-    await updateBackend.mutateAsync({
-      name: backend.id,
-      config: { infrastructure_owner: ownership },
-    });
-    await backendSettingsQuery.refetch();
+    setBackendDialogOpen(false);
+    setEditingBackendId(null);
+    setInitialBackendTypeId(null);
   };
 
   const onInstallTerminalCommand = async () => {
@@ -773,8 +767,6 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             backends={backends}
             onAdd={() => openAddBackend("bitcoin")}
             onEdit={openEditBackend}
-            onDelete={onDeleteBackend}
-            onSetOwnership={onSetBackendOwnership}
           />
         );
       case "network-lightning":
@@ -784,8 +776,6 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             backends={backends}
             onAdd={() => openAddBackend("lnd")}
             onEdit={openEditBackend}
-            onDelete={onDeleteBackend}
-            onSetOwnership={onSetBackendOwnership}
           />
         );
       case "network-liquid":
@@ -795,8 +785,6 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             backends={backends}
             onAdd={() => openAddBackend("liquid")}
             onEdit={openEditBackend}
-            onDelete={onDeleteBackend}
-            onSetOwnership={onSetBackendOwnership}
           />
         );
       case "network-market":
@@ -811,7 +799,6 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             backends={backends}
             aiFeaturesEnabled={aiFeaturesEnabled}
             onEditBackend={openEditBackend}
-            onSetBackendOwnership={onSetBackendOwnership}
             onManageAi={() => goToSection("assistant-ai")}
           />
         );
@@ -949,6 +936,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             setEditingBackendId(null);
             setInitialBackendTypeId(null);
           }}
+          onDelete={onDeleteBackend}
           onSave={onSaveBackend}
         />
         <Dialog

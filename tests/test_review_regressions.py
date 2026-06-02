@@ -3979,7 +3979,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertNotIn("rpcpassword", payload["data"])
         self.assertNotIn("api_key", payload["data"])
 
-    def test_backends_delete_refuses_when_wallets_reference_backend(self):
+    def test_backends_delete_detaches_wallet_backend_references(self):
         self._bootstrap_profile()
 
         payload, result = self._run_json(
@@ -4004,14 +4004,25 @@ class ReviewRegressionTest(unittest.TestCase):
         self._assert_ok(payload, result, "backends.set-default")
 
         payload, result = self._run_json("backends", "delete", "mempool")
-        self.assertEqual(result.returncode, 1, msg=payload)
-        self.assertEqual(payload.get("kind"), "error")
-        self.assertEqual(payload["error"]["code"], "conflict")
-        self.assertIn("Main/Default/Tracked", payload["error"]["hint"])
+        self._assert_ok(payload, result, "backends.delete")
+        self.assertTrue(payload["data"]["deleted"])
         self.assertEqual(
-            payload["error"]["details"],
-            {"wallet_refs": ["Main/Default/Tracked"]},
+            payload["data"]["detached_wallet_refs"],
+            ["Main/Default/Tracked"],
         )
+
+        payload, result = self._run_json(
+            "wallets",
+            "get",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--wallet",
+            "Tracked",
+        )
+        self._assert_ok(payload, result, "wallets.get")
+        self.assertNotIn("backend", payload["data"]["config"])
 
     def test_metadata_record_mutations_roundtrip_and_invalidate_journals(self):
         self._bootstrap_wallet(label="Meta")

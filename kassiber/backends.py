@@ -540,6 +540,40 @@ def wallet_backend_references(conn, backend_name):
     return _wallet_backend_references(conn, backend_name)
 
 
+def _clear_wallet_backend_references(conn, backend_name):
+    rows = conn.execute(
+        """
+        SELECT
+            w.id,
+            w.label AS wallet_label,
+            p.label AS profile_label,
+            ws.label AS workspace_label,
+            w.config_json
+        FROM wallets w
+        JOIN profiles p ON p.id = w.profile_id
+        JOIN workspaces ws ON ws.id = w.workspace_id
+        ORDER BY ws.label ASC, p.label ASC, w.label ASC
+        """
+    ).fetchall()
+    detached = []
+    for row in rows:
+        try:
+            config = json.loads(row["config_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if str_or_none(config.get("backend")) != backend_name:
+            continue
+        config.pop("backend", None)
+        conn.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps(config, sort_keys=True), row["id"]),
+        )
+        detached.append(
+            f"{row['workspace_label']}/{row['profile_label']}/{row['wallet_label']}"
+        )
+    return detached
+
+
 def _load_bootstrap_backend_tombstones(conn):
     raw = get_setting(conn, BOOTSTRAP_BACKEND_TOMBSTONES_SETTING)
     if not raw:
@@ -1002,20 +1036,17 @@ def delete_db_backend(conn, name):
             f"Backend '{name}' is the stored default; clear it with `kassiber backends clear-default` first",
             code="conflict",
         )
-    wallet_refs = _wallet_backend_references(conn, name)
-    if wallet_refs:
-        raise AppError(
-            f"Backend '{name}' is still referenced by wallet configuration",
-            code="conflict",
-            hint=f"Repoint or update these wallets first: {', '.join(wallet_refs[:5])}",
-            details={"wallet_refs": wallet_refs},
-        )
+    detached_wallet_refs = _clear_wallet_backend_references(conn, name)
     conn.execute("DELETE FROM backends WHERE name = ?", (name,))
     tombstones = _load_bootstrap_backend_tombstones(conn)
     tombstones.add(name)
     _save_bootstrap_backend_tombstones(conn, tombstones)
     conn.commit()
-    return {"name": name, "deleted": True}
+    return {
+        "name": name,
+        "deleted": True,
+        "detached_wallet_refs": detached_wallet_refs,
+    }
 
 
 def set_default_backend(conn, runtime_config, name, commit=True):

@@ -105,7 +105,9 @@ export default function Ai02({
     }
   };
   const trimmedInput = inputValue.trim();
-  const canSend = Boolean(trimmedInput) && Boolean(selection?.model) && !isStreaming;
+  const canSubmit = Boolean(trimmedInput) && Boolean(selection?.model);
+  const canSend = canSubmit && !isStreaming;
+  const canQueue = canSubmit && isStreaming;
   const showSuggestions = !trimmedInput && !isStreaming && prompts.length > 0;
   const ModelIcon =
     activeProviderKind === "remote"
@@ -124,7 +126,7 @@ export default function Ai02({
   }, [inputValue]);
 
   const handleSubmit = () => {
-    if (!canSend) return;
+    if (!canSubmit) return;
     onSubmit(trimmedInput);
     setInputValue("");
   };
@@ -192,9 +194,10 @@ export default function Ai02({
                     "size-9 rounded-full bg-foreground text-background transition-colors duration-100 ease-out cursor-pointer hover:bg-foreground/90 disabled:bg-muted disabled:text-muted-foreground",
                     canSend && "bg-foreground hover:bg-foreground/90!",
                   )}
-                  disabled={!canSend}
+                  disabled={!canSubmit}
                   onClick={handleSubmit}
-                  aria-label="Send message"
+                  aria-label={canQueue ? "Queue message" : "Send message"}
+                  title={canQueue ? "Queue message" : "Send message"}
                 >
                   <ArrowUp className="h-4 w-4" />
                 </Button>
@@ -266,21 +269,23 @@ export default function Ai02({
               >
                 <Square className="h-3.5 w-3.5 text-destructive-foreground" />
               </Button>
-            ) : (
+            ) : null}
+            {!isStreaming || trimmedInput ? (
               <Button
                 variant="ghost"
                 size="icon-sm"
                 className={cn(
                   "rounded-full bg-foreground text-background transition-colors duration-100 ease-out cursor-pointer hover:bg-foreground/90 disabled:bg-muted disabled:text-muted-foreground",
-                  canSend && "bg-foreground hover:bg-foreground/90!",
+                  (canSend || canQueue) && "bg-foreground hover:bg-foreground/90!",
                 )}
-                disabled={!canSend}
+                disabled={!canSubmit}
                 onClick={handleSubmit}
-                aria-label="Send message"
+                aria-label={canQueue ? "Queue message" : "Send message"}
+                title={canQueue ? "Queue message" : "Send message"}
               >
                 <ArrowUp className="h-4 w-4" />
               </Button>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

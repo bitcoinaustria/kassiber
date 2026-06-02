@@ -1344,6 +1344,8 @@ export function TransactionDetailSheet({
   const StatusIcon = transactionStatusIcons[localDraft.reviewStatus];
   const flow = transactionFlow(transaction);
   const explorer = explorerForTransaction(transaction, explorerSettings);
+  const transactionDisplayId = transaction.explorerId ?? transaction.txnId;
+  const showSourceExternalId = shouldShowSourceExternalId(transaction);
   const amountBtc = transactionBtc(transaction);
   const feeBtc = transaction.feeBtc ?? 0;
   const feeEur = transaction.feeEur ?? null;
@@ -1377,9 +1379,6 @@ export function TransactionDetailSheet({
   const isExactPricing = localDraft.pricingQuality === "exact";
   const isCoarsePricing = localDraft.pricingQuality === "coarse_fallback";
   const isProviderSamplePricing = localDraft.pricingQuality === "provider_sample";
-  const transactionDisplayId = transaction.explorerId ?? transaction.txnId;
-  const sourceRecordId = transactionDisplayId;
-  const showSourceExternalId = shouldShowSourceExternalId(transaction);
   const sourceName = transaction.wallet || transaction.paymentMethod;
   const sourceType = transaction.sourceType ?? transaction.paymentMethod;
   const settlementLabel = transactionStatusLabels[transaction.status];
@@ -2876,17 +2875,6 @@ export function TransactionDetailSheet({
                       label="Kassiber row"
                       value={transaction.id}
                       copyValue={transaction.id}
-                      hidden={hideSensitive}
-                    />
-                    <SourceRecordRow
-                      icon={<Link2 className="size-3.5" aria-hidden="true" />}
-                      label="Source id"
-                      value={
-                        <span className="font-mono">
-                          {formatShortTxid(sourceRecordId)}
-                        </span>
-                      }
-                      copyValue={sourceRecordId}
                       hidden={hideSensitive}
                     />
                     <SourceRecordRow

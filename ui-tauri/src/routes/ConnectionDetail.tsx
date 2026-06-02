@@ -195,6 +195,11 @@ function formatBackendDetail(backend?: WalletListItem["backend"]) {
   return `${backend.name}${kind}${source}`;
 }
 
+function backendOptionLabel(backend: { name: string; display_name?: string }) {
+  const label = backend.display_name?.trim() || backend.name;
+  return label === backend.name ? label : `${label} (${backend.name})`;
+}
+
 export function ConnectionDetail() {
   const { connectionId } = useParams({ from: "/_app/connections/$connectionId" });
   const { data, isLoading } = useDaemon<OverviewSnapshot>(
@@ -453,7 +458,12 @@ function ConnectionDetailView({
   const deleteWallet =
     useDaemonMutation<DeleteWalletResult>("ui.wallets.delete");
   const backendOptionsQuery = useDaemon<{
-    backends: { name: string; kind: string; is_default?: boolean }[];
+    backends: Array<{
+      name: string;
+      display_name?: string;
+      kind: string;
+      is_default?: boolean;
+    }>;
   }>("ui.backends.options");
   const walletsListQuery = useDaemon<{
     wallets: WalletListItem[];
@@ -1157,7 +1167,7 @@ function ConnectionDetailView({
                     <option value="">Keep current instance</option>
                     {btcpayBackendOptions.map((backend) => (
                       <option key={backend.name} value={backend.name}>
-                        {backend.name}
+                        {backendOptionLabel(backend)}
                         {backend.is_default ? " (default)" : ""}
                       </option>
                     ))}

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Download } from "lucide-react";
+import { Download, Trash2 } from "lucide-react";
 
 import Ai02 from "@/components/ai-02";
 import { useAssistantSession } from "@/components/ai/assistantSession";
@@ -16,6 +16,7 @@ export function Assistant() {
     isStreaming,
     error,
     pendingConsent,
+    queuedPrompts,
     selection,
     setSelection,
     thinkingEffort,
@@ -23,8 +24,10 @@ export function Assistant() {
     sendPrompt,
     sendConsent,
     abort,
+    reset,
   } = useAssistantSession();
   const hasMessages = messages.length > 0;
+  const queuedPromptCount = queuedPrompts.length;
   const supportsThinkingEffort = useSupportedReasoningEffort({
     selection,
     thinkingEffort,
@@ -79,6 +82,7 @@ export function Assistant() {
             {isStreaming ? (
               <span className="mr-auto rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                 Generating
+                {queuedPromptCount > 0 ? ` - ${queuedPromptCount} queued` : ""}
               </span>
             ) : (
               <span className="mr-auto text-xs text-muted-foreground">
@@ -94,6 +98,16 @@ export function Assistant() {
             >
               <Download className="size-4" aria-hidden="true" />
               Export chat
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="gap-2 text-muted-foreground hover:text-destructive"
+              onClick={reset}
+            >
+              <Trash2 className="size-4" aria-hidden="true" />
+              Clear chat
             </Button>
           </div>
         ) : null}

@@ -435,15 +435,21 @@ export const BtcActivityChart = ({
       const point = state.activePayload?.find((item) => item.payload)?.payload;
       if (point) setExpandedPointDate(point.date);
     };
+    const isActivityMarkerEvent = (event: React.MouseEvent) =>
+      event.target instanceof Element &&
+      event.target.closest("[data-activity-marker='true']");
     const handleChartDoubleClick = (event: React.MouseEvent) => {
+      if (isActivityMarkerEvent(event)) return;
       if (plottedData.length <= 3) return;
       resetBrushRange();
       event.preventDefault();
     };
     const handleChartClick = (event: React.MouseEvent) => {
+      if (isActivityMarkerEvent(event)) return;
       if (event.detail >= 2) handleChartDoubleClick(event);
     };
     const handleChartMouseDown = (event: React.MouseEvent) => {
+      if (isActivityMarkerEvent(event)) return;
       if (event.detail >= 2) handleChartDoubleClick(event);
     };
     const xAxisTicks = portfolioAxisTicks(
@@ -691,7 +697,7 @@ export const BtcActivityChart = ({
               >
                 <ChartContainer
                   config={chartConfig}
-                  className="min-h-0 flex-1 w-full overflow-visible [&_.recharts-tooltip-wrapper]:!z-[100]"
+                  className="min-h-0 flex-1 w-full overflow-visible [&_.recharts-active-dot]:pointer-events-none [&_.recharts-active-dot_*]:pointer-events-none [&_.recharts-tooltip-wrapper]:!z-[100]"
                 >
                   <ComposedChart
                     data={selectedChartDisplayData}
