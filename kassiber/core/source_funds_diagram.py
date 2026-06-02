@@ -274,7 +274,6 @@ def build_flow_drawing(
     drawing = Drawing(width, height)
 
     body_top = height - pad - header_h
-    body_bottom = pad + legend_h
 
     # Position every node box, keyed by id.
     positions: dict[str, tuple[float, float, float, float]] = {}

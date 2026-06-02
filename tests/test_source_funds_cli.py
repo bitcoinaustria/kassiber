@@ -1093,7 +1093,14 @@ class SourceFundsCliTest(unittest.TestCase):
             for level in flow["levels"]
             for node in level["nodes"]
         }
+        flow_transaction_ids = {
+            node["transaction_id"]
+            for level in flow["levels"]
+            for node in level["nodes"]
+            if node["node_type"] == "transaction"
+        }
         self.assertIn("Reviewed disclosure source", flow_labels)
+        self.assertIn(preview["target"]["transaction_id"], flow_transaction_ids)
         self.assertGreaterEqual(len(flow["edges"]), 3)
         pdf_path = self.root / "case-export.pdf"
         exported = self.cli(
