@@ -145,6 +145,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.transactions.metadata.update",
     "ui.attachments.list",
     "ui.attachments.add",
+    "ui.attachments.copy",
     "ui.attachments.remove",
     "ui.attachments.open",
     "ui.wallets.list",
@@ -173,6 +174,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.reports.export_austrian_e1kv_pdf",
     "ui.reports.export_austrian_e1kv_xlsx",
     "ui.reports.export_austrian_e1kv_csv",
+    "ui.reports.export_audit_package",
     "ui.journals.snapshot",
     "ui.journals.events.list",
     "ui.journals.quarantine",
@@ -197,6 +199,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.rates.kraken_csv.import",
     "ui.rates.rebuild",
     "ui.workspace.health",
+    "ui.audit.evidence.summary",
     "ui.workspace.create",
     "ui.workspace.rename",
     "ui.workspace.delete",
@@ -506,7 +509,7 @@ fn open_exported_file(path: String) -> Result<(), String> {
         .map_err(|error| format!("Report export file could not be inspected: {error}"))?;
     if !is_supported_report_export_target(&canonical, &metadata) {
         return Err(
-            "Only managed PDF, XLSX, CSV files, and Austrian CSV bundle folders can be opened."
+            "Only managed PDF, XLSX, CSV files, Austrian CSV bundle folders, and audit package folders can be opened."
                 .to_string(),
         );
     }
@@ -581,7 +584,7 @@ fn save_exported_file_as(source_path: String, destination_path: String) -> Resul
         .map_err(|error| format!("Report export file could not be inspected: {error}"))?;
     if !is_supported_report_export_target(&canonical_source, &metadata) {
         return Err(
-            "Only managed PDF, XLSX, CSV files, and Austrian CSV bundle folders can be saved."
+            "Only managed PDF, XLSX, CSV files, Austrian CSV bundle folders, and audit package folders can be saved."
                 .to_string(),
         );
     }
@@ -700,23 +703,25 @@ fn copy_report_export_directory(source: &Path, destination: &Path) -> Result<(),
             .next()
             .is_some()
     {
-        return Err("Choose a new or empty folder for the CSV bundle.".to_string());
+        return Err("Choose a new or empty folder for the report export.".to_string());
     }
     std::fs::create_dir_all(destination)
-        .map_err(|error| format!("Could not create CSV bundle destination: {error}"))?;
+        .map_err(|error| format!("Could not create report export destination: {error}"))?;
     for entry in std::fs::read_dir(source)
-        .map_err(|error| format!("Could not read managed CSV bundle: {error}"))?
+        .map_err(|error| format!("Could not read managed report export: {error}"))?
     {
-        let entry = entry.map_err(|error| format!("Could not read CSV bundle entry: {error}"))?;
+        let entry = entry.map_err(|error| format!("Could not read report export entry: {error}"))?;
         let source_path = entry.path();
         let destination_path = destination.join(entry.file_name());
         let entry_metadata = entry
             .metadata()
-            .map_err(|error| format!("Could not inspect CSV bundle entry: {error}"))?;
+            .map_err(|error| format!("Could not inspect report export entry: {error}"))?;
         if entry_metadata.is_dir() {
             copy_report_export_directory(&source_path, &destination_path)?;
         } else {
-            copy_report_export_file(&source_path, &destination_path)?;
+            std::fs::copy(&source_path, &destination_path)
+                .map(|_| ())
+                .map_err(|error| format!("Could not save report export entry: {error}"))?;
         }
     }
     Ok(())
@@ -1614,6 +1619,13 @@ fn is_supported_austrian_csv_bundle_dir(path: &Path) -> bool {
     name.starts_with("kassiber-austrian-e1kv-") && name.contains("-csv-")
 }
 
+fn is_supported_audit_package_dir(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    name.starts_with("kassiber-audit-package-")
+}
+
 fn is_managed_report_export_path(path: &Path) -> bool {
     managed_report_exports_root(path).is_some()
 }
@@ -1641,7 +1653,8 @@ fn is_supported_report_export_target(path: &Path, metadata: &std::fs::Metadata) 
     if metadata.is_file() {
         return is_supported_export_file(path);
     }
-    metadata.is_dir() && is_supported_austrian_csv_bundle_dir(path)
+    metadata.is_dir()
+        && (is_supported_austrian_csv_bundle_dir(path) || is_supported_audit_package_dir(path))
 }
 
 fn open_with_default_app(path: &Path) -> Result<(), String> {
@@ -2347,7 +2360,7 @@ mod tests {
         copy_report_export_directory, database_is_encrypted,
         ensure_export_destination_outside_managed_root, inspect_import_project_directory,
         inspect_terminal_command, is_managed_report_export_path,
-        is_supported_austrian_csv_bundle_dir, is_supported_export_file,
+        is_supported_audit_package_dir, is_supported_austrian_csv_bundle_dir, is_supported_export_file,
         is_supported_report_export_target, menu_action, menu_action_for_deep_link,
         menu_action_for_id, navigate_action, open_settings_action, path_is_on_path,
         terminal_command_contents, terminal_command_path_hint, validated_attachment_file_path,
@@ -2630,6 +2643,7 @@ mod tests {
         let required: &[&str] = &[
             "ui.attachments.list",
             "ui.attachments.add",
+            "ui.attachments.copy",
             "ui.attachments.remove",
             "ui.attachments.open",
         ];
@@ -2820,6 +2834,12 @@ mod tests {
         assert!(!is_supported_austrian_csv_bundle_dir(Path::new(
             "kassiber-report-20260512-101010"
         )));
+        assert!(is_supported_audit_package_dir(Path::new(
+            "kassiber-audit-package-20260512-101010"
+        )));
+        assert!(!is_supported_audit_package_dir(Path::new(
+            "kassiber-report-20260512-101010"
+        )));
 
         let root = unique_temp_dir("report-export-target");
         let reports = root.join("exports").join("reports");
@@ -2828,6 +2848,8 @@ mod tests {
         fs::write(&csv_file, b"header\n").expect("write csv file");
         let bundle_dir = reports.join("kassiber-austrian-e1kv-2026-csv-20260512-101010");
         fs::create_dir_all(&bundle_dir).expect("create bundle dir");
+        let audit_dir = reports.join("kassiber-audit-package-20260512-101010");
+        fs::create_dir_all(&audit_dir).expect("create audit package dir");
         let nested_dir = reports.join("kassiber-report-20260512-101010");
         fs::create_dir_all(&nested_dir).expect("create unrelated dir");
 
@@ -2838,6 +2860,10 @@ mod tests {
         assert!(is_supported_report_export_target(
             &bundle_dir,
             &bundle_dir.metadata().expect("bundle metadata")
+        ));
+        assert!(is_supported_report_export_target(
+            &audit_dir,
+            &audit_dir.metadata().expect("audit metadata")
         ));
         assert!(!is_supported_report_export_target(
             &nested_dir,

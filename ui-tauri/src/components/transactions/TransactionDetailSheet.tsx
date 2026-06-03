@@ -11,7 +11,6 @@ import {
   Hash,
   History,
   Info,
-  Layers,
   Link2,
   ListChecks,
   Network,
@@ -601,16 +600,8 @@ export type AttachmentItem = {
   label: string;
   detail?: string;
   href?: string;
-};
-
-export type SourceFundsLinkItem = {
-  id: string;
-  link_type: string;
-  state: string;
-  confidence: string;
-  asset?: string | null;
-  allocation_amount?: number | null;
-  explanation?: string;
+  copiedFromAttachmentId?: string;
+  copiedFromTransactionId?: string;
 };
 
 export type JournalEventItem = {
@@ -843,6 +834,7 @@ function AttachmentsPanel({
   hideSensitive,
   onAddFiles,
   onAddLinks,
+  onReuseEvidence,
   onOpen,
   onRemove,
 }: {
@@ -850,6 +842,7 @@ function AttachmentsPanel({
   hideSensitive: boolean;
   onAddFiles?: (paths: string[]) => void | Promise<void>;
   onAddLinks?: (urls: string[]) => void | Promise<void>;
+  onReuseEvidence?: () => void;
   onOpen?: (item: AttachmentItem) => void;
   onRemove?: (item: AttachmentItem) => void;
 }) {
@@ -936,6 +929,11 @@ function AttachmentsPanel({
                         {item.detail}
                       </div>
                     ) : null}
+                    {item.copiedFromAttachmentId ? (
+                      <Badge variant="secondary" className="mt-1 rounded-md">
+                        reused
+                      </Badge>
+                    ) : null}
                   </button>
                 ) : (
                   <div className="min-w-0 flex-1" title={hiddenTitle}>
@@ -956,6 +954,11 @@ function AttachmentsPanel({
                       >
                         {item.detail}
                       </div>
+                    ) : null}
+                    {item.copiedFromAttachmentId ? (
+                      <Badge variant="secondary" className="mt-1 rounded-md">
+                        reused
+                      </Badge>
                     ) : null}
                   </div>
                 )}
@@ -992,7 +995,7 @@ function AttachmentsPanel({
           {pickerError}
         </p>
       ) : null}
-      <div className="grid grid-cols-2 gap-1.5">
+      <div className="grid gap-1.5 sm:grid-cols-3">
         <Button
           type="button"
           variant="outline"
@@ -1019,6 +1022,17 @@ function AttachmentsPanel({
         >
           <Link2 className="size-3.5" aria-hidden="true" />
           Attach links
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          disabled={!onReuseEvidence}
+          onClick={onReuseEvidence}
+        >
+          <Repeat2 className="size-3.5" aria-hidden="true" />
+          Reuse
         </Button>
       </div>
       {onAddLinks ? (
@@ -1202,12 +1216,12 @@ export function TransactionDetailSheet({
   saveError,
   nowRate,
   attachments,
-  sourceFundsLinks = [],
   journalEvents = [],
   commercialContext,
   commercialContextLoading,
   onAddAttachmentFiles,
   onAddAttachmentLinks,
+  onReuseEvidence,
   onOpenAttachment,
   onRemoveAttachment,
   onUnpair,
@@ -1229,12 +1243,12 @@ export function TransactionDetailSheet({
   saveError?: string | null;
   nowRate?: number | null;
   attachments?: AttachmentItem[];
-  sourceFundsLinks?: SourceFundsLinkItem[];
   journalEvents?: JournalEventItem[];
   commercialContext?: CommercialContextData;
   commercialContextLoading?: boolean;
   onAddAttachmentFiles?: (paths: string[]) => void | Promise<void>;
   onAddAttachmentLinks?: (urls: string[]) => void | Promise<void>;
+  onReuseEvidence?: () => void;
   onOpenAttachment?: (item: AttachmentItem) => void;
   onRemoveAttachment?: (item: AttachmentItem) => void;
   onUnpair?: (pairId: string) => void | Promise<void>;
@@ -2674,36 +2688,6 @@ export function TransactionDetailSheet({
 
                     <div className="overflow-hidden rounded-md border">
                       <div className="flex items-center gap-2 border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        <Layers
-                          className="size-3"
-                          aria-hidden="true"
-                        />
-                        Source of funds
-                      </div>
-                      {sourceFundsLinks.length ? (
-                        sourceFundsLinks.map((link) => (
-                          <LedgerRow
-                            key={link.id}
-                            label={`${link.link_type} · ${link.state}`}
-                            value={
-                              <span className={blurClass(hideSensitive)}>
-                                {link.allocation_amount
-                                  ? `${link.allocation_amount.toFixed(8)} ${link.asset ?? transaction.asset ?? "BTC"}`
-                                  : link.confidence}
-                              </span>
-                            }
-                            align="right"
-                            hint={link.explanation || link.confidence}
-                          />
-                        ))
-                      ) : (
-                        <div className="p-3 text-xs text-muted-foreground">
-                          No reviewed source-of-funds links for this row yet.
-                        </div>
-                      )}
-                    </div>
-                    <div className="overflow-hidden rounded-md border">
-                      <div className="flex items-center gap-2 border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                         <FileText
                           className="size-3"
                           aria-hidden="true"
@@ -2913,6 +2897,7 @@ export function TransactionDetailSheet({
                   hideSensitive={hideSensitive}
                   onAddFiles={onAddAttachmentFiles}
                   onAddLinks={onAddAttachmentLinks}
+                  onReuseEvidence={onReuseEvidence}
                   onOpen={onOpenAttachment}
                   onRemove={onRemoveAttachment}
                 />

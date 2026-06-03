@@ -269,6 +269,26 @@ Reviewed `missing_history` gaps may appear in the report, but they must be
 labeled as gaps with the evidence the user attached. They are not equivalent to
 fiat purchases, mining income, gifts, or exchange withdrawals.
 
+## Audit Package Handoff
+
+The Reports audit package export now reuses the same reviewed source-funds
+state for trusted auditor handoff. The package manifest is DB-backed and
+deterministic: it lists included transactions, direct attachments, source-funds
+links, link/root-source evidence, journal/review state when enabled, copied-file
+hashes, URL references, copied-evidence provenance, and missing-evidence
+warnings.
+
+This is not a source-funds PDF replacement and it does not mutate
+`transaction_pairs`. Tax/journal pairs can seed source-funds suggestions, but
+the audit package reads source-funds review state from `source_funds_links`,
+`source_funds_sources`, and their attachment join tables.
+
+AI/readiness summaries use the same persisted evidence query shape but redact
+raw URL values, managed storage paths, descriptors, xpubs, backend endpoints,
+credentials, raw wallet files, logs, AI settings, unrelated books, and
+technical wallet evidence. OCR, photo understanding, invoice parsing, remote
+document upload, automatic evidence pairing, and auto-review remain deferred.
+
 ## Privacy and Reveal Modes
 
 The default report should be scoped to the target path only. It must not include

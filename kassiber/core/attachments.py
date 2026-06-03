@@ -111,9 +111,29 @@ def _attachment_row_to_dict(row: Mapping[str, Any], attachments_root: Path) -> d
         "size_bytes": int(row["size_bytes"]) if row["size_bytes"] is not None else None,
         "sha256": row["sha256"] or "",
         "stored_relpath": stored_relpath or "",
+        "copied_from_attachment_id": row["copied_from_attachment_id"] or "",
+        "copied_from_transaction_id": row["copied_from_transaction_id"] or "",
         "exists": exists,
         "created_at": row["created_at"],
     }
+
+
+def _select_attachment_row(conn, profile_id: str, attachment_id: str):
+    return conn.execute(
+        """
+        SELECT
+            a.*,
+            t.external_id,
+            t.occurred_at,
+            t.asset,
+            w.label AS wallet
+        FROM attachments a
+        LEFT JOIN transactions t ON t.id = a.transaction_id
+        LEFT JOIN wallets w ON w.id = t.wallet_id
+        WHERE a.profile_id = ? AND a.id = ?
+        """,
+        (profile_id, attachment_id),
+    ).fetchone()
 
 
 def add_attachment(
@@ -203,22 +223,183 @@ def add_attachment(
                 pass
         raise
 
-    row = conn.execute(
-        """
-        SELECT
-            a.*,
-            t.external_id,
-            t.occurred_at,
-            t.asset,
-            w.label AS wallet
-        FROM attachments a
-        LEFT JOIN transactions t ON t.id = a.transaction_id
-        LEFT JOIN wallets w ON w.id = t.wallet_id
-        WHERE a.id = ?
-        """,
-        (attachment_id,),
-    ).fetchone()
+    row = _select_attachment_row(conn, profile["id"], attachment_id)
     return _attachment_row_to_dict(row, attachments_root)
+
+
+def copy_attachments(
+    conn,
+    data_root: str,
+    workspace_ref: str | None,
+    profile_ref: str | None,
+    target_tx_ref: str,
+    attachment_ids: list[str],
+    hooks: AttachmentHooks,
+    *,
+    source_tx_ref: str | None = None,
+):
+    if not attachment_ids:
+        raise AppError("Select at least one attachment to copy", code="validation")
+    workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    target_tx = hooks.resolve_transaction(conn, profile["id"], target_tx_ref)
+    source_tx = (
+        hooks.resolve_transaction(conn, profile["id"], source_tx_ref)
+        if source_tx_ref
+        else None
+    )
+    if source_tx and source_tx["id"] == target_tx["id"]:
+        raise AppError(
+            "Choose a different source transaction for evidence reuse",
+            code="validation",
+        )
+
+    cleaned_ids = []
+    seen = set()
+    for attachment_id in attachment_ids:
+        if not isinstance(attachment_id, str) or not attachment_id.strip():
+            raise AppError("attachment_ids must be non-empty strings", code="validation")
+        normalized = attachment_id.strip()
+        if normalized not in seen:
+            cleaned_ids.append(normalized)
+            seen.add(normalized)
+
+    placeholders = ",".join("?" for _ in cleaned_ids)
+    where = [
+        "a.profile_id = ?",
+        f"a.id IN ({placeholders})",
+        "a.transaction_id IS NOT NULL",
+    ]
+    params: list[Any] = [profile["id"], *cleaned_ids]
+    if source_tx:
+        where.append("a.transaction_id = ?")
+        params.append(source_tx["id"])
+    rows = conn.execute(
+        f"""
+        SELECT a.*
+        FROM attachments a
+        WHERE {' AND '.join(where)}
+        """,
+        params,
+    ).fetchall()
+    rows_by_id = {row["id"]: row for row in rows}
+    missing_ids = [
+        attachment_id
+        for attachment_id in cleaned_ids
+        if attachment_id not in rows_by_id
+    ]
+    if missing_ids:
+        raise AppError(
+            "One or more source attachments were not found",
+            code="not_found",
+            details={"attachment_ids": missing_ids},
+        )
+
+    attachments_root = _attachments_root(data_root)
+    created_paths: list[Path] = []
+    new_ids: list[str] = []
+    created_at = hooks.now_iso()
+    conn.execute("SAVEPOINT attachment_copy")
+    try:
+        for source in (rows_by_id[attachment_id] for attachment_id in cleaned_ids):
+            new_id = str(uuid.uuid4())
+            new_ids.append(new_id)
+            stored_relpath = None
+            size_bytes = source["size_bytes"]
+            sha256 = source["sha256"]
+            if source["attachment_type"] == "file":
+                source_path, path_valid = _resolve_stored_path(
+                    attachments_root,
+                    source["stored_relpath"],
+                )
+                if not path_valid or source_path is None:
+                    raise AppError(
+                        "Source attachment has an invalid managed storage path",
+                        code="validation",
+                        details={"attachment_id": source["id"]},
+                    )
+                if not source_path.exists():
+                    raise AppError(
+                        "Source attachment file is missing",
+                        code="not_found",
+                        details={"attachment_id": source["id"]},
+                    )
+                destination, stored_relpath = _attachment_storage_path(
+                    attachments_root,
+                    profile["id"],
+                    new_id,
+                    source["original_filename"] or source["label"],
+                )
+                size_bytes, sha256 = _hash_and_copy_file(source_path, destination)
+                created_paths.append(destination)
+                if (
+                    source["size_bytes"] is not None
+                    and int(source["size_bytes"]) != size_bytes
+                ):
+                    raise AppError(
+                        "Source attachment size does not match its stored metadata",
+                        code="validation",
+                        details={"attachment_id": source["id"]},
+                    )
+                if source["sha256"] and source["sha256"] != sha256:
+                    raise AppError(
+                        "Source attachment hash does not match its stored metadata",
+                        code="validation",
+                        details={"attachment_id": source["id"]},
+                    )
+            conn.execute(
+                """
+                INSERT INTO attachments(
+                    id, workspace_id, profile_id, transaction_id, attachment_type, label,
+                    original_filename, stored_relpath, source_url, media_type,
+                    size_bytes, sha256, copied_from_attachment_id,
+                    copied_from_transaction_id, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    new_id,
+                    workspace["id"],
+                    profile["id"],
+                    target_tx["id"],
+                    source["attachment_type"],
+                    source["label"],
+                    source["original_filename"],
+                    stored_relpath,
+                    source["source_url"],
+                    source["media_type"],
+                    size_bytes,
+                    sha256,
+                    source["id"],
+                    source["transaction_id"],
+                    created_at,
+                ),
+            )
+        conn.execute("RELEASE SAVEPOINT attachment_copy")
+        conn.commit()
+    except Exception:
+        conn.execute("ROLLBACK TO SAVEPOINT attachment_copy")
+        conn.execute("RELEASE SAVEPOINT attachment_copy")
+        for path in created_paths:
+            try:
+                path.unlink()
+                _prune_empty_dirs(attachments_root, path)
+            except OSError:
+                # Best-effort rollback cleanup must not mask the original copy error.
+                pass
+        raise
+
+    copied = [
+        _attachment_row_to_dict(
+            _select_attachment_row(conn, profile["id"], new_id),
+            attachments_root,
+        )
+        for new_id in new_ids
+    ]
+    return {
+        "source_transaction_id": source_tx["id"] if source_tx else "",
+        "target_transaction_id": target_tx["id"],
+        "attachments": copied,
+        "copied": len(copied),
+    }
 
 
 def list_attachments(
@@ -412,6 +593,7 @@ def gc_attachments(conn, data_root: str, *, dry_run: bool = False):
 __all__ = [
     "AttachmentHooks",
     "add_attachment",
+    "copy_attachments",
     "gc_attachments",
     "list_attachments",
     "remove_attachment",

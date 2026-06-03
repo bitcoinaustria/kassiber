@@ -47,11 +47,23 @@ type MockAttachment = {
   size_bytes?: number | null;
   sha256?: string;
   stored_relpath?: string;
+  copied_from_attachment_id?: string;
+  copied_from_transaction_id?: string;
   exists?: boolean | null;
   created_at: string;
 };
 
 let mockAttachments: MockAttachment[] = [
+  {
+    id: "att-tx2-1",
+    transaction_id: "tx2",
+    attachment_type: "url",
+    label: "Board approval reference",
+    url: "https://docs.example.com/board/approval",
+    media_type: "text/uri-list",
+    exists: null,
+    created_at: "2026-03-31T09:00:00Z",
+  },
   {
     id: "att-tx1-1",
     transaction_id: "tx1",
@@ -77,6 +89,113 @@ let mockAttachments: MockAttachment[] = [
   },
 ];
 let mockAttachmentCounter = 0;
+
+function mockAuditEvidenceSummary(transactionId: string) {
+  const direct = mockAttachments
+    .filter((attachment) => !transactionId || attachment.transaction_id === transactionId)
+    .map((attachment) => ({
+      id: attachment.id,
+      attachment_type: attachment.attachment_type,
+      label: attachment.label,
+      media_type: attachment.media_type ?? "",
+      size_bytes: attachment.size_bytes ?? null,
+      sha256: attachment.sha256 ?? "",
+      exists: attachment.exists ?? null,
+      copied_from_attachment_id: attachment.copied_from_attachment_id ?? "",
+      copied_from_transaction_id: attachment.copied_from_transaction_id ?? "",
+      url_host:
+        attachment.attachment_type === "url" && attachment.url
+          ? new URL(attachment.url).host
+          : "",
+    }));
+  const status = direct.length ? "warning" : "blocked";
+  return {
+    schema_version: 1,
+    workspace: { id: "mock-ws", label: "Mock workspace" },
+    profile: { id: "mock-profile", label: "Demo book" },
+    scope: { type: transactionId ? "transactions" : "active_profile" },
+    journal_freshness: {
+      status: "current",
+      needs_processing: false,
+      reason: "mock journals are current",
+    },
+    transactions: [
+      {
+        transaction: {
+          id: transactionId || "tx1",
+          external_id: transactionId || "tx1",
+          asset: "BTC",
+        },
+        readiness: {
+          status,
+          warnings: [
+            ...(direct.length
+              ? []
+              : [
+                  {
+                    code: "receipt_missing",
+                    severity: "blocker",
+                    message: "No direct receipt, note, file, or URL reference is attached to this transaction.",
+                    action: "Attach a local receipt file or a URL reference from transaction detail.",
+                  },
+                ]),
+            {
+              code: "source_link_unreviewed",
+              severity: "blocker",
+              message: "At least one source-of-funds suggestion is still unreviewed.",
+              action: "Accept, edit, or reject the suggested link.",
+            },
+            {
+              code: "sensitive_material_excluded",
+              severity: "info",
+              message: "Descriptors, xpubs, backend URLs, credentials, wallet files, logs, AI settings, and technical wallet evidence are excluded from this audit surface.",
+            },
+          ],
+        },
+        direct_attachments: direct,
+        source_funds_links: [
+          {
+            id: "mock-sof-link-1",
+            link_type: "manual_source",
+            state: "suggested",
+            confidence: "strong",
+            method: "mock_fixture",
+            asset: "BTC",
+            allocation_amount: 0.01,
+            allocation_policy: "explicit",
+            explanation: "Mock source-funds link for browser preview.",
+            attachments: [],
+            from_source: {
+              id: "mock-source-1",
+              source_type: "fiat_purchase",
+              label: "Exchange statement",
+              review_state: "reviewed",
+              attachments: [],
+            },
+          },
+        ],
+      },
+    ],
+    summary: {
+      transaction_count: 1,
+      ready_count: 0,
+      blocked_count: status === "blocked" ? 1 : 0,
+      warning_count: status === "warning" ? 1 : 0,
+    },
+    excluded_sensitive_material: [
+      "wallet descriptors",
+      "xpubs",
+      "backend credentials",
+      "backend URLs",
+      "raw wallet files",
+      "environment files",
+      "logs",
+      "AI settings",
+      "unrelated books",
+      "technical wallet evidence",
+    ],
+  };
+}
 
 type MockConnection = {
   id: string;
@@ -1516,6 +1635,63 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.attachments.copy") {
+      const args = (req.args ?? {}) as {
+        transaction?: unknown;
+        target_transaction?: unknown;
+        source_transaction?: unknown;
+        attachments?: unknown;
+        attachment_ids?: unknown;
+      };
+      const transactionId =
+        typeof args.transaction === "string"
+          ? args.transaction
+          : typeof args.target_transaction === "string"
+            ? args.target_transaction
+            : "";
+      const sourceTransactionId =
+        typeof args.source_transaction === "string"
+          ? args.source_transaction
+          : "";
+      const attachmentIds = Array.isArray(args.attachments)
+        ? args.attachments
+        : Array.isArray(args.attachment_ids)
+          ? args.attachment_ids
+          : [];
+      const sourceAttachments = attachmentIds
+        .filter((id): id is string => typeof id === "string")
+        .map((id) => mockAttachments.find((attachment) => attachment.id === id))
+        .filter((attachment): attachment is MockAttachment => Boolean(attachment));
+      const copied = sourceAttachments.map((attachment) => {
+        const id = `att-mock-${(mockAttachmentCounter += 1)}`;
+        return {
+          ...attachment,
+          id,
+          transaction_id: transactionId,
+          stored_relpath:
+            attachment.attachment_type === "file"
+              ? `mock/${id}-${attachment.original_filename || attachment.label}`
+              : "",
+          copied_from_attachment_id: attachment.id,
+          copied_from_transaction_id:
+            sourceTransactionId || attachment.transaction_id,
+          created_at: new Date().toISOString(),
+        };
+      });
+      mockAttachments = [...copied, ...mockAttachments];
+      return {
+        kind: "ui.attachments.copy",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          copied: copied.length,
+          attachments: copied,
+          source_transaction_id: sourceTransactionId,
+          target_transaction_id: transactionId,
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.attachments.remove") {
       const args = (req.args ?? {}) as { attachment?: unknown };
       const attachmentId =
@@ -1559,6 +1735,72 @@ export const mockDaemon: DaemonTransport = {
           url: attachment.url,
           path: attachment.attachment_type === "file" ? `/tmp/${attachment.label}` : undefined,
           attachment,
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.source_funds.links.list") {
+      return {
+        kind: "ui.source_funds.links.list",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          links: mockAuditEvidenceSummary(String(req.args?.target_transaction ?? "tx1"))
+            .transactions[0].source_funds_links,
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.source_funds.cases.list") {
+      return {
+        kind: "ui.source_funds.cases.list",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          cases: [
+            {
+              id: "mock-source-funds-case",
+              label: "Exchange sale handoff",
+              target_external_id: "tx1",
+              status: "blocked",
+              created_at: "2026-04-18T15:00:00Z",
+            },
+          ],
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.audit.evidence.summary") {
+      const transaction =
+        typeof req.args?.transaction === "string" ? req.args.transaction : "tx1";
+      return {
+        kind: "ui.audit.evidence.summary",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: mockAuditEvidenceSummary(transaction) as T,
+      };
+    }
+
+    if (req.kind === "ui.reports.export_audit_package") {
+      return {
+        kind: "ui.reports.export_audit_package",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          dir: "/tmp/kassiber-audit-package-mock",
+          manifest: "/tmp/kassiber-audit-package-mock/manifest.json",
+          format: "directory",
+          scope: "audit_package",
+          filename: "kassiber-audit-package-mock",
+          transaction_count: 1,
+          ready_count: 0,
+          blocked_count: 1,
+          evidence_file_count: mockAttachments.filter(
+            (attachment) => attachment.attachment_type === "file",
+          ).length,
+          url_reference_count: mockAttachments.filter(
+            (attachment) => attachment.attachment_type === "url",
+          ).length,
         } as T,
       };
     }

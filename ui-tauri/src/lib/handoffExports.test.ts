@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AUDIT_PACKAGE_EXPORT_KIND,
   HANDOFF_EXPORT_MODES,
   NORMAL_HANDOFF_EXCLUSIONS,
   handoffModeById,
@@ -34,6 +35,13 @@ describe("handoff export modes", () => {
       technical ? requiresSensitiveWalletMaterialConsent(technical) : false,
     ).toBe(true);
     expect(normalHandoffModes()).not.toContain(technical);
+  });
+
+  it("marks audit package available only with its real daemon export kind", () => {
+    const audit = handoffModeById("audit_package");
+
+    expect(audit?.availability).toBe("available");
+    expect(audit?.daemonKind).toBe(AUDIT_PACKAGE_EXPORT_KIND);
   });
 
   it("does not add another unrestricted export mode by accident", () => {
