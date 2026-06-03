@@ -19,7 +19,7 @@ describe("essentialsStepComplete", () => {
     expect(essentialsStepComplete(DEFAULT_FORM)).toBe(true);
   });
 
-  it("requires workspace and profile labels", () => {
+  it("requires the visible books label and hidden default book label", () => {
     expect(essentialsStepComplete(form({ workspace: "   " }))).toBe(false);
     expect(essentialsStepComplete(form({ profile: "" }))).toBe(false);
   });

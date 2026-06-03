@@ -245,7 +245,7 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
     if (!renameWorkspaceTarget || renameWorkspace.isPending) return;
     const label = renameWorkspaceName.trim();
     if (!label) {
-      setRenameWorkspaceError("Enter a books set name.");
+      setRenameWorkspaceError("Enter a book set name.");
       return;
     }
     setRenameWorkspaceError(null);
@@ -263,7 +263,7 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
           setRenameWorkspaceError(
             error instanceof Error
               ? error.message
-              : "Could not rename books set.",
+              : "Could not rename book set.",
           );
         },
       },
@@ -274,7 +274,7 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
     if (createWorkspace.isPending) return;
     const label = workspaceName.trim();
     if (!label) {
-      setWorkspaceError("Enter a books set name.");
+      setWorkspaceError("Enter a book set name.");
       return;
     }
     setWorkspaceError(null);
@@ -290,7 +290,7 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
           setWorkspaceError(
             error instanceof Error
               ? error.message
-              : "Could not create books set.",
+              : "Could not create book set.",
           );
         },
       },
@@ -320,7 +320,7 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
             }}
           >
             <FolderPlus className="size-4" aria-hidden="true" />
-            New books set
+            New book set
           </Button>
         </div>
       </div>
@@ -329,13 +329,13 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
         <SummaryCard
           label="Sets"
           value={workspaces.length}
-          detail="Books sets"
+          detail="Book sets"
           icon={BriefcaseBusiness}
         />
         <SummaryCard
           label="Books"
           value={profileCount}
-          detail="Profiles"
+          detail="Individual books"
           icon={Users}
         />
         <SummaryCard
@@ -942,9 +942,9 @@ function RenameWorkspaceDialog({
           }}
         >
           <DialogHeader>
-            <DialogTitle>Edit books set name</DialogTitle>
+            <DialogTitle>Edit book set name</DialogTitle>
             <DialogDescription>
-              Rename this books set. Books, wallets, and transactions stay
+              Rename this book set. Books, wallets, and transactions stay
               unchanged.
             </DialogDescription>
           </DialogHeader>
@@ -959,7 +959,7 @@ function RenameWorkspaceDialog({
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="rename-workspace-name">Books set name</Label>
+            <Label htmlFor="rename-workspace-name">Book set name</Label>
             <Input
               id="rename-workspace-name"
               autoFocus
@@ -1127,7 +1127,7 @@ function CreateWorkspaceDialog({
           }}
         >
           <DialogHeader>
-            <DialogTitle>New books set</DialogTitle>
+            <DialogTitle>New book set</DialogTitle>
             <DialogDescription>
               Create a separate top-level set in this local database, then add
               its first book. Most users only need one.
@@ -1135,14 +1135,14 @@ function CreateWorkspaceDialog({
           </DialogHeader>
 
           <div className="space-y-2">
-            <Label htmlFor="workspace-name">Books set name</Label>
+            <Label htmlFor="workspace-name">Book set name</Label>
             <Input
               id="workspace-name"
               data-testid="workspace-name-input"
               autoFocus
               aria-invalid={Boolean(errorMessage)}
               disabled={isSubmitting}
-              placeholder="Books set name"
+              placeholder="Book set name"
               value={name}
               onChange={(event) => onNameChange(event.currentTarget.value)}
             />

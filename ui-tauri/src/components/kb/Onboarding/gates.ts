@@ -7,7 +7,7 @@ import {
 } from "./constants";
 import type { OnboardingForm } from "./types";
 
-/** Workspace + profile labels are present. */
+/** Visible books label and hidden default book label are present. */
 export const identityComplete = (form: OnboardingForm): boolean =>
   Boolean(form.workspace.trim() && form.profile.trim());
 
@@ -49,7 +49,7 @@ export const aiComplete = (form: OnboardingForm): boolean => {
   return true;
 };
 
-/** Step "Your books" gate — workspace/profile labels + valid tax defaults. */
+/** Step "Your books" gate — books labels + valid tax defaults. */
 export const essentialsStepComplete = (form: OnboardingForm): boolean =>
   identityComplete(form) && accountingComplete(form);
 

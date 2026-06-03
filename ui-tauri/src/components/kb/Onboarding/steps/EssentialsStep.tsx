@@ -42,12 +42,12 @@ export const EssentialsStep = ({
         className="space-y-6"
       >
         <TextField
-          label="Workspace name"
+          label="Books name"
           name="workspace"
           value={form.workspace}
           placeholder="My Books"
           autoFocus
-          description="Groups all your books. Shown in the app header."
+          description="Shown in the app header. Add separate private, business, or client books later."
           onChange={(value) => update("workspace", value)}
         />
 
@@ -114,26 +114,6 @@ export const EssentialsStep = ({
             />
           )}
         </div>
-
-        <details className="group rounded-lg border border-line bg-paper px-4 py-3">
-          <summary className="cursor-pointer list-none text-sm font-medium text-ink">
-            More options
-          </summary>
-          <div className="pt-4">
-            <TextField
-              label="Profile name"
-              name="profile"
-              value={form.profile}
-              placeholder="Private"
-              onChange={(value) => update("profile", value)}
-            />
-            <p className="m-0 mt-2 text-xs leading-5 text-ink-2">
-              A profile is one set of books inside this workspace (e.g. private
-              or business) and carries its own tax defaults. Add more later from
-              Settings.
-            </p>
-          </div>
-        </details>
 
         <OnboardingStepActions>
           <Button type="submit" className="w-full" disabled={!canContinue}>

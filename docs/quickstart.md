@@ -32,7 +32,7 @@ wallets -> transactions -> journals -> reports
 - **account** — a wallet/reporting bucket that wallets can belong to.
 
 In the CLI and database these are still named `workspace` and `profile`.
-The desktop UI uses the friendlier names above: a workspace is a local books
+The desktop UI uses the friendlier names above: a workspace is a local book
 set, and a profile is a book. "My Books" might contain `private` and
 `business` books; a company or client should usually live in its own state
 root with one main set of BTC books plus buckets such as `events`,
