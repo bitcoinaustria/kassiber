@@ -3529,60 +3529,39 @@ def resolve_quarantine_price_override(
         raise AppError("--fiat-rate must be positive", code="validation")
     if new_value is not None and new_value < 0:
         raise AppError("--fiat-value must not be negative", code="validation")
-    payload = pricing.pricing_payload(
-        rate=new_rate,
-        value=new_value,
-        source_kind=pricing.SOURCE_MANUAL_OVERRIDE,
-        quality=pricing.QUALITY_EXACT,
-        provider="manual",
-        pricing_timestamp=tx["confirmed_at"] or tx["occurred_at"],
-        fetched_at=now_iso(),
-        granularity="exact",
-        method="quarantine_price_override",
-    )
-    conn.execute(
-        """
-        UPDATE transactions
-        SET fiat_rate = ?, fiat_value = ?, fiat_price_source = ?,
-            fiat_rate_exact = ?, fiat_value_exact = ?,
-            pricing_source_kind = ?, pricing_provider = ?, pricing_pair = ?,
-            pricing_timestamp = ?, pricing_fetched_at = ?,
-            pricing_granularity = ?, pricing_method = ?,
-            pricing_external_ref = ?, pricing_quality = ?
-        WHERE id = ?
-        """,
-        (
-            payload["fiat_rate"],
-            payload["fiat_value"],
-            payload["fiat_price_source"],
-            payload["fiat_rate_exact"],
-            payload["fiat_value_exact"],
-            payload["pricing_source_kind"],
-            payload["pricing_provider"],
-            payload["pricing_pair"],
-            payload["pricing_timestamp"],
-            payload["pricing_fetched_at"],
-            payload["pricing_granularity"],
-            payload["pricing_method"],
-            payload["pricing_external_ref"],
-            payload["pricing_quality"],
-            tx["id"],
-        ),
+    record = core_metadata.update_transaction_metadata(
+        conn,
+        workspace_ref,
+        profile_ref,
+        tx["id"],
+        _metadata_hooks(),
+        pricing_update={
+            "fiat_rate": str(new_rate) if new_rate is not None else None,
+            "fiat_value": str(new_value) if new_value is not None else None,
+            "source_kind": pricing.SOURCE_MANUAL_OVERRIDE,
+            "quality": pricing.QUALITY_EXACT,
+            "method": "quarantine_price_override",
+        },
+        source="cli",
+        reason="Resolved quarantine with manual pricing override",
+        commit=False,
     )
     conn.execute(
         "DELETE FROM journal_quarantines WHERE profile_id = ? AND transaction_id = ?",
         (profile["id"], tx["id"]),
     )
-    invalidate_journals(conn, profile["id"])
+    if not record["updated"]:
+        invalidate_journals(conn, profile["id"])
     conn.commit()
     return {
         "transaction_id": tx["id"],
         "resolution": "price-override",
         "fiat_rate": float(new_rate) if new_rate is not None else None,
         "fiat_value": float(new_value) if new_value is not None else None,
-        "fiat_rate_exact": payload["fiat_rate_exact"],
-        "fiat_value_exact": payload["fiat_value_exact"],
-        "pricing_source_kind": payload["pricing_source_kind"],
+        "fiat_rate_exact": record["fiat_rate_exact"],
+        "fiat_value_exact": record["fiat_value_exact"],
+        "pricing_source_kind": record["pricing_source_kind"],
+        "history_event_id": record["history_event_id"],
         "note": "Run `kassiber journals process` to regenerate entries.",
     }
 
@@ -3591,20 +3570,29 @@ def resolve_quarantine_exclude(conn, workspace_ref, profile_ref, tx_ref):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     tx = resolve_transaction(conn, profile["id"], tx_ref)
     _ensure_quarantined(conn, profile["id"], tx["id"])
-    conn.execute(
-        "UPDATE transactions SET excluded = 1 WHERE id = ?",
-        (tx["id"],),
+    record = core_metadata.update_transaction_metadata(
+        conn,
+        workspace_ref,
+        profile_ref,
+        tx["id"],
+        _metadata_hooks(),
+        excluded=True,
+        source="cli",
+        reason="Resolved quarantine by excluding transaction",
+        commit=False,
     )
     conn.execute(
         "DELETE FROM journal_quarantines WHERE profile_id = ? AND transaction_id = ?",
         (profile["id"], tx["id"]),
     )
-    invalidate_journals(conn, profile["id"])
+    if not record["updated"]:
+        invalidate_journals(conn, profile["id"])
     conn.commit()
     return {
         "transaction_id": tx["id"],
         "resolution": "exclude",
         "excluded": True,
+        "history_event_id": record["history_event_id"],
         "note": "Run `kassiber journals process` to regenerate entries.",
     }
 

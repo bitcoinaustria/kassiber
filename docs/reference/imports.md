@@ -551,7 +551,14 @@ python3 -m kassiber metadata records get --transaction <TRANSACTION_ID>
 python3 -m kassiber metadata records note set --transaction <ID> --note "Cold storage move"
 python3 -m kassiber metadata records tag add --transaction <ID> --tag tax-lot
 python3 -m kassiber metadata records excluded set --transaction <ID>
+python3 -m kassiber metadata records history list --transaction <ID>
+python3 -m kassiber metadata records history activity --source ai_tool
 ```
+
+Metadata edits from the CLI, desktop, and approved AI tools write append-only
+history in the same local database transaction as the actual change. No-op
+saves do not create history rows, and `metadata records history revert` records
+an undo as a new forward edit rather than modifying the old event.
 
 For raw transaction ranking, sort in Kassiber before applying `--limit`:
 

@@ -42,6 +42,10 @@ const Transactions = lazyRouteComponent(
   () => import("./routes/Transactions"),
   "Transactions",
 );
+const Activity = lazyRouteComponent(
+  () => import("./routes/Activity"),
+  "Activity",
+);
 const Reports = lazyRouteComponent(() => import("./routes/Reports"), "Reports");
 const SourceFunds = lazyRouteComponent(
   () => import("./routes/SourceFunds"),
@@ -134,6 +138,12 @@ const transactionsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/transactions",
   component: Transactions,
+});
+
+const activityRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/activity",
+  component: Activity,
 });
 
 const reportsRoute = createRoute({
@@ -288,6 +298,7 @@ const routeTree = rootRoute.addChildren([
   appLayoutRoute.addChildren([
     overviewRoute,
     transactionsRoute,
+    activityRoute,
     reportsRoute,
     sourceFundsRoute,
     journalsRoute,

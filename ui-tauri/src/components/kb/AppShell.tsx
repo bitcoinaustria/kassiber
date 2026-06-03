@@ -24,6 +24,7 @@ import {
   Fingerprint,
   Gauge,
   Heart,
+  History,
   LifeBuoy,
   LockKeyhole,
   LogOut,
@@ -186,6 +187,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Overview", icon: Gauge, href: "/overview" },
       { label: "Transactions", icon: ClipboardList, href: "/transactions" },
+      { label: "Activity", icon: History, href: "/activity" },
       { label: "Wallets", icon: WalletCards, href: "/connections" },
       { label: "Reports", icon: BarChart3, href: "/reports" },
       { label: "Assistant", icon: MessageSquareText, href: "/assistant" },
@@ -203,6 +205,15 @@ const NAV_GROUPS: NavGroup[] = [
 ];
 
 const ROUTE_META: Array<[string, RouteMeta]> = [
+  [
+    "/activity",
+    {
+      title: "Activity",
+      icon: History,
+      searchLabel: "Search activity",
+      searchPlaceholder: "Search transactions, wallets...",
+    },
+  ],
   [
     "/connections/",
     {

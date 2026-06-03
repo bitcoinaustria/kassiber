@@ -16,6 +16,7 @@ from ..time_utils import _iso_z, _parse_iso_datetime
 from ..wallet_descriptors import DEFAULT_DESCRIPTOR_GAP_LIMIT
 from . import rates as core_rates
 from . import reports as report_builders
+from . import transaction_history
 from .repo import current_context_snapshot
 from .wallets import wallet_btcpay_provenance_config
 
@@ -42,6 +43,7 @@ END
 """.strip()
 _AUDIT_PROFILE_TABLE_COLUMNS = {
     "transactions": "created_at",
+    "transaction_edit_events": "changed_at",
     "journal_entries": "created_at",
     "journal_quarantines": "created_at",
     "wallets": "created_at",
@@ -3346,6 +3348,10 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     else:
         counts = health["counts"]
         journals = health["journals"]
+        edit_stale = transaction_history.stale_summary(
+            conn,
+            {"id": health["profile"]["id"], **journals},
+        )
         if counts["wallets"] == 0:
             blockers.append(
                 {
@@ -3369,13 +3375,21 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                 }
             )
         if journals["needs_processing"]:
+            edit_count = int(edit_stale.get("edit_count") or 0)
             blockers.append(
                 {
                     "id": "journals_stale",
                     "severity": "blocking",
                     "title": "Journals need processing",
-                    "detail": journals["reason"],
+                    "detail": (
+                        f"{journals['reason']}; {edit_count} metadata edit(s) "
+                        "changed report inputs."
+                        if edit_count
+                        else journals["reason"]
+                    ),
                     "daemon_kind": "ui.journals.process",
+                    "activity_kind": "ui.activity.history",
+                    "edit_history": edit_stale,
                 }
             )
         if journals["quarantine_count"]:
@@ -3454,6 +3468,7 @@ def build_audit_changes_since_last_answer_snapshot(
                 "transactions": None,
                 "journal_entries": None,
                 "journal_quarantines": None,
+                "transaction_edit_events": None,
                 "wallets": None,
                 "rates": None,
                 "journals_processed_at": profile["last_processed_at"],
@@ -3506,6 +3521,7 @@ def build_audit_changes_since_last_answer_snapshot(
         "transactions": count_since("transactions"),
         "journal_entries": count_since("journal_entries"),
         "journal_quarantines": count_since("journal_quarantines"),
+        "transaction_edit_events": count_since("transaction_edit_events", "changed_at"),
         "wallets": count_since("wallets"),
         "rates": int(
             conn.execute(
@@ -3529,6 +3545,7 @@ def build_audit_changes_since_last_answer_snapshot(
             "transactions": latest("transactions"),
             "journal_entries": latest("journal_entries"),
             "journal_quarantines": latest("journal_quarantines"),
+            "transaction_edit_events": latest("transaction_edit_events", "changed_at"),
             "wallets": latest("wallets"),
             "rates": latest("rates_cache", "fetched_at"),
             "journals_processed_at": profile["last_processed_at"],

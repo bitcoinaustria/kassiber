@@ -14,6 +14,7 @@ from ..envelope import json_ready
 from ..errors import AppError
 from ..msat import msat_to_btc
 from . import source_funds as core_source_funds
+from . import transaction_history
 
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
 TransactionResolver = Callable[..., Mapping[str, Any]]
@@ -753,6 +754,7 @@ def build_evidence_summary(
     source_funds_case_ref: str | None = None,
     include_journal_state: bool = True,
     include_review_state: bool = True,
+    include_edit_history: bool = False,
 ) -> dict[str, Any]:
     workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     scope: dict[str, Any] = {"type": "active_profile"}
@@ -780,7 +782,28 @@ def build_evidence_summary(
     )
     transactions = []
     warning_counts: dict[str, int] = {}
-    for tx in _transaction_rows_for_scope(conn, profile["id"], hooks, resolved_transaction_refs):
+    tx_rows = _transaction_rows_for_scope(conn, profile["id"], hooks, resolved_transaction_refs)
+    tx_ids = [tx["id"] for tx in tx_rows]
+    edit_history = (
+        transaction_history.history_for_transaction_ids(conn, profile, tx_ids)
+        if include_edit_history
+        else {}
+    )
+    edit_history_count = sum(len(events) for events in edit_history.values())
+    if not include_edit_history and tx_ids:
+        placeholders = ",".join("?" for _ in tx_ids)
+        edit_history_count = int(
+            conn.execute(
+                f"""
+                SELECT COUNT(*) AS count
+                FROM transaction_edit_events
+                WHERE profile_id = ? AND transaction_id IN ({placeholders})
+                """,
+                (profile["id"], *tx_ids),
+            ).fetchone()["count"]
+            or 0
+        )
+    for tx in tx_rows:
         tags = _tx_tags(conn, tx["id"])
         direct_attachments = [
             _attachment_summary(row, attachments_root, include_url=False)
@@ -839,6 +862,8 @@ def build_evidence_summary(
                 "entries": _journal_entries_for_tx(conn, profile["id"], tx["id"]),
                 "quarantine": quarantine,
             }
+        if include_edit_history:
+            item["edit_history"] = edit_history.get(tx["id"], [])
         transactions.append(item)
 
     return {
@@ -854,6 +879,8 @@ def build_evidence_summary(
             "blocked_count": sum(1 for item in transactions if item["readiness"]["status"] == "blocked"),
             "warning_count": sum(1 for item in transactions if item["readiness"]["status"] == "warning"),
             "warning_codes": dict(sorted(warning_counts.items())),
+            "edit_history_event_count": edit_history_count,
+            "edit_history_included": bool(include_edit_history),
         },
         "excluded_sensitive_material": SENSITIVE_MATERIAL_EXCLUSIONS,
     }
@@ -1028,6 +1055,7 @@ def export_audit_package(
     include_url_references: bool = True,
     include_journal_state: bool = True,
     include_review_state: bool = True,
+    include_edit_history: bool = False,
 ) -> dict[str, Any]:
     output_dir = Path(dir_path)
     if output_dir.exists() and any(output_dir.iterdir()):
@@ -1043,6 +1071,7 @@ def export_audit_package(
         source_funds_case_ref=source_funds_case_ref,
         include_journal_state=include_journal_state,
         include_review_state=include_review_state,
+        include_edit_history=include_edit_history,
     )
     profile_id = summary["profile"]["id"]
     attachments_root = _attachments_root(data_root)
@@ -1069,6 +1098,14 @@ def export_audit_package(
         include_url_references=include_url_references,
     )
     package_warnings.extend(url_warnings)
+    if not include_edit_history and summary["summary"].get("edit_history_event_count", 0):
+        package_warnings.append(
+            _warning(
+                "edit_history_excluded",
+                "info",
+                "Transaction edit history exists but was excluded by export options.",
+            )
+        )
     package_warnings.append(
         _warning(
             "sensitive_material_excluded",
@@ -1093,6 +1130,7 @@ def export_audit_package(
                 "include_url_references": bool(include_url_references),
                 "include_journal_state": bool(include_journal_state),
                 "include_review_state": bool(include_review_state),
+                "include_edit_history": bool(include_edit_history),
             },
             "evidence_files": evidence_files,
             "url_references": url_references,

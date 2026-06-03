@@ -9,7 +9,6 @@ import {
   ExternalLink,
   FileText,
   Hash,
-  History,
   Info,
   Link2,
   ListChecks,
@@ -71,6 +70,12 @@ import { MISSING_FIAT_LABEL, type Currency } from "@/lib/currency";
 import { isFilePickerAvailable, pickFiles } from "@/lib/filePicker";
 import { cn } from "@/lib/utils";
 import type { ExplorerSettings } from "@/lib/explorer";
+import type {
+  HistoryRevertTarget,
+  TransactionHistoryEvent,
+  TransactionHistoryStaleSummary,
+} from "@/lib/transactionHistory";
+import { TransactionEditHistoryPanel } from "./TransactionEditHistoryPanel";
 
 import {
   allTransactionStatuses,
@@ -1219,6 +1224,10 @@ export function TransactionDetailSheet({
   journalEvents = [],
   commercialContext,
   commercialContextLoading,
+  historyEvents,
+  historyStale,
+  historyLoading,
+  isRevertingHistory,
   onAddAttachmentFiles,
   onAddAttachmentLinks,
   onReuseEvidence,
@@ -1227,6 +1236,9 @@ export function TransactionDetailSheet({
   onUnpair,
   isUnpairing,
   onOpenMarketDataSettings,
+  onRevertHistory,
+  onProcessJournals,
+  isProcessingJournals,
   onOpenChange,
   onOpenExplorer,
   onSave,
@@ -1246,6 +1258,10 @@ export function TransactionDetailSheet({
   journalEvents?: JournalEventItem[];
   commercialContext?: CommercialContextData;
   commercialContextLoading?: boolean;
+  historyEvents?: TransactionHistoryEvent[];
+  historyStale?: TransactionHistoryStaleSummary;
+  historyLoading?: boolean;
+  isRevertingHistory?: boolean;
   onAddAttachmentFiles?: (paths: string[]) => void | Promise<void>;
   onAddAttachmentLinks?: (urls: string[]) => void | Promise<void>;
   onReuseEvidence?: () => void;
@@ -1254,6 +1270,9 @@ export function TransactionDetailSheet({
   onUnpair?: (pairId: string) => void | Promise<void>;
   isUnpairing?: boolean;
   onOpenMarketDataSettings?: () => void;
+  onRevertHistory?: (target: HistoryRevertTarget) => void | Promise<void>;
+  onProcessJournals?: () => void;
+  isProcessingJournals?: boolean;
   onOpenChange: (open: boolean) => void;
   onOpenExplorer: (transaction: Transaction) => void;
   onSave: (
@@ -2929,17 +2948,16 @@ export function TransactionDetailSheet({
                     </div>
                   </div>
                 ) : null}
-                <div className="rounded-md border border-dashed bg-muted/40 p-3 text-xs text-muted-foreground">
-                  <div className="mb-2 flex items-center gap-2 font-semibold text-foreground">
-                    <History
-                      className="size-4 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                    Edit history
-                  </div>
-                  Once enabled, every metadata save shows up here with who
-                  changed what, when, and the prior value.
-                </div>
+                <TransactionEditHistoryPanel
+                  events={historyEvents}
+                  stale={historyStale}
+                  hideSensitive={hideSensitive}
+                  isLoading={historyLoading}
+                  onRevert={onRevertHistory}
+                  isReverting={isRevertingHistory}
+                  onProcessJournals={onProcessJournals}
+                  isProcessingJournals={isProcessingJournals}
+                />
               </aside>
             </div>
           </div>
