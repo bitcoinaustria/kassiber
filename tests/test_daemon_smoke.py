@@ -2300,6 +2300,35 @@ class DaemonSmokeTest(unittest.TestCase):
                 _write_payload(
                     proc,
                     {
+                        "request_id": "backend-public-defaults",
+                        "kind": "ui.backends.public_defaults",
+                    },
+                )
+                public_defaults = _read_payload_timeout(proc)
+                self.assertEqual(
+                    public_defaults["kind"],
+                    "ui.backends.public_defaults",
+                )
+                public_backend_by_name = {
+                    backend["name"]: backend
+                    for backend in public_defaults["data"]["backends"]
+                }
+                self.assertEqual(
+                    public_backend_by_name["mempool"]["url"],
+                    "https://mempool.bitcoin-austria.at/api",
+                )
+                self.assertEqual(
+                    public_backend_by_name["fulcrum"]["url"],
+                    "ssl://index.bitcoin-austria.at:50002",
+                )
+                self.assertEqual(
+                    public_backend_by_name["liquid"]["url"],
+                    "https://liquid.network/api",
+                )
+
+                _write_payload(
+                    proc,
+                    {
                         "request_id": "create-descriptor-gap-zero",
                         "kind": "ui.wallets.create",
                         "args": {

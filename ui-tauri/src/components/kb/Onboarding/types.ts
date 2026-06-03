@@ -63,10 +63,12 @@ export interface StepComponentProps {
   ) => void;
   onSubmit: () => void;
   goBack?: () => void;
+  onJump?: (index: number) => void;
   canContinue?: boolean;
   submitting?: boolean;
   currentStep: number;
   totalSteps: number;
+  backendPreviewRows?: BackendPreviewRow[];
 }
 
 export interface OnboardingStep {

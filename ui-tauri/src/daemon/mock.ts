@@ -147,6 +147,30 @@ const mockBackendSettingsPayload = () => ({
   },
 });
 
+const mockBackendPublicDefaultsPayload = () => {
+  const backends = mockBackendSettingsRows
+    .filter((row) =>
+      ["electrum", "esplora", "liquid-esplora"].includes(row.kind),
+    )
+    .map((row) => ({
+      name: row.name,
+      kind: row.kind,
+      chain: row.chain,
+      network: row.network,
+      url: row.url,
+      source: row.source,
+      is_default: row.is_default,
+    }));
+  return {
+    backends,
+    summary: {
+      count: backends.length,
+      default_backend:
+        mockBackendSettingsRows.find((row) => row.is_default)?.name ?? null,
+    },
+  };
+};
+
 function mockBackendRowFromArgs(
   args: Record<string, unknown>,
   existing?: MockBackendSettingsRow,
@@ -1940,6 +1964,14 @@ export const mockDaemon: DaemonTransport = {
         schema_version: 1,
         request_id: req.request_id,
         data: mockBackendSettingsPayload() as T,
+      };
+    }
+    if (req.kind === "ui.backends.public_defaults") {
+      return {
+        kind: "ui.backends.public_defaults",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: mockBackendPublicDefaultsPayload() as T,
       };
     }
 

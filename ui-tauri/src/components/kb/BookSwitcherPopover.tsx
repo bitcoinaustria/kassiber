@@ -48,7 +48,7 @@ export function BookSwitcherPopover({
         <DialogHeader className="border-b px-4 py-3 sm:px-5">
           <DialogTitle className="text-base">Switch books</DialogTitle>
           <DialogDescription>
-            Pick the active book/profile for every screen in this window.
+            Pick the active book for every screen in this window.
           </DialogDescription>
         </DialogHeader>
 

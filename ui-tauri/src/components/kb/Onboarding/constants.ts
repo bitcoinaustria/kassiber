@@ -2,7 +2,6 @@ import type {
   AiProviderKind,
   AustrianGainsAlgorithm,
   BackendKind,
-  BackendPreviewRow,
   FiatCurrency,
   GainsAlgorithm,
   GenericGainsAlgorithm,
@@ -185,16 +184,6 @@ export const BACKEND_KIND_LABELS: Record<BackendKind, string> = {
   bitcoinrpc: "Bitcoin Core RPC",
   "liquid-esplora": "Liquid Esplora",
 };
-
-export const PUBLIC_BACKEND_DEFAULTS: readonly BackendPreviewRow[] = [
-  { name: DEFAULT_BACKEND_NAME, kind: "Esplora", url: DEFAULT_BACKEND_URL },
-  {
-    name: "fulcrum",
-    kind: "Electrum",
-    url: "ssl://index.bitcoin-austria.at:50002",
-  },
-  { name: "liquid", kind: "Explorer API", url: "https://liquid.network/api" },
-];
 
 export const AI_PROVIDER_KIND_LABELS: Record<AiProviderKind, string> = {
   local: "Local",

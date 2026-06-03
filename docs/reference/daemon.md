@@ -145,32 +145,32 @@ caller-supplied `api_key`; desktop callers must set or rotate keys through
 `ai.providers.set_api_key` and then test the stored provider.
 
 `ui.profiles.switch` accepts `{"profile_id":"..."}` and updates the active
-books set / book (`context_workspace` / `context_profile` internally) after the
-database is already unlocked. It does not create a per-books/profile passphrase
+book set / book (`context_workspace` / `context_profile` internally) after the
+database is already unlocked. It does not create a per-book passphrase
 boundary; SQLCipher encryption is database-level.
 
 `ui.profiles.create` accepts `{"workspace_id":"...","label":"..."}` and creates
-a new book in that books set. `workspace` and `profile` remain the daemon/API
-names for books set and book. It inherits fiat currency, tax country, long-term
+a new book in that book set. `workspace` and `profile` remain the daemon/API
+names for book set and book. It inherits fiat currency, tax country, long-term
 period, and gains algorithm from the active book in that set when available;
 otherwise it uses the first book in the set, then generic EUR/FIFO defaults for
 empty sets. It can also accept `source_profile_id` to copy those settings from a
 specific book in the same set. Wallets, accounts/buckets, and transactions are
 not copied. The new book becomes active.
 
-`ui.workspace.create` accepts `{"label":"..."}` and creates an empty books set.
-`workspace` remains the daemon/API name. The daemon makes the new books set
-current and clears the active book/profile until the user creates or switches to
+`ui.workspace.create` accepts `{"label":"..."}` and creates an empty book set.
+`workspace` remains the daemon/API name. The daemon makes the new book set
+current and clears the active book until the user creates or switches to
 books inside that set.
 
 `ui.workspace.delete` accepts
-`{"confirm":"DELETE","confirm_workspace":"..."}` for the current books set. Like
+`{"confirm":"DELETE","confirm_workspace":"..."}` for the current book set. Like
 wallet deletes, encrypted databases require `args.auth_response.passphrase_secret`
 and plaintext databases require `DELETE LOCAL DATA`.
 
 `ui.profiles.reset_data` accepts
 `{"confirm":"RESET","confirm_profile":"...","clear_shared_rates":false}` for
-the current book. It keeps the current books set, book/profile, bucket/account
+the current book. It keeps the current book set, book, bucket/account
 rows, wallet connection rows, and configured backends, then clears
 imported/synced transactions, journals, quarantines, swap pairs/dismissals/rules,
 saved views, BIP329 labels, transaction tags, attachment metadata/files, and

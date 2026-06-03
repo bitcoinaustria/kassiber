@@ -123,6 +123,7 @@ from .backends import (
     BACKEND_KINDS,
     load_runtime_config,
     merge_db_backends,
+    redact_backend_url,
     wallet_backend_references,
 )
 from .db import (
@@ -195,6 +196,7 @@ SUPPORTED_KINDS = (
     "ui.wallets.list",
     "ui.backends.list",
     "ui.backends.options",
+    "ui.backends.public_defaults",
     "ui.backends.settings.list",
     "ui.backends.create",
     "ui.backends.update",
@@ -5264,6 +5266,38 @@ def _backend_options_payload(ctx: "DaemonContext") -> dict[str, Any]:
     }
 
 
+def _backend_public_defaults_payload(ctx: "DaemonContext") -> dict[str, Any]:
+    bootstrap_names = list(ctx.runtime_config.get("bootstrap_backends", {}))
+    default_backend = str(ctx.runtime_config.get("default_backend") or "")
+    rows = []
+    for name in bootstrap_names:
+        backend = ctx.runtime_config.get("backends", {}).get(name)
+        if not backend:
+            continue
+        kind = str(backend.get("kind") or "")
+        url = str(backend.get("url") or "")
+        if kind not in {"electrum", "esplora", "liquid-esplora"} or not url:
+            continue
+        rows.append(
+            {
+                "name": str(backend.get("name") or name),
+                "kind": kind,
+                "chain": str(backend.get("chain") or ""),
+                "network": str(backend.get("network") or ""),
+                "url": redact_backend_url(url),
+                "source": str(backend.get("source") or ""),
+                "is_default": name == default_backend,
+            }
+        )
+    return {
+        "backends": rows,
+        "summary": {
+            "count": len(rows),
+            "default_backend": default_backend or None,
+        },
+    }
+
+
 def _backend_settings_list_payload(ctx: "DaemonContext") -> dict[str, Any]:
     backends = core_accounts.list_backends(ctx.runtime_config)
     for backend in backends:
@@ -7020,6 +7054,18 @@ def handle_request(
         return (
             _handle_ai_tool_call_consent(
                 ctx, request_id, _coerce_args_dict(request_id, request.get("args"))
+            ),
+            False,
+        )
+
+    if kind == "ui.backends.public_defaults":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.backends.public_defaults",
+                    _backend_public_defaults_payload(ctx),
+                ),
+                request_id,
             ),
             False,
         )

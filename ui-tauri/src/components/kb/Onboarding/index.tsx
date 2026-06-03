@@ -1,11 +1,10 @@
 import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { ShieldCheck } from "lucide-react";
 
 import { Wordmark } from "@/components/kb/Wordmark";
 import { Button } from "@/components/ui/button";
-import { dispatchDaemonAuthRequired } from "@/daemon/client";
+import { dispatchDaemonAuthRequired, useDaemon } from "@/daemon/client";
 import {
   activateImportProject,
   canImportProjects,
@@ -30,22 +29,26 @@ import {
   DEFAULT_AI_PROVIDER_NAME,
   DEFAULT_FORM,
   GAINS_ALGORITHM_DEFAULTS,
-  aiBaseUrlHint,
-  backendEndpointHint,
-  databasePassphraseHint,
   electrumEndpointUrl,
   gainsAlgorithmsFor,
   parseTaxLongTermDays,
 } from "./constants";
+import {
+  aiStepComplete,
+  essentialsStepComplete,
+  reviewStepComplete,
+  securityStepComplete,
+  syncStepComplete,
+} from "./gates";
 import { AiStep } from "./steps/AiStep";
-import { ConnectionsStep } from "./steps/ConnectionsStep";
-import { DatabaseStep } from "./steps/DatabaseStep";
-import { IdentityStep } from "./steps/IdentityStep";
+import { EssentialsStep } from "./steps/EssentialsStep";
+import { ReviewStep } from "./steps/ReviewStep";
+import { SecurityStep } from "./steps/SecurityStep";
+import { SyncStep } from "./steps/SyncStep";
 import { ImportProjectPanel } from "./ImportProjectPanel";
 import { StartChoicePanel } from "./StartChoicePanel";
 import { OnboardingStepper } from "./stepper";
-import { TaxStep } from "./steps/TaxStep";
-import type { OnboardingForm, OnboardingStep } from "./types";
+import type { BackendPreviewRow, OnboardingForm, OnboardingStep } from "./types";
 
 interface OnboardingProps {
   className?: string;
@@ -54,71 +57,35 @@ interface OnboardingProps {
 
 const DEFAULT_STEPS: OnboardingStep[] = [
   {
-    component: IdentityStep,
-    label: "Workspace",
-    isComplete: (form) =>
-      Boolean(form.workspace.trim() && form.profile.trim()),
+    component: EssentialsStep,
+    label: "Your books",
+    isComplete: essentialsStepComplete,
   },
   {
-    component: TaxStep,
-    label: "Accounting",
-    isComplete: (form) =>
-      form.taxCountry === "at" ||
-      parseTaxLongTermDays(form.taxLongTermDays) !== null,
-  },
-  {
-    component: ConnectionsStep,
-    label: "Connections",
-    isComplete: (form) => {
-      if (form.backendSetupMode === "skip") {
-        return form.skipBackendsAcknowledged;
-      }
-      if (form.backendSetupMode === "custom") {
-        const backendUrl =
-          form.backendKind === "electrum"
-            ? electrumEndpointUrl({
-                host: form.backendHost,
-                port: form.backendPort,
-                useSsl: form.backendUseSsl,
-              })
-            : form.backendUrl;
-        return Boolean(
-          form.backendName.trim() &&
-            backendEndpointHint(form.backendKind, backendUrl) === null,
-        );
-      }
-      return true;
-    },
+    component: SyncStep,
+    label: "Sync",
+    isComplete: syncStepComplete,
   },
   {
     component: AiStep,
     label: "AI",
-    isComplete: (form) => {
-      if (form.aiSetupMode !== "disabled") {
-        if (aiBaseUrlHint(form.aiBaseUrl) !== null) return false;
-      }
-      if (form.aiSetupMode === "remote") {
-        return Boolean(
-          form.aiProviderName.trim() &&
-            form.aiRemoteAcknowledged,
-        );
-      }
-      return true;
-    },
+    isComplete: aiStepComplete,
   },
   {
-    component: DatabaseStep,
-    label: "Database",
-    isComplete: (form) =>
-      form.databaseMode === "plaintext"
-        ? form.plaintextAcknowledged
-        : form.recoveryAcknowledged &&
-          databasePassphraseHint(
-            form.databasePassphrase,
-            form.databasePassphraseConfirm,
-          ) === null,
+    component: SecurityStep,
+    label: "Security",
+    isComplete: securityStepComplete,
+  },
+  {
+    component: ReviewStep,
+    label: "Review",
+    isComplete: reviewStepComplete,
   },
 ];
+
+const SECURITY_STEP_INDEX = DEFAULT_STEPS.findIndex(
+  (entry) => entry.component === SecurityStep,
+);
 
 const DEV_MOCK_IDENTITY: Identity = {
   name: "mock books",
@@ -164,6 +131,33 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
   const activeSteps = customSteps ?? DEFAULT_STEPS;
   const step = activeSteps[currentStep];
   const importAvailable = canImportProjects();
+  const backendPublicDefaultsQuery = useDaemon<{
+    backends: Array<{
+      name?: string;
+      kind?: string;
+      url?: string;
+    }>;
+  }>(
+    "ui.backends.public_defaults",
+    undefined,
+    {
+      enabled: flowMode === "setup" && !customSteps,
+      refetchOnMount: "always",
+    },
+  );
+  const backendPreviewRows: BackendPreviewRow[] =
+    backendPublicDefaultsQuery.data?.data?.backends
+      ?.map((backend) => ({
+        name: backend.name?.trim() ?? "",
+        kind: backend.kind?.trim() ?? "",
+        url: backend.url?.trim() ?? "",
+      }))
+      .filter(
+        (backend) =>
+          backend.name.length > 0 &&
+          backend.kind.length > 0 &&
+          backend.url.length > 0,
+      ) ?? [];
 
   const update = <K extends keyof OnboardingForm>(
     key: K,
@@ -384,6 +378,18 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     setFlowMode("setup");
   };
 
+  // Express path: accept recommended defaults and jump straight to Security,
+  // where the user only sets a passphrase. Encryption is never silently
+  // skipped, and Back still reaches the Essentials step.
+  const beginQuickStart = () => {
+    setDataMode("real");
+    setFinishError(null);
+    setImportError(null);
+    setForm(DEFAULT_FORM);
+    setCurrentStep(SECURITY_STEP_INDEX);
+    setFlowMode("setup");
+  };
+
   const refreshImportedProfiles = async () => {
     setLoadingImportProfiles(true);
     setImportError(null);
@@ -532,22 +538,16 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       >
         <div className="flex w-full items-center justify-between gap-4">
           <Wordmark size={22} />
-          <div className="flex items-center gap-3">
-            <div className="hidden items-center gap-2 text-xs text-ink-2 sm:flex">
-              <ShieldCheck className="size-4" />
-              Local-first · watch-only · SQLCipher-aware
-            </div>
-            {import.meta.env.DEV && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={skipToMockPreview}
-              >
-                Mock-only preview
-              </Button>
-            )}
-          </div>
+          {import.meta.env.DEV && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={skipToMockPreview}
+            >
+              Mock-only preview
+            </Button>
+          )}
         </div>
 
         {importSelection ? (
@@ -569,6 +569,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
             importing={importing}
             onSetup={beginSetup}
             onImport={beginImport}
+            onQuickStart={beginQuickStart}
           />
         ) : (
           <>
@@ -588,7 +589,12 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
               submitting={submitting}
               currentStep={currentStep}
               totalSteps={activeSteps.length}
+              backendPreviewRows={backendPreviewRows}
               goBack={handleGoBack}
+              onJump={(index) => {
+                setFinishError(null);
+                setCurrentStep(index);
+              }}
             />
           </>
         )}
@@ -602,7 +608,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
         <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-ink-3">
           <span>Private keys never enter Kassiber.</span>
           <span>State stays under ~/.kassiber unless overridden.</span>
-          <span>Run backups before tracking real funds.</span>
+          <span>Dodge the SaaS honeypots.</span>
         </div>
       </div>
     </section>
