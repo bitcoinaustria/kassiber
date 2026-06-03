@@ -261,9 +261,10 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         name="ui.wallets.utxos",
         description=(
             "Read one wallet's watch-only coin/UTXO inventory with outpoints, "
-            "amounts, status, branch/index metadata when known, and source "
-            "freshness; never returns descriptors, xpubs, blinding keys, backend "
-            "URLs/tokens, raw wallet config, or raw wallet files."
+            "amounts, status, coarse branch metadata, and source freshness; "
+            "never returns wallet addresses, derivation indices, descriptors, "
+            "xpubs, blinding keys, backend URLs/tokens, raw wallet config, or "
+            "raw wallet files."
         ),
         parameters={
             "type": "object",

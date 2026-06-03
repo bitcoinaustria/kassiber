@@ -27,6 +27,7 @@ from kassiber.daemon import (
     _planned_auto_read_tools,
     _reports_tax_summary_payload,
 )
+from kassiber.db import open_db
 from kassiber.secrets.sqlcipher import sqlcipher_available
 from kassiber.wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
@@ -5777,6 +5778,52 @@ class DaemonSmokeTest(unittest.TestCase):
             finally:
                 conn.close()
 
+            task_queue = queue.Queue()
+            runtime = AiToolRuntime(
+                data_root=str(data_root),
+                runtime_config={
+                    "backends": {
+                        "private": {
+                            "name": "private",
+                            "kind": "esplora",
+                            "url": "https://private-node.local/secret-path",
+                        }
+                    },
+                    "default_backend": "private",
+                },
+                main_thread_tasks=task_queue,
+                maintenance_state={},
+            )
+            call = ParsedAiToolCall(
+                call_id="call_1",
+                name="ui.wallets.utxos",
+                arguments={"wallet": "DescriptorLive"},
+            )
+            results = []
+            thread = threading.Thread(
+                target=lambda: results.append(_execute_read_only_ai_tool(call, runtime)),
+            )
+            thread.start()
+            task = task_queue.get(timeout=1)
+            conn = open_db(data_root)
+            try:
+                task.response.put((True, task.callback(conn)))
+                thread.join(timeout=1)
+            finally:
+                conn.close()
+            self.assertFalse(thread.is_alive())
+            self.assertTrue(results[0]["ok"])
+            self.assertEqual(results[0]["envelope"]["kind"], "ui.wallets.utxos")
+            ai_payload = json.dumps(results[0]["envelope"]["data"], sort_keys=True)
+            self.assertIn(f"{'77' * 32}:1", ai_payload)
+            self.assertIn('"branch_label": "receive"', ai_payload)
+            self.assertNotIn("bc1qobservedcoin", ai_payload)
+            self.assertNotIn("address_label", ai_payload)
+            self.assertNotIn("address_index", ai_payload)
+            self.assertNotIn("branch_index", ai_payload)
+            self.assertNotIn("private-node.local", ai_payload)
+            self.assertNotIn("secret-path", ai_payload)
+
             proc = _start_daemon(data_root)
             self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
             try:
@@ -5795,7 +5842,11 @@ class DaemonSmokeTest(unittest.TestCase):
                 row = utxos["data"]["utxos"][0]
                 self.assertEqual(row["outpoint"], f"{'77' * 32}:1")
                 self.assertEqual(row["amount_sat"], 12_345)
+                self.assertEqual(row["address"], "bc1qobservedcoin")
+                self.assertEqual(row["address_label"], "receive #0")
                 self.assertEqual(row["branch_label"], "receive")
+                self.assertEqual(row["branch_index"], 0)
+                self.assertEqual(row["address_index"], 0)
                 self.assertEqual(row["source"]["backend"], "private")
                 self.assertEqual(row["source"]["backend_kind"], "esplora")
                 payload = json.dumps(utxos["data"], sort_keys=True)

@@ -289,8 +289,8 @@ surfaces:
 - `ui_wallets_list` maps to daemon kind `ui.wallets.list`
 - `ui_wallets_utxos` maps to daemon kind `ui.wallets.utxos`; it returns one
   wallet's redacted watch-only coin inventory and source freshness, without
-  descriptors, xpubs, blinding keys, backend URLs/tokens, raw wallet config, or
-  raw wallet files
+  wallet addresses, derivation indices, descriptors, xpubs, blinding keys,
+  backend URLs/tokens, raw wallet config, or raw wallet files
 - `ui_backends_list` maps to daemon kind `ui.backends.list`; it is scoped to
   backends referenced by the active books/profile and returns URL presence
   metadata, not exact endpoint URLs

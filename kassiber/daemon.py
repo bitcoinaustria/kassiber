@@ -116,6 +116,7 @@ from .core.ui_snapshot import (
     build_transactions_resolve_snapshot,
     build_transactions_search_snapshot,
     build_transactions_snapshot,
+    build_wallet_utxos_snapshot_for_ai,
     build_wallet_utxos_snapshot,
     build_wallets_list_snapshot,
     build_workspace_health_snapshot,
@@ -3271,7 +3272,7 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
             elif entry.daemon_kind == "ui.wallets.list":
                 payload = build_wallets_list_snapshot(conn, runtime.runtime_config)
             elif entry.daemon_kind == "ui.wallets.utxos":
-                payload = build_wallet_utxos_snapshot(
+                payload = build_wallet_utxos_snapshot_for_ai(
                     conn,
                     runtime.runtime_config,
                     call.arguments,

@@ -2946,6 +2946,31 @@ def build_wallet_utxos_snapshot(
     }
 
 
+def _wallet_utxo_row_for_ai(row: dict[str, Any]) -> dict[str, Any]:
+    redacted = dict(row)
+    redacted.pop("address", None)
+    redacted.pop("address_label", None)
+    redacted.pop("branch_index", None)
+    redacted.pop("address_index", None)
+    return redacted
+
+
+def build_wallet_utxos_snapshot_for_ai(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object] | None,
+    args: Any,
+) -> dict[str, Any]:
+    payload = build_wallet_utxos_snapshot(conn, runtime_config, args)
+    return {
+        **payload,
+        "utxos": [
+            _wallet_utxo_row_for_ai(row)
+            for row in payload.get("utxos", [])
+            if isinstance(row, dict)
+        ],
+    }
+
+
 def build_backends_list_snapshot(
     conn: sqlite3.Connection,
     runtime_config: dict[str, object],

@@ -199,22 +199,22 @@ def update_wallet_output_inventory(
         spent_cursor = conn.execute(
             f"""
             UPDATE wallet_utxos
-            SET spent_at = ?, last_seen_at = ?
+            SET spent_at = ?
             WHERE wallet_id = ?
               AND spent_at IS NULL
               AND outpoint NOT IN ({placeholders})
             """,
-            (timestamp, timestamp, wallet["id"], *sorted(seen_outpoints)),
+            (timestamp, wallet["id"], *sorted(seen_outpoints)),
         )
     else:
         spent_cursor = conn.execute(
             """
             UPDATE wallet_utxos
-            SET spent_at = ?, last_seen_at = ?
+            SET spent_at = ?
             WHERE wallet_id = ?
               AND spent_at IS NULL
             """,
-            (timestamp, timestamp, wallet["id"]),
+            (timestamp, wallet["id"]),
         )
     conn.execute(
         """

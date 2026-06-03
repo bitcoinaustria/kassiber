@@ -177,6 +177,10 @@ class OutputInventoryTest(unittest.TestCase):
                 spent = [row for row in all_rows if row["source"]["spent_at"]]
                 self.assertEqual(len(spent), 1)
                 self.assertEqual(spent[0]["outpoint"], f"{receive_txid}:0")
+                self.assertEqual(
+                    spent[0]["source"]["last_seen_at"],
+                    "2026-01-01T12:00:00Z",
+                )
 
                 third = update_wallet_output_inventory(
                     conn,
@@ -194,6 +198,20 @@ class OutputInventoryTest(unittest.TestCase):
                 self.assertEqual(summary["active_count"], 0)
                 self.assertEqual(summary["observed_count"], 0)
                 self.assertEqual(summary["last_seen_at"], "2026-01-01T14:00:00Z")
+                all_rows = list_wallet_output_inventory(
+                    conn,
+                    wallet["id"],
+                    include_spent=True,
+                )
+                spent_by_outpoint = {
+                    row["outpoint"]: row
+                    for row in all_rows
+                    if row["source"]["spent_at"]
+                }
+                self.assertEqual(
+                    spent_by_outpoint[f"{change_txid}:2"]["source"]["last_seen_at"],
+                    "2026-01-01T13:00:00Z",
+                )
 
                 cleared = clear_wallet_output_inventory(conn, wallet["id"])
                 self.assertGreaterEqual(cleared["utxos_deleted"], 1)
