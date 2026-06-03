@@ -283,6 +283,11 @@ class _EsploraSyncHandler(BaseHTTPRequestHandler):
         if self.path.startswith("/scripthash/") and self.path.endswith("/txs/mempool"):
             self._send_json([])
             return
+        if self.path.startswith("/scripthash/") and self.path.endswith("/utxo"):
+            scripthash = self.path.split("/")[2]
+            utxos = getattr(self.server, "utxos", [])  # type: ignore[attr-defined]
+            self._send_json(utxos if scripthash == target_scripthash else [])
+            return
         if self.path.startswith("/scripthash/"):
             self._send_json(
                 {"chain_stats": {"tx_count": 0}, "mempool_stats": {"tx_count": 0}}
@@ -681,6 +686,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.transactions.search", ready["data"]["supported_kinds"])
             self.assertIn("ui.transactions.metadata.update", ready["data"]["supported_kinds"])
             self.assertIn("ui.wallets.list", ready["data"]["supported_kinds"])
+            self.assertIn("ui.wallets.utxos", ready["data"]["supported_kinds"])
             self.assertIn("ui.backends.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.backends.options", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.capital_gains", ready["data"]["supported_kinds"])
@@ -5672,6 +5678,165 @@ class DaemonSmokeTest(unittest.TestCase):
             code, stderr = _close_daemon(proc)
             self.assertEqual(code, 0, stderr)
             self.assertEqual(stderr, "")
+
+    def test_ui_wallets_utxos_returns_redacted_coin_inventory_shape(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-utxos-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_sensitive_ai_surface(data_root)
+            conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+            try:
+                workspace_id = conn.execute(
+                    "SELECT workspace_id FROM wallets WHERE id = ?",
+                    ("wallet-descriptor",),
+                ).fetchone()[0]
+                profile_id = conn.execute(
+                    "SELECT profile_id FROM wallets WHERE id = ?",
+                    ("wallet-descriptor",),
+                ).fetchone()[0]
+                conn.execute(
+                    """
+                    INSERT INTO wallet_utxos(
+                        id, workspace_id, profile_id, wallet_id, backend_name,
+                        backend_kind, chain, network, asset, amount, txid, vout,
+                        outpoint, confirmation_status, confirmations, block_height,
+                        block_time, address, address_label, branch_label,
+                        branch_index, address_index, first_seen_at, last_seen_at,
+                        spent_at, raw_json
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "utxo-1",
+                        workspace_id,
+                        profile_id,
+                        "wallet-descriptor",
+                        "private",
+                        "esplora",
+                        "bitcoin",
+                        "mainnet",
+                        "BTC",
+                        12_345_000,
+                        "77" * 32,
+                        1,
+                        f"{'77' * 32}:1",
+                        "confirmed",
+                        6,
+                        800_001,
+                        "2026-01-02T00:00:00Z",
+                        "bc1qobservedcoin",
+                        "receive #0",
+                        "receive",
+                        0,
+                        0,
+                        "2026-01-02T00:00:00Z",
+                        "2026-01-02T00:00:00Z",
+                        None,
+                        json.dumps({"internal_raw_marker": "not exposed"}),
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO wallet_utxos(
+                        id, workspace_id, profile_id, wallet_id, backend_name,
+                        backend_kind, chain, network, asset, amount, txid, vout,
+                        outpoint, confirmation_status, confirmations, block_height,
+                        block_time, address, address_label, branch_label,
+                        branch_index, address_index, first_seen_at, last_seen_at,
+                        spent_at, raw_json
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "utxo-stale-file",
+                        workspace_id,
+                        profile_id,
+                        "wallet-file-only",
+                        "private",
+                        "esplora",
+                        "bitcoin",
+                        "mainnet",
+                        "BTC",
+                        99_000,
+                        "88" * 32,
+                        0,
+                        f"{'88' * 32}:0",
+                        "confirmed",
+                        3,
+                        800_002,
+                        "2026-01-03T00:00:00Z",
+                        "bc1qstaleshouldnotleak",
+                        "address #0",
+                        "address",
+                        None,
+                        0,
+                        "2026-01-03T00:00:00Z",
+                        "2026-01-03T00:00:00Z",
+                        None,
+                        json.dumps({"unsupported_raw_marker": "not exposed"}),
+                    ),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+            try:
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "utxos-sensitive",
+                        "kind": "ui.wallets.utxos",
+                        "args": {"wallet": "DescriptorLive"},
+                    },
+                )
+                utxos = _read_payload_timeout(proc)
+                self.assertEqual(utxos["kind"], "ui.wallets.utxos")
+                self.assertTrue(utxos["data"]["support"]["supported"])
+                self.assertEqual(utxos["data"]["summary"]["count"], 1)
+                row = utxos["data"]["utxos"][0]
+                self.assertEqual(row["outpoint"], f"{'77' * 32}:1")
+                self.assertEqual(row["amount_sat"], 12_345)
+                self.assertEqual(row["branch_label"], "receive")
+                self.assertEqual(row["source"]["backend"], "private")
+                self.assertEqual(row["source"]["backend_kind"], "esplora")
+                payload = json.dumps(utxos["data"], sort_keys=True)
+                self.assertIn("bc1qobservedcoin", payload)
+                for leaked in (
+                    "xpub_descriptor_material",
+                    "private-node.local",
+                    "secret-path",
+                    "secret-token-value",
+                    "secret-auth-header",
+                    "internal_raw_marker",
+                    "backend_url",
+                    "wpkh(",
+                    "config_json",
+                ):
+                    self.assertNotIn(leaked, payload)
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "utxos-file-only",
+                        "kind": "ui.wallets.utxos",
+                        "args": {"wallet": "FileOnly"},
+                    },
+                )
+                unsupported = _read_payload_timeout(proc)
+                self.assertEqual(unsupported["kind"], "ui.wallets.utxos")
+                self.assertFalse(unsupported["data"]["support"]["supported"])
+                self.assertEqual(
+                    unsupported["data"]["support"]["status"],
+                    "unsupported_source",
+                )
+                self.assertEqual(unsupported["data"]["utxos"], [])
+                self.assertEqual(unsupported["data"]["totals"], [])
+                self.assertEqual(unsupported["data"]["summary"]["count"], 0)
+            finally:
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
 
     def test_ai_tool_consent_stale_target_returns_not_found(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:

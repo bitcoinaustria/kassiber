@@ -80,13 +80,16 @@ class SyncBackendsTest(unittest.TestCase):
         with patch(
             "kassiber.core.sync_backends.fetch_esplora_scripthash_transactions",
             return_value=[tx],
+        ), patch(
+            "kassiber.core.sync_backends.fetch_esplora_scripthash_utxos",
+            return_value=[],
         ):
             records, meta = esplora_sync_adapter(
                 {"name": "esplora", "kind": "esplora", "url": "https://esplora.example"},
                 {"id": "wallet-1"},
                 sync_state,
             )
-        self.assertEqual(meta, {})
+        self.assertEqual(meta, {"utxos": []})
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["txid"], tx["txid"])
         self.assertEqual(records[0]["direction"], "inbound")
@@ -135,6 +138,11 @@ class SyncBackendsTest(unittest.TestCase):
                         (scripthash,),
                     ):
                         responses.append([{"tx_hash": txid, "height": 123}])
+                    elif key == (
+                        "blockchain.scripthash.listunspent",
+                        (scripthash,),
+                    ):
+                        responses.append([])
                     elif key == ("blockchain.transaction.get", (txid,)):
                         responses.append("current-raw")
                     elif key == ("blockchain.block.header", (123,)):
@@ -152,7 +160,7 @@ class SyncBackendsTest(unittest.TestCase):
                 {"id": "wallet-1"},
                 sync_state,
             )
-        self.assertEqual(meta, {})
+        self.assertEqual(meta, {"utxos": []})
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["txid"], txid)
         self.assertEqual(records[0]["direction"], "inbound")
@@ -244,6 +252,12 @@ class SyncBackendsTest(unittest.TestCase):
                         "blocktime": 1_700_000_000,
                     }
                 ]
+            if key == (
+                "listunspent",
+                (0, 9999999, ["bc1qcore"], True),
+                "kassiber-wallet-1",
+            ):
+                return []
             raise AssertionError(f"Unexpected RPC call: {key!r}")
 
         with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call):
@@ -254,6 +268,7 @@ class SyncBackendsTest(unittest.TestCase):
             )
         self.assertEqual(meta["core_wallet"], "kassiber-wallet-1")
         self.assertEqual(meta["imported_addresses"], 1)
+        self.assertEqual(meta["utxos"], [])
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["txid"], "33" * 32)
         self.assertEqual(records[0]["direction"], "inbound")

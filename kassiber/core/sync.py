@@ -40,6 +40,17 @@ SyncCoreLightningWallet = Callable[
     [sqlite3.Connection, RuntimeConfig, ProfileRow, WalletRow],
     SyncOutcome,
 ]
+UpdateOutputInventory = Callable[
+    [
+        sqlite3.Connection,
+        ProfileRow,
+        WalletRow,
+        BackendRecord,
+        "WalletSyncState",
+        Sequence[Mapping[str, Any]],
+    ],
+    Mapping[str, Any],
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +75,7 @@ class WalletSyncHooks:
     sync_btcpay_wallet: SyncBTCPayWallet | None = None
     enrich_btcpay_wallet: EnrichBTCPayWallet | None = None
     sync_core_lightning_wallet: SyncCoreLightningWallet | None = None
+    update_output_inventory: UpdateOutputInventory | None = None
 
 
 def _merge_btcpay_enrichment(
@@ -123,6 +135,8 @@ def sync_wallet_from_backend(
             hint="Use an esplora, electrum, or bitcoinrpc backend for live refresh.",
         )
     normalized_records, adapter_meta = adapter(backend, wallet, sync_state)
+    adapter_meta = dict(adapter_meta or {})
+    observed_utxos = adapter_meta.pop("utxos", None)
     outcome = hooks.insert_records(
         conn,
         profile,
@@ -130,6 +144,17 @@ def sync_wallet_from_backend(
         normalized_records,
         f"backend:{backend['name']}",
     )
+    if observed_utxos is not None and hooks.update_output_inventory is not None:
+        outcome["output_inventory"] = dict(
+            hooks.update_output_inventory(
+                conn,
+                profile,
+                wallet,
+                backend,
+                sync_state,
+                observed_utxos,
+            )
+        )
     outcome["backend"] = backend["name"]
     outcome["backend_kind"] = kind
     outcome["backend_url"] = backend["url"]

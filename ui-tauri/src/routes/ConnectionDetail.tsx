@@ -26,6 +26,10 @@ import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { ConnectionStatusPill } from "@/components/kb/ConnectionStatusPill";
 import { DetailRow } from "@/components/kb/DetailRow";
 import { MetricCard } from "@/components/kb/MetricCard";
+import {
+  CoinsInventoryPanel,
+  type WalletUtxosData,
+} from "@/components/kb/wallets";
 import { NodeConnectionDetail } from "./NodeConnectionDetail";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -473,6 +477,11 @@ function ConnectionDetailView({
       (wallet.id && wallet.id === connection.id) ||
       wallet.label === connection.label,
   );
+  const coinsInventoryQuery = useDaemon<WalletUtxosData>(
+    "ui.wallets.utxos",
+    { wallet: connection.id },
+    { retry: false },
+  );
   const walletProvenanceRoutes = walletDetail?.btcpay_provenance ?? [];
   const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -591,6 +600,7 @@ function ConnectionDetailView({
           clearSyncNotice();
           syncNoticeIdRef.current = null;
           setSyncProgress(null);
+          void queryClient.invalidateQueries({ queryKey: ["daemon"] });
         },
       },
     );
@@ -929,6 +939,19 @@ function ConnectionDetailView({
           icon={<Database className="size-4" aria-hidden="true" />}
         />
       </div>
+
+      <CoinsInventoryPanel
+        inventory={coinsInventoryQuery.data?.data}
+        isLoading={coinsInventoryQuery.isLoading}
+        errorMessage={
+          coinsInventoryQuery.error instanceof Error
+            ? coinsInventoryQuery.error.message
+            : null
+        }
+        hideSensitive={hideSensitive}
+        isRefreshing={isWalletSyncRunning}
+        onRefresh={onSync}
+      />
 
       {walletProvenanceRoutes.length > 0 ? (
         <Card>

@@ -116,6 +116,7 @@ from .core.ui_snapshot import (
     build_transactions_resolve_snapshot,
     build_transactions_search_snapshot,
     build_transactions_snapshot,
+    build_wallet_utxos_snapshot,
     build_wallets_list_snapshot,
     build_workspace_health_snapshot,
 )
@@ -196,6 +197,7 @@ SUPPORTED_KINDS = (
     "ui.attachments.remove",
     "ui.attachments.open",
     "ui.wallets.list",
+    "ui.wallets.utxos",
     "ui.backends.list",
     "ui.backends.options",
     "ui.backends.public_defaults",
@@ -3268,6 +3270,12 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                 payload = build_transactions_search_snapshot(conn, call.arguments)
             elif entry.daemon_kind == "ui.wallets.list":
                 payload = build_wallets_list_snapshot(conn, runtime.runtime_config)
+            elif entry.daemon_kind == "ui.wallets.utxos":
+                payload = build_wallet_utxos_snapshot(
+                    conn,
+                    runtime.runtime_config,
+                    call.arguments,
+                )
             elif entry.daemon_kind == "ui.backends.list":
                 payload = build_backends_list_snapshot(conn, runtime.runtime_config)
             elif entry.daemon_kind == "ui.profiles.snapshot":
@@ -7313,6 +7321,22 @@ def handle_request(
                 build_envelope(
                     "ui.wallets.list",
                     build_wallets_list_snapshot(ctx.conn, ctx.runtime_config),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.wallets.utxos":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.wallets.utxos",
+                    build_wallet_utxos_snapshot(
+                        ctx.conn,
+                        ctx.runtime_config,
+                        request.get("args"),
+                    ),
                 ),
                 request_id,
             ),

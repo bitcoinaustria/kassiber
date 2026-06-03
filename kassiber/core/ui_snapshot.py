@@ -13,11 +13,16 @@ from ..errors import AppError
 from ..msat import msat_to_btc
 from ..tax_policy import build_tax_policy
 from ..time_utils import _iso_z, _parse_iso_datetime
-from ..wallet_descriptors import DEFAULT_DESCRIPTOR_GAP_LIMIT
+from ..wallet_descriptors import DEFAULT_DESCRIPTOR_GAP_LIMIT, liquid_plan_can_unblind
+from . import output_inventory as core_output_inventory
 from . import rates as core_rates
 from . import reports as report_builders
 from .repo import current_context_snapshot
-from .wallets import wallet_btcpay_provenance_config
+from .sync import normalize_backend_kind
+from .wallets import (
+    load_wallet_descriptor_plan_from_config,
+    wallet_btcpay_provenance_config,
+)
 
 
 MAX_UI_LIST_LIMIT = 500
@@ -2694,6 +2699,249 @@ def build_wallets_list_snapshot(
             "count": len(wallets),
             "transaction_count": sum(wallet["transaction_count"] for wallet in wallets),
             "needs_journals": bool(freshness["needs_processing"]),
+        },
+    }
+
+
+def _wallet_ref_arg(args: Any) -> str:
+    if not isinstance(args, dict):
+        raise AppError(
+            "ui.wallets.utxos args must be an object",
+            code="validation",
+            retryable=False,
+        )
+    wallet = args.get("wallet") or args.get("connection")
+    if not isinstance(wallet, str) or not wallet.strip():
+        raise AppError(
+            "ui.wallets.utxos wallet must be a non-empty string",
+            code="validation",
+            retryable=False,
+        )
+    return wallet.strip()
+
+
+def _resolve_wallet_for_utxos(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    wallet_ref: str,
+) -> sqlite3.Row:
+    row = conn.execute(
+        """
+        SELECT
+            w.id,
+            w.label,
+            w.kind,
+            w.config_json,
+            w.created_at,
+            a.code AS account_code,
+            a.label AS account_label
+        FROM wallets w
+        LEFT JOIN accounts a ON a.id = w.account_id
+        WHERE w.profile_id = ?
+          AND (w.id = ? OR w.label = ?)
+        ORDER BY CASE WHEN w.id = ? THEN 0 ELSE 1 END, w.label ASC
+        LIMIT 1
+        """,
+        (profile_id, wallet_ref, wallet_ref, wallet_ref),
+    ).fetchone()
+    if row is None:
+        raise AppError(
+            f"Wallet '{wallet_ref}' was not found in the active profile",
+            code="not_found",
+            retryable=False,
+        )
+    return row
+
+
+def _wallet_utxo_support(
+    wallet: sqlite3.Row,
+    config: dict[str, Any],
+    backend_summary: dict[str, str],
+    backend: Any,
+) -> dict[str, Any]:
+    sync_mode = backend_summary["sync_mode"]
+    has_descriptor = bool(config.get("descriptor"))
+    has_addresses = bool(config.get("addresses"))
+    if sync_mode not in {"backend_descriptor", "backend_addresses"}:
+        return {
+            "supported": False,
+            "status": "unsupported_source",
+            "reason": "not_chain_backed",
+            "message": "This source is not a chain-backed watch-only wallet.",
+        }
+    if not isinstance(backend, dict):
+        return {
+            "supported": False,
+            "status": "unsupported_source",
+            "reason": "backend_missing",
+            "message": "This wallet needs a configured Esplora, Electrum, or Bitcoin Core backend before coin inventory can refresh.",
+        }
+    backend_kind = normalize_backend_kind(backend.get("kind"))
+    if backend_kind not in {"esplora", "electrum", "bitcoinrpc"}:
+        return {
+            "supported": False,
+            "status": "unsupported_source",
+            "reason": "backend_kind",
+            "message": f"Coin inventory is not implemented for {backend_kind or 'this backend'} sources yet.",
+        }
+    chain = str(config.get("chain") or "bitcoin").strip().lower() or "bitcoin"
+    if has_descriptor and backend_kind == "bitcoinrpc":
+        return {
+            "supported": False,
+            "status": "unsupported_source",
+            "reason": "bitcoinrpc_descriptor",
+            "message": "Bitcoin Core coin inventory is available for address-backed wallets only.",
+        }
+    if chain == "liquid":
+        if not has_descriptor:
+            return {
+                "supported": False,
+                "status": "liquid_unblind_blocked",
+                "reason": "liquid_descriptor_required",
+                "message": "Liquid coin inventory requires descriptor-backed outputs so Kassiber can unblind them locally.",
+            }
+        try:
+            descriptor_plan = load_wallet_descriptor_plan_from_config(config)
+        except AppError as exc:
+            return {
+                "supported": False,
+                "status": "liquid_unblind_blocked",
+                "reason": "descriptor_unavailable",
+                "message": str(exc),
+            }
+        if not liquid_plan_can_unblind(descriptor_plan):
+            return {
+                "supported": False,
+                "status": "liquid_unblind_blocked",
+                "reason": "missing_blinding_keys",
+                "message": "Liquid coin inventory needs private blinding keys before Kassiber can account for outputs.",
+            }
+    if not has_descriptor and not has_addresses:
+        return {
+            "supported": False,
+            "status": "unsupported_source",
+            "reason": "no_watch_targets",
+            "message": "This wallet has no descriptor, xpub, or addresses to scan.",
+        }
+    return {
+        "supported": True,
+        "status": "supported",
+        "reason": "",
+        "message": "",
+    }
+
+
+def _wallet_utxo_totals(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    totals: dict[str, int] = defaultdict(int)
+    for row in rows:
+        totals[row["asset"]] += int(row["amount_msat"])
+    return [
+        {
+            "asset": asset,
+            "amount": msat_to_btc(amount_msat),
+            "amount_sat": amount_msat // 1000,
+            "amount_msat": amount_msat,
+        }
+        for asset, amount_msat in sorted(totals.items())
+    ]
+
+
+def build_wallet_utxos_snapshot(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object] | None,
+    args: Any,
+) -> dict[str, Any]:
+    context, profile = _active_context_and_profile(conn)
+    if profile is None:
+        return {
+            "wallet": None,
+            "utxos": [],
+            "totals": [],
+            "support": {
+                "supported": False,
+                "status": "unsupported_source",
+                "reason": "no_active_profile",
+                "message": "No active profile is selected.",
+            },
+            "freshness": {
+                "status": "no_profile",
+                "last_seen_at": None,
+                "last_synced_at": None,
+                "stale": False,
+            },
+        }
+    wallet_ref = _wallet_ref_arg(args)
+    wallet = _resolve_wallet_for_utxos(conn, profile["id"], wallet_ref)
+    config = _json_config(wallet["config_json"])
+    runtime_backends = (
+        runtime_config.get("backends", {})
+        if isinstance(runtime_config, dict)
+        else {}
+    )
+    default_backend = (
+        runtime_config.get("default_backend")
+        if isinstance(runtime_config, dict)
+        else None
+    )
+    backend_summary = _wallet_backend_summary(wallet["kind"], config, default_backend)
+    backend_name = backend_summary["name"]
+    backend = (
+        runtime_backends.get(str(backend_name))
+        if isinstance(runtime_backends, dict) and backend_name
+        else None
+    )
+    support = _wallet_utxo_support(wallet, config, backend_summary, backend)
+    if support["supported"]:
+        rows = core_output_inventory.list_wallet_output_inventory(conn, wallet["id"])
+        inventory_summary = core_output_inventory.wallet_output_inventory_summary(
+            conn,
+            wallet["id"],
+        )
+        last_seen_at = inventory_summary["last_seen_at"]
+    else:
+        rows = []
+        last_seen_at = None
+    last_synced_at = _string_or_empty(config.get("last_synced_at")) or None
+    if not support["supported"]:
+        freshness_status = support["status"]
+    elif last_seen_at:
+        freshness_status = "current"
+    elif last_synced_at:
+        freshness_status = "stale"
+    else:
+        freshness_status = "never_refreshed"
+    return {
+        "wallet": {
+            "id": wallet["id"],
+            "label": wallet["label"],
+            "kind": wallet["kind"],
+            "account": {
+                "code": wallet["account_code"] or "",
+                "label": wallet["account_label"] or "",
+            },
+            "backend": {
+                "name": str(backend_name) if backend_name else "",
+                "source": backend_summary["source"],
+                "kind": str(backend.get("kind") or "") if isinstance(backend, dict) else "",
+            },
+            "chain": str(config.get("chain") or ""),
+            "network": str(config.get("network") or ""),
+            "sync_mode": backend_summary["sync_mode"],
+        },
+        "utxos": rows,
+        "totals": _wallet_utxo_totals(rows),
+        "support": support,
+        "freshness": {
+            "status": freshness_status,
+            "last_seen_at": last_seen_at,
+            "last_synced_at": last_synced_at,
+            "stale": support["supported"] and freshness_status != "current",
+            "active_count": len(rows),
+        },
+        "summary": {
+            "workspace": context["workspace_label"] or None,
+            "profile": context["profile_label"] or None,
+            "count": len(rows),
         },
     }
 

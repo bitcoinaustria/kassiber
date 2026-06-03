@@ -42,6 +42,7 @@ daemon for the exact current allowlist:
       "ui.transactions.resolve",
       "ui.transactions.metadata.update",
       "ui.wallets.list",
+      "ui.wallets.utxos",
       "ui.backends.list",
       "ui.backends.options",
       "ui.reports.capital_gains",
@@ -130,6 +131,16 @@ material.
 global search: it accepts a Kassiber transaction id or external transaction id
 scoped to the active profile and returns at most one safe transaction display
 row. It does not create a browser-side search index.
+
+`ui.wallets.utxos` accepts `{"wallet":"<wallet id or label>"}` and returns the
+active local coin inventory for one wallet. Rows include outpoint, txid, vout,
+asset, amount, confirmation status, block/time when known, address or safe
+receive/change label, branch/index when known, and first/last-seen freshness.
+The response includes backend name/kind only; it never returns descriptors,
+xpubs, backend URLs/tokens, raw wallet config, wallet files, or raw backend
+payloads. Unsupported sources return `support.status="unsupported_source"`.
+Liquid wallets return `support.status="liquid_unblind_blocked"` unless their
+descriptor material can unblind and account for outputs locally.
 
 `ai.providers.set_api_key` accepts
 `{"name":"provider","api_key":"..."}` or `{"name":"provider","api_key":null}`.

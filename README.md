@@ -65,7 +65,8 @@ workflow almost nobody else covers.
 ## Highlights
 
 - **Direct Bitcoin sync** — Esplora, Electrum, Bitcoin Core RPC, BTCPay
-  Greenfield, Liquid Electrum.
+  Greenfield, Liquid Electrum, plus watch-only coin/UTXO inventory for
+  chain-backed wallet sources.
 - **Imports** — BTCPay CSV/JSON, Phoenix, River, Bull Bitcoin, Coinfinity,
   21bitcoin, Pocket Bitcoin, Strike, generic CSV/JSON, BIP329 labels.
 - **Review workflows** — notes, tags, exclusions, attachments; reviewed
@@ -115,6 +116,11 @@ or BTCPay connection, and the optional AI assistant. Every other flow —
 Overview, Connections, Imports, Transactions, Swap Matching, Journals,
 Quarantine, Reports, Source of Funds, Books, Settings, Logs,
 Assistant — is one click away in the sidebar.
+
+Open a wallet in Connections to refresh its source and review its read-only
+Coins table: currently unspent outputs, amounts, confirmation state,
+receive/change position when known, and source freshness. Kassiber never
+constructs transactions, signs, broadcasts, freezes coins, or selects coins.
 
 ### CLI
 

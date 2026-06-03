@@ -57,6 +57,16 @@ prerelease and development troubleshooting: request logs include argument keys,
 not argument values, while terminal daemon errors keep their structured
 message, hint, and redacted details when the daemon exposes them.
 
+The Connections detail page includes a read-only Coins table for chain-backed
+wallet sources. Refreshing a descriptor/xpub/address wallet updates the local
+output inventory, and the detail page shows current unspent outputs with
+outpoint, amount, confirmation state, receive/change branch/index when known,
+address or safe label, and source freshness. The table is inventory-only:
+there is no spend, PSBT, signing, broadcast, coin-selection, or freeze action.
+Unsupported file/BTCPay/Lightning-style sources show an unsupported state, and
+Liquid sources show an unblind blocker unless Kassiber has descriptor material
+that can unblind outputs locally.
+
 Settings -> AI providers displays each provider's API-key presence plus storage
 location/state. Saving provider metadata does not include the raw key in the
 create/update request; when the API-key field is filled, the form sends the

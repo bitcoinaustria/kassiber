@@ -740,6 +740,147 @@ def fetch_esplora_scripthash_transactions(
     )
 
 
+def fetch_esplora_scripthash_utxos(base_url, script_pubkey_hex, timeout=30):
+    return http_get_json(
+        append_url_path(
+            base_url,
+            f"scripthash/{scriptpubkey_scripthash(script_pubkey_hex)}/utxo",
+        ),
+        timeout=timeout,
+    )
+
+
+def _target_output_metadata(target):
+    branch_label = target.get("branch_label") or "address"
+    address_index = target.get("address_index")
+    if address_index is None:
+        label = branch_label
+    else:
+        label = f"{branch_label} #{address_index}"
+    return {
+        "address": target.get("address") or target.get("unconfidential_address") or "",
+        "address_label": label,
+        "branch_label": branch_label,
+        "branch_index": target.get("branch_index"),
+        "address_index": address_index,
+    }
+
+
+def _block_time_from_status(status):
+    if not isinstance(status, dict):
+        return None
+    return timestamp_to_iso(status.get("block_time"), default=None)
+
+
+def _block_height_from_status(status):
+    if not isinstance(status, dict):
+        return None
+    block_height = status.get("block_height")
+    if block_height in (None, "", 0, "0"):
+        return None
+    return int(block_height)
+
+
+def _esplora_bitcoin_utxo_record(raw_utxo, target, sync_state):
+    status = raw_utxo.get("status") or {}
+    block_height = _block_height_from_status(status)
+    return {
+        "txid": raw_utxo.get("txid"),
+        "vout": raw_utxo.get("vout"),
+        "asset": "BTC",
+        "amount_sats": int(raw_utxo.get("value") or 0),
+        "confirmation_status": "confirmed" if block_height else "mempool",
+        "block_height": block_height,
+        "block_time": _block_time_from_status(status),
+        "chain": sync_state.chain,
+        "network": sync_state.network,
+        **_target_output_metadata(target),
+        "raw": {
+            "source": "esplora_scripthash_utxo",
+            "confirmed": bool(status.get("confirmed")) if isinstance(status, dict) else False,
+        },
+    }
+
+
+def _liquid_utxo_record_from_output(
+    txid,
+    vout,
+    status,
+    decoded_tx,
+    target,
+    sync_state,
+    *,
+    source,
+):
+    if vout is None or int(vout) < 0 or int(vout) >= len(decoded_tx.vout):
+        raise AppError(f"Liquid UTXO output index {vout} is out of range for transaction {txid}")
+    output = decoded_tx.vout[int(vout)]
+    script_hex = output.script_pubkey.data.hex()
+    if script_hex != target["script_pubkey"]:
+        raise AppError(f"Liquid UTXO {txid}:{vout} did not match the tracked script")
+    value_sats, asset_id = liquid_output_amount_asset_id(
+        output,
+        sync_state.descriptor_plan,
+        target=target,
+    )
+    block_height = _block_height_from_status(status)
+    return {
+        "txid": txid,
+        "vout": int(vout),
+        "asset": liquid_asset_code(asset_id, sync_state.policy_asset_id),
+        "amount_sats": value_sats,
+        "confirmation_status": "confirmed" if block_height else "mempool",
+        "block_height": block_height,
+        "block_time": _block_time_from_status(status),
+        "chain": sync_state.chain,
+        "network": sync_state.network,
+        **_target_output_metadata(target),
+        "raw": {
+            "source": source,
+            "asset_id": asset_id,
+            "confirmed": bool(status.get("confirmed")) if isinstance(status, dict) else False,
+        },
+    }
+
+
+def esplora_utxos_for_wallet(backend, sync_state: WalletSyncState):
+    timeout = backend_timeout(backend)
+    raw_tx_cache = {}
+
+    def liquid_tx(txid):
+        if txid not in raw_tx_cache:
+            raw_hex = http_get_text(
+                append_url_path(backend["url"], f"tx/{txid}/hex"),
+                timeout=timeout,
+            ).strip()
+            raw_tx_cache[txid] = decode_liquid_transaction(raw_hex)
+        return raw_tx_cache[txid]
+
+    outputs = []
+    for target in sync_state.targets:
+        raw_utxos = fetch_esplora_scripthash_utxos(
+            backend["url"],
+            target["script_pubkey"],
+            timeout=timeout,
+        )
+        for raw_utxo in raw_utxos or []:
+            if sync_state.chain == "liquid":
+                outputs.append(
+                    _liquid_utxo_record_from_output(
+                        raw_utxo.get("txid"),
+                        raw_utxo.get("vout"),
+                        raw_utxo.get("status") or {},
+                        liquid_tx(raw_utxo.get("txid")),
+                        target,
+                        sync_state,
+                        source="liquid_esplora_scripthash_utxo",
+                    )
+                )
+            else:
+                outputs.append(_esplora_bitcoin_utxo_record(raw_utxo, target, sync_state))
+    return outputs
+
+
 def sats_to_btc(value):
     return dec(value) / SATS_PER_BTC
 
@@ -1061,7 +1202,9 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
 
 def esplora_sync_adapter(backend, wallet, sync_state):
     del wallet
-    return esplora_records_for_wallet(backend, sync_state), {}
+    return esplora_records_for_wallet(backend, sync_state), {
+        "utxos": esplora_utxos_for_wallet(backend, sync_state)
+    }
 
 
 def bitcoinrpc_auth_headers(backend):
@@ -1238,9 +1381,10 @@ def record_from_bitcoinrpc_details(txid, details, backend_name):
     }
 
 
-def bitcoinrpc_records_for_wallet(backend, wallet, addresses):
-    wallet_name = bitcoinrpc_ensure_watchonly_wallet(backend, wallet)
-    imported_count = bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses)
+def bitcoinrpc_records_for_wallet(backend, wallet, addresses, wallet_name=None, imported_count=None):
+    wallet_name = wallet_name or bitcoinrpc_ensure_watchonly_wallet(backend, wallet)
+    if imported_count is None:
+        imported_count = bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses)
     details = fetch_bitcoinrpc_wallet_transactions(backend, wallet_name)
     grouped = defaultdict(list)
     for detail in details:
@@ -1261,12 +1405,95 @@ def bitcoinrpc_records_for_wallet(backend, wallet, addresses):
     return records, {"core_wallet": wallet_name, "imported_addresses": imported_count}
 
 
+def _bitcoinrpc_transaction_metadata(backend, wallet_name, txid):
+    try:
+        tx = bitcoinrpc_call(backend, "gettransaction", [txid, True], wallet_name=wallet_name)
+    except AppError:
+        return {"block_height": None, "block_time": None}
+    block_time = timestamp_to_iso(tx.get("blocktime") or tx.get("time"), default=None)
+    block_height = None
+    block_hash = tx.get("blockhash")
+    if block_hash:
+        try:
+            header = bitcoinrpc_call(backend, "getblockheader", [block_hash], wallet_name=None)
+            block_height = header.get("height")
+        except AppError:
+            block_height = None
+    return {"block_height": block_height, "block_time": block_time}
+
+
+def bitcoinrpc_utxos_for_wallet_name(backend, wallet_name, addresses, sync_state: WalletSyncState):
+    target_by_address = {
+        target["address"]: target
+        for target in sync_state.targets
+        if target.get("address")
+    }
+    target_by_script = {
+        target["script_pubkey"]: target
+        for target in sync_state.targets
+        if target.get("script_pubkey")
+    }
+    raw_utxos = bitcoinrpc_call(
+        backend,
+        "listunspent",
+        [0, 9999999, addresses, True],
+        wallet_name=wallet_name,
+    )
+    outputs = []
+    metadata_cache = {}
+    for raw_utxo in raw_utxos or []:
+        target = target_by_address.get(raw_utxo.get("address"))
+        if target is None:
+            target = target_by_script.get(str(raw_utxo.get("scriptPubKey") or "").lower())
+        if target is None:
+            continue
+        txid = raw_utxo.get("txid")
+        confirmations = int(raw_utxo.get("confirmations") or 0)
+        if txid not in metadata_cache:
+            metadata_cache[txid] = _bitcoinrpc_transaction_metadata(backend, wallet_name, txid)
+        metadata = metadata_cache[txid]
+        amount_sats = int((dec(raw_utxo.get("amount"), "0") * SATS_PER_BTC).to_integral_value())
+        outputs.append(
+            {
+                "txid": txid,
+                "vout": raw_utxo.get("vout"),
+                "asset": "BTC",
+                "amount_sats": amount_sats,
+                "confirmation_status": "confirmed" if confirmations > 0 else "mempool",
+                "confirmations": confirmations,
+                "block_height": metadata.get("block_height"),
+                "block_time": metadata.get("block_time"),
+                "chain": sync_state.chain,
+                "network": sync_state.network,
+                **_target_output_metadata(target),
+                "raw": {
+                    "source": "bitcoinrpc_listunspent",
+                    "confirmed": confirmations > 0,
+                    "safe": bool(raw_utxo.get("safe", True)),
+                },
+            }
+        )
+    return outputs
+
+
 def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
-    return bitcoinrpc_records_for_wallet(
+    addresses = [target["address"] for target in sync_state.targets if target.get("address")]
+    wallet_name = bitcoinrpc_ensure_watchonly_wallet(backend, wallet)
+    imported_count = bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses)
+    records, meta = bitcoinrpc_records_for_wallet(
         backend,
         wallet,
-        [target["address"] for target in sync_state.targets if target.get("address")],
+        addresses,
+        wallet_name=wallet_name,
+        imported_count=imported_count,
     )
+    meta["utxos"] = bitcoinrpc_utxos_for_wallet_name(
+        backend,
+        wallet_name,
+        addresses,
+        sync_state,
+    )
+    return records, meta
 
 
 def read_varint(payload, offset):
@@ -1350,6 +1577,107 @@ def electrum_output_at_index(tx, index):
     if index is None or index < 0 or index >= len(outputs):
         return None
     return outputs[index]
+
+
+def _electrum_utxo_status(raw_utxo, header_timestamps):
+    height = raw_utxo.get("height")
+    if height in (None, "", 0, "0") or int(height) <= 0:
+        return {
+            "confirmed": False,
+            "block_height": None,
+            "block_time": None,
+        }
+    block_height = int(height)
+    return {
+        "confirmed": True,
+        "block_height": block_height,
+        "block_time": timestamp_to_iso(header_timestamps.get(block_height), default=None),
+    }
+
+
+def _electrum_bitcoin_utxo_record(raw_utxo, target, sync_state, header_timestamps):
+    status = _electrum_utxo_status(raw_utxo, header_timestamps)
+    block_height = status["block_height"]
+    return {
+        "txid": raw_utxo.get("tx_hash"),
+        "vout": raw_utxo.get("tx_pos"),
+        "asset": "BTC",
+        "amount_sats": int(raw_utxo.get("value") or 0),
+        "confirmation_status": "confirmed" if block_height else "mempool",
+        "block_height": block_height,
+        "block_time": status["block_time"],
+        "chain": sync_state.chain,
+        "network": sync_state.network,
+        **_target_output_metadata(target),
+        "raw": {
+            "source": "electrum_scripthash_listunspent",
+            "confirmed": bool(status["confirmed"]),
+        },
+    }
+
+
+def electrum_utxos_for_wallet(backend, sync_state: WalletSyncState):
+    outputs = []
+    batch_size = backend_batch_size(backend)
+    header_timestamps = {}
+    with ElectrumClient(backend) as client:
+        scripthashes = [scriptpubkey_scripthash(target["script_pubkey"]) for target in sync_state.targets]
+        target_by_scripthash = dict(zip(scripthashes, sync_state.targets))
+        raw_results = electrum_call_many(
+            client,
+            [("blockchain.scripthash.listunspent", [scripthash]) for scripthash in scripthashes],
+            batch_size=batch_size,
+        )
+        raw_by_target = []
+        heights = set()
+        for scripthash, raw_utxos in zip(scripthashes, raw_results):
+            target = target_by_scripthash[scripthash]
+            for raw_utxo in raw_utxos or []:
+                raw_by_target.append((target, raw_utxo))
+                height = raw_utxo.get("height")
+                if height not in (None, "", 0, "0") and int(height) > 0:
+                    heights.add(int(height))
+        if heights:
+            header_hexes = electrum_call_many(
+                client,
+                [("blockchain.block.header", [height]) for height in sorted(heights)],
+                batch_size=batch_size,
+            )
+            for height, header_hex in zip(sorted(heights), header_hexes):
+                header_timestamps[height] = block_header_timestamp(header_hex)
+        liquid_tx_cache = {}
+
+        def liquid_tx(txid):
+            if txid not in liquid_tx_cache:
+                raw_tx = client.call("blockchain.transaction.get", [txid])
+                liquid_tx_cache[txid] = decode_liquid_transaction(raw_tx)
+            return liquid_tx_cache[txid]
+
+        for target, raw_utxo in raw_by_target:
+            if sync_state.chain == "liquid":
+                status = _electrum_utxo_status(raw_utxo, header_timestamps)
+                outputs.append(
+                    _liquid_utxo_record_from_output(
+                        raw_utxo.get("tx_hash"),
+                        raw_utxo.get("tx_pos"),
+                        {
+                            "confirmed": bool(status["confirmed"]),
+                            "block_height": status["block_height"],
+                            "block_time": None,
+                        },
+                        liquid_tx(raw_utxo.get("tx_hash")),
+                        target,
+                        sync_state,
+                        source="liquid_electrum_scripthash_listunspent",
+                    )
+                )
+                if outputs[-1]["block_time"] is None:
+                    outputs[-1]["block_time"] = status["block_time"]
+                continue
+            outputs.append(
+                _electrum_bitcoin_utxo_record(raw_utxo, target, sync_state, header_timestamps)
+            )
+    return outputs
 
 
 def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_lookup):
@@ -1561,7 +1889,9 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
 
 def electrum_sync_adapter(backend, wallet, sync_state):
     del wallet
-    return electrum_records_for_wallet(backend, sync_state), {}
+    return electrum_records_for_wallet(backend, sync_state), {
+        "utxos": electrum_utxos_for_wallet(backend, sync_state)
+    }
 
 
 SYNC_BACKEND_ADAPTERS = MappingProxyType(
@@ -1576,8 +1906,11 @@ SYNC_BACKEND_ADAPTERS = MappingProxyType(
 __all__ = [
     "SYNC_BACKEND_ADAPTERS",
     "bitcoinrpc_sync_adapter",
+    "bitcoinrpc_utxos_for_wallet_name",
     "electrum_sync_adapter",
+    "electrum_utxos_for_wallet",
     "esplora_sync_adapter",
+    "esplora_utxos_for_wallet",
     "resolve_wallet_sync_targets",
     "sync_target_from_address",
     "sync_target_from_derived",
