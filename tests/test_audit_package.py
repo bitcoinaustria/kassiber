@@ -247,6 +247,20 @@ class AuditPackageCoreTest(unittest.TestCase):
         self.assertIn("journal_stale", warning_codes)
         self.assertIn("sensitive_material_excluded", warning_codes)
 
+    def test_empty_transaction_scope_stays_empty(self):
+        summary = audit_package.build_evidence_summary(
+            self.conn,
+            str(self.data_root),
+            None,
+            None,
+            self.audit_hooks,
+            transaction_refs=[],
+        )
+
+        self.assertEqual(summary["scope"], {"type": "transactions", "transaction_count": 0})
+        self.assertEqual(summary["summary"]["transaction_count"], 0)
+        self.assertEqual(summary["transactions"], [])
+
     def test_audit_package_manifest_includes_files_urls_and_exclusions(self):
         self._mark_journals_current()
         self.conn.execute(
@@ -633,7 +647,11 @@ class AuditPackageCoreTest(unittest.TestCase):
         manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
         self.assertEqual(manifest["package"]["evidence_files"], [])
         self.assertFalse((output_dir / "evidence").exists())
-        self.assertNotIn("url", manifest["package"]["url_references"][0])
+        self.assertEqual(manifest["package"]["url_references"], [])
+        manifest_text = json.dumps(manifest, sort_keys=True)
+        self.assertNotIn("docs.example.test", manifest_text)
+        self.assertNotIn("Board decision link", manifest_text)
+        self.assertNotIn(url_attachment["id"], manifest_text)
         warning_codes = {warning["code"] for warning in manifest["package"]["warnings"]}
         self.assertIn("copied_attachments_excluded", warning_codes)
         self.assertIn("url_references_excluded", warning_codes)

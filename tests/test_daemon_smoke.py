@@ -5212,6 +5212,18 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertNotIn(str(data_root), manifest_text)
                 self.assertNotIn("stored_relpath", manifest_text)
 
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "audit-export-empty-transactions",
+                        "kind": "ui.reports.export_audit_package",
+                        "args": {"transactions": []},
+                    },
+                )
+                rejected = _read_payload_timeout(proc)
+                self.assertEqual(rejected["kind"], "error")
+                self.assertEqual(rejected["error"]["code"], "validation")
+
                 _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
                 self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
                 code, stderr = _close_daemon(proc)

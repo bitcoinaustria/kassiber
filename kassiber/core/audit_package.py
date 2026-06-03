@@ -690,7 +690,7 @@ def _transaction_rows_for_scope(
     hooks: AuditPackageHooks,
     transaction_refs: Sequence[str] | None,
 ) -> list[sqlite3.Row]:
-    if transaction_refs:
+    if transaction_refs is not None:
         rows = []
         seen = set()
         for ref in transaction_refs:
@@ -756,7 +756,7 @@ def build_evidence_summary(
 ) -> dict[str, Any]:
     workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     scope: dict[str, Any] = {"type": "active_profile"}
-    if transaction_refs and source_funds_case_ref:
+    if transaction_refs is not None and source_funds_case_ref:
         raise AppError("Choose transactions or source_funds_case, not both", code="validation")
     resolved_transaction_refs = transaction_refs
     if source_funds_case_ref:
@@ -769,7 +769,7 @@ def build_evidence_summary(
         )
         resolved_transaction_refs = refs
         scope = {"type": "source_funds_case", "case": case}
-    elif transaction_refs:
+    elif transaction_refs is not None:
         scope = {"type": "transactions", "transaction_count": len(transaction_refs)}
 
     attachments_root = _attachments_root(data_root)
@@ -941,6 +941,16 @@ def _copy_evidence_files(
 def _url_references(rows: Sequence[Mapping[str, Any]], *, include_url_references: bool) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     references = []
     warnings = []
+    if not include_url_references:
+        if any(row["attachment_type"] == "url" for row in rows):
+            warnings.append(
+                _warning(
+                    "url_references_excluded",
+                    "info",
+                    "URL references exist but were excluded by export options.",
+                )
+            )
+        return [], warnings
     for row in rows:
         if row["attachment_type"] != "url":
             continue
@@ -967,15 +977,41 @@ def _url_references(rows: Sequence[Mapping[str, Any]], *, include_url_references
                 )
             )
         references.append(item)
-    if not include_url_references and references:
-        warnings.append(
-            _warning(
-                "url_references_excluded",
-                "info",
-                "URL references exist but were excluded by export options.",
-            )
-        )
     return sorted(references, key=lambda item: item["attachment_id"]), warnings
+
+
+def _without_url_attachment_summaries(summary: Mapping[str, Any]) -> dict[str, Any]:
+    scrubbed = dict(summary)
+    transactions = []
+    for item in summary.get("transactions", []):
+        tx_item = dict(item)
+        tx_item["direct_attachments"] = [
+            attachment
+            for attachment in item.get("direct_attachments", [])
+            if attachment.get("attachment_type") != "url"
+        ]
+        links = []
+        for link in item.get("source_funds_links", []):
+            link_item = dict(link)
+            link_item["attachments"] = [
+                attachment
+                for attachment in link.get("attachments", [])
+                if attachment.get("attachment_type") != "url"
+            ]
+            source = link.get("from_source")
+            if isinstance(source, Mapping):
+                source_item = dict(source)
+                source_item["attachments"] = [
+                    attachment
+                    for attachment in source.get("attachments", [])
+                    if attachment.get("attachment_type") != "url"
+                ]
+                link_item["from_source"] = source_item
+            links.append(link_item)
+        tx_item["source_funds_links"] = links
+        transactions.append(tx_item)
+    scrubbed["transactions"] = transactions
+    return scrubbed
 
 
 def export_audit_package(
@@ -1041,8 +1077,14 @@ def export_audit_package(
         )
     )
 
+    manifest_summary = (
+        summary
+        if include_url_references
+        else _without_url_attachment_summaries(summary)
+    )
+
     manifest = {
-        **summary,
+        **manifest_summary,
         "package": {
             "schema_version": AUDIT_PACKAGE_SCHEMA_VERSION,
             "generated_at": hooks.now_iso(),

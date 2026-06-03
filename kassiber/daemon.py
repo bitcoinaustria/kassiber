@@ -1916,9 +1916,13 @@ def _audit_package_transaction_refs(args: dict[str, Any]) -> list[str] | None:
         return [transaction]
     if transactions is None:
         return None
-    if not isinstance(transactions, list) or not all(isinstance(item, str) and item.strip() for item in transactions):
+    if (
+        not isinstance(transactions, list)
+        or not transactions
+        or not all(isinstance(item, str) and item.strip() for item in transactions)
+    ):
         raise AppError(
-            "transactions must be an array of non-empty strings",
+            "transactions must be a non-empty array of non-empty strings",
             code="validation",
             retryable=False,
         )
