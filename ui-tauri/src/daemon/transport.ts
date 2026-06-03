@@ -128,6 +128,8 @@ export interface TerminalCommandStatus {
   message: string;
 }
 
+const IMPORT_PROJECT_BRIDGE_PATH = "/__kassiber__/import-project";
+
 let activeImportProjectSelection: ImportProjectSelection | null = null;
 let activeImportProjectActivation:
   | {
@@ -438,31 +440,70 @@ export function canSaveExportedFiles(): boolean {
   return DAEMON_MODE === "tauri";
 }
 
+async function requestBridgeImportProject<T>(
+  body: Record<string, unknown>,
+): Promise<T> {
+  const response = await fetch(IMPORT_PROJECT_BRIDGE_PATH, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = (await response.json()) as Record<string, unknown>;
+  const error =
+    payload.error && typeof payload.error === "object"
+      ? (payload.error as { message?: string | null })
+      : null;
+  if (!response.ok || payload.kind === "error" || error) {
+    const message =
+      error?.message ?? `Project import failed with HTTP ${response.status}`;
+    throw new Error(message || "Project import failed.");
+  }
+  return payload as T;
+}
+
 export async function selectImportProjectDirectory(): Promise<ImportProjectSelection | null> {
+  if (DAEMON_MODE === "bridge") {
+    const response = await requestBridgeImportProject<{
+      selection: ImportProjectSelection | null;
+    }>({ action: "select" });
+    return response.selection;
+  }
   if (DAEMON_MODE !== "tauri") {
-    throw new Error("Project import is available in the desktop app.");
+    throw new Error("Project import is available in the desktop app or dev bridge.");
   }
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<ImportProjectSelection | null>("select_import_project_directory");
 }
 
+async function activateImportProjectViaMode(
+  dataRoot: string,
+): Promise<ImportProjectSelection> {
+  if (DAEMON_MODE === "bridge") {
+    const response = await requestBridgeImportProject<{
+      selection: ImportProjectSelection;
+    }>({ action: "activate", dataRoot });
+    return response.selection;
+  }
+  if (DAEMON_MODE !== "tauri") {
+    throw new Error("Project import is available in the desktop app or dev bridge.");
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<ImportProjectSelection>("activate_import_project", {
+    dataRoot,
+  });
+}
+
 export async function activateImportProject(
   dataRoot: string,
 ): Promise<ImportProjectSelection> {
-  if (DAEMON_MODE !== "tauri") {
-    throw new Error("Project import is available in the desktop app.");
-  }
   if (activeImportProjectSelection?.dataRoot === dataRoot) {
     return activeImportProjectSelection;
   }
   if (activeImportProjectActivation?.dataRoot === dataRoot) {
     return activeImportProjectActivation.promise;
   }
-  const { invoke } = await import("@tauri-apps/api/core");
   const generation = ++importProjectActivationGeneration;
-  const promise = invoke<ImportProjectSelection>("activate_import_project", {
-    dataRoot,
-  });
+  const promise = activateImportProjectViaMode(dataRoot);
   activeImportProjectActivation = { dataRoot, generation, promise };
   try {
     const selection = await promise;
@@ -485,13 +526,17 @@ export function isImportProjectActive(dataRoot: string): boolean {
 }
 
 export async function clearImportProject(): Promise<void> {
-  if (DAEMON_MODE !== "tauri") {
+  if (DAEMON_MODE === "mock") {
     return;
   }
-  const { invoke } = await import("@tauri-apps/api/core");
   importProjectActivationGeneration += 1;
   activeImportProjectActivation = null;
-  await invoke("clear_import_project");
+  if (DAEMON_MODE === "bridge") {
+    await requestBridgeImportProject<{ ok: boolean }>({ action: "clear" });
+  } else {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("clear_import_project");
+  }
   if (activeImportProjectSelection !== null) {
     activeImportProjectSelection = null;
     useUiStore.getState().bumpDaemonSession();
@@ -499,7 +544,7 @@ export async function clearImportProject(): Promise<void> {
 }
 
 export function canImportProjects(): boolean {
-  return DAEMON_MODE === "tauri";
+  return DAEMON_MODE === "tauri" || DAEMON_MODE === "bridge";
 }
 
 export function canUseTouchIdPassphraseUnlock(): boolean {

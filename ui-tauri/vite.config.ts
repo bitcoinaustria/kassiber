@@ -4,17 +4,23 @@ import {
   spawn,
   type ChildProcessWithoutNullStreams,
 } from "node:child_process";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import {
+  existsSync,
+  readFileSync,
+  realpathSync,
+} from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { inspectImportProjectDirectory } from "./vite/importProject";
 
 const DAEMON_BRIDGE_PATH = "/__kassiber__/daemon";
 const DAEMON_BRIDGE_STREAM_PATH = "/__kassiber__/daemon/stream";
 const FILE_PICKER_BRIDGE_PATH = "/__kassiber__/pick-file";
+const IMPORT_PROJECT_BRIDGE_PATH = "/__kassiber__/import-project";
 const BRIDGE_REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
 const UI_ROOT = __dirname;
 const NODE_MODULES_REALPATH = (() => {
@@ -270,6 +276,7 @@ interface PendingBridgeRequest {
 
 class DaemonBridgeSupervisor {
   private child: ChildProcessWithoutNullStreams | null = null;
+  private dataRoot: string | null = null;
   private readonly pending = new Map<string, PendingBridgeRequest>();
   private stderrTail = "";
 
@@ -290,6 +297,12 @@ class DaemonBridgeSupervisor {
       request_id: makeBridgeRequestId("bridge-cancel"),
       args: { target_request_id: targetRequestId },
     });
+  }
+
+  setDataRoot(dataRoot: string | null) {
+    if (this.dataRoot === dataRoot) return;
+    this.dataRoot = dataRoot;
+    this.shutdown();
   }
 
   shutdown() {
@@ -356,7 +369,12 @@ class DaemonBridgeSupervisor {
     }
 
     const repoRoot = path.resolve(__dirname, "..");
-    const child = spawn("uv", ["run", "python", "-m", "kassiber", "daemon"], {
+    const args = ["run", "python", "-m", "kassiber"];
+    if (this.dataRoot) {
+      args.push("--data-root", this.dataRoot);
+    }
+    args.push("daemon");
+    const child = spawn("uv", args, {
       cwd: repoRoot,
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -448,6 +466,10 @@ function daemonBridgePlugin() {
         }
         if (pathname === FILE_PICKER_BRIDGE_PATH) {
           await handleBridgeFilePicker(req, res);
+          return;
+        }
+        if (pathname === IMPORT_PROJECT_BRIDGE_PATH) {
+          await handleBridgeImportProject(req, res, supervisor);
           return;
         }
         next();
@@ -606,6 +628,104 @@ async function handleBridgeFilePicker(req: IncomingMessage, res: ServerResponse)
           : { path: null, error: message },
       );
     }
+  }
+}
+
+async function handleBridgeImportProject(
+  req: IncomingMessage,
+  res: ServerResponse,
+  supervisor: DaemonBridgeSupervisor,
+) {
+  if (!isLoopbackHost(req.headers.host)) {
+    writeJsonError(
+      res,
+      403,
+      "bridge_forbidden_host",
+      "project import bridge only accepts loopback hosts",
+    );
+    return;
+  }
+  if (req.method !== "POST") {
+    writeJsonError(
+      res,
+      405,
+      "method_not_allowed",
+      "project import bridge only accepts POST",
+    );
+    return;
+  }
+  if (!isAllowedBridgeOrigin(req.headers.origin, req.headers.host)) {
+    writeJsonError(
+      res,
+      403,
+      "bridge_forbidden_origin",
+      "project import bridge only accepts same-origin browser requests",
+    );
+    return;
+  }
+
+  let request: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(await readBody(req)) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("request body must be a JSON object");
+    }
+    request = parsed as Record<string, unknown>;
+  } catch (error) {
+    writeJsonError(
+      res,
+      400,
+      "invalid_project_import_request",
+      error instanceof Error ? error.message : String(error),
+    );
+    return;
+  }
+
+  try {
+    const action = request.action;
+    if (action === "select") {
+      const paths = await pickFileViaNativeBridge({
+        title: "Open Kassiber books",
+        directory: true,
+        multiple: false,
+      });
+      if (!paths[0]) {
+        writeJson(res, 200, { selection: null });
+        return;
+      }
+      writeJson(res, 200, {
+        selection: inspectImportProjectDirectory(paths[0]),
+      });
+      return;
+    }
+    if (action === "activate") {
+      if (typeof request.dataRoot !== "string" || !request.dataRoot.trim()) {
+        throw new Error("dataRoot is required.");
+      }
+      const selection = inspectImportProjectDirectory(request.dataRoot);
+      supervisor.setDataRoot(selection.dataRoot);
+      writeJson(res, 200, { selection });
+      return;
+    }
+    if (action === "clear") {
+      supervisor.setDataRoot(null);
+      writeJson(res, 200, { ok: true });
+      return;
+    }
+    writeJsonError(
+      res,
+      400,
+      "invalid_project_import_action",
+      "project import action must be select, activate, or clear",
+    );
+  } catch (error) {
+    writeJsonError(
+      res,
+      500,
+      "bridge_project_import_failed",
+      redactBridgeText(error instanceof Error ? error.message : String(error)),
+      true,
+    );
   }
 }
 
