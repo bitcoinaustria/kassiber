@@ -540,6 +540,70 @@ class AuditPackageCoreTest(unittest.TestCase):
         self.assertNotIn("source_link_missing", warning_codes)
         self.assertNotIn("source_link_unreviewed", warning_codes)
 
+    def test_audit_package_journal_state_exclusion_does_not_create_false_journal_blocker(self):
+        self.conn.execute(
+            "UPDATE transactions SET pricing_source_kind = 'manual_override' WHERE id = ?",
+            (self.tx_id,),
+        )
+        self.conn.commit()
+        direct = self._add_file_attachment("board-decision.pdf", b"decision")
+        self._add_reviewed_source_link(attachment_ids=[direct["id"]])
+
+        summary = audit_package.build_evidence_summary(
+            self.conn,
+            str(self.data_root),
+            None,
+            None,
+            self.audit_hooks,
+            transaction_refs=[self.tx_id],
+            include_journal_state=False,
+        )
+
+        tx_summary = summary["transactions"][0]
+        warning_codes = {
+            warning["code"]
+            for warning in tx_summary["readiness"]["warnings"]
+        }
+        self.assertEqual(summary["journal_freshness"]["status"], "not_processed")
+        self.assertEqual(tx_summary["readiness"]["status"], "ready")
+        self.assertIn("journal_state_excluded", warning_codes)
+        self.assertNotIn("journal_stale", warning_codes)
+        self.assertNotIn("journal_quarantined", warning_codes)
+        self.assertNotIn("source_link_missing", warning_codes)
+
+    def test_audit_package_export_omits_journal_payload_when_journal_state_excluded(self):
+        self.conn.execute(
+            "UPDATE transactions SET pricing_source_kind = 'manual_override' WHERE id = ?",
+            (self.tx_id,),
+        )
+        self.conn.commit()
+        direct = self._add_file_attachment("board-decision.pdf", b"decision")
+        self._add_reviewed_source_link(attachment_ids=[direct["id"]])
+        output_dir = self.root / "exports" / "audit-no-journal"
+
+        result = audit_package.export_audit_package(
+            self.conn,
+            str(self.data_root),
+            None,
+            None,
+            output_dir,
+            self.audit_hooks,
+            transaction_refs=[self.tx_id],
+            include_journal_state=False,
+        )
+
+        manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
+        tx_manifest = manifest["transactions"][0]
+        warning_codes = {
+            warning["code"]
+            for warning in tx_manifest["readiness"]["warnings"]
+        }
+        self.assertEqual(manifest["journal_freshness"]["status"], "not_processed")
+        self.assertNotIn("journal", tx_manifest)
+        self.assertEqual(tx_manifest["readiness"]["status"], "ready")
+        self.assertIn("journal_state_excluded", warning_codes)
+        self.assertNotIn("journal_stale", warning_codes)
+
     def test_audit_package_can_exclude_copied_files_and_url_references(self):
         self._mark_journals_current()
         self.conn.execute(

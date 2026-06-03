@@ -293,6 +293,19 @@ def _journal_freshness(conn: sqlite3.Connection, profile: Mapping[str, Any]) -> 
     }
 
 
+def _readiness_journal_freshness(
+    freshness: Mapping[str, Any],
+    *,
+    include_journal_state: bool,
+) -> dict[str, Any] | Mapping[str, Any]:
+    if include_journal_state:
+        return freshness
+    neutral = dict(freshness)
+    neutral["needs_processing"] = False
+    neutral["reason"] = "journal state excluded by export options"
+    return neutral
+
+
 def _tx_tags(conn: sqlite3.Connection, tx_id: str) -> list[str]:
     return [
         row["label"]
@@ -761,6 +774,10 @@ def build_evidence_summary(
 
     attachments_root = _attachments_root(data_root)
     freshness = _journal_freshness(conn, profile)
+    readiness_freshness = _readiness_journal_freshness(
+        freshness,
+        include_journal_state=include_journal_state,
+    )
     transactions = []
     warning_counts: dict[str, int] = {}
     for tx in _transaction_rows_for_scope(conn, profile["id"], hooks, resolved_transaction_refs):
@@ -780,7 +797,7 @@ def build_evidence_summary(
             tags,
             direct_attachments,
             links,
-            freshness,
+            readiness_freshness,
             quarantine,
             include_review_state=include_review_state,
         )

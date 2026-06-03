@@ -383,6 +383,7 @@ def copy_attachments(
                 path.unlink()
                 _prune_empty_dirs(attachments_root, path)
             except OSError:
+                # Best-effort rollback cleanup must not mask the original copy error.
                 pass
         raise
 
