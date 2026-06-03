@@ -46,6 +46,7 @@ import {
   enrichTreasuryChartData,
   formatBtcAxis,
   formatFiatPrice,
+  formatRelativeMarketRateTime,
   formatTreasuryDetailDate,
   formatTreasuryTick,
   fullTreasuryBrushRange,
@@ -55,6 +56,7 @@ import {
   INCOMING_MARKER_MIN_PARAM,
   LEGACY_INCOMING_MARKER_MIN_PARAM,
   LEGACY_OUTGOING_MARKER_MIN_PARAM,
+  marketRateDetailLabel,
   normalizeTreasuryBrushRange,
   OUTGOING_MARKER_MIN_PARAM,
   periodShortLabels,
@@ -461,6 +463,10 @@ export const BtcActivityChart = ({
     const detailDate = latestPoint
       ? formatTreasuryDetailDate(latestPoint.date)
       : "Current snapshot";
+    const priceSyncedAt =
+      snapshot.marketRate?.fetchedAt ?? snapshot.marketRate?.timestamp;
+    const priceSyncLabel = formatRelativeMarketRateTime(priceSyncedAt);
+    const priceSyncDetail = marketRateDetailLabel(snapshot);
     return (
       <div className="relative z-10 flex min-w-0 flex-1 flex-col gap-4 overflow-visible rounded-xl border bg-card p-3 sm:p-4">
         <ChartControlsSheet
@@ -499,6 +505,14 @@ export const BtcActivityChart = ({
               <span className="text-[10px] text-muted-foreground">
                 As of {detailDate}
               </span>
+              {priceSyncLabel && (
+                <span
+                  className="text-[10px] text-muted-foreground"
+                  title={priceSyncDetail}
+                >
+                  priced {priceSyncLabel}
+                </span>
+              )}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span>
