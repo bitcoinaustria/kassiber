@@ -120,7 +120,7 @@ class AuditPackageCoreTest(unittest.TestCase):
                 self.workspace_id,
                 self.profile_id,
                 self.wallet_id,
-                "salary-jan",
+                "recurring-approval-jan",
                 "fp-source",
                 "2026-01-31T09:00:00Z",
                 "inbound",
@@ -130,8 +130,8 @@ class AuditPackageCoreTest(unittest.TestCase):
                 "EUR",
                 50_000.0,
                 50.0,
-                "salary",
-                "Monthly salary approved by board decision",
+                "treasury",
+                "Recurring payment approved by board decision",
                 "{}",
                 NOW,
             ),
@@ -191,7 +191,7 @@ class AuditPackageCoreTest(unittest.TestCase):
             label="Board decision link",
         )
 
-    def _add_reviewed_source_link(self, *, attachment_ids):
+    def _add_source_link(self, *, attachment_ids, state="reviewed"):
         source = source_funds.create_source(
             self.conn,
             None,
@@ -212,7 +212,7 @@ class AuditPackageCoreTest(unittest.TestCase):
             to_transaction_ref=self.tx_id,
             from_source_ref=source["id"],
             link_type="manual_source",
-            state="reviewed",
+            state=state,
             confidence="exact",
             method="manual",
             allocation_amount="0.00100000",
@@ -220,6 +220,9 @@ class AuditPackageCoreTest(unittest.TestCase):
             explanation="Reviewed source evidence for auditor handoff.",
             attachment_ids=attachment_ids[1:],
         )
+
+    def _add_reviewed_source_link(self, *, attachment_ids):
+        return self._add_source_link(attachment_ids=attachment_ids, state="reviewed")
 
     def test_evidence_summary_flags_persisted_missing_state(self):
         summary = audit_package.build_evidence_summary(
@@ -299,12 +302,12 @@ class AuditPackageCoreTest(unittest.TestCase):
     def test_copy_evidence_duplicates_file_and_url_rows_with_provenance(self):
         source_tx_id = self._insert_source_transaction()
         source_file = self._add_file_attachment(
-            name="salary-board-approval.pdf",
+            name="board-approval.pdf",
             content=b"board approval\n",
             tx_id=source_tx_id,
         )
         source_url = self._add_url_attachment(
-            "https://docs.example.test/board/salary-approval",
+            "https://docs.example.test/board/approval",
             tx_id=source_tx_id,
         )
         result = core_attachments.copy_attachments(
@@ -350,17 +353,23 @@ class AuditPackageCoreTest(unittest.TestCase):
         )
         self.assertTrue(copied_file_path.exists())
         self.assertFalse(source_file_path.exists())
+        stored_copy = self.conn.execute(
+            "SELECT * FROM attachments WHERE id = ?",
+            (copied_file["id"],),
+        ).fetchone()
+        self.assertEqual(stored_copy["copied_from_attachment_id"], source_file["id"])
+        self.assertEqual(stored_copy["copied_from_transaction_id"], source_tx_id)
 
     def test_audit_package_manifest_includes_copied_evidence_provenance(self):
         self._mark_journals_current()
         source_tx_id = self._insert_source_transaction()
         source_file = self._add_file_attachment(
-            name="salary-board-approval.pdf",
+            name="board-approval.pdf",
             content=b"board approval\n",
             tx_id=source_tx_id,
         )
         source_url = self._add_url_attachment(
-            "https://docs.example.test/board/salary-approval",
+            "https://docs.example.test/board/approval",
             tx_id=source_tx_id,
         )
         copied = core_attachments.copy_attachments(
@@ -411,6 +420,61 @@ class AuditPackageCoreTest(unittest.TestCase):
         self.assertIn(source_file["id"], copied_attachment_ids)
         self.assertIn(source_url["id"], copied_attachment_ids)
 
+    def test_audit_package_excludes_suggested_source_link_evidence(self):
+        self._mark_journals_current()
+        self.conn.execute(
+            "UPDATE transactions SET pricing_source_kind = 'manual_override' WHERE id = ?",
+            (self.tx_id,),
+        )
+        self.conn.commit()
+        source_tx_id = self._insert_source_transaction()
+        source_file = self._add_file_attachment(
+            name="unreviewed-source.pdf",
+            content=b"unreviewed source\n",
+            tx_id=source_tx_id,
+        )
+        source_url = self._add_url_attachment(
+            "https://docs.example.test/unreviewed-source",
+            tx_id=source_tx_id,
+        )
+        self._add_source_link(
+            attachment_ids=[source_file["id"], source_url["id"]],
+            state="suggested",
+        )
+        output_dir = self.root / "exports" / "audit-suggested"
+
+        result = audit_package.export_audit_package(
+            self.conn,
+            str(self.data_root),
+            None,
+            None,
+            output_dir,
+            self.audit_hooks,
+            transaction_refs=[self.tx_id],
+        )
+
+        manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
+        self.assertEqual(manifest["package"]["evidence_files"], [])
+        self.assertEqual(manifest["package"]["url_references"], [])
+        link_manifest = manifest["transactions"][0]["source_funds_links"][0]
+        self.assertEqual(link_manifest["state"], "suggested")
+        self.assertTrue(link_manifest["review_details_redacted"])
+        self.assertEqual(link_manifest["attachments"], [])
+        self.assertIsNone(link_manifest["from_source"])
+        self.assertIsNone(link_manifest["from_transaction"])
+        self.assertIsNone(link_manifest["allocation_amount"])
+        self.assertEqual(link_manifest["explanation"], "")
+        manifest_text = json.dumps(manifest, sort_keys=True)
+        self.assertNotIn(source_file["id"], manifest_text)
+        self.assertNotIn(source_url["id"], manifest_text)
+        self.assertNotIn("unreviewed-source.pdf", manifest_text)
+        self.assertNotIn("docs.example.test/unreviewed-source", manifest_text)
+        warning_codes = {
+            warning["code"]
+            for warning in manifest["transactions"][0]["readiness"]["warnings"]
+        }
+        self.assertIn("source_link_unreviewed", warning_codes)
+
     def test_audit_package_redacts_secret_bearing_url_reference(self):
         self._mark_journals_current()
         self.conn.execute(
@@ -424,7 +488,7 @@ class AuditPackageCoreTest(unittest.TestCase):
         )
         self.conn.commit()
         secret_url = self._add_url_attachment(
-            "https://docs.example.test/receipt?access_token=secret"
+            "https://docs.example.test/receipt?access_token=secret#refresh_token=fragment-secret"
         )
         self._add_reviewed_source_link(attachment_ids=[secret_url["id"]])
         output_dir = self.root / "exports" / "audit-secret-url"
@@ -443,8 +507,38 @@ class AuditPackageCoreTest(unittest.TestCase):
         reference = manifest["package"]["url_references"][0]
         self.assertEqual(reference["url"], "")
         self.assertIn("access_token=REDACTED", reference["redacted_url"])
+        self.assertIn("refresh_token=REDACTED", reference["redacted_url"])
+        self.assertNotIn("fragment-secret", reference["redacted_url"])
         warning_codes = {warning["code"] for warning in manifest["package"]["warnings"]}
         self.assertIn("secret_bearing_url_redacted", warning_codes)
+
+    def test_audit_package_review_state_exclusion_does_not_create_false_source_blocker(self):
+        self._mark_journals_current()
+        self.conn.execute(
+            "UPDATE transactions SET pricing_source_kind = 'manual_override' WHERE id = ?",
+            (self.tx_id,),
+        )
+        self.conn.commit()
+        direct = self._add_file_attachment("board-decision.pdf", b"decision")
+        self._add_reviewed_source_link(attachment_ids=[direct["id"]])
+
+        summary = audit_package.build_evidence_summary(
+            self.conn,
+            str(self.data_root),
+            None,
+            None,
+            self.audit_hooks,
+            transaction_refs=[self.tx_id],
+            include_review_state=False,
+        )
+
+        warning_codes = {
+            warning["code"]
+            for warning in summary["transactions"][0]["readiness"]["warnings"]
+        }
+        self.assertIn("review_state_excluded", warning_codes)
+        self.assertNotIn("source_link_missing", warning_codes)
+        self.assertNotIn("source_link_unreviewed", warning_codes)
 
     def test_audit_package_can_exclude_copied_files_and_url_references(self):
         self._mark_journals_current()

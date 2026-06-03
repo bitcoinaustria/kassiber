@@ -7,7 +7,7 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
-from urllib.parse import parse_qsl, urlparse, urlunparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from ..db import ensure_data_root, resolve_attachments_root
 from ..envelope import json_ready
@@ -154,10 +154,26 @@ def _url_safety(url: str | None) -> dict[str, Any]:
             safe_query_pairs.append((key, "REDACTED"))
         else:
             safe_query_pairs.append((key, value))
-    redacted_query = "&".join(
-        f"{key}={value}" if value != "" else key for key, value in safe_query_pairs
-    )
-    redacted_url = urlunparse(parsed._replace(query=redacted_query))
+    fragment = parsed.fragment
+    redacted_fragment = fragment
+    fragment_pairs = parse_qsl(fragment.lstrip("?"), keep_blank_values=True)
+    if fragment_pairs:
+        safe_fragment_pairs = []
+        for key, value in fragment_pairs:
+            key_lower = key.lower()
+            if any(hint in key_lower for hint in _SECRET_URL_QUERY_HINTS):
+                redacted = True
+                reason = reason or "secret-like URL fragment"
+                safe_fragment_pairs.append((key, "REDACTED"))
+            else:
+                safe_fragment_pairs.append((key, value))
+        redacted_fragment = urlencode(safe_fragment_pairs)
+    elif fragment and any(hint in fragment.lower() for hint in _SECRET_URL_QUERY_HINTS):
+        redacted = True
+        reason = reason or "secret-like URL fragment"
+        redacted_fragment = "REDACTED"
+    redacted_query = urlencode(safe_query_pairs)
+    redacted_url = urlunparse(parsed._replace(query=redacted_query, fragment=redacted_fragment))
     return {
         "url": raw if not redacted else "",
         "redacted": redacted,
@@ -394,19 +410,29 @@ def _source_funds_links_for_tx(
     ).fetchall()
     links = []
     for row in rows:
-        attachment_rows = _attachment_rows_by_ids(
-            conn,
-            profile_id,
-            _attachment_ids_for_join(conn, "source_funds_link_attachments", "link_id", row["id"]),
+        is_reviewed = row["state"] == "reviewed"
+        attachment_rows = (
+            _attachment_rows_by_ids(
+                conn,
+                profile_id,
+                _attachment_ids_for_join(conn, "source_funds_link_attachments", "link_id", row["id"]),
+            )
+            if is_reviewed
+            else []
         )
         parent_tx = None
-        if row["from_transaction_id"]:
+        if is_reviewed and row["from_transaction_id"]:
             tx_row = conn.execute(
                 "SELECT * FROM transactions WHERE profile_id = ? AND id = ?",
                 (profile_id, row["from_transaction_id"]),
             ).fetchone()
             if tx_row:
                 parent_tx = _transaction_summary(tx_row)
+        from_source = (
+            _source_summary(conn, profile_id, row["from_source_id"], attachments_root)
+            if is_reviewed and row["from_source_id"]
+            else None
+        )
         links.append(
             {
                 "id": row["id"],
@@ -415,24 +441,23 @@ def _source_funds_links_for_tx(
                 "confidence": row["confidence"],
                 "method": row["method"],
                 "asset": row["asset"],
-                "allocation_amount": _btc_value(row["allocation_amount"]),
-                "allocation_amount_msat": row["allocation_amount"],
-                "from_asset": row["from_asset"] or row["asset"],
-                "from_allocation_amount": _btc_value(row["from_allocation_amount"]),
-                "from_allocation_amount_msat": row["from_allocation_amount"],
-                "allocation_policy": row["allocation_policy"],
-                "explanation": row["explanation"] or "",
+                "allocation_amount": _btc_value(row["allocation_amount"]) if is_reviewed else None,
+                "allocation_amount_msat": row["allocation_amount"] if is_reviewed else None,
+                "from_asset": (row["from_asset"] or row["asset"]) if is_reviewed else None,
+                "from_allocation_amount": (
+                    _btc_value(row["from_allocation_amount"]) if is_reviewed else None
+                ),
+                "from_allocation_amount_msat": row["from_allocation_amount"] if is_reviewed else None,
+                "allocation_policy": row["allocation_policy"] if is_reviewed else "",
+                "explanation": (row["explanation"] or "") if is_reviewed else "",
                 "uses_chain_observation": bool(row["uses_chain_observation"]),
-                "chain_data_confirmed": bool(row["chain_data_confirmed"]),
+                "chain_data_confirmed": bool(row["chain_data_confirmed"]) if is_reviewed else False,
+                "review_details_redacted": not is_reviewed,
                 "attachments": [
                     _attachment_summary(attachment, attachments_root, include_url=False)
                     for attachment in attachment_rows
                 ],
-                "from_source": (
-                    _source_summary(conn, profile_id, row["from_source_id"], attachments_root)
-                    if row["from_source_id"]
-                    else None
-                ),
+                "from_source": from_source,
                 "from_transaction": parent_tx,
                 "created_at": row["created_at"],
                 "updated_at": row["updated_at"],
@@ -528,6 +553,8 @@ def _evidence_warnings(
     source_links: Sequence[Mapping[str, Any]],
     journal_freshness: Mapping[str, Any],
     quarantine: Mapping[str, Any] | None,
+    *,
+    include_review_state: bool,
 ) -> list[dict[str, Any]]:
     warnings: list[dict[str, Any]] = []
     if tx["excluded"]:
@@ -572,40 +599,41 @@ def _evidence_warnings(
                     action="Attach the decision document as a URL reference or local file.",
                 )
             )
-    reviewed_links = [link for link in source_links if link["state"] == "reviewed"]
-    suggested_links = [link for link in source_links if link["state"] == "suggested"]
-    if not reviewed_links:
-        warnings.append(
-            _warning(
-                "source_link_missing",
-                "blocker",
-                "No reviewed source-of-funds link or root source is connected to this transaction.",
-                action="Review or create a source-of-funds link before exporting.",
-            )
-        )
-    if suggested_links:
-        warnings.append(
-            _warning(
-                "source_link_unreviewed",
-                "blocker",
-                "At least one source-of-funds suggestion is still unreviewed.",
-                action="Accept, edit, or reject the suggested link.",
-            )
-        )
-    for link in reviewed_links:
-        link_evidence_count = len(link.get("attachments") or [])
-        source = link.get("from_source") or {}
-        source_evidence_count = len(source.get("attachments") or []) if isinstance(source, dict) else 0
-        if link_evidence_count == 0 and source_evidence_count == 0:
+    if include_review_state:
+        reviewed_links = [link for link in source_links if link["state"] == "reviewed"]
+        suggested_links = [link for link in source_links if link["state"] == "suggested"]
+        if not reviewed_links:
             warnings.append(
                 _warning(
-                    "source_evidence_missing",
-                    "warning",
-                    "A reviewed source-of-funds link has no attached supporting evidence.",
-                    action="Attach evidence to the link or its root source.",
+                    "source_link_missing",
+                    "blocker",
+                    "No reviewed source-of-funds link or root source is connected to this transaction.",
+                    action="Review or create a source-of-funds link before exporting.",
                 )
             )
-            break
+        if suggested_links:
+            warnings.append(
+                _warning(
+                    "source_link_unreviewed",
+                    "blocker",
+                    "At least one source-of-funds suggestion is still unreviewed.",
+                    action="Accept, edit, or reject the suggested link.",
+                )
+            )
+        for link in reviewed_links:
+            link_evidence_count = len(link.get("attachments") or [])
+            source = link.get("from_source") or {}
+            source_evidence_count = len(source.get("attachments") or []) if isinstance(source, dict) else 0
+            if link_evidence_count == 0 and source_evidence_count == 0:
+                warnings.append(
+                    _warning(
+                        "source_evidence_missing",
+                        "warning",
+                        "A reviewed source-of-funds link has no attached supporting evidence.",
+                        action="Attach evidence to the link or its root source.",
+                    )
+                )
+                break
     if journal_freshness.get("needs_processing"):
         warnings.append(
             _warning(
@@ -747,7 +775,15 @@ def build_evidence_summary(
             else []
         )
         quarantine = _journal_quarantine_for_tx(conn, profile["id"], tx["id"]) if include_journal_state else None
-        warnings = _evidence_warnings(tx, tags, direct_attachments, links, freshness, quarantine)
+        warnings = _evidence_warnings(
+            tx,
+            tags,
+            direct_attachments,
+            links,
+            freshness,
+            quarantine,
+            include_review_state=include_review_state,
+        )
         if not include_review_state:
             warnings.append(
                 _warning(
@@ -814,6 +850,8 @@ def _collect_attachment_ids(summary: Mapping[str, Any], *, include_review_state:
         if not include_review_state:
             continue
         for link in item.get("source_funds_links", []):
+            if link.get("state") != "reviewed":
+                continue
             for attachment in link.get("attachments", []):
                 ids.add(attachment["id"])
             source = link.get("from_source") or {}

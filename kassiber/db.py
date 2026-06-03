@@ -430,8 +430,8 @@ CREATE TABLE IF NOT EXISTS attachments (
     media_type TEXT,
     size_bytes INTEGER,
     sha256 TEXT,
-    copied_from_attachment_id TEXT REFERENCES attachments(id) ON DELETE SET NULL,
-    copied_from_transaction_id TEXT REFERENCES transactions(id) ON DELETE SET NULL,
+    copied_from_attachment_id TEXT,
+    copied_from_transaction_id TEXT,
     created_at TEXT NOT NULL
 );
 
@@ -1017,8 +1017,8 @@ def ensure_schema_compat(conn):
     _drop_legacy_source_funds_recipients_unique(conn)
     _migrate_msat_columns(conn)
     _migrate_nullable_attachment_transactions(conn)
-    ensure_column(conn, "attachments", "copied_from_attachment_id", "TEXT REFERENCES attachments(id) ON DELETE SET NULL")
-    ensure_column(conn, "attachments", "copied_from_transaction_id", "TEXT REFERENCES transactions(id) ON DELETE SET NULL")
+    ensure_column(conn, "attachments", "copied_from_attachment_id", "TEXT")
+    ensure_column(conn, "attachments", "copied_from_transaction_id", "TEXT")
     _backfill_liquid_asset_codes(conn)
     _ensure_swap_matching_schema(conn)
     _ensure_direct_swap_payout_schema(conn)
@@ -1233,7 +1233,17 @@ def _migrate_nullable_attachment_transactions(conn):
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='attachments_legacy_notnull_tx'"
     ).fetchone()
     current_sql = (table_sql[0] if table_sql else "") or ""
-    if not legacy_sql and "transaction_id TEXT NOT NULL" not in current_sql:
+    copied_provenance_fk_columns = {
+        row["from"] if hasattr(row, "keys") else row[3]
+        for row in conn.execute("PRAGMA foreign_key_list(attachments)").fetchall()
+        if (row["from"] if hasattr(row, "keys") else row[3])
+        in {"copied_from_attachment_id", "copied_from_transaction_id"}
+    }
+    if (
+        not legacy_sql
+        and "transaction_id TEXT NOT NULL" not in current_sql
+        and not copied_provenance_fk_columns
+    ):
         _repair_attachment_child_fks(conn)
         return
     previous_fk_state = conn.execute("PRAGMA foreign_keys").fetchone()[0]
@@ -1260,8 +1270,8 @@ def _migrate_nullable_attachment_transactions(conn):
                 media_type TEXT,
                 size_bytes INTEGER,
                 sha256 TEXT,
-                copied_from_attachment_id TEXT REFERENCES attachments(id) ON DELETE SET NULL,
-                copied_from_transaction_id TEXT REFERENCES transactions(id) ON DELETE SET NULL,
+                copied_from_attachment_id TEXT,
+                copied_from_transaction_id TEXT,
                 created_at TEXT NOT NULL
             )
             """
@@ -1270,16 +1280,30 @@ def _migrate_nullable_attachment_transactions(conn):
             conn,
             "attachments",
             "copied_from_attachment_id",
-            "TEXT REFERENCES attachments(id) ON DELETE SET NULL",
+            "TEXT",
         )
         _ensure_column_no_commit(
             conn,
             "attachments",
             "copied_from_transaction_id",
-            "TEXT REFERENCES transactions(id) ON DELETE SET NULL",
+            "TEXT",
+        )
+        legacy_columns = {
+            row["name"] if hasattr(row, "keys") else row[1]
+            for row in conn.execute("PRAGMA table_info(attachments_legacy_notnull_tx)").fetchall()
+        }
+        copied_from_attachment_expr = (
+            "copied_from_attachment_id"
+            if "copied_from_attachment_id" in legacy_columns
+            else "NULL"
+        )
+        copied_from_transaction_expr = (
+            "copied_from_transaction_id"
+            if "copied_from_transaction_id" in legacy_columns
+            else "NULL"
         )
         conn.execute(
-            """
+            f"""
             INSERT OR IGNORE INTO attachments(
                 id, workspace_id, profile_id, transaction_id, attachment_type, label,
                 original_filename, stored_relpath, source_url, media_type,
@@ -1288,7 +1312,8 @@ def _migrate_nullable_attachment_transactions(conn):
             )
             SELECT id, workspace_id, profile_id, transaction_id, attachment_type, label,
                    original_filename, stored_relpath, source_url, media_type,
-                   size_bytes, sha256, NULL, NULL, created_at
+                   size_bytes, sha256, {copied_from_attachment_expr},
+                   {copied_from_transaction_expr}, created_at
             FROM attachments_legacy_notnull_tx
             """
         )

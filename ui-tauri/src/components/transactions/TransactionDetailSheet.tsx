@@ -11,7 +11,6 @@ import {
   Hash,
   History,
   Info,
-  Layers,
   Link2,
   ListChecks,
   Network,
@@ -27,10 +26,6 @@ import {
 import * as React from "react";
 
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
-import {
-  TransactionEvidenceReadinessPanel,
-  type AuditEvidenceTransactionSummary,
-} from "@/components/transactions/TransactionEvidencePanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -607,16 +602,6 @@ export type AttachmentItem = {
   href?: string;
   copiedFromAttachmentId?: string;
   copiedFromTransactionId?: string;
-};
-
-export type SourceFundsLinkItem = {
-  id: string;
-  link_type: string;
-  state: string;
-  confidence: string;
-  asset?: string | null;
-  allocation_amount?: number | null;
-  explanation?: string;
 };
 
 export type JournalEventItem = {
@@ -1231,8 +1216,6 @@ export function TransactionDetailSheet({
   saveError,
   nowRate,
   attachments,
-  evidenceSummary,
-  sourceFundsLinks = [],
   journalEvents = [],
   commercialContext,
   commercialContextLoading,
@@ -1260,8 +1243,6 @@ export function TransactionDetailSheet({
   saveError?: string | null;
   nowRate?: number | null;
   attachments?: AttachmentItem[];
-  evidenceSummary?: AuditEvidenceTransactionSummary;
-  sourceFundsLinks?: SourceFundsLinkItem[];
   journalEvents?: JournalEventItem[];
   commercialContext?: CommercialContextData;
   commercialContextLoading?: boolean;
@@ -2707,36 +2688,6 @@ export function TransactionDetailSheet({
 
                     <div className="overflow-hidden rounded-md border">
                       <div className="flex items-center gap-2 border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        <Layers
-                          className="size-3"
-                          aria-hidden="true"
-                        />
-                        Source of funds
-                      </div>
-                      {sourceFundsLinks.length ? (
-                        sourceFundsLinks.map((link) => (
-                          <LedgerRow
-                            key={link.id}
-                            label={`${link.link_type} · ${link.state}`}
-                            value={
-                              <span className={blurClass(hideSensitive)}>
-                                {link.allocation_amount
-                                  ? `${link.allocation_amount.toFixed(8)} ${link.asset ?? transaction.asset ?? "BTC"}`
-                                  : link.confidence}
-                              </span>
-                            }
-                            align="right"
-                            hint={link.explanation || link.confidence}
-                          />
-                        ))
-                      ) : (
-                        <div className="p-3 text-xs text-muted-foreground">
-                          No reviewed source-of-funds links for this row yet.
-                        </div>
-                      )}
-                    </div>
-                    <div className="overflow-hidden rounded-md border">
-                      <div className="flex items-center gap-2 border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                         <FileText
                           className="size-3"
                           aria-hidden="true"
@@ -2949,10 +2900,6 @@ export function TransactionDetailSheet({
                   onReuseEvidence={onReuseEvidence}
                   onOpen={onOpenAttachment}
                   onRemove={onRemoveAttachment}
-                />
-                <TransactionEvidenceReadinessPanel
-                  summary={evidenceSummary}
-                  hideSensitive={hideSensitive}
                 />
                 {tags.length ? (
                   <div className="rounded-md border bg-card p-3">

@@ -106,12 +106,10 @@ import {
   type AttachmentRecord,
   type AttachmentsCopyData,
   type AttachmentsListData,
-  type AuditEvidenceSummaryData,
   type BreakdownSelection,
   type FeeFilter,
   type FlowChartSelection,
   type JournalEventsData,
-  type SourceFundsLinksData,
   type TableQuickFilter,
 } from "./model";
 
@@ -200,16 +198,6 @@ const TransactionsTable = ({
     "ui.attachments.list",
     { transaction: reuseSourceTransactionId },
     { enabled: reuseDialogOpen && Boolean(reuseSourceTransactionId) },
-  );
-  const sourceFundsLinksQuery = useDaemon<SourceFundsLinksData>(
-    "ui.source_funds.links.list",
-    { target_transaction: detailTransaction?.id ?? "" },
-    { enabled: Boolean(detailTransaction) },
-  );
-  const auditEvidenceSummaryQuery = useDaemon<AuditEvidenceSummaryData>(
-    "ui.audit.evidence.summary",
-    { transaction: detailTransaction?.id ?? "" },
-    { enabled: Boolean(detailTransaction) },
   );
   const journalEventsQuery = useDaemon<JournalEventsData>(
     "ui.journals.events.list",
@@ -369,10 +357,6 @@ const TransactionsTable = ({
       ),
     [reuseSourceAttachmentsQuery.data],
   );
-  const sourceFundsLinks =
-    sourceFundsLinksQuery.data?.data?.links ?? [];
-  const auditEvidenceSummary =
-    auditEvidenceSummaryQuery.data?.data?.transactions?.[0];
   const journalEvents = journalEventsQuery.data?.data?.events ?? [];
   const commercialContext = commercialContextQuery.data?.data;
 
@@ -1426,8 +1410,6 @@ const TransactionsTable = ({
         saveError={saveError}
         nowRate={nowRate}
         attachments={detailTransaction ? attachmentItems : undefined}
-        evidenceSummary={detailTransaction ? auditEvidenceSummary : undefined}
-        sourceFundsLinks={sourceFundsLinks}
         journalEvents={journalEvents}
         commercialContext={commercialContext}
         commercialContextLoading={commercialContextQuery.isLoading}

@@ -4,9 +4,7 @@ import { transactionRecords } from "./demoRecords";
 import { type Tx } from "@/mocks/seed";
 import {
   type AttachmentItem,
-  type AuditEvidenceSummaryData,
   type JournalEventItem,
-  type SourceFundsLinkItem,
   SATS_PER_BTC,
   formatSignedDisplayMoney,
   transactionBtc,
@@ -262,10 +260,6 @@ type AttachmentOpenData = {
   path?: string;
   url?: string;
   attachment: AttachmentRecord;
-};
-
-type SourceFundsLinksData = {
-  links: SourceFundsLinkItem[];
 };
 
 type JournalEventsData = {
@@ -1036,7 +1030,6 @@ export type {
   AttachmentOpenData,
   AttachmentRecord,
   AttachmentsListData,
-  AuditEvidenceSummaryData,
   BreakdownSelection,
   FeeFilter,
   FlowChartClickData,
@@ -1048,7 +1041,6 @@ export type {
   FlowChartSelection,
   JournalEventsData,
   PeriodKey,
-  SourceFundsLinksData,
   SwapCandidate,
   TableQuickFilter,
 };
