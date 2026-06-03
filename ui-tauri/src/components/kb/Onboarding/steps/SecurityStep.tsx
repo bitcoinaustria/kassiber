@@ -1,4 +1,4 @@
-import { KeyRound, Loader2 } from "lucide-react";
+import { KeyRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { canUseTouchIdPassphraseUnlock } from "@/daemon/transport";
@@ -19,7 +19,6 @@ export const SecurityStep = ({
   onSubmit,
   goBack,
   canContinue = true,
-  submitting = false,
 }: StepComponentProps) => {
   const encrypted = form.databaseMode === "sqlcipher";
   const touchIdAvailable = encrypted && canUseTouchIdPassphraseUnlock();
@@ -35,7 +34,6 @@ export const SecurityStep = ({
   return (
     <OnboardingSingleColumnFrame
       title="Protect your books"
-      eyebrow="Security"
       currentStep={currentStep}
       totalSteps={totalSteps}
       goBack={goBack}
@@ -150,14 +148,7 @@ export const SecurityStep = ({
             className="w-full"
             disabled={!canCreateBooks || !canContinue}
           >
-            {submitting ? (
-              <>
-                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                Creating books…
-              </>
-            ) : (
-              "Create books"
-            )}
+            Continue
           </Button>
         </OnboardingStepActions>
       </form>

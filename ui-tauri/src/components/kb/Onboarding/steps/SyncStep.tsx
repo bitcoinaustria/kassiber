@@ -23,7 +23,6 @@ export const SyncStep = ({
     <OnboardingStepFrame>
       <OnboardingStepLeftWrapper
         title="Choose sync connections"
-        eyebrow="Sync"
         currentStep={currentStep}
         totalSteps={totalSteps}
         goBack={goBack}

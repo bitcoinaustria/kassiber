@@ -68,3 +68,10 @@ export const securityStepComplete = (form: OnboardingForm): boolean =>
         form.databasePassphrase,
         form.databasePassphraseConfirm,
       ) === null;
+
+/** Final review is only actionable once all prior setup choices are valid. */
+export const reviewStepComplete = (form: OnboardingForm): boolean =>
+  essentialsStepComplete(form) &&
+  syncStepComplete(form) &&
+  aiStepComplete(form) &&
+  securityStepComplete(form);

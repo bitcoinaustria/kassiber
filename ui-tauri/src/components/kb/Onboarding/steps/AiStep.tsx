@@ -23,7 +23,6 @@ export const AiStep = ({
     <OnboardingStepFrame>
       <OnboardingStepLeftWrapper
         title="Choose AI assistance"
-        eyebrow="AI"
         currentStep={currentStep}
         totalSteps={totalSteps}
         goBack={goBack}

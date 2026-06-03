@@ -29,7 +29,6 @@ export const EssentialsStep = ({
   return (
     <OnboardingSingleColumnFrame
       title="Set up your books"
-      eyebrow="Your books"
       currentStep={currentStep}
       totalSteps={totalSteps}
       goBack={goBack}

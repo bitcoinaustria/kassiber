@@ -130,7 +130,6 @@ export function ImportProjectPanel({
     <OnboardingStepFrame>
       <OnboardingStepLeftWrapper
         title="Open existing books"
-        eyebrow="Import"
         currentStep={0}
         totalSteps={1}
       >

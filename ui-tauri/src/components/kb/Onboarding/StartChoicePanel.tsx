@@ -57,7 +57,6 @@ export function StartChoicePanel({
     <OnboardingStepFrame>
       <OnboardingStepLeftWrapper
         title="Open your local books"
-        eyebrow="Start"
         currentStep={0}
         totalSteps={5}
         showProgress={false}

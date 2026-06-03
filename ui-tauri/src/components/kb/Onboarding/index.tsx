@@ -1,11 +1,10 @@
 import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { ShieldCheck } from "lucide-react";
 
 import { Wordmark } from "@/components/kb/Wordmark";
 import { Button } from "@/components/ui/button";
-import { dispatchDaemonAuthRequired } from "@/daemon/client";
+import { dispatchDaemonAuthRequired, useDaemon } from "@/daemon/client";
 import {
   activateImportProject,
   canImportProjects,
@@ -37,17 +36,19 @@ import {
 import {
   aiStepComplete,
   essentialsStepComplete,
+  reviewStepComplete,
   securityStepComplete,
   syncStepComplete,
 } from "./gates";
 import { AiStep } from "./steps/AiStep";
 import { EssentialsStep } from "./steps/EssentialsStep";
+import { ReviewStep } from "./steps/ReviewStep";
 import { SecurityStep } from "./steps/SecurityStep";
 import { SyncStep } from "./steps/SyncStep";
 import { ImportProjectPanel } from "./ImportProjectPanel";
 import { StartChoicePanel } from "./StartChoicePanel";
 import { OnboardingStepper } from "./stepper";
-import type { OnboardingForm, OnboardingStep } from "./types";
+import type { BackendPreviewRow, OnboardingForm, OnboardingStep } from "./types";
 
 interface OnboardingProps {
   className?: string;
@@ -75,7 +76,16 @@ const DEFAULT_STEPS: OnboardingStep[] = [
     label: "Security",
     isComplete: securityStepComplete,
   },
+  {
+    component: ReviewStep,
+    label: "Review",
+    isComplete: reviewStepComplete,
+  },
 ];
+
+const SECURITY_STEP_INDEX = DEFAULT_STEPS.findIndex(
+  (entry) => entry.component === SecurityStep,
+);
 
 const DEV_MOCK_IDENTITY: Identity = {
   name: "mock books",
@@ -121,6 +131,33 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
   const activeSteps = customSteps ?? DEFAULT_STEPS;
   const step = activeSteps[currentStep];
   const importAvailable = canImportProjects();
+  const backendPublicDefaultsQuery = useDaemon<{
+    backends: Array<{
+      name?: string;
+      kind?: string;
+      url?: string;
+    }>;
+  }>(
+    "ui.backends.public_defaults",
+    undefined,
+    {
+      enabled: flowMode === "setup" && !customSteps,
+      refetchOnMount: "always",
+    },
+  );
+  const backendPreviewRows: BackendPreviewRow[] =
+    backendPublicDefaultsQuery.data?.data?.backends
+      ?.map((backend) => ({
+        name: backend.name?.trim() ?? "",
+        kind: backend.kind?.trim() ?? "",
+        url: backend.url?.trim() ?? "",
+      }))
+      .filter(
+        (backend) =>
+          backend.name.length > 0 &&
+          backend.kind.length > 0 &&
+          backend.url.length > 0,
+      ) ?? [];
 
   const update = <K extends keyof OnboardingForm>(
     key: K,
@@ -349,7 +386,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     setFinishError(null);
     setImportError(null);
     setForm(DEFAULT_FORM);
-    setCurrentStep(DEFAULT_STEPS.length - 1);
+    setCurrentStep(SECURITY_STEP_INDEX);
     setFlowMode("setup");
   };
 
@@ -501,22 +538,16 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       >
         <div className="flex w-full items-center justify-between gap-4">
           <Wordmark size={22} />
-          <div className="flex items-center gap-3">
-            <div className="hidden items-center gap-2 text-xs text-ink-2 sm:flex">
-              <ShieldCheck className="size-4" />
-              Local-first · watch-only · SQLCipher-aware
-            </div>
-            {import.meta.env.DEV && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={skipToMockPreview}
-              >
-                Mock-only preview
-              </Button>
-            )}
-          </div>
+          {import.meta.env.DEV && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={skipToMockPreview}
+            >
+              Mock-only preview
+            </Button>
+          )}
         </div>
 
         {importSelection ? (
@@ -558,7 +589,12 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
               submitting={submitting}
               currentStep={currentStep}
               totalSteps={activeSteps.length}
+              backendPreviewRows={backendPreviewRows}
               goBack={handleGoBack}
+              onJump={(index) => {
+                setFinishError(null);
+                setCurrentStep(index);
+              }}
             />
           </>
         )}
@@ -572,7 +608,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
         <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-ink-3">
           <span>Private keys never enter Kassiber.</span>
           <span>State stays under ~/.kassiber unless overridden.</span>
-          <span>Run backups before tracking real funds.</span>
+          <span>Dodge the SaaS honeypots.</span>
         </div>
       </div>
     </section>

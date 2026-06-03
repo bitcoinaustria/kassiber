@@ -150,6 +150,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.wallets.list",
     "ui.backends.list",
     "ui.backends.options",
+    "ui.backends.public_defaults",
     "ui.backends.settings.list",
     "ui.backends.create",
     "ui.backends.update",

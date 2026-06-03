@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 
 interface OnboardingStepHeaderProps {
   title: string;
-  eyebrow: string;
   stepIndex: number;
   totalSteps: number;
   goBack?: () => void;
@@ -15,7 +14,6 @@ interface OnboardingStepHeaderProps {
 
 export const OnboardingStepHeader = ({
   title,
-  eyebrow,
   stepIndex,
   totalSteps,
   goBack,
@@ -36,11 +34,12 @@ export const OnboardingStepHeader = ({
         </Button>
       )}
       <div>
-        <p className="font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-ink-3">
-          {eyebrow}
-          {showProgress ? ` · ${stepIndex + 1}/${totalSteps}` : null}
-        </p>
-        <h3 className="mt-2 text-2xl font-semibold tracking-normal text-ink md:whitespace-nowrap">
+        {showProgress && (
+          <p className="mb-2 font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-ink-3">
+            Step {stepIndex + 1}/{totalSteps}
+          </p>
+        )}
+        <h3 className="text-2xl font-semibold tracking-normal text-ink md:whitespace-nowrap">
           {title}
         </h3>
       </div>
@@ -85,26 +84,30 @@ export const OnboardingStepFrame = ({ children }: { children: ReactNode }) => {
  */
 export const OnboardingSingleColumnFrame = ({
   title,
-  eyebrow,
   currentStep,
   totalSteps,
   goBack,
   showProgress,
+  className,
   children,
 }: {
   title: string;
-  eyebrow: string;
   currentStep: number;
   totalSteps: number;
   children: ReactNode;
   goBack?: () => void;
   showProgress?: boolean;
+  className?: string;
 }) => {
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-6 rounded-lg border border-line bg-paper px-6 py-8 sm:px-10 sm:py-10">
+    <div
+      className={cn(
+        "mx-auto flex w-full max-w-xl flex-col gap-6 rounded-lg border border-line bg-paper px-6 py-8 sm:px-10 sm:py-10",
+        className,
+      )}
+    >
       <OnboardingStepHeader
         title={title}
-        eyebrow={eyebrow}
         stepIndex={currentStep}
         totalSteps={totalSteps}
         goBack={goBack}
@@ -117,7 +120,6 @@ export const OnboardingSingleColumnFrame = ({
 
 export const OnboardingStepLeftWrapper = ({
   title,
-  eyebrow,
   currentStep,
   totalSteps,
   goBack,
@@ -125,7 +127,6 @@ export const OnboardingStepLeftWrapper = ({
   children,
 }: {
   title: string;
-  eyebrow: string;
   currentStep: number;
   totalSteps: number;
   children: ReactNode;
@@ -137,7 +138,6 @@ export const OnboardingStepLeftWrapper = ({
       <div className="flex h-full w-full max-w-md shrink-0 flex-col gap-6">
         <OnboardingStepHeader
           title={title}
-          eyebrow={eyebrow}
           stepIndex={currentStep}
           totalSteps={totalSteps}
           goBack={goBack}

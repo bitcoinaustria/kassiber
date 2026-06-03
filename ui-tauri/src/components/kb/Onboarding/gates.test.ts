@@ -4,6 +4,7 @@ import { DEFAULT_FORM } from "./constants";
 import {
   aiStepComplete,
   essentialsStepComplete,
+  reviewStepComplete,
   securityStepComplete,
   syncStepComplete,
 } from "./gates";
@@ -122,6 +123,26 @@ describe("securityStepComplete", () => {
     );
     expect(
       securityStepComplete(
+        form({
+          databaseMode: "sqlcipher",
+          databasePassphrase: "correct horse battery",
+          databasePassphraseConfirm: "correct horse battery",
+          recoveryAcknowledged: true,
+        }),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("reviewStepComplete", () => {
+  it("requires all prior setup gates", () => {
+    expect(
+      reviewStepComplete(
+        form({ databaseMode: "sqlcipher", recoveryAcknowledged: false }),
+      ),
+    ).toBe(false);
+    expect(
+      reviewStepComplete(
         form({
           databaseMode: "sqlcipher",
           databasePassphrase: "correct horse battery",
