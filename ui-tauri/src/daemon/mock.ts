@@ -2396,13 +2396,35 @@ export const mockDaemon: DaemonTransport = {
     }
 
     if (req.kind === "ui.rates.rebuild") {
+      const args = (req.args ?? {}) as { pair?: unknown };
+      const overview = fixtures["ui.overview.snapshot"] as {
+        marketRate?: {
+          pair?: string | null;
+          timestamp?: string | null;
+          fetchedAt?: string | null;
+          source?: string | null;
+        };
+      };
+      if (overview.marketRate) {
+        const now = new Date().toISOString();
+        overview.marketRate.pair =
+          typeof args.pair === "string" && args.pair.trim()
+            ? args.pair.trim().toUpperCase()
+            : overview.marketRate.pair;
+        overview.marketRate.timestamp = now;
+        overview.marketRate.fetchedAt = now;
+        overview.marketRate.source = "coinbase-exchange";
+      }
       return {
         kind: "ui.rates.rebuild",
         schema_version: 1,
         request_id: req.request_id,
         data: {
           source: "coinbase-exchange",
-          pair: null,
+          pair:
+            typeof args.pair === "string" && args.pair.trim()
+              ? args.pair.trim().toUpperCase()
+              : null,
           days: 30,
           reprice_transactions: true,
           deleted: {

@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
 
 import {
+  activeMarketFiatCurrency,
   blurClass,
   buildBalanceDrivers,
   buildBalanceRailItems,
@@ -39,6 +40,7 @@ export const BalanceDriversCard = ({
 }) => {
   const { rows, maxValueBtc, netBtc, transactionCount } =
     buildBalanceDrivers(snapshot);
+  const fiatCurrency = activeMarketFiatCurrency(snapshot);
   const netEur = netBtc * snapshot.priceEur;
   const netTone =
     netBtc > 0
@@ -78,7 +80,12 @@ export const BalanceDriversCard = ({
             blurClass(hideSensitive),
           )}
         >
-          {formatSignedDisplayMoney(netEur, snapshot.priceEur, currency)}
+          {formatSignedDisplayMoney(
+            netEur,
+            snapshot.priceEur,
+            currency,
+            fiatCurrency,
+          )}
         </CurrencyToggleText>
       </div>
 
@@ -112,7 +119,12 @@ export const BalanceDriversCard = ({
                     blurClass(hideSensitive),
                   )}
                 >
-                  {formatDriverValue(item.valueBtc, snapshot.priceEur, currency)}
+                  {formatDriverValue(
+                    item.valueBtc,
+                    snapshot.priceEur,
+                    currency,
+                    fiatCurrency,
+                  )}
                 </span>
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-muted">
@@ -148,6 +160,7 @@ export const HoldingsBySourceChart = ({
   currency: Currency;
 }) => {
   const isBitcoinMode = currency === "btc";
+  const fiatCurrency = activeMarketFiatCurrency(snapshot);
   const { active: activeSlice, handleHover: setHoveredSlice } =
     useHoverHighlight<number>();
   const holdingsData = buildHoldingsBySource(snapshot);
@@ -163,6 +176,7 @@ export const HoldingsBySourceChart = ({
     totalHoldings,
     snapshot.priceEur,
     currency,
+    fiatCurrency,
   );
   const singleHolding = holdingsData.length === 1 ? holdingsData[0] : null;
 
@@ -276,6 +290,7 @@ export const HoldingsBySourceChart = ({
                 singleHolding.value,
                 snapshot.priceEur,
                 currency,
+                fiatCurrency,
               )}
             </p>
             <p
@@ -363,6 +378,7 @@ export const HoldingsBySourceChart = ({
                     item.value,
                     snapshot.priceEur,
                     currency,
+                    fiatCurrency,
                   )}
                 </span>
                 <span

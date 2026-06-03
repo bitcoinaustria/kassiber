@@ -18,12 +18,16 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { formatBtc, MISSING_FIAT_LABEL, type Currency } from "@/lib/currency";
+import {
+  formatBtc,
+  formatFiatAmount,
+  MISSING_FIAT_LABEL,
+  type Currency,
+} from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
 import {
   blurClass,
-  currencyFormatter,
   formatSignedDisplayMoney,
   overviewFlowLabels,
   overviewFlowStyles,
@@ -42,12 +46,14 @@ export const RecentTransactionsTable = ({
   hideSensitive,
   currency,
   priceEur,
+  fiatCurrency = "EUR",
 }: {
   className?: string;
   transactions: Transaction[];
   hideSensitive: boolean;
   currency: Currency;
   priceEur: number;
+  fiatCurrency?: string;
 }) => {
   const [statusFilter, setStatusFilter] = React.useState<
     TransactionStatus | "all"
@@ -191,12 +197,17 @@ export const RecentTransactionsTable = ({
               const primaryAmount =
                 currency === "btc"
                   ? formatBtc(amountBtc, { sign: true })
-                  : formatSignedDisplayMoney(t.amount, priceEur, currency);
+                  : formatSignedDisplayMoney(
+                      t.amount,
+                      priceEur,
+                      currency,
+                      fiatCurrency,
+                    );
               const secondaryAmount =
                 currency === "btc"
                   ? t.amount === null
                     ? MISSING_FIAT_LABEL
-                    : currencyFormatter.format(Math.abs(t.amount))
+                    : formatFiatAmount(Math.abs(t.amount), fiatCurrency)
                   : formatBtc(amountBtc);
               const amountTone =
                 flow === "incoming"

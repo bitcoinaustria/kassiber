@@ -551,6 +551,12 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertFalse(overview["status"]["needsJournals"])
         self.assertEqual(overview["status"]["quarantines"], 2)
         self.assertEqual(overview["priceEur"], 65_000)
+        self.assertEqual(overview["marketRate"]["fiatCurrency"], "EUR")
+        self.assertEqual(overview["marketRate"]["pair"], "BTC-EUR")
+        self.assertEqual(overview["marketRate"]["rate"], 65_000)
+        self.assertEqual(overview["marketRate"]["timestamp"], "2026-02-01T00:00:00Z")
+        self.assertEqual(overview["marketRate"]["source"], "manual")
+        self.assertEqual(overview["marketRate"]["fetchedAt"], now)
         self.assertEqual(len(overview["connections"]), 1)
         self.assertEqual(overview["connections"][0]["label"], "Cold Wallet")
         self.assertAlmostEqual(overview["connections"][0]["balance"], 0.899)
@@ -624,6 +630,120 @@ class ReviewRegressionTest(unittest.TestCase):
             build_transactions_resolve_snapshot(conn, {"query": "tx-ui-spend", "limit": 1})
         self.assertEqual(unknown_filter.exception.code, "validation")
         self.assertEqual(unknown_filter.exception.details, {"unknown": ["limit"]})
+
+    def test_overview_market_rate_uses_active_book_fiat_currency(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-03-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-usd", "USD Workspace", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-usd",
+                "ws-usd",
+                "USD Book",
+                "USD",
+                "generic",
+                365,
+                "FIFO",
+                now,
+            ),
+        )
+        conn.executemany(
+            """
+            INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at, granularity, method)
+            VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "BTC-EUR",
+                    "2026-03-01T00:00:00Z",
+                    65_000,
+                    "manual",
+                    "2026-03-01T00:01:00Z",
+                    None,
+                    None,
+                ),
+                (
+                    "BTC-USD",
+                    "2026-03-01T00:00:00Z",
+                    70_000,
+                    "coingecko",
+                    "2026-03-01T00:02:00Z",
+                    "daily",
+                    "close",
+                ),
+            ],
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("wal-usd", "ws-usd", "pf-usd", "USD Wallet", "address", "{}", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "tx-usd-in",
+                "ws-usd",
+                "pf-usd",
+                "wal-usd",
+                "usd-in",
+                "fp-usd-in",
+                "2026-03-01T00:00:00Z",
+                "2026-03-01T00:00:00Z",
+                "inbound",
+                "BTC",
+                btc_to_msat("2.0"),
+                0,
+                "USD",
+                68_000,
+                136_000,
+                "import",
+                "transfer",
+                "USD funding",
+                "Exchange",
+                None,
+                0,
+                "{}",
+                now,
+            ),
+        )
+        set_setting(conn, "context_workspace", "ws-usd")
+        set_setting(conn, "context_profile", "pf-usd")
+        conn.commit()
+
+        overview = build_overview_snapshot(conn)
+
+        self.assertEqual(overview["priceEur"], 65_000)
+        self.assertEqual(overview["priceUsd"], 70_000)
+        self.assertEqual(overview["marketRate"]["fiatCurrency"], "USD")
+        self.assertEqual(overview["marketRate"]["pair"], "BTC-USD")
+        self.assertEqual(overview["marketRate"]["rate"], 70_000)
+        self.assertEqual(overview["marketRate"]["source"], "coingecko")
+        self.assertEqual(overview["marketRate"]["fetchedAt"], "2026-03-01T00:02:00Z")
+        self.assertEqual(overview["marketRate"]["granularity"], "daily")
+        self.assertEqual(overview["marketRate"]["method"], "close")
+        self.assertEqual(overview["fiat"]["fiatCurrency"], "USD")
+        self.assertEqual(overview["fiat"]["eurBalance"], 140_000)
+        self.assertEqual(overview["portfolioSeries"][-1]["valueEur"], 140_000)
 
     def test_overview_connection_balances_use_raw_wallet_transactions_when_journals_are_partial(self):
         conn = open_db(self.data_root)

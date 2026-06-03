@@ -36,6 +36,7 @@ import { ActivityScatterDot } from "./ActivityScatterDot";
 import { ChartControlsSheet } from "./ChartControlsSheet";
 import { ChartStat } from "./ChartStat";
 import {
+  activeMarketFiatCurrency,
   activityMarkerView,
   buildTreasuryChartStats,
   blurClass,
@@ -44,7 +45,7 @@ import {
   DEFAULT_OUTGOING_MARKER_MIN_BTC,
   enrichTreasuryChartData,
   formatBtcAxis,
-  formatEurPrice,
+  formatFiatPrice,
   formatTreasuryDetailDate,
   formatTreasuryTick,
   fullTreasuryBrushRange,
@@ -370,7 +371,7 @@ export const BtcActivityChart = ({
     const gainPct = visibleCostBasis
       ? (gainEur / Math.abs(visibleCostBasis)) * 100
       : null;
-    const fiatCurrency = (snapshot.fiat.fiatCurrency || "EUR").toUpperCase();
+    const fiatCurrency = activeMarketFiatCurrency(snapshot);
     const incomingActivityPoints = activityPoints.filter(
       (point) => point.eventFlow === "incoming",
     );
@@ -756,7 +757,7 @@ export const BtcActivityChart = ({
                     tickFormatter={(value) =>
                       hideSensitive
                         ? ""
-                        : formatEurPrice(Number(value))
+                        : formatFiatPrice(Number(value), fiatCurrency)
                     }
                     width={64}
                   />
@@ -780,6 +781,7 @@ export const BtcActivityChart = ({
                       <TreasuryTooltip
                         hideSensitive={hideSensitive}
                         priceEur={snapshot.priceEur}
+                        fiatCurrency={fiatCurrency}
                       />
                     }
                     cursor={{ strokeOpacity: 0.2 }}
@@ -945,7 +947,7 @@ export const BtcActivityChart = ({
               </div>
               <div className="pointer-events-none flex items-center justify-center">
                 <span className="rotate-90 whitespace-nowrap text-[10px] font-semibold text-muted-foreground">
-                  BTC Price (EUR)
+                  BTC Price ({fiatCurrency})
                 </span>
               </div>
             </div>
@@ -962,6 +964,7 @@ export const BtcActivityChart = ({
                 previousPoint={previousPoint}
                 hideSensitive={hideSensitive}
                 priceEur={snapshot.priceEur}
+                fiatCurrency={fiatCurrency}
                 chartCurrency={currency}
               />
             </div>
