@@ -96,6 +96,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.secrets.init",
   "ui.secrets.change_passphrase",
   "ui.next_actions",
+  "ui.wallets.utxos",
   "ui.wallets.create",
   "ui.wallets.import_file",
   "ui.wallets.preview_descriptor",

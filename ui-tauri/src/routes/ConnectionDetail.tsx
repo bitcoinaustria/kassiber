@@ -27,7 +27,7 @@ import { ConnectionStatusPill } from "@/components/kb/ConnectionStatusPill";
 import { DetailRow } from "@/components/kb/DetailRow";
 import { MetricCard } from "@/components/kb/MetricCard";
 import {
-  CoinsInventoryPanel,
+  UtxosInventoryPanel,
   type WalletUtxosData,
 } from "@/components/kb/wallets";
 import { NodeConnectionDetail } from "./NodeConnectionDetail";
@@ -940,7 +940,7 @@ function ConnectionDetailView({
         />
       </div>
 
-      <CoinsInventoryPanel
+      <UtxosInventoryPanel
         inventory={coinsInventoryQuery.data?.data}
         isLoading={coinsInventoryQuery.isLoading}
         errorMessage={

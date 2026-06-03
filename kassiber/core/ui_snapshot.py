@@ -2850,7 +2850,7 @@ def _wallet_utxo_support(
             "supported": False,
             "status": "unsupported_source",
             "reason": "backend_missing",
-            "message": "This wallet needs a configured Esplora, Electrum, or Bitcoin Core backend before coin inventory can refresh.",
+            "message": "This wallet needs a configured Esplora, Electrum, or Bitcoin Core backend before UTXO inventory can refresh.",
         }
     backend_kind = normalize_backend_kind(backend.get("kind"))
     if backend_kind not in {"esplora", "electrum", "bitcoinrpc"}:
@@ -2858,7 +2858,7 @@ def _wallet_utxo_support(
             "supported": False,
             "status": "unsupported_source",
             "reason": "backend_kind",
-            "message": f"Coin inventory is not implemented for {backend_kind or 'this backend'} sources yet.",
+            "message": f"UTXO inventory is not implemented for {backend_kind or 'this backend'} sources yet.",
         }
     chain = str(config.get("chain") or "bitcoin").strip().lower() or "bitcoin"
     if has_descriptor and backend_kind == "bitcoinrpc":
@@ -2866,7 +2866,7 @@ def _wallet_utxo_support(
             "supported": False,
             "status": "unsupported_source",
             "reason": "bitcoinrpc_descriptor",
-            "message": "Bitcoin Core coin inventory is available for address-backed wallets only.",
+            "message": "Bitcoin Core UTXO inventory is available for address-backed wallets only.",
         }
     if chain == "liquid":
         if not has_descriptor:
@@ -2874,7 +2874,7 @@ def _wallet_utxo_support(
                 "supported": False,
                 "status": "liquid_unblind_blocked",
                 "reason": "liquid_descriptor_required",
-                "message": "Liquid coin inventory requires descriptor-backed outputs so Kassiber can unblind them locally.",
+                "message": "Liquid UTXO inventory requires descriptor-backed outputs so Kassiber can unblind them locally.",
             }
         try:
             descriptor_plan = load_wallet_descriptor_plan_from_config(config)
@@ -2890,7 +2890,7 @@ def _wallet_utxo_support(
                 "supported": False,
                 "status": "liquid_unblind_blocked",
                 "reason": "missing_blinding_keys",
-                "message": "Liquid coin inventory needs private blinding keys before Kassiber can account for outputs.",
+                "message": "Liquid UTXO inventory needs private blinding keys before Kassiber can account for outputs.",
             }
     if not has_descriptor and not has_addresses:
         return {

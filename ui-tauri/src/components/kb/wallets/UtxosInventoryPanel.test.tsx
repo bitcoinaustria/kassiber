@@ -2,9 +2,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  CoinsInventoryPanel,
+  UtxosInventoryPanel,
   type WalletUtxosData,
-} from "./CoinsInventoryPanel";
+} from "./UtxosInventoryPanel";
 
 const baseInventory: WalletUtxosData = {
   wallet: {
@@ -67,7 +67,7 @@ const baseInventory: WalletUtxosData = {
 
 const renderPanel = (inventory: WalletUtxosData | null = baseInventory) =>
   renderToStaticMarkup(
-    <CoinsInventoryPanel
+    <UtxosInventoryPanel
       inventory={inventory}
       hideSensitive={false}
       isRefreshing={false}
@@ -75,12 +75,12 @@ const renderPanel = (inventory: WalletUtxosData | null = baseInventory) =>
     />,
   );
 
-describe("CoinsInventoryPanel", () => {
-  it("renders known UTXO rows with secondary coin wording", () => {
+describe("UtxosInventoryPanel", () => {
+  it("renders known UTXO rows with UTXO wording", () => {
     const html = renderPanel();
 
-    expect(html).toContain("Coins");
-    expect(html).toContain("Currently unspent outputs");
+    expect(html).toContain("UTXOs");
+    expect(html).toContain("Currently unspent transaction outputs");
     expect(html).toContain("₿ 0.12500000");
     expect(html).toContain("receive #3");
     expect(html).toContain("12 conf");
@@ -91,7 +91,7 @@ describe("CoinsInventoryPanel", () => {
       ...baseInventory,
       freshness: { ...baseInventory.freshness, stale: true, status: "stale" },
     });
-    expect(staleHtml).toContain("Refresh this source to update the coin inventory.");
+    expect(staleHtml).toContain("Refresh this source to update the UTXO inventory.");
 
     const emptyHtml = renderPanel({
       ...baseInventory,
@@ -99,7 +99,7 @@ describe("CoinsInventoryPanel", () => {
       totals: [],
       summary: { count: 0 },
     });
-    expect(emptyHtml).toContain("No unspent coins known");
+    expect(emptyHtml).toContain("No UTXOs known");
 
     const unsupportedHtml = renderPanel({
       ...baseInventory,
@@ -113,7 +113,7 @@ describe("CoinsInventoryPanel", () => {
       },
       freshness: { status: "unsupported_source", stale: false },
     });
-    expect(unsupportedHtml).toContain("Coin inventory unavailable");
+    expect(unsupportedHtml).toContain("UTXO inventory unavailable");
     expect(unsupportedHtml).toContain("not a chain-backed watch-only wallet");
 
     const liquidHtml = renderPanel({
@@ -124,11 +124,11 @@ describe("CoinsInventoryPanel", () => {
         supported: false,
         status: "liquid_unblind_blocked",
         reason: "missing_blinding_keys",
-        message: "Liquid coin inventory needs private blinding keys.",
+        message: "Liquid UTXO inventory needs private blinding keys.",
       },
       freshness: { status: "liquid_unblind_blocked", stale: false },
     });
-    expect(liquidHtml).toContain("Liquid outputs need unblinding");
+    expect(liquidHtml).toContain("Liquid UTXOs need unblinding");
     expect(liquidHtml).toContain("private blinding keys");
   });
 });

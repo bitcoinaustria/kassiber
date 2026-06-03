@@ -81,7 +81,7 @@ export interface WalletUtxosData {
   };
 }
 
-interface CoinsInventoryPanelProps {
+interface UtxosInventoryPanelProps {
   inventory?: WalletUtxosData | null;
   isLoading?: boolean;
   errorMessage?: string | null;
@@ -154,19 +154,19 @@ function EmptyState({
   );
 }
 
-export function CoinsInventoryPanel({
+export function UtxosInventoryPanel({
   inventory,
   isLoading = false,
   errorMessage,
   hideSensitive,
   isRefreshing,
   onRefresh,
-}: CoinsInventoryPanelProps) {
+}: UtxosInventoryPanelProps) {
   const rows = inventory?.utxos ?? [];
   const stale = Boolean(inventory?.freshness.stale);
   const unsupported = inventory?.support.supported === false;
   const liquidBlocked = inventory?.support.status === "liquid_unblind_blocked";
-  const title = liquidBlocked ? "Liquid outputs need unblinding" : "Coin inventory unavailable";
+  const title = liquidBlocked ? "Liquid UTXOs need unblinding" : "UTXO inventory unavailable";
 
   return (
     <Card>
@@ -175,13 +175,13 @@ export function CoinsInventoryPanel({
           <div>
             <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
               <Coins className="size-4" aria-hidden="true" />
-              Coins
+              UTXOs
               <span className="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-[10px] font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
                 {rows.length.toLocaleString("en-US")}
               </span>
             </CardTitle>
             <CardDescription>
-              Currently unspent outputs known from this source.
+              Currently unspent transaction outputs known from this source.
             </CardDescription>
           </div>
           <Button
@@ -208,7 +208,7 @@ export function CoinsInventoryPanel({
           </div>
         ) : errorMessage ? (
           <EmptyState
-            title="Coin inventory could not load"
+            title="UTXO inventory could not load"
             body={errorMessage}
             onRefresh={onRefresh}
             isRefreshing={isRefreshing}
@@ -222,13 +222,13 @@ export function CoinsInventoryPanel({
               />
               <div className="space-y-1">
                 <p className="font-medium text-foreground">{title}</p>
-                <p>{inventory?.support.message || "This wallet source does not expose a watch-only coin inventory."}</p>
+                <p>{inventory?.support.message || "This wallet source does not expose a watch-only UTXO inventory."}</p>
               </div>
             </div>
           </div>
         ) : rows.length === 0 ? (
           <EmptyState
-            title="No unspent coins known"
+            title="No UTXOs known"
             body="Refresh this source to update Kassiber's UTXO inventory."
             onRefresh={onRefresh}
             isRefreshing={isRefreshing}
@@ -238,7 +238,7 @@ export function CoinsInventoryPanel({
             {stale ? (
               <div className="flex items-start gap-2 border-b bg-amber-50 px-4 py-2.5 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
                 <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-                <span>Refresh this source to update the coin inventory.</span>
+                <span>Refresh this source to update the UTXO inventory.</span>
               </div>
             ) : null}
             <Table>

@@ -3,6 +3,6 @@ export { WalletsFilters } from "./WalletsFilters";
 export { WalletsMetricGrid } from "./WalletsMetricGrid";
 export { WalletsTable } from "./WalletsTable";
 export {
-  CoinsInventoryPanel,
+  UtxosInventoryPanel,
   type WalletUtxosData,
-} from "./CoinsInventoryPanel";
+} from "./UtxosInventoryPanel";

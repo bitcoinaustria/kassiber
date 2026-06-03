@@ -61,9 +61,9 @@ prerelease and development troubleshooting: request logs include argument keys,
 not argument values, while terminal daemon errors keep their structured
 message, hint, and redacted details when the daemon exposes them.
 
-The Connections detail page includes a read-only Coins table for chain-backed
+The Connections detail page includes a read-only UTXOs table for chain-backed
 wallet sources. Refreshing a descriptor/xpub/address wallet updates the local
-output inventory, and the detail page shows current unspent outputs with
+output inventory, and the detail page shows current unspent transaction outputs with
 outpoint, amount, confirmation state, receive/change branch/index when known,
 address or safe label, and source freshness. The table is inventory-only:
 there is no spend, PSBT, signing, broadcast, coin-selection, or freeze action.

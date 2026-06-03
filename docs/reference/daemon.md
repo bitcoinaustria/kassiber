@@ -133,7 +133,7 @@ scoped to the active profile and returns at most one safe transaction display
 row. It does not create a browser-side search index.
 
 `ui.wallets.utxos` accepts `{"wallet":"<wallet id or label>"}` and returns the
-active local coin inventory for one wallet. Rows include outpoint, txid, vout,
+active local UTXO inventory for one wallet. Rows include outpoint, txid, vout,
 asset, amount, confirmation status, block/time when known, address or safe
 receive/change label, branch/index when known, and first/last-seen freshness.
 The response includes backend name/kind only; it never returns descriptors,

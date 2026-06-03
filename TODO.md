@@ -58,11 +58,11 @@ Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the 
   (replacing #154) and PR #159 adds `kassiber/core/lightning/cln.py`
   (replacing #155); both PRs are scoped to a single adapter so review
   stays focused per-implementation.
-- [x] Add watch-only coin/UTXO inventory for chain-backed wallet sources:
+- [x] Add watch-only UTXO inventory for chain-backed wallet sources:
   source refresh now persists current unspent outputs for Esplora/Electrum
   descriptor/xpub/address wallets and Bitcoin Core address wallets, exposes
   the redacted `ui.wallets.utxos` daemon surface, and renders a desktop
-  wallet-detail Coins table with loading, empty, unsupported, stale, refresh,
+  wallet-detail UTXOs table with loading, empty, unsupported, stale, refresh,
   and Liquid-unblind-blocker states.
 - [ ] Design an opt-in encrypted Lightning **evidence vault** for
   operators who need proof-of-payment for legal disputes, full invoice
