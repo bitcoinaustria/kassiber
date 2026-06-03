@@ -164,13 +164,15 @@ const AUSTRIAN_KENNZAHL_PLACEHOLDER_ROWS: KennzahlRow[] = [
   },
 ];
 
-type ReportExportFormatId = "csv" | "pdf" | "xlsx" | "summary_pdf";
+type ReportExportFormatId = "csv" | "pdf" | "xlsx" | "summary_pdf" | "audit_package";
+type AuditPackageScope = "active_profile" | "source_funds_case";
 type ReportTone = "good" | "warning" | "alert" | "neutral";
 type ReportHref = "/journals" | "/quarantine" | "/transactions" | "/reports";
 
 interface ReportExportResult {
   file?: string;
   dir?: string;
+  manifest?: string;
   filename?: string;
   format?: string;
   scope?: string;
@@ -193,6 +195,9 @@ interface ReportExportResult {
   };
   wallets?: Array<{ id?: string; label?: string }>;
   snapshot?: boolean;
+  transaction_count?: number;
+  evidence_file_count?: number;
+  url_reference_count?: number;
 }
 
 interface WalletListData {
@@ -203,6 +208,18 @@ interface WalletListData {
     chain?: string;
     transaction_count?: number;
   }>;
+}
+
+interface SourceFundsCaseRow {
+  id: string;
+  label?: string;
+  target_external_id?: string;
+  status?: string;
+  created_at?: string;
+}
+
+interface SourceFundsCasesData {
+  cases: SourceFundsCaseRow[];
 }
 
 interface ReportReadiness {
@@ -221,6 +238,7 @@ function reportExportDefaultFilename(
   year: number,
   austrian: boolean,
 ) {
+  if (format === "audit_package") return `kassiber-audit-package-${year}`;
   if (format === "summary_pdf") return `kassiber-summary-report-${year}.pdf`;
   if (austrian) {
     if (format === "pdf") return `kassiber-austrian-e1kv-${year}.pdf`;
@@ -236,6 +254,7 @@ function reportExportSaveFilters(
   format: ReportExportFormatId,
   payload?: ReportExportResult,
 ) {
+  if (format === "audit_package") return undefined;
   if (payload?.format === "csv" && payload.files?.length) return undefined;
   if (format === "pdf" || format === "summary_pdf") {
     return [{ name: "PDF report", extensions: ["pdf"] }];
@@ -366,10 +385,23 @@ function ReportsView({
   );
   const [summarySnapshot, setSummarySnapshot] = useState(true);
   const [summaryWalletIds, setSummaryWalletIds] = useState<string[]>([]);
+  const [auditScope, setAuditScope] =
+    useState<AuditPackageScope>("active_profile");
+  const [auditCaseId, setAuditCaseId] = useState("");
+  const [auditIncludeCopiedAttachments, setAuditIncludeCopiedAttachments] =
+    useState(true);
+  const [auditIncludeUrlReferences, setAuditIncludeUrlReferences] =
+    useState(true);
+  const [auditIncludeJournalState, setAuditIncludeJournalState] =
+    useState(true);
+  const [auditIncludeReviewState, setAuditIncludeReviewState] =
+    useState(true);
   const addNotification = useUiStore((s) => s.addNotification);
   const exportCsv = useDaemonMutation<ReportExportResult>("ui.reports.export_csv");
   const exportXlsx = useDaemonMutation<ReportExportResult>("ui.reports.export_xlsx");
   const exportPdf = useDaemonMutation<ReportExportResult>("ui.reports.export_pdf");
+  const exportAuditPackage =
+    useDaemonMutation<ReportExportResult>("ui.reports.export_audit_package");
   const exportSummaryPdf =
     useDaemonMutation<ReportExportResult>("ui.reports.export_summary_pdf");
   const exportAustrianPdf =
@@ -379,11 +411,23 @@ function ReportsView({
   const exportAustrianCsv =
     useDaemonMutation<ReportExportResult>("ui.reports.export_austrian_e1kv_csv");
   const activeProfileIsAustrian = report.jurisdictionCode === "AT";
+  const sourceFundsCasesQuery = useDaemon<SourceFundsCasesData>(
+    "ui.source_funds.cases.list",
+  );
+  const sourceFundsCases = sourceFundsCasesQuery.data?.data?.cases ?? [];
   const walletChoices = useMemo(
     () => wallets.filter((wallet) => wallet.id || wallet.label),
     [wallets],
   );
   const showWalletPicker = walletChoices.length > 1;
+  useEffect(() => {
+    if (auditScope !== "source_funds_case") return;
+    if (auditCaseId) return;
+    const firstCase = sourceFundsCases[0];
+    if (firstCase?.id) {
+      setAuditCaseId(firstCase.id);
+    }
+  }, [auditCaseId, auditScope, sourceFundsCases]);
   useEffect(() => {
     setSummaryWalletIds((current) => {
       const allIds = walletChoices.map((wallet) => wallet.id ?? wallet.label);
@@ -446,6 +490,8 @@ function ReportsView({
     const mutation =
       format === "summary_pdf"
         ? exportSummaryPdf
+        : format === "audit_package"
+          ? exportAuditPackage
         : format === "csv"
         ? activeProfileIsAustrian
           ? exportAustrianCsv
@@ -465,6 +511,16 @@ function ReportsView({
             include_snapshot: summarySnapshot,
             ...(showWalletPicker ? { wallets: summaryWalletIds } : {}),
           }
+        : format === "audit_package"
+          ? {
+              include_copied_attachments: auditIncludeCopiedAttachments,
+              include_url_references: auditIncludeUrlReferences,
+              include_journal_state: auditIncludeJournalState,
+              include_review_state: auditIncludeReviewState,
+              ...(auditScope === "source_funds_case" && auditCaseId
+                ? { source_funds_case: auditCaseId }
+                : {}),
+            }
         : format === "pdf"
         ? activeProfileIsAustrian
           ? { year: exportYear }
@@ -479,7 +535,9 @@ function ReportsView({
         const exportPath = payload?.file ?? payload?.dir ?? "";
         const filename = (payload?.filename ?? basename(exportPath)) || "report";
         const detail =
-          payload?.format === "pdf" && payload.pages
+          payload?.scope === "audit_package"
+            ? `${payload.transaction_count ?? 0} transaction${payload.transaction_count === 1 ? "" : "s"} · ${payload.evidence_file_count ?? 0} file${payload.evidence_file_count === 1 ? "" : "s"} · ${payload.url_reference_count ?? 0} link${payload.url_reference_count === 1 ? "" : "s"}`
+          : payload?.format === "pdf" && payload.pages
             ? `${payload.pages} page${payload.pages === 1 ? "" : "s"}`
             : payload?.format === "xlsx" && payload.sheets?.length
               ? `${payload.sheets.length} sheet${payload.sheets.length === 1 ? "" : "s"}`
@@ -495,7 +553,9 @@ function ReportsView({
           try {
             const destination = await saveFile({
               title:
-                payload?.format === "csv" && payload.files?.length
+                payload?.scope === "audit_package"
+                  ? "Save audit package"
+                  : payload?.format === "csv" && payload.files?.length
                   ? "Save CSV bundle"
                   : "Save report export",
               defaultPath: reportExportDefaultFilename(
@@ -644,7 +704,24 @@ function ReportsView({
             onExport={handleExport}
             onOpenExport={handleOpenExport}
           />
-          <HandoffScopePanel />
+          <HandoffScopePanel
+            activeExport={activeExport}
+            successfulExport={successfulExport}
+            auditScope={auditScope}
+            onAuditScopeChange={setAuditScope}
+            auditCaseId={auditCaseId}
+            onAuditCaseIdChange={setAuditCaseId}
+            sourceFundsCases={sourceFundsCases}
+            includeCopiedAttachments={auditIncludeCopiedAttachments}
+            onIncludeCopiedAttachmentsChange={setAuditIncludeCopiedAttachments}
+            includeUrlReferences={auditIncludeUrlReferences}
+            onIncludeUrlReferencesChange={setAuditIncludeUrlReferences}
+            includeJournalState={auditIncludeJournalState}
+            onIncludeJournalStateChange={setAuditIncludeJournalState}
+            includeReviewState={auditIncludeReviewState}
+            onIncludeReviewStateChange={setAuditIncludeReviewState}
+            onExport={handleExport}
+          />
           <SummaryPdfPanel
             year={effectiveYear}
             wallets={walletChoices}
@@ -1220,8 +1297,45 @@ function ReportFilesPanel({
   );
 }
 
-function HandoffScopePanel() {
+function HandoffScopePanel({
+  activeExport,
+  successfulExport,
+  auditScope,
+  onAuditScopeChange,
+  auditCaseId,
+  onAuditCaseIdChange,
+  sourceFundsCases,
+  includeCopiedAttachments,
+  onIncludeCopiedAttachmentsChange,
+  includeUrlReferences,
+  onIncludeUrlReferencesChange,
+  includeJournalState,
+  onIncludeJournalStateChange,
+  includeReviewState,
+  onIncludeReviewStateChange,
+  onExport,
+}: {
+  activeExport: ReportExportFormatId | null;
+  successfulExport: { format: ReportExportFormatId; year: number } | null;
+  auditScope: AuditPackageScope;
+  onAuditScopeChange: (scope: AuditPackageScope) => void;
+  auditCaseId: string;
+  onAuditCaseIdChange: (caseId: string) => void;
+  sourceFundsCases: SourceFundsCaseRow[];
+  includeCopiedAttachments: boolean;
+  onIncludeCopiedAttachmentsChange: (value: boolean) => void;
+  includeUrlReferences: boolean;
+  onIncludeUrlReferencesChange: (value: boolean) => void;
+  includeJournalState: boolean;
+  onIncludeJournalStateChange: (value: boolean) => void;
+  includeReviewState: boolean;
+  onIncludeReviewStateChange: (value: boolean) => void;
+  onExport: (format: ReportExportFormatId) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
+  const auditExportDisabled =
+    Boolean(activeExport) ||
+    (auditScope === "source_funds_case" && !auditCaseId);
 
   return (
     <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
@@ -1267,16 +1381,50 @@ function HandoffScopePanel() {
         <div className="px-4 pb-4 sm:px-5">
           <div className="divide-y rounded-lg border bg-background/50">
             {HANDOFF_EXPORT_MODES.map((mode) => (
-              <HandoffModeRow key={mode.id} mode={mode} />
+              <HandoffModeRow
+                key={mode.id}
+                mode={mode}
+                activeExport={activeExport}
+                auditExportDisabled={auditExportDisabled}
+                auditSuccess={successfulExport?.format === "audit_package"}
+                onExport={onExport}
+              />
             ))}
           </div>
+          <AuditPackageControls
+            scope={auditScope}
+            onScopeChange={onAuditScopeChange}
+            caseId={auditCaseId}
+            onCaseIdChange={onAuditCaseIdChange}
+            cases={sourceFundsCases}
+            includeCopiedAttachments={includeCopiedAttachments}
+            onIncludeCopiedAttachmentsChange={onIncludeCopiedAttachmentsChange}
+            includeUrlReferences={includeUrlReferences}
+            onIncludeUrlReferencesChange={onIncludeUrlReferencesChange}
+            includeJournalState={includeJournalState}
+            onIncludeJournalStateChange={onIncludeJournalStateChange}
+            includeReviewState={includeReviewState}
+            onIncludeReviewStateChange={onIncludeReviewStateChange}
+          />
         </div>
       ) : null}
     </div>
   );
 }
 
-function HandoffModeRow({ mode }: { mode: HandoffExportMode }) {
+function HandoffModeRow({
+  mode,
+  activeExport,
+  auditExportDisabled,
+  auditSuccess,
+  onExport,
+}: {
+  mode: HandoffExportMode;
+  activeExport: ReportExportFormatId | null;
+  auditExportDisabled: boolean;
+  auditSuccess: boolean;
+  onExport: (format: ReportExportFormatId) => void;
+}) {
   const Icon =
     mode.id === "tax_advisor_report"
       ? FileCheck2
@@ -1325,7 +1473,141 @@ function HandoffModeRow({ mode }: { mode: HandoffExportMode }) {
           </p>
         </div>
       </div>
+      {mode.id === "audit_package" ? (
+        <Button
+          type="button"
+          size="sm"
+          variant={auditSuccess ? "default" : "outline"}
+          className="h-8 shrink-0 gap-2"
+          disabled={auditExportDisabled}
+          onClick={() => onExport("audit_package")}
+        >
+          {activeExport === "audit_package" ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          ) : auditSuccess ? (
+            <CheckCircle2 className="size-4 animate-pulse" aria-hidden="true" />
+          ) : (
+            <Download className="size-4" aria-hidden="true" />
+          )}
+          <span className="hidden sm:inline">{auditSuccess ? "Done" : "Export"}</span>
+        </Button>
+      ) : null}
     </div>
+  );
+}
+
+function AuditPackageControls({
+  scope,
+  onScopeChange,
+  caseId,
+  onCaseIdChange,
+  cases,
+  includeCopiedAttachments,
+  onIncludeCopiedAttachmentsChange,
+  includeUrlReferences,
+  onIncludeUrlReferencesChange,
+  includeJournalState,
+  onIncludeJournalStateChange,
+  includeReviewState,
+  onIncludeReviewStateChange,
+}: {
+  scope: AuditPackageScope;
+  onScopeChange: (scope: AuditPackageScope) => void;
+  caseId: string;
+  onCaseIdChange: (caseId: string) => void;
+  cases: SourceFundsCaseRow[];
+  includeCopiedAttachments: boolean;
+  onIncludeCopiedAttachmentsChange: (value: boolean) => void;
+  includeUrlReferences: boolean;
+  onIncludeUrlReferencesChange: (value: boolean) => void;
+  includeJournalState: boolean;
+  onIncludeJournalStateChange: (value: boolean) => void;
+  includeReviewState: boolean;
+  onIncludeReviewStateChange: (value: boolean) => void;
+}) {
+  return (
+    <div className="mt-3 rounded-lg border bg-background/50 p-3">
+      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="space-y-1.5">
+          <LabelText>Audit package scope</LabelText>
+          <Select value={scope} onValueChange={(value) => onScopeChange(value as AuditPackageScope)}>
+            <SelectTrigger className="h-9">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active_profile">Active book/profile</SelectItem>
+              <SelectItem value="source_funds_case" disabled={!cases.length}>
+                Saved source-funds case
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          {scope === "source_funds_case" ? (
+            <Select value={caseId} onValueChange={onCaseIdChange}>
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Choose a saved case" />
+              </SelectTrigger>
+              <SelectContent>
+                {cases.map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    {item.label || item.target_external_id || item.id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <AuditPackageCheckbox
+            label="Copied files"
+            checked={includeCopiedAttachments}
+            onCheckedChange={onIncludeCopiedAttachmentsChange}
+          />
+          <AuditPackageCheckbox
+            label="URL references"
+            checked={includeUrlReferences}
+            onCheckedChange={onIncludeUrlReferencesChange}
+          />
+          <AuditPackageCheckbox
+            label="Journal state"
+            checked={includeJournalState}
+            onCheckedChange={onIncludeJournalStateChange}
+          />
+          <AuditPackageCheckbox
+            label="Review state"
+            checked={includeReviewState}
+            onCheckedChange={onIncludeReviewStateChange}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LabelText({ children }: { children: ReactNode }) {
+  return (
+    <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+      {children}
+    </div>
+  );
+}
+
+function AuditPackageCheckbox({
+  label,
+  checked,
+  onCheckedChange,
+}: {
+  label: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex min-h-9 items-center gap-2 rounded-md border bg-card px-2 text-xs">
+      <Checkbox
+        checked={checked}
+        onCheckedChange={(value) => onCheckedChange(value === true)}
+      />
+      <span>{label}</span>
+    </label>
   );
 }
 

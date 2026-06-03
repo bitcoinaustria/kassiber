@@ -27,6 +27,10 @@ import {
 import * as React from "react";
 
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
+import {
+  TransactionEvidenceReadinessPanel,
+  type AuditEvidenceTransactionSummary,
+} from "@/components/transactions/TransactionEvidencePanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -601,6 +605,8 @@ export type AttachmentItem = {
   label: string;
   detail?: string;
   href?: string;
+  copiedFromAttachmentId?: string;
+  copiedFromTransactionId?: string;
 };
 
 export type SourceFundsLinkItem = {
@@ -843,6 +849,7 @@ function AttachmentsPanel({
   hideSensitive,
   onAddFiles,
   onAddLinks,
+  onReuseEvidence,
   onOpen,
   onRemove,
 }: {
@@ -850,6 +857,7 @@ function AttachmentsPanel({
   hideSensitive: boolean;
   onAddFiles?: (paths: string[]) => void | Promise<void>;
   onAddLinks?: (urls: string[]) => void | Promise<void>;
+  onReuseEvidence?: () => void;
   onOpen?: (item: AttachmentItem) => void;
   onRemove?: (item: AttachmentItem) => void;
 }) {
@@ -936,6 +944,11 @@ function AttachmentsPanel({
                         {item.detail}
                       </div>
                     ) : null}
+                    {item.copiedFromAttachmentId ? (
+                      <Badge variant="secondary" className="mt-1 rounded-md">
+                        reused
+                      </Badge>
+                    ) : null}
                   </button>
                 ) : (
                   <div className="min-w-0 flex-1" title={hiddenTitle}>
@@ -956,6 +969,11 @@ function AttachmentsPanel({
                       >
                         {item.detail}
                       </div>
+                    ) : null}
+                    {item.copiedFromAttachmentId ? (
+                      <Badge variant="secondary" className="mt-1 rounded-md">
+                        reused
+                      </Badge>
                     ) : null}
                   </div>
                 )}
@@ -992,7 +1010,7 @@ function AttachmentsPanel({
           {pickerError}
         </p>
       ) : null}
-      <div className="grid grid-cols-2 gap-1.5">
+      <div className="grid gap-1.5 sm:grid-cols-3">
         <Button
           type="button"
           variant="outline"
@@ -1019,6 +1037,17 @@ function AttachmentsPanel({
         >
           <Link2 className="size-3.5" aria-hidden="true" />
           Attach links
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          disabled={!onReuseEvidence}
+          onClick={onReuseEvidence}
+        >
+          <Repeat2 className="size-3.5" aria-hidden="true" />
+          Reuse
         </Button>
       </div>
       {onAddLinks ? (
@@ -1202,12 +1231,14 @@ export function TransactionDetailSheet({
   saveError,
   nowRate,
   attachments,
+  evidenceSummary,
   sourceFundsLinks = [],
   journalEvents = [],
   commercialContext,
   commercialContextLoading,
   onAddAttachmentFiles,
   onAddAttachmentLinks,
+  onReuseEvidence,
   onOpenAttachment,
   onRemoveAttachment,
   onUnpair,
@@ -1229,12 +1260,14 @@ export function TransactionDetailSheet({
   saveError?: string | null;
   nowRate?: number | null;
   attachments?: AttachmentItem[];
+  evidenceSummary?: AuditEvidenceTransactionSummary;
   sourceFundsLinks?: SourceFundsLinkItem[];
   journalEvents?: JournalEventItem[];
   commercialContext?: CommercialContextData;
   commercialContextLoading?: boolean;
   onAddAttachmentFiles?: (paths: string[]) => void | Promise<void>;
   onAddAttachmentLinks?: (urls: string[]) => void | Promise<void>;
+  onReuseEvidence?: () => void;
   onOpenAttachment?: (item: AttachmentItem) => void;
   onRemoveAttachment?: (item: AttachmentItem) => void;
   onUnpair?: (pairId: string) => void | Promise<void>;
@@ -2913,8 +2946,13 @@ export function TransactionDetailSheet({
                   hideSensitive={hideSensitive}
                   onAddFiles={onAddAttachmentFiles}
                   onAddLinks={onAddAttachmentLinks}
+                  onReuseEvidence={onReuseEvidence}
                   onOpen={onOpenAttachment}
                   onRemove={onRemoveAttachment}
+                />
+                <TransactionEvidenceReadinessPanel
+                  summary={evidenceSummary}
+                  hideSensitive={hideSensitive}
                 />
                 {tags.length ? (
                   <div className="rounded-md border bg-card p-3">

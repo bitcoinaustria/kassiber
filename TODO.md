@@ -218,8 +218,21 @@ top of the monolith.
 - [x] Add deterministic-hop bulk review for consolidation/self-transfer chains while keeping weak time/amount and chain-observation suggestions manual
 - [x] Add local report-shape rollups for overview, narrative, data sources, source mix, simplified flow charts, and level-by-level flow details, and simplify the desktop default workflow while keeping advanced review controls optional
 - [x] Add a basic Austria/EUR source-funds report context with bilingual title, evidence checklist, and fictitious local demo generator
+- [x] Add a DB-backed Reports audit package export for trusted auditor
+  handoff: deterministic `manifest.json`, selected managed evidence files,
+  URL references as labels/links, transaction evidence readiness warnings,
+  source-funds review state, journal context, and explicit exclusion of
+  descriptors/xpubs/backend credentials/logs/AI settings/technical wallet
+  evidence.
+- [x] Add manual transaction-detail evidence reuse: choose another transaction,
+  copy selected URL references as new rows, duplicate managed file attachments
+  under new attachment ids, preserve provenance, and surface copied evidence in
+  readiness/audit package manifests.
 - [ ] Add graph visualization polish for dense source-funds cases after real-user feedback; keep the current editor workflow as the source of truth
 - [ ] Add optional configured-backend chain observations with an explicit public-backend privacy warning; keep them weak suggestions unless reviewed
+- [ ] Add optional OCR/photo/invoice extraction after the evidence review and
+  audit package workflow has real-user feedback; keep suggestions review-gated
+  and never auto-mark evidence complete.
 
 ## Phase 1 - Desktop UI
 

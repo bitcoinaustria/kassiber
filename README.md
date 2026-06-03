@@ -70,8 +70,10 @@ workflow almost nobody else covers.
   21bitcoin, Pocket Bitcoin, Strike, generic CSV/JSON, BIP329 labels.
 - **Review workflows** — notes, tags, exclusions, attachments; reviewed
   transfer/swap pairing for Lightning, Liquid peg-in/peg-out, and submarine
-  swaps; reviewed source-of-funds reports with immutable saved cases and
-  gated PDF export.
+  swaps; reviewed source-of-funds reports with immutable saved cases,
+  gated PDF export, transaction evidence readiness, manual evidence reuse
+  between transactions, and a DB-backed audit package manifest/export for
+  trusted handoff.
 - **Tax & reports** — RP2 lot accounting (FIFO/LIFO/HIFO/LOFO and moving
   average); Austrian § 27b EStG with E 1kv PDF / XLSX / CSV; summary,
   balance sheet, capital gains, portfolio, balance history; local

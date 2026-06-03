@@ -56,6 +56,7 @@ import { useUiStore } from "@/store/ui";
 import {
   ExplorerOpenDialog,
   TransactionDetailSheet,
+  TransactionEvidenceReuseDialog,
   allPaymentMethods,
   allTransactionFlows,
   allTransactionStatuses,
@@ -103,7 +104,9 @@ import {
   updateTransactionDetailParams,
   type AttachmentOpenData,
   type AttachmentRecord,
+  type AttachmentsCopyData,
   type AttachmentsListData,
+  type AuditEvidenceSummaryData,
   type BreakdownSelection,
   type FeeFilter,
   type FlowChartSelection,
@@ -168,6 +171,9 @@ const TransactionsTable = ({
   const [detailTransaction, setDetailTransaction] =
     React.useState<Transaction | null>(null);
   const [detailInitialTab, setDetailInitialTab] = React.useState("details");
+  const [reuseDialogOpen, setReuseDialogOpen] = React.useState(false);
+  const [reuseSourceTransactionId, setReuseSourceTransactionId] =
+    React.useState("");
   const pendingDetailLinkRef = React.useRef(readTransactionDetailParams());
   const tableRef = React.useRef<HTMLDivElement>(null);
   const [drafts, setDrafts] = React.useState<Record<string, TransactionEditDraft>>(
@@ -176,6 +182,9 @@ const TransactionsTable = ({
   const [saveError, setSaveError] = React.useState<string | null>(null);
   const metadataUpdate = useDaemonMutation("ui.transactions.metadata.update");
   const attachmentAdd = useDaemonMutation<AttachmentRecord>("ui.attachments.add");
+  const attachmentCopy = useDaemonMutation<AttachmentsCopyData>(
+    "ui.attachments.copy",
+  );
   const attachmentRemove = useDaemonMutation<AttachmentRecord>(
     "ui.attachments.remove",
   );
@@ -187,9 +196,19 @@ const TransactionsTable = ({
     { transaction: detailTransaction?.id ?? "" },
     { enabled: Boolean(detailTransaction) },
   );
+  const reuseSourceAttachmentsQuery = useDaemon<AttachmentsListData>(
+    "ui.attachments.list",
+    { transaction: reuseSourceTransactionId },
+    { enabled: reuseDialogOpen && Boolean(reuseSourceTransactionId) },
+  );
   const sourceFundsLinksQuery = useDaemon<SourceFundsLinksData>(
     "ui.source_funds.links.list",
     { target_transaction: detailTransaction?.id ?? "" },
+    { enabled: Boolean(detailTransaction) },
+  );
+  const auditEvidenceSummaryQuery = useDaemon<AuditEvidenceSummaryData>(
+    "ui.audit.evidence.summary",
+    { transaction: detailTransaction?.id ?? "" },
     { enabled: Boolean(detailTransaction) },
   );
   const journalEventsQuery = useDaemon<JournalEventsData>(
@@ -324,8 +343,36 @@ const TransactionsTable = ({
       ),
     [attachmentsQuery.data],
   );
+  const evidenceSourceTransactions = React.useMemo(
+    () =>
+      detailTransaction
+        ? records.filter((txn) => txn.id !== detailTransaction.id)
+        : [],
+    [detailTransaction, records],
+  );
+  React.useEffect(() => {
+    if (!reuseDialogOpen) return;
+    if (
+      reuseSourceTransactionId &&
+      evidenceSourceTransactions.some(
+        (transaction) => transaction.id === reuseSourceTransactionId,
+      )
+    ) {
+      return;
+    }
+    setReuseSourceTransactionId(evidenceSourceTransactions[0]?.id ?? "");
+  }, [evidenceSourceTransactions, reuseDialogOpen, reuseSourceTransactionId]);
+  const reuseSourceAttachmentItems = React.useMemo(
+    () =>
+      (reuseSourceAttachmentsQuery.data?.data?.attachments ?? []).map(
+        attachmentRecordToItem,
+      ),
+    [reuseSourceAttachmentsQuery.data],
+  );
   const sourceFundsLinks =
     sourceFundsLinksQuery.data?.data?.links ?? [];
+  const auditEvidenceSummary =
+    auditEvidenceSummaryQuery.data?.data?.transactions?.[0];
   const journalEvents = journalEventsQuery.data?.data?.events ?? [];
   const commercialContext = commercialContextQuery.data?.data;
 
@@ -1379,6 +1426,7 @@ const TransactionsTable = ({
         saveError={saveError}
         nowRate={nowRate}
         attachments={detailTransaction ? attachmentItems : undefined}
+        evidenceSummary={detailTransaction ? auditEvidenceSummary : undefined}
         sourceFundsLinks={sourceFundsLinks}
         journalEvents={journalEvents}
         commercialContext={commercialContext}
@@ -1413,6 +1461,13 @@ const TransactionsTable = ({
             dedupeKey: `attachments-links-${detailTransaction.id}`,
           });
         }}
+        onReuseEvidence={
+          evidenceSourceTransactions.length
+            ? () => {
+                setReuseDialogOpen(true);
+              }
+            : undefined
+        }
         onOpenAttachment={async (item) => {
           const result = await attachmentOpen.mutateAsync({
             attachment: item.id,
@@ -1465,6 +1520,7 @@ const TransactionsTable = ({
         onOpenChange={(open) => {
           if (!open) {
             setDetailTransaction(null);
+            setReuseDialogOpen(false);
             setSaveError(null);
             updateTransactionDetailParams(null);
           }
@@ -1499,6 +1555,34 @@ const TransactionsTable = ({
             );
             throw error;
           }
+        }}
+      />
+      <TransactionEvidenceReuseDialog
+        open={reuseDialogOpen}
+        onOpenChange={setReuseDialogOpen}
+        targetTransaction={detailTransaction}
+        sourceTransactions={evidenceSourceTransactions}
+        sourceTransactionId={reuseSourceTransactionId}
+        onSourceTransactionIdChange={setReuseSourceTransactionId}
+        sourceAttachments={reuseSourceAttachmentItems}
+        isLoadingSourceAttachments={reuseSourceAttachmentsQuery.isLoading}
+        isCopying={attachmentCopy.isPending}
+        hideSensitive={hideSensitive}
+        onCopy={async (attachmentIds) => {
+          if (!detailTransaction || !reuseSourceTransactionId) return;
+          const result = await attachmentCopy.mutateAsync({
+            transaction: detailTransaction.id,
+            source_transaction: reuseSourceTransactionId,
+            attachments: attachmentIds,
+          });
+          const copied = result.data?.copied ?? attachmentIds.length;
+          setReuseDialogOpen(false);
+          useUiStore.getState().addNotification({
+            title: "Evidence reused",
+            body: `${copied} evidence item${copied === 1 ? "" : "s"} copied to this transaction.`,
+            tone: "success",
+            dedupeKey: `attachments-copy-${detailTransaction.id}`,
+          });
         }}
       />
     </>

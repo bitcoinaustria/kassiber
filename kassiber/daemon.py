@@ -80,6 +80,7 @@ from .cli.handlers import (
     sync_btcpay_commercial_provenance,
     sync_wallet,
 )
+from .core import audit_package as core_audit_package
 from .core import commercial as core_commercial
 from .core import attachments as core_attachments
 from .core import lightning as core_lightning
@@ -191,6 +192,7 @@ SUPPORTED_KINDS = (
     "ui.transactions.metadata.update",
     "ui.attachments.list",
     "ui.attachments.add",
+    "ui.attachments.copy",
     "ui.attachments.remove",
     "ui.attachments.open",
     "ui.wallets.list",
@@ -217,6 +219,7 @@ SUPPORTED_KINDS = (
     "ui.reports.export_austrian_e1kv_pdf",
     "ui.reports.export_austrian_e1kv_xlsx",
     "ui.reports.export_austrian_e1kv_csv",
+    "ui.reports.export_audit_package",
     "ui.source_funds.preview",
     "ui.source_funds.cases.save",
     "ui.source_funds.cases.list",
@@ -276,6 +279,7 @@ SUPPORTED_KINDS = (
     "ui.rates.rebuild",
     "ui.report.blockers",
     "ui.audit.changes_since_last_answer",
+    "ui.audit.evidence.summary",
     "ui.maintenance.settings",
     "ui.maintenance.configure",
     "ui.maintenance.run",
@@ -1357,6 +1361,15 @@ def _source_funds_hooks() -> core_source_funds.SourceFundsHooks:
     )
 
 
+def _audit_package_hooks() -> core_audit_package.AuditPackageHooks:
+    report_hooks = _report_hooks()
+    return core_audit_package.AuditPackageHooks(
+        resolve_scope=resolve_scope,
+        resolve_transaction=resolve_transaction,
+        now_iso=report_hooks.now_iso,
+    )
+
+
 def _commercial_hooks() -> core_commercial.CommercialHooks:
     return core_commercial.CommercialHooks(
         resolve_scope=resolve_scope,
@@ -1674,6 +1687,8 @@ def _ui_source_funds_payload(
                 a.media_type,
                 a.size_bytes,
                 a.sha256,
+                a.copied_from_attachment_id,
+                a.copied_from_transaction_id,
                 a.created_at,
                 t.id AS transaction_id,
                 t.external_id,
@@ -1699,6 +1714,8 @@ def _ui_source_funds_payload(
                     "media_type": row["media_type"],
                     "size_bytes": row["size_bytes"],
                     "sha256": row["sha256"],
+                    "copied_from_attachment_id": row["copied_from_attachment_id"] or "",
+                    "copied_from_transaction_id": row["copied_from_transaction_id"] or "",
                     "created_at": row["created_at"],
                     "transaction_id": row["transaction_id"],
                     "external_id": row["external_id"],
@@ -1874,6 +1891,59 @@ def _ui_source_funds_payload(
     raise AppError(f"unsupported source-funds daemon export kind: {kind}", code="validation")
 
 
+def _optional_bool_arg(args: dict[str, Any], key: str, default: bool) -> bool:
+    value = args.get(key, default)
+    if not isinstance(value, bool):
+        raise AppError(
+            f"{key} must be a boolean",
+            code="validation",
+            details={"type": type(value).__name__},
+            retryable=False,
+        )
+    return value
+
+
+def _audit_package_transaction_refs(args: dict[str, Any]) -> list[str] | None:
+    transaction = _optional_str_arg(args, "transaction")
+    transactions = args.get("transactions")
+    if transaction and transactions is not None:
+        raise AppError(
+            "Use either transaction or transactions, not both",
+            code="validation",
+            retryable=False,
+        )
+    if transaction:
+        return [transaction]
+    if transactions is None:
+        return None
+    if not isinstance(transactions, list) or not all(isinstance(item, str) and item.strip() for item in transactions):
+        raise AppError(
+            "transactions must be an array of non-empty strings",
+            code="validation",
+            retryable=False,
+        )
+    return [item.strip() for item in transactions]
+
+
+def _audit_package_options(args: dict[str, Any]) -> dict[str, Any]:
+    transaction_refs = _audit_package_transaction_refs(args)
+    source_funds_case_ref = _optional_str_arg(args, "source_funds_case")
+    if transaction_refs and source_funds_case_ref:
+        raise AppError(
+            "Use either transaction(s) or source_funds_case, not both",
+            code="validation",
+            retryable=False,
+        )
+    return {
+        "transaction_refs": transaction_refs,
+        "source_funds_case_ref": source_funds_case_ref,
+        "include_copied_attachments": _optional_bool_arg(args, "include_copied_attachments", True),
+        "include_url_references": _optional_bool_arg(args, "include_url_references", True),
+        "include_journal_state": _optional_bool_arg(args, "include_journal_state", True),
+        "include_review_state": _optional_bool_arg(args, "include_review_state", True),
+    }
+
+
 def _ui_report_export_payload(
     ctx: DaemonContext,
     kind: str,
@@ -1919,6 +1989,22 @@ def _ui_report_export_payload(
             }
         )
         return payload
+
+    if kind == "ui.reports.export_audit_package":
+        directory = _managed_report_export_path(
+            ctx.data_root,
+            "kassiber-audit-package",
+            "",
+        )
+        return core_audit_package.export_audit_package(
+            conn,
+            ctx.data_root,
+            None,
+            None,
+            directory,
+            _audit_package_hooks(),
+            **_audit_package_options(args),
+        )
 
     if kind == "ui.reports.export_summary_pdf":
         unknown = sorted(set(args) - {"start", "end", "wallets", "include_snapshot"})
@@ -6261,6 +6347,26 @@ def _ui_attachment_payload(
             label=args.get("label"),
             media_type=args.get("media_type"),
         )
+    if kind == "ui.attachments.copy":
+        transaction = args.get("transaction") or args.get("target_transaction")
+        if not isinstance(transaction, str) or not transaction.strip():
+            raise AppError("ui.attachments.copy requires args.transaction", code="validation")
+        attachment_ids = args.get("attachments") or args.get("attachment_ids")
+        if not isinstance(attachment_ids, list):
+            raise AppError("ui.attachments.copy requires args.attachments", code="validation")
+        source_transaction = args.get("source_transaction")
+        if not isinstance(source_transaction, str) or not source_transaction.strip():
+            raise AppError("ui.attachments.copy requires args.source_transaction", code="validation")
+        return core_attachments.copy_attachments(
+            conn,
+            ctx.data_root,
+            None,
+            None,
+            transaction.strip(),
+            attachment_ids,
+            hooks,
+            source_tx_ref=source_transaction.strip(),
+        )
     if kind == "ui.attachments.remove":
         attachment_id = args.get("attachment") or args.get("attachment_id")
         if not isinstance(attachment_id, str) or not attachment_id.strip():
@@ -7178,6 +7284,7 @@ def handle_request(
     if kind in {
         "ui.attachments.list",
         "ui.attachments.add",
+        "ui.attachments.copy",
         "ui.attachments.remove",
         "ui.attachments.open",
     }:
@@ -7418,6 +7525,7 @@ def handle_request(
         "ui.reports.export_austrian_e1kv_pdf",
         "ui.reports.export_austrian_e1kv_xlsx",
         "ui.reports.export_austrian_e1kv_csv",
+        "ui.reports.export_audit_package",
     }:
         return (
             _with_request_id(
@@ -7710,6 +7818,37 @@ def handle_request(
                     build_audit_changes_since_last_answer_snapshot(
                         ctx.conn,
                         request.get("args"),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.audit.evidence.summary":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        options = _audit_package_options(args)
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.audit.evidence.summary",
+                    core_audit_package.build_evidence_summary(
+                        ctx.conn,
+                        ctx.data_root,
+                        None,
+                        None,
+                        _audit_package_hooks(),
+                        **{
+                            key: value
+                            for key, value in options.items()
+                            if key
+                            in {
+                                "transaction_refs",
+                                "source_funds_case_ref",
+                                "include_journal_state",
+                                "include_review_state",
+                            }
+                        },
                     ),
                 ),
                 request_id,

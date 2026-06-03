@@ -1,7 +1,7 @@
 /**
  * Informational taxonomy for Reports UI framing. These labels describe the
- * intended handoff boundaries; runtime package/export gating is tracked in
- * TODO.md until scoped audit-package exports exist.
+ * intended handoff boundaries and the daemon kinds that back actionable
+ * exports.
  */
 export type HandoffExportModeId =
   | "tax_advisor_report"
@@ -19,11 +19,14 @@ export interface HandoffExportMode {
   title: string;
   sensitivity: "External" | "Trusted" | "Restricted";
   availability: HandoffExportAvailability;
+  daemonKind?: string;
   summary: string;
   includes: string[];
   excludes: string[];
   walletMaterialPolicy: HandoffWalletMaterialPolicy;
 }
+
+export const AUDIT_PACKAGE_EXPORT_KIND = "ui.reports.export_audit_package";
 
 export const SENSITIVE_WALLET_MATERIAL = [
   "wallet descriptors",
@@ -54,7 +57,8 @@ export const HANDOFF_EXPORT_MODES: readonly HandoffExportMode[] = [
     id: "audit_package",
     title: "Audit package",
     sensitivity: "Trusted",
-    availability: "planned",
+    availability: "available",
+    daemonKind: AUDIT_PACKAGE_EXPORT_KIND,
     summary: "Book-scoped evidence package for internal or trusted audit review.",
     includes: [
       "Selected book transactions",

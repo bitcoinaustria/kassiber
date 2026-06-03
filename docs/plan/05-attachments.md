@@ -11,6 +11,13 @@ Kassiber already supports transaction attachments:
 - copied local files stored under the managed attachments root
 - URL attachments stored as literal strings
 - add/list/remove/verify/gc CLI commands
+- transaction-detail desktop controls for adding files, adding URL references,
+  opening managed files/URLs, removing attachment rows, and manually reusing
+  selected evidence from another transaction
+- transaction-detail evidence readiness that combines direct attachments with
+  source-funds link/root evidence and persisted journal/pricing warnings
+- Reports audit package export that can include selected copied attachment
+  files plus URL references in a manifest
 - no URL fetching, indexing, OCR, preview generation, or health checking
 
 ## Product Boundary
@@ -52,19 +59,32 @@ project directory, for example:
 
 ## UI Direction
 
-Transaction detail should eventually expose:
+Transaction detail exposes:
 
 - Add URL
-- Add file, if retained in desktop MVP
+- Add file
 - list existing attachments
 - open URL/file through the OS handler
 - remove attachment
-- verify copied files where useful
+- reuse selected evidence from another transaction
+- show persisted evidence/readiness state from the daemon
+
+Reused URL evidence creates a new persisted URL attachment row on the target
+transaction. Reused file evidence duplicates the managed file under a new
+attachment id; attachment rows must not share `stored_relpath` unless a future
+shared-blob/refcount model lands. Reused evidence rows carry
+`copied_from_attachment_id` and `copied_from_transaction_id` provenance when
+available.
+
+`attachments verify` remains a CLI-level integrity check. The desktop
+readiness summary marks copied-file rows whose managed file is missing, but it
+does not hash every file on every detail-sheet open.
 
 ## Non-Goals
 
 - mirroring cloud documents
 - Drive/Dropbox/Nextcloud API sync
 - OCR/indexing/preview generation
+- photo understanding or invoice auto-extraction
 - background broken-link monitoring
 - a second blob store for external-document reconciliation

@@ -430,6 +430,8 @@ CREATE TABLE IF NOT EXISTS attachments (
     media_type TEXT,
     size_bytes INTEGER,
     sha256 TEXT,
+    copied_from_attachment_id TEXT REFERENCES attachments(id) ON DELETE SET NULL,
+    copied_from_transaction_id TEXT REFERENCES transactions(id) ON DELETE SET NULL,
     created_at TEXT NOT NULL
 );
 
@@ -934,12 +936,19 @@ def get_setting(conn, key):
     return row["value"] if row else None
 
 
-def ensure_column(conn, table_name, column_name, definition):
+def _ensure_column_no_commit(conn, table_name, column_name, definition):
     """Idempotent `ALTER TABLE ... ADD COLUMN` — no-op when the column exists."""
     columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
     if column_name in columns:
-        return
+        return False
     conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
+    return True
+
+
+def ensure_column(conn, table_name, column_name, definition):
+    """Idempotent `ALTER TABLE ... ADD COLUMN` — no-op when the column exists."""
+    if not _ensure_column_no_commit(conn, table_name, column_name, definition):
+        return
     conn.commit()
 
 
@@ -1008,6 +1017,8 @@ def ensure_schema_compat(conn):
     _drop_legacy_source_funds_recipients_unique(conn)
     _migrate_msat_columns(conn)
     _migrate_nullable_attachment_transactions(conn)
+    ensure_column(conn, "attachments", "copied_from_attachment_id", "TEXT REFERENCES attachments(id) ON DELETE SET NULL")
+    ensure_column(conn, "attachments", "copied_from_transaction_id", "TEXT REFERENCES transactions(id) ON DELETE SET NULL")
     _backfill_liquid_asset_codes(conn)
     _ensure_swap_matching_schema(conn)
     _ensure_direct_swap_payout_schema(conn)
@@ -1249,16 +1260,35 @@ def _migrate_nullable_attachment_transactions(conn):
                 media_type TEXT,
                 size_bytes INTEGER,
                 sha256 TEXT,
+                copied_from_attachment_id TEXT REFERENCES attachments(id) ON DELETE SET NULL,
+                copied_from_transaction_id TEXT REFERENCES transactions(id) ON DELETE SET NULL,
                 created_at TEXT NOT NULL
             )
             """
         )
+        _ensure_column_no_commit(
+            conn,
+            "attachments",
+            "copied_from_attachment_id",
+            "TEXT REFERENCES attachments(id) ON DELETE SET NULL",
+        )
+        _ensure_column_no_commit(
+            conn,
+            "attachments",
+            "copied_from_transaction_id",
+            "TEXT REFERENCES transactions(id) ON DELETE SET NULL",
+        )
         conn.execute(
             """
-            INSERT OR IGNORE INTO attachments
+            INSERT OR IGNORE INTO attachments(
+                id, workspace_id, profile_id, transaction_id, attachment_type, label,
+                original_filename, stored_relpath, source_url, media_type,
+                size_bytes, sha256, copied_from_attachment_id,
+                copied_from_transaction_id, created_at
+            )
             SELECT id, workspace_id, profile_id, transaction_id, attachment_type, label,
                    original_filename, stored_relpath, source_url, media_type,
-                   size_bytes, sha256, created_at
+                   size_bytes, sha256, NULL, NULL, created_at
             FROM attachments_legacy_notnull_tx
             """
         )

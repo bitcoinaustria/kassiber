@@ -5014,6 +5014,213 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(code, 0, stderr)
             self.assertEqual(stderr, "")
 
+    def test_daemon_audit_evidence_summary_and_package_export_use_persisted_state(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-audit-package-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(data_root, tmp)
+            source_csv = Path(tmp) / "salary.csv"
+            source_csv.write_text(
+                "\n".join(
+                    [
+                        "date,txid,direction,asset,amount,fee,fiat_rate,description",
+                        "2026-01-31T10:00:00Z,salary-jan,inbound,BTC,0.10000000,0,50000,Monthly salary approved by board decision",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            _run_cli(
+                data_root,
+                "wallets",
+                "import-csv",
+                "--wallet",
+                "Cold",
+                "--file",
+                str(source_csv),
+            )
+            receipt = Path(tmp) / "receipt.pdf"
+            receipt.write_bytes(b"%PDF-1.4\n% receipt\n")
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+            try:
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "audit-file-1",
+                        "kind": "ui.attachments.add",
+                        "args": {
+                            "transaction": "salary-jan",
+                            "file_path": str(receipt),
+                            "label": "Receipt PDF",
+                        },
+                    },
+                )
+                file_added = _read_payload_timeout(proc)
+                self.assertEqual(file_added["kind"], "ui.attachments.add")
+                self.assertEqual(file_added["data"]["attachment_type"], "file")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "audit-url-1",
+                        "kind": "ui.attachments.add",
+                        "args": {
+                            "transaction": "salary-jan",
+                            "url": "https://docs.example.test/decision/42",
+                            "label": "Board decision",
+                        },
+                    },
+                )
+                url_added = _read_payload_timeout(proc)
+                self.assertEqual(url_added["kind"], "ui.attachments.add")
+                self.assertEqual(url_added["data"]["attachment_type"], "url")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "audit-copy-1",
+                        "kind": "ui.attachments.copy",
+                        "args": {
+                            "source_transaction": "salary-jan",
+                            "transaction": "seed-inbound-1",
+                            "attachments": [
+                                file_added["data"]["id"],
+                                url_added["data"]["id"],
+                            ],
+                        },
+                    },
+                )
+                copied = _read_payload_timeout(proc)
+                self.assertEqual(copied["kind"], "ui.attachments.copy")
+                self.assertEqual(copied["data"]["copied"], 2)
+                copied_file = next(
+                    item
+                    for item in copied["data"]["attachments"]
+                    if item["attachment_type"] == "file"
+                )
+                copied_url = next(
+                    item
+                    for item in copied["data"]["attachments"]
+                    if item["attachment_type"] == "url"
+                )
+                self.assertNotEqual(
+                    copied_file["stored_relpath"],
+                    file_added["data"]["stored_relpath"],
+                )
+                self.assertEqual(
+                    copied_file["copied_from_attachment_id"],
+                    file_added["data"]["id"],
+                )
+                self.assertEqual(
+                    copied_url["copied_from_attachment_id"],
+                    url_added["data"]["id"],
+                )
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "audit-source-1",
+                        "kind": "ui.source_funds.sources.create",
+                        "args": {
+                            "source_type": "fiat_purchase",
+                            "label": "Reviewed fiat purchase",
+                            "asset": "BTC",
+                            "amount": "0.10000000",
+                        },
+                    },
+                )
+                source = _read_payload_timeout(proc)
+                self.assertEqual(source["kind"], "ui.source_funds.sources.create")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "audit-link-1",
+                        "kind": "ui.source_funds.links.create",
+                        "args": {
+                            "from_source": source["data"]["id"],
+                            "to_transaction": "seed-inbound-1",
+                            "link_type": "manual_source",
+                            "state": "reviewed",
+                            "confidence": "strong",
+                            "allocation_amount": "0.10000000",
+                            "allocation_policy": "explicit",
+                            "explanation": "Reviewed source for auditor handoff.",
+                        },
+                    },
+                )
+                link = _read_payload_timeout(proc)
+                self.assertEqual(link["kind"], "ui.source_funds.links.create")
+                self.assertEqual(link["data"]["state"], "reviewed")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "audit-summary-1",
+                        "kind": "ui.audit.evidence.summary",
+                        "args": {"transaction": "seed-inbound-1"},
+                    },
+                )
+                summary = _read_payload_timeout(proc)
+                self.assertEqual(summary["kind"], "ui.audit.evidence.summary")
+                tx_summary = summary["data"]["transactions"][0]
+                self.assertEqual(tx_summary["transaction"]["external_id"], "seed-inbound-1")
+                self.assertEqual(len(tx_summary["direct_attachments"]), 2)
+                self.assertEqual(tx_summary["source_funds_links"][0]["state"], "reviewed")
+                warning_codes = {
+                    warning["code"]
+                    for warning in tx_summary["readiness"]["warnings"]
+                }
+                self.assertIn("journal_stale", warning_codes)
+                self.assertIn("source_evidence_missing", warning_codes)
+                self.assertIn("sensitive_material_excluded", warning_codes)
+                self.assertNotIn("source_link_missing", warning_codes)
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "audit-export-1",
+                        "kind": "ui.reports.export_audit_package",
+                        "args": {"transaction": "seed-inbound-1"},
+                    },
+                )
+                exported = _read_payload_timeout(proc)
+                self.assertEqual(exported["kind"], "ui.reports.export_audit_package")
+                self.assertEqual(exported["data"]["transaction_count"], 1)
+                self.assertEqual(exported["data"]["evidence_file_count"], 1)
+                self.assertEqual(exported["data"]["url_reference_count"], 1)
+
+                manifest_path = Path(exported["data"]["manifest"])
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                self.assertEqual(manifest["summary"]["transaction_count"], 1)
+                evidence_file = manifest["package"]["evidence_files"][0]
+                self.assertTrue((manifest_path.parent / evidence_file["path"]).exists())
+                self.assertEqual(
+                    evidence_file["copied_from_attachment_id"],
+                    file_added["data"]["id"],
+                )
+                self.assertEqual(
+                    manifest["package"]["url_references"][0]["url"],
+                    "https://docs.example.test/decision/42",
+                )
+                self.assertEqual(
+                    manifest["package"]["url_references"][0]["copied_from_attachment_id"],
+                    url_added["data"]["id"],
+                )
+                manifest_text = json.dumps(manifest, sort_keys=True)
+                self.assertNotIn(str(data_root), manifest_text)
+                self.assertNotIn("stored_relpath", manifest_text)
+
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+
     def test_daemon_report_read_tools_auto_process_stale_journals(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
             data_root = Path(tmp) / "data"

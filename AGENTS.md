@@ -89,8 +89,8 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ui.connections.node.snapshot`, `ui.journals.snapshot`,
   `ui.journals.quarantine`, `ui.journals.transfers.list`, `ui.rates.summary`,
   `ui.rates.coverage`, `ui.report.blockers`,
-  `ui.audit.changes_since_last_answer`, `ui.maintenance.settings`,
-  `ui.workspace.health`, `ui.next_actions`, and virtual
+  `ui.audit.changes_since_last_answer`, `ui.audit.evidence.summary`,
+  `ui.maintenance.settings`, `ui.workspace.health`, `ui.next_actions`, and virtual
   `read_skill_reference`. Lightning kinds require a registered adapter
   (`kassiber.core.lightning.register_adapter`); LND ships an adapter that
   registers itself on import, and Core Lightning / NWC adapters will
@@ -103,10 +103,13 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ui.onboarding.complete`, `ui.wallets.create`, `ui.connections.btcpay.create`,
   `ui.connections.btcpay.discover`, and
   `ui.metadata.bip329.import`; transaction editor metadata saves use
-  `ui.transactions.metadata.update`; desktop Settings maintenance uses
+  `ui.transactions.metadata.update`; transaction evidence reuse uses
+  `ui.attachments.copy` and must duplicate managed files under a new attachment
+  id rather than sharing `stored_relpath`; desktop Settings maintenance uses
   `ui.profiles.reset_data` for confirmed per-book testing resets and
   `ui.rates.kraken_csv.import` for local Kraken CSV/ZIP history backfills and
-  quarterly update archives. Do not model the Connections dialog as a
+  `ui.reports.export_audit_package` for DB-backed auditor handoff packages.
+  Do not model the Connections dialog as a
   command-template picker. Connection setup should select from configured
   chain/indexer backends via `ui.backends.options`; BTCPay setup can create a
   BTCPay instance inline from URL + API key, discover stores/payment methods,

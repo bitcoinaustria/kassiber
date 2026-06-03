@@ -45,6 +45,15 @@ accounting handoff:
   It still excludes descriptors and xpub-like wallet material by default. Import
   should create a new project by default, not merge into an existing private
   project silently.
+- **Current audit package export** writes a managed directory under
+  `exports/reports/` with a deterministic `manifest.json` plus an
+  `evidence/` folder when copied-file inclusion is enabled. The manifest ties
+  included transactions to direct attachments, copied-file hashes, URL
+  references, source-funds links, review state, journal context, copied-evidence
+  provenance, and missing evidence warnings. URL/cloud documents remain
+  references only; Kassiber does not fetch or mirror them. When evidence is
+  reused between transactions, file attachments are duplicated under a new
+  attachment id instead of sharing `stored_relpath`.
 - **Technical wallet evidence** is a separate restricted action, not a normal
   export checkbox. If it is ever implemented, it must require explicit approval
   and should explain that descriptors or xpub-like material can reveal wallet

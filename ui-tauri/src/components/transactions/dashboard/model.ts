@@ -4,6 +4,7 @@ import { transactionRecords } from "./demoRecords";
 import { type Tx } from "@/mocks/seed";
 import {
   type AttachmentItem,
+  type AuditEvidenceSummaryData,
   type JournalEventItem,
   type SourceFundsLinkItem,
   SATS_PER_BTC,
@@ -241,10 +242,19 @@ type AttachmentRecord = {
   size_bytes?: number | null;
   sha256?: string;
   exists?: boolean | null;
+  copied_from_attachment_id?: string;
+  copied_from_transaction_id?: string;
 };
 
 type AttachmentsListData = {
   attachments: AttachmentRecord[];
+};
+
+type AttachmentsCopyData = {
+  copied: number;
+  attachments: AttachmentRecord[];
+  source_transaction_id?: string;
+  target_transaction_id?: string;
 };
 
 type AttachmentOpenData = {
@@ -292,6 +302,8 @@ function attachmentRecordToItem(record: AttachmentRecord): AttachmentItem {
         ? record.url || record.media_type || undefined
         : fileBits.join(" · ") || record.original_filename || undefined,
     href: record.url || undefined,
+    copiedFromAttachmentId: record.copied_from_attachment_id || undefined,
+    copiedFromTransactionId: record.copied_from_transaction_id || undefined,
   };
 }
 
@@ -1020,9 +1032,11 @@ export {
 };
 
 export type {
+  AttachmentsCopyData,
   AttachmentOpenData,
   AttachmentRecord,
   AttachmentsListData,
+  AuditEvidenceSummaryData,
   BreakdownSelection,
   FeeFilter,
   FlowChartClickData,
