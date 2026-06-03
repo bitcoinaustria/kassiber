@@ -78,6 +78,43 @@ export const OnboardingStepFrame = ({ children }: { children: ReactNode }) => {
   );
 };
 
+/**
+ * Focused single-column card for steps that don't need a side explainer
+ * (naming the workspace, locking the database). Renders the standard step
+ * header plus its content in a centered, comfortably narrow column.
+ */
+export const OnboardingSingleColumnFrame = ({
+  title,
+  eyebrow,
+  currentStep,
+  totalSteps,
+  goBack,
+  showProgress,
+  children,
+}: {
+  title: string;
+  eyebrow: string;
+  currentStep: number;
+  totalSteps: number;
+  children: ReactNode;
+  goBack?: () => void;
+  showProgress?: boolean;
+}) => {
+  return (
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-6 rounded-lg border border-line bg-paper px-6 py-8 sm:px-10 sm:py-10">
+      <OnboardingStepHeader
+        title={title}
+        eyebrow={eyebrow}
+        stepIndex={currentStep}
+        totalSteps={totalSteps}
+        goBack={goBack}
+        showProgress={showProgress}
+      />
+      {children}
+    </div>
+  );
+};
+
 export const OnboardingStepLeftWrapper = ({
   title,
   eyebrow,

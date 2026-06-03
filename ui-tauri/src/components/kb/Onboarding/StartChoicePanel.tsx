@@ -21,6 +21,7 @@ interface StartChoicePanelProps {
   importing: boolean;
   onSetup: () => void;
   onImport: () => void;
+  onQuickStart: () => void;
 }
 
 const START_HIGHLIGHTS: Array<{
@@ -50,6 +51,7 @@ export function StartChoicePanel({
   importing,
   onSetup,
   onImport,
+  onQuickStart,
 }: StartChoicePanelProps) {
   return (
     <OnboardingStepFrame>
@@ -122,6 +124,18 @@ export function StartChoicePanel({
                   "mt-1 size-5 shrink-0 text-ink transition-transform",
                   importAvailable && "group-hover:translate-x-0.5",
                 )}
+                aria-hidden="true"
+              />
+            </button>
+
+            <button
+              type="button"
+              onClick={onQuickStart}
+              className="group mt-1 inline-flex items-center gap-1.5 self-start text-sm font-medium text-ink-2 underline-offset-4 transition-colors hover:text-ink hover:underline"
+            >
+              Or create with recommended defaults
+              <ArrowRight
+                className="size-3.5 transition-transform group-hover:translate-x-0.5"
                 aria-hidden="true"
               />
             </button>

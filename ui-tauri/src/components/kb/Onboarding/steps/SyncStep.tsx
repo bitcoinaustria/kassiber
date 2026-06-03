@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 
-import { AiFields } from "../AiFields";
-import { AiExplainer } from "../explainers";
+import { ConnectionsFields } from "../ConnectionsFields";
+import { SyncExplainer } from "../explainers";
 import {
   OnboardingStepActions,
   OnboardingStepFrame,
@@ -10,7 +10,7 @@ import {
 } from "../frame";
 import type { StepComponentProps } from "../types";
 
-export const AiStep = ({
+export const SyncStep = ({
   form,
   update,
   onSubmit,
@@ -22,8 +22,8 @@ export const AiStep = ({
   return (
     <OnboardingStepFrame>
       <OnboardingStepLeftWrapper
-        title="Choose AI assistance"
-        eyebrow="AI"
+        title="Choose sync connections"
+        eyebrow="Sync"
         currentStep={currentStep}
         totalSteps={totalSteps}
         goBack={goBack}
@@ -35,7 +35,7 @@ export const AiStep = ({
           }}
           className="flex h-full flex-col justify-between gap-6 py-4"
         >
-          <AiFields form={form} update={update} />
+          <ConnectionsFields form={form} update={update} />
 
           <OnboardingStepActions>
             <Button type="submit" className="w-full" disabled={!canContinue}>
@@ -45,7 +45,7 @@ export const AiStep = ({
         </form>
       </OnboardingStepLeftWrapper>
       <OnboardingStepRightWrapper className="px-8 py-10">
-        <AiExplainer form={form} />
+        <SyncExplainer form={form} />
       </OnboardingStepRightWrapper>
     </OnboardingStepFrame>
   );

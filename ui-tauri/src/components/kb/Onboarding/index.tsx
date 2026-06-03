@@ -30,21 +30,23 @@ import {
   DEFAULT_AI_PROVIDER_NAME,
   DEFAULT_FORM,
   GAINS_ALGORITHM_DEFAULTS,
-  aiBaseUrlHint,
-  backendEndpointHint,
-  databasePassphraseHint,
   electrumEndpointUrl,
   gainsAlgorithmsFor,
   parseTaxLongTermDays,
 } from "./constants";
+import {
+  aiStepComplete,
+  essentialsStepComplete,
+  securityStepComplete,
+  syncStepComplete,
+} from "./gates";
 import { AiStep } from "./steps/AiStep";
-import { ConnectionsStep } from "./steps/ConnectionsStep";
-import { DatabaseStep } from "./steps/DatabaseStep";
-import { IdentityStep } from "./steps/IdentityStep";
+import { EssentialsStep } from "./steps/EssentialsStep";
+import { SecurityStep } from "./steps/SecurityStep";
+import { SyncStep } from "./steps/SyncStep";
 import { ImportProjectPanel } from "./ImportProjectPanel";
 import { StartChoicePanel } from "./StartChoicePanel";
 import { OnboardingStepper } from "./stepper";
-import { TaxStep } from "./steps/TaxStep";
 import type { OnboardingForm, OnboardingStep } from "./types";
 
 interface OnboardingProps {
@@ -54,69 +56,24 @@ interface OnboardingProps {
 
 const DEFAULT_STEPS: OnboardingStep[] = [
   {
-    component: IdentityStep,
-    label: "Workspace",
-    isComplete: (form) =>
-      Boolean(form.workspace.trim() && form.profile.trim()),
+    component: EssentialsStep,
+    label: "Your books",
+    isComplete: essentialsStepComplete,
   },
   {
-    component: TaxStep,
-    label: "Accounting",
-    isComplete: (form) =>
-      form.taxCountry === "at" ||
-      parseTaxLongTermDays(form.taxLongTermDays) !== null,
-  },
-  {
-    component: ConnectionsStep,
-    label: "Connections",
-    isComplete: (form) => {
-      if (form.backendSetupMode === "skip") {
-        return form.skipBackendsAcknowledged;
-      }
-      if (form.backendSetupMode === "custom") {
-        const backendUrl =
-          form.backendKind === "electrum"
-            ? electrumEndpointUrl({
-                host: form.backendHost,
-                port: form.backendPort,
-                useSsl: form.backendUseSsl,
-              })
-            : form.backendUrl;
-        return Boolean(
-          form.backendName.trim() &&
-            backendEndpointHint(form.backendKind, backendUrl) === null,
-        );
-      }
-      return true;
-    },
+    component: SyncStep,
+    label: "Sync",
+    isComplete: syncStepComplete,
   },
   {
     component: AiStep,
     label: "AI",
-    isComplete: (form) => {
-      if (form.aiSetupMode !== "disabled") {
-        if (aiBaseUrlHint(form.aiBaseUrl) !== null) return false;
-      }
-      if (form.aiSetupMode === "remote") {
-        return Boolean(
-          form.aiProviderName.trim() &&
-            form.aiRemoteAcknowledged,
-        );
-      }
-      return true;
-    },
+    isComplete: aiStepComplete,
   },
   {
-    component: DatabaseStep,
-    label: "Database",
-    isComplete: (form) =>
-      form.databaseMode === "plaintext"
-        ? form.plaintextAcknowledged
-        : form.recoveryAcknowledged &&
-          databasePassphraseHint(
-            form.databasePassphrase,
-            form.databasePassphraseConfirm,
-          ) === null,
+    component: SecurityStep,
+    label: "Security",
+    isComplete: securityStepComplete,
   },
 ];
 
@@ -384,6 +341,18 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     setFlowMode("setup");
   };
 
+  // Express path: accept recommended defaults and jump straight to Security,
+  // where the user only sets a passphrase. Encryption is never silently
+  // skipped, and Back still reaches the Essentials step.
+  const beginQuickStart = () => {
+    setDataMode("real");
+    setFinishError(null);
+    setImportError(null);
+    setForm(DEFAULT_FORM);
+    setCurrentStep(DEFAULT_STEPS.length - 1);
+    setFlowMode("setup");
+  };
+
   const refreshImportedProfiles = async () => {
     setLoadingImportProfiles(true);
     setImportError(null);
@@ -569,6 +538,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
             importing={importing}
             onSetup={beginSetup}
             onImport={beginImport}
+            onQuickStart={beginQuickStart}
           />
         ) : (
           <>
