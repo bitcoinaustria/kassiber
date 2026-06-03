@@ -5746,6 +5746,67 @@ class DaemonSmokeTest(unittest.TestCase):
                     ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
+                        "utxo-old-backend",
+                        workspace_id,
+                        profile_id,
+                        "wallet-descriptor",
+                        "old-private",
+                        "electrum",
+                        "bitcoin",
+                        "mainnet",
+                        "BTC",
+                        77_000,
+                        "66" * 32,
+                        0,
+                        f"{'66' * 32}:0",
+                        "confirmed",
+                        3,
+                        799_999,
+                        "2026-01-01T00:00:00Z",
+                        "bc1qoldbackendcoin",
+                        "receive #99",
+                        "receive",
+                        0,
+                        99,
+                        "2026-01-01T00:00:00Z",
+                        "2026-01-01T00:00:00Z",
+                        None,
+                        json.dumps({"old_backend_marker": "not exposed"}),
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO wallet_utxo_refreshes(
+                        wallet_id, workspace_id, profile_id, backend_name,
+                        backend_kind, chain, network, observed_count,
+                        active_count, last_seen_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "wallet-descriptor",
+                        workspace_id,
+                        profile_id,
+                        "old-private",
+                        "electrum",
+                        "bitcoin",
+                        "mainnet",
+                        1,
+                        1,
+                        "2026-01-04T00:00:00Z",
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO wallet_utxos(
+                        id, workspace_id, profile_id, wallet_id, backend_name,
+                        backend_kind, chain, network, asset, amount, txid, vout,
+                        outpoint, confirmation_status, confirmations, block_height,
+                        block_time, address, address_label, branch_label,
+                        branch_index, address_index, first_seen_at, last_seen_at,
+                        spent_at, raw_json
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
                         "utxo-stale-file",
                         workspace_id,
                         profile_id,
@@ -5817,6 +5878,7 @@ class DaemonSmokeTest(unittest.TestCase):
             ai_payload = json.dumps(results[0]["envelope"]["data"], sort_keys=True)
             self.assertIn(f"{'77' * 32}:1", ai_payload)
             self.assertIn('"branch_label": "receive"', ai_payload)
+            self.assertNotIn(f"{'66' * 32}:0", ai_payload)
             self.assertNotIn("bc1qobservedcoin", ai_payload)
             self.assertNotIn("address_label", ai_payload)
             self.assertNotIn("address_index", ai_payload)
@@ -5839,6 +5901,10 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertEqual(utxos["kind"], "ui.wallets.utxos")
                 self.assertTrue(utxos["data"]["support"]["supported"])
                 self.assertEqual(utxos["data"]["summary"]["count"], 1)
+                self.assertEqual(
+                    utxos["data"]["freshness"]["last_seen_at"],
+                    "2026-01-02T00:00:00Z",
+                )
                 row = utxos["data"]["utxos"][0]
                 self.assertEqual(row["outpoint"], f"{'77' * 32}:1")
                 self.assertEqual(row["amount_sat"], 12_345)
@@ -5851,6 +5917,8 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertEqual(row["source"]["backend_kind"], "esplora")
                 payload = json.dumps(utxos["data"], sort_keys=True)
                 self.assertIn("bc1qobservedcoin", payload)
+                self.assertNotIn(f"{'66' * 32}:0", payload)
+                self.assertNotIn("bc1qoldbackendcoin", payload)
                 for leaked in (
                     "xpub_descriptor_material",
                     "private-node.local",
@@ -5858,6 +5926,7 @@ class DaemonSmokeTest(unittest.TestCase):
                     "secret-token-value",
                     "secret-auth-header",
                     "internal_raw_marker",
+                    "old_backend_marker",
                     "backend_url",
                     "wpkh(",
                     "config_json",

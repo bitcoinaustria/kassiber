@@ -8,12 +8,20 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
-from ..backends import redact_backend_for_output
+from ..backends import backend_value, redact_backend_for_output
 from ..errors import AppError
 from ..msat import msat_to_btc
 from ..tax_policy import build_tax_policy
 from ..time_utils import _iso_z, _parse_iso_datetime
-from ..wallet_descriptors import DEFAULT_DESCRIPTOR_GAP_LIMIT, liquid_plan_can_unblind
+from ..wallet_descriptors import (
+    BITCOIN_NETWORK_ALIASES,
+    CHAIN_ALIASES,
+    DEFAULT_DESCRIPTOR_GAP_LIMIT,
+    LIQUID_NETWORK_ALIASES,
+    liquid_plan_can_unblind,
+    normalize_chain,
+    normalize_network,
+)
 from . import output_inventory as core_output_inventory
 from . import rates as core_rates
 from . import reports as report_builders
@@ -307,6 +315,74 @@ def _wallet_backend_summary(
         "name": backend_name,
         "source": backend_source,
         "sync_mode": sync_mode,
+    }
+
+
+def _unique_text_values(values: list[Any]) -> list[str]:
+    output = []
+    for value in values:
+        text = _string_or_empty(value)
+        if text and text not in output:
+            output.append(text)
+    return output
+
+
+def _wallet_utxo_chain_filter_values(value: Any) -> list[str]:
+    try:
+        canonical = normalize_chain(value)
+    except ValueError:
+        return _unique_text_values([value])
+    aliases = [alias for alias, target in CHAIN_ALIASES.items() if target == canonical]
+    return _unique_text_values([canonical, value, *aliases])
+
+
+def _wallet_utxo_network_filter_values(chain: str, value: Any) -> list[str]:
+    try:
+        canonical = normalize_network(chain, value)
+    except ValueError:
+        return _unique_text_values([value])
+    aliases_map = BITCOIN_NETWORK_ALIASES if chain == "bitcoin" else LIQUID_NETWORK_ALIASES
+    aliases = [alias for alias, target in aliases_map.items() if target == canonical]
+    return _unique_text_values([canonical, value, *aliases])
+
+
+def _wallet_utxo_source_filter(
+    config: dict[str, Any],
+    backend_summary: dict[str, str],
+    backend: Any,
+) -> dict[str, Any]:
+    backend_chain = (
+        backend_value(backend, "chain")
+        if isinstance(backend, dict)
+        else None
+    )
+    chain_source = backend_chain or config.get("chain")
+    chain_values = _wallet_utxo_chain_filter_values(chain_source)
+    chain = chain_values[0] if chain_values else _string_or_empty(chain_source)
+    backend_network = (
+        backend_value(backend, "network")
+        if isinstance(backend, dict)
+        else None
+    )
+    network_values = _wallet_utxo_network_filter_values(
+        chain or "bitcoin",
+        backend_network or config.get("network"),
+    )
+    backend_kind = (
+        backend_value(backend, "kind")
+        if isinstance(backend, dict)
+        else None
+    )
+    backend_kind_values = (
+        _unique_text_values([normalize_backend_kind(backend_kind), backend_kind])
+        if _string_or_empty(backend_kind)
+        else []
+    )
+    return {
+        "backend_name": backend_summary["name"] or None,
+        "backend_kind": backend_kind_values or None,
+        "chain": chain_values,
+        "network": network_values,
     }
 
 
@@ -2892,10 +2968,16 @@ def build_wallet_utxos_snapshot(
     )
     support = _wallet_utxo_support(wallet, config, backend_summary, backend)
     if support["supported"]:
-        rows = core_output_inventory.list_wallet_output_inventory(conn, wallet["id"])
+        source_filter = _wallet_utxo_source_filter(config, backend_summary, backend)
+        rows = core_output_inventory.list_wallet_output_inventory(
+            conn,
+            wallet["id"],
+            **source_filter,
+        )
         inventory_summary = core_output_inventory.wallet_output_inventory_summary(
             conn,
             wallet["id"],
+            **source_filter,
         )
         last_seen_at = inventory_summary["last_seen_at"]
     else:

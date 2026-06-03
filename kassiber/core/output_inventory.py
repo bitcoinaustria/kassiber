@@ -276,37 +276,104 @@ def clear_wallet_output_inventory(
     }
 
 
+def _filter_values(value: str | Sequence[str] | None) -> list[str]:
+    values: Sequence[str | None]
+    if value is None:
+        return []
+    if isinstance(value, str):
+        values = [value]
+    else:
+        values = value
+    normalized = []
+    for item in values:
+        text = str_or_none(item)
+        if text and text not in normalized:
+            normalized.append(text)
+    return normalized
+
+
+def _append_source_filter(
+    clauses: list[str],
+    params: list[Any],
+    column: str,
+    value: str | Sequence[str] | None,
+) -> None:
+    values = _filter_values(value)
+    if not values:
+        return
+    if len(values) == 1:
+        clauses.append(f"{column} = ?")
+        params.append(values[0])
+        return
+    placeholders = ", ".join("?" for _ in values)
+    clauses.append(f"{column} IN ({placeholders})")
+    params.extend(values)
+
+
+def _source_filter_sql(
+    *,
+    prefix: str = "",
+    backend_name: str | Sequence[str] | None = None,
+    backend_kind: str | Sequence[str] | None = None,
+    chain: str | Sequence[str] | None = None,
+    network: str | Sequence[str] | None = None,
+) -> tuple[str, list[Any]]:
+    clauses: list[str] = []
+    params: list[Any] = []
+    _append_source_filter(clauses, params, f"{prefix}backend_name", backend_name)
+    _append_source_filter(clauses, params, f"{prefix}backend_kind", backend_kind)
+    _append_source_filter(clauses, params, f"{prefix}chain", chain)
+    _append_source_filter(clauses, params, f"{prefix}network", network)
+    if not clauses:
+        return "", params
+    return " AND " + " AND ".join(clauses), params
+
+
 def wallet_output_inventory_summary(
     conn: sqlite3.Connection,
     wallet_id: str,
+    *,
+    backend_name: str | Sequence[str] | None = None,
+    backend_kind: str | Sequence[str] | None = None,
+    chain: str | Sequence[str] | None = None,
+    network: str | Sequence[str] | None = None,
 ) -> dict[str, Any]:
+    source_where, source_params = _source_filter_sql(
+        backend_name=backend_name,
+        backend_kind=backend_kind,
+        chain=chain,
+        network=network,
+    )
     active_row = conn.execute(
-        """
+        f"""
         SELECT
             COUNT(*) AS active_count,
             MAX(last_seen_at) AS active_last_seen_at
         FROM wallet_utxos
         WHERE wallet_id = ?
           AND spent_at IS NULL
+          {source_where}
         """,
-        (wallet_id,),
+        (wallet_id, *source_params),
     ).fetchone()
     refresh_row = conn.execute(
-        """
+        f"""
         SELECT observed_count, active_count, last_seen_at
         FROM wallet_utxo_refreshes
         WHERE wallet_id = ?
+          {source_where}
         """,
-        (wallet_id,),
+        (wallet_id, *source_params),
     ).fetchone()
     spent_row = conn.execute(
-        """
+        f"""
         SELECT MAX(spent_at) AS last_spent_at
         FROM wallet_utxos
         WHERE wallet_id = ?
           AND spent_at IS NOT NULL
+          {source_where}
         """,
-        (wallet_id,),
+        (wallet_id, *source_params),
     ).fetchone()
     return {
         "active_count": int(active_row["active_count"] or 0) if active_row else 0,
@@ -327,14 +394,25 @@ def list_wallet_output_inventory(
     wallet_id: str,
     *,
     include_spent: bool = False,
+    backend_name: str | Sequence[str] | None = None,
+    backend_kind: str | Sequence[str] | None = None,
+    chain: str | Sequence[str] | None = None,
+    network: str | Sequence[str] | None = None,
 ) -> list[dict[str, Any]]:
     where_spent = "" if include_spent else "AND spent_at IS NULL"
+    source_where, source_params = _source_filter_sql(
+        backend_name=backend_name,
+        backend_kind=backend_kind,
+        chain=chain,
+        network=network,
+    )
     rows = conn.execute(
         f"""
         SELECT *
         FROM wallet_utxos
         WHERE wallet_id = ?
           {where_spent}
+          {source_where}
         ORDER BY
           asset ASC,
           CASE WHEN block_height IS NULL OR block_height <= 0 THEN 1 ELSE 0 END ASC,
@@ -342,7 +420,7 @@ def list_wallet_output_inventory(
           txid ASC,
           vout ASC
         """,
-        (wallet_id,),
+        (wallet_id, *source_params),
     ).fetchall()
     output = []
     for row in rows:

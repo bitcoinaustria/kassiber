@@ -63,6 +63,140 @@ def _seed_wallet(conn):
 
 
 class OutputInventoryTest(unittest.TestCase):
+    def test_inventory_summary_and_rows_can_be_scoped_to_source(self):
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="main",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[],
+            tracked_scripts={},
+            history_cache={},
+        )
+        current_txid = "cc" * 32
+        old_txid = "dd" * 32
+        with tempfile.TemporaryDirectory(prefix="kassiber-utxo-source-filter-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            try:
+                profile, wallet = _seed_wallet(conn)
+                update_wallet_output_inventory(
+                    conn,
+                    profile,
+                    wallet,
+                    {"name": "current-default", "kind": "esplora"},
+                    sync_state,
+                    [
+                        {
+                            "txid": current_txid,
+                            "vout": 0,
+                            "amount_sats": 50_000,
+                            "asset": "BTC",
+                            "chain": "bitcoin",
+                            "network": "main",
+                            "confirmation_status": "confirmed",
+                            "block_height": 810_000,
+                        }
+                    ],
+                    seen_at="2026-01-01T12:00:00Z",
+                )
+                conn.execute(
+                    """
+                    INSERT INTO wallet_utxos(
+                        id, workspace_id, profile_id, wallet_id, backend_name,
+                        backend_kind, chain, network, asset, amount, txid, vout,
+                        outpoint, confirmation_status, confirmations, block_height,
+                        block_time, address, address_label, branch_label,
+                        branch_index, address_index, first_seen_at, last_seen_at,
+                        spent_at, raw_json
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "stale-source-row",
+                        profile["workspace_id"],
+                        profile["id"],
+                        wallet["id"],
+                        "old-default",
+                        "electrum",
+                        "bitcoin",
+                        "main",
+                        "BTC",
+                        25_000_000,
+                        old_txid,
+                        1,
+                        f"{old_txid}:1",
+                        "confirmed",
+                        10,
+                        809_000,
+                        "2026-01-01T11:00:00Z",
+                        "bc1qoldsource",
+                        "receive #9",
+                        "receive",
+                        0,
+                        9,
+                        "2026-01-01T11:00:00Z",
+                        "2026-01-01T11:00:00Z",
+                        None,
+                        "{}",
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO wallet_utxo_refreshes(
+                        wallet_id, workspace_id, profile_id, backend_name,
+                        backend_kind, chain, network, observed_count,
+                        active_count, last_seen_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(wallet_id) DO UPDATE SET
+                        backend_name = excluded.backend_name,
+                        backend_kind = excluded.backend_kind,
+                        chain = excluded.chain,
+                        network = excluded.network,
+                        observed_count = excluded.observed_count,
+                        active_count = excluded.active_count,
+                        last_seen_at = excluded.last_seen_at
+                    """,
+                    (
+                        wallet["id"],
+                        profile["workspace_id"],
+                        profile["id"],
+                        "old-default",
+                        "electrum",
+                        "bitcoin",
+                        "main",
+                        1,
+                        1,
+                        "2026-01-01T13:00:00Z",
+                    ),
+                )
+                conn.commit()
+
+                self.assertEqual(
+                    len(list_wallet_output_inventory(conn, wallet["id"])),
+                    2,
+                )
+                rows = list_wallet_output_inventory(
+                    conn,
+                    wallet["id"],
+                    backend_name="current-default",
+                    backend_kind="esplora",
+                    chain="bitcoin",
+                    network=["main", "mainnet"],
+                )
+                self.assertEqual([row["outpoint"] for row in rows], [f"{current_txid}:0"])
+                summary = wallet_output_inventory_summary(
+                    conn,
+                    wallet["id"],
+                    backend_name="current-default",
+                    backend_kind="esplora",
+                    chain="bitcoin",
+                    network=["main", "mainnet"],
+                )
+                self.assertEqual(summary["active_count"], 1)
+                self.assertEqual(summary["observed_count"], 0)
+                self.assertEqual(summary["last_seen_at"], "2026-01-01T12:00:00Z")
+            finally:
+                conn.close()
+
     def test_esplora_utxos_keep_derivation_metadata_and_spent_detection(self):
         target_receive = {
             "chain": "bitcoin",
