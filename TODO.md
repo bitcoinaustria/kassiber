@@ -63,7 +63,7 @@ Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the 
   descriptor/xpub/address wallets and Bitcoin Core address wallets, exposes
   the redacted `ui.wallets.utxos` daemon surface, and renders a desktop
   wallet-detail UTXOs table with loading, empty, unsupported, stale, refresh,
-  and Liquid-unblind-blocker states.
+  sorting, explorer-link, and Liquid-unblind-blocker states.
 - [ ] Design an opt-in encrypted Lightning **evidence vault** for
   operators who need proof-of-payment for legal disputes, full invoice
   replay for corrupted-bookkeeper recovery, or chain-of-custody records

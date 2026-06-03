@@ -422,6 +422,7 @@ function ConnectionDetailView({
   const addNotification = useUiStore((state) => state.addNotification);
   const updateNotification = useUiStore((state) => state.updateNotification);
   const identity = useUiStore((state) => state.identity);
+  const explorerSettings = useUiStore((state) => state.explorerSettings);
   const syncNoticeIdRef = useRef<string | null>(null);
   const walletSyncMutationKey = daemonMutationKey(dataMode, "ui.wallets.sync");
   const walletSyncsInFlight = useIsMutating({
@@ -950,6 +951,7 @@ function ConnectionDetailView({
         }
         hideSensitive={hideSensitive}
         isRefreshing={isWalletSyncRunning}
+        explorerSettings={explorerSettings}
         onRefresh={onSync}
       />
 
