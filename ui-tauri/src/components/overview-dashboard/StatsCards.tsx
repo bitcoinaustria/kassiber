@@ -7,6 +7,7 @@ import type { OverviewSnapshot } from "@/mocks/seed";
 
 import {
   activeMarketFiatCurrency,
+  activeMarketFiatRate,
   blurClass,
   buildStatsData,
   currencyFormatter,
@@ -35,6 +36,7 @@ export const StatsCards = ({
 }) => {
   const stats = buildStatsData(snapshot, currency);
   const fiatCurrency = activeMarketFiatCurrency(snapshot);
+  const fiatRate = activeMarketFiatRate(snapshot);
   const marketRateIsSynced = Boolean(
     snapshot.marketRate?.fetchedAt ?? snapshot.marketRate?.timestamp,
   );
@@ -148,7 +150,7 @@ export const StatsCards = ({
                         <span>
                           {formatCompactDisplayMoney(
                             stat.value,
-                            snapshot.priceEur,
+                            fiatRate,
                             currency,
                             fiatCurrency,
                           )}
@@ -174,7 +176,7 @@ export const StatsCards = ({
                             {stat.format === "currency"
                               ? formatCompactDisplayMoney(
                                   Math.abs(stat.value - stat.previousValue),
-                                  snapshot.priceEur,
+                                  fiatRate,
                                   currency,
                                   fiatCurrency,
                                 )

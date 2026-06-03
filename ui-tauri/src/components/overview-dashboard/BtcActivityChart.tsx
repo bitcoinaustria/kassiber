@@ -37,6 +37,7 @@ import { ChartControlsSheet } from "./ChartControlsSheet";
 import { ChartStat } from "./ChartStat";
 import {
   activeMarketFiatCurrency,
+  activeMarketFiatRate,
   activityMarkerView,
   buildTreasuryChartStats,
   blurClass,
@@ -374,6 +375,7 @@ export const BtcActivityChart = ({
       ? (gainEur / Math.abs(visibleCostBasis)) * 100
       : null;
     const fiatCurrency = activeMarketFiatCurrency(snapshot);
+    const fiatRate = activeMarketFiatRate(snapshot);
     const incomingActivityPoints = activityPoints.filter(
       (point) => point.eventFlow === "incoming",
     );
@@ -794,7 +796,7 @@ export const BtcActivityChart = ({
                     content={
                       <TreasuryTooltip
                         hideSensitive={hideSensitive}
-                        priceEur={snapshot.priceEur}
+                        priceEur={fiatRate}
                         fiatCurrency={fiatCurrency}
                       />
                     }
@@ -977,7 +979,7 @@ export const BtcActivityChart = ({
                 point={selectedPoint}
                 previousPoint={previousPoint}
                 hideSensitive={hideSensitive}
-                priceEur={snapshot.priceEur}
+                priceEur={fiatRate}
                 fiatCurrency={fiatCurrency}
                 chartCurrency={currency}
               />

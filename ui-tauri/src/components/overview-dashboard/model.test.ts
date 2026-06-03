@@ -4,6 +4,9 @@ import { MOCK_OVERVIEW, type OverviewSnapshot } from "@/mocks/seed";
 
 import {
   activeMarketFiatCurrency,
+  activeMarketFiatRate,
+  buildBalanceRailItems,
+  buildHoldingsBySource,
   formatCompactDisplayMoney,
   formatMarketRateSource,
   formatMarketRateValue,
@@ -36,6 +39,7 @@ describe("overview market rate display", () => {
     };
 
     expect(activeMarketFiatCurrency(snapshot)).toBe("USD");
+    expect(activeMarketFiatRate(snapshot)).toBe(70_000);
     expect(formatMarketRateValue(snapshot)).toBe("$70,000.00 / BTC");
     expect(marketRateCompactLabel(snapshot)).toBe("CoinGecko · 2m ago");
     expect(marketRateSyncLabel(snapshot)).toBe("Synced 2026-03-01 00:02");
@@ -72,6 +76,48 @@ describe("overview market rate display", () => {
     expect(marketRateCompactLabel(snapshot)).toBe("Fetch rates");
     expect(marketRateSyncLabel(snapshot)).toBe("Not synced");
     expect(marketRateDetailLabel(snapshot)).toBe("Fetch rates");
+  });
+
+  it("uses the active book fiat rate for overview BTC balance conversions", () => {
+    const snapshot: OverviewSnapshot = {
+      ...MOCK_OVERVIEW,
+      priceEur: 65_000,
+      priceUsd: 70_000,
+      fiat: { ...MOCK_OVERVIEW.fiat, fiatCurrency: "USD" },
+      marketRate: {
+        asset: "BTC",
+        fiatCurrency: "USD",
+        pair: "BTC-USD",
+        rate: 70_000,
+        timestamp: "2026-03-01T00:00:00Z",
+        source: "coingecko",
+        fetchedAt: "2026-03-01T00:02:00Z",
+        granularity: "daily",
+        method: "close",
+      },
+      connections: [
+        {
+          ...MOCK_OVERVIEW.connections[0],
+          kind: "xpub",
+          label: "Cold Storage",
+          balance: 2,
+        },
+        {
+          ...MOCK_OVERVIEW.connections[2],
+          kind: "core-ln",
+          label: "Home Node",
+          balance: 0.5,
+        },
+      ],
+    };
+
+    expect(activeMarketFiatRate(snapshot)).toBe(70_000);
+    expect(buildHoldingsBySource(snapshot).map(({ name, value }) => [name, value]))
+      .toEqual([
+        ["Cold Storage", 140_000],
+        ["Home Node", 35_000],
+      ]);
+    expect(buildBalanceRailItems(snapshot).total).toBe(175_000);
   });
 
   it("uses friendly labels for known rate sources", () => {

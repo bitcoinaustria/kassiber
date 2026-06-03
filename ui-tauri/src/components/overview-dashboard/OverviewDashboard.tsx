@@ -19,6 +19,7 @@ import { OverviewSidePanel } from "./OverviewSidePanel";
 import { StatsCards } from "./StatsCards";
 import {
   activeMarketFiatCurrency,
+  activeMarketFiatRate,
   toDashboardTransaction as toOverviewTransaction,
   transactionRecords,
 } from "./model";
@@ -79,6 +80,7 @@ export const OverviewDashboard = ({
     };
   }, [marketRateRefreshedAt, snapshot]);
   const fiatCurrency = activeMarketFiatCurrency(displayedSnapshot);
+  const fiatRate = activeMarketFiatRate(displayedSnapshot);
   const refreshOverviewState = React.useCallback(() => {
     if (isSyncing || isProcessingJournals) return;
     syncAll({ onTrustedSuccess: runJournalProcessing });
@@ -196,7 +198,7 @@ export const OverviewDashboard = ({
               transactions={transactions}
               hideSensitive={hideSensitive}
               currency={currency}
-              priceEur={snapshot.priceEur}
+              priceEur={fiatRate}
               fiatCurrency={fiatCurrency}
             />
           </div>
