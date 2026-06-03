@@ -18,6 +18,7 @@ import { useDaemonMutation } from "@/daemon/client";
 import type { Currency } from "@/lib/currency";
 import type { ExplorerSettings } from "@/lib/explorer";
 import type { OverviewSnapshot } from "@/mocks/seed";
+import { activeMarketFiatRate } from "./model";
 import { overviewDetailTransactions } from "./overviewTransactionDetailModel";
 
 type OverviewTransactionDetailOptions = {
@@ -136,6 +137,7 @@ export function useOverviewTransactionDetail({
   const explorerTarget = explorerTransaction
     ? explorerForTransaction(explorerTransaction, explorerSettings)
     : null;
+  const fiatRate = activeMarketFiatRate(snapshot);
 
   React.useEffect(() => {
     const pending = pendingDetailLinkRef.current;
@@ -164,7 +166,7 @@ export function useOverviewTransactionDetail({
         explorerSettings={explorerSettings}
         isSaving={metadataUpdate.isPending}
         saveError={saveError}
-        nowRate={snapshot.priceEur}
+        nowRate={fiatRate}
         onOpenChange={(open) => {
           if (!open) {
             setDetailTransaction(null);

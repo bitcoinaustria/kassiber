@@ -15,6 +15,8 @@ import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
 
 import {
+  activeMarketFiatCurrency,
+  activeMarketFiatRate,
   blurClass,
   buildBalanceDrivers,
   buildBalanceRailItems,
@@ -39,7 +41,9 @@ export const BalanceDriversCard = ({
 }) => {
   const { rows, maxValueBtc, netBtc, transactionCount } =
     buildBalanceDrivers(snapshot);
-  const netEur = netBtc * snapshot.priceEur;
+  const fiatCurrency = activeMarketFiatCurrency(snapshot);
+  const fiatRate = activeMarketFiatRate(snapshot);
+  const netFiat = netBtc * fiatRate;
   const netTone =
     netBtc > 0
       ? "text-emerald-700 dark:text-emerald-300"
@@ -78,7 +82,12 @@ export const BalanceDriversCard = ({
             blurClass(hideSensitive),
           )}
         >
-          {formatSignedDisplayMoney(netEur, snapshot.priceEur, currency)}
+          {formatSignedDisplayMoney(
+            netFiat,
+            fiatRate,
+            currency,
+            fiatCurrency,
+          )}
         </CurrencyToggleText>
       </div>
 
@@ -112,7 +121,12 @@ export const BalanceDriversCard = ({
                     blurClass(hideSensitive),
                   )}
                 >
-                  {formatDriverValue(item.valueBtc, snapshot.priceEur, currency)}
+                  {formatDriverValue(
+                    item.valueBtc,
+                    fiatRate,
+                    currency,
+                    fiatCurrency,
+                  )}
                 </span>
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-muted">
@@ -148,6 +162,8 @@ export const HoldingsBySourceChart = ({
   currency: Currency;
 }) => {
   const isBitcoinMode = currency === "btc";
+  const fiatCurrency = activeMarketFiatCurrency(snapshot);
+  const fiatRate = activeMarketFiatRate(snapshot);
   const { active: activeSlice, handleHover: setHoveredSlice } =
     useHoverHighlight<number>();
   const holdingsData = buildHoldingsBySource(snapshot);
@@ -161,8 +177,9 @@ export const HoldingsBySourceChart = ({
   );
   const totalHoldingsLabel = formatCompactDisplayMoney(
     totalHoldings,
-    snapshot.priceEur,
+    fiatRate,
     currency,
+    fiatCurrency,
   );
   const singleHolding = holdingsData.length === 1 ? holdingsData[0] : null;
 
@@ -274,8 +291,9 @@ export const HoldingsBySourceChart = ({
             >
               {formatCompactDisplayMoney(
                 singleHolding.value,
-                snapshot.priceEur,
+                fiatRate,
                 currency,
+                fiatCurrency,
               )}
             </p>
             <p
@@ -361,8 +379,9 @@ export const HoldingsBySourceChart = ({
                 >
                   {formatCompactDisplayMoney(
                     item.value,
-                    snapshot.priceEur,
+                    fiatRate,
                     currency,
+                    fiatCurrency,
                   )}
                 </span>
                 <span

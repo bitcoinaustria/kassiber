@@ -6,7 +6,7 @@ import {
   activityFlowLabels,
   blurClass,
   compactEventId,
-  formatEurPrice,
+  formatFiatPrice,
   formatPortfolioMoney,
   statusLabels,
   type TreasuryChartPoint,
@@ -24,6 +24,7 @@ export interface TreasuryTooltipProps {
   label?: string | number;
   hideSensitive: boolean;
   priceEur: number;
+  fiatCurrency: string;
 }
 
 export function TreasuryTooltip({
@@ -32,6 +33,7 @@ export function TreasuryTooltip({
   label,
   hideSensitive,
   priceEur,
+  fiatCurrency,
 }: TreasuryTooltipProps) {
   if (!active || !payload?.length) return null;
 
@@ -118,12 +120,17 @@ export function TreasuryTooltip({
           )}
           <TooltipMetricRow
             label="Fiat value"
-            value={formatPortfolioMoney(point.eventFiatValueEur ?? 0, priceEur, "eur")}
+            value={formatPortfolioMoney(
+              point.eventFiatValueEur ?? 0,
+              priceEur,
+              "eur",
+              fiatCurrency,
+            )}
             hidden={hideSensitive}
           />
           <TooltipMetricRow
             label="BTC price"
-            value={formatEurPrice(point.bitcoinPriceEur)}
+            value={formatFiatPrice(point.bitcoinPriceEur, fiatCurrency)}
             hidden={hideSensitive}
           />
           {(point.eventFeeBtc ?? 0) > 0 && (
@@ -141,7 +148,9 @@ export function TreasuryTooltip({
           <TooltipMetricRow
             label="Avg basis after"
             value={
-              point.avgCostEur === null ? "—" : formatEurPrice(point.avgCostEur)
+              point.avgCostEur === null
+                ? "—"
+                : formatFiatPrice(point.avgCostEur, fiatCurrency)
             }
             hidden={hideSensitive}
           />
@@ -188,13 +197,15 @@ export function TreasuryTooltip({
         />
         <TooltipMetricRow
           label="BTC price"
-          value={formatEurPrice(point.bitcoinPriceEur)}
+          value={formatFiatPrice(point.bitcoinPriceEur, fiatCurrency)}
           hidden={hideSensitive}
         />
         <TooltipMetricRow
           label="Avg basis"
           value={
-            point.avgCostEur === null ? "—" : formatEurPrice(point.avgCostEur)
+            point.avgCostEur === null
+              ? "—"
+              : formatFiatPrice(point.avgCostEur, fiatCurrency)
           }
           hidden={hideSensitive}
         />
@@ -204,6 +215,7 @@ export function TreasuryTooltip({
             Math.abs(point.unrealizedEur),
             priceEur,
             "eur",
+            fiatCurrency,
           )} (${unrealizedPct >= 0 ? "+" : "−"}${Math.abs(unrealizedPct).toFixed(
             1,
           )}%)`}

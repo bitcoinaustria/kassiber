@@ -18,9 +18,12 @@ import * as React from "react";
 import { type ChartConfig } from "@/components/ui/chart";
 import {
   formatBtc,
+  formatCompactFiatAmount,
+  formatFiatAmount,
   MISSING_FIAT_LABEL,
   type Currency,
 } from "@/lib/currency";
+import { formatShortDate } from "@/lib/date";
 import { useUiStore } from "@/store/ui";
 import {
   type OverviewSnapshot,
@@ -219,13 +222,6 @@ export const currencyFormatter = new Intl.NumberFormat("en-US", {
 
 export const numberFormatter = new Intl.NumberFormat("en-US");
 
-export const compactCurrencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "EUR",
-  notation: "compact",
-  maximumFractionDigits: 0,
-});
-
 export const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
 export function btcFromEur(eur: number, priceEur: number) {
@@ -233,64 +229,153 @@ export function btcFromEur(eur: number, priceEur: number) {
 }
 
 export function formatDisplayMoney(
-  eur: number | null,
-  priceEur: number,
+  fiatValue: number | null,
+  fiatRate: number,
   currency: Currency,
+  fiatCurrency = "EUR",
 ) {
-  if (eur === null) return MISSING_FIAT_LABEL;
-  if (currency === "btc") return formatBtc(btcFromEur(eur, priceEur));
-  return currencyFormatter.format(eur);
+  if (fiatValue === null) return MISSING_FIAT_LABEL;
+  if (currency === "btc") return formatBtc(btcFromEur(fiatValue, fiatRate));
+  return formatFiatAmount(fiatValue, fiatCurrency);
 }
 
 export function formatSignedDisplayMoney(
-  eur: number | null,
-  priceEur: number,
+  fiatValue: number | null,
+  fiatRate: number,
   currency: Currency,
+  fiatCurrency = "EUR",
 ) {
-  if (eur === null) return MISSING_FIAT_LABEL;
+  if (fiatValue === null) return MISSING_FIAT_LABEL;
   if (currency === "btc") {
-    return formatBtc(btcFromEur(eur, priceEur), { sign: true });
+    return formatBtc(btcFromEur(fiatValue, fiatRate), { sign: true });
   }
-  const prefix = eur >= 0 ? "+ " : "− ";
-  return `${prefix}${currencyFormatter.format(Math.abs(eur))}`;
+  const prefix = fiatValue >= 0 ? "+ " : "− ";
+  return `${prefix}${formatFiatAmount(Math.abs(fiatValue), fiatCurrency)}`;
 }
 
 export function formatCompactDisplayMoney(
-  eur: number,
-  priceEur: number,
+  fiatValue: number,
+  fiatRate: number,
   currency: Currency,
+  fiatCurrency = "EUR",
 ) {
   if (currency === "btc") {
-    return formatBtc(btcFromEur(eur, priceEur), { precision: 3 });
+    return formatBtc(btcFromEur(fiatValue, fiatRate), { precision: 3 });
   }
-  return compactCurrencyFormatter.format(eur);
+  return formatCompactFiatAmount(fiatValue, fiatCurrency);
 }
 
 export function formatPortfolioMoney(
   amount: number,
-  priceEur: number,
+  fiatRate: number,
   currency: Currency,
+  fiatCurrency = "EUR",
 ) {
   if (currency === "btc") return formatBtc(amount);
-  return formatDisplayMoney(amount, priceEur, currency);
+  return formatDisplayMoney(amount, fiatRate, currency, fiatCurrency);
 }
 
-export function formatDriverValue(btc: number, priceEur: number, currency: Currency) {
+export function formatDriverValue(
+  btc: number,
+  fiatRate: number,
+  currency: Currency,
+  fiatCurrency = "EUR",
+) {
   if (currency === "btc") {
     return formatBtc(btc, { precision: btc > 0 && btc < 0.001 ? 8 : 3 });
   }
-  return formatCompactDisplayMoney(btc * priceEur, priceEur, currency);
+  return formatCompactDisplayMoney(btc * fiatRate, fiatRate, currency, fiatCurrency);
 }
 
 export function formatDetailedPortfolioMoney(
   amount: number,
-  priceEur: number,
+  fiatRate: number,
   currency: Currency,
+  fiatCurrency = "EUR",
 ) {
   if (currency === "btc") {
     return formatBtc(amount, { precision: Math.abs(amount) < 0.01 ? 8 : 4 });
   }
-  return formatDisplayMoney(amount, priceEur, currency);
+  return formatDisplayMoney(amount, fiatRate, currency, fiatCurrency);
+}
+
+export function activeMarketFiatCurrency(snapshot: OverviewSnapshot) {
+  return (
+    snapshot.marketRate?.fiatCurrency ??
+    snapshot.fiat.fiatCurrency ??
+    "EUR"
+  ).toUpperCase();
+}
+
+export function activeMarketFiatRate(snapshot: OverviewSnapshot) {
+  const rate = snapshot.marketRate?.rate;
+  if (typeof rate === "number" && Number.isFinite(rate) && rate > 0) {
+    return rate;
+  }
+  const fiatCurrency = activeMarketFiatCurrency(snapshot);
+  if (fiatCurrency === "USD") return snapshot.priceUsd;
+  return snapshot.priceEur;
+}
+
+export function formatMarketRateValue(snapshot: OverviewSnapshot) {
+  const fiatCurrency = activeMarketFiatCurrency(snapshot);
+  const rate = snapshot.marketRate?.rate;
+  if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0) {
+    return `No ${fiatCurrency} rate`;
+  }
+  return `${formatFiatAmount(rate, fiatCurrency)} / BTC`;
+}
+
+const MARKET_RATE_SOURCE_LABELS: Record<string, string> = {
+  "coinbase-exchange": "Coinbase Exchange",
+  "kraken-csv": "Kraken CSV",
+  coingecko: "CoinGecko",
+  manual: "Manual",
+};
+
+export function formatMarketRateSource(source: string | null | undefined) {
+  if (!source) return "No source";
+  const normalized = source.trim().toLowerCase();
+  return MARKET_RATE_SOURCE_LABELS[normalized] ?? source;
+}
+
+export function marketRateSyncLabel(snapshot: OverviewSnapshot) {
+  const syncedAt = snapshot.marketRate?.fetchedAt ?? snapshot.marketRate?.timestamp;
+  return syncedAt ? `Synced ${formatShortDate(syncedAt)}` : "Not synced";
+}
+
+export function formatRelativeMarketRateTime(
+  value: string | null | undefined,
+  nowMs = Date.now(),
+) {
+  if (!value) return null;
+  const thenMs = Date.parse(value);
+  if (!Number.isFinite(thenMs)) return null;
+  const diffSec = Math.max(0, Math.floor((nowMs - thenMs) / 1000));
+  if (diffSec < 60) return "just now";
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+  return `${Math.floor(diffSec / 86400)}d ago`;
+}
+
+export function marketRateCompactLabel(snapshot: OverviewSnapshot) {
+  const syncedAt = snapshot.marketRate?.fetchedAt ?? snapshot.marketRate?.timestamp;
+  const source = snapshot.marketRate?.source;
+  const sourceLabel = source
+    ? formatMarketRateSource(source).replace(/\s+Exchange$/, "")
+    : null;
+  if (!syncedAt && !sourceLabel) return "Fetch rates";
+  const timeLabel = formatRelativeMarketRateTime(syncedAt);
+  return [sourceLabel, timeLabel].filter(Boolean).join(" · ");
+}
+
+export function marketRateDetailLabel(snapshot: OverviewSnapshot) {
+  const pair = snapshot.marketRate?.pair;
+  const source = snapshot.marketRate?.source;
+  if (!pair && !source) return "Fetch rates";
+  if (!pair) return formatMarketRateSource(source);
+  if (!source) return pair;
+  return `${formatMarketRateSource(source)} · ${pair}`;
 }
 
 export function donutCenterValueClass(value: string) {
@@ -444,7 +529,7 @@ export function latestPortfolioBalanceBtc(snapshot: OverviewSnapshot) {
   }
   const latestBalance = snapshot.balanceSeries[snapshot.balanceSeries.length - 1];
   if (typeof latestBalance === "number") return latestBalance;
-  return btcFromEur(snapshot.fiat.eurBalance, snapshot.priceEur);
+  return btcFromEur(snapshot.fiat.eurBalance, activeMarketFiatRate(snapshot));
 }
 
 export function buildStatsData(
@@ -644,13 +729,14 @@ export function fallbackPortfolioData(
   currency: Currency,
   { densify }: { densify: boolean },
 ): PortfolioChartPoint[] {
+  const fiatRate = activeMarketFiatRate(snapshot);
   const scoped = densify
-    ? expandFallbackYearData(data, snapshot.priceEur)
+    ? expandFallbackYearData(data, fiatRate)
     : data;
   return scoped.map((point, index) => {
     const valueEur = point.thisYear;
     const costBasisEur = point.prevYear;
-    const balanceBtc = btcFromEur(valueEur, snapshot.priceEur);
+    const balanceBtc = btcFromEur(valueEur, fiatRate);
     return buildPortfolioChartPoint(
       {
         date: `fallback-${index}`,
@@ -697,6 +783,7 @@ export function getDataForPeriod(
     if (period === "ytd") return fallback.slice(0, 6);
     return fallback;
   }
+  const fiatRate = activeMarketFiatRate(snapshot);
   const labels =
     period === "5years"
       ? ["2022", "2023", "2024", "2025", "2026"]
@@ -718,7 +805,7 @@ export function getDataForPeriod(
     const isLatestPoint = index === snapshot.balanceSeries.length - 1;
     const value = isLatestPoint
       ? snapshot.fiat.eurBalance
-      : btc * snapshot.priceEur;
+      : btc * fiatRate;
     const basisShare =
       snapshot.fiat.eurBalance > 0
         ? value / snapshot.fiat.eurBalance
@@ -1066,11 +1153,17 @@ export function formatTreasuryDetailDate(value: string) {
   });
 }
 
-export function formatEurPrice(eur: number) {
-  if (Math.abs(eur) >= 100_000) return `${Math.round(eur).toLocaleString("en-US")} EUR`;
-  return `${eur.toLocaleString("en-US", {
+export function formatFiatPrice(value: number, fiatCurrency = "EUR") {
+  const rounded = Math.abs(value) >= 100_000
+    ? Math.round(value).toLocaleString("en-US")
+    : value.toLocaleString("en-US", {
     maximumFractionDigits: 0,
-  })} EUR`;
+  });
+  return `${rounded} ${fiatCurrency}`;
+}
+
+export function formatEurPrice(eur: number) {
+  return formatFiatPrice(eur, "EUR");
 }
 
 export function treasuryPrimaryValue(point: TreasuryChartPoint) {
@@ -1142,6 +1235,7 @@ export const activityFlowKeys: ActivityFlow[] = [
 
 export function activityTxs(snapshot: OverviewSnapshot): TreasuryActivityEvent[] {
   const txs = snapshot.activityTxs?.length ? snapshot.activityTxs : snapshot.txs;
+  const fiatRate = activeMarketFiatRate(snapshot);
   return txs
     .flatMap((tx, sequence) => {
       const occurredAt = parseOverviewTxDate(tx.occurredAt ?? tx.date);
@@ -1160,7 +1254,7 @@ export function activityTxs(snapshot: OverviewSnapshot): TreasuryActivityEvent[]
       if (volumeBtc <= 0 && feeBtc <= 0) return [];
       const valueEur = Math.abs(tx.eur ?? 0);
       const priceEur =
-        valueEur > 0 && btc > 0 ? valueEur / btc : tx.rate ?? snapshot.priceEur;
+        valueEur > 0 && btc > 0 ? valueEur / btc : tx.rate ?? fiatRate;
       return [
         {
           tx,
@@ -1212,8 +1306,9 @@ export function buildTreasuryBasePoint(
   point: PortfolioChartPoint,
   snapshot: OverviewSnapshot,
 ): TreasuryChartPoint {
+  const fiatRate = activeMarketFiatRate(snapshot);
   const bitcoinPriceEur =
-    point.balanceBtc > 0 ? point.valueEur / point.balanceBtc : snapshot.priceEur;
+    point.balanceBtc > 0 ? point.valueEur / point.balanceBtc : fiatRate;
   const avgCostEur =
     point.balanceBtc > 0 && point.costBasisEur > 0
       ? point.costBasisEur / point.balanceBtc
@@ -1552,6 +1647,7 @@ export function railForConnection(kind: string, label: string): BalanceRail {
 }
 
 export function buildBalanceRailItems(snapshot: OverviewSnapshot) {
+  const fiatRate = activeMarketFiatRate(snapshot);
   const byRail: Record<BalanceRail, number> = {
     onchain: 0,
     lightning: 0,
@@ -1561,7 +1657,7 @@ export function buildBalanceRailItems(snapshot: OverviewSnapshot) {
   for (const connection of snapshot.connections) {
     if (connection.balance <= 0) continue;
     const rail = railForConnection(connection.kind, connection.label);
-    byRail[rail] += connection.balance * snapshot.priceEur;
+    byRail[rail] += connection.balance * fiatRate;
   }
   const total = Object.values(byRail).reduce((sum, value) => sum + value, 0);
   const items = [
@@ -1601,11 +1697,12 @@ export function buildBalanceRailItems(snapshot: OverviewSnapshot) {
 }
 
 export function buildHoldingsBySource(snapshot: OverviewSnapshot): HoldingsItem[] {
+  const fiatRate = activeMarketFiatRate(snapshot);
   const rows = snapshot.connections
     .filter((connection) => connection.balance > 0)
     .map((connection) => ({
       name: connection.label,
-      value: connection.balance * snapshot.priceEur,
+      value: connection.balance * fiatRate,
     }))
     .sort((a, b) => b.value - a.value);
   const total = rows.reduce((sum, item) => sum + item.value, 0);
