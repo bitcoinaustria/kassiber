@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import {
   AlertTriangle,
   ArrowDown,
@@ -367,7 +373,11 @@ function OutpointButton({
           hideSensitive && "sensitive",
         )}
         title={localTransactionTitle(row)}
-        onClick={() => onOpenTransaction(row.txid)}
+        onKeyDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpenTransaction(row.txid);
+        }}
       >
         <span className="truncate">{formatOutpoint(row.outpoint)}</span>
       </button>
@@ -388,7 +398,11 @@ function OutpointButton({
         hideSensitive && "sensitive",
       )}
       title={explorerButtonTitle(explorer)}
-      onClick={() => onOpen(row)}
+      onKeyDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpen(row);
+      }}
     >
       <span className="truncate">{formatOutpoint(row.outpoint)}</span>
       <ExternalLink
@@ -419,12 +433,17 @@ function LocationBlock({
           >
             {row.address}
           </span>
-          <CopyButton
-            value={row.address}
-            ariaLabel="Copy address"
-            variant="ghost"
-            className="size-5 shrink-0 text-muted-foreground"
-          />
+          <span
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            <CopyButton
+              value={row.address}
+              ariaLabel="Copy address"
+              variant="ghost"
+              className="size-5 shrink-0 text-muted-foreground"
+            />
+          </span>
         </div>
       ) : null}
     </div>
@@ -619,6 +638,22 @@ export function UtxosInventoryPanel({
   const handleSort = (column: SortableUtxoColumn) => {
     setSort((current) => nextSortForColumn(current, column));
   };
+  const openRowTransaction = (row: WalletUtxoRow, explorer: ExplorerTarget | null) => {
+    if (onOpenTransaction) {
+      onOpenTransaction(row.txid);
+      return;
+    }
+    if (explorer) setExplorerRow(row);
+  };
+  const openRowOnKeyboard = (
+    event: KeyboardEvent<HTMLElement>,
+    row: WalletUtxoRow,
+    explorer: ExplorerTarget | null,
+  ) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    openRowTransaction(row, explorer);
+  };
   const visibleRows = sortedRows.slice(0, visibleCount);
   const hiddenCount = sortedRows.length - visibleRows.length;
   const explorerTarget = explorerRow
@@ -751,7 +786,16 @@ export function UtxosInventoryPanel({
                     return (
                       <TableRow
                         key={row.id || row.outpoint}
-                        className={cn(isMempool(row) && "bg-muted/20")}
+                        role="button"
+                        tabIndex={0}
+                        className={cn(
+                          "cursor-pointer hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                          isMempool(row) && "bg-muted/20",
+                        )}
+                        onClick={() => openRowTransaction(row, explorer)}
+                        onKeyDown={(event) =>
+                          openRowOnKeyboard(event, row, explorer)
+                        }
                       >
                         <TableCell>
                           <div className="flex items-center gap-1">
@@ -762,12 +806,17 @@ export function UtxosInventoryPanel({
                               onOpen={setExplorerRow}
                               onOpenTransaction={onOpenTransaction}
                             />
-                            <CopyButton
-                              value={row.outpoint}
-                              ariaLabel="Copy outpoint"
-                              variant="ghost"
-                              className="size-5 shrink-0 text-muted-foreground"
-                            />
+                            <span
+                              onClick={(event) => event.stopPropagation()}
+                              onKeyDown={(event) => event.stopPropagation()}
+                            >
+                              <CopyButton
+                                value={row.outpoint}
+                                ariaLabel="Copy outpoint"
+                                variant="ghost"
+                                className="size-5 shrink-0 text-muted-foreground"
+                              />
+                            </span>
                           </div>
                         </TableCell>
                         <TableCell>
@@ -803,9 +852,15 @@ export function UtxosInventoryPanel({
                   <div
                     key={row.id || row.outpoint}
                     className={cn(
-                      "flex flex-col gap-2 px-4 py-3",
+                      "flex cursor-pointer flex-col gap-2 px-4 py-3 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                       isMempool(row) && "bg-muted/20",
                     )}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openRowTransaction(row, explorer)}
+                    onKeyDown={(event) =>
+                      openRowOnKeyboard(event, row, explorer)
+                    }
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-1">
@@ -816,12 +871,17 @@ export function UtxosInventoryPanel({
                           onOpen={setExplorerRow}
                           onOpenTransaction={onOpenTransaction}
                         />
-                        <CopyButton
-                          value={row.outpoint}
-                          ariaLabel="Copy outpoint"
-                          variant="ghost"
-                          className="size-5 shrink-0 text-muted-foreground"
-                        />
+                        <span
+                          onClick={(event) => event.stopPropagation()}
+                          onKeyDown={(event) => event.stopPropagation()}
+                        >
+                          <CopyButton
+                            value={row.outpoint}
+                            ariaLabel="Copy outpoint"
+                            variant="ghost"
+                            className="size-5 shrink-0 text-muted-foreground"
+                          />
+                        </span>
                       </div>
                       <Badge
                         variant={row.confirmation_status === "confirmed" ? "secondary" : "outline"}

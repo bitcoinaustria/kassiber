@@ -88,4 +88,27 @@ describe("overviewDetailTransactions", () => {
     expect(records).toHaveLength(1);
     expect(records[0]?.tags).toEqual(["Reviewed", "Income"]);
   });
+
+  it("includes resolved extra rows so wallet UTXO clicks can open details in place", () => {
+    const records = overviewDetailTransactions(
+      snapshot({
+        txs: [tx({ id: "recent-tx" })],
+      }),
+      [
+        tx({
+          id: "resolved-tx",
+          externalId:
+            "4e9f0b7d8c6a5b4c3d2e1f0099887766554433221100ffeeddccbbaa99887766",
+        }),
+      ],
+    );
+
+    expect(records.map((record) => record.id)).toEqual([
+      "recent-tx",
+      "resolved-tx",
+    ]);
+    expect(records[1]?.txnId).toBe(
+      "4e9f0b7d8c6a5b4c3d2e1f0099887766554433221100ffeeddccbbaa99887766",
+    );
+  });
 });

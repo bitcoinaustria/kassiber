@@ -5,7 +5,7 @@
  * Connections and Overview screens.
  */
 
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import {
@@ -31,6 +31,7 @@ import {
   UtxosInventoryPanel,
   type WalletUtxosData,
 } from "@/components/kb/wallets";
+import { useOverviewTransactionDetail } from "@/components/overview-dashboard/useOverviewTransactionDetail";
 import { NodeConnectionDetail } from "./NodeConnectionDetail";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -254,6 +255,7 @@ export function ConnectionDetail() {
   return (
     <ConnectionDetailView
       connection={connection}
+      snapshot={snapshot}
       priceEur={snapshot.priceEur}
       txs={snapshot.txs}
       hideSensitive={hideSensitive}
@@ -406,6 +408,7 @@ function NodeConnectionContainer({
 
 interface ConnectionDetailViewProps {
   connection: Connection;
+  snapshot: OverviewSnapshot;
   priceEur: number;
   txs: OverviewSnapshot["txs"];
   hideSensitive: boolean;
@@ -413,6 +416,7 @@ interface ConnectionDetailViewProps {
 
 function ConnectionDetailView({
   connection,
+  snapshot,
   priceEur,
   txs,
   hideSensitive,
@@ -424,6 +428,9 @@ function ConnectionDetailView({
   const updateNotification = useUiStore((state) => state.updateNotification);
   const identity = useUiStore((state) => state.identity);
   const explorerSettings = useUiStore((state) => state.explorerSettings);
+  const currency = useUiStore((state) => state.currency);
+  const [pendingUtxoTransactionId, setPendingUtxoTransactionId] =
+    useState<string | null>(null);
   const syncNoticeIdRef = useRef<string | null>(null);
   const walletSyncMutationKey = daemonMutationKey(dataMode, "ui.wallets.sync");
   const walletSyncsInFlight = useIsMutating({
@@ -484,11 +491,26 @@ function ConnectionDetailView({
     { wallet: connection.id },
     { retry: false },
   );
+  const utxoTransactionQuery = useDaemon<{
+    transaction?: OverviewSnapshot["txs"][number] | null;
+  }>(
+    "ui.transactions.resolve",
+    { query: pendingUtxoTransactionId ?? "" },
+    { enabled: Boolean(pendingUtxoTransactionId) },
+  );
+  const resolvedUtxoTransaction =
+    utxoTransactionQuery.data?.data?.transaction ?? null;
+  const { detailSheet, openTransactionDetail } = useOverviewTransactionDetail({
+    snapshot,
+    extraTransactions: resolvedUtxoTransaction
+      ? [resolvedUtxoTransaction]
+      : [],
+    hideSensitive,
+    currency,
+    explorerSettings,
+  });
   const openUtxoTransaction = (transactionId: string) => {
-    void navigate({
-      to: "/transactions",
-      search: { tx: transactionId },
-    });
+    setPendingUtxoTransactionId(transactionId);
   };
   const walletProvenanceRoutes = walletDetail?.btcpay_provenance ?? [];
   const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
@@ -531,6 +553,45 @@ function ConnectionDetailView({
       return account === label || account.includes(label);
     })
     .slice(0, 6);
+
+  useEffect(() => {
+    if (!pendingUtxoTransactionId || utxoTransactionQuery.isLoading) return;
+    if (resolvedUtxoTransaction) {
+      openTransactionDetail(pendingUtxoTransactionId);
+      setPendingUtxoTransactionId(null);
+      return;
+    }
+    if (utxoTransactionQuery.error) {
+      addNotification({
+        title: "Transaction not opened",
+        body:
+          utxoTransactionQuery.error instanceof Error
+            ? utxoTransactionQuery.error.message
+            : "Kassiber could not resolve this UTXO transaction.",
+        tone: "warning",
+        dedupeKey: `utxo-transaction-open-${pendingUtxoTransactionId}`,
+      });
+      setPendingUtxoTransactionId(null);
+      return;
+    }
+    if (utxoTransactionQuery.data) {
+      addNotification({
+        title: "Transaction not found",
+        body: "This UTXO has no matching imported Kassiber transaction yet.",
+        tone: "warning",
+        dedupeKey: `utxo-transaction-missing-${pendingUtxoTransactionId}`,
+      });
+      setPendingUtxoTransactionId(null);
+    }
+  }, [
+    addNotification,
+    openTransactionDetail,
+    pendingUtxoTransactionId,
+    resolvedUtxoTransaction,
+    utxoTransactionQuery.data,
+    utxoTransactionQuery.error,
+    utxoTransactionQuery.isLoading,
+  ]);
   const txCount = connection.transactionCount ?? txsForConnection.length;
   const isWalletSyncRunning =
     syncWallet.isPending ||
@@ -1389,6 +1450,7 @@ function ConnectionDetailView({
           </form>
         </DialogContent>
       </Dialog>
+      {detailSheet}
     </div>
   );
 }
