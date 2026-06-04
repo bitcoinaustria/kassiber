@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Coins,
@@ -129,6 +129,11 @@ type UtxoSortValue =
   | "confirmations-asc"
   | "outpoint-asc"
   | "outpoint-desc";
+
+// Render in pages so wallets with hundreds of coins stay responsive — the
+// header total stays accurate (it sums the full set server-side) regardless of
+// how many rows are currently revealed.
+export const UTXO_PAGE_SIZE = 50;
 
 export const UTXO_SORT_OPTIONS: Array<{ value: UtxoSortValue; label: string }> = [
   { value: "default", label: "Default order" },
@@ -500,12 +505,20 @@ export function UtxosInventoryPanel({
 }: UtxosInventoryPanelProps) {
   const rows = inventory?.utxos ?? [];
   const totals = inventory?.totals ?? [];
+  const walletId = inventory?.wallet?.id ?? null;
   const [sort, setSort] = useState<UtxoSortValue>("default");
   const [explorerRow, setExplorerRow] = useState<WalletUtxoRow | null>(null);
+  const [visibleCount, setVisibleCount] = useState(UTXO_PAGE_SIZE);
+  // Collapse back to the first page when switching wallets.
+  useEffect(() => {
+    setVisibleCount(UTXO_PAGE_SIZE);
+  }, [walletId]);
   const sortedRows = useMemo(
     () => sortUtxosForDisplay(rows, sort),
     [rows, sort],
   );
+  const visibleRows = sortedRows.slice(0, visibleCount);
+  const hiddenCount = sortedRows.length - visibleRows.length;
   const explorerTarget = explorerRow
     ? explorerTargetForUtxo(explorerRow, explorerSettings)
     : null;
@@ -648,7 +661,7 @@ export function UtxosInventoryPanel({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedRows.map((row) => {
+                  {visibleRows.map((row) => {
                     const explorer = explorerTargetForUtxo(row, explorerSettings);
                     return (
                       <TableRow
@@ -698,7 +711,7 @@ export function UtxosInventoryPanel({
             </div>
             {/* Mobile: stacked rows, matching the Recent transactions layout. */}
             <div className="divide-y sm:hidden">
-              {sortedRows.map((row) => {
+              {visibleRows.map((row) => {
                 const explorer = explorerTargetForUtxo(row, explorerSettings);
                 return (
                   <div
@@ -746,6 +759,24 @@ export function UtxosInventoryPanel({
                 );
               })}
             </div>
+            {hiddenCount > 0 ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2.5 text-xs text-muted-foreground">
+                <span>
+                  Showing {visibleRows.length.toLocaleString("en-US")} of{" "}
+                  {sortedRows.length.toLocaleString("en-US")}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setVisibleCount((count) => count + UTXO_PAGE_SIZE)
+                  }
+                >
+                  Show {Math.min(UTXO_PAGE_SIZE, hiddenCount).toLocaleString("en-US")} more
+                </Button>
+              </div>
+            ) : null}
             <UtxoExplorerOpenDialog
               row={explorerRow}
               target={explorerTarget}

@@ -284,4 +284,24 @@ describe("UtxosInventoryPanel", () => {
     expect(html).toContain("0.50000000");
     expect(html).not.toContain("₿");
   });
+
+  it("paginates large inventories with a show-more control", () => {
+    const many = Array.from({ length: 60 }, (_, i) => {
+      const txid = `${i.toString(16).padStart(2, "0")}${baseInventory.utxos[0].txid.slice(2)}`;
+      return {
+        ...baseInventory.utxos[0],
+        id: `coin-${i}`,
+        txid,
+        outpoint: `${txid}:0`,
+        address: i === 59 ? "bc1qhiddenrowmarker" : `bc1qvisiblerow${i}`,
+      };
+    });
+
+    const html = renderPanel({ ...baseInventory, utxos: many });
+
+    expect(html).toContain("Showing 50 of 60");
+    expect(html).toContain("Show 10 more");
+    expect(html).toContain("bc1qvisiblerow0");
+    expect(html).not.toContain("bc1qhiddenrowmarker");
+  });
 });
