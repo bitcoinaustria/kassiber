@@ -112,6 +112,10 @@ const flowChartConfig = {
 
 function toDashboardTransaction(tx: Tx, index: number): Transaction {
   const tag = tx.tag || "";
+  const displayAmountSat =
+    tx.type === "Consolidation" && tx.amountSat === 0 && tx.feeSat
+      ? tx.feeSat
+      : tx.amountSat;
   const isSwap =
     tag.toLowerCase().includes("swap") ||
     tx.type === "Swap" ||
@@ -119,7 +123,10 @@ function toDashboardTransaction(tx: Tx, index: number): Transaction {
     tx.type === "Melt";
   const flow: TransactionFlow = isSwap
     ? "swap"
-    : tx.internal || tx.type === "Transfer" || tx.type === "Rebalance"
+    : tx.internal ||
+        tx.type === "Transfer" ||
+        tx.type === "Consolidation" ||
+        tx.type === "Rebalance"
       ? "transfer"
       : tx.amountSat >= 0
         ? "incoming"
@@ -148,9 +155,9 @@ function toDashboardTransaction(tx: Tx, index: number): Transaction {
       tx.eur !== null
         ? Math.abs(tx.eur)
         : tx.rate !== null
-          ? Math.abs((tx.amountSat / SATS_PER_BTC) * tx.rate)
+          ? Math.abs((displayAmountSat / SATS_PER_BTC) * tx.rate)
           : null,
-    amountBtc: Math.abs(tx.amountSat / SATS_PER_BTC),
+    amountBtc: Math.abs(displayAmountSat / SATS_PER_BTC),
     feeBtc: tx.feeSat ? Math.abs(tx.feeSat / SATS_PER_BTC) : 0,
     feeEur:
       tx.feeSat && tx.rate !== null

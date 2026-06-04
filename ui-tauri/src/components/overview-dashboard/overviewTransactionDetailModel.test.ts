@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { OverviewSnapshot, Tx } from "@/mocks/seed";
+import { toDashboardTransaction } from "./model";
 import { overviewDetailTransactions } from "./overviewTransactionDetailModel";
 
 function tx(overrides: Partial<Tx> & Pick<Tx, "id">): Tx {
@@ -38,6 +39,24 @@ function snapshot(overrides: Partial<OverviewSnapshot>): OverviewSnapshot {
 }
 
 describe("overviewDetailTransactions", () => {
+  it("shows fee-only consolidations as transfer rows with the fee amount", () => {
+    const record = toDashboardTransaction(
+      tx({
+        id: "tx12",
+        type: "Consolidation",
+        amountSat: 0,
+        feeSat: 42_180,
+        eur: -30.13,
+        tag: "Consolidation fee",
+      }),
+      0,
+    );
+
+    expect(record.flow).toBe("transfer");
+    expect(record.amountBtc).toBe(-0.0004218);
+    expect(record.amount).toBe(-30.13);
+  });
+
   it("includes activity-only rows so chart markers can open details", () => {
     const records = overviewDetailTransactions(
       snapshot({

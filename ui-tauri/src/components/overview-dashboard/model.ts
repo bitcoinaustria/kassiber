@@ -1996,11 +1996,15 @@ export function flowForOverviewTx(tx: OverviewTx): OverviewTransactionFlow {
 }
 
 export function toDashboardTransaction(tx: OverviewTx, index: number): Transaction {
+  const displayAmountSat =
+    tx.type === "Consolidation" && tx.amountSat === 0 && tx.feeSat
+      ? -Math.abs(tx.feeSat)
+      : tx.amountSat;
   const amount =
     tx.eur !== null
       ? tx.eur
       : tx.rate !== null
-        ? (tx.amountSat / 100_000_000) * tx.rate
+        ? (displayAmountSat / 100_000_000) * tx.rate
         : null;
   const account = tx.account || tx.counter || "Unassigned";
   const accountLower = account.toLowerCase();
@@ -2041,7 +2045,7 @@ export function toDashboardTransaction(tx: OverviewTx, index: number): Transacti
     status,
     flow: flowForOverviewTx(tx),
     amount,
-    amountBtc: tx.amountSat / 100_000_000,
+    amountBtc: displayAmountSat / 100_000_000,
     date: tx.date,
   };
 }
