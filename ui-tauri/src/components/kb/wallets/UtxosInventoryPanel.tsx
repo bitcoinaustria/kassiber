@@ -134,8 +134,8 @@ export const UTXO_SORT_OPTIONS: Array<{ value: UtxoSortValue; label: string }> =
   { value: "default", label: "Default order" },
   { value: "size-desc", label: "Size: largest first" },
   { value: "size-asc", label: "Size: smallest first" },
-  { value: "date-desc", label: "Chain date: newest first" },
-  { value: "date-asc", label: "Chain date: oldest first" },
+  { value: "date-desc", label: "Confirmed: newest first" },
+  { value: "date-asc", label: "Confirmed: oldest first" },
   { value: "confirmations-desc", label: "Confirmations: most first" },
   { value: "confirmations-asc", label: "Confirmations: fewest first" },
   { value: "outpoint-asc", label: "Outpoint: A-Z" },
@@ -211,16 +211,9 @@ function dateLabel(value: string | null | undefined) {
 }
 
 // The Status column already conveys confirmed/mempool state, so the date column
-// shows only an actual chain date (or "—" when the output is still unconfirmed).
+// shows only the block confirmation time (or "—" when still unconfirmed).
 function primaryDateLabel(row: WalletUtxoRow) {
   return row.block_time ? dateLabel(row.block_time) : null;
-}
-
-function seenDateLabel(row: WalletUtxoRow) {
-  if (row.source.last_seen_at && row.source.last_seen_at !== row.block_time) {
-    return dateLabel(row.source.last_seen_at);
-  }
-  return null;
 }
 
 function rowDateMs(row: WalletUtxoRow) {
@@ -651,13 +644,12 @@ export function UtxosInventoryPanel({
                     <TableHead>Amount</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Address</TableHead>
-                    <TableHead className="text-right">Chain date</TableHead>
+                    <TableHead className="text-right">Confirmed</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {sortedRows.map((row) => {
                     const explorer = explorerTargetForUtxo(row, explorerSettings);
-                    const seen = seenDateLabel(row);
                     return (
                       <TableRow
                         key={row.id || row.outpoint}
@@ -695,11 +687,8 @@ export function UtxosInventoryPanel({
                         <TableCell className="max-w-[220px]">
                           <LocationBlock row={row} hideSensitive={hideSensitive} />
                         </TableCell>
-                        <TableCell className="text-right text-xs text-muted-foreground">
-                          <div className="font-mono">{primaryDateLabel(row) ?? "—"}</div>
-                          {seen ? (
-                            <div className="mt-1 font-mono">seen {seen}</div>
-                          ) : null}
+                        <TableCell className="text-right font-mono text-xs text-muted-foreground">
+                          {primaryDateLabel(row) ?? "—"}
                         </TableCell>
                       </TableRow>
                     );

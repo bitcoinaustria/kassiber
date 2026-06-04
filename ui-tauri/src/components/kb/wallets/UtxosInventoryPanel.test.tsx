@@ -123,7 +123,7 @@ describe("UtxosInventoryPanel", () => {
 
     expect(html).toContain("Sort UTXOs");
     expect(UTXO_SORT_OPTIONS.map((option) => option.label)).toContain(
-      "Chain date: newest first",
+      "Confirmed: newest first",
     );
   });
 
