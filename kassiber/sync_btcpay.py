@@ -96,15 +96,15 @@ def fetch_btcpay_records(
         if isinstance(previous, dict) and previous.get("fingerprint") == fingerprint:
             next_pages[page_key] = previous
             stopped_by_known_page = True
-            break
-        for tx in page:
-            if _is_confirmed_transaction(tx):
-                records.append(_to_record(tx, payment_method_id))
-        next_pages[page_key] = {
-            "fingerprint": fingerprint,
-            "stable_ids": _page_stable_ids(page),
-            "rows": len(page),
-        }
+        else:
+            for tx in page:
+                if _is_confirmed_transaction(tx):
+                    records.append(_to_record(tx, payment_method_id))
+            next_pages[page_key] = {
+                "fingerprint": fingerprint,
+                "stable_ids": _page_stable_ids(page),
+                "rows": len(page),
+            }
         if len(page) < page_size:
             break
         skip += page_size
@@ -179,13 +179,13 @@ def fetch_btcpay_invoice_provenance(
         if isinstance(previous, dict) and previous.get("fingerprint") == fingerprint:
             next_pages[page_key] = previous
             stopped_by_known_page = True
-            break
-        invoices.extend(_normalize_invoice_provenance(store_id, invoice) for invoice in page)
-        next_pages[page_key] = {
-            "fingerprint": fingerprint,
-            "stable_ids": _invoice_page_stable_ids(page),
-            "rows": len(page),
-        }
+        else:
+            invoices.extend(_normalize_invoice_provenance(store_id, invoice) for invoice in page)
+            next_pages[page_key] = {
+                "fingerprint": fingerprint,
+                "stable_ids": _invoice_page_stable_ids(page),
+                "rows": len(page),
+            }
         if len(page) < page_size:
             break
         skip += page_size

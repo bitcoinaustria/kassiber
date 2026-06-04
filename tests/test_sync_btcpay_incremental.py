@@ -34,7 +34,7 @@ class _Opener:
 
 
 class BtcpayIncrementalTest(unittest.TestCase):
-    def test_wallet_history_stops_at_unchanged_page_fingerprint(self):
+    def test_wallet_history_skips_unchanged_page_and_continues_to_end(self):
         backend = {"name": "btcpay", "kind": "btcpay", "url": "https://btcpay.example", "token": "secret"}
         page0 = [
             {
@@ -67,7 +67,8 @@ class BtcpayIncrementalTest(unittest.TestCase):
             metadata=second_metadata,
         )
         self.assertEqual(records, [])
-        self.assertEqual(len(second_opener.urls), 1)
+        self.assertEqual(len(second_opener.urls), 2)
+        self.assertEqual(second_metadata["pages_fetched"], 2)
         self.assertTrue(second_metadata["stopped_by_known_page"])
 
     def test_wallet_history_reimports_when_metadata_changes_with_same_id(self):
@@ -116,7 +117,62 @@ class BtcpayIncrementalTest(unittest.TestCase):
         self.assertEqual(records[0]["_btcpay_labels"], ["new"])
         self.assertEqual(len(second_opener.urls), 2)
 
-    def test_invoice_provenance_stops_at_unchanged_page_fingerprint(self):
+    def test_wallet_history_reimports_older_changed_page_after_newer_unchanged(self):
+        backend = {"name": "btcpay", "kind": "btcpay", "url": "https://btcpay.example", "token": "secret"}
+        page0 = [
+            {
+                "transactionHash": "aa" * 32,
+                "timestamp": 1_700_000_100,
+                "amount": "0.01",
+                "confirmations": 6,
+                "comment": "Newest stable",
+            }
+        ]
+        page1 = [
+            {
+                "transactionHash": "bb" * 32,
+                "timestamp": 1_700_000_000,
+                "amount": "0.02",
+                "confirmations": 6,
+                "comment": "Older original",
+                "labels": ["old"],
+            }
+        ]
+        metadata = {}
+        records = fetch_btcpay_records(
+            backend,
+            "store",
+            page_size=1,
+            opener=_Opener({0: page0, 1: page1, 2: []}),
+            metadata=metadata,
+        )
+        self.assertEqual(len(records), 2)
+
+        updated_page1 = [
+            {
+                **page1[0],
+                "comment": "Older corrected",
+                "labels": ["corrected"],
+            }
+        ]
+        second_opener = _Opener({0: page0, 1: updated_page1, 2: []})
+        second_metadata = {}
+        records = fetch_btcpay_records(
+            backend,
+            "store",
+            page_size=1,
+            opener=second_opener,
+            checkpoint={"btcpay_pages": metadata["btcpay_pages"]},
+            metadata=second_metadata,
+        )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["_btcpay_comment"], "Older corrected")
+        self.assertEqual(records[0]["_btcpay_labels"], ["corrected"])
+        self.assertEqual(len(second_opener.urls), 3)
+        self.assertTrue(second_metadata["stopped_by_known_page"])
+
+    def test_invoice_provenance_skips_unchanged_page_and_continues_to_end(self):
         backend = {"name": "btcpay", "kind": "btcpay", "url": "https://btcpay.example", "token": "secret"}
         page0 = [{"id": "invoice-1", "status": "Settled", "payments": []}]
         opener = _Opener({0: page0, 1: []})
@@ -142,7 +198,8 @@ class BtcpayIncrementalTest(unittest.TestCase):
             metadata=second_metadata,
         )
         self.assertEqual(records, [])
-        self.assertEqual(len(second_opener.urls), 1)
+        self.assertEqual(len(second_opener.urls), 2)
+        self.assertEqual(second_metadata["pages_fetched"], 2)
         self.assertTrue(second_metadata["stopped_by_known_page"])
 
     def test_invoice_provenance_reimports_when_metadata_changes_with_same_id(self):
@@ -186,6 +243,56 @@ class BtcpayIncrementalTest(unittest.TestCase):
         self.assertEqual(records[0]["order_id"], "order-2")
         self.assertEqual(records[0]["order_url"], "https://shop.example/orders/2")
         self.assertEqual(len(second_opener.urls), 2)
+
+    def test_invoice_provenance_reimports_older_changed_page_after_newer_unchanged(self):
+        backend = {"name": "btcpay", "kind": "btcpay", "url": "https://btcpay.example", "token": "secret"}
+        page0 = [
+            {
+                "id": "invoice-new",
+                "status": "Settled",
+                "metadata": {"orderId": "order-new"},
+                "payments": [],
+            }
+        ]
+        page1 = [
+            {
+                "id": "invoice-old",
+                "status": "Settled",
+                "metadata": {"orderId": "order-old"},
+                "payments": [],
+            }
+        ]
+        metadata = {}
+        records = fetch_btcpay_invoice_provenance(
+            backend,
+            "store",
+            page_size=1,
+            opener=_Opener({0: page0, 1: page1, 2: []}),
+            metadata=metadata,
+        )
+        self.assertEqual(len(records), 2)
+
+        updated_page1 = [
+            {
+                **page1[0],
+                "metadata": {"orderId": "order-old-corrected"},
+            }
+        ]
+        second_opener = _Opener({0: page0, 1: updated_page1, 2: []})
+        second_metadata = {}
+        records = fetch_btcpay_invoice_provenance(
+            backend,
+            "store",
+            page_size=1,
+            opener=second_opener,
+            checkpoint={"btcpay_invoice_pages": metadata["btcpay_invoice_pages"]},
+            metadata=second_metadata,
+        )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["order_id"], "order-old-corrected")
+        self.assertEqual(len(second_opener.urls), 3)
+        self.assertTrue(second_metadata["stopped_by_known_page"])
 
 
 if __name__ == "__main__":

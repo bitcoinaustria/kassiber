@@ -1,7 +1,9 @@
 import ast
 import json
+import queue
 import sqlite3
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -422,6 +424,64 @@ class FreshnessTest(unittest.TestCase):
         self.assertIn(freshness.rate_source_key(profile_id), active_keys)
         self.assertIn(freshness.journal_source_key(profile_id), active_keys)
         self.assertEqual(active_keys.count(cold_key), 1)
+
+    def test_background_worker_uses_remembered_unlock_passphrase(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        conn.execute("INSERT INTO settings(key, value) VALUES('context_workspace', 'ws')")
+        conn.execute("INSERT INTO settings(key, value) VALUES('context_profile', ?)", (profile_id,))
+        freshness.set_policy(conn, profile_id, background_enabled=True)
+        conn.commit()
+
+        class _Out:
+            def __init__(self):
+                self.payloads = []
+
+            def write(self, payload):
+                self.payloads.append(payload)
+
+        ctx = daemon_runtime.DaemonContext(
+            conn=conn,
+            data_root="encrypted-data-root",
+            runtime_config={},
+            active_ai_chats=daemon_runtime.ActiveAiChats(),
+            main_thread_tasks=queue.Queue(),
+            auth_backoff=daemon_runtime.AuthAttemptBackoff(),
+            input_lines=queue.Queue(),
+            deferred_input_lines=[],
+            out=_Out(),
+            freshness_stop_event=threading.Event(),
+            db_passphrase="remembered-passphrase",
+        )
+        captured = []
+        opened = threading.Event()
+        closed = threading.Event()
+
+        class _WorkerConn:
+            def close(self):
+                closed.set()
+
+        def fake_open_db(data_root, *, passphrase=None, require_existing_schema=False):
+            del data_root, require_existing_schema
+            captured.append(passphrase)
+            opened.set()
+            return _WorkerConn()
+
+        try:
+            with (
+                patch.object(daemon_runtime, "open_db", side_effect=fake_open_db),
+                patch.object(daemon_runtime, "merge_db_backends"),
+                patch.object(daemon_runtime, "_freshness_background_tick"),
+            ):
+                daemon_runtime._start_freshness_background_worker(ctx)
+                self.assertTrue(opened.wait(timeout=2))
+        finally:
+            ctx.freshness_stop_event.set()
+            if ctx.freshness_worker is not None:
+                ctx.freshness_worker.join(timeout=2)
+
+        self.assertEqual(captured, ["remembered-passphrase"])
+        self.assertTrue(closed.wait(timeout=2))
 
 
 if __name__ == "__main__":

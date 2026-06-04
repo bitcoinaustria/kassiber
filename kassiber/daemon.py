@@ -644,6 +644,7 @@ class DaemonContext:
     deferred_input_lines: list[str]
     out: Any
     freshness_stop_event: threading.Event
+    db_passphrase: str | None = None
     freshness_worker: threading.Thread | None = None
 
 
@@ -2212,6 +2213,8 @@ def _open_daemon_connection(
     require_existing_schema: bool = False,
 ) -> sqlite3.Connection:
     if ctx.conn is not None:
+        if passphrase:
+            ctx.db_passphrase = passphrase
         _start_freshness_background_worker(ctx, passphrase=passphrase)
         return ctx.conn
     conn = open_db(
@@ -2221,6 +2224,8 @@ def _open_daemon_connection(
     )
     merge_db_backends(conn, ctx.runtime_config)
     ctx.conn = conn
+    if passphrase:
+        ctx.db_passphrase = passphrase
     _start_freshness_background_worker(ctx, passphrase=passphrase)
     return conn
 
@@ -3291,6 +3296,7 @@ def _start_freshness_background_worker(
             return
     except sqlite3.Error:
         return
+    worker_passphrase = passphrase if passphrase is not None else ctx.db_passphrase
 
     def _worker(db_passphrase: str | None) -> None:
         worker_conn: sqlite3.Connection | None = None
@@ -3344,7 +3350,7 @@ def _start_freshness_background_worker(
 
     worker = threading.Thread(
         target=_worker,
-        args=(passphrase,),
+        args=(worker_passphrase,),
         daemon=True,
         name="kassiber-freshness-worker",
     )
@@ -7778,6 +7784,7 @@ def handle_request(
         if ctx.conn is not None:
             ctx.conn.close()
             ctx.conn = None
+        ctx.db_passphrase = None
         return (
             _with_request_id(
                 build_envelope("daemon.lock", {"locked": True}),
