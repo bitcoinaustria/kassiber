@@ -119,7 +119,6 @@ describe("UtxosInventoryPanel", () => {
           },
         },
       ],
-      summary: { count: 2 },
     });
 
     expect(html).toContain("Sort UTXOs");
@@ -213,7 +212,6 @@ describe("UtxosInventoryPanel", () => {
       ...baseInventory,
       utxos: [],
       totals: [],
-      summary: { count: 0 },
     });
     expect(emptyHtml).toContain("No UTXOs known");
 
@@ -246,5 +244,44 @@ describe("UtxosInventoryPanel", () => {
     });
     expect(liquidHtml).toContain("Liquid UTXOs need unblinding");
     expect(liquidHtml).toContain("private blinding keys");
+  });
+
+  it("surfaces totals, freshness, and copy affordances", () => {
+    const html = renderPanel();
+
+    expect(html).toContain("As of");
+    expect(html).toContain("Copy outpoint");
+    expect(html).toContain("Copy address");
+    // The summed total renders in the header in addition to the per-row amount.
+    expect((html.match(/₿ 0\.12500000/g) ?? []).length).toBeGreaterThan(1);
+  });
+
+  it("renders Liquid amounts with an explicit ticker and no bitcoin glyph", () => {
+    const html = renderPanel({
+      ...baseInventory,
+      utxos: [
+        {
+          ...baseInventory.utxos[0],
+          id: "liquid-coin",
+          asset: "L-BTC",
+          amount: 0.5,
+          amount_sat: 50_000_000,
+          amount_msat: 50_000_000_000,
+          source: { ...baseInventory.utxos[0].source, chain: "liquid" },
+        },
+      ],
+      totals: [
+        {
+          asset: "L-BTC",
+          amount: 0.5,
+          amount_sat: 50_000_000,
+          amount_msat: 50_000_000_000,
+        },
+      ],
+    });
+
+    expect(html).toContain("L-BTC");
+    expect(html).toContain("0.50000000");
+    expect(html).not.toContain("₿");
   });
 });

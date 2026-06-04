@@ -24,6 +24,7 @@ import {
 
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { ConnectionStatusPill } from "@/components/kb/ConnectionStatusPill";
+import { CountBadge } from "@/components/kb/CountBadge";
 import { DetailRow } from "@/components/kb/DetailRow";
 import { MetricCard } from "@/components/kb/MetricCard";
 import {
@@ -1000,9 +1001,7 @@ function ConnectionDetailView({
           <CardHeader className="border-b px-4 pb-3">
             <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
               Recent transactions
-              <span className="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-[10px] font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
-                {txsForConnection.length}
-              </span>
+              <CountBadge>{txsForConnection.length}</CountBadge>
             </CardTitle>
             <CardDescription>
               Recent transactions for this wallet source.

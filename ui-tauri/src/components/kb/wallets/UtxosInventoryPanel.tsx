@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 
 import { openExternalUrl } from "@/daemon/transport";
+import { CopyButton } from "@/components/kb/CopyButton";
+import { CountBadge } from "@/components/kb/CountBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -78,18 +80,20 @@ export interface WalletUtxoRow {
   };
 }
 
+export interface WalletUtxoTotal {
+  asset: string;
+  amount: number | string;
+  amount_sat: number;
+  amount_msat: number;
+}
+
 export interface WalletUtxosData {
   wallet: {
     id: string;
     label: string;
   } | null;
   utxos: WalletUtxoRow[];
-  totals: Array<{
-    asset: string;
-    amount: number | string;
-    amount_sat: number;
-    amount_msat: number;
-  }>;
+  totals: WalletUtxoTotal[];
   support: {
     supported: boolean;
     status: string;
@@ -103,11 +107,6 @@ export interface WalletUtxosData {
     stale: boolean;
     active_count?: number;
   };
-  summary?: {
-    workspace?: string | null;
-    profile?: string | null;
-    count: number;
-  };
 }
 
 interface UtxosInventoryPanelProps {
@@ -120,7 +119,6 @@ interface UtxosInventoryPanelProps {
   onRefresh: () => void;
 }
 
-const BTC_ASSETS = new Set(["BTC", "LBTC", "L-BTC"]);
 type UtxoSortValue =
   | "default"
   | "size-desc"
@@ -144,11 +142,37 @@ export const UTXO_SORT_OPTIONS: Array<{ value: UtxoSortValue; label: string }> =
   { value: "outpoint-desc", label: "Outpoint: Z-A" },
 ];
 
-function formatAmount(value: number | string, asset: string) {
+function formatAmountText(value: number | string) {
   const amount = Number(value);
-  if (!Number.isFinite(amount)) return `${value} ${asset}`;
-  if (BTC_ASSETS.has(asset)) return `₿ ${amount.toFixed(8)}`;
-  return `${amount.toFixed(8)} ${asset}`;
+  return Number.isFinite(amount) ? amount.toFixed(8) : String(value);
+}
+
+// Bitcoin renders with the ₿ glyph as its unit (house style, matches the rest
+// of the app). Liquid and other assets keep an explicit ticker so L-BTC is
+// never shown as on-chain ₿, and the ticker is rendered exactly once.
+function AmountDisplay({
+  value,
+  asset,
+  hideSensitive,
+  className,
+}: {
+  value: number | string;
+  asset: string;
+  hideSensitive?: boolean;
+  className?: string;
+}) {
+  const text = formatAmountText(value);
+  const isBtc = asset === "BTC";
+  return (
+    <span className={cn("inline-flex items-baseline gap-1", className)}>
+      <span className={cn("tabular-nums", hideSensitive && "sensitive")}>
+        {isBtc ? `₿ ${text}` : text}
+      </span>
+      {isBtc ? null : (
+        <span className="text-xs font-normal text-muted-foreground">{asset}</span>
+      )}
+    </span>
+  );
 }
 
 function formatOutpoint(value: string) {
@@ -172,6 +196,10 @@ function statusLabel(row: WalletUtxoRow) {
   return "mempool";
 }
 
+function isMempool(row: WalletUtxoRow) {
+  return row.confirmation_status !== "confirmed";
+}
+
 function dateLabel(value: string | null | undefined) {
   if (!value) return null;
   const parsed = Date.parse(value);
@@ -182,10 +210,17 @@ function dateLabel(value: string | null | undefined) {
   });
 }
 
+// The Status column already conveys confirmed/mempool state, so the date column
+// shows only an actual chain date (or "—" when the output is still unconfirmed).
 function primaryDateLabel(row: WalletUtxoRow) {
-  if (row.block_time) return dateLabel(row.block_time);
-  if (row.confirmation_status !== "confirmed") return "mempool";
-  return "unknown";
+  return row.block_time ? dateLabel(row.block_time) : null;
+}
+
+function seenDateLabel(row: WalletUtxoRow) {
+  if (row.source.last_seen_at && row.source.last_seen_at !== row.block_time) {
+    return dateLabel(row.source.last_seen_at);
+  }
+  return null;
 }
 
 function rowDateMs(row: WalletUtxoRow) {
@@ -270,6 +305,75 @@ function explorerOpenErrorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
   if (typeof error === "string" && error) return error;
   return "Could not open explorer in the default browser.";
+}
+
+function OutpointButton({
+  row,
+  explorer,
+  hideSensitive,
+  onOpen,
+}: {
+  row: WalletUtxoRow;
+  explorer: ExplorerTarget | null;
+  hideSensitive: boolean;
+  onOpen: (row: WalletUtxoRow) => void;
+}) {
+  if (!explorer) {
+    return (
+      <span className={cn("font-mono text-xs", hideSensitive && "sensitive")}>
+        {formatOutpoint(row.outpoint)}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className={cn(
+        "inline-flex max-w-[22ch] items-center gap-1 truncate text-left font-mono text-xs underline-offset-4 hover:underline",
+        hideSensitive && "sensitive",
+      )}
+      title={explorerButtonTitle(explorer)}
+      onClick={() => onOpen(row)}
+    >
+      <span className="truncate">{formatOutpoint(row.outpoint)}</span>
+      <ExternalLink
+        className="size-3 shrink-0 text-muted-foreground"
+        aria-hidden="true"
+      />
+    </button>
+  );
+}
+
+function LocationBlock({
+  row,
+  hideSensitive,
+}: {
+  row: WalletUtxoRow;
+  hideSensitive: boolean;
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="truncate text-sm">{formatLocation(row)}</div>
+      {row.address ? (
+        <div className="flex min-w-0 items-center gap-1">
+          <span
+            className={cn(
+              "truncate font-mono text-xs text-muted-foreground",
+              hideSensitive && "sensitive",
+            )}
+          >
+            {row.address}
+          </span>
+          <CopyButton
+            value={row.address}
+            ariaLabel="Copy address"
+            variant="ghost"
+            className="size-5 shrink-0 text-muted-foreground"
+          />
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function UtxoExplorerOpenDialog({
@@ -402,6 +506,7 @@ export function UtxosInventoryPanel({
   onRefresh,
 }: UtxosInventoryPanelProps) {
   const rows = inventory?.utxos ?? [];
+  const totals = inventory?.totals ?? [];
   const [sort, setSort] = useState<UtxoSortValue>("default");
   const [explorerRow, setExplorerRow] = useState<WalletUtxoRow | null>(null);
   const sortedRows = useMemo(
@@ -415,22 +520,41 @@ export function UtxosInventoryPanel({
   const unsupported = inventory?.support.supported === false;
   const liquidBlocked = inventory?.support.status === "liquid_unblind_blocked";
   const title = liquidBlocked ? "Liquid UTXOs need unblinding" : "UTXO inventory unavailable";
+  const lastSyncedLabel = dateLabel(
+    inventory?.freshness.last_synced_at ?? inventory?.freshness.last_seen_at,
+  );
 
   return (
     <Card>
       <CardHeader className="border-b px-4 pb-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
+          <div className="min-w-0">
             <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
               <Coins className="size-4" aria-hidden="true" />
               UTXOs
-              <span className="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-[10px] font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
-                {rows.length.toLocaleString("en-US")}
-              </span>
+              <CountBadge>{rows.length.toLocaleString("en-US")}</CountBadge>
             </CardTitle>
-            <CardDescription>
+            {totals.length > 0 ? (
+              <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                {totals.map((total) => (
+                  <AmountDisplay
+                    key={total.asset}
+                    value={total.amount}
+                    asset={total.asset}
+                    hideSensitive={hideSensitive}
+                    className="text-base font-semibold sm:text-lg"
+                  />
+                ))}
+              </div>
+            ) : null}
+            <CardDescription className="mt-1">
               Currently unspent transaction outputs known from this source.
             </CardDescription>
+            {lastSyncedLabel ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                As of {lastSyncedLabel}
+              </p>
+            ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {rows.length > 1 ? (
@@ -512,89 +636,127 @@ export function UtxosInventoryPanel({
             {stale ? (
               <div className="flex items-start gap-2 border-b bg-amber-50 px-4 py-2.5 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
                 <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-                <span>Refresh this source to update the UTXO inventory.</span>
+                <span>
+                  {lastSyncedLabel ? `Last refreshed ${lastSyncedLabel}. ` : ""}
+                  Refresh this source to update the UTXO inventory.
+                </span>
               </div>
             ) : null}
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Outpoint</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Address</TableHead>
-                  <TableHead className="text-right">Chain date</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedRows.map((row) => {
-                  const explorer = explorerTargetForUtxo(row, explorerSettings);
-                  return (
-                    <TableRow key={row.id || row.outpoint}>
-                      <TableCell className="font-mono text-xs">
-                        {explorer ? (
-                          <button
-                            type="button"
-                            className={cn(
-                              "inline-flex max-w-[22ch] items-center gap-1 truncate text-left underline-offset-4 hover:underline",
-                              hideSensitive && "sensitive",
-                            )}
-                            title={explorerButtonTitle(explorer)}
-                            onClick={() => setExplorerRow(row)}
-                          >
-                            <span className="truncate">
-                              {formatOutpoint(row.outpoint)}
-                            </span>
-                            <ExternalLink
-                              className="size-3 shrink-0 text-muted-foreground"
-                              aria-hidden="true"
+            {/* Desktop: dense columnar table for scanning amounts/confirmations. */}
+            <div className="hidden sm:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Outpoint</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Address</TableHead>
+                    <TableHead className="text-right">Chain date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sortedRows.map((row) => {
+                    const explorer = explorerTargetForUtxo(row, explorerSettings);
+                    const seen = seenDateLabel(row);
+                    return (
+                      <TableRow
+                        key={row.id || row.outpoint}
+                        className={cn(isMempool(row) && "bg-muted/20")}
+                      >
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <OutpointButton
+                              row={row}
+                              explorer={explorer}
+                              hideSensitive={hideSensitive}
+                              onOpen={setExplorerRow}
                             />
-                          </button>
-                        ) : (
-                          formatOutpoint(row.outpoint)
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <span className={cn("font-medium", hideSensitive && "sensitive")}>
-                          {formatAmount(row.amount, row.asset)}
-                        </span>
-                        <span className="ml-1 text-xs text-muted-foreground">
-                          {row.asset}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={row.confirmation_status === "confirmed" ? "secondary" : "outline"}>
-                          {statusLabel(row)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="max-w-[220px]">
-                        <div className="truncate text-sm">{formatLocation(row)}</div>
-                        {row.address ? (
-                          <div
-                            className={cn(
-                              "truncate font-mono text-xs text-muted-foreground",
-                              hideSensitive && "sensitive",
-                            )}
-                          >
-                            {row.address}
+                            <CopyButton
+                              value={row.outpoint}
+                              ariaLabel="Copy outpoint"
+                              variant="ghost"
+                              className="size-5 shrink-0 text-muted-foreground"
+                            />
                           </div>
-                        ) : null}
-                      </TableCell>
-                      <TableCell className="text-right text-xs text-muted-foreground">
-                        <div className="font-mono">
-                          {primaryDateLabel(row) || "unknown"}
-                        </div>
-                        {row.source.last_seen_at &&
-                        row.source.last_seen_at !== row.block_time ? (
-                          <div className="mt-1 font-mono">
-                            seen {dateLabel(row.source.last_seen_at)}
-                          </div>
-                        ) : null}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                        </TableCell>
+                        <TableCell>
+                          <AmountDisplay
+                            value={row.amount}
+                            asset={row.asset}
+                            hideSensitive={hideSensitive}
+                            className="font-medium"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={row.confirmation_status === "confirmed" ? "secondary" : "outline"}>
+                            {statusLabel(row)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="max-w-[220px]">
+                          <LocationBlock row={row} hideSensitive={hideSensitive} />
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground">
+                          <div className="font-mono">{primaryDateLabel(row) ?? "—"}</div>
+                          {seen ? (
+                            <div className="mt-1 font-mono">seen {seen}</div>
+                          ) : null}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+            {/* Mobile: stacked rows, matching the Recent transactions layout. */}
+            <div className="divide-y sm:hidden">
+              {sortedRows.map((row) => {
+                const explorer = explorerTargetForUtxo(row, explorerSettings);
+                return (
+                  <div
+                    key={row.id || row.outpoint}
+                    className={cn(
+                      "flex flex-col gap-2 px-4 py-3",
+                      isMempool(row) && "bg-muted/20",
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-1">
+                        <OutpointButton
+                          row={row}
+                          explorer={explorer}
+                          hideSensitive={hideSensitive}
+                          onOpen={setExplorerRow}
+                        />
+                        <CopyButton
+                          value={row.outpoint}
+                          ariaLabel="Copy outpoint"
+                          variant="ghost"
+                          className="size-5 shrink-0 text-muted-foreground"
+                        />
+                      </div>
+                      <Badge
+                        variant={row.confirmation_status === "confirmed" ? "secondary" : "outline"}
+                        className="shrink-0"
+                      >
+                        {statusLabel(row)}
+                      </Badge>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <AmountDisplay
+                        value={row.amount}
+                        asset={row.asset}
+                        hideSensitive={hideSensitive}
+                        className="text-sm font-medium"
+                      />
+                      <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                        {primaryDateLabel(row) ?? "—"}
+                      </span>
+                    </div>
+                    <LocationBlock row={row} hideSensitive={hideSensitive} />
+                  </div>
+                );
+              })}
+            </div>
             <UtxoExplorerOpenDialog
               row={explorerRow}
               target={explorerTarget}
