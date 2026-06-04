@@ -119,6 +119,100 @@ class FreshnessTest(unittest.TestCase):
         self.assertEqual(state["stale_reason"], "cancelled")
         self.assertTrue(state["blocking_reports"])
 
+    def test_running_cancel_stays_single_flight_and_finishes_cancelled(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        job = freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            job_type=freshness.JOB_ONCHAIN_WALLET,
+            source_key="onchain_wallet:cold",
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Cold wallet",
+            priority=10,
+        )
+        conn.commit()
+        seen = []
+
+        def cancellable(conn, running_job, progress, check_cancelled):
+            progress({"phase": freshness.PHASE_BACKEND_FETCH})
+            requested = freshness.cancel_job(conn, running_job["id"])
+            self.assertEqual(requested["status"], freshness.JOB_RUNNING)
+            self.assertTrue(requested["cancel_requested"])
+            duplicate = freshness.enqueue_job(
+                conn,
+                profile_id=profile_id,
+                job_type=freshness.JOB_ONCHAIN_WALLET,
+                source_key="onchain_wallet:cold",
+                source_type=freshness.SOURCE_ONCHAIN,
+                source_label="Cold wallet",
+                priority=10,
+            )
+            self.assertEqual(duplicate["id"], running_job["id"])
+            seen.append("cancel_requested")
+            check_cancelled()
+            raise AssertionError("cancelled job continued after check")
+
+        results = freshness.run_due_jobs(
+            conn,
+            {freshness.JOB_ONCHAIN_WALLET: cancellable},
+            profile_id=profile_id,
+            limit=1,
+        )
+
+        self.assertEqual(seen, ["cancel_requested"])
+        self.assertEqual(results[0]["status"], freshness.JOB_CANCELLED)
+        self.assertEqual(results[0]["error"], {})
+        state = freshness.get_source_state(conn, profile_id, "onchain_wallet:cold")
+        self.assertEqual(state["status"], freshness.STATUS_BLOCKING_REPORTS)
+        self.assertEqual(state["stale_reason"], "cancelled")
+        self.assertTrue(state["blocking_reports"])
+
+    def test_paused_queued_source_does_not_run_until_resumed(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        job = freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            job_type=freshness.JOB_ONCHAIN_WALLET,
+            source_key="onchain_wallet:cold",
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Cold wallet",
+            priority=10,
+        )
+        freshness.pause_source(conn, profile_id, "onchain_wallet:cold")
+        conn.commit()
+        calls = []
+
+        def ok(conn, running_job, progress, check_cancelled):
+            calls.append(running_job["id"])
+            return {"status": "synced"}
+
+        self.assertEqual(
+            freshness.run_due_jobs(
+                conn,
+                {freshness.JOB_ONCHAIN_WALLET: ok},
+                profile_id=profile_id,
+                limit=1,
+            ),
+            [],
+        )
+        self.assertEqual(calls, [])
+        queued = freshness.list_jobs(conn, profile_id, active_only=True)
+        self.assertEqual(queued[0]["id"], job["id"])
+        self.assertEqual(queued[0]["status"], freshness.JOB_QUEUED)
+
+        freshness.resume_source(conn, profile_id, "onchain_wallet:cold")
+        results = freshness.run_due_jobs(
+            conn,
+            {freshness.JOB_ONCHAIN_WALLET: ok},
+            profile_id=profile_id,
+            limit=1,
+        )
+
+        self.assertEqual(calls, [job["id"]])
+        self.assertEqual(results[0]["status"], freshness.JOB_DONE)
+
     def test_recover_interrupted_running_job_requeues_with_checkpoint(self):
         conn = self._db()
         profile_id = _seed_profile(conn)

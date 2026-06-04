@@ -9,6 +9,7 @@ from kassiber.core.sync_backends import (
     _read_exact,
     _socks5_address,
     bitcoinrpc_sync_adapter,
+    discover_descriptor_targets,
     electrum_sync_adapter,
     esplora_sync_adapter,
     record_from_bitcoin_esplora_tx,
@@ -155,6 +156,36 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(records, [])
         self.assertEqual(second_meta["scripts_unchanged"], 1)
         self.assertEqual(len(fetch_calls), 1)
+
+    def test_esplora_descriptor_discovery_rechecks_previously_unused_scripts(self):
+        target = {"address": "bc1qgap", "script_pubkey": "0014" + "22" * 20}
+        scripthash = scriptpubkey_scripthash(target["script_pubkey"])
+        usage_checks = []
+
+        def fake_scan(plan, target_used=None, target_used_batch=None, scan_batch_size=None):
+            del plan, target_used_batch, scan_batch_size
+            self.assertIsNotNone(target_used)
+            usage_checks.append(target_used(target))
+            return [target]
+
+        with patch("kassiber.core.sync_backends.scan_descriptor_targets", side_effect=fake_scan), patch(
+            "kassiber.core.sync_backends.esplora_scripthash_has_history",
+            return_value=True,
+        ) as has_history:
+            discovery = discover_descriptor_targets(
+                {"name": "esplora", "kind": "esplora", "url": "https://esplora.example"},
+                object(),
+                "esplora",
+                checkpoint={"esplora_scripthashes": {scripthash: {"tx_count": 0}}},
+            )
+
+        self.assertEqual(discovery["targets"], [target])
+        self.assertEqual(usage_checks, [True])
+        has_history.assert_called_once_with(
+            "https://esplora.example",
+            target["script_pubkey"],
+            timeout=30,
+        )
 
     def test_electrum_sync_adapter_returns_record_shape(self):
         target = {"address": "bc1qe1", "script_pubkey": "0014deadbeef"}
@@ -307,6 +338,60 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(
             second_calls,
             [("blockchain.scripthash.subscribe", (scripthash,))],
+        )
+
+    def test_electrum_descriptor_discovery_rechecks_cached_unused_status(self):
+        target = {"address": "bc1qgap", "script_pubkey": "0014cafebabe"}
+        scripthash = scriptpubkey_scripthash(target["script_pubkey"])
+        batch_calls = []
+
+        class FakeElectrumClient:
+            def __init__(self, backend):
+                self.backend = backend
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def batch_call(self, requests):
+                batch_calls.extend(requests)
+                responses = []
+                for method, params in requests:
+                    key = (method, tuple(params or ()))
+                    if key == ("blockchain.scripthash.subscribe", (scripthash,)):
+                        responses.append("status-new")
+                    else:
+                        raise AssertionError(f"Unexpected Electrum call: {key!r}")
+                return responses
+
+        def fake_scan(plan, target_used=None, target_used_batch=None, scan_batch_size=None):
+            del plan, target_used, scan_batch_size
+            self.assertIsNotNone(target_used_batch)
+            self.assertEqual(target_used_batch([target]), [True])
+            return [target]
+
+        with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient), patch(
+            "kassiber.core.sync_backends.scan_descriptor_targets",
+            side_effect=fake_scan,
+        ):
+            discovery = discover_descriptor_targets(
+                {
+                    "name": "electrum",
+                    "kind": "electrum",
+                    "url": "ssl://electrum.example:50002",
+                    "batch_size": 10,
+                },
+                object(),
+                "electrum",
+                checkpoint={"electrum_scripthash_statuses": {scripthash: None}},
+            )
+
+        self.assertEqual(discovery["targets"], [target])
+        self.assertEqual(
+            batch_calls,
+            [("blockchain.scripthash.subscribe", [scripthash])],
         )
 
     def test_electrum_call_raises_app_error_for_non_json_response(self):

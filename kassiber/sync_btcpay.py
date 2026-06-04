@@ -351,9 +351,28 @@ def _page_stable_ids(page):
     return sorted(_stable_transaction_id(tx) for tx in page if isinstance(tx, dict))
 
 
+def _page_fingerprint_rows(page):
+    rows = []
+    for tx in page:
+        if not isinstance(tx, dict):
+            continue
+        rows.append(
+            {
+                "id": _stable_transaction_id(tx),
+                "timestamp": tx.get("timestamp"),
+                "amount": tx.get("amount"),
+                "confirmations": tx.get("confirmations"),
+                "status": tx.get("status"),
+                "comment": tx.get("comment"),
+                "labels": parse_btcpay_labels(tx.get("labels")),
+            }
+        )
+    return sorted(rows, key=lambda row: row["id"])
+
+
 def _page_fingerprint(page):
     return hashlib.sha256(
-        json.dumps(_page_stable_ids(page), sort_keys=True).encode("utf-8")
+        json.dumps(_page_fingerprint_rows(page), sort_keys=True).encode("utf-8")
     ).hexdigest()
 
 
@@ -367,9 +386,31 @@ def _invoice_page_stable_ids(page):
     return sorted(_invoice_stable_id(invoice) for invoice in page if isinstance(invoice, dict))
 
 
+def _invoice_page_fingerprint_rows(page):
+    rows = []
+    for invoice in page:
+        if not isinstance(invoice, dict):
+            continue
+        metadata = _invoice_metadata(invoice)
+        rows.append(
+            {
+                "id": _invoice_stable_id(invoice),
+                "status": invoice.get("status"),
+                "orderId": invoice.get("orderId") or metadata.get("orderId"),
+                "orderUrl": invoice.get("orderUrl") or metadata.get("orderUrl"),
+                "paymentRequestId": invoice.get("paymentRequestId")
+                or metadata.get("paymentRequestId")
+                or metadata.get("payment_request_id"),
+                "metadata": metadata,
+                "payments": invoice.get("payments"),
+            }
+        )
+    return sorted(rows, key=lambda row: row["id"])
+
+
 def _invoice_page_fingerprint(page):
     return hashlib.sha256(
-        json.dumps(_invoice_page_stable_ids(page), sort_keys=True).encode("utf-8")
+        json.dumps(_invoice_page_fingerprint_rows(page), sort_keys=True).encode("utf-8")
     ).hexdigest()
 
 

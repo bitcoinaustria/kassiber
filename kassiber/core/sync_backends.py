@@ -692,7 +692,8 @@ def discover_descriptor_targets(backend, plan, kind, checkpoint=None):
             scripthash = scriptpubkey_scripthash(target["script_pubkey"])
             cached = cached_stats.get(scripthash)
             if isinstance(cached, dict) and "tx_count" in cached:
-                return int(cached.get("tx_count") or 0) > 0
+                if int(cached.get("tx_count") or 0) > 0:
+                    return True
             return esplora_scripthash_has_history(
                 backend["url"],
                 target["script_pubkey"],
@@ -719,6 +720,7 @@ def discover_descriptor_targets(backend, plan, kind, checkpoint=None):
                     scripthash
                     for scripthash in scripthashes
                     if scripthash not in cached_statuses
+                    or cached_statuses.get(scripthash) is None
                 ]
                 if missing:
                     statuses = electrum_call_many(

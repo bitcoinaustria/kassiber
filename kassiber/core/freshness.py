@@ -460,6 +460,42 @@ def _pending_job_for_source(
     ).fetchone()
 
 
+def _set_cancelled(
+    conn: sqlite3.Connection,
+    job: Mapping[str, Any],
+) -> dict[str, Any]:
+    now = now_iso()
+    conn.execute(
+        """
+        UPDATE freshness_jobs
+        SET cancel_requested = 1, status = ?, phase = ?, finished_at = ?,
+            updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            JOB_CANCELLED,
+            job.get("phase") or PHASE_ERROR,
+            now,
+            now,
+            job["id"],
+        ),
+    )
+    state = get_source_state(conn, job["profile_id"], job["source_key"])
+    upsert_source_state(
+        conn,
+        profile_id=job["profile_id"],
+        source_key=job["source_key"],
+        source_type=job["source_type"],
+        source_label=job["source_label"],
+        status=STATUS_PARTIALLY_STALE,
+        stale_reason="cancelled",
+        blocking_reports=True,
+        last_phase=job.get("phase"),
+        checkpoint=(state or {}).get("checkpoint", {}),
+    )
+    return _load_job(conn, job["id"])
+
+
 def enqueue_job(
     conn: sqlite3.Connection,
     *,
@@ -552,30 +588,24 @@ def cancel_job(conn: sqlite3.Connection, job_id: str) -> dict[str, Any]:
         raise AppError("Freshness job was not found", code="not_found")
     if row["status"] in {JOB_DONE, JOB_ERROR, JOB_CANCELLED}:
         return _row_payload(row)
-    now = now_iso()
-    conn.execute(
-        """
-        UPDATE freshness_jobs
-        SET cancel_requested = 1, status = ?, finished_at = ?, updated_at = ?
-        WHERE id = ?
-        """,
-        (JOB_CANCELLED, now, now, job_id),
-    )
-    state = get_source_state(conn, row["profile_id"], row["source_key"])
-    upsert_source_state(
-        conn,
-        profile_id=row["profile_id"],
-        source_key=row["source_key"],
-        source_type=row["source_type"],
-        source_label=row["source_label"],
-        status=STATUS_PARTIALLY_STALE,
-        stale_reason="cancelled",
-        blocking_reports=True,
-        last_phase=row["phase"],
-        checkpoint=(state or {}).get("checkpoint", {}),
-    )
-    updated = conn.execute("SELECT * FROM freshness_jobs WHERE id = ?", (job_id,)).fetchone()
-    return _row_payload(updated)
+    job = _row_payload(row)
+    if job["status"] == JOB_RUNNING:
+        now = now_iso()
+        conn.execute(
+            """
+            UPDATE freshness_jobs
+            SET cancel_requested = 1, updated_at = ?
+            WHERE id = ?
+            """,
+            (now, job_id),
+        )
+        update_job_progress(
+            conn,
+            job,
+            {"phase": job.get("phase") or PHASE_BACKEND_FETCH, "cancellation_requested": True},
+        )
+        return _load_job(conn, job_id)
+    return _set_cancelled(conn, job)
 
 
 def _load_job(conn: sqlite3.Connection, job_id: str) -> dict[str, Any]:
@@ -667,6 +697,13 @@ def _next_due_job(conn: sqlite3.Connection, profile_id: str | None = None) -> di
         WHERE status IN (?, ?)
           AND (run_after IS NULL OR run_after <= ?)
           AND (cooldown_until IS NULL OR cooldown_until <= ?)
+          AND NOT EXISTS (
+            SELECT 1
+            FROM freshness_source_states
+            WHERE freshness_source_states.profile_id = freshness_jobs.profile_id
+              AND freshness_source_states.source_key = freshness_jobs.source_key
+              AND freshness_source_states.paused = 1
+          )
           {profile_filter}
         ORDER BY priority ASC, created_at ASC, id ASC
         LIMIT 1
@@ -902,6 +939,10 @@ def run_job(
         result = handler(conn, job, progress, check_cancelled)
         check_cancelled()
     except AppError as exc:
+        if exc.code == "cancelled":
+            updated = _set_cancelled(conn, job)
+            conn.commit()
+            return updated
         updated = _mark_error(conn, job, exc)
         conn.commit()
         return updated

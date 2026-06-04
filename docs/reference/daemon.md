@@ -64,6 +64,12 @@ daemon for the exact current allowlist:
       "ui.rates.summary",
       "ui.rates.kraken_csv.import",
       "ui.rates.rebuild",
+      "ui.freshness.status",
+      "ui.freshness.configure",
+      "ui.freshness.run",
+      "ui.freshness.cancel",
+      "ui.freshness.pause",
+      "ui.freshness.resume",
       "ui.workspace.health",
       "ui.workspace.create",
       "ui.workspace.delete",
@@ -355,7 +361,9 @@ Source states are `fresh`, `queued`, `syncing`, `paused`, `rate_limited`,
 `partially_stale`, `failed`, and `blocking_reports`. Report reads are blocked
 only when source staleness, missing rates, or journal readiness makes the
 report unsafe. Rate limits are normal state: a 429/`Retry-After` cools down the
-affected source/provider only, while other queued jobs can continue.
+affected source/provider only, while other queued jobs can continue. The
+`blocking_reports` flag, not the cooldown label alone, decides whether reports
+must wait.
 
 `ui.freshness.status` returns the active profile policy, source states, active
 jobs, and summary counts. `ui.freshness.configure` writes the general freshness
