@@ -3296,7 +3296,7 @@ def _start_freshness_background_worker(
         worker_conn: sqlite3.Connection | None = None
         try:
             worker_conn = open_db(ctx.data_root, passphrase=db_passphrase)
-            db_passphrase = None
+            del db_passphrase
             merge_db_backends(worker_conn, ctx.runtime_config)
         except AppError as exc:
             _emit_background_freshness_event(

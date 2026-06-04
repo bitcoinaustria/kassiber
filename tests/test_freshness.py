@@ -122,7 +122,7 @@ class FreshnessTest(unittest.TestCase):
     def test_running_cancel_stays_single_flight_and_finishes_cancelled(self):
         conn = self._db()
         profile_id = _seed_profile(conn)
-        job = freshness.enqueue_job(
+        freshness.enqueue_job(
             conn,
             profile_id=profile_id,
             job_type=freshness.JOB_ONCHAIN_WALLET,
