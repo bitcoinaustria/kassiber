@@ -168,6 +168,51 @@ CREATE TABLE IF NOT EXISTS transaction_tags (
 CREATE INDEX IF NOT EXISTS idx_transactions_profile_external_id
     ON transactions(profile_id, external_id) WHERE external_id IS NOT NULL;
 
+CREATE TABLE IF NOT EXISTS transaction_edit_events (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    wallet_id TEXT REFERENCES wallets(id) ON DELETE SET NULL,
+    transaction_external_id TEXT,
+    transaction_occurred_at TEXT,
+    source TEXT NOT NULL,
+    reason TEXT,
+    changed_at TEXT NOT NULL,
+    journal_input_version INTEGER NOT NULL DEFAULT 0,
+    journal_input_version_after INTEGER NOT NULL DEFAULT 0,
+    last_processed_input_version INTEGER NOT NULL DEFAULT 0,
+    last_processed_at TEXT,
+    last_processed_tx_count INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS transaction_edit_fields (
+    id TEXT PRIMARY KEY,
+    event_id TEXT NOT NULL REFERENCES transaction_edit_events(id) ON DELETE CASCADE,
+    field TEXT NOT NULL,
+    before_value TEXT,
+    after_value TEXT,
+    diff_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_transaction_edit_events_profile_changed
+    ON transaction_edit_events(profile_id, changed_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_transaction_edit_events_transaction_changed
+    ON transaction_edit_events(transaction_id, changed_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_transaction_edit_events_source_changed
+    ON transaction_edit_events(profile_id, source, changed_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_transaction_edit_events_wallet_changed
+    ON transaction_edit_events(profile_id, wallet_id, changed_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_transaction_edit_fields_event
+    ON transaction_edit_fields(event_id);
+
+CREATE INDEX IF NOT EXISTS idx_transaction_edit_fields_field
+    ON transaction_edit_fields(field, event_id);
+
 CREATE TABLE IF NOT EXISTS journal_entries (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

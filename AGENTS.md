@@ -19,6 +19,7 @@
   - [kassiber/secrets/](kassiber/secrets/) — SQLCipher keying helpers (`sqlcipher.py`), passphrase prompt/fd plumbing (`prompt.py`), plaintext→encrypted migration (`migration.py`), passphrase rotation (`passphrase.py`), dotenv→encrypted credential lift (`credentials.py`, exposes `kassiber secrets migrate-credentials`), `kassiber secrets {init,change-passphrase,verify,status,migrate-credentials}` CLI (`cli.py`), and the `--*-stdin` / `--*-fd` credential-input helpers (`cli_input.py`).
   - [kassiber/backup/](kassiber/backup/) — `tar | age` backup format: SQLCipher-aware export (`pack.py`), age subprocess + pyrage fallback (`age_cli.py`), strict tar member validation (`safe_tar.py`), and `kassiber backup {export,import}` CLI (`cli.py`).
   - [kassiber/core/attachments.py](kassiber/core/attachments.py) — transaction attachment storage, URL-reference handling, integrity verification, and orphan-file GC for the managed attachment tree.
+  - [kassiber/core/transaction_history.py](kassiber/core/transaction_history.py) — append-only transaction metadata provenance. It writes grouped edit events plus field-level before/after/diff rows for notes, tags, exclusion, review/tax status, Austrian overrides, and pricing provenance/value fields; read helpers power per-transaction history, global Activity, stale-report counts, redacted AI-safe reads, audit-package inclusion, and append-only revert.
   - [kassiber/core/engines/__init__.py](kassiber/core/engines/__init__.py) — tax-engine interface/resolver. Both the generic RP2 path and the Austrian (§ 27b EStG) path route through `GenericRP2TaxEngine`; AT profiles surface rp2's `rp2.plugin.country.at.AT` plugin directly so accounting methods and engine semantics come from rp2, while Kassiber keeps Austrian disposal bucketing / Kennzahl mapping on its side.
   - [kassiber/core/tax_events.py](kassiber/core/tax_events.py) — in-memory normalization seam between raw transaction rows and tax-engine inputs, including early quarantine classification for under-specified tax semantics.
   - [kassiber/core/sync.py](kassiber/core/sync.py) — wallet sync orchestration above backend-specific transport details.
@@ -90,6 +91,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ui.journals.quarantine`, `ui.journals.transfers.list`, `ui.rates.summary`,
   `ui.rates.coverage`, `ui.report.blockers`,
   `ui.audit.changes_since_last_answer`, `ui.audit.evidence.summary`,
+  `ui.transactions.history`, `ui.activity.history`, `ui.activity.stale`,
   `ui.maintenance.settings`, `ui.workspace.health`, `ui.next_actions`, and virtual
   `read_skill_reference`. Lightning kinds require a registered adapter
   (`kassiber.core.lightning.register_adapter`); LND ships an adapter that
@@ -103,7 +105,10 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ui.onboarding.complete`, `ui.wallets.create`, `ui.connections.btcpay.create`,
   `ui.connections.btcpay.discover`, and
   `ui.metadata.bip329.import`; transaction editor metadata saves use
-  `ui.transactions.metadata.update`; transaction evidence reuse uses
+  `ui.transactions.metadata.update` and append grouped transaction edit
+  history rows in the same SQLite transaction when a real value changes;
+  `ui.transactions.history.revert` creates a new forward edit rather than
+  rewriting old history; transaction evidence reuse uses
   `ui.attachments.copy` and must duplicate managed files under a new attachment
   id rather than sharing `stored_relpath`; desktop Settings maintenance uses
   `ui.profiles.reset_data` for confirmed per-book testing resets and
@@ -161,7 +166,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `backends {kinds,list,get,create,update,delete,reveal-token,set-default,clear-default}`
 - `transactions {list}`
 - `attachments {add,list,remove,verify,gc}`
-- `metadata records {list,get,note {set,clear},tag {add,remove},excluded {set,clear}}`
+- `metadata records {list,get,note {set,clear},tag {add,remove},excluded {set,clear},history {list,activity,stale,revert}}`
 - `metadata bip329 {import,list,export}`
 - `journals {process,list,transfers {list},quarantined,events {list,get},quarantine {show,clear,resolve {price-override,exclude}}}`
 - `transfers {pair,list,unpair,payouts {list,create,delete},suggest,bulk-pair,dismiss,rules {list,create,apply,delete,enable,disable}}`

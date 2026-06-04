@@ -12,6 +12,7 @@
 export type AppRoutePath =
   | "/overview"
   | "/transactions"
+  | "/activity"
   | "/reports"
   | "/source-of-funds"
   | "/connections"
@@ -62,6 +63,7 @@ export type NativeMenuPayload =
 export const APP_ROUTE_PATHS: readonly AppRoutePath[] = [
   "/overview",
   "/transactions",
+  "/activity",
   "/reports",
   "/source-of-funds",
   "/connections",

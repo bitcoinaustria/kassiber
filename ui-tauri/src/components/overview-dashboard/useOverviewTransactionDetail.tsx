@@ -14,10 +14,16 @@ import {
   readTransactionDetailParams,
   updateTransactionDetailParams,
 } from "@/components/transactions/dashboard/model";
-import { useDaemonMutation } from "@/daemon/client";
+import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import type { Currency } from "@/lib/currency";
 import type { ExplorerSettings } from "@/lib/explorer";
+import type {
+  HistoryRevertTarget,
+  TransactionHistoryList,
+} from "@/lib/transactionHistory";
 import type { OverviewSnapshot } from "@/mocks/seed";
+import { useUiStore } from "@/store/ui";
 import { activeMarketFiatRate } from "./model";
 import { overviewDetailTransactions } from "./overviewTransactionDetailModel";
 
@@ -45,6 +51,17 @@ export function useOverviewTransactionDetail({
   const [saveError, setSaveError] = React.useState<string | null>(null);
   const pendingDetailLinkRef = React.useRef(readTransactionDetailParams());
   const metadataUpdate = useDaemonMutation("ui.transactions.metadata.update");
+  const revertHistory = useDaemonMutation("ui.transactions.history.revert");
+  const { runJournalProcessing, isProcessingJournals } =
+    useJournalProcessingAction({
+      notifyStart: true,
+      notifyAlreadyRunning: true,
+    });
+  const historyQuery = useDaemon<TransactionHistoryList>(
+    "ui.transactions.history",
+    { transaction: detailTransaction?.id ?? "", limit: 25 },
+    { enabled: Boolean(detailTransaction) },
+  );
   const transactions = React.useMemo(
     () => overviewDetailTransactions(snapshot),
     [snapshot],
@@ -138,6 +155,27 @@ export function useOverviewTransactionDetail({
     ? explorerForTransaction(explorerTransaction, explorerSettings)
     : null;
   const fiatRate = activeMarketFiatRate(snapshot);
+  const historyData = historyQuery.data?.data;
+  const revertHistoryTarget = React.useCallback(
+    async (target: HistoryRevertTarget) => {
+      if (!detailTransaction) return;
+      await revertHistory.mutateAsync({
+        transaction: detailTransaction.id,
+        event: target.event.id,
+        ...(target.field ? { field: target.field.field } : {}),
+        reason: target.field
+          ? `Reverted ${target.field.label} from edit history`
+          : "Reverted edit history event",
+      });
+      useUiStore.getState().addNotification({
+        title: "Edit reverted",
+        body: "Kassiber wrote a new edit history entry with the reverted value.",
+        tone: "success",
+        dedupeKey: `history-revert-${target.event.id}-${target.field?.field ?? "event"}`,
+      });
+    },
+    [detailTransaction, revertHistory],
+  );
 
   React.useEffect(() => {
     const pending = pendingDetailLinkRef.current;
@@ -167,6 +205,13 @@ export function useOverviewTransactionDetail({
         isSaving={metadataUpdate.isPending}
         saveError={saveError}
         nowRate={fiatRate}
+        historyEvents={historyData?.events}
+        historyStale={historyData?.stale}
+        historyLoading={historyQuery.isLoading}
+        isRevertingHistory={revertHistory.isPending}
+        onRevertHistory={revertHistoryTarget}
+        onProcessJournals={runJournalProcessing}
+        isProcessingJournals={isProcessingJournals}
         onOpenChange={(open) => {
           if (!open) {
             setDetailTransaction(null);

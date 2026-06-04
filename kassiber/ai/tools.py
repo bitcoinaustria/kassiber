@@ -639,7 +639,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         name="ui.audit.changes_since_last_answer",
         description=(
             "Read whether transactions, wallets, journals, quarantines, or rates "
-            "changed since an optional prior answer timestamp."
+            "or metadata edit history changed since an optional prior answer timestamp."
         ),
         parameters={
             "type": "object",
@@ -655,6 +655,58 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         wire_name="ui_audit_changes_since_last_answer",
         daemon_kind="ui.audit.changes_since_last_answer",
         summary_template="Read changes since last answer",
+    ),
+    ToolEntry(
+        name="ui.transactions.history",
+        description=(
+            "Read bounded append-only metadata edit history for one transaction, "
+            "including source, reason, changed fields, and redacted before/after values."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["transaction"],
+            "properties": {
+                "transaction": {"type": "string", "description": "Transaction id or external id."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 20},
+                "source": {"type": "string", "enum": ["cli", "gui", "ai_tool"]},
+                "field_family": {"type": "string", "enum": ["metadata", "tax", "pricing"]},
+                "pricing_only": {"type": "boolean"},
+                "ai_only": {"type": "boolean"},
+                "stale_only": {"type": "boolean"},
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_transactions_history",
+        daemon_kind="ui.transactions.history",
+        summary_template="Read transaction edit history",
+    ),
+    ToolEntry(
+        name="ui.activity.history",
+        description=(
+            "Read bounded global Activity history for transaction metadata edits "
+            "with safe filters for source, field family, wallet, transaction, pricing, and AI changes."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "transaction": {"type": "string"},
+                "wallet": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 20},
+                "source": {"type": "string", "enum": ["cli", "gui", "ai_tool"]},
+                "field_family": {"type": "string", "enum": ["metadata", "tax", "pricing"]},
+                "pricing_only": {"type": "boolean"},
+                "ai_only": {"type": "boolean"},
+                "stale_only": {"type": "boolean"},
+                "start": {"type": "string"},
+                "end": {"type": "string"},
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_activity_history",
+        daemon_kind="ui.activity.history",
+        summary_template="Read metadata Activity history",
     ),
     ToolEntry(
         name="ui.maintenance.settings",

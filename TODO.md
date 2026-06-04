@@ -472,15 +472,15 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   The desktop sheet now lists real attachments, copies selected files,
   stores URL references, opens URL/file targets through the Tauri shell,
   and removes attachment records through daemon mutations.
-- [ ] Change history / audit log for metadata edits — per-row history of
-  what changed (label, tags, note, exclusion, tax handling, pricing
-  source, manual price evidence), who changed it, when, and the prior
-  value. Surfacing target: the `Edit history` panel in the desktop
-  transaction detail sheet (currently a placeholder). Backend needs a
-  new SQLite table (`transaction_edits` or similar), a daemon kind
-  (`ui.transactions.history`), and `metadata.update` writes that
-  append edit rows. Keep local-first and audit-friendly; redaction
-  rules for the sensitive blur should still apply when rendering.
+- [x] Change provenance for transaction metadata edits — append-only
+  `transaction_edit_events` / `transaction_edit_fields` rows capture notes,
+  tags, exclusions, review/tax status, Austrian overrides, and pricing
+  provenance/value changes from CLI, desktop, and AI-tool sources. No-op
+  saves are suppressed; revert creates a new forward edit. Users can inspect
+  per-transaction history, browse the global Activity route with filters,
+  see stale-report prompts, and opt edit history into audit-package export
+  without exposing descriptors, xpubs, backend credentials, wallet files, or
+  unrelated wallet history.
 - [ ] Custom CSV mapping DSL for arbitrary wallet exports
 - [ ] Rates/manual adjustment surface
 - [ ] Full double-entry account model only if a future ledger design needs it:

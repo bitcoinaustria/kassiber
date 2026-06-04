@@ -41,6 +41,10 @@ daemon for the exact current allowlist:
       "ui.transactions.list",
       "ui.transactions.resolve",
       "ui.transactions.metadata.update",
+      "ui.transactions.history",
+      "ui.transactions.history.revert",
+      "ui.activity.history",
+      "ui.activity.stale",
       "ui.wallets.list",
       "ui.backends.list",
       "ui.backends.options",
@@ -136,6 +140,13 @@ material.
 global search: it accepts a Kassiber transaction id or external transaction id
 scoped to the active profile and returns at most one safe transaction display
 row. It does not create a browser-side search index.
+
+`ui.transactions.history` and `ui.activity.history` read redacted,
+append-only metadata edit events from the same local database as transactions.
+`ui.activity.stale` summarizes edit events that happened after the last journal
+processing run so report-readiness prompts can explain why reports are stale.
+`ui.transactions.history.revert` applies a selected field or event snapshot as a
+new forward metadata edit; it never updates or deletes prior history rows.
 
 `ai.providers.set_api_key` accepts
 `{"name":"provider","api_key":"..."}` or `{"name":"provider","api_key":null}`.

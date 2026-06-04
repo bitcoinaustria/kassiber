@@ -256,6 +256,11 @@ local when those fields are sensitive.
 Change-audit reads require an explicit previous-answer timestamp. Without a
 baseline, `ui.audit.changes_since_last_answer` returns
 `status: "baseline_required"` rather than claiming that nothing changed.
+When a baseline is provided, the answer includes transaction metadata edit
+events alongside transaction, wallet, journal, quarantine, and rate changes.
+Bounded edit-history reads are available only through the safe
+`ui.transactions.history` and `ui.activity.history` daemon tools; the assistant
+does not get raw SQLite or CLI access.
 
 The in-app prompt is a digest, not a full dump of
 `skills/kassiber/SKILL.md`. It teaches the model the local-first accounting
@@ -286,6 +291,12 @@ surfaces:
 - `ui_transactions_search` maps to daemon kind `ui.transactions.search`; it
   searches safe transaction metadata such as ids, txids, wallet labels, notes,
   descriptions, counterparties, kinds, and tags
+- `ui_transactions_history` maps to daemon kind `ui.transactions.history`; it
+  returns bounded, redacted append-only metadata edit history for one
+  transaction, including grouped pricing events and source attribution
+- `ui_activity_history` maps to daemon kind `ui.activity.history`; it returns
+  bounded, redacted global edit Activity with date, source, field-family,
+  wallet, transaction, pricing-only, and AI-only filters
 - `ui_wallets_list` maps to daemon kind `ui.wallets.list`
 - `ui_backends_list` maps to daemon kind `ui.backends.list`; it is scoped to
   backends referenced by the active books/profile and returns URL presence
@@ -329,8 +340,8 @@ surfaces:
   wallets, transactions, stale journals, quarantine, or missing prices
 - `ui_audit_changes_since_last_answer` maps to daemon kind
   `ui.audit.changes_since_last_answer`; it answers whether transactions,
-  wallets, journals, quarantines, or rates changed since an optional RFC3339
-  answer timestamp
+  metadata edits, wallets, journals, quarantines, or rates changed since an
+  optional RFC3339 answer timestamp
 - `ui_maintenance_settings` maps to daemon kind `ui.maintenance.settings`; it
   reads the active profile's AI maintenance settings
 - `ui_workspace_health` maps to daemon kind `ui.workspace.health`

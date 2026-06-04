@@ -68,7 +68,8 @@ workflow almost nobody else covers.
   Greenfield, Liquid Electrum.
 - **Imports** — BTCPay CSV/JSON, Phoenix, River, Bull Bitcoin, Coinfinity,
   21bitcoin, Pocket Bitcoin, Strike, generic CSV/JSON, BIP329 labels.
-- **Review workflows** — notes, tags, exclusions, attachments; reviewed
+- **Review workflows** — notes, tags, exclusions, attachments; append-only
+  transaction edit history with Activity review and safe revert; reviewed
   transfer/swap pairing for Lightning, Liquid peg-in/peg-out, and submarine
   swaps; reviewed source-of-funds reports with immutable saved cases,
   gated PDF export, audit evidence summaries, manual evidence reuse between

@@ -203,6 +203,10 @@ SUPPORTED_KINDS = (
     "ui.transactions.resolve",
     "ui.transactions.search",
     "ui.transactions.metadata.update",
+    "ui.transactions.history",
+    "ui.transactions.history.revert",
+    "ui.activity.history",
+    "ui.activity.stale",
     "ui.attachments.list",
     "ui.attachments.add",
     "ui.attachments.copy",
@@ -1967,6 +1971,7 @@ def _audit_package_options(args: dict[str, Any]) -> dict[str, Any]:
         "include_url_references": _optional_bool_arg(args, "include_url_references", True),
         "include_journal_state": _optional_bool_arg(args, "include_journal_state", True),
         "include_review_state": _optional_bool_arg(args, "include_review_state", True),
+        "include_edit_history": _optional_bool_arg(args, "include_edit_history", False),
     }
 
 
@@ -5890,7 +5895,7 @@ def _handle_transaction_metadata_update(
         "pricing_external_ref",
     }
     review_tax_fields = {"review_status", "taxable", "at_regime", "at_category"}
-    allowed = {"transaction", "note", "tags", "excluded"} | pricing_fields | review_tax_fields
+    allowed = {"transaction", "note", "tags", "excluded", "source", "reason"} | pricing_fields | review_tax_fields
     unknown = sorted(set(args) - allowed)
     if unknown:
         raise AppError(
@@ -5900,6 +5905,8 @@ def _handle_transaction_metadata_update(
             retryable=False,
         )
     transaction = _required_str_arg(args, "transaction", "transaction id")
+    source = _optional_str_arg(args, "source") or "gui"
+    reason = _optional_str_arg(args, "reason")
     tags = args.get("tags") if "tags" in args else None
     pricing_update = None
     if any(field in args for field in pricing_fields):
@@ -5923,9 +5930,157 @@ def _handle_transaction_metadata_update(
         excluded=args.get("excluded") if "excluded" in args else None,
         pricing_update=pricing_update,
         review_status=args.get("review_status") if "review_status" in args else None,
+        review_status_set="review_status" in args,
         taxable=args.get("taxable") if "taxable" in args else None,
+        taxable_set="taxable" in args,
         at_regime=args.get("at_regime") if "at_regime" in args else None,
+        at_regime_set="at_regime" in args,
         at_category=args.get("at_category") if "at_category" in args else None,
+        at_category_set="at_category" in args,
+        source=source,
+        reason=reason,
+    )
+
+
+def _handle_transaction_history(
+    ctx: DaemonContext,
+    request: dict[str, Any],
+) -> dict[str, Any]:
+    if ctx.conn is None:
+        raise AppError("database is not open", code="unavailable", retryable=True)
+    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
+    allowed = {
+        "transaction",
+        "source",
+        "field_family",
+        "field",
+        "pricing_only",
+        "ai_only",
+        "stale_only",
+        "start",
+        "end",
+        "cursor",
+        "limit",
+    }
+    unknown = sorted(set(args) - allowed)
+    if unknown:
+        raise AppError(
+            "ui.transactions.history received unsupported fields",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    return core_metadata.list_transaction_history(
+        ctx.conn,
+        None,
+        None,
+        _required_str_arg(args, "transaction", "transaction id"),
+        _metadata_hooks(),
+        source=_optional_str_arg(args, "source"),
+        field_family=_optional_str_arg(args, "field_family"),
+        field=_optional_str_arg(args, "field"),
+        pricing_only=_optional_bool_arg(args, "pricing_only", False),
+        ai_only=_optional_bool_arg(args, "ai_only", False),
+        stale_only=_optional_bool_arg(args, "stale_only", False),
+        start=_optional_str_arg(args, "start"),
+        end=_optional_str_arg(args, "end"),
+        cursor=_optional_str_arg(args, "cursor"),
+        limit=args.get("limit"),
+    )
+
+
+def _handle_activity_history(
+    ctx: DaemonContext,
+    request: dict[str, Any],
+) -> dict[str, Any]:
+    if ctx.conn is None:
+        raise AppError("database is not open", code="unavailable", retryable=True)
+    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
+    allowed = {
+        "transaction",
+        "wallet",
+        "source",
+        "field_family",
+        "field",
+        "pricing_only",
+        "ai_only",
+        "stale_only",
+        "start",
+        "end",
+        "cursor",
+        "limit",
+    }
+    unknown = sorted(set(args) - allowed)
+    if unknown:
+        raise AppError(
+            "ui.activity.history received unsupported fields",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    return core_metadata.list_activity_history(
+        ctx.conn,
+        None,
+        None,
+        _metadata_hooks(),
+        transaction_ref=_optional_str_arg(args, "transaction"),
+        wallet_ref=_optional_str_arg(args, "wallet"),
+        source=_optional_str_arg(args, "source"),
+        field_family=_optional_str_arg(args, "field_family"),
+        field=_optional_str_arg(args, "field"),
+        pricing_only=_optional_bool_arg(args, "pricing_only", False),
+        ai_only=_optional_bool_arg(args, "ai_only", False),
+        stale_only=_optional_bool_arg(args, "stale_only", False),
+        start=_optional_str_arg(args, "start"),
+        end=_optional_str_arg(args, "end"),
+        cursor=_optional_str_arg(args, "cursor"),
+        limit=args.get("limit"),
+    )
+
+
+def _handle_activity_stale(
+    ctx: DaemonContext,
+    request: dict[str, Any],
+) -> dict[str, Any]:
+    if ctx.conn is None:
+        raise AppError("database is not open", code="unavailable", retryable=True)
+    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
+    if args:
+        raise AppError(
+            "ui.activity.stale does not accept arguments",
+            code="validation",
+            details={"unknown": sorted(args)},
+            retryable=False,
+        )
+    return core_metadata.stale_transaction_edit_summary(ctx.conn, None, None, _metadata_hooks())
+
+
+def _handle_transaction_history_revert(
+    ctx: DaemonContext,
+    request: dict[str, Any],
+) -> dict[str, Any]:
+    if ctx.conn is None:
+        raise AppError("database is not open", code="unavailable", retryable=True)
+    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
+    allowed = {"transaction", "event", "field", "source", "reason"}
+    unknown = sorted(set(args) - allowed)
+    if unknown:
+        raise AppError(
+            "ui.transactions.history.revert received unsupported fields",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    return core_metadata.revert_transaction_edit(
+        ctx.conn,
+        None,
+        None,
+        _required_str_arg(args, "transaction", "transaction id"),
+        _metadata_hooks(),
+        event_id=_required_str_arg(args, "event", "event id"),
+        field=_optional_str_arg(args, "field"),
+        source=_optional_str_arg(args, "source") or "gui",
+        reason=_optional_str_arg(args, "reason"),
     )
 
 
@@ -6906,6 +7061,54 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.transactions.history":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.transactions.history",
+                    _handle_transaction_history(ctx, request),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.activity.history":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.activity.history",
+                    _handle_activity_history(ctx, request),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.activity.stale":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.activity.stale",
+                    _handle_activity_stale(ctx, request),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.transactions.history.revert":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.transactions.history.revert",
+                    _handle_transaction_history_revert(ctx, request),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind in {
         "ui.attachments.list",
         "ui.attachments.add",
@@ -7472,6 +7675,7 @@ def handle_request(
                                 "source_funds_case_ref",
                                 "include_journal_state",
                                 "include_review_state",
+                                "include_edit_history",
                             }
                         },
                     ),
