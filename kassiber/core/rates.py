@@ -16,6 +16,7 @@ from urllib import request as urlrequest
 from .. import __version__
 from ..db import APP_NAME
 from ..errors import AppError
+from ..retry import retry_after_seconds_from_http_error
 from . import pricing
 from ..time_utils import _iso_z, _parse_iso_datetime
 
@@ -151,6 +152,13 @@ def http_get_json(url, timeout=30):
             return json.loads(response.read().decode("utf-8"))
     except urlerror.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
+        if exc.code == 429:
+            raise AppError(
+                f"Rate provider rate limited the request for {url} (HTTP 429)",
+                code="rate_limited",
+                retryable=True,
+                details={"retry_after_seconds": retry_after_seconds_from_http_error(exc)},
+            ) from exc
         raise AppError(f"HTTP {exc.code} from backend for {url}: {detail[:200]}") from exc
     except urlerror.URLError as exc:
         raise AppError(f"Failed to reach backend {url}: {exc.reason}") from exc
@@ -1479,6 +1487,57 @@ def sync_bundled_kraken_btc_daily(conn, pair=None, commit=True):
         )
 
 
+def _bundled_kraken_seeded_pairs(conn, pairs):
+    if not pairs:
+        return set()
+    placeholders = ", ".join("?" for _ in pairs)
+    rows = conn.execute(
+        f"""
+        SELECT pair, COUNT(*) AS count
+        FROM rates_cache
+        WHERE source = ?
+          AND granularity = 'daily'
+          AND method = 'ohlcvt_csv'
+          AND pair IN ({placeholders})
+        GROUP BY pair
+        """,
+        [RATE_SOURCE_KRAKEN_CSV, *pairs],
+    ).fetchall()
+    return {row["pair"] for row in rows if int(row["count"] or 0) > 0}
+
+
+def ensure_bundled_kraken_btc_daily_seed(conn, pair=None, commit=True):
+    requested_pairs = [require_supported_pair(pair)] if pair else list(SUPPORTED_RATE_PAIRS)
+    seeded_pairs = _bundled_kraken_seeded_pairs(conn, requested_pairs)
+    missing_pairs = [requested for requested in requested_pairs if requested not in seeded_pairs]
+    if not missing_pairs:
+        return str(bundled_kraken_btc_daily_path()), [
+            {
+                "pair": requested,
+                "source": RATE_SOURCE_KRAKEN_CSV,
+                "samples": 0,
+                "rows": 0,
+                "files": 0,
+                "skipped_rows": 0,
+                "skipped_files": 0,
+                "granularity": "daily",
+                "method": "ohlcvt_csv",
+                "already_seeded": True,
+                "fetched_at": None,
+            }
+            for requested in requested_pairs
+        ]
+    seed_pair = missing_pairs[0] if len(missing_pairs) == 1 else None
+    archive_path, summary = sync_bundled_kraken_btc_daily(
+        conn,
+        pair=seed_pair,
+        commit=commit,
+    )
+    for row in summary:
+        row["already_seeded"] = False
+    return archive_path, summary
+
+
 def sync_rates(
     conn,
     pair=None,
@@ -1554,6 +1613,7 @@ __all__ = [
     "RATE_SOURCE_KRAKEN_CSV",
     "SUPPORTED_RATE_PAIRS",
     "SUPPORTED_RATE_SOURCES",
+    "ensure_bundled_kraken_btc_daily_seed",
     "fetch_rates_coinbase_exchange",
     "fetch_rates_coingecko",
     "get_cached_rate_at_or_before",

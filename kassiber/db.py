@@ -46,6 +46,9 @@ LEGACY_XDG_DATA_ROOT = os.path.expanduser(f"~/.local/share/{APP_NAME}")
 LEGACY_DATA_ROOT = os.path.expanduser(f"~/.local/share/{LEGACY_APP_NAME}")
 DEFAULT_DB_FILENAME = f"{APP_NAME}.sqlite3"
 LEGACY_DB_FILENAME = f"{LEGACY_APP_NAME}.sqlite3"
+DB_BUSY_TIMEOUT_MS = 30_000
+DB_BUSY_TIMEOUT_SECONDS = DB_BUSY_TIMEOUT_MS / 1000
+DB_JOURNAL_MODE = "wal"
 
 
 SCHEMA = """
@@ -422,6 +425,64 @@ CREATE INDEX IF NOT EXISTS idx_lightning_node_records_profile_type_time
 
 CREATE INDEX IF NOT EXISTS idx_lightning_node_records_wallet_type_time
     ON lightning_node_records(wallet_id, record_type, occurred_at DESC);
+
+CREATE TABLE IF NOT EXISTS freshness_source_states (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    source_key TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    source_label TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'fresh',
+    state TEXT NOT NULL DEFAULT 'fresh',
+    stale_reason TEXT,
+    blocking_reports INTEGER NOT NULL DEFAULT 0,
+    paused INTEGER NOT NULL DEFAULT 0,
+    rate_limited_until TEXT,
+    cooldown_reason TEXT,
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    last_success_at TEXT,
+    last_error_at TEXT,
+    last_error_code TEXT,
+    last_error_message TEXT,
+    last_phase TEXT,
+    progress_json TEXT NOT NULL DEFAULT '{}',
+    checkpoint_json TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(profile_id, source_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_freshness_source_states_profile_status
+    ON freshness_source_states(profile_id, status, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS freshness_jobs (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    job_type TEXT NOT NULL,
+    source_key TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    source_label TEXT NOT NULL,
+    status TEXT NOT NULL,
+    phase TEXT,
+    priority INTEGER NOT NULL DEFAULT 100,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    progress_json TEXT NOT NULL DEFAULT '{}',
+    result_json TEXT NOT NULL DEFAULT '{}',
+    error_json TEXT NOT NULL DEFAULT '{}',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    cancel_requested INTEGER NOT NULL DEFAULT 0,
+    run_after TEXT,
+    cooldown_until TEXT,
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    finished_at TEXT,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_freshness_jobs_profile_status
+    ON freshness_jobs(profile_id, status, priority, created_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_freshness_jobs_singleflight
+    ON freshness_jobs(profile_id, source_key, job_type)
+    WHERE status IN ('queued', 'running', 'rate_limited');
 
 CREATE TABLE IF NOT EXISTS rates_cache (
     pair TEXT NOT NULL,
@@ -881,6 +942,13 @@ def database_has_core_schema(conn):
     return True
 
 
+def _configure_connection_pragmas(conn):
+    """Apply connection settings used by daemon foreground/background writers."""
+    conn.execute(f"PRAGMA busy_timeout = {DB_BUSY_TIMEOUT_MS}")
+    conn.execute(f"PRAGMA journal_mode = {DB_JOURNAL_MODE}")
+    conn.execute("PRAGMA foreign_keys = ON")
+
+
 def open_db(data_root, *, passphrase=None, require_existing_schema=False):
     """Open (and lazily migrate) the SQLite store rooted at `data_root`.
 
@@ -919,21 +987,24 @@ def open_db(data_root, *, passphrase=None, require_existing_schema=False):
                 hint="Use `kassiber --db-passphrase-fd <fd> <command>` or rely on the GUI unlock prompt.",
                 retryable=False,
             )
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(db_path, timeout=DB_BUSY_TIMEOUT_SECONDS)
         conn.row_factory = sqlite3.Row
-        if require_existing_schema and not database_has_core_schema(conn):
+        try:
+            if require_existing_schema and not database_has_core_schema(conn):
+                raise AppError(
+                    "database does not contain a Kassiber project schema",
+                    code="invalid_project_database",
+                    hint="Choose an existing Kassiber project database, not an empty or unrelated SQLite file.",
+                    details={"database": str(db_path)},
+                    retryable=False,
+                )
+            _configure_connection_pragmas(conn)
+            conn.executescript(SCHEMA)
+            ensure_schema_compat(conn)
+            return conn
+        except Exception:
             conn.close()
-            raise AppError(
-                "database does not contain a Kassiber project schema",
-                code="invalid_project_database",
-                hint="Choose an existing Kassiber project database, not an empty or unrelated SQLite file.",
-                details={"database": str(db_path)},
-                retryable=False,
-            )
-        conn.executescript(SCHEMA)
-        ensure_schema_compat(conn)
-        conn.execute("PRAGMA foreign_keys = ON")
-        return conn
+            raise
 
     if file_present and plaintext_header:
         raise AppError(
@@ -949,18 +1020,22 @@ def open_db(data_root, *, passphrase=None, require_existing_schema=False):
         passphrase,
         row_factory=secrets_sqlcipher.get_row_class(),
     )
-    if require_existing_schema and not database_has_core_schema(conn):
+    try:
+        if require_existing_schema and not database_has_core_schema(conn):
+            raise AppError(
+                "database does not contain a Kassiber project schema",
+                code="invalid_project_database",
+                hint="Choose an existing Kassiber project database, not an empty or unrelated SQLCipher file.",
+                details={"database": str(db_path)},
+                retryable=False,
+            )
+        _configure_connection_pragmas(conn)
+        conn.executescript(SCHEMA)
+        ensure_schema_compat(conn)
+        return conn
+    except Exception:
         conn.close()
-        raise AppError(
-            "database does not contain a Kassiber project schema",
-            code="invalid_project_database",
-            hint="Choose an existing Kassiber project database, not an empty or unrelated SQLCipher file.",
-            details={"database": str(db_path)},
-            retryable=False,
-        )
-    conn.executescript(SCHEMA)
-    ensure_schema_compat(conn)
-    return conn
+        raise
 
 
 def set_setting(conn, key, value):
@@ -1068,6 +1143,7 @@ def ensure_schema_compat(conn):
     _ensure_swap_matching_schema(conn)
     _ensure_direct_swap_payout_schema(conn)
     _ensure_commercial_reconciliation_schema(conn)
+    _ensure_freshness_schema(conn)
 
 
 def _ensure_ai_provider_secret_refs_schema(conn):
@@ -1084,6 +1160,89 @@ def _ensure_ai_provider_secret_refs_schema(conn):
         )
         """
     )
+
+
+def _ensure_freshness_schema(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS freshness_source_states (
+            profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            source_key TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            source_label TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'fresh',
+            state TEXT NOT NULL DEFAULT 'fresh',
+            stale_reason TEXT,
+            blocking_reports INTEGER NOT NULL DEFAULT 0,
+            paused INTEGER NOT NULL DEFAULT 0,
+            rate_limited_until TEXT,
+            cooldown_reason TEXT,
+            retry_count INTEGER NOT NULL DEFAULT 0,
+            last_success_at TEXT,
+            last_error_at TEXT,
+            last_error_code TEXT,
+            last_error_message TEXT,
+            last_phase TEXT,
+            progress_json TEXT NOT NULL DEFAULT '{}',
+            checkpoint_json TEXT NOT NULL DEFAULT '{}',
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY(profile_id, source_key)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_freshness_source_states_profile_status
+            ON freshness_source_states(profile_id, status, updated_at DESC)
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS freshness_jobs (
+            id TEXT PRIMARY KEY,
+            profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            job_type TEXT NOT NULL,
+            source_key TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            source_label TEXT NOT NULL,
+            status TEXT NOT NULL,
+            phase TEXT,
+            priority INTEGER NOT NULL DEFAULT 100,
+            payload_json TEXT NOT NULL DEFAULT '{}',
+            progress_json TEXT NOT NULL DEFAULT '{}',
+            result_json TEXT NOT NULL DEFAULT '{}',
+            error_json TEXT NOT NULL DEFAULT '{}',
+            attempts INTEGER NOT NULL DEFAULT 0,
+            cancel_requested INTEGER NOT NULL DEFAULT 0,
+            run_after TEXT,
+            cooldown_until TEXT,
+            created_at TEXT NOT NULL,
+            started_at TEXT,
+            finished_at TEXT,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_freshness_jobs_profile_status
+            ON freshness_jobs(profile_id, status, priority, created_at)
+        """
+    )
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_freshness_jobs_singleflight
+            ON freshness_jobs(profile_id, source_key, job_type)
+            WHERE status IN ('queued', 'running', 'rate_limited')
+        """
+    )
+    for table in ("freshness_source_states", "freshness_jobs"):
+        for column, definition in (
+            ("source_type", "TEXT NOT NULL DEFAULT 'source'"),
+            ("source_label", "TEXT NOT NULL DEFAULT ''"),
+            ("updated_at", "TEXT NOT NULL DEFAULT ''"),
+        ):
+            ensure_column(conn, table, column, definition)
 
 
 def _ensure_commercial_reconciliation_schema(conn):

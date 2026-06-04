@@ -735,10 +735,14 @@ export function AppShell() {
 
   const runMenuWalletSync = React.useCallback(() => {
     if (!ensureWorkspaceForMenuAction()) return;
-    if (isSyncing || isDaemonKindMutating("ui.wallets.sync")) {
+    if (
+      isSyncing ||
+      isDaemonKindMutating("ui.freshness.run") ||
+      isDaemonKindMutating("ui.wallets.sync")
+    ) {
       addNotification({
-        title: "Connection refresh already running",
-        body: "Kassiber is already scanning watch-only sources.",
+        title: "Book refresh already running",
+        body: "Kassiber is already refreshing sources, rates, or journals.",
         tone: "info",
       });
       return;

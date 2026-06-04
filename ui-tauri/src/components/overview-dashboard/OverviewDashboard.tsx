@@ -83,8 +83,8 @@ export const OverviewDashboard = ({
   const fiatRate = activeMarketFiatRate(displayedSnapshot);
   const refreshOverviewState = React.useCallback(() => {
     if (isSyncing || isProcessingJournals) return;
-    syncAll({ onTrustedSuccess: runJournalProcessing });
-  }, [isProcessingJournals, isSyncing, runJournalProcessing, syncAll]);
+    syncAll();
+  }, [isProcessingJournals, isSyncing, syncAll]);
   const refreshMarketRateState = React.useCallback(() => {
     if (marketRateRefreshInFlightRef.current) return;
     marketRateRefreshInFlightRef.current = true;

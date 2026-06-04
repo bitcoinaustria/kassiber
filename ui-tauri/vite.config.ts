@@ -103,6 +103,12 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.wallets.update",
   "ui.wallets.delete",
   "ui.wallets.sync",
+  "ui.freshness.status",
+  "ui.freshness.configure",
+  "ui.freshness.run",
+  "ui.freshness.cancel",
+  "ui.freshness.pause",
+  "ui.freshness.resume",
   "daemon.lock",
   "daemon.unlock",
   // AI provider config and chat kinds. The bridge keeps one daemon process so
@@ -154,12 +160,17 @@ const ALLOWED_BRIDGE_KINDS = new Set([
 ]);
 /**
  * Kinds the bridge accepts on the stream endpoint. AI chat is here because
- * it MUST stream (the daemon spawns a worker thread); wallet sync is here
- * because it CAN stream progress envelopes when the caller wants them. The
- * invoke endpoint also accepts wallet sync — it just drops the interleaved
- * progress envelopes — so existing useDaemonMutation callers keep working.
+ * it MUST stream (the daemon spawns a worker thread); wallet sync and
+ * freshness runs are here because they CAN stream progress envelopes when the
+ * caller wants them. The invoke endpoint also accepts them — it just drops the
+ * interleaved progress envelopes — so existing useDaemonMutation callers keep
+ * working.
  */
-const STREAM_CAPABLE_BRIDGE_KINDS = new Set(["ai.chat", "ui.wallets.sync"]);
+const STREAM_CAPABLE_BRIDGE_KINDS = new Set([
+  "ai.chat",
+  "ui.wallets.sync",
+  "ui.freshness.run",
+]);
 const STREAM_ONLY_BRIDGE_KINDS = new Set(["ai.chat"]);
 
 function makeBridgeRequestId(prefix = "bridge") {

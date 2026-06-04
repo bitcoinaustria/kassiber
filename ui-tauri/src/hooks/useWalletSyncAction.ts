@@ -3,9 +3,9 @@ import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 
 import { daemonMutationKey, useDaemonStreamMutation } from "@/daemon/client";
 import {
-  summarizeSyncResults,
-  syncResultsAreTrustedForReports,
-  type SyncResult,
+  freshnessRunNeedsAttention,
+  summarizeFreshnessRun,
+  type FreshnessRunData,
 } from "@/lib/syncResults";
 import {
   STARTING_SYNC_PROGRESS_VALUE,
@@ -16,27 +16,32 @@ import {
 import { useUiStore } from "@/store/ui";
 
 type WalletSyncOptions = {
-  onTrustedSuccess?: (results: SyncResult[]) => void;
+  onTrustedSuccess?: () => void;
 };
 
 export function useWalletSyncAction() {
   const queryClient = useQueryClient();
   const dataMode = useUiStore((state) => state.dataMode);
+  const freshnessRunMutationKey = React.useMemo(
+    () => daemonMutationKey(dataMode, "ui.freshness.run"),
+    [dataMode],
+  );
   const walletSyncMutationKey = React.useMemo(
     () => daemonMutationKey(dataMode, "ui.wallets.sync"),
     [dataMode],
   );
-  const walletSyncsInFlight = useIsMutating({
-    mutationKey: walletSyncMutationKey,
+  const freshnessRunsInFlight = useIsMutating({
+    mutationKey: freshnessRunMutationKey,
   });
+  const walletSyncsInFlight = useIsMutating({ mutationKey: walletSyncMutationKey });
   const addNotification = useUiStore((state) => state.addNotification);
   const updateNotification = useUiStore((state) => state.updateNotification);
   const noticeIdRef = React.useRef<string | null>(null);
   const progressValueRef = React.useRef(STARTING_SYNC_PROGRESS_VALUE);
-  const syncWallets = useDaemonStreamMutation<
-    { results: SyncResult[] },
+  const refreshBook = useDaemonStreamMutation<
+    FreshnessRunData,
     WalletSyncProgress
-  >("ui.wallets.sync", {
+  >("ui.freshness.run", {
     onProgress: (progress) => {
       const noticeId = noticeIdRef.current;
       if (!noticeId) return;
@@ -54,77 +59,76 @@ export function useWalletSyncAction() {
 
   const syncAll = React.useCallback(
     (options?: WalletSyncOptions) => {
-      // Honor in-flight syncs from any other `useDaemonMutation("ui.wallets.sync")`
-      // instance — this hook is mounted in the transactions dashboard,
-      // overview dashboard, and AppShell, so a
-      // sync started from one surface should block a duplicate from another.
+      // Honor in-flight refreshes from any surface. This hook is mounted in the
+      // transactions dashboard, overview dashboard, and AppShell, so one book
+      // refresh should block duplicates while connection-detail syncs are also
+      // running.
       const otherSyncInFlight =
+        queryClient.isMutating({
+          mutationKey: freshnessRunMutationKey,
+        }) > 0 ||
         queryClient.isMutating({
           mutationKey: walletSyncMutationKey,
         }) > 0;
-      if (syncWallets.isPending || otherSyncInFlight) return;
+      if (refreshBook.isPending || otherSyncInFlight) return;
       progressValueRef.current = STARTING_SYNC_PROGRESS_VALUE;
       noticeIdRef.current = addNotification({
-        title: "Connection refresh started",
-        body: "Kassiber is scanning configured watch-only sources.",
+        title: "Book refresh started",
+        body: "Kassiber is refreshing sources, market rates, and journals.",
         tone: "warning",
-        dedupeKey: "wallet-sync",
+        dedupeKey: "book-refresh",
         progress: startingSyncProgress(),
       });
-      syncWallets.mutate(
-        { all: true },
+      refreshBook.mutate(
+        { all: true, rates: true, journals: true, run: true },
         {
           onSuccess: (envelope) => {
-            const results = envelope.data?.results ?? [];
-            const errors = results.filter(
-              (result) => result.status === "error",
-            ).length;
-            const body = summarizeSyncResults(results);
-            const shouldRunFollowup = syncResultsAreTrustedForReports(results);
+            const body = summarizeFreshnessRun(envelope.data);
+            const needsAttention = freshnessRunNeedsAttention(envelope.data);
             if (noticeIdRef.current) {
               updateNotification(noticeIdRef.current, {
-                title: errors
-                  ? "Connection refresh finished with errors"
-                  : "Connection refresh finished",
+                title: needsAttention
+                  ? "Book refresh needs attention"
+                  : "Book refresh finished",
                 body,
-                tone: errors ? "error" : "success",
-                dedupeKey: "wallet-sync",
+                tone: needsAttention ? "warning" : "success",
+                dedupeKey: "book-refresh",
                 progress: undefined,
               });
               noticeIdRef.current = null;
             } else {
               addNotification({
-                title: errors
-                  ? "Connection refresh finished with errors"
-                  : "Connection refresh finished",
+                title: needsAttention
+                  ? "Book refresh needs attention"
+                  : "Book refresh finished",
                 body,
-                tone: errors ? "error" : "success",
-                dedupeKey: "wallet-sync",
+                tone: needsAttention ? "warning" : "success",
+                dedupeKey: "book-refresh",
               });
             }
-            if (shouldRunFollowup) options?.onTrustedSuccess?.(results);
+            if (!needsAttention) options?.onTrustedSuccess?.();
           },
           onError: (error) => {
             const body =
               error instanceof Error
                 ? error.message
-                : "Connection refresh failed";
+                : "Book refresh failed";
             if (noticeIdRef.current) {
               updateNotification(noticeIdRef.current, {
-                title: "Connection refresh failed",
+                title: "Book refresh failed",
                 body,
                 tone: "error",
-                dedupeKey: "wallet-sync",
+                dedupeKey: "book-refresh",
                 progress: undefined,
               });
               noticeIdRef.current = null;
               return;
             }
             addNotification({
-              title: "Connection refresh failed",
+              title: "Book refresh failed",
               body,
               tone: "error",
-              dedupeKey: "wallet-sync",
+              dedupeKey: "book-refresh",
             });
           },
           onSettled: () => {
@@ -135,8 +139,9 @@ export function useWalletSyncAction() {
     },
     [
       addNotification,
+      freshnessRunMutationKey,
       queryClient,
-      syncWallets,
+      refreshBook,
       updateNotification,
       walletSyncMutationKey,
     ],
@@ -144,6 +149,6 @@ export function useWalletSyncAction() {
 
   return {
     syncAll,
-    isSyncing: walletSyncsInFlight > 0,
+    isSyncing: freshnessRunsInFlight + walletSyncsInFlight > 0,
   };
 }

@@ -2813,6 +2813,9 @@ export const mockDaemon: DaemonTransport = {
     if (req.kind === "ui.wallets.sync") {
       return mockWalletsSyncStream<T, R>(req, options);
     }
+    if (req.kind === "ui.freshness.run") {
+      return mockFreshnessRunStream<T, R>(req, options);
+    }
     // Non-streaming kinds resolve straight through to invoke.
     return mockDaemon.invoke<T>(req);
   },
@@ -2848,6 +2851,49 @@ async function mockWalletsSyncStream<T, R>(
     });
   }
   return mockDaemon.invoke<T>(req);
+}
+
+async function mockFreshnessRunStream<T, R>(
+  req: DaemonRequest,
+  options?: DaemonStreamOptions<R>,
+): Promise<DaemonEnvelope<T>> {
+  const requestId =
+    req.request_id ?? `mock-freshness-${Math.random().toString(36).slice(2)}`;
+  const steps = [
+    {
+      phase: "discovery",
+      source_label: "Treasury watch-only",
+      source_type: "onchain_wallet",
+    },
+    {
+      phase: "backend_fetch",
+      source_label: "Treasury watch-only",
+      source_type: "onchain_wallet",
+      processed: 400,
+      total: 1200,
+    },
+    {
+      phase: "rate_coverage",
+      source_label: "Market-rate coverage",
+      source_type: "market_rates",
+    },
+    {
+      phase: "journal_refresh",
+      source_label: "Journals",
+      source_type: "journals",
+    },
+  ];
+  for (const data of steps) {
+    if (options?.signal?.aborted) break;
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    options?.onRecord?.({
+      kind: "ui.freshness.run.progress",
+      schema_version: 1,
+      request_id: requestId,
+      data: data as R,
+    });
+  }
+  return mockDaemon.invoke<T>({ ...req, request_id: requestId });
 }
 
 async function mockAiChatStream<T, R>(
