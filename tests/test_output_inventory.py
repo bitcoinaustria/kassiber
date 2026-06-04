@@ -102,6 +102,42 @@ class OutputInventoryTest(unittest.TestCase):
                 )
                 conn.execute(
                     """
+                    INSERT INTO transactions(
+                        id, workspace_id, profile_id, wallet_id, external_id,
+                        fingerprint, occurred_at, confirmed_at, direction,
+                        asset, amount, fee, fiat_currency, fiat_rate,
+                        fiat_value, fiat_price_source, kind, description,
+                        counterparty, note, excluded, raw_json, created_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "tx-current-utxo",
+                        profile["workspace_id"],
+                        profile["id"],
+                        wallet["id"],
+                        current_txid,
+                        "fp-current-utxo",
+                        "2026-01-01T12:00:00Z",
+                        "2026-01-01T12:00:00Z",
+                        "inbound",
+                        "BTC",
+                        50_000_000,
+                        0,
+                        "EUR",
+                        50_000,
+                        25,
+                        "manual",
+                        "transfer",
+                        "Funding",
+                        "Exchange",
+                        None,
+                        0,
+                        "{}",
+                        "2026-01-01T12:00:00Z",
+                    ),
+                )
+                conn.execute(
+                    """
                     INSERT INTO wallet_utxos(
                         id, workspace_id, profile_id, wallet_id, backend_name,
                         backend_kind, chain, network, asset, amount, txid, vout,
@@ -184,6 +220,7 @@ class OutputInventoryTest(unittest.TestCase):
                     network=["main", "mainnet"],
                 )
                 self.assertEqual([row["outpoint"] for row in rows], [f"{current_txid}:0"])
+                self.assertEqual(rows[0]["transaction_id"], "tx-current-utxo")
                 summary = wallet_output_inventory_summary(
                     conn,
                     wallet["id"],

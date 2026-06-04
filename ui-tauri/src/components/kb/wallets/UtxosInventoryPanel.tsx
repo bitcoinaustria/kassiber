@@ -55,6 +55,7 @@ import { cn } from "@/lib/utils";
 
 export interface WalletUtxoRow {
   id: string;
+  transaction_id?: string;
   outpoint: string;
   txid: string;
   vout: number;
@@ -345,6 +346,10 @@ function localTransactionTitle(row: WalletUtxoRow) {
   return `Open local transaction details for ${formatOutpoint(row.outpoint)}`;
 }
 
+export function transactionRefForRow(row: WalletUtxoRow) {
+  return row.transaction_id || row.txid;
+}
+
 function explorerOpenErrorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
   if (typeof error === "string" && error) return error;
@@ -376,7 +381,7 @@ function OutpointButton({
         onKeyDown={(event) => event.stopPropagation()}
         onClick={(event) => {
           event.stopPropagation();
-          onOpenTransaction(row.txid);
+          onOpenTransaction(transactionRefForRow(row));
         }}
       >
         <span className="truncate">{formatOutpoint(row.outpoint)}</span>
@@ -640,7 +645,7 @@ export function UtxosInventoryPanel({
   };
   const openRowTransaction = (row: WalletUtxoRow, explorer: ExplorerTarget | null) => {
     if (onOpenTransaction) {
-      onOpenTransaction(row.txid);
+      onOpenTransaction(transactionRefForRow(row));
       return;
     }
     if (explorer) setExplorerRow(row);

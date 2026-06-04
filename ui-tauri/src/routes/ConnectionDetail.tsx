@@ -496,7 +496,7 @@ function ConnectionDetailView({
   }>(
     "ui.transactions.resolve",
     { query: pendingUtxoTransactionId ?? "" },
-    { enabled: Boolean(pendingUtxoTransactionId) },
+    { enabled: Boolean(pendingUtxoTransactionId), retry: false },
   );
   const resolvedUtxoTransaction =
     utxoTransactionQuery.data?.data?.transaction ?? null;
@@ -557,7 +557,7 @@ function ConnectionDetailView({
   useEffect(() => {
     if (!pendingUtxoTransactionId || utxoTransactionQuery.isLoading) return;
     if (resolvedUtxoTransaction) {
-      openTransactionDetail(pendingUtxoTransactionId);
+      openTransactionDetail(resolvedUtxoTransaction.id);
       setPendingUtxoTransactionId(null);
       return;
     }

@@ -481,9 +481,19 @@ def list_wallet_output_inventory(
         limit_params.append(normalized_limit)
     rows = conn.execute(
         f"""
-        SELECT *
-        FROM wallet_utxos
-        WHERE wallet_id = ?
+        SELECT
+            u.*,
+            (
+                SELECT t.id
+                FROM transactions t
+                WHERE t.profile_id = u.profile_id
+                  AND t.wallet_id = u.wallet_id
+                  AND lower(t.external_id) = lower(u.txid)
+                ORDER BY t.occurred_at DESC, t.created_at DESC, t.id DESC
+                LIMIT 1
+            ) AS transaction_id
+        FROM wallet_utxos u
+        WHERE u.wallet_id = ?
           {where_spent}
           {source_where}
         ORDER BY
@@ -502,6 +512,7 @@ def list_wallet_output_inventory(
         output.append(
             {
                 "id": row["id"],
+                "transaction_id": row["transaction_id"] or "",
                 "outpoint": row["outpoint"],
                 "txid": row["txid"],
                 "vout": int(row["vout"]),

@@ -5,6 +5,7 @@ import {
   explorerButtonTitle,
   explorerTargetForUtxo,
   sortUtxosForDisplay,
+  transactionRefForRow,
   UtxosInventoryPanel,
   type WalletUtxosData,
 } from "./UtxosInventoryPanel";
@@ -213,6 +214,19 @@ describe("UtxosInventoryPanel", () => {
 
     expect(html).toContain("Open local transaction details for");
     expect(html).not.toContain("Open UTXO transaction on");
+    expect(html).toContain('role="button"');
+  });
+
+  it("prefers Kassiber transaction ids over raw txids for local UTXO openers", () => {
+    expect(
+      transactionRefForRow({
+        ...baseInventory.utxos[0],
+        transaction_id: "tx-local-1",
+      }),
+    ).toBe("tx-local-1");
+    expect(transactionRefForRow(baseInventory.utxos[0])).toBe(
+      baseInventory.utxos[0].txid,
+    );
   });
 
   it("renders stale, empty, unsupported, and Liquid blocker states", () => {
