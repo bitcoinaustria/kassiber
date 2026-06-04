@@ -424,7 +424,6 @@ def _fetch_incremental_pages(
     changed_pages: list[int] = []
     unchanged_pages: list[int] = []
     stopped_by_known_page = False
-    stop_reason = "end_of_results"
     terminal_skip: int | None = None
     unchanged_streak = 0
     skip = 0

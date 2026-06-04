@@ -147,8 +147,6 @@ from .daemon_swap_review import (
 from .daemon_freshness import (
     _apply_sync_failure_blocker,
     _auto_maintain_for_read,
-    _auto_process_journals_if_needed,
-    _auto_sync_wallets_if_enabled,
     _clear_unlocked_passphrase,
     _coerce_wallets_sync_args,
     _freshness_configure_payload,

@@ -31,7 +31,8 @@ from .util import str_or_none
 
 
 class FreshnessOutputChannel(Protocol):
-    def write(self, payload: dict[str, Any]) -> None: ...
+    def write(self, payload: dict[str, Any]) -> None:
+        pass
 
 
 class FreshnessDaemonContext(Protocol):
@@ -798,9 +799,11 @@ def _start_freshness_background_worker(
 
     def _worker() -> None:
         worker_conn: sqlite3.Connection | None = None
-        db_passphrase = passphrase_handoff.pop("value", None)
         try:
-            worker_conn = open_db(ctx.data_root, passphrase=db_passphrase)
+            worker_conn = open_db(
+                ctx.data_root,
+                passphrase=passphrase_handoff.pop("value", None),
+            )
             merge_db_backends(worker_conn, ctx.runtime_config)
         except AppError as exc:
             _emit_background_freshness_event(
@@ -827,8 +830,6 @@ def _start_freshness_background_worker(
                 },
             )
             return
-        finally:
-            db_passphrase = None
         try:
             while not ctx.freshness_stop_event.wait(FRESHNESS_BACKGROUND_POLL_SECONDS):
                 try:
