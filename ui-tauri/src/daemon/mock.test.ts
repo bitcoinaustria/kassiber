@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { mockDaemon } from "./mock";
+import type { DaemonStreamRecord } from "./transport";
 
 describe("mock daemon backend settings", () => {
   it("supports settings list and CRUD for demo mode", async () => {
@@ -77,5 +78,31 @@ describe("mock daemon rate refresh", () => {
         args: { pair: "BTC-EUR", source: "coinbase-exchange" },
       });
     }
+  });
+});
+
+describe("mock daemon streams", () => {
+  it("streams daemon-owned freshness progress", async () => {
+    const records: DaemonStreamRecord[] = [];
+
+    const envelope = await mockDaemon.stream<{ completed?: unknown[] }>(
+      {
+        kind: "ui.freshness.run",
+        request_id: "freshness-mock-1",
+        args: { all: true, rates: true, journals: true, run: true },
+      },
+      {
+        onRecord(record) {
+          records.push(record);
+        },
+      },
+    );
+
+    expect(envelope.kind).toBe("ui.freshness.run");
+    expect(envelope.data?.completed?.length).toBeGreaterThan(0);
+    expect(records.map((record) => record.kind)).toContain(
+      "ui.freshness.run.progress",
+    );
+    expect(records[0]?.request_id).toBe("freshness-mock-1");
   });
 });

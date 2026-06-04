@@ -167,8 +167,9 @@ Kraken OHLCVT local archive (`rates sync --source kraken-csv --path ...`),
 and manual overrides (`rates set BTC-USD <ts> <rate>`).
 The repository also ships a small BTC-only Kraken offline history bundle for
 EUR and USD daily values under `kassiber/data/rates/kraken/btc_daily`, which
-can be imported with the same `kraken-csv` path flow. Desktop Settings exposes
-this as `Kraken offline history: daily values` for offline fallback coverage.
+freshness/rate-coverage jobs seed automatically when missing. It can also be
+imported with the same `kraken-csv` path flow, and Desktop Settings exposes it
+as `Kraken offline history: daily values` for offline fallback coverage.
 Bundled daily values are stored at candle close timestamps and should be
 treated as prior-close coarse fallback pricing, not exact intraday pricing.
 

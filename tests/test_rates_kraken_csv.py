@@ -589,6 +589,38 @@ class KrakenCsvRatesTest(unittest.TestCase):
         self.assertEqual(summaries["BTC-EUR"]["granularity"], "daily")
         self.assertEqual(summaries["BTC-USD"]["granularity"], "daily")
 
+    def test_bundled_kraken_daily_seed_is_idempotent(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+
+        _, first = core_rates.ensure_bundled_kraken_btc_daily_seed(conn)
+        _, second = core_rates.ensure_bundled_kraken_btc_daily_seed(conn)
+
+        first_summaries = {row["pair"]: row for row in first}
+        second_summaries = {row["pair"]: row for row in second}
+        self.assertFalse(first_summaries["BTC-EUR"]["already_seeded"])
+        self.assertFalse(first_summaries["BTC-USD"]["already_seeded"])
+        self.assertEqual(first_summaries["BTC-EUR"]["samples"], 4581)
+        self.assertEqual(first_summaries["BTC-USD"]["samples"], 4548)
+        self.assertTrue(second_summaries["BTC-EUR"]["already_seeded"])
+        self.assertTrue(second_summaries["BTC-USD"]["already_seeded"])
+        self.assertEqual(second_summaries["BTC-EUR"]["samples"], 0)
+        self.assertEqual(second_summaries["BTC-USD"]["samples"], 0)
+
+        rows = conn.execute(
+            """
+            SELECT pair, COUNT(*) AS count
+            FROM rates_cache
+            WHERE source = 'kraken-csv'
+            GROUP BY pair
+            ORDER BY pair
+            """
+        ).fetchall()
+        self.assertEqual(
+            [(row["pair"], row["count"]) for row in rows],
+            [("BTC-EUR", 4581), ("BTC-USD", 4548)],
+        )
+
     def test_bundled_kraken_import_supports_non_filesystem_resources(self):
         conn = open_db(str(self.data_root))
         self.addCleanup(conn.close)
