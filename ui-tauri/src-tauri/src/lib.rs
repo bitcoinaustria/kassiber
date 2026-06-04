@@ -220,6 +220,12 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.wallets.update",
     "ui.wallets.delete",
     "ui.wallets.sync",
+    "ui.freshness.status",
+    "ui.freshness.configure",
+    "ui.freshness.run",
+    "ui.freshness.cancel",
+    "ui.freshness.pause",
+    "ui.freshness.resume",
     "daemon.lock",
     "daemon.unlock",
     "ai.providers.list",
@@ -272,7 +278,11 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
 /// forwards intermediate records to the webview as Tauri events
 /// `daemon://stream` and switches to a per-record inactivity
 /// timeout. Other kinds keep the existing total-budget behavior.
-const STREAMING_DAEMON_KINDS: &[&str] = &["ai.chat", "ui.wallets.sync"];
+const STREAMING_DAEMON_KINDS: &[&str] = &[
+    "ai.chat",
+    "ui.wallets.sync",
+    "ui.freshness.run",
+];
 
 // Daemon kinds that exercise the AI runtime (model calls, chat sessions, tool
 // consent prompts). Gated server-side by the global AI features toggle so the

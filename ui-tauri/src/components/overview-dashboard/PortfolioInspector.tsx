@@ -13,12 +13,14 @@ export function PortfolioInspector({
   previousPoint,
   hideSensitive,
   priceEur,
+  fiatCurrency,
   chartCurrency,
 }: {
   point: PortfolioChartPoint | null;
   previousPoint: PortfolioChartPoint | null;
   hideSensitive: boolean;
   priceEur: number;
+  fiatCurrency: string;
   chartCurrency: Currency;
 }) {
   const isBtc = chartCurrency === "btc";
@@ -39,6 +41,7 @@ export function PortfolioInspector({
         Math.abs(secondaryDelta),
         priceEur,
         "eur",
+        fiatCurrency,
       )}`
     : `${secondaryDelta >= 0 ? "+" : "−"}${formatBtc(
         Math.abs(secondaryDelta),
@@ -59,7 +62,12 @@ export function PortfolioInspector({
       <div className="grid gap-2">
         <InspectorMetric
           label="Value"
-          value={formatPortfolioMoney(point?.valueEur ?? 0, priceEur, "eur")}
+          value={formatPortfolioMoney(
+            point?.valueEur ?? 0,
+            priceEur,
+            "eur",
+            fiatCurrency,
+          )}
           hidden={hideSensitive}
         />
         <InspectorMetric
@@ -69,7 +77,12 @@ export function PortfolioInspector({
         />
         <InspectorMetric
           label="Cost basis"
-          value={formatPortfolioMoney(point?.costBasisEur ?? 0, priceEur, "eur")}
+          value={formatPortfolioMoney(
+            point?.costBasisEur ?? 0,
+            priceEur,
+            "eur",
+            fiatCurrency,
+          )}
           hidden={hideSensitive}
         />
         <InspectorMetric
@@ -78,6 +91,7 @@ export function PortfolioInspector({
             Math.abs(point?.unrealizedEur ?? 0),
             priceEur,
             "eur",
+            fiatCurrency,
           )}`}
           tone={(point?.unrealizedEur ?? 0) >= 0 ? "good" : "bad"}
           hidden={hideSensitive}
@@ -100,6 +114,7 @@ export function PortfolioInspector({
             Math.abs(primaryDelta),
             priceEur,
             chartCurrency,
+            fiatCurrency,
           )}
         </div>
         <p className="mt-1 text-[10px] text-muted-foreground">

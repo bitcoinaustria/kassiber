@@ -25,6 +25,7 @@ from ..wallet_descriptors import (
 from . import output_inventory as core_output_inventory
 from . import rates as core_rates
 from . import reports as report_builders
+from . import transaction_history
 from .repo import current_context_snapshot
 from .sync import normalize_backend_kind
 from .wallets import (
@@ -55,6 +56,7 @@ END
 """.strip()
 _AUDIT_PROFILE_TABLE_COLUMNS = {
     "transactions": "created_at",
+    "transaction_edit_events": "changed_at",
     "journal_entries": "created_at",
     "journal_quarantines": "created_at",
     "wallets": "created_at",
@@ -66,6 +68,17 @@ def _empty_overview_snapshot() -> dict[str, Any]:
     return {
         "priceEur": 0.0,
         "priceUsd": 0.0,
+        "marketRate": {
+            "asset": "BTC",
+            "fiatCurrency": "EUR",
+            "pair": "BTC-EUR",
+            "rate": None,
+            "timestamp": None,
+            "source": None,
+            "fetchedAt": None,
+            "granularity": None,
+            "method": None,
+        },
         "connections": [],
         "txs": [],
         "balanceSeries": [0.0] * 12,
@@ -88,17 +101,42 @@ def _empty_overview_snapshot() -> dict[str, Any]:
 
 
 def _latest_rate(conn: sqlite3.Connection, pair: str) -> float:
+    row = _latest_rate_row(conn, pair)
+    return float(row["rate"]) if row else 0.0
+
+
+def _latest_rate_row(conn: sqlite3.Connection, pair: str) -> sqlite3.Row | None:
     row = conn.execute(
         """
-        SELECT rate
+        SELECT pair, timestamp, rate, source, fetched_at, granularity, method
         FROM rates_cache
         WHERE pair = ?
-        ORDER BY timestamp DESC, fetched_at DESC
+        ORDER BY timestamp DESC,
+                 CASE WHEN source = 'manual' THEN 0 ELSE 1 END ASC,
+                 fetched_at DESC,
+                 source ASC
         LIMIT 1
         """,
         (pair,),
     ).fetchone()
-    return float(row["rate"]) if row else 0.0
+    return row
+
+
+def _market_rate_snapshot(conn: sqlite3.Connection, fiat_currency: str) -> dict[str, Any]:
+    fiat_code = str(fiat_currency or "EUR").strip().upper() or "EUR"
+    pair = core_rates.transaction_rate_pair("BTC", fiat_code)
+    row = _latest_rate_row(conn, pair) if pair else None
+    return {
+        "asset": "BTC",
+        "fiatCurrency": fiat_code,
+        "pair": pair,
+        "rate": float(row["rate"]) if row else None,
+        "timestamp": row["timestamp"] if row else None,
+        "source": row["source"] if row else None,
+        "fetchedAt": row["fetched_at"] if row else None,
+        "granularity": row["granularity"] if row else None,
+        "method": row["method"] if row else None,
+    }
 
 
 def _latest_transaction_rate(
@@ -1344,10 +1382,10 @@ def _fiat_snapshot(
     conn: sqlite3.Connection,
     profile_id: str,
     fiat_currency: str,
-    price_eur: float,
+    fiat_rate: float,
     balances: dict[str, float],
 ) -> dict[str, Any]:
-    market_value = sum(balances.values()) * price_eur
+    market_value = sum(balances.values()) * fiat_rate
     realized_row = conn.execute(
         """
         SELECT SUM(COALESCE(gain_loss, 0)) AS gain_loss
@@ -1404,6 +1442,16 @@ def build_overview_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         profile["id"],
         "USD",
     )
+    market_rate = _market_rate_snapshot(conn, profile["fiat_currency"])
+    book_fiat_rate = (
+        float(market_rate["rate"])
+        if market_rate["rate"] is not None
+        else _latest_transaction_rate(
+            conn,
+            profile["id"],
+            market_rate["fiatCurrency"],
+        )
+    )
     # Connection tiles are a wallet/source status surface, not a tax-report
     # surface. Use raw synced transactions so quarantined or partially
     # processed journal rows do not make a wallet with imported funds look
@@ -1413,12 +1461,13 @@ def build_overview_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         conn,
         profile["id"],
         profile["fiat_currency"],
-        price_eur,
+        book_fiat_rate,
         balances,
     )
     snapshot = {
         "priceEur": price_eur,
         "priceUsd": price_usd,
+        "marketRate": market_rate,
         "connections": _connections(conn, profile["id"], balances),
         "txs": _transactions(conn, profile["id"]),
         "activityTxs": _activity_transactions(conn, profile["id"]),
@@ -1426,7 +1475,7 @@ def build_overview_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         "portfolioSeries": _portfolio_series(
             conn,
             profile["id"],
-            price_eur,
+            book_fiat_rate,
             sum(balances.values()),
             fiat["eurBalance"],
         ),
@@ -3655,6 +3704,10 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     else:
         counts = health["counts"]
         journals = health["journals"]
+        edit_stale = transaction_history.stale_summary(
+            conn,
+            {"id": health["profile"]["id"], **journals},
+        )
         if counts["wallets"] == 0:
             blockers.append(
                 {
@@ -3678,13 +3731,21 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                 }
             )
         if journals["needs_processing"]:
+            edit_count = int(edit_stale.get("edit_count") or 0)
             blockers.append(
                 {
                     "id": "journals_stale",
                     "severity": "blocking",
                     "title": "Journals need processing",
-                    "detail": journals["reason"],
+                    "detail": (
+                        f"{journals['reason']}; {edit_count} metadata edit(s) "
+                        "changed report inputs."
+                        if edit_count
+                        else journals["reason"]
+                    ),
                     "daemon_kind": "ui.journals.process",
+                    "activity_kind": "ui.activity.history",
+                    "edit_history": edit_stale,
                 }
             )
         if journals["quarantine_count"]:
@@ -3763,6 +3824,7 @@ def build_audit_changes_since_last_answer_snapshot(
                 "transactions": None,
                 "journal_entries": None,
                 "journal_quarantines": None,
+                "transaction_edit_events": None,
                 "wallets": None,
                 "rates": None,
                 "journals_processed_at": profile["last_processed_at"],
@@ -3815,6 +3877,7 @@ def build_audit_changes_since_last_answer_snapshot(
         "transactions": count_since("transactions"),
         "journal_entries": count_since("journal_entries"),
         "journal_quarantines": count_since("journal_quarantines"),
+        "transaction_edit_events": count_since("transaction_edit_events", "changed_at"),
         "wallets": count_since("wallets"),
         "rates": int(
             conn.execute(
@@ -3838,6 +3901,7 @@ def build_audit_changes_since_last_answer_snapshot(
             "transactions": latest("transactions"),
             "journal_entries": latest("journal_entries"),
             "journal_quarantines": latest("journal_quarantines"),
+            "transaction_edit_events": latest("transaction_edit_events", "changed_at"),
             "wallets": latest("wallets"),
             "rates": latest("rates_cache", "fetched_at"),
             "journals_processed_at": profile["last_processed_at"],

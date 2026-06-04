@@ -257,9 +257,22 @@ export interface PortfolioPoint {
   costBasisEur: number;
 }
 
+export interface MarketRateSnapshot {
+  asset: "BTC";
+  fiatCurrency: string;
+  pair: string | null;
+  rate: number | null;
+  timestamp: string | null;
+  source: string | null;
+  fetchedAt: string | null;
+  granularity: string | null;
+  method: string | null;
+}
+
 export interface OverviewSnapshot {
   priceEur: number;
   priceUsd: number;
+  marketRate?: MarketRateSnapshot;
   connections: Connection[];
   activityTxs?: Tx[];
   txs: Tx[];
@@ -277,9 +290,25 @@ export interface OverviewSnapshot {
   };
 }
 
+const minutesAgoIso = (minutes: number) =>
+  new Date(Date.now() - minutes * 60_000).toISOString();
+
+const MOCK_MARKET_RATE_FETCHED_AT = minutesAgoIso(2);
+
 export const MOCK_OVERVIEW: OverviewSnapshot = {
   priceEur: 71_420.18,
   priceUsd: 76_597.49,
+  marketRate: {
+    asset: "BTC",
+    fiatCurrency: "EUR",
+    pair: "BTC-EUR",
+    rate: 71_420.18,
+    timestamp: MOCK_MARKET_RATE_FETCHED_AT,
+    source: "coinbase-exchange",
+    fetchedAt: MOCK_MARKET_RATE_FETCHED_AT,
+    granularity: "60",
+    method: "close",
+  },
   connections: [
     {
       id: "c1",

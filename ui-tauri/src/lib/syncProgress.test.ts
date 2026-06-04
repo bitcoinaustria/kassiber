@@ -10,13 +10,15 @@ describe("sync progress notifications", () => {
     expect(
       formatSyncProgressBody({
         wallet: "Cold",
+        phase: "backend_fetch",
         processed: 12,
         total: 24,
       }),
-    ).toBe("Cold: 12 / 24 transactions scanned.");
+    ).toBe("Cold: Fetching source history; 12 / 24 rows scanned.");
 
     const progress = syncProgressNotification({
       wallet: "Cold",
+      phase: "backend_fetch",
       processed: 12,
       total: 24,
     });
@@ -25,7 +27,7 @@ describe("sync progress notifications", () => {
     expect(progress.progress).toEqual({
       value: 50,
       indeterminate: false,
-      label: "Scanning transactions: 12 / 24",
+      label: "Fetching source history: 12 / 24",
     });
   });
 
@@ -36,13 +38,14 @@ describe("sync progress notifications", () => {
     expect(progress.progress).toEqual({
       value: 85,
       indeterminate: false,
-      label: "Scanning configured sources",
+      label: "Refreshing configured sources",
     });
   });
 
   it("clamps progress when daemon counters exceed the reported total", () => {
     const progress = syncProgressNotification({
       wallet: "Cold",
+      phase: "import",
       processed: 30,
       total: 24,
     });
@@ -51,7 +54,16 @@ describe("sync progress notifications", () => {
     expect(progress.progress).toEqual({
       value: 100,
       indeterminate: false,
-      label: "Scanning transactions: 30 / 24",
+      label: "Importing transactions: 30 / 24",
     });
+  });
+
+  it("formats daemon-owned freshness phases without counters", () => {
+    expect(
+      formatSyncProgressBody({
+        source_label: "Market-rate coverage",
+        phase: "rate_coverage",
+      }),
+    ).toBe("Market-rate coverage: Checking market-rate coverage.");
   });
 });

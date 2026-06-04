@@ -11,8 +11,8 @@ converts between:
     returned in envelopes
 
 Call sites should never call `datetime.fromisoformat` directly; use
-`parse_timestamp` or `_parse_iso_datetime` so users get a consistent
-validation error envelope.
+`parse_timestamp`, `_parse_iso_datetime`, or `parse_iso_datetime_or_none`
+so users get the intended validation-or-best-effort behavior.
 """
 
 from datetime import datetime, timezone
@@ -91,6 +91,30 @@ def _parse_iso_datetime(value, field_name):
             code="validation",
             hint="Use RFC3339 UTC like 2025-01-01T00:00:00Z",
         ) from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def parse_iso_datetime_or_none(value):
+    """Best-effort ISO/RFC3339 parser for persisted daemon timestamps.
+
+    Returns a timezone-aware UTC `datetime`, or `None` when the persisted
+    value is empty or malformed. User-facing parsers should keep using
+    `parse_timestamp` / `_parse_iso_datetime` so validation errors stay
+    explicit.
+    """
+    if value in (None, ""):
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)

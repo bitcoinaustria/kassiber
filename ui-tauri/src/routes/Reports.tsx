@@ -396,6 +396,8 @@ function ReportsView({
     useState(true);
   const [auditIncludeReviewState, setAuditIncludeReviewState] =
     useState(true);
+  const [auditIncludeEditHistory, setAuditIncludeEditHistory] =
+    useState(false);
   const addNotification = useUiStore((s) => s.addNotification);
   const exportCsv = useDaemonMutation<ReportExportResult>("ui.reports.export_csv");
   const exportXlsx = useDaemonMutation<ReportExportResult>("ui.reports.export_xlsx");
@@ -517,6 +519,7 @@ function ReportsView({
               include_url_references: auditIncludeUrlReferences,
               include_journal_state: auditIncludeJournalState,
               include_review_state: auditIncludeReviewState,
+              include_edit_history: auditIncludeEditHistory,
               ...(auditScope === "source_funds_case" && auditCaseId
                 ? { source_funds_case: auditCaseId }
                 : {}),
@@ -720,6 +723,8 @@ function ReportsView({
             onIncludeJournalStateChange={setAuditIncludeJournalState}
             includeReviewState={auditIncludeReviewState}
             onIncludeReviewStateChange={setAuditIncludeReviewState}
+            includeEditHistory={auditIncludeEditHistory}
+            onIncludeEditHistoryChange={setAuditIncludeEditHistory}
             onExport={handleExport}
           />
           <SummaryPdfPanel
@@ -1313,6 +1318,8 @@ function HandoffScopePanel({
   onIncludeJournalStateChange,
   includeReviewState,
   onIncludeReviewStateChange,
+  includeEditHistory,
+  onIncludeEditHistoryChange,
   onExport,
 }: {
   activeExport: ReportExportFormatId | null;
@@ -1330,6 +1337,8 @@ function HandoffScopePanel({
   onIncludeJournalStateChange: (value: boolean) => void;
   includeReviewState: boolean;
   onIncludeReviewStateChange: (value: boolean) => void;
+  includeEditHistory: boolean;
+  onIncludeEditHistoryChange: (value: boolean) => void;
   onExport: (format: ReportExportFormatId) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -1405,6 +1414,8 @@ function HandoffScopePanel({
             onIncludeJournalStateChange={onIncludeJournalStateChange}
             includeReviewState={includeReviewState}
             onIncludeReviewStateChange={onIncludeReviewStateChange}
+            includeEditHistory={includeEditHistory}
+            onIncludeEditHistoryChange={onIncludeEditHistoryChange}
           />
         </div>
       ) : null}
@@ -1510,6 +1521,8 @@ function AuditPackageControls({
   onIncludeJournalStateChange,
   includeReviewState,
   onIncludeReviewStateChange,
+  includeEditHistory,
+  onIncludeEditHistoryChange,
 }: {
   scope: AuditPackageScope;
   onScopeChange: (scope: AuditPackageScope) => void;
@@ -1524,6 +1537,8 @@ function AuditPackageControls({
   onIncludeJournalStateChange: (value: boolean) => void;
   includeReviewState: boolean;
   onIncludeReviewStateChange: (value: boolean) => void;
+  includeEditHistory: boolean;
+  onIncludeEditHistoryChange: (value: boolean) => void;
 }) {
   return (
     <div className="mt-3 rounded-lg border bg-background/50 p-3">
@@ -1576,6 +1591,11 @@ function AuditPackageControls({
             label="Review state"
             checked={includeReviewState}
             onCheckedChange={onIncludeReviewStateChange}
+          />
+          <AuditPackageCheckbox
+            label="Edit history"
+            checked={includeEditHistory}
+            onCheckedChange={onIncludeEditHistoryChange}
           />
         </div>
       </div>

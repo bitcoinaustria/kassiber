@@ -664,7 +664,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         name="ui.audit.changes_since_last_answer",
         description=(
             "Read whether transactions, wallets, journals, quarantines, or rates "
-            "changed since an optional prior answer timestamp."
+            "or metadata edit history changed since an optional prior answer timestamp."
         ),
         parameters={
             "type": "object",
@@ -682,10 +682,62 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         summary_template="Read changes since last answer",
     ),
     ToolEntry(
+        name="ui.transactions.history",
+        description=(
+            "Read bounded append-only metadata edit history for one transaction, "
+            "including source, reason, changed fields, and redacted before/after values."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["transaction"],
+            "properties": {
+                "transaction": {"type": "string", "description": "Transaction id or external id."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 20},
+                "source": {"type": "string", "enum": ["cli", "gui", "ai_tool"]},
+                "field_family": {"type": "string", "enum": ["metadata", "tax", "pricing"]},
+                "pricing_only": {"type": "boolean"},
+                "ai_only": {"type": "boolean"},
+                "stale_only": {"type": "boolean"},
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_transactions_history",
+        daemon_kind="ui.transactions.history",
+        summary_template="Read transaction edit history",
+    ),
+    ToolEntry(
+        name="ui.activity.history",
+        description=(
+            "Read bounded global Activity history for transaction metadata edits "
+            "with safe filters for source, field family, wallet, transaction, pricing, and AI changes."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "transaction": {"type": "string"},
+                "wallet": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 20},
+                "source": {"type": "string", "enum": ["cli", "gui", "ai_tool"]},
+                "field_family": {"type": "string", "enum": ["metadata", "tax", "pricing"]},
+                "pricing_only": {"type": "boolean"},
+                "ai_only": {"type": "boolean"},
+                "stale_only": {"type": "boolean"},
+                "start": {"type": "string"},
+                "end": {"type": "string"},
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_activity_history",
+        daemon_kind="ui.activity.history",
+        summary_template="Read metadata Activity history",
+    ),
+    ToolEntry(
         name="ui.maintenance.settings",
         description=(
-            "Read AI maintenance settings for the active profile, including whether "
-            "watch-only source refresh is allowed before report reads."
+            "Read daemon freshness policy and source/job state for the active profile, "
+            "including whether report-read tools may run opted-in refresh jobs."
         ),
         parameters=_EMPTY_OBJECT_SCHEMA,
         kind_class="read_only",
@@ -772,20 +824,32 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.maintenance.configure",
         description=(
-            "Change AI maintenance settings after explicit consent. Currently "
-            "controls whether watch-only refresh may run automatically before report reads."
+            "Change daemon freshness policy after explicit consent. The legacy "
+            "auto_sync_before_report_reads flag maps to report_read_sync plus source-class opt-ins."
         ),
         parameters={
             "type": "object",
             "additionalProperties": False,
-            "required": ["auto_sync_before_report_reads"],
             "properties": {
                 "auto_sync_before_report_reads": {
                     "type": "boolean",
                     "description": (
-                        "When true, report/read tools may refresh configured sources "
-                        "before refreshing journals."
+                        "Legacy compatibility flag. When true, report/read tools may "
+                        "refresh opted-in configured sources before refreshing journals."
                     ),
+                },
+                "report_read_sync": {
+                    "type": "boolean",
+                    "description": "Allow report/read tools to run opted-in freshness jobs before local journal refresh.",
+                },
+                "background_enabled": {
+                    "type": "boolean",
+                    "description": "Allow daemon-owned background refresh while the app/daemon is running.",
+                },
+                "source_classes": {
+                    "type": "object",
+                    "additionalProperties": {"type": "boolean"},
+                    "description": "Per-source-class opt-ins such as onchain_wallet, btcpay_wallet, btcpay_provenance, market_rates, and journals.",
                 },
             },
         },
@@ -1222,11 +1286,11 @@ def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
             return f"Fetch spot prices for {pair.strip()}"
         return "Fetch missing spot prices and reprocess journals"
     if tool.name == "ui.maintenance.configure":
-        enabled = arguments.get("auto_sync_before_report_reads")
+        enabled = arguments.get("report_read_sync", arguments.get("auto_sync_before_report_reads"))
         return (
-            "Enable automatic watch-only refresh before report reads"
+            "Enable freshness refresh before report reads"
             if enabled is True
-            else "Disable automatic watch-only refresh before report reads"
+            else "Disable freshness refresh before report reads"
         )
     if tool.name == "ui.maintenance.run":
         sync_mode = arguments.get("sync", "if_enabled")

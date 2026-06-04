@@ -32,6 +32,10 @@ kassiber metadata records note set --transaction <transaction-id> --note "Review
 kassiber metadata records note clear --transaction <transaction-id>
 ```
 
+Use `--reason` on note, tag, and exclusion mutations when the change needs an
+auditor-facing explanation. The CLI records `source=cli`; desktop saves record
+`source=gui`; approved assistant tool mutations record `source=ai_tool`.
+
 ## Tags
 
 ```bash
@@ -51,6 +55,25 @@ After exclusions or other review metadata that change reporting meaning, re-run:
 ```bash
 kassiber journals process
 ```
+
+## Edit history and Activity
+
+Every real metadata edit writes append-only history rows in the same local
+SQLite transaction as the metadata change. No-op saves do not create history.
+Revert creates a new forward edit; it never rewrites old rows.
+
+```bash
+kassiber metadata records history list --transaction <transaction-id>
+kassiber metadata records history activity --source ai_tool --field-family pricing
+kassiber metadata records history activity --transaction <transaction-id> --limit 25
+kassiber metadata records history stale
+kassiber metadata records history revert --event-id <event-id> --field note --reason "Undo mistaken note"
+```
+
+History rows store normalized machine values and render human summaries,
+including grouped pricing changes, tag added/removed diffs, source badges, and
+redacted sensitive values. Activity supports date, source, field-family, wallet,
+transaction, pricing-only, and AI-only filters.
 
 ## BIP329
 

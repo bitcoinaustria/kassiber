@@ -32,6 +32,7 @@ export function localeForFiat(code: string): string {
 }
 
 const fiatFormatterCache = new Map<string, Intl.NumberFormat>();
+const compactFiatFormatterCache = new Map<string, Intl.NumberFormat>();
 
 /**
  * Cached locale-aware currency formatter for a fiat code, e.g.
@@ -55,6 +56,23 @@ export function fiatFormatter(code: string): Intl.NumberFormat {
 export function formatFiatAmount(value: number, code: string): string {
   if (!Number.isFinite(value)) return MISSING_FIAT_LABEL;
   return fiatFormatter(code).format(value);
+}
+
+/** Format an amount already denominated in `code` with compact notation. */
+export function formatCompactFiatAmount(value: number, code: string): string {
+  if (!Number.isFinite(value)) return MISSING_FIAT_LABEL;
+  const key = code.trim().toUpperCase();
+  let formatter = compactFiatFormatterCache.get(key);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(localeForFiat(key), {
+      style: "currency",
+      currency: key,
+      notation: "compact",
+      maximumFractionDigits: 0,
+    });
+    compactFiatFormatterCache.set(key, formatter);
+  }
+  return formatter.format(value);
 }
 
 export const useCurrency = () => useUiStore((s) => s.currency);

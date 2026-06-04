@@ -146,9 +146,11 @@ class LiquidElectrumSyncTest(unittest.TestCase):
             "prev-raw": prev_tx,
         }
         calls = []
+        scripthash = scriptpubkey_scripthash(tracked_script)
         history = [{"tx_hash": current_txid, "height": 123}]
         responses = {
-            ("blockchain.scripthash.get_history", (scriptpubkey_scripthash(tracked_script),)): history,
+            ("blockchain.scripthash.subscribe", (scripthash,)): "status-1",
+            ("blockchain.scripthash.get_history", (scripthash,)): history,
             ("blockchain.transaction.get", (current_txid,)): "current-raw",
             ("blockchain.transaction.get", (prev_txid,)): "prev-raw",
             ("blockchain.block.header", (123,)): _header_hex(1_700_000_000),
@@ -178,7 +180,7 @@ class LiquidElectrumSyncTest(unittest.TestCase):
             "kassiber.core.sync_backends.liquid_output_amount_asset_id",
             side_effect=lambda output, plan, target=None: (output.fake_value_sats, output.fake_asset_id),
         ):
-            records = electrum_records_for_wallet(
+            records, meta = electrum_records_for_wallet(
                 {"name": "liquid", "kind": "electrum", "url": "ssl://liquid.example:995"},
                 WalletSyncState(
                     chain="liquid",
@@ -192,17 +194,20 @@ class LiquidElectrumSyncTest(unittest.TestCase):
             )
 
         self.assertEqual(len(records), 1)
+        self.assertEqual(meta["scripts_changed"], 1)
         record = records[0]
         self.assertEqual(record["direction"], "inbound")
         self.assertEqual(record["asset"], "LBTC")
         self.assertAlmostEqual(float(record["amount"]), 0.00020901, places=12)
         self.assertAlmostEqual(float(record["fee"]), 0.0, places=12)
         self.assertEqual(record["occurred_at"], timestamp_to_iso(1_700_000_000))
+        self.assertIn(("blockchain.scripthash.subscribe", (scripthash,)), calls)
+        self.assertIn(("blockchain.scripthash.get_history", (scripthash,)), calls)
         self.assertIn(("blockchain.transaction.get", (current_txid,)), calls)
         self.assertIn(("blockchain.transaction.get", (prev_txid,)), calls)
         self.assertIn(("blockchain.block.header", (123,)), calls)
 
-    def test_discover_descriptor_targets_reuses_history_cache_with_backend_batch_size(self):
+    def test_discover_descriptor_targets_uses_subscription_status_with_backend_batch_size(self):
         first_target = {"script_pubkey": "0014feedface"}
         second_target = {"script_pubkey": "0014deadbeef"}
         first_hash = scriptpubkey_scripthash(first_target["script_pubkey"])
@@ -224,10 +229,10 @@ class LiquidElectrumSyncTest(unittest.TestCase):
                 responses = []
                 for method, params in requests:
                     key = (method, tuple(params or ()))
-                    if key == ("blockchain.scripthash.get_history", (first_hash,)):
-                        responses.append([{"tx_hash": "11" * 32, "height": 7}])
-                    elif key == ("blockchain.scripthash.get_history", (second_hash,)):
-                        responses.append([])
+                    if key == ("blockchain.scripthash.subscribe", (first_hash,)):
+                        responses.append("status-1")
+                    elif key == ("blockchain.scripthash.subscribe", (second_hash,)):
+                        responses.append(None)
                     else:
                         raise AssertionError(f"Unexpected batched call: {key!r}")
                 return responses
@@ -257,14 +262,13 @@ class LiquidElectrumSyncTest(unittest.TestCase):
         self.assertEqual(
             batch_calls,
             [
-                [("blockchain.scripthash.get_history", [first_hash])],
-                [("blockchain.scripthash.get_history", [second_hash])],
+                [("blockchain.scripthash.subscribe", [first_hash])],
+                [("blockchain.scripthash.subscribe", [second_hash])],
             ],
         )
-        self.assertEqual(discovery["history_cache"][first_hash], [{"tx_hash": "11" * 32, "height": 7}])
-        self.assertEqual(discovery["history_cache"][second_hash], [])
+        self.assertEqual(discovery["history_cache"], {})
 
-    def test_electrum_records_reuse_history_cache_and_batch_fetches(self):
+    def test_electrum_records_uses_subscription_status_and_batch_fetches(self):
         policy_asset_id = default_policy_asset_id("liquidv1")
         tracked_script = "0014c54c073c10cf177cf5157e0861757586f4029b96"
         target = {
@@ -308,7 +312,11 @@ class LiquidElectrumSyncTest(unittest.TestCase):
                 responses = []
                 for method, params in requests:
                     key = (method, tuple(params or ()))
-                    if key == ("blockchain.transaction.get", (current_txid,)):
+                    if key == ("blockchain.scripthash.subscribe", (scriptpubkey_scripthash(tracked_script),)):
+                        responses.append("status-1")
+                    elif key == ("blockchain.scripthash.get_history", (scriptpubkey_scripthash(tracked_script),)):
+                        responses.append([{"tx_hash": current_txid, "height": 123}])
+                    elif key == ("blockchain.transaction.get", (current_txid,)):
                         responses.append("current-raw")
                     elif key == ("blockchain.transaction.get", (prev_txid,)):
                         responses.append("prev-raw")
@@ -325,7 +333,7 @@ class LiquidElectrumSyncTest(unittest.TestCase):
             "kassiber.core.sync_backends.liquid_output_amount_asset_id",
             side_effect=lambda output, plan, target=None: (output.fake_value_sats, output.fake_asset_id),
         ):
-            records = electrum_records_for_wallet(
+            records, meta = electrum_records_for_wallet(
                 {"name": "liquid", "kind": "electrum", "url": "ssl://liquid.example:995"},
                 WalletSyncState(
                     chain="liquid",
@@ -334,17 +342,18 @@ class LiquidElectrumSyncTest(unittest.TestCase):
                     policy_asset_id=policy_asset_id,
                     targets=[target],
                     tracked_scripts={tracked_script: target},
-                    history_cache={
-                        scriptpubkey_scripthash(tracked_script): [{"tx_hash": current_txid, "height": 123}]
-                    },
+                    history_cache={},
                 ),
             )
 
         self.assertEqual(len(records), 1)
+        self.assertEqual(meta["scripts_changed"], 1)
         self.assertEqual(records[0]["direction"], "inbound")
         self.assertEqual(
             batched_requests,
             [
+                [("blockchain.scripthash.subscribe", [scriptpubkey_scripthash(tracked_script)])],
+                [("blockchain.scripthash.get_history", [scriptpubkey_scripthash(tracked_script)])],
                 [("blockchain.transaction.get", [current_txid])],
                 [("blockchain.transaction.get", [prev_txid])],
                 [("blockchain.block.header", [123])],

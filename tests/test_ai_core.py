@@ -302,7 +302,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
                 configure_tool,
                 {"auto_sync_before_report_reads": True},
             ),
-            "Enable automatic watch-only refresh before report reads",
+            "Enable freshness refresh before report reads",
         )
 
     def test_read_skill_reference_allowlist(self):

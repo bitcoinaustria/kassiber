@@ -88,6 +88,112 @@ let mockAttachments: MockAttachment[] = [
     created_at: "2026-04-18T14:23:00Z",
   },
 ];
+
+let mockTransactionHistory: Array<Record<string, any>> = [
+  {
+    id: "edit-mock-2",
+    transaction_id: "tx2",
+    transaction_external_id: "tx2",
+    transaction_occurred_at: "2026-04-17T09:08:00Z",
+    wallet_id: "wallet-home-node",
+    wallet_label: "Home Node (CLN)",
+    source: "ai_tool",
+    source_label: "Assistant",
+    reason: "Suggested hosting classification",
+    changed_at: "2026-04-18T08:12:00Z",
+    summary: "Updated Review status, Taxable",
+    families: ["tax"],
+    report_anchor: { stale_for_reports: true, journal_input_version_after: 8 },
+    transaction: {
+      id: "tx2",
+      external_id: "tx2",
+      occurred_at: "2026-04-17T09:08:00Z",
+      direction: "outbound",
+      asset: "BTC",
+      amount: 0.00120431,
+      amount_msat: 120_431_000,
+      fee: 0,
+      fee_msat: 0,
+      counterparty: "Server rental · Hetzner",
+    },
+    fields: [
+      {
+        id: "edit-field-mock-3",
+        field: "review_status",
+        label: "Review status",
+        family: "tax",
+        before_value: "review",
+        after_value: "completed",
+        before_label: "Needs review",
+        after_label: "Completed",
+        diff: {},
+      },
+      {
+        id: "edit-field-mock-4",
+        field: "taxable",
+        label: "Taxable",
+        family: "tax",
+        before_value: true,
+        after_value: false,
+        before_label: "Taxable",
+        after_label: "Not taxable",
+        diff: {},
+      },
+    ],
+  },
+  {
+    id: "edit-mock-1",
+    transaction_id: "tx1",
+    transaction_external_id: "tx1",
+    transaction_occurred_at: "2026-04-18T14:22:00Z",
+    wallet_id: "wallet-cold",
+    wallet_label: "Cold Storage",
+    source: "gui",
+    source_label: "Desktop",
+    reason: "Matched invoice evidence",
+    changed_at: "2026-04-18T07:42:00Z",
+    summary: "Pricing provenance updated",
+    families: ["pricing", "metadata"],
+    report_anchor: { stale_for_reports: true, journal_input_version_after: 7 },
+    transaction: {
+      id: "tx1",
+      external_id: "tx1",
+      occurred_at: "2026-04-18T14:22:00Z",
+      direction: "inbound",
+      asset: "BTC",
+      amount: 0.0245,
+      amount_msat: 2_450_000_000,
+      fee: 0,
+      fee_msat: 0,
+      counterparty: "Invoice · ACME GmbH",
+    },
+    fields: [
+      {
+        id: "edit-field-mock-1",
+        field: "tags",
+        label: "Tags",
+        family: "metadata",
+        before_value: ["Revenue"],
+        after_value: ["Invoice", "Revenue"],
+        before_label: "Revenue",
+        after_label: "Invoice, Revenue",
+        diff: { added: ["Invoice"], removed: [], before: ["Revenue"], after: ["Invoice", "Revenue"] },
+      },
+      {
+        id: "edit-field-mock-2",
+        field: "pricing_external_ref",
+        label: "Pricing evidence reference",
+        family: "pricing",
+        before_value: null,
+        after_value: "invoice=ACME-42 secret=[redacted]",
+        before_label: "Empty",
+        after_label: "invoice=ACME-42 secret=[redacted]",
+        diff: {},
+        redacted: true,
+      },
+    ],
+  },
+];
 let mockAttachmentCounter = 0;
 
 function mockAuditEvidenceSummary(transactionId: string) {
@@ -1624,6 +1730,134 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.transactions.history" || req.kind === "ui.activity.history") {
+      const args = (req.args ?? {}) as Record<string, unknown>;
+      const transaction =
+        typeof args.transaction === "string" ? args.transaction : "";
+      const source = typeof args.source === "string" ? args.source : "";
+      const family =
+        typeof args.field_family === "string" ? args.field_family : "";
+      const wallet = typeof args.wallet === "string" ? args.wallet : "";
+      const pricingOnly = args.pricing_only === true;
+      const aiOnly = args.ai_only === true;
+      const staleOnly = args.stale_only === true;
+      const events = mockTransactionHistory.filter((event) => {
+        if (transaction && event.transaction_id !== transaction && event.transaction_external_id !== transaction) {
+          return false;
+        }
+        if (source && event.source !== source) return false;
+        if (aiOnly && event.source !== "ai_tool") return false;
+        if (wallet && event.wallet_label !== wallet && event.wallet_id !== wallet) return false;
+        if (family && !event.families.includes(family)) return false;
+        if (pricingOnly && !event.families.includes("pricing")) return false;
+        if (staleOnly && !event.report_anchor?.stale_for_reports) return false;
+        return true;
+      });
+      return {
+        kind: req.kind,
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          events,
+          next_cursor: null,
+          has_more: false,
+          limit: typeof args.limit === "number" ? args.limit : 50,
+          stale: {
+            edit_count: mockTransactionHistory.filter(
+              (event) => event.report_anchor?.stale_for_reports,
+            ).length,
+            latest_changed_at: mockTransactionHistory[0]?.changed_at ?? null,
+            source_counts: { ai_tool: 1, gui: 1 },
+            family_counts: { metadata: 1, pricing: 1, tax: 2 },
+            field_counts: {
+              pricing_external_ref: 1,
+              review_status: 1,
+              tags: 1,
+              taxable: 1,
+            },
+            last_processed_at: "2026-04-17T22:00:00Z",
+            last_processed_input_version: 6,
+          },
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.activity.stale") {
+      return {
+        kind: "ui.activity.stale",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          edit_count: mockTransactionHistory.filter(
+            (event) => event.report_anchor?.stale_for_reports,
+          ).length,
+          latest_changed_at: mockTransactionHistory[0]?.changed_at ?? null,
+          source_counts: { ai_tool: 1, gui: 1 },
+          family_counts: { metadata: 1, pricing: 1, tax: 2 },
+          field_counts: {
+            pricing_external_ref: 1,
+            review_status: 1,
+            tags: 1,
+            taxable: 1,
+          },
+          last_processed_at: "2026-04-17T22:00:00Z",
+          last_processed_input_version: 6,
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.transactions.history.revert") {
+      const args = (req.args ?? {}) as Record<string, unknown>;
+      const transactionId = typeof args.transaction === "string" ? args.transaction : "tx1";
+      const eventId = typeof args.event === "string" ? args.event : "";
+      const fieldName = typeof args.field === "string" ? args.field : "";
+      const sourceEvent =
+        mockTransactionHistory.find((event) => event.id === eventId) ??
+        mockTransactionHistory.find((event) => event.transaction_id === transactionId);
+      const sourceField = fieldName
+        ? sourceEvent?.fields.find((field: Record<string, any>) => field.field === fieldName)
+        : undefined;
+      const fields = sourceField ? [sourceField] : sourceEvent?.fields ?? [];
+      const revertedFields = fields.map((field: Record<string, any>) => field.field);
+      const newEvent = {
+        id: `edit-mock-revert-${Date.now()}`,
+        transaction_id: transactionId,
+        transaction_external_id: transactionId,
+        transaction_occurred_at: sourceEvent?.transaction_occurred_at ?? "",
+        wallet_id: sourceEvent?.wallet_id ?? "",
+        wallet_label: sourceEvent?.wallet_label ?? "",
+        source: "gui",
+        source_label: "Desktop",
+        reason: typeof args.reason === "string" ? args.reason : "Reverted edit history event",
+        changed_at: new Date().toISOString(),
+        summary: sourceField ? `Updated ${sourceField.label}` : "Reverted edit history event",
+        families: Array.from(new Set(fields.map((field: Record<string, any>) => field.family))),
+        report_anchor: { stale_for_reports: true, journal_input_version_after: 9 },
+        transaction: sourceEvent?.transaction ?? { id: transactionId },
+        fields: fields.map((field: Record<string, any>) => ({
+          ...field,
+          id: `${field.id}-revert`,
+          before_value: field.after_value,
+          after_value: field.before_value,
+          before_label: field.after_label,
+          after_label: field.before_label,
+        })),
+      };
+      mockTransactionHistory = [newEvent, ...mockTransactionHistory];
+      return {
+        kind: "ui.transactions.history.revert",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          updated: true,
+          reverted_event_id: eventId,
+          history_event_id: newEvent.id,
+          reverted_fields: revertedFields,
+          transaction: { transaction_id: transactionId },
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.attachments.list") {
       const args = (req.args ?? {}) as { transaction?: unknown };
       const tx = typeof args.transaction === "string" ? args.transaction : "";
@@ -2456,13 +2690,35 @@ export const mockDaemon: DaemonTransport = {
     }
 
     if (req.kind === "ui.rates.rebuild") {
+      const args = (req.args ?? {}) as { pair?: unknown };
+      const overview = fixtures["ui.overview.snapshot"] as {
+        marketRate?: {
+          pair?: string | null;
+          timestamp?: string | null;
+          fetchedAt?: string | null;
+          source?: string | null;
+        };
+      };
+      if (overview.marketRate) {
+        const now = new Date().toISOString();
+        overview.marketRate.pair =
+          typeof args.pair === "string" && args.pair.trim()
+            ? args.pair.trim().toUpperCase()
+            : overview.marketRate.pair;
+        overview.marketRate.timestamp = now;
+        overview.marketRate.fetchedAt = now;
+        overview.marketRate.source = "coinbase-exchange";
+      }
       return {
         kind: "ui.rates.rebuild",
         schema_version: 1,
         request_id: req.request_id,
         data: {
           source: "coinbase-exchange",
-          pair: null,
+          pair:
+            typeof args.pair === "string" && args.pair.trim()
+              ? args.pair.trim().toUpperCase()
+              : null,
           days: 30,
           reprice_transactions: true,
           deleted: {
@@ -2617,6 +2873,9 @@ export const mockDaemon: DaemonTransport = {
     if (req.kind === "ui.wallets.sync") {
       return mockWalletsSyncStream<T, R>(req, options);
     }
+    if (req.kind === "ui.freshness.run") {
+      return mockFreshnessRunStream<T, R>(req, options);
+    }
     // Non-streaming kinds resolve straight through to invoke.
     return mockDaemon.invoke<T>(req);
   },
@@ -2652,6 +2911,49 @@ async function mockWalletsSyncStream<T, R>(
     });
   }
   return mockDaemon.invoke<T>(req);
+}
+
+async function mockFreshnessRunStream<T, R>(
+  req: DaemonRequest,
+  options?: DaemonStreamOptions<R>,
+): Promise<DaemonEnvelope<T>> {
+  const requestId =
+    req.request_id ?? `mock-freshness-${Math.random().toString(36).slice(2)}`;
+  const steps = [
+    {
+      phase: "discovery",
+      source_label: "Treasury watch-only",
+      source_type: "onchain_wallet",
+    },
+    {
+      phase: "backend_fetch",
+      source_label: "Treasury watch-only",
+      source_type: "onchain_wallet",
+      processed: 400,
+      total: 1200,
+    },
+    {
+      phase: "rate_coverage",
+      source_label: "Market-rate coverage",
+      source_type: "market_rates",
+    },
+    {
+      phase: "journal_refresh",
+      source_label: "Journals",
+      source_type: "journals",
+    },
+  ];
+  for (const data of steps) {
+    if (options?.signal?.aborted) break;
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    options?.onRecord?.({
+      kind: "ui.freshness.run.progress",
+      schema_version: 1,
+      request_id: requestId,
+      data: data as R,
+    });
+  }
+  return mockDaemon.invoke<T>({ ...req, request_id: requestId });
 }
 
 async function mockAiChatStream<T, R>(

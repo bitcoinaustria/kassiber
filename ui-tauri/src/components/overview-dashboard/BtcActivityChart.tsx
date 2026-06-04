@@ -36,6 +36,8 @@ import { ActivityScatterDot } from "./ActivityScatterDot";
 import { ChartControlsSheet } from "./ChartControlsSheet";
 import { ChartStat } from "./ChartStat";
 import {
+  activeMarketFiatCurrency,
+  activeMarketFiatRate,
   activityMarkerView,
   buildTreasuryChartStats,
   blurClass,
@@ -44,7 +46,8 @@ import {
   DEFAULT_OUTGOING_MARKER_MIN_BTC,
   enrichTreasuryChartData,
   formatBtcAxis,
-  formatEurPrice,
+  formatFiatPrice,
+  formatRelativeMarketRateTime,
   formatTreasuryDetailDate,
   formatTreasuryTick,
   fullTreasuryBrushRange,
@@ -54,6 +57,7 @@ import {
   INCOMING_MARKER_MIN_PARAM,
   LEGACY_INCOMING_MARKER_MIN_PARAM,
   LEGACY_OUTGOING_MARKER_MIN_PARAM,
+  marketRateDetailLabel,
   normalizeTreasuryBrushRange,
   OUTGOING_MARKER_MIN_PARAM,
   periodShortLabels,
@@ -370,7 +374,8 @@ export const BtcActivityChart = ({
     const gainPct = visibleCostBasis
       ? (gainEur / Math.abs(visibleCostBasis)) * 100
       : null;
-    const fiatCurrency = (snapshot.fiat.fiatCurrency || "EUR").toUpperCase();
+    const fiatCurrency = activeMarketFiatCurrency(snapshot);
+    const fiatRate = activeMarketFiatRate(snapshot);
     const incomingActivityPoints = activityPoints.filter(
       (point) => point.eventFlow === "incoming",
     );
@@ -460,6 +465,10 @@ export const BtcActivityChart = ({
     const detailDate = latestPoint
       ? formatTreasuryDetailDate(latestPoint.date)
       : "Current snapshot";
+    const priceSyncedAt =
+      snapshot.marketRate?.fetchedAt ?? snapshot.marketRate?.timestamp;
+    const priceSyncLabel = formatRelativeMarketRateTime(priceSyncedAt);
+    const priceSyncDetail = marketRateDetailLabel(snapshot);
     return (
       <div className="relative z-10 flex min-w-0 flex-1 flex-col gap-4 overflow-visible rounded-xl border bg-card p-3 sm:p-4">
         <ChartControlsSheet
@@ -498,6 +507,14 @@ export const BtcActivityChart = ({
               <span className="text-[10px] text-muted-foreground">
                 As of {detailDate}
               </span>
+              {priceSyncLabel && (
+                <span
+                  className="text-[10px] text-muted-foreground"
+                  title={priceSyncDetail}
+                >
+                  priced {priceSyncLabel}
+                </span>
+              )}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span>
@@ -756,7 +773,7 @@ export const BtcActivityChart = ({
                     tickFormatter={(value) =>
                       hideSensitive
                         ? ""
-                        : formatEurPrice(Number(value))
+                        : formatFiatPrice(Number(value), fiatCurrency)
                     }
                     width={64}
                   />
@@ -779,7 +796,8 @@ export const BtcActivityChart = ({
                     content={
                       <TreasuryTooltip
                         hideSensitive={hideSensitive}
-                        priceEur={snapshot.priceEur}
+                        priceEur={fiatRate}
+                        fiatCurrency={fiatCurrency}
                       />
                     }
                     cursor={{ strokeOpacity: 0.2 }}
@@ -945,7 +963,7 @@ export const BtcActivityChart = ({
               </div>
               <div className="pointer-events-none flex items-center justify-center">
                 <span className="rotate-90 whitespace-nowrap text-[10px] font-semibold text-muted-foreground">
-                  BTC Price (EUR)
+                  BTC Price ({fiatCurrency})
                 </span>
               </div>
             </div>
@@ -961,7 +979,8 @@ export const BtcActivityChart = ({
                 point={selectedPoint}
                 previousPoint={previousPoint}
                 hideSensitive={hideSensitive}
-                priceEur={snapshot.priceEur}
+                priceEur={fiatRate}
+                fiatCurrency={fiatCurrency}
                 chartCurrency={currency}
               />
             </div>

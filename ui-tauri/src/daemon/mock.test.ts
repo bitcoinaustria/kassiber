@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { mockDaemon } from "./mock";
+import type { DaemonStreamRecord } from "./transport";
 
 describe("mock daemon backend settings", () => {
   it("supports settings list and CRUD for demo mode", async () => {
@@ -44,5 +45,64 @@ describe("mock daemon backend settings", () => {
       args: { name: "mock-extra" },
     });
     expect(deleted.data?.deleted).toBe(true);
+  });
+});
+
+describe("mock daemon rate refresh", () => {
+  it("updates the overview market rate sync timestamp when rates rebuild", async () => {
+    try {
+      const refreshed = await mockDaemon.invoke<{
+        pair: string;
+        sync: Array<{ pair: string }>;
+      }>({
+        kind: "ui.rates.rebuild",
+        args: { pair: "BTC-CHF", source: "coinbase-exchange" },
+      });
+      expect(refreshed.error).toBeUndefined();
+      expect(refreshed.data?.pair).toBe("BTC-CHF");
+
+      const after = await mockDaemon.invoke<{
+        marketRate?: {
+          pair?: string | null;
+          fetchedAt?: string | null;
+          source?: string | null;
+        };
+      }>({ kind: "ui.overview.snapshot" });
+
+      expect(after.data?.marketRate?.pair).toBe("BTC-CHF");
+      expect(after.data?.marketRate?.source).toBe("coinbase-exchange");
+      expect(Date.parse(after.data?.marketRate?.fetchedAt ?? "")).not.toBeNaN();
+    } finally {
+      await mockDaemon.invoke({
+        kind: "ui.rates.rebuild",
+        args: { pair: "BTC-EUR", source: "coinbase-exchange" },
+      });
+    }
+  });
+});
+
+describe("mock daemon streams", () => {
+  it("streams daemon-owned freshness progress", async () => {
+    const records: DaemonStreamRecord[] = [];
+
+    const envelope = await mockDaemon.stream<{ completed?: unknown[] }>(
+      {
+        kind: "ui.freshness.run",
+        request_id: "freshness-mock-1",
+        args: { all: true, rates: true, journals: true, run: true },
+      },
+      {
+        onRecord(record) {
+          records.push(record);
+        },
+      },
+    );
+
+    expect(envelope.kind).toBe("ui.freshness.run");
+    expect(envelope.data?.completed?.length).toBeGreaterThan(0);
+    expect(records.map((record) => record.kind)).toContain(
+      "ui.freshness.run.progress",
+    );
+    expect(records[0]?.request_id).toBe("freshness-mock-1");
   });
 });

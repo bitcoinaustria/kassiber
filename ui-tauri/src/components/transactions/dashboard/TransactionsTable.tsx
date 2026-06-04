@@ -53,6 +53,11 @@ import { cn } from "@/lib/utils";
 import { type Currency } from "@/lib/currency";
 import { type ExplorerSettings } from "@/lib/explorer";
 import { useUiStore } from "@/store/ui";
+import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
+import type {
+  HistoryRevertTarget,
+  TransactionHistoryList,
+} from "@/lib/transactionHistory";
 import {
   ExplorerOpenDialog,
   TransactionDetailSheet,
@@ -189,9 +194,20 @@ const TransactionsTable = ({
   const attachmentOpen =
     useDaemonMutation<AttachmentOpenData>("ui.attachments.open");
   const unpairTransfer = useDaemonMutation("ui.transfers.unpair");
+  const revertHistory = useDaemonMutation("ui.transactions.history.revert");
+  const { runJournalProcessing, isProcessingJournals } =
+    useJournalProcessingAction({
+      notifyStart: true,
+      notifyAlreadyRunning: true,
+    });
   const attachmentsQuery = useDaemon<AttachmentsListData>(
     "ui.attachments.list",
     { transaction: detailTransaction?.id ?? "" },
+    { enabled: Boolean(detailTransaction) },
+  );
+  const historyQuery = useDaemon<TransactionHistoryList>(
+    "ui.transactions.history",
+    { transaction: detailTransaction?.id ?? "", limit: 25 },
     { enabled: Boolean(detailTransaction) },
   );
   const reuseSourceAttachmentsQuery = useDaemon<AttachmentsListData>(
@@ -359,6 +375,27 @@ const TransactionsTable = ({
   );
   const journalEvents = journalEventsQuery.data?.data?.events ?? [];
   const commercialContext = commercialContextQuery.data?.data;
+  const historyData = historyQuery.data?.data;
+  const revertHistoryTarget = React.useCallback(
+    async (target: HistoryRevertTarget) => {
+      if (!detailTransaction) return;
+      await revertHistory.mutateAsync({
+        transaction: detailTransaction.id,
+        event: target.event.id,
+        ...(target.field ? { field: target.field.field } : {}),
+        reason: target.field
+          ? `Reverted ${target.field.label} from edit history`
+          : "Reverted edit history event",
+      });
+      useUiStore.getState().addNotification({
+        title: "Edit reverted",
+        body: "Kassiber wrote a new edit history entry with the reverted value.",
+        tone: "success",
+        dedupeKey: `history-revert-${target.event.id}-${target.field?.field ?? "event"}`,
+      });
+    },
+    [detailTransaction, revertHistory],
+  );
 
   const hasActiveFilters =
     chartSelection !== null ||
@@ -1413,6 +1450,13 @@ const TransactionsTable = ({
         journalEvents={journalEvents}
         commercialContext={commercialContext}
         commercialContextLoading={commercialContextQuery.isLoading}
+        historyEvents={historyData?.events}
+        historyStale={historyData?.stale}
+        historyLoading={historyQuery.isLoading}
+        isRevertingHistory={revertHistory.isPending}
+        onRevertHistory={revertHistoryTarget}
+        onProcessJournals={runJournalProcessing}
+        isProcessingJournals={isProcessingJournals}
         onAddAttachmentFiles={async (paths) => {
           if (!detailTransaction) return;
           for (const path of paths) {

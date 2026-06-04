@@ -1920,7 +1920,15 @@ def _mark_wallet_synced_from_results(conn, wallet, results):
         _mark_wallet_synced(conn, wallet)
 
 
-def sync_wallet_from_backend(conn, runtime_config, workspace_ref, profile_ref, wallet):
+def sync_wallet_from_backend(
+    conn,
+    runtime_config,
+    workspace_ref,
+    profile_ref,
+    wallet,
+    *,
+    checkpoint=None,
+):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     return core_sync.sync_wallet_from_backend(
         conn,
@@ -1928,10 +1936,20 @@ def sync_wallet_from_backend(conn, runtime_config, workspace_ref, profile_ref, w
         profile,
         wallet,
         _wallet_sync_hooks(),
+        checkpoint=checkpoint,
     )
 
 
-def sync_wallet(conn, runtime_config, workspace_ref, profile_ref, wallet_ref=None, sync_all=False):
+def sync_wallet(
+    conn,
+    runtime_config,
+    workspace_ref,
+    profile_ref,
+    wallet_ref=None,
+    sync_all=False,
+    *,
+    freshness_checkpoints=None,
+):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     if sync_all and wallet_ref:
         raise AppError("--wallet and --all are mutually exclusive", code="validation")
@@ -1948,6 +1966,7 @@ def sync_wallet(conn, runtime_config, workspace_ref, profile_ref, wallet_ref=Non
                     profile,
                     [wallet],
                     _wallet_sync_hooks(commit=False),
+                    checkpoints=freshness_checkpoints,
                 )
                 _mark_wallet_synced_from_results(conn, wallet, wallet_results)
                 results.extend(wallet_results)
@@ -1979,6 +1998,7 @@ def sync_wallet(conn, runtime_config, workspace_ref, profile_ref, wallet_ref=Non
             profile,
             wallets,
             _wallet_sync_hooks(),
+            checkpoints=freshness_checkpoints,
         )
         _mark_wallet_synced_from_results(conn, wallets[0], results)
         conn.commit()
@@ -1995,6 +2015,11 @@ def _sync_btcpay_wallet(
     commit=True,
 ):
     config = json.loads(wallet["config_json"] or "{}")
+    checkpoint = {}
+    try:
+        checkpoint = dict(wallet["_freshness_checkpoint"] or {})
+    except (KeyError, IndexError, TypeError):
+        checkpoint = {}
     btcpay_config = core_wallets.wallet_btcpay_sync_config(config)
     if btcpay_config is None:
         raise AppError(
@@ -2010,11 +2035,14 @@ def _sync_btcpay_wallet(
             code="validation",
             hint="Create a BTCPay backend with `kassiber backends create --kind btcpay --url <server> --token-stdin` or `--token-fd FD`.",
         )
+    btcpay_meta = {}
     records = fetch_btcpay_records(
         backend,
         store_id=btcpay_config["store_id"],
         payment_method_id=btcpay_config["payment_method_id"],
         page_size=page_size,
+        checkpoint=checkpoint,
+        metadata=btcpay_meta,
     )
     outcome = _import_records_for_sync(
         conn,
@@ -2032,6 +2060,21 @@ def _sync_btcpay_wallet(
     outcome["payment_method_id"] = btcpay_config["payment_method_id"]
     outcome["page_size"] = page_size
     outcome["fetched"] = len(records)
+    if btcpay_meta:
+        checkpoint.update(
+            {
+                "backend": {"name": backend["name"], "kind": kind},
+                "btcpay_pages": btcpay_meta.get("btcpay_pages", {}),
+                "btcpay_pagination": btcpay_meta.get("btcpay_pagination", {}),
+                "store_id": btcpay_config["store_id"],
+                "payment_method_id": btcpay_config["payment_method_id"],
+            }
+        )
+        outcome["freshness_checkpoint"] = checkpoint
+        outcome["pages_fetched"] = btcpay_meta.get("pages_fetched", 0)
+        outcome["stopped_by_known_page"] = bool(btcpay_meta.get("stopped_by_known_page"))
+        outcome["stop_reason"] = btcpay_meta.get("stop_reason")
+        outcome["deep_audit"] = btcpay_meta.get("deep_audit")
     return outcome
 
 
@@ -2056,6 +2099,13 @@ def enrich_wallet_from_btcpay_provenance(
     commit=True,
 ):
     config = json.loads(wallet["config_json"] or "{}")
+    checkpoint = {}
+    try:
+        checkpoint = dict(wallet["_freshness_checkpoint"] or {})
+    except (KeyError, IndexError, TypeError):
+        checkpoint = {}
+    route_checkpoints = checkpoint.get("routes") if isinstance(checkpoint.get("routes"), dict) else {}
+    next_route_checkpoints = {}
     routes = core_wallets.wallet_btcpay_provenance_config(config)
     totals = {
         "routes": 0,
@@ -2074,11 +2124,15 @@ def enrich_wallet_from_btcpay_provenance(
                 code="validation",
                 hint="Use a BTCPay backend for BTCPay provenance enrichment.",
             )
+        route_key = f"{backend['name']}:{route['store_id']}:{route['payment_method_id']}"
+        btcpay_meta = {}
         records = fetch_btcpay_records(
             backend,
             store_id=route["store_id"],
             payment_method_id=route["payment_method_id"],
             page_size=page_size,
+            checkpoint=route_checkpoints.get(route_key, {}),
+            metadata=btcpay_meta,
         )
         metadata = core_imports.apply_btcpay_metadata(
             conn,
@@ -2095,7 +2149,18 @@ def enrich_wallet_from_btcpay_provenance(
             "store_id": route["store_id"],
             "payment_method_id": route["payment_method_id"],
             "fetched": len(records),
+            "pages_fetched": btcpay_meta.get("pages_fetched", 0),
+            "stopped_by_known_page": bool(btcpay_meta.get("stopped_by_known_page")),
+            "stop_reason": btcpay_meta.get("stop_reason"),
+            "deep_audit": btcpay_meta.get("deep_audit"),
             **metadata,
+        }
+        next_route_checkpoints[route_key] = {
+            "backend": {"name": backend["name"], "kind": kind},
+            "btcpay_pages": btcpay_meta.get("btcpay_pages", {}),
+            "btcpay_pagination": btcpay_meta.get("btcpay_pagination", {}),
+            "store_id": route["store_id"],
+            "payment_method_id": route["payment_method_id"],
         }
         route_results.append(route_result)
         totals["routes"] += 1
@@ -2105,9 +2170,11 @@ def enrich_wallet_from_btcpay_provenance(
         totals["btcpay_tags_created"] += metadata["btcpay_tags_created"]
     if commit:
         conn.commit()
+    checkpoint.update({"routes": dict(sorted(next_route_checkpoints.items()))})
     return {
         **totals,
         "route_results": route_results,
+        "freshness_checkpoint": checkpoint,
     }
 
 
@@ -2229,6 +2296,7 @@ def sync_btcpay_commercial_provenance(
     backend_name,
     store_id,
     page_size,
+    checkpoint=None,
 ):
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
     backend = resolve_backend(runtime_config, backend_name)
@@ -2239,10 +2307,14 @@ def sync_btcpay_commercial_provenance(
             code="validation",
             hint="Create a BTCPay backend with `kassiber backends create --kind btcpay --url <server> --token-stdin` or `--token-fd FD`.",
         )
+    btcpay_meta = {}
+    checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
     invoices = fetch_btcpay_invoice_provenance(
         backend,
         store_id=store_id,
         page_size=page_size,
+        checkpoint=checkpoint,
+        metadata=btcpay_meta,
     )
     outcome = core_commercial.upsert_btcpay_provenance(
         conn,
@@ -2251,6 +2323,14 @@ def sync_btcpay_commercial_provenance(
         backend_name=backend["name"],
         invoices=invoices,
     )
+    checkpoint.update(
+        {
+            "backend": {"name": backend["name"], "kind": kind},
+            "btcpay_invoice_pages": btcpay_meta.get("btcpay_invoice_pages", {}),
+            "btcpay_invoice_pagination": btcpay_meta.get("btcpay_invoice_pagination", {}),
+            "store_id": store_id,
+        }
+    )
     return {
         **outcome,
         "backend": backend["name"],
@@ -2258,6 +2338,11 @@ def sync_btcpay_commercial_provenance(
         "backend_url": redact_backend_url(backend["url"]),
         "store_id": store_id,
         "page_size": page_size,
+        "pages_fetched": btcpay_meta.get("pages_fetched", 0),
+        "stopped_by_known_page": bool(btcpay_meta.get("stopped_by_known_page")),
+        "stop_reason": btcpay_meta.get("stop_reason"),
+        "deep_audit": btcpay_meta.get("deep_audit"),
+        "freshness_checkpoint": checkpoint,
     }
 
 
@@ -3539,60 +3624,39 @@ def resolve_quarantine_price_override(
         raise AppError("--fiat-rate must be positive", code="validation")
     if new_value is not None and new_value < 0:
         raise AppError("--fiat-value must not be negative", code="validation")
-    payload = pricing.pricing_payload(
-        rate=new_rate,
-        value=new_value,
-        source_kind=pricing.SOURCE_MANUAL_OVERRIDE,
-        quality=pricing.QUALITY_EXACT,
-        provider="manual",
-        pricing_timestamp=tx["confirmed_at"] or tx["occurred_at"],
-        fetched_at=now_iso(),
-        granularity="exact",
-        method="quarantine_price_override",
-    )
-    conn.execute(
-        """
-        UPDATE transactions
-        SET fiat_rate = ?, fiat_value = ?, fiat_price_source = ?,
-            fiat_rate_exact = ?, fiat_value_exact = ?,
-            pricing_source_kind = ?, pricing_provider = ?, pricing_pair = ?,
-            pricing_timestamp = ?, pricing_fetched_at = ?,
-            pricing_granularity = ?, pricing_method = ?,
-            pricing_external_ref = ?, pricing_quality = ?
-        WHERE id = ?
-        """,
-        (
-            payload["fiat_rate"],
-            payload["fiat_value"],
-            payload["fiat_price_source"],
-            payload["fiat_rate_exact"],
-            payload["fiat_value_exact"],
-            payload["pricing_source_kind"],
-            payload["pricing_provider"],
-            payload["pricing_pair"],
-            payload["pricing_timestamp"],
-            payload["pricing_fetched_at"],
-            payload["pricing_granularity"],
-            payload["pricing_method"],
-            payload["pricing_external_ref"],
-            payload["pricing_quality"],
-            tx["id"],
-        ),
+    record = core_metadata.update_transaction_metadata(
+        conn,
+        workspace_ref,
+        profile_ref,
+        tx["id"],
+        _metadata_hooks(),
+        pricing_update={
+            "fiat_rate": str(new_rate) if new_rate is not None else None,
+            "fiat_value": str(new_value) if new_value is not None else None,
+            "source_kind": pricing.SOURCE_MANUAL_OVERRIDE,
+            "quality": pricing.QUALITY_EXACT,
+            "method": "quarantine_price_override",
+        },
+        source="cli",
+        reason="Resolved quarantine with manual pricing override",
+        commit=False,
     )
     conn.execute(
         "DELETE FROM journal_quarantines WHERE profile_id = ? AND transaction_id = ?",
         (profile["id"], tx["id"]),
     )
-    invalidate_journals(conn, profile["id"])
+    if not record["updated"]:
+        invalidate_journals(conn, profile["id"])
     conn.commit()
     return {
         "transaction_id": tx["id"],
         "resolution": "price-override",
         "fiat_rate": float(new_rate) if new_rate is not None else None,
         "fiat_value": float(new_value) if new_value is not None else None,
-        "fiat_rate_exact": payload["fiat_rate_exact"],
-        "fiat_value_exact": payload["fiat_value_exact"],
-        "pricing_source_kind": payload["pricing_source_kind"],
+        "fiat_rate_exact": record["fiat_rate_exact"],
+        "fiat_value_exact": record["fiat_value_exact"],
+        "pricing_source_kind": record["pricing_source_kind"],
+        "history_event_id": record["history_event_id"],
         "note": "Run `kassiber journals process` to regenerate entries.",
     }
 
@@ -3601,20 +3665,29 @@ def resolve_quarantine_exclude(conn, workspace_ref, profile_ref, tx_ref):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     tx = resolve_transaction(conn, profile["id"], tx_ref)
     _ensure_quarantined(conn, profile["id"], tx["id"])
-    conn.execute(
-        "UPDATE transactions SET excluded = 1 WHERE id = ?",
-        (tx["id"],),
+    record = core_metadata.update_transaction_metadata(
+        conn,
+        workspace_ref,
+        profile_ref,
+        tx["id"],
+        _metadata_hooks(),
+        excluded=True,
+        source="cli",
+        reason="Resolved quarantine by excluding transaction",
+        commit=False,
     )
     conn.execute(
         "DELETE FROM journal_quarantines WHERE profile_id = ? AND transaction_id = ?",
         (profile["id"], tx["id"]),
     )
-    invalidate_journals(conn, profile["id"])
+    if not record["updated"]:
+        invalidate_journals(conn, profile["id"])
     conn.commit()
     return {
         "transaction_id": tx["id"],
         "resolution": "exclude",
         "excluded": True,
+        "history_event_id": record["history_event_id"],
         "note": "Run `kassiber journals process` to regenerate entries.",
     }
 

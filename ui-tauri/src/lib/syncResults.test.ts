@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  describeFreshnessSourceState,
   describeWalletSyncResult,
+  freshnessRunNeedsAttention,
+  summarizeFreshnessRun,
   summarizeSyncResults,
   syncResultsAreTrustedForReports,
 } from "./syncResults";
@@ -53,5 +56,73 @@ describe("syncResults", () => {
         { wallet: "Descriptor", status: "error", message: "Timed out" },
       ]),
     ).toBe(false);
+    expect(
+      syncResultsAreTrustedForReports([
+        { wallet: "Cold", status: "synced" },
+        { wallet: "Rates", status: "blocking_reports" },
+      ]),
+    ).toBe(false);
+  });
+
+  it("describes normal freshness cooldowns without panic wording", () => {
+    expect(
+      describeFreshnessSourceState({
+        source_key: "market_rates:profile",
+        source_type: "market_rates",
+        source_label: "Market-rate coverage",
+        status: "rate_limited",
+        rate_limited_until: "2026-06-04T12:30:00Z",
+      }),
+    ).toBe("Market-rate coverage is rate limited until 2026-06-04T12:30:00Z.");
+  });
+
+  it("summarizes combined book refresh jobs without treating cooldown as failure", () => {
+    const payload = {
+      completed: [
+        { job_type: "onchain_wallet_history", source_label: "Cold", status: "done" },
+        { job_type: "market_rate_coverage", source_label: "Market-rate coverage", status: "done" },
+        { job_type: "journal_refresh", source_label: "Journal refresh", status: "done" },
+        {
+          job_type: "btcpay_provenance",
+          source_label: "BTCPay provenance",
+          status: "rate_limited",
+          error: { message: "Retry after 90 seconds." },
+        },
+      ],
+      summary: { rate_limited: 1, failed: 0, blocking_reports: 0 },
+    };
+
+    expect(summarizeFreshnessRun(payload)).toBe(
+      "3 completed, 1 cooling down: BTCPay provenance: Retry after 90 seconds.",
+    );
+    expect(freshnessRunNeedsAttention(payload)).toBe(false);
+  });
+
+  it("marks combined refresh attention only for blocking or failed sources", () => {
+    const payload = {
+      completed: [
+        {
+          job_type: "market_rate_coverage",
+          source_label: "Market-rate coverage",
+          status: "error",
+          error: { message: "HTTP 500" },
+        },
+      ],
+      sources: [
+        {
+          source_key: "market_rates:profile",
+          source_type: "market_rates",
+          source_label: "Market-rate coverage",
+          status: "blocking_reports",
+          blocking_reports: true,
+        },
+      ],
+      summary: { failed: 1, blocking_reports: 1 },
+    };
+
+    expect(summarizeFreshnessRun(payload)).toBe(
+      "1 needs attention: Market-rate coverage: HTTP 500",
+    );
+    expect(freshnessRunNeedsAttention(payload)).toBe(true);
   });
 });
