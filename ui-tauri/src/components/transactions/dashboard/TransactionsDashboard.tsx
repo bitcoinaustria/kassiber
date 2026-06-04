@@ -198,7 +198,7 @@ const TransactionsDashboard = ({
             variant="outline"
             size="sm"
             className="h-8 gap-2 sm:h-9"
-            aria-label="Refresh watch-only connections"
+            aria-label="Refresh book"
             onClick={() => syncAll()}
             disabled={isSyncing}
           >

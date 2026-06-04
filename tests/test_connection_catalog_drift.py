@@ -261,18 +261,30 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
             "and ui-tauri/vite.config.ts).",
         )
 
-    def test_wallet_sync_is_streaming_in_tauri_supervisor(self):
-        streaming = re.search(
+    def test_refresh_kinds_are_stream_capable_in_desktop_boundaries(self):
+        tauri_streaming = re.search(
             r"STREAMING_DAEMON_KINDS[^=]*=\s*&\[(?P<body>.*?)\];",
             self.tauri_lib_text,
             re.DOTALL,
         )
-        self.assertIsNotNone(streaming, "could not find Tauri streaming kind list")
-        self.assertIn(
-            '"ui.wallets.sync"',
-            streaming.group("body"),
-            "ui.wallets.sync emits progress records and must be marked streaming",
+        vite_streaming = re.search(
+            r"STREAM_CAPABLE_BRIDGE_KINDS[^=]*=\s*new Set\(\[(?P<body>.*?)\]\);",
+            self.vite_config_text,
+            re.DOTALL,
         )
+        self.assertIsNotNone(tauri_streaming, "could not find Tauri streaming kind list")
+        self.assertIsNotNone(vite_streaming, "could not find Vite stream-capable kind list")
+        for kind in ("ui.wallets.sync", "ui.freshness.run"):
+            self.assertIn(
+                f'"{kind}"',
+                tauri_streaming.group("body"),
+                f"{kind} emits progress records and must be marked streaming",
+            )
+            self.assertIn(
+                f'"{kind}"',
+                vite_streaming.group("body"),
+                f"{kind} emits progress records and must be stream-capable in dev bridge",
+            )
 
     def test_ready_entries_reference_known_wallet_kinds(self):
         # We only want the array literal that lives behind CONNECTION_SOURCES.

@@ -3,6 +3,8 @@ import type { NotificationProgress } from "@/store/ui";
 export type WalletSyncProgress = {
   phase?: string;
   wallet?: string;
+  source_label?: string;
+  source_type?: string;
   processed?: number;
   total?: number;
   imported?: number;
@@ -24,26 +26,48 @@ function progressNumbers(progress: WalletSyncProgress) {
   };
 }
 
+const PHASE_LABELS: Record<string, string> = {
+  discovery: "Discovering wallet history",
+  backend_fetch: "Fetching source history",
+  decode_enrich: "Decoding and enriching transactions",
+  import: "Importing transactions",
+  rate_coverage: "Checking market-rate coverage",
+  journal_refresh: "Refreshing journals",
+  done: "Refresh complete",
+  error: "Refresh needs attention",
+};
+
+function phaseLabel(phase: string | undefined, fallback: string) {
+  if (!phase) return fallback;
+  return PHASE_LABELS[phase] ?? phase.replaceAll("_", " ");
+}
+
+function sourceLabel(progress: WalletSyncProgress) {
+  return progress.wallet || progress.source_label || "";
+}
+
 export function startingSyncProgress(): NotificationProgress {
   return {
     value: STARTING_SYNC_PROGRESS_VALUE,
     indeterminate: false,
-    label: "Preparing wallet scan",
+    label: "Preparing source refresh",
   };
 }
 
 export function formatSyncProgressBody(progress: WalletSyncProgress) {
-  const wallet = progress.wallet ? `${progress.wallet}: ` : "";
+  const source = sourceLabel(progress);
+  const prefix = source ? `${source}: ` : "";
+  const phase = phaseLabel(progress.phase, "refresh is running");
   const { processed, total } = progressNumbers(progress);
   if (processed !== null && total !== null && total > 0) {
-    return `${wallet}${processed.toLocaleString()} / ${total.toLocaleString()} transactions scanned.`;
+    return `${prefix}${phase}; ${processed.toLocaleString()} / ${total.toLocaleString()} rows scanned.`;
   }
   if (processed !== null) {
-    return `${wallet}${processed.toLocaleString()} transactions scanned.`;
+    return `${prefix}${phase}; ${processed.toLocaleString()} rows scanned.`;
   }
-  return wallet
-    ? `${wallet}refresh is running.`
-    : "Kassiber is scanning configured watch-only sources.";
+  return prefix
+    ? `${prefix}${phase}.`
+    : `${phase}.`;
 }
 
 export function syncProgressNotification(
@@ -63,12 +87,12 @@ export function syncProgressNotification(
       indeterminate: false,
       label:
         processed !== null && total !== null && total > 0
-          ? `Scanning transactions: ${processed.toLocaleString()} / ${total.toLocaleString()}`
+          ? `${phaseLabel(progress.phase, "Scanning transactions")}: ${processed.toLocaleString()} / ${total.toLocaleString()}`
           : processed !== null
-            ? `Scanning transactions: ${processed.toLocaleString()} scanned`
-            : progress.wallet
-              ? `Scanning ${progress.wallet}`
-              : "Scanning configured sources",
+            ? `${phaseLabel(progress.phase, "Scanning transactions")}: ${processed.toLocaleString()} scanned`
+            : sourceLabel(progress)
+              ? `${phaseLabel(progress.phase, "Refreshing")} ${sourceLabel(progress)}`
+              : phaseLabel(progress.phase, "Refreshing configured sources"),
     },
     value,
   };

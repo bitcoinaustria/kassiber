@@ -378,6 +378,64 @@ CREATE INDEX IF NOT EXISTS idx_lightning_node_records_profile_type_time
 CREATE INDEX IF NOT EXISTS idx_lightning_node_records_wallet_type_time
     ON lightning_node_records(wallet_id, record_type, occurred_at DESC);
 
+CREATE TABLE IF NOT EXISTS freshness_source_states (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    source_key TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    source_label TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'fresh',
+    state TEXT NOT NULL DEFAULT 'fresh',
+    stale_reason TEXT,
+    blocking_reports INTEGER NOT NULL DEFAULT 0,
+    paused INTEGER NOT NULL DEFAULT 0,
+    rate_limited_until TEXT,
+    cooldown_reason TEXT,
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    last_success_at TEXT,
+    last_error_at TEXT,
+    last_error_code TEXT,
+    last_error_message TEXT,
+    last_phase TEXT,
+    progress_json TEXT NOT NULL DEFAULT '{}',
+    checkpoint_json TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(profile_id, source_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_freshness_source_states_profile_status
+    ON freshness_source_states(profile_id, status, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS freshness_jobs (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    job_type TEXT NOT NULL,
+    source_key TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    source_label TEXT NOT NULL,
+    status TEXT NOT NULL,
+    phase TEXT,
+    priority INTEGER NOT NULL DEFAULT 100,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    progress_json TEXT NOT NULL DEFAULT '{}',
+    result_json TEXT NOT NULL DEFAULT '{}',
+    error_json TEXT NOT NULL DEFAULT '{}',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    cancel_requested INTEGER NOT NULL DEFAULT 0,
+    run_after TEXT,
+    cooldown_until TEXT,
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    finished_at TEXT,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_freshness_jobs_profile_status
+    ON freshness_jobs(profile_id, status, priority, created_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_freshness_jobs_singleflight
+    ON freshness_jobs(profile_id, source_key, job_type)
+    WHERE status IN ('queued', 'running', 'rate_limited');
+
 CREATE TABLE IF NOT EXISTS rates_cache (
     pair TEXT NOT NULL,
     timestamp TEXT NOT NULL,
@@ -1023,6 +1081,7 @@ def ensure_schema_compat(conn):
     _ensure_swap_matching_schema(conn)
     _ensure_direct_swap_payout_schema(conn)
     _ensure_commercial_reconciliation_schema(conn)
+    _ensure_freshness_schema(conn)
 
 
 def _ensure_ai_provider_secret_refs_schema(conn):
@@ -1039,6 +1098,89 @@ def _ensure_ai_provider_secret_refs_schema(conn):
         )
         """
     )
+
+
+def _ensure_freshness_schema(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS freshness_source_states (
+            profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            source_key TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            source_label TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'fresh',
+            state TEXT NOT NULL DEFAULT 'fresh',
+            stale_reason TEXT,
+            blocking_reports INTEGER NOT NULL DEFAULT 0,
+            paused INTEGER NOT NULL DEFAULT 0,
+            rate_limited_until TEXT,
+            cooldown_reason TEXT,
+            retry_count INTEGER NOT NULL DEFAULT 0,
+            last_success_at TEXT,
+            last_error_at TEXT,
+            last_error_code TEXT,
+            last_error_message TEXT,
+            last_phase TEXT,
+            progress_json TEXT NOT NULL DEFAULT '{}',
+            checkpoint_json TEXT NOT NULL DEFAULT '{}',
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY(profile_id, source_key)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_freshness_source_states_profile_status
+            ON freshness_source_states(profile_id, status, updated_at DESC)
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS freshness_jobs (
+            id TEXT PRIMARY KEY,
+            profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            job_type TEXT NOT NULL,
+            source_key TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            source_label TEXT NOT NULL,
+            status TEXT NOT NULL,
+            phase TEXT,
+            priority INTEGER NOT NULL DEFAULT 100,
+            payload_json TEXT NOT NULL DEFAULT '{}',
+            progress_json TEXT NOT NULL DEFAULT '{}',
+            result_json TEXT NOT NULL DEFAULT '{}',
+            error_json TEXT NOT NULL DEFAULT '{}',
+            attempts INTEGER NOT NULL DEFAULT 0,
+            cancel_requested INTEGER NOT NULL DEFAULT 0,
+            run_after TEXT,
+            cooldown_until TEXT,
+            created_at TEXT NOT NULL,
+            started_at TEXT,
+            finished_at TEXT,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_freshness_jobs_profile_status
+            ON freshness_jobs(profile_id, status, priority, created_at)
+        """
+    )
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_freshness_jobs_singleflight
+            ON freshness_jobs(profile_id, source_key, job_type)
+            WHERE status IN ('queued', 'running', 'rate_limited')
+        """
+    )
+    for table in ("freshness_source_states", "freshness_jobs"):
+        for column, definition in (
+            ("source_type", "TEXT NOT NULL DEFAULT 'source'"),
+            ("source_label", "TEXT NOT NULL DEFAULT ''"),
+            ("updated_at", "TEXT NOT NULL DEFAULT ''"),
+        ):
+            ensure_column(conn, table, column, definition)
 
 
 def _ensure_commercial_reconciliation_schema(conn):
