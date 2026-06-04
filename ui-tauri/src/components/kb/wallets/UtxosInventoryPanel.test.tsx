@@ -122,6 +122,7 @@ describe("UtxosInventoryPanel", () => {
     });
 
     expect(html).toContain("Sort UTXOs");
+    expect(html).not.toContain(">Refresh</button>");
     expect(UTXO_SORT_OPTIONS.map((option) => option.label)).toContain(
       "Confirmed: newest first",
     );

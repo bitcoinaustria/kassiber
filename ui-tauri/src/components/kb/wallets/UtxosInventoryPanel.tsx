@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Coins,
   ExternalLink,
+  Filter,
   RefreshCw,
   ShieldAlert,
 } from "lucide-react";
@@ -29,12 +30,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -574,39 +576,42 @@ export function UtxosInventoryPanel({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {rows.length > 1 ? (
-              <Select
-                value={sort}
-                onValueChange={(value) => setSort(value as UtxoSortValue)}
-              >
-                <SelectTrigger
-                  size="sm"
-                  className="w-[min(100%,14rem)]"
-                  aria-label="Sort UTXOs"
-                >
-                  <SelectValue placeholder="Sort UTXOs" />
-                </SelectTrigger>
-                <SelectContent align="end">
-                  {UTXO_SORT_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      "h-8 gap-1.5 sm:h-9 sm:gap-2",
+                      sort !== "default" && "border-primary",
+                    )}
+                    aria-label="Sort UTXOs"
+                  >
+                    <Filter className="size-3.5 sm:size-4" aria-hidden="true" />
+                    <span className="hidden sm:inline">Sort</span>
+                    {sort !== "default" ? (
+                      <span className="size-1.5 rounded-full bg-primary sm:size-2" />
+                    ) : null}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[220px]">
+                  <DropdownMenuLabel>Sort UTXOs</DropdownMenuLabel>
+                  <DropdownMenuRadioGroup
+                    value={sort}
+                    onValueChange={(value) => setSort(value as UtxoSortValue)}
+                  >
+                    {UTXO_SORT_OPTIONS.map((option) => (
+                      <DropdownMenuRadioItem
+                        key={option.value}
+                        value={option.value}
+                      >
+                        {option.label}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
             ) : null}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={isRefreshing}
-              onClick={onRefresh}
-            >
-              <RefreshCw
-                className={cn("size-4", isRefreshing && "animate-spin")}
-                aria-hidden="true"
-              />
-              {isRefreshing ? "Refreshing" : "Refresh"}
-            </Button>
           </div>
         </div>
       </CardHeader>
