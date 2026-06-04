@@ -568,11 +568,6 @@ export function UtxosInventoryPanel({
                 {rowLimit.toLocaleString("en-US")} rows for preview performance.
               </p>
             ) : null}
-            {lastSyncedLabel ? (
-              <p className="mt-1 text-xs text-muted-foreground">
-                As of {lastSyncedLabel}
-              </p>
-            ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {rows.length > 1 ? (

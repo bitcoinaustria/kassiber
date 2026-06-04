@@ -247,10 +247,10 @@ describe("UtxosInventoryPanel", () => {
     expect(liquidHtml).toContain("private blinding keys");
   });
 
-  it("surfaces freshness and copy affordances without duplicating wallet balance", () => {
+  it("surfaces copy affordances without duplicating wallet balance or header freshness", () => {
     const html = renderPanel();
 
-    expect(html).toContain("As of");
+    expect(html).not.toContain("As of");
     expect(html).toContain("Copy outpoint");
     expect(html).toContain("Copy address");
     // Static rendering includes both desktop and mobile row layouts; there
