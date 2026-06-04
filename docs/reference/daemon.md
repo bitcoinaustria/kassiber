@@ -386,6 +386,13 @@ mode with an explicit busy timeout so the daemon foreground connection and the
 freshness worker can safely serialize writes instead of failing immediately on
 ordinary lock contention.
 
+For SQLCipher databases, the daemon keeps the verified database passphrase only
+as unlocked-session state so the background worker can open its own connection.
+That reference is not persisted or logged, is cleared on lock, passphrase
+rotation, and shutdown paths, and the worker drops its one-shot handoff after
+opening the connection. This is a practical local-daemon boundary, not Python
+memory zeroization.
+
 First sync progress phases are `discovery`, `backend_fetch`, `decode_enrich`,
 `import`, `rate_coverage`, `journal_refresh`, `done`, and `error`. The streaming
 `ui.wallets.sync.progress` and `ui.freshness.run.progress` records include the
@@ -396,9 +403,14 @@ known txids, dirty mempool scripts, header timestamps, and highest used branch
 indexes; repeated syncs batch `blockchain.scripthash.subscribe` and skip
 unchanged history/tx/header calls. Esplora stores script stats fingerprints and
 known txids; unchanged scripts skip paged history. BTCPay stores page
-fingerprints/stable ids and stops at the first unchanged page. Rate jobs reuse
-the existing `rates_checked_minutes` cache and do not run destructive rebuilds
-in background freshness work.
+fingerprints, stable ids, stop reasons, and pagination cursors. Repeat BTCPay
+syncs treat a page as unchanged only when both stable ids and the metadata
+fingerprint match, stop the head scan after a bounded unchanged-page window, and
+advance a deep-audit cursor over older pages so older comment, label, invoice,
+or payment metadata edits can still be discovered without walking the whole
+history every background pass. Rate jobs reuse the existing
+`rates_checked_minutes` cache and do not run destructive rebuilds in background
+freshness work.
 
 ## Lightning node kinds
 

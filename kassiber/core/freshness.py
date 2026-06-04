@@ -12,7 +12,7 @@ from typing import Any, Callable, Mapping
 
 from ..envelope import json_ready
 from ..errors import AppError
-from ..time_utils import now_iso
+from ..time_utils import now_iso, parse_iso_datetime_or_none
 
 JOB_ONCHAIN_WALLET = "onchain_wallet_history"
 JOB_BTCPAY_WALLET = "btcpay_wallet_source"
@@ -102,16 +102,7 @@ def _json_load(value: Any, default: Any) -> Any:
 
 
 def _parse_iso(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    raw = value[:-1] + "+00:00" if value.endswith("Z") else value
-    try:
-        parsed = datetime.fromisoformat(raw)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+    return parse_iso_datetime_or_none(value)
 
 
 def _iso_from_now_plus(seconds: int) -> str:

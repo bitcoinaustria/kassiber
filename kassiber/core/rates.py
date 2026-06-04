@@ -16,6 +16,7 @@ from urllib import request as urlrequest
 from .. import __version__
 from ..db import APP_NAME
 from ..errors import AppError
+from ..retry import retry_after_seconds_from_http_error
 from . import pricing
 from ..time_utils import _iso_z, _parse_iso_datetime
 
@@ -156,7 +157,7 @@ def http_get_json(url, timeout=30):
                 f"Rate provider rate limited the request for {url} (HTTP 429)",
                 code="rate_limited",
                 retryable=True,
-                details={"retry_after_seconds": _retry_after_seconds(exc)},
+                details={"retry_after_seconds": retry_after_seconds_from_http_error(exc)},
             ) from exc
         raise AppError(f"HTTP {exc.code} from backend for {url}: {detail[:200]}") from exc
     except urlerror.URLError as exc:
@@ -170,20 +171,6 @@ def _float_from_exact(value):
     if exact is None:
         return None, None
     return float(pricing.decimal_from_exact(exact)), exact
-
-
-def _retry_after_seconds(exc):
-    value = exc.headers.get("Retry-After") if getattr(exc, "headers", None) else None
-    if not value:
-        return None
-    try:
-        return max(0, int(value))
-    except ValueError:
-        try:
-            parsed = datetime.strptime(value, "%a, %d %b %Y %H:%M:%S %z")
-        except ValueError:
-            return None
-        return max(0, int((parsed - datetime.now(parsed.tzinfo)).total_seconds()))
 
 
 def _rate_insert_params(

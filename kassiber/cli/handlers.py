@@ -2055,6 +2055,7 @@ def _sync_btcpay_wallet(
             {
                 "backend": {"name": backend["name"], "kind": kind},
                 "btcpay_pages": btcpay_meta.get("btcpay_pages", {}),
+                "btcpay_pagination": btcpay_meta.get("btcpay_pagination", {}),
                 "store_id": btcpay_config["store_id"],
                 "payment_method_id": btcpay_config["payment_method_id"],
             }
@@ -2062,6 +2063,8 @@ def _sync_btcpay_wallet(
         outcome["freshness_checkpoint"] = checkpoint
         outcome["pages_fetched"] = btcpay_meta.get("pages_fetched", 0)
         outcome["stopped_by_known_page"] = bool(btcpay_meta.get("stopped_by_known_page"))
+        outcome["stop_reason"] = btcpay_meta.get("stop_reason")
+        outcome["deep_audit"] = btcpay_meta.get("deep_audit")
     return outcome
 
 
@@ -2138,11 +2141,14 @@ def enrich_wallet_from_btcpay_provenance(
             "fetched": len(records),
             "pages_fetched": btcpay_meta.get("pages_fetched", 0),
             "stopped_by_known_page": bool(btcpay_meta.get("stopped_by_known_page")),
+            "stop_reason": btcpay_meta.get("stop_reason"),
+            "deep_audit": btcpay_meta.get("deep_audit"),
             **metadata,
         }
         next_route_checkpoints[route_key] = {
             "backend": {"name": backend["name"], "kind": kind},
             "btcpay_pages": btcpay_meta.get("btcpay_pages", {}),
+            "btcpay_pagination": btcpay_meta.get("btcpay_pagination", {}),
             "store_id": route["store_id"],
             "payment_method_id": route["payment_method_id"],
         }
@@ -2311,6 +2317,7 @@ def sync_btcpay_commercial_provenance(
         {
             "backend": {"name": backend["name"], "kind": kind},
             "btcpay_invoice_pages": btcpay_meta.get("btcpay_invoice_pages", {}),
+            "btcpay_invoice_pagination": btcpay_meta.get("btcpay_invoice_pagination", {}),
             "store_id": store_id,
         }
     )
@@ -2323,6 +2330,8 @@ def sync_btcpay_commercial_provenance(
         "page_size": page_size,
         "pages_fetched": btcpay_meta.get("pages_fetched", 0),
         "stopped_by_known_page": bool(btcpay_meta.get("stopped_by_known_page")),
+        "stop_reason": btcpay_meta.get("stop_reason"),
+        "deep_audit": btcpay_meta.get("deep_audit"),
         "freshness_checkpoint": checkpoint,
     }
 

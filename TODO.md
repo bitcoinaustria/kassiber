@@ -415,6 +415,12 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   checkpointed Electrum/Esplora/BTCPay/rate work, cancellation, pause/resume,
   opt-in background worker, provider cooldowns, redacted envelopes, and Tauri
   allowlist support.
+- [x] Follow-up hardening for freshness workers: move daemon freshness glue into
+  a focused module, share Retry-After and persisted timestamp parsing helpers,
+  scope the unlocked SQLCipher passphrase to the local daemon session plus
+  one-shot worker handoff, and bound repeat BTCPay page scans with stable-id
+  fingerprints, explicit stop reasons, and rotating deep audits for older
+  metadata edits.
 - [ ] Finish the remaining live-action worker surfaces: file/import flows,
   metadata edits, transfer pairing, attachments, quarantine resolve,
   profile/wallet/backend CRUD, backup/restore.
