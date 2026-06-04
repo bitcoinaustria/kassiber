@@ -416,7 +416,14 @@ def _wallet_utxo_source_filter(
         if _string_or_empty(backend_kind)
         else []
     )
+    backend_name_values = _unique_text_values(
+        [
+            backend_summary.get("name"),
+            backend.get("name") if isinstance(backend, dict) else None,
+        ]
+    )
     return {
+        "backend_name": backend_name_values or None,
         "backend_kind": backend_kind_values or None,
         "chain": chain_values,
         "network": network_values,

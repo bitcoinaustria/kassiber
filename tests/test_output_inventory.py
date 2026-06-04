@@ -310,8 +310,8 @@ class OutputInventoryTest(unittest.TestCase):
                     network="mainnet",
                 )
                 self.assertEqual(summary["active_count"], 0)
-                self.assertEqual(summary["observed_count"], 5)
-                self.assertEqual(summary["last_seen_at"], "2026-01-01T12:00:00Z")
+                self.assertEqual(summary["observed_count"], 0)
+                self.assertIsNone(summary["last_seen_at"])
             finally:
                 conn.close()
 

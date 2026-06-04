@@ -96,7 +96,6 @@ class SyncBackendsTest(unittest.TestCase):
                 {"id": "wallet-1"},
                 sync_state,
             )
-        self.assertEqual(meta, {"utxos": []})
         self.assertEqual(meta["scripts_changed"], 1)
         self.assertIn("freshness_checkpoint", meta)
         self.assertEqual(meta["utxos"], [])
@@ -129,6 +128,9 @@ class SyncBackendsTest(unittest.TestCase):
         ), patch(
             "kassiber.core.sync_backends.fetch_esplora_scripthash_transactions",
             side_effect=fake_fetch,
+        ), patch(
+            "kassiber.core.sync_backends.fetch_esplora_scripthash_utxos",
+            return_value=[],
         ):
             sync_state = WalletSyncState(
                 chain="bitcoin",
@@ -330,6 +332,9 @@ class SyncBackendsTest(unittest.TestCase):
         with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient), patch(
             "kassiber.core.sync_backends.decode_raw_transaction",
             side_effect=lambda raw_hex: raw_map[raw_hex],
+        ), patch(
+            "kassiber.core.sync_backends.electrum_utxos_for_wallet",
+            return_value=[],
         ):
             sync_state = WalletSyncState(
                 chain="bitcoin",

@@ -278,6 +278,32 @@ def clear_wallet_output_inventory(
     }
 
 
+def clear_backend_output_inventory(
+    conn: sqlite3.Connection,
+    backend_name: str,
+    *,
+    commit: bool = True,
+) -> dict[str, Any]:
+    """Drop cached output inventory stamped with a backend that was changed."""
+    normalized_backend = str(backend_name or "").strip().lower()
+    if not normalized_backend:
+        return {"utxos_deleted": 0, "refreshes_deleted": 0}
+    utxo_cursor = conn.execute(
+        "DELETE FROM wallet_utxos WHERE backend_name = ?",
+        (normalized_backend,),
+    )
+    refresh_cursor = conn.execute(
+        "DELETE FROM wallet_utxo_refreshes WHERE backend_name = ?",
+        (normalized_backend,),
+    )
+    if commit:
+        conn.commit()
+    return {
+        "utxos_deleted": int(utxo_cursor.rowcount or 0),
+        "refreshes_deleted": int(refresh_cursor.rowcount or 0),
+    }
+
+
 def _filter_values(value: str | Sequence[str] | None) -> list[str]:
     values: Sequence[str | None]
     if value is None:
@@ -334,12 +360,14 @@ def _source_filter_sql(
 def _refresh_filter_sql(
     *,
     prefix: str = "",
+    backend_name: str | Sequence[str] | None = None,
     backend_kind: str | Sequence[str] | None = None,
     chain: str | Sequence[str] | None = None,
     network: str | Sequence[str] | None = None,
 ) -> tuple[str, list[Any]]:
     clauses: list[str] = []
     params: list[Any] = []
+    _append_source_filter(clauses, params, f"{prefix}backend_name", backend_name)
     _append_source_filter(clauses, params, f"{prefix}backend_kind", backend_kind)
     _append_source_filter(clauses, params, f"{prefix}chain", chain)
     _append_source_filter(clauses, params, f"{prefix}network", network)
@@ -364,6 +392,7 @@ def wallet_output_inventory_summary(
         network=network,
     )
     refresh_where, refresh_params = _refresh_filter_sql(
+        backend_name=backend_name,
         backend_kind=backend_kind,
         chain=chain,
         network=network,

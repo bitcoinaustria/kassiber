@@ -5919,7 +5919,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(results[0]["envelope"]["kind"], "ui.wallets.utxos")
             ai_payload = json.dumps(results[0]["envelope"]["data"], sort_keys=True)
             self.assertIn(f"{'77' * 32}:1", ai_payload)
-            self.assertIn(f"{'99' * 32}:2", ai_payload)
+            self.assertNotIn(f"{'99' * 32}:2", ai_payload)
             self.assertIn('"branch_label": "receive"', ai_payload)
             self.assertNotIn(f"{'66' * 32}:0", ai_payload)
             self.assertNotIn("bc1qobservedcoin", ai_payload)
@@ -5944,16 +5944,16 @@ class DaemonSmokeTest(unittest.TestCase):
                 utxos = _read_payload_timeout(proc)
                 self.assertEqual(utxos["kind"], "ui.wallets.utxos")
                 self.assertTrue(utxos["data"]["support"]["supported"])
-                self.assertEqual(utxos["data"]["summary"]["count"], 2)
-                self.assertEqual(utxos["data"]["summary"]["returned_count"], 2)
+                self.assertEqual(utxos["data"]["summary"]["count"], 1)
+                self.assertEqual(utxos["data"]["summary"]["returned_count"], 1)
                 self.assertFalse(utxos["data"]["summary"]["truncated"])
                 self.assertEqual(utxos["data"]["summary"]["row_limit"], 500)
                 self.assertEqual(
                     utxos["data"]["freshness"]["last_seen_at"],
-                    "2026-01-03T00:00:00Z",
+                    "2026-01-02T00:00:00Z",
                 )
-                self.assertEqual(utxos["data"]["freshness"]["active_count"], 2)
-                self.assertEqual(utxos["data"]["totals"][0]["amount_sat"], 12_367)
+                self.assertEqual(utxos["data"]["freshness"]["active_count"], 1)
+                self.assertEqual(utxos["data"]["totals"][0]["amount_sat"], 12_345)
                 row = utxos["data"]["utxos"][0]
                 self.assertEqual(row["outpoint"], f"{'77' * 32}:1")
                 self.assertEqual(row["amount_sat"], 12_345)
@@ -5966,7 +5966,7 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertEqual(row["source"]["backend_kind"], "esplora")
                 payload = json.dumps(utxos["data"], sort_keys=True)
                 self.assertIn("bc1qobservedcoin", payload)
-                self.assertIn("bc1qrenamedbackendcoin", payload)
+                self.assertNotIn("bc1qrenamedbackendcoin", payload)
                 self.assertNotIn(f"{'66' * 32}:0", payload)
                 self.assertNotIn("bc1qoldbackendcoin", payload)
                 for leaked in (
