@@ -121,6 +121,7 @@ interface UtxosInventoryPanelProps {
   isRefreshing: boolean;
   explorerSettings: ExplorerSettings;
   onRefresh: () => void;
+  onOpenTransaction?: (transactionId: string) => void;
 }
 
 type UtxoSortValue =
@@ -334,6 +335,10 @@ export function explorerButtonTitle(target: ExplorerTarget) {
   return `Open UTXO transaction on ${target.label}`;
 }
 
+function localTransactionTitle(row: WalletUtxoRow) {
+  return `Open local transaction details for ${formatOutpoint(row.outpoint)}`;
+}
+
 function explorerOpenErrorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
   if (typeof error === "string" && error) return error;
@@ -345,12 +350,29 @@ function OutpointButton({
   explorer,
   hideSensitive,
   onOpen,
+  onOpenTransaction,
 }: {
   row: WalletUtxoRow;
   explorer: ExplorerTarget | null;
   hideSensitive: boolean;
   onOpen: (row: WalletUtxoRow) => void;
+  onOpenTransaction?: (transactionId: string) => void;
 }) {
+  if (onOpenTransaction) {
+    return (
+      <button
+        type="button"
+        className={cn(
+          "inline-flex max-w-[22ch] items-center gap-1 truncate text-left font-mono text-xs underline-offset-4 hover:underline",
+          hideSensitive && "sensitive",
+        )}
+        title={localTransactionTitle(row)}
+        onClick={() => onOpenTransaction(row.txid)}
+      >
+        <span className="truncate">{formatOutpoint(row.outpoint)}</span>
+      </button>
+    );
+  }
   if (!explorer) {
     return (
       <span className={cn("font-mono text-xs", hideSensitive && "sensitive")}>
@@ -575,6 +597,7 @@ export function UtxosInventoryPanel({
   isRefreshing,
   explorerSettings,
   onRefresh,
+  onOpenTransaction,
 }: UtxosInventoryPanelProps) {
   const rows = inventory?.utxos ?? [];
   const walletId = inventory?.wallet?.id ?? null;
@@ -737,6 +760,7 @@ export function UtxosInventoryPanel({
                               explorer={explorer}
                               hideSensitive={hideSensitive}
                               onOpen={setExplorerRow}
+                              onOpenTransaction={onOpenTransaction}
                             />
                             <CopyButton
                               value={row.outpoint}
@@ -790,6 +814,7 @@ export function UtxosInventoryPanel({
                           explorer={explorer}
                           hideSensitive={hideSensitive}
                           onOpen={setExplorerRow}
+                          onOpenTransaction={onOpenTransaction}
                         />
                         <CopyButton
                           value={row.outpoint}

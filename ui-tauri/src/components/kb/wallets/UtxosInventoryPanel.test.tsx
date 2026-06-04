@@ -68,7 +68,10 @@ const baseInventory: WalletUtxosData = {
   },
 };
 
-const renderPanel = (inventory: WalletUtxosData | null = baseInventory) =>
+const renderPanel = (
+  inventory: WalletUtxosData | null = baseInventory,
+  options: { onOpenTransaction?: (transactionId: string) => void } = {},
+) =>
   renderToStaticMarkup(
     <UtxosInventoryPanel
       inventory={inventory}
@@ -76,6 +79,7 @@ const renderPanel = (inventory: WalletUtxosData | null = baseInventory) =>
       isRefreshing={false}
       explorerSettings={{ bitcoinBaseUrl: "", liquidBaseUrl: "" }}
       onRefresh={vi.fn()}
+      onOpenTransaction={options.onOpenTransaction}
     />,
   );
 
@@ -202,6 +206,13 @@ describe("UtxosInventoryPanel", () => {
       "Open UTXO transaction on mempool.bitcoin-austria.at",
     );
     expect(explorerButtonTitle(target!)).not.toContain(baseInventory.utxos[0].txid);
+  });
+
+  it("uses local transaction detail targets when a transaction opener is provided", () => {
+    const html = renderPanel(baseInventory, { onOpenTransaction: vi.fn() });
+
+    expect(html).toContain("Open local transaction details for");
+    expect(html).not.toContain("Open UTXO transaction on");
   });
 
   it("renders stale, empty, unsupported, and Liquid blocker states", () => {

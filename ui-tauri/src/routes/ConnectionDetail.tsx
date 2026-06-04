@@ -31,6 +31,7 @@ import {
   UtxosInventoryPanel,
   type WalletUtxosData,
 } from "@/components/kb/wallets";
+import { useOverviewTransactionDetail } from "@/components/overview-dashboard/useOverviewTransactionDetail";
 import { NodeConnectionDetail } from "./NodeConnectionDetail";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -254,6 +255,7 @@ export function ConnectionDetail() {
   return (
     <ConnectionDetailView
       connection={connection}
+      snapshot={snapshot}
       priceEur={snapshot.priceEur}
       txs={snapshot.txs}
       hideSensitive={hideSensitive}
@@ -406,6 +408,7 @@ function NodeConnectionContainer({
 
 interface ConnectionDetailViewProps {
   connection: Connection;
+  snapshot: OverviewSnapshot;
   priceEur: number;
   txs: OverviewSnapshot["txs"];
   hideSensitive: boolean;
@@ -413,6 +416,7 @@ interface ConnectionDetailViewProps {
 
 function ConnectionDetailView({
   connection,
+  snapshot,
   priceEur,
   txs,
   hideSensitive,
@@ -424,6 +428,13 @@ function ConnectionDetailView({
   const updateNotification = useUiStore((state) => state.updateNotification);
   const identity = useUiStore((state) => state.identity);
   const explorerSettings = useUiStore((state) => state.explorerSettings);
+  const currency = useUiStore((state) => state.currency);
+  const { detailSheet, openTransactionDetail } = useOverviewTransactionDetail({
+    snapshot,
+    hideSensitive,
+    currency,
+    explorerSettings,
+  });
   const syncNoticeIdRef = useRef<string | null>(null);
   const walletSyncMutationKey = daemonMutationKey(dataMode, "ui.wallets.sync");
   const walletSyncsInFlight = useIsMutating({
@@ -954,6 +965,7 @@ function ConnectionDetailView({
         isRefreshing={isWalletSyncRunning}
         explorerSettings={explorerSettings}
         onRefresh={onSync}
+        onOpenTransaction={openTransactionDetail}
       />
 
       {walletProvenanceRoutes.length > 0 ? (
@@ -1382,6 +1394,7 @@ function ConnectionDetailView({
           </form>
         </DialogContent>
       </Dialog>
+      {detailSheet}
     </div>
   );
 }
