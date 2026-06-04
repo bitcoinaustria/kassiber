@@ -11,6 +11,7 @@ import path for transaction insertion plus note/tag metadata application.
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
 import json
 from urllib import error as urlerror
 from urllib import parse as urlparse
@@ -39,6 +40,8 @@ def fetch_btcpay_records(
     payment_method_id=DEFAULT_PAYMENT_METHOD_ID,
     page_size=DEFAULT_PAGE_SIZE,
     opener=None,
+    checkpoint=None,
+    metadata=None,
 ):
     if not store_id:
         raise AppError("BTCPay store id is required", code="validation")
@@ -58,6 +61,10 @@ def fetch_btcpay_records(
     timeout = backend_timeout(backend)
     http_opener = opener or urlrequest.build_opener()
     records = []
+    checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
+    previous_pages = checkpoint.get("btcpay_pages") or {}
+    next_pages = {}
+    stopped_by_known_page = False
     skip = 0
     page_count = 0
     while True:
@@ -82,13 +89,33 @@ def fetch_btcpay_records(
                 f"BTCPay response for {url} was not a JSON array",
                 code="protocol_error",
             )
-        for tx in page:
-            if _is_confirmed_transaction(tx):
-                records.append(_to_record(tx, payment_method_id))
         page_count += 1
+        fingerprint = _page_fingerprint(page)
+        page_key = str(skip)
+        previous = previous_pages.get(page_key) if isinstance(previous_pages, dict) else None
+        if isinstance(previous, dict) and previous.get("fingerprint") == fingerprint:
+            next_pages[page_key] = previous
+            stopped_by_known_page = True
+        else:
+            for tx in page:
+                if _is_confirmed_transaction(tx):
+                    records.append(_to_record(tx, payment_method_id))
+            next_pages[page_key] = {
+                "fingerprint": fingerprint,
+                "stable_ids": _page_stable_ids(page),
+                "rows": len(page),
+            }
         if len(page) < page_size:
             break
         skip += page_size
+    if metadata is not None:
+        metadata.update(
+            {
+                "btcpay_pages": dict(sorted(next_pages.items())),
+                "pages_fetched": page_count,
+                "stopped_by_known_page": stopped_by_known_page,
+            }
+        )
     return records
 
 
@@ -98,6 +125,8 @@ def fetch_btcpay_invoice_provenance(
     *,
     page_size=DEFAULT_PAGE_SIZE,
     opener=None,
+    checkpoint=None,
+    metadata=None,
 ):
     """Fetch invoice/payment provenance without importing wallet balances."""
 
@@ -118,6 +147,10 @@ def fetch_btcpay_invoice_provenance(
     timeout = backend_timeout(backend)
     http_opener = opener or urlrequest.build_opener()
     invoices = []
+    checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
+    previous_pages = checkpoint.get("btcpay_invoice_pages") or {}
+    next_pages = {}
+    stopped_by_known_page = False
     skip = 0
     page_count = 0
     while True:
@@ -139,11 +172,31 @@ def fetch_btcpay_invoice_provenance(
                 f"BTCPay response for {url} was not a JSON array",
                 code="protocol_error",
             )
-        invoices.extend(_normalize_invoice_provenance(store_id, invoice) for invoice in page)
         page_count += 1
+        page_key = str(skip)
+        fingerprint = _invoice_page_fingerprint(page)
+        previous = previous_pages.get(page_key) if isinstance(previous_pages, dict) else None
+        if isinstance(previous, dict) and previous.get("fingerprint") == fingerprint:
+            next_pages[page_key] = previous
+            stopped_by_known_page = True
+        else:
+            invoices.extend(_normalize_invoice_provenance(store_id, invoice) for invoice in page)
+            next_pages[page_key] = {
+                "fingerprint": fingerprint,
+                "stable_ids": _invoice_page_stable_ids(page),
+                "rows": len(page),
+            }
         if len(page) < page_size:
             break
         skip += page_size
+    if metadata is not None:
+        metadata.update(
+            {
+                "btcpay_invoice_pages": dict(sorted(next_pages.items())),
+                "pages_fetched": page_count,
+                "stopped_by_known_page": stopped_by_known_page,
+            }
+        )
     return invoices
 
 
@@ -283,6 +336,84 @@ def _build_invoices_url(base, store_id, skip, limit):
     return f"{base.rstrip('/')}/api/v1/stores/{store_q}/invoices?{query}"
 
 
+def _stable_transaction_id(tx):
+    if not isinstance(tx, dict):
+        return ""
+    return str(
+        tx.get("transactionHash")
+        or tx.get("transactionId")
+        or tx.get("id")
+        or json.dumps(tx, sort_keys=True)
+    )
+
+
+def _page_stable_ids(page):
+    return sorted(_stable_transaction_id(tx) for tx in page if isinstance(tx, dict))
+
+
+def _page_fingerprint_rows(page):
+    rows = []
+    for tx in page:
+        if not isinstance(tx, dict):
+            continue
+        rows.append(
+            {
+                "id": _stable_transaction_id(tx),
+                "timestamp": tx.get("timestamp"),
+                "amount": tx.get("amount"),
+                "confirmations": tx.get("confirmations"),
+                "status": tx.get("status"),
+                "comment": tx.get("comment"),
+                "labels": parse_btcpay_labels(tx.get("labels")),
+            }
+        )
+    return sorted(rows, key=lambda row: row["id"])
+
+
+def _page_fingerprint(page):
+    return hashlib.sha256(
+        json.dumps(_page_fingerprint_rows(page), sort_keys=True).encode("utf-8")
+    ).hexdigest()
+
+
+def _invoice_stable_id(invoice):
+    if not isinstance(invoice, dict):
+        return ""
+    return str(invoice.get("id") or invoice.get("invoiceId") or json.dumps(invoice, sort_keys=True))
+
+
+def _invoice_page_stable_ids(page):
+    return sorted(_invoice_stable_id(invoice) for invoice in page if isinstance(invoice, dict))
+
+
+def _invoice_page_fingerprint_rows(page):
+    rows = []
+    for invoice in page:
+        if not isinstance(invoice, dict):
+            continue
+        metadata = _invoice_metadata(invoice)
+        rows.append(
+            {
+                "id": _invoice_stable_id(invoice),
+                "status": invoice.get("status"),
+                "orderId": invoice.get("orderId") or metadata.get("orderId"),
+                "orderUrl": invoice.get("orderUrl") or metadata.get("orderUrl"),
+                "paymentRequestId": invoice.get("paymentRequestId")
+                or metadata.get("paymentRequestId")
+                or metadata.get("payment_request_id"),
+                "metadata": metadata,
+                "payments": invoice.get("payments"),
+            }
+        )
+    return sorted(rows, key=lambda row: row["id"])
+
+
+def _invoice_page_fingerprint(page):
+    return hashlib.sha256(
+        json.dumps(_invoice_page_fingerprint_rows(page), sort_keys=True).encode("utf-8")
+    ).hexdigest()
+
+
 def _http_get_json(opener, url, token, timeout, *, permission_hint=None):
     request = urlrequest.Request(
         url,
@@ -296,6 +427,13 @@ def _http_get_json(opener, url, token, timeout, *, permission_hint=None):
             return json.loads(response.read().decode("utf-8"))
     except urlerror.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
+        if exc.code == 429:
+            raise AppError(
+                f"BTCPay rate limited the request (HTTP 429) for {url}",
+                code="rate_limited",
+                retryable=True,
+                details={"retry_after_seconds": _retry_after_seconds(exc)},
+            ) from exc
         if exc.code == 401:
             raise AppError(
                 f"BTCPay rejected the API key (HTTP 401) for {url}",
@@ -325,6 +463,20 @@ def _http_get_json(opener, url, token, timeout, *, permission_hint=None):
             code="network_error",
             retryable=True,
         ) from exc
+
+
+def _retry_after_seconds(exc):
+    value = exc.headers.get("Retry-After") if getattr(exc, "headers", None) else None
+    if not value:
+        return None
+    try:
+        return max(0, int(value))
+    except ValueError:
+        try:
+            parsed = _dt.datetime.strptime(value, "%a, %d %b %Y %H:%M:%S %z")
+        except ValueError:
+            return None
+        return max(0, int((parsed - _dt.datetime.now(parsed.tzinfo)).total_seconds()))
 
 
 def _normalize_store(raw_store):

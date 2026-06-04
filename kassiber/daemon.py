@@ -78,6 +78,9 @@ from .cli.handlers import (
     set_transfer_rule_enabled,
     suggest_transfer_candidates,
     sync_btcpay_commercial_provenance,
+    enrich_wallet_from_btcpay_provenance,
+    sync_configured_btcpay_wallet,
+    sync_wallet_from_backend,
     sync_wallet,
 )
 from .core import audit_package as core_audit_package
@@ -92,6 +95,7 @@ from .core import source_funds_coverage as core_source_funds_coverage
 from .core import source_funds_recipients as core_source_funds_recipients
 from .core import accounts as core_accounts
 from .core import imports as core_imports
+from .core import freshness as core_freshness
 from .core import maintenance as core_maintenance
 from .core import metadata as core_metadata
 from .core import rates as core_rates
@@ -169,6 +173,8 @@ AUTO_CONTEXT_ENTRY_MAX_CHARS = 6_000
 AUTO_CONTEXT_LIST_LIMIT = 25
 AUTO_CONTEXT_STRING_LIMIT = 2_000
 AUTO_SYNC_PROFILE_MIN_INTERVAL_SECONDS = 60
+FRESHNESS_BACKGROUND_POLL_SECONDS = 5.0
+FRESHNESS_BACKGROUND_REFRESH_INTERVAL_SECONDS = 15 * 60
 _AUTO_SYNC_PROFILE_LAST_ATTEMPT: dict[str, float] = {}
 _AUTO_SYNC_PROFILE_LAST_RESULT: dict[str, dict[str, Any]] = {}
 _AUTO_SYNC_PROFILE_LOCK = threading.Lock()
@@ -283,6 +289,12 @@ SUPPORTED_KINDS = (
     "ui.maintenance.settings",
     "ui.maintenance.configure",
     "ui.maintenance.run",
+    "ui.freshness.status",
+    "ui.freshness.configure",
+    "ui.freshness.run",
+    "ui.freshness.cancel",
+    "ui.freshness.pause",
+    "ui.freshness.resume",
     "ui.workspace.health",
     "ui.workspace.create",
     "ui.workspace.rename",
@@ -631,6 +643,9 @@ class DaemonContext:
     input_lines: queue.Queue[str]
     deferred_input_lines: list[str]
     out: Any
+    freshness_stop_event: threading.Event
+    db_passphrase: str | None = None
+    freshness_worker: threading.Thread | None = None
 
 
 @dataclass(frozen=True)
@@ -2198,6 +2213,9 @@ def _open_daemon_connection(
     require_existing_schema: bool = False,
 ) -> sqlite3.Connection:
     if ctx.conn is not None:
+        if passphrase:
+            ctx.db_passphrase = passphrase
+        _start_freshness_background_worker(ctx, passphrase=passphrase)
         return ctx.conn
     conn = open_db(
         ctx.data_root,
@@ -2206,6 +2224,9 @@ def _open_daemon_connection(
     )
     merge_db_backends(conn, ctx.runtime_config)
     ctx.conn = conn
+    if passphrase:
+        ctx.db_passphrase = passphrase
+    _start_freshness_background_worker(ctx, passphrase=passphrase)
     return conn
 
 
@@ -2571,13 +2592,27 @@ def _wallets_sync_payload(
     raw_args: dict[str, Any],
     *,
     strict: bool,
+    progress_observer: Callable[[Mapping[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     args = _coerce_wallets_sync_args(raw_args, strict=strict)
     context = current_context_snapshot(conn)
     if not context["workspace_id"] or not context["profile_id"]:
         return {"results": []}
-    payload = {
-        "results": sync_wallet(
+    payload = _freshness_run_payload(
+        conn,
+        runtime_config,
+        {
+            "wallet": args["wallet"],
+            "all": args["all"],
+            "rates": False,
+            "journals": False,
+            "run": True,
+        },
+        progress_observer=progress_observer,
+    )
+    payload["results"] = payload.get("results") or []
+    if not payload["results"] and not payload.get("enqueued"):
+        payload["results"] = sync_wallet(
             conn,
             runtime_config,
             None,
@@ -2585,7 +2620,6 @@ def _wallets_sync_payload(
             wallet_ref=args["wallet"],
             sync_all=args["all"],
         )
-    }
     return _redact_sync_payload_for_ui(payload)
 
 
@@ -2709,6 +2743,762 @@ def _setting_bool(conn: sqlite3.Connection, key: str, *, default: bool = False) 
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _wallet_lookup_sql(wallet_ref: str | None = None) -> tuple[str, tuple[Any, ...]]:
+    if wallet_ref:
+        return (
+            """
+            SELECT *
+            FROM wallets
+            WHERE profile_id = ?
+              AND (id = ? OR lower(label) = lower(?))
+            ORDER BY label ASC
+            """,
+            (wallet_ref, wallet_ref),
+        )
+    return (
+        """
+        SELECT *
+        FROM wallets
+        WHERE profile_id = ?
+        ORDER BY label ASC
+        """,
+        (),
+    )
+
+
+def _load_wallets_for_freshness(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    wallet_ref: str | None = None,
+) -> list[sqlite3.Row]:
+    sql, extra = _wallet_lookup_sql(wallet_ref)
+    rows = conn.execute(sql, (profile_id, *extra)).fetchall()
+    if wallet_ref and not rows:
+        raise AppError(
+            f"Wallet '{wallet_ref}' was not found",
+            code="not_found",
+            retryable=False,
+        )
+    return list(rows)
+
+
+def _wallet_has_onchain_source(wallet: Mapping[str, Any], config: Mapping[str, Any]) -> bool:
+    if str(wallet["kind"]) == "coreln":
+        return False
+    if config.get("source_file") and config.get("source_format"):
+        return False
+    if str_or_none(config.get("descriptor")):
+        return True
+    addresses = core_wallets.normalize_addresses(config.get("addresses"))
+    return bool(addresses)
+
+
+def _freshness_wallet_source_specs(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    wallet_ref: str | None = None,
+    include_rates: bool = True,
+    include_journals: bool = True,
+) -> list[dict[str, Any]]:
+    specs: list[dict[str, Any]] = []
+    for wallet in _load_wallets_for_freshness(conn, profile_id, wallet_ref):
+        config = json.loads(wallet["config_json"] or "{}")
+        if core_wallets.wallet_btcpay_sync_config(config):
+            specs.append(
+                {
+                    "job_type": core_freshness.JOB_BTCPAY_WALLET,
+                    "source_type": core_freshness.SOURCE_BTCPAY_WALLET,
+                    "source_key": core_freshness.source_key(
+                        core_freshness.SOURCE_BTCPAY_WALLET,
+                        wallet["id"],
+                    ),
+                    "source_label": f"{wallet['label']} BTCPay wallet source",
+                    "payload": {"wallet_id": wallet["id"]},
+                    "priority": 20,
+                }
+            )
+        if _wallet_has_onchain_source(wallet, config):
+            specs.append(
+                {
+                    "job_type": core_freshness.JOB_ONCHAIN_WALLET,
+                    "source_type": core_freshness.SOURCE_ONCHAIN,
+                    "source_key": core_freshness.source_key(
+                        core_freshness.SOURCE_ONCHAIN,
+                        wallet["id"],
+                    ),
+                    "source_label": f"{wallet['label']} on-chain history",
+                    "payload": {"wallet_id": wallet["id"]},
+                    "priority": 30,
+                }
+            )
+        if core_wallets.wallet_btcpay_provenance_config(config):
+            specs.append(
+                {
+                    "job_type": core_freshness.JOB_BTCPAY_PROVENANCE,
+                    "source_type": core_freshness.SOURCE_BTCPAY_PROVENANCE,
+                    "source_key": core_freshness.source_key(
+                        core_freshness.SOURCE_BTCPAY_PROVENANCE,
+                        wallet["id"],
+                    ),
+                    "source_label": f"{wallet['label']} BTCPay provenance",
+                    "payload": {"wallet_id": wallet["id"]},
+                    "priority": 40,
+                }
+            )
+    if include_rates:
+        specs.append(
+            {
+                "job_type": core_freshness.JOB_MARKET_RATES,
+                "source_type": core_freshness.SOURCE_RATES,
+                "source_key": core_freshness.rate_source_key(profile_id),
+                "source_label": "Market-rate coverage",
+                "payload": {},
+                "priority": 70,
+            }
+        )
+    if include_journals:
+        specs.append(
+            {
+                "job_type": core_freshness.JOB_JOURNAL_REFRESH,
+                "source_type": core_freshness.SOURCE_JOURNALS,
+                "source_key": core_freshness.journal_source_key(profile_id),
+                "source_label": "Journal refresh",
+                "payload": {},
+                "priority": 80,
+            }
+        )
+    return specs
+
+
+def _source_checkpoint(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    source_key: str,
+) -> dict[str, Any]:
+    state = core_freshness.get_source_state(conn, profile_id, source_key)
+    checkpoint = (state or {}).get("checkpoint") if isinstance(state, dict) else None
+    return dict(checkpoint) if isinstance(checkpoint, dict) else {}
+
+
+def _wallet_with_freshness_checkpoint(
+    wallet: Mapping[str, Any],
+    checkpoint: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {**dict(wallet), "_freshness_checkpoint": dict(checkpoint)}
+
+
+def _mark_daemon_wallet_synced(conn: sqlite3.Connection, wallet: Mapping[str, Any]) -> None:
+    config = json.loads(wallet["config_json"] or "{}")
+    config["last_synced_at"] = _utc_now_iso()
+    conn.execute(
+        "UPDATE wallets SET config_json = ? WHERE id = ?",
+        (json.dumps(config, sort_keys=True), wallet["id"]),
+    )
+
+
+def _load_freshness_profile_wallet(
+    conn: sqlite3.Connection,
+    job: Mapping[str, Any],
+) -> tuple[sqlite3.Row, sqlite3.Row]:
+    profile = conn.execute(
+        "SELECT * FROM profiles WHERE id = ?",
+        (job["profile_id"],),
+    ).fetchone()
+    if profile is None:
+        raise AppError("Freshness job profile was not found", code="not_found")
+    payload = job.get("payload") if isinstance(job.get("payload"), dict) else {}
+    wallet_id = payload.get("wallet_id")
+    wallet = conn.execute(
+        "SELECT * FROM wallets WHERE profile_id = ? AND id = ?",
+        (job["profile_id"], wallet_id),
+    ).fetchone()
+    if wallet is None:
+        raise AppError("Freshness job wallet was not found", code="not_found")
+    return profile, wallet
+
+
+def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_freshness.JobHandler]:
+    def onchain_wallet(
+        conn: sqlite3.Connection,
+        job: Mapping[str, Any],
+        progress: Callable[[Mapping[str, Any]], None],
+        check_cancelled: Callable[[], None],
+    ) -> Mapping[str, Any]:
+        profile, wallet = _load_freshness_profile_wallet(conn, job)
+        checkpoint = _source_checkpoint(conn, profile["id"], job["source_key"])
+        wallet_with_checkpoint = _wallet_with_freshness_checkpoint(wallet, checkpoint)
+        progress({"phase": core_freshness.PHASE_DISCOVERY, "wallet": wallet["label"]})
+        check_cancelled()
+        progress({"phase": core_freshness.PHASE_BACKEND_FETCH, "wallet": wallet["label"]})
+        outcome = sync_wallet_from_backend(
+            conn,
+            runtime_config,
+            None,
+            None,
+            wallet_with_checkpoint,
+            checkpoint=checkpoint,
+        )
+        check_cancelled()
+        progress({"phase": core_freshness.PHASE_IMPORT, "wallet": wallet["label"]})
+        _mark_daemon_wallet_synced(conn, wallet)
+        conn.commit()
+        return {"wallet": wallet["label"], "status": "synced", **outcome}
+
+    def btcpay_wallet(
+        conn: sqlite3.Connection,
+        job: Mapping[str, Any],
+        progress: Callable[[Mapping[str, Any]], None],
+        check_cancelled: Callable[[], None],
+    ) -> Mapping[str, Any]:
+        profile, wallet = _load_freshness_profile_wallet(conn, job)
+        checkpoint = _source_checkpoint(conn, profile["id"], job["source_key"])
+        wallet_with_checkpoint = _wallet_with_freshness_checkpoint(wallet, checkpoint)
+        progress({"phase": core_freshness.PHASE_DISCOVERY, "wallet": wallet["label"]})
+        check_cancelled()
+        progress({"phase": core_freshness.PHASE_BACKEND_FETCH, "wallet": wallet["label"]})
+        outcome = sync_configured_btcpay_wallet(
+            conn,
+            runtime_config,
+            profile,
+            wallet_with_checkpoint,
+        )
+        check_cancelled()
+        progress({"phase": core_freshness.PHASE_IMPORT, "wallet": wallet["label"]})
+        _mark_daemon_wallet_synced(conn, wallet)
+        conn.commit()
+        return {"wallet": wallet["label"], "status": "synced", **outcome}
+
+    def btcpay_provenance(
+        conn: sqlite3.Connection,
+        job: Mapping[str, Any],
+        progress: Callable[[Mapping[str, Any]], None],
+        check_cancelled: Callable[[], None],
+    ) -> Mapping[str, Any]:
+        profile, wallet = _load_freshness_profile_wallet(conn, job)
+        checkpoint = _source_checkpoint(conn, profile["id"], job["source_key"])
+        wallet_with_checkpoint = _wallet_with_freshness_checkpoint(wallet, checkpoint)
+        progress({"phase": core_freshness.PHASE_BACKEND_FETCH, "wallet": wallet["label"]})
+        outcome = enrich_wallet_from_btcpay_provenance(
+            conn,
+            runtime_config,
+            profile,
+            wallet_with_checkpoint,
+        )
+        check_cancelled()
+        progress({"phase": core_freshness.PHASE_DECODE_ENRICH, "wallet": wallet["label"]})
+        conn.commit()
+        return {"wallet": wallet["label"], "status": "synced", **outcome}
+
+    def market_rates(
+        conn: sqlite3.Connection,
+        job: Mapping[str, Any],
+        progress: Callable[[Mapping[str, Any]], None],
+        check_cancelled: Callable[[], None],
+    ) -> Mapping[str, Any]:
+        del job
+        progress({"phase": core_freshness.PHASE_RATE_COVERAGE})
+        check_cancelled()
+        archive_path, seed_summary = core_rates.ensure_bundled_kraken_btc_daily_seed(
+            conn,
+            commit=True,
+        )
+        check_cancelled()
+        summary = core_rates.sync_rates(conn, commit=True)
+        return {
+            "status": "synced",
+            "bundled_seed": {
+                "source": core_rates.RATE_SOURCE_KRAKEN_CSV,
+                "path": archive_path,
+                "summary": seed_summary,
+            },
+            "sync": summary,
+        }
+
+    def journal_refresh(
+        conn: sqlite3.Connection,
+        job: Mapping[str, Any],
+        progress: Callable[[Mapping[str, Any]], None],
+        check_cancelled: Callable[[], None],
+    ) -> Mapping[str, Any]:
+        del job
+        progress({"phase": core_freshness.PHASE_JOURNAL_REFRESH})
+        check_cancelled()
+        payload = _journals_process_payload(conn)
+        return {"status": "synced", **payload}
+
+    return {
+        core_freshness.JOB_ONCHAIN_WALLET: onchain_wallet,
+        core_freshness.JOB_BTCPAY_WALLET: btcpay_wallet,
+        core_freshness.JOB_BTCPAY_PROVENANCE: btcpay_provenance,
+        core_freshness.JOB_MARKET_RATES: market_rates,
+        core_freshness.JOB_JOURNAL_REFRESH: journal_refresh,
+    }
+
+
+def _freshness_status_payload(conn: sqlite3.Connection) -> dict[str, Any]:
+    profile = _active_profile_row(conn)
+    if profile is None:
+        return {"profile": None, "policy": core_freshness.default_policy().to_payload(), "sources": [], "jobs": []}
+    snapshot = core_freshness.build_snapshot(conn, profile["id"])
+    return {
+        "profile": {"id": profile["id"], "label": profile["label"]},
+        **snapshot,
+    }
+
+
+def _freshness_configure_payload(
+    conn: sqlite3.Connection,
+    raw_args: dict[str, Any],
+) -> dict[str, Any]:
+    unknown = sorted(set(raw_args) - {"background_enabled", "report_read_sync", "source_classes", "auto_sync_before_report_reads"})
+    if unknown:
+        raise AppError(
+            "ui.freshness.configure received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    profile = _active_profile_row(conn)
+    if profile is None:
+        raise AppError("ui.freshness.configure requires an active profile", code="validation", retryable=False)
+    source_classes = raw_args.get("source_classes")
+    if source_classes is not None and not isinstance(source_classes, dict):
+        raise AppError(
+            "ui.freshness.configure source_classes must be an object",
+            code="validation",
+            details={"type": type(source_classes).__name__},
+            retryable=False,
+        )
+    legacy_value = raw_args.get("auto_sync_before_report_reads")
+    report_read_sync = raw_args.get("report_read_sync")
+    if legacy_value is not None:
+        if not isinstance(legacy_value, bool):
+            raise AppError(
+                "ui.freshness.configure auto_sync_before_report_reads must be a boolean",
+                code="validation",
+                details={"type": type(legacy_value).__name__},
+                retryable=False,
+            )
+        report_read_sync = legacy_value
+        source_classes = {
+            core_freshness.SOURCE_ONCHAIN: legacy_value,
+            core_freshness.SOURCE_BTCPAY_WALLET: legacy_value,
+            core_freshness.SOURCE_BTCPAY_PROVENANCE: legacy_value,
+        }
+    policy = core_freshness.set_policy(
+        conn,
+        profile["id"],
+        background_enabled=raw_args.get("background_enabled"),
+        report_read_sync=report_read_sync,
+        source_classes=source_classes,
+    )
+    conn.commit()
+    return {
+        "profile": {"id": profile["id"], "label": profile["label"]},
+        "settings": {
+            **policy.to_payload(),
+            "auto_sync_before_report_reads": policy.report_read_sync,
+            "setting_key": core_freshness.policy_setting_key(profile["id"]),
+        },
+    }
+
+
+def _enqueue_freshness_jobs(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    specs: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    jobs = []
+    for spec in specs:
+        job = core_freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            job_type=spec["job_type"],
+            source_key=spec["source_key"],
+            source_type=spec["source_type"],
+            source_label=spec["source_label"],
+            payload=spec.get("payload") or {},
+            priority=int(spec.get("priority") or 100),
+        )
+        if job.get("job_type"):
+            jobs.append(job)
+    conn.commit()
+    return jobs
+
+
+def _filter_freshness_specs_by_policy(
+    specs: list[dict[str, Any]],
+    policy: core_freshness.FreshnessPolicy,
+    *,
+    force: bool = False,
+) -> list[dict[str, Any]]:
+    if force:
+        return specs
+    return [
+        spec
+        for spec in specs
+        if policy.source_classes.get(spec["source_type"], False)
+    ]
+
+
+def _parse_freshness_timestamp(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    raw = value.strip()
+    raw = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _freshness_background_source_due(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    spec: Mapping[str, Any],
+    now: datetime,
+) -> bool:
+    active = conn.execute(
+        """
+        SELECT id
+        FROM freshness_jobs
+        WHERE profile_id = ?
+          AND source_key = ?
+          AND status IN ('queued', 'running', 'rate_limited')
+        LIMIT 1
+        """,
+        (profile_id, spec["source_key"]),
+    ).fetchone()
+    if active is not None:
+        return False
+    state = core_freshness.get_source_state(conn, profile_id, str(spec["source_key"]))
+    if state is None:
+        return True
+    if state.get("paused"):
+        return False
+    limited_until = _parse_freshness_timestamp(state.get("rate_limited_until"))
+    if limited_until is not None and limited_until > now:
+        return False
+    status = state.get("status")
+    if status in {
+        core_freshness.STATUS_FAILED,
+        core_freshness.STATUS_PARTIALLY_STALE,
+        core_freshness.STATUS_BLOCKING_REPORTS,
+        core_freshness.STATUS_RATE_LIMITED,
+    }:
+        return True
+    last_success = _parse_freshness_timestamp(state.get("last_success_at"))
+    if last_success is None:
+        return True
+    age_seconds = (now - last_success).total_seconds()
+    return age_seconds >= FRESHNESS_BACKGROUND_REFRESH_INTERVAL_SECONDS
+
+
+def _filter_freshness_specs_for_background(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    specs: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    now = datetime.now(timezone.utc)
+    return [
+        spec
+        for spec in specs
+        if _freshness_background_source_due(
+            conn,
+            profile_id=profile_id,
+            spec=spec,
+            now=now,
+        )
+    ]
+
+
+def _emit_background_freshness_event(
+    out: _OutputChannel,
+    kind: str,
+    payload: Mapping[str, Any],
+) -> None:
+    out.write(build_envelope(kind, core_freshness.redact_freshness_payload(dict(payload))))
+
+
+def _freshness_background_tick(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object],
+    out: _OutputChannel,
+) -> None:
+    profile = _active_profile_row(conn)
+    if profile is None:
+        return
+    profile_id = profile["id"]
+    policy = core_freshness.get_policy(conn, profile_id)
+    if not policy.background_enabled:
+        return
+    core_freshness.recover_interrupted_jobs(conn, profile_id=profile_id)
+    conn.commit()
+    specs = _freshness_wallet_source_specs(
+        conn,
+        profile_id,
+        include_rates=policy.source_classes.get(core_freshness.SOURCE_RATES, False),
+        include_journals=policy.source_classes.get(core_freshness.SOURCE_JOURNALS, False),
+    )
+    specs = _filter_freshness_specs_by_policy(specs, policy)
+    specs = _filter_freshness_specs_for_background(conn, profile_id, specs)
+    enqueued = _enqueue_freshness_jobs(conn, profile_id, specs)
+
+    def _progress(payload: Mapping[str, Any]) -> None:
+        _emit_background_freshness_event(
+            out,
+            "ui.freshness.progress",
+            {"profile_id": profile_id, **dict(payload)},
+        )
+
+    completed = core_freshness.run_due_jobs(
+        conn,
+        _freshness_handlers(runtime_config),
+        profile_id=profile_id,
+        limit=1,
+        progress_observer=_progress,
+    )
+    if enqueued or completed:
+        _emit_background_freshness_event(
+            out,
+            "ui.freshness.background",
+            {
+                "profile": {"id": profile_id, "label": profile["label"]},
+                "enqueued": enqueued,
+                "completed": completed,
+                **core_freshness.build_snapshot(conn, profile_id),
+            },
+        )
+
+
+def _start_freshness_background_worker(
+    ctx: DaemonContext,
+    *,
+    passphrase: str | None = None,
+) -> None:
+    if ctx.freshness_worker is not None and ctx.freshness_worker.is_alive():
+        return
+    if ctx.freshness_stop_event.is_set():
+        return
+    if ctx.conn is None:
+        return
+    try:
+        profile = _active_profile_row(ctx.conn)
+        if profile is None:
+            return
+        policy = core_freshness.get_policy(ctx.conn, profile["id"])
+        if not policy.background_enabled:
+            return
+    except sqlite3.Error:
+        return
+    worker_passphrase = passphrase if passphrase is not None else ctx.db_passphrase
+
+    def _worker(db_passphrase: str | None) -> None:
+        worker_conn: sqlite3.Connection | None = None
+        try:
+            worker_conn = open_db(ctx.data_root, passphrase=db_passphrase)
+            del db_passphrase
+            merge_db_backends(worker_conn, ctx.runtime_config)
+        except AppError as exc:
+            _emit_background_freshness_event(
+                ctx.out,
+                "ui.freshness.worker",
+                {
+                    "status": "unavailable",
+                    "code": exc.code or "freshness_worker_unavailable",
+                    "message": str(exc),
+                    "hint": exc.hint,
+                    "retryable": exc.retryable,
+                },
+            )
+            return
+        except Exception as exc:
+            _emit_background_freshness_event(
+                ctx.out,
+                "ui.freshness.worker",
+                {
+                    "status": "unavailable",
+                    "code": "freshness_worker_unavailable",
+                    "message": str(exc) or exc.__class__.__name__,
+                    "retryable": True,
+                },
+            )
+            return
+        try:
+            while not ctx.freshness_stop_event.wait(FRESHNESS_BACKGROUND_POLL_SECONDS):
+                try:
+                    _freshness_background_tick(worker_conn, ctx.runtime_config, ctx.out)
+                except Exception as exc:
+                    worker_conn.rollback()
+                    _emit_background_freshness_event(
+                        ctx.out,
+                        "ui.freshness.worker",
+                        {
+                            "status": "error",
+                            "code": "freshness_background_error",
+                            "message": str(exc) or exc.__class__.__name__,
+                            "retryable": True,
+                        },
+                    )
+        finally:
+            worker_conn.close()
+
+    worker = threading.Thread(
+        target=_worker,
+        args=(worker_passphrase,),
+        daemon=True,
+        name="kassiber-freshness-worker",
+    )
+    ctx.freshness_worker = worker
+    worker.start()
+
+
+def _stop_freshness_background_worker(
+    ctx: DaemonContext,
+    *,
+    cancel_running: bool = False,
+    reset_event: bool = True,
+) -> None:
+    if cancel_running and ctx.conn is not None:
+        try:
+            ctx.conn.execute(
+                """
+                UPDATE freshness_jobs
+                SET cancel_requested = 1, updated_at = ?
+                WHERE status = 'running'
+                """,
+                (_utc_now_iso(),),
+            )
+            ctx.conn.commit()
+        except sqlite3.Error:
+            ctx.conn.rollback()
+    ctx.freshness_stop_event.set()
+    worker = ctx.freshness_worker
+    if worker is not None:
+        worker.join(timeout=2.0)
+    if worker is None or not worker.is_alive():
+        ctx.freshness_worker = None
+    if reset_event:
+        ctx.freshness_stop_event = threading.Event()
+
+
+def _sync_results_from_freshness_jobs(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    for job in jobs:
+        job_type = job.get("job_type")
+        if job_type not in {
+            core_freshness.JOB_ONCHAIN_WALLET,
+            core_freshness.JOB_BTCPAY_WALLET,
+            core_freshness.JOB_BTCPAY_PROVENANCE,
+        }:
+            continue
+        if job.get("status") == core_freshness.JOB_DONE:
+            result = job.get("result")
+            if isinstance(result, dict):
+                results.append(result)
+            continue
+        error = job.get("error") if isinstance(job.get("error"), dict) else {}
+        results.append(
+            {
+                "wallet": job.get("source_label") or "Source",
+                "status": "error",
+                "code": error.get("code") or job.get("status"),
+                "message": error.get("message") or "Refresh did not finish.",
+                "hint": error.get("hint"),
+            }
+        )
+    return results
+
+
+def _freshness_run_payload(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object],
+    raw_args: dict[str, Any] | None = None,
+    *,
+    progress_observer: Callable[[Mapping[str, Any]], None] | None = None,
+) -> dict[str, Any]:
+    args = raw_args or {}
+    unknown = sorted(set(args) - {"wallet", "all", "rates", "journals", "run", "limit"})
+    if unknown:
+        raise AppError(
+            "ui.freshness.run received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    profile = _active_profile_row(conn)
+    if profile is None:
+        return {"profile": None, "enqueued": [], "completed": [], **core_freshness.build_snapshot(conn, "")}
+    wallet = args.get("wallet")
+    if wallet is not None and (not isinstance(wallet, str) or not wallet.strip()):
+        raise AppError("ui.freshness.run wallet must be a non-empty string", code="validation", retryable=False)
+    sync_all = bool(args.get("all", wallet is None))
+    include_rates = bool(args.get("rates", True))
+    include_journals = bool(args.get("journals", True))
+    recovered = core_freshness.recover_interrupted_jobs(conn, profile_id=profile["id"])
+    if recovered:
+        conn.commit()
+    specs = _freshness_wallet_source_specs(
+        conn,
+        profile["id"],
+        wallet_ref=None if sync_all else wallet.strip(),
+        include_rates=include_rates,
+        include_journals=include_journals,
+    )
+    enqueued = _enqueue_freshness_jobs(conn, profile["id"], specs)
+    completed: list[dict[str, Any]] = []
+    if args.get("run", True):
+        completed = core_freshness.run_due_jobs(
+            conn,
+            _freshness_handlers(runtime_config),
+            profile_id=profile["id"],
+            limit=int(args.get("limit") or max(1, len(enqueued))),
+            progress_observer=progress_observer,
+        )
+    snapshot = core_freshness.build_snapshot(conn, profile["id"])
+    return {
+        "profile": {"id": profile["id"], "label": profile["label"]},
+        "results": _sync_results_from_freshness_jobs(completed),
+        "recovered": recovered,
+        "enqueued": enqueued,
+        "completed": completed,
+        **snapshot,
+    }
+
+
+def _freshness_control_payload(
+    conn: sqlite3.Connection,
+    raw_args: dict[str, Any],
+    *,
+    action: str,
+) -> dict[str, Any]:
+    profile = _active_profile_row(conn)
+    if profile is None:
+        raise AppError(f"ui.freshness.{action} requires an active profile", code="validation", retryable=False)
+    if action == "cancel":
+        job_id = raw_args.get("job_id")
+        if not isinstance(job_id, str) or not job_id.strip():
+            raise AppError("ui.freshness.cancel requires args.job_id", code="validation", retryable=False)
+        result = core_freshness.cancel_job(conn, job_id.strip())
+    else:
+        source_key = raw_args.get("source_key")
+        if not isinstance(source_key, str) or not source_key.strip():
+            raise AppError(f"ui.freshness.{action} requires args.source_key", code="validation", retryable=False)
+        if action == "pause":
+            result = core_freshness.pause_source(conn, profile["id"], source_key.strip())
+        elif action == "resume":
+            result = core_freshness.resume_source(conn, profile["id"], source_key.strip())
+        else:
+            raise AppError(f"Unsupported freshness control action '{action}'", code="validation", retryable=False)
+    conn.commit()
+    return {"result": result, **_freshness_status_payload(conn)}
+
+
 def _maintenance_settings_payload(conn: sqlite3.Connection) -> dict[str, Any]:
     context = current_context_snapshot(conn)
     profile = _active_profile_row(conn)
@@ -2716,9 +3506,14 @@ def _maintenance_settings_payload(conn: sqlite3.Connection) -> dict[str, Any]:
         return {
             "workspace": context.get("workspace_label") or None,
             "profile": None,
-            "settings": {"auto_sync_before_report_reads": False},
+            "settings": {
+                **core_freshness.default_policy().to_payload(),
+                "auto_sync_before_report_reads": False,
+            },
+            "freshness": {"sources": [], "jobs": []},
         }
-    key = _auto_sync_setting_key(profile["id"])
+    policy = core_freshness.get_policy(conn, profile["id"])
+    snapshot = core_freshness.build_snapshot(conn, profile["id"])
     return {
         "workspace": context.get("workspace_label") or None,
         "profile": {
@@ -2726,9 +3521,11 @@ def _maintenance_settings_payload(conn: sqlite3.Connection) -> dict[str, Any]:
             "label": profile["label"],
         },
         "settings": {
-            "auto_sync_before_report_reads": _setting_bool(conn, key),
-            "setting_key": key,
+            **policy.to_payload(),
+            "auto_sync_before_report_reads": policy.report_read_sync,
+            "setting_key": core_freshness.policy_setting_key(profile["id"]),
         },
+        "freshness": snapshot,
     }
 
 
@@ -2736,20 +3533,20 @@ def _maintenance_configure_payload(
     conn: sqlite3.Connection,
     raw_args: dict[str, Any],
 ) -> dict[str, Any]:
-    unknown = sorted(set(raw_args) - {"auto_sync_before_report_reads"})
+    unknown = sorted(
+        set(raw_args)
+        - {
+            "auto_sync_before_report_reads",
+            "background_enabled",
+            "report_read_sync",
+            "source_classes",
+        }
+    )
     if unknown:
         raise AppError(
             "ui.maintenance.configure received unsupported arguments",
             code="validation",
             details={"unknown": unknown},
-            retryable=False,
-        )
-    value = raw_args.get("auto_sync_before_report_reads")
-    if not isinstance(value, bool):
-        raise AppError(
-            "ui.maintenance.configure auto_sync_before_report_reads must be a boolean",
-            code="validation",
-            details={"type": type(value).__name__},
             retryable=False,
         )
     profile = _active_profile_row(conn)
@@ -2759,9 +3556,8 @@ def _maintenance_configure_payload(
             code="validation",
             retryable=False,
         )
-    set_setting(conn, _auto_sync_setting_key(profile["id"]), "true" if value else "false")
-    conn.commit()
-    return _maintenance_settings_payload(conn)
+    payload = _freshness_configure_payload(conn, raw_args)
+    return {**_maintenance_settings_payload(conn), "configured": payload["settings"]}
 
 
 def _auto_process_journals_if_needed(conn: sqlite3.Connection) -> dict[str, Any] | None:
@@ -2799,7 +3595,8 @@ def _auto_sync_wallets_if_enabled(
     profile = _active_profile_row(conn)
     if profile is None:
         return None
-    enabled = _setting_bool(conn, _auto_sync_setting_key(profile["id"]))
+    policy = core_freshness.get_policy(conn, profile["id"])
+    enabled = policy.report_read_sync
     if not enabled and not force:
         return None
     state["auto_sync_attempted"] = True
@@ -2830,12 +3627,41 @@ def _auto_sync_wallets_if_enabled(
                 return payload
             _AUTO_SYNC_PROFILE_LAST_ATTEMPT[profile["id"]] = now
     try:
-        payload = _wallets_sync_payload(
+        if "default_backend" not in runtime_config and not runtime_config.get("backends"):
+            payload = _wallets_sync_payload(
+                conn,
+                runtime_config,
+                {"all": True},
+                strict=False,
+            )
+            payload = _redact_sync_payload_for_ui(payload)
+            ok = not _sync_payload_has_errors(payload)
+            payload["ok"] = ok
+            state["auto_sync"] = {"ok": ok, "payload": payload}
+            if not force:
+                with _AUTO_SYNC_PROFILE_LOCK:
+                    _AUTO_SYNC_PROFILE_LAST_RESULT[profile["id"]] = dict(payload)
+            return payload
+        specs = _freshness_wallet_source_specs(
             conn,
-            runtime_config,
-            {"all": True},
-            strict=False,
+            profile["id"],
+            include_rates=policy.source_classes.get(core_freshness.SOURCE_RATES, False),
+            include_journals=False,
         )
+        specs = _filter_freshness_specs_by_policy(specs, policy, force=force)
+        enqueued = _enqueue_freshness_jobs(conn, profile["id"], specs)
+        completed = core_freshness.run_due_jobs(
+            conn,
+            _freshness_handlers(runtime_config),
+            profile_id=profile["id"],
+            limit=max(1, len(enqueued)),
+        )
+        payload = {
+            "results": _sync_results_from_freshness_jobs(completed),
+            "enqueued": enqueued,
+            "completed": completed,
+            "freshness": core_freshness.build_snapshot(conn, profile["id"]),
+        }
         payload = _redact_sync_payload_for_ui(payload)
         ok = not _sync_payload_has_errors(payload)
         payload["ok"] = ok
@@ -6954,9 +7780,11 @@ def handle_request(
         )
 
     if kind == "daemon.lock":
+        _stop_freshness_background_worker(ctx, cancel_running=True)
         if ctx.conn is not None:
             ctx.conn.close()
             ctx.conn = None
+        ctx.db_passphrase = None
         return (
             _with_request_id(
                 build_envelope("daemon.lock", {"locked": True}),
@@ -7060,6 +7888,7 @@ def handle_request(
                 "database": str(db_path),
             }
         else:
+            _stop_freshness_background_worker(ctx, cancel_running=True)
             if ctx.conn is not None:
                 ctx.conn.close()
                 ctx.conn = None
@@ -7139,6 +7968,7 @@ def handle_request(
                 False,
             )
         if ctx.conn is not None:
+            _stop_freshness_background_worker(ctx, cancel_running=True)
             ctx.conn.close()
             ctx.conn = None
         db_path = resolve_database_path(resolve_effective_data_root(ctx.data_root))
@@ -7904,6 +8734,75 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.freshness.status":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.freshness.status",
+                    _freshness_status_payload(ctx.conn),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.freshness.configure":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.freshness.configure",
+                    _freshness_configure_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.freshness.run":
+        def _emit_freshness_progress(payload: Mapping[str, Any]) -> None:
+            out.write(
+                _with_request_id(
+                    build_envelope("ui.freshness.run.progress", dict(payload)),
+                    request_id,
+                )
+            )
+
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.freshness.run",
+                    _freshness_run_payload(
+                        ctx.conn,
+                        ctx.runtime_config,
+                        _coerce_args_dict(request_id, request.get("args")),
+                        progress_observer=_emit_freshness_progress,
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind in {"ui.freshness.cancel", "ui.freshness.pause", "ui.freshness.resume"}:
+        action = kind.rsplit(".", 1)[-1]
+        return (
+            _with_request_id(
+                build_envelope(
+                    kind,
+                    _freshness_control_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                        action=action,
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.workspace.health":
         return (
             _with_request_id(
@@ -8257,6 +9156,7 @@ def handle_request(
                 ctx.runtime_config,
                 args or {},
                 strict=False,
+                progress_observer=_emit_sync_progress,
             )
         finally:
             core_imports.sync_progress_emitter.reset(token)
@@ -8792,7 +9692,10 @@ def run(
         input_lines=input_lines,
         deferred_input_lines=[],
         out=out,
+        freshness_stop_event=threading.Event(),
     )
+    if conn is not None:
+        _start_freshness_background_worker(ctx)
 
     out.write(
         build_envelope(
@@ -8804,84 +9707,88 @@ def run(
         ),
     )
 
-    while True:
-        _drain_daemon_main_thread_tasks(ctx)
-        try:
-            line = _next_input_line(ctx, timeout=0.05)
-        except queue.Empty:
-            continue
-        if line == "":
-            break
-        if len(line) > MAX_REQUEST_LINE_CHARS:
-            while line and not line.endswith("\n"):
-                line = _next_input_line(ctx)
-            out.write(
-                _error_envelope(
-                    "request_too_large",
-                    "daemon request line is too large",
-                    request_id=None,
-                    details={"max_chars": MAX_REQUEST_LINE_CHARS},
-                    retryable=False,
-                ),
-            )
-            continue
-        raw = line.strip()
-        if not raw:
-            continue
-        try:
-            request = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            out.write(
-                _error_envelope(
-                    "invalid_json",
-                    "daemon request line is not valid JSON",
-                    request_id=None,
-                    details={"error": str(exc)},
-                    retryable=False,
-                ),
-            )
-            continue
-        if not isinstance(request, dict):
-            out.write(
-                _error_envelope(
-                    "validation",
-                    "daemon request must be a JSON object",
-                    request_id=None,
-                    details={"type": type(request).__name__},
-                    retryable=False,
-                ),
-            )
-            continue
-        if request.get("kind") == _SECRET_STORE_CONTROL_RESPONSE_KIND:
-            continue
+    try:
+        while True:
+            _drain_daemon_main_thread_tasks(ctx)
+            try:
+                line = _next_input_line(ctx, timeout=0.05)
+            except queue.Empty:
+                continue
+            if line == "":
+                break
+            if len(line) > MAX_REQUEST_LINE_CHARS:
+                while line and not line.endswith("\n"):
+                    line = _next_input_line(ctx)
+                out.write(
+                    _error_envelope(
+                        "request_too_large",
+                        "daemon request line is too large",
+                        request_id=None,
+                        details={"max_chars": MAX_REQUEST_LINE_CHARS},
+                        retryable=False,
+                    ),
+                )
+                continue
+            raw = line.strip()
+            if not raw:
+                continue
+            try:
+                request = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                out.write(
+                    _error_envelope(
+                        "invalid_json",
+                        "daemon request line is not valid JSON",
+                        request_id=None,
+                        details={"error": str(exc)},
+                        retryable=False,
+                    ),
+                )
+                continue
+            if not isinstance(request, dict):
+                out.write(
+                    _error_envelope(
+                        "validation",
+                        "daemon request must be a JSON object",
+                        request_id=None,
+                        details={"type": type(request).__name__},
+                        retryable=False,
+                    ),
+                )
+                continue
+            if request.get("kind") == _SECRET_STORE_CONTROL_RESPONSE_KIND:
+                continue
 
-        try:
-            response, should_shutdown = handle_request(ctx, request, out)
-        except AppError as exc:
-            response = _error_envelope(
-                exc.code or "app_error",
-                str(exc),
-                request_id=request.get("request_id"),
-                details=exc.details,
-                hint=exc.hint,
-                retryable=exc.retryable,
-            )
-            should_shutdown = False
-        except Exception as exc:
-            traceback.print_exc(file=sys.stderr)
-            sys.stderr.flush()
-            response = _error_envelope(
-                "internal_error",
-                str(exc) or exc.__class__.__name__,
-                request_id=request.get("request_id"),
-                retryable=False,
-            )
-            should_shutdown = False
+            try:
+                response, should_shutdown = handle_request(ctx, request, out)
+            except AppError as exc:
+                response = _error_envelope(
+                    exc.code or "app_error",
+                    str(exc),
+                    request_id=request.get("request_id"),
+                    details=exc.details,
+                    hint=exc.hint,
+                    retryable=exc.retryable,
+                )
+                should_shutdown = False
+            except Exception as exc:
+                traceback.print_exc(file=sys.stderr)
+                sys.stderr.flush()
+                response = _error_envelope(
+                    "internal_error",
+                    str(exc) or exc.__class__.__name__,
+                    request_id=request.get("request_id"),
+                    retryable=False,
+                )
+                should_shutdown = False
 
-        if response is not None:
-            out.write(response)
-        _drain_daemon_main_thread_tasks(ctx)
-        if should_shutdown:
-            return 0
+            if response is not None:
+                out.write(response)
+            _start_freshness_background_worker(ctx)
+            _drain_daemon_main_thread_tasks(ctx)
+            if should_shutdown:
+                return 0
+    finally:
+        _stop_freshness_background_worker(ctx, reset_event=False)
 
     return 0

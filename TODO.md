@@ -409,10 +409,17 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 
 ### 1.4 Live actions and workers
 
-- [ ] Sync, imports, journals process, metadata edits, transfer pairing,
-  attachments, quarantine resolve, profile/wallet/backend CRUD,
-  backup/restore
-- [ ] Progress + cancellation UI
+- [x] Add a daemon-owned freshness/job subsystem for live source refresh:
+  persistent per-profile source states and jobs, separate on-chain / BTCPay
+  wallet-source / BTCPay provenance / market-rate / journal job types,
+  checkpointed Electrum/Esplora/BTCPay/rate work, cancellation, pause/resume,
+  opt-in background worker, provider cooldowns, redacted envelopes, and Tauri
+  allowlist support.
+- [ ] Finish the remaining live-action worker surfaces: file/import flows,
+  metadata edits, transfer pairing, attachments, quarantine resolve,
+  profile/wallet/backend CRUD, backup/restore.
+- [ ] Expand the dedicated progress + cancellation UI beyond sync/freshness
+  helpers into every long-running live action.
 - [ ] Separate secret-entry IPC channel; OS-keychain-backed secret refs
 
 ### 1.5 Packaging, signing, distribution

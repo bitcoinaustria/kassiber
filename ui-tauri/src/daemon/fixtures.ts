@@ -73,6 +73,86 @@ export const fixtures: Record<string, unknown> = {
       updated: 0,
     })),
   },
+  "ui.freshness.run": {
+    profile: { id: "mock-profile", label: "Demo book" },
+    results: MOCK_OVERVIEW.connections.map((connection) => ({
+      wallet: connection.label,
+      status: "synced",
+      inserted: 0,
+      updated: 0,
+    })),
+    enqueued: [
+      {
+        job_type: "onchain_wallet_history",
+        source_label: "Treasury watch-only",
+        source_type: "onchain_wallet",
+        status: "queued",
+      },
+      {
+        job_type: "market_rate_coverage",
+        source_label: "Market-rate coverage",
+        source_type: "market_rates",
+        status: "queued",
+      },
+      {
+        job_type: "journal_refresh",
+        source_label: "Journals",
+        source_type: "journals",
+        status: "queued",
+      },
+    ],
+    completed: [
+      {
+        job_type: "onchain_wallet_history",
+        source_label: "Treasury watch-only",
+        source_type: "onchain_wallet",
+        status: "done",
+      },
+      {
+        job_type: "market_rate_coverage",
+        source_label: "Market-rate coverage",
+        source_type: "market_rates",
+        status: "done",
+      },
+      {
+        job_type: "journal_refresh",
+        source_label: "Journals",
+        source_type: "journals",
+        status: "done",
+      },
+    ],
+    sources: [
+      {
+        source_key: "onchain_wallet:mock-wallet",
+        source_type: "onchain_wallet",
+        source_label: "Treasury watch-only",
+        status: "fresh",
+        blocking_reports: false,
+      },
+      {
+        source_key: "market_rates:mock-profile",
+        source_type: "market_rates",
+        source_label: "Market-rate coverage",
+        status: "fresh",
+        blocking_reports: false,
+      },
+      {
+        source_key: "journals:mock-profile",
+        source_type: "journals",
+        source_label: "Journals",
+        status: "fresh",
+        blocking_reports: false,
+      },
+    ],
+    jobs: [],
+    summary: {
+      sources: 3,
+      active_jobs: 0,
+      blocking_reports: 0,
+      rate_limited: 0,
+      failed: 0,
+    },
+  },
   "ui.transfers.suggest": {
     candidates: [
       {

@@ -36,7 +36,7 @@ export function WalletsDashboardHeader({
             className={cn("size-4", isSyncing && "animate-spin")}
             aria-hidden="true"
           />
-          {isSyncing ? "Refreshing" : "Refresh all"}
+          {isSyncing ? "Refreshing" : "Refresh book"}
         </Button>
         <Button size="sm" className={headerActionClassName} onClick={onAddWallet}>
           <Plus className="size-4" aria-hidden="true" />

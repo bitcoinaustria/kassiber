@@ -64,6 +64,12 @@ daemon for the exact current allowlist:
       "ui.rates.summary",
       "ui.rates.kraken_csv.import",
       "ui.rates.rebuild",
+      "ui.freshness.status",
+      "ui.freshness.configure",
+      "ui.freshness.run",
+      "ui.freshness.cancel",
+      "ui.freshness.pause",
+      "ui.freshness.resume",
       "ui.workspace.health",
       "ui.workspace.create",
       "ui.workspace.delete",
@@ -325,11 +331,74 @@ the request supplied one. Malformed JSON and non-object requests cannot carry
 a caller request id, so they return `request_id: null`. `daemon.shutdown`
 asks the daemon to write a final shutdown envelope and exit cleanly.
 
-`status`, the `ui.*` snapshots, report export kinds, `ui.wallets.sync`, and
-`ui.journals.process` are backed by real data today. Report export kinds write
-files under the managed `exports/reports/` state directory and return the
-written path plus metadata. UI kinds not yet wired return `daemon_unavailable`
-instead.
+`status`, the `ui.*` snapshots, report export kinds, `ui.wallets.sync`,
+`ui.freshness.*`, and `ui.journals.process` are backed by real data today.
+Report export kinds write files under the managed `exports/reports/` state
+directory and return the written path plus metadata. UI kinds not yet wired
+return `daemon_unavailable` instead.
+
+## Freshness jobs
+
+Kassiber's daemon owns source freshness. The desktop configures, observes,
+retries, pauses, resumes, and cancels jobs, but it never performs network sync
+itself. Persistent state lives in SQLite under `freshness_jobs` and
+`freshness_source_states`.
+
+Job types are separate so partial success stays usable:
+
+- `onchain_wallet_history` for descriptor/address wallet history through
+  Esplora, Electrum, or Bitcoin Core.
+- `btcpay_wallet_source` for BTCPay confirmed wallet-history imports.
+- `btcpay_provenance` for BTCPay comment/label enrichment on existing wallets.
+- `market_rate_coverage` for incremental missing-minute rate coverage.
+- `journal_refresh` for follow-up local journal processing.
+
+Market-rate jobs first seed the bundled Kraken BTC daily BTC-EUR/BTC-USD
+archive into `rates_cache` when missing, then perform the existing live
+incremental minute coverage for exact transaction timestamps.
+
+Source states are `fresh`, `queued`, `syncing`, `paused`, `rate_limited`,
+`partially_stale`, `failed`, and `blocking_reports`. Report reads are blocked
+only when source staleness, missing rates, or journal readiness makes the
+report unsafe. Rate limits are normal state: a 429/`Retry-After` cools down the
+affected source/provider only, while other queued jobs can continue. The
+`blocking_reports` flag, not the cooldown label alone, decides whether reports
+must wait.
+
+`ui.freshness.status` returns the active profile policy, source states, active
+jobs, and summary counts. `ui.freshness.configure` writes the general freshness
+policy (`background_enabled`, `report_read_sync`, and per-source-class opt-ins).
+The legacy `auto_sync_before_report_reads` argument remains accepted and maps
+onto `report_read_sync` plus wallet-source opt-ins. `ui.freshness.run` enqueues
+and optionally drains due jobs. `ui.wallets.sync` now delegates to that same
+daemon-owned queue with `rates=false` and `journals=false`; when a wallet is
+supplied it is source-scoped to that wallet, while a book/global refresh can
+enqueue the remaining wallet, rate, and journal jobs without duplicating the
+already queued source. `ui.freshness.cancel`, `ui.freshness.pause`, and
+`ui.freshness.resume` mutate the job/source state.
+
+When `background_enabled` is true, the daemon starts an opt-in freshness worker
+while the app is running. The worker opens its own SQLite connection, enqueues
+only policy-enabled sources that are missing, stale, failed, or past the refresh
+interval, and drains one due job per pass so manual requests can still observe
+and cancel jobs through the same tables. Kassiber opens local databases in WAL
+mode with an explicit busy timeout so the daemon foreground connection and the
+freshness worker can safely serialize writes instead of failing immediately on
+ordinary lock contention.
+
+First sync progress phases are `discovery`, `backend_fetch`, `decode_enrich`,
+`import`, `rate_coverage`, `journal_refresh`, `done`, and `error`. The streaming
+`ui.wallets.sync.progress` and `ui.freshness.run.progress` records include the
+phase plus source identifiers.
+
+Checkpoints are persisted per source. Electrum stores script-hash statuses,
+known txids, dirty mempool scripts, header timestamps, and highest used branch
+indexes; repeated syncs batch `blockchain.scripthash.subscribe` and skip
+unchanged history/tx/header calls. Esplora stores script stats fingerprints and
+known txids; unchanged scripts skip paged history. BTCPay stores page
+fingerprints/stable ids and stops at the first unchanged page. Rate jobs reuse
+the existing `rates_checked_minutes` cache and do not run destructive rebuilds
+in background freshness work.
 
 ## Lightning node kinds
 
