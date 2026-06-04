@@ -107,6 +107,14 @@ export interface WalletUtxosData {
     stale: boolean;
     active_count?: number;
   };
+  summary?: {
+    workspace?: string | null;
+    profile?: string | null;
+    count: number;
+    returned_count?: number;
+    truncated?: boolean;
+    row_limit?: number | null;
+  };
 }
 
 interface UtxosInventoryPanelProps {
@@ -506,6 +514,10 @@ export function UtxosInventoryPanel({
   const rows = inventory?.utxos ?? [];
   const totals = inventory?.totals ?? [];
   const walletId = inventory?.wallet?.id ?? null;
+  const totalCount = inventory?.summary?.count ?? inventory?.freshness.active_count ?? rows.length;
+  const returnedCount = inventory?.summary?.returned_count ?? rows.length;
+  const serverTruncated = Boolean(inventory?.summary?.truncated);
+  const rowLimit = inventory?.summary?.row_limit ?? null;
   const [sort, setSort] = useState<UtxoSortValue>("default");
   const [explorerRow, setExplorerRow] = useState<WalletUtxoRow | null>(null);
   const [visibleCount, setVisibleCount] = useState(UTXO_PAGE_SIZE);
@@ -538,7 +550,11 @@ export function UtxosInventoryPanel({
             <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
               <Coins className="size-4" aria-hidden="true" />
               UTXOs
-              <CountBadge>{rows.length.toLocaleString("en-US")}</CountBadge>
+              <CountBadge>
+                {serverTruncated
+                  ? `${returnedCount.toLocaleString("en-US")} of ${totalCount.toLocaleString("en-US")}`
+                  : totalCount.toLocaleString("en-US")}
+              </CountBadge>
             </CardTitle>
             {totals.length > 0 ? (
               <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -554,8 +570,16 @@ export function UtxosInventoryPanel({
               </div>
             ) : null}
             <CardDescription className="mt-1">
-              Currently unspent transaction outputs known from this source.
+              {serverTruncated
+                ? `Showing the first ${returnedCount.toLocaleString("en-US")} UTXOs returned by this source.`
+                : "Currently unspent transaction outputs known from this source."}
             </CardDescription>
+            {serverTruncated && rowLimit ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Full totals stay current; the table response is capped at{" "}
+                {rowLimit.toLocaleString("en-US")} rows for preview performance.
+              </p>
+            ) : null}
             {lastSyncedLabel ? (
               <p className="mt-1 text-xs text-muted-foreground">
                 As of {lastSyncedLabel}
@@ -775,6 +799,11 @@ export function UtxosInventoryPanel({
                 >
                   Show {Math.min(UTXO_PAGE_SIZE, hiddenCount).toLocaleString("en-US")} more
                 </Button>
+              </div>
+            ) : serverTruncated ? (
+              <div className="border-t px-4 py-2.5 text-xs text-muted-foreground">
+                Showing {returnedCount.toLocaleString("en-US")} transported rows of{" "}
+                {totalCount.toLocaleString("en-US")} total active UTXOs.
               </div>
             ) : null}
             <UtxoExplorerOpenDialog

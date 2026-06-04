@@ -12,6 +12,8 @@ from ..time_utils import now_iso
 from ..util import str_or_none
 from ..wallet_descriptors import normalize_asset_code
 
+DEFAULT_WALLET_OUTPUT_INVENTORY_LIMIT = 500
+
 
 def _stable_utxo_id(profile_id: str, wallet_id: str, txid: str, vout: int) -> str:
     payload = f"{profile_id}:{wallet_id}:{txid}:{vout}".encode("utf-8")
@@ -329,6 +331,23 @@ def _source_filter_sql(
     return " AND " + " AND ".join(clauses), params
 
 
+def _refresh_filter_sql(
+    *,
+    prefix: str = "",
+    backend_kind: str | Sequence[str] | None = None,
+    chain: str | Sequence[str] | None = None,
+    network: str | Sequence[str] | None = None,
+) -> tuple[str, list[Any]]:
+    clauses: list[str] = []
+    params: list[Any] = []
+    _append_source_filter(clauses, params, f"{prefix}backend_kind", backend_kind)
+    _append_source_filter(clauses, params, f"{prefix}chain", chain)
+    _append_source_filter(clauses, params, f"{prefix}network", network)
+    if not clauses:
+        return "", params
+    return " AND " + " AND ".join(clauses), params
+
+
 def wallet_output_inventory_summary(
     conn: sqlite3.Connection,
     wallet_id: str,
@@ -340,6 +359,11 @@ def wallet_output_inventory_summary(
 ) -> dict[str, Any]:
     source_where, source_params = _source_filter_sql(
         backend_name=backend_name,
+        backend_kind=backend_kind,
+        chain=chain,
+        network=network,
+    )
+    refresh_where, refresh_params = _refresh_filter_sql(
         backend_kind=backend_kind,
         chain=chain,
         network=network,
@@ -361,9 +385,9 @@ def wallet_output_inventory_summary(
         SELECT observed_count, active_count, last_seen_at
         FROM wallet_utxo_refreshes
         WHERE wallet_id = ?
-          {source_where}
+          {refresh_where}
         """,
-        (wallet_id, *source_params),
+        (wallet_id, *refresh_params),
     ).fetchone()
     spent_row = conn.execute(
         f"""
@@ -389,7 +413,7 @@ def wallet_output_inventory_summary(
     }
 
 
-def list_wallet_output_inventory(
+def wallet_output_inventory_totals(
     conn: sqlite3.Connection,
     wallet_id: str,
     *,
@@ -408,6 +432,55 @@ def list_wallet_output_inventory(
     )
     rows = conn.execute(
         f"""
+        SELECT asset, SUM(amount) AS amount_msat
+        FROM wallet_utxos
+        WHERE wallet_id = ?
+          {where_spent}
+          {source_where}
+        GROUP BY asset
+        ORDER BY asset ASC
+        """,
+        (wallet_id, *source_params),
+    ).fetchall()
+    return [
+        {
+            "asset": row["asset"],
+            "amount": msat_to_btc(int(row["amount_msat"] or 0)),
+            "amount_sat": int(row["amount_msat"] or 0) // 1000,
+            "amount_msat": int(row["amount_msat"] or 0),
+        }
+        for row in rows
+    ]
+
+
+def list_wallet_output_inventory(
+    conn: sqlite3.Connection,
+    wallet_id: str,
+    *,
+    include_spent: bool = False,
+    backend_name: str | Sequence[str] | None = None,
+    backend_kind: str | Sequence[str] | None = None,
+    chain: str | Sequence[str] | None = None,
+    network: str | Sequence[str] | None = None,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    where_spent = "" if include_spent else "AND spent_at IS NULL"
+    source_where, source_params = _source_filter_sql(
+        backend_name=backend_name,
+        backend_kind=backend_kind,
+        chain=chain,
+        network=network,
+    )
+    limit_clause = ""
+    limit_params: list[Any] = []
+    if limit is not None:
+        normalized_limit = int(limit)
+        if normalized_limit <= 0:
+            raise AppError("UTXO inventory limit must be positive", code="validation")
+        limit_clause = "LIMIT ?"
+        limit_params.append(normalized_limit)
+    rows = conn.execute(
+        f"""
         SELECT *
         FROM wallet_utxos
         WHERE wallet_id = ?
@@ -419,8 +492,9 @@ def list_wallet_output_inventory(
           block_height ASC,
           txid ASC,
           vout ASC
+        {limit_clause}
         """,
-        (wallet_id, *source_params),
+        (wallet_id, *source_params, *limit_params),
     ).fetchall()
     output = []
     for row in rows:

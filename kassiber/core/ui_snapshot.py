@@ -379,7 +379,6 @@ def _wallet_utxo_source_filter(
         else []
     )
     return {
-        "backend_name": backend_summary["name"] or None,
         "backend_kind": backend_kind_values or None,
         "chain": chain_values,
         "network": network_values,
@@ -2907,21 +2906,6 @@ def _wallet_utxo_support(
     }
 
 
-def _wallet_utxo_totals(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    totals: dict[str, int] = defaultdict(int)
-    for row in rows:
-        totals[row["asset"]] += int(row["amount_msat"])
-    return [
-        {
-            "asset": asset,
-            "amount": msat_to_btc(amount_msat),
-            "amount_sat": amount_msat // 1000,
-            "amount_msat": amount_msat,
-        }
-        for asset, amount_msat in sorted(totals.items())
-    ]
-
-
 def build_wallet_utxos_snapshot(
     conn: sqlite3.Connection,
     runtime_config: dict[str, object] | None,
@@ -2972,6 +2956,7 @@ def build_wallet_utxos_snapshot(
         rows = core_output_inventory.list_wallet_output_inventory(
             conn,
             wallet["id"],
+            limit=core_output_inventory.DEFAULT_WALLET_OUTPUT_INVENTORY_LIMIT,
             **source_filter,
         )
         inventory_summary = core_output_inventory.wallet_output_inventory_summary(
@@ -2979,9 +2964,15 @@ def build_wallet_utxos_snapshot(
             wallet["id"],
             **source_filter,
         )
+        totals = core_output_inventory.wallet_output_inventory_totals(
+            conn,
+            wallet["id"],
+            **source_filter,
+        )
         last_seen_at = inventory_summary["last_seen_at"]
     else:
         rows = []
+        totals = []
         last_seen_at = None
     last_synced_at = _string_or_empty(config.get("last_synced_at")) or None
     if not support["supported"]:
@@ -3011,19 +3002,29 @@ def build_wallet_utxos_snapshot(
             "sync_mode": backend_summary["sync_mode"],
         },
         "utxos": rows,
-        "totals": _wallet_utxo_totals(rows),
+        "totals": totals,
         "support": support,
         "freshness": {
             "status": freshness_status,
             "last_seen_at": last_seen_at,
             "last_synced_at": last_synced_at,
             "stale": support["supported"] and freshness_status != "current",
-            "active_count": len(rows),
+            "active_count": inventory_summary["active_count"] if support["supported"] else 0,
         },
         "summary": {
             "workspace": context["workspace_label"] or None,
             "profile": context["profile_label"] or None,
-            "count": len(rows),
+            "count": inventory_summary["active_count"] if support["supported"] else 0,
+            "returned_count": len(rows),
+            "truncated": (
+                support["supported"]
+                and inventory_summary["active_count"] > len(rows)
+            ),
+            "row_limit": (
+                core_output_inventory.DEFAULT_WALLET_OUTPUT_INVENTORY_LIMIT
+                if support["supported"]
+                else None
+            ),
         },
     }
 

@@ -8,6 +8,7 @@ from kassiber.core.output_inventory import (
     clear_wallet_output_inventory,
     list_wallet_output_inventory,
     update_wallet_output_inventory,
+    wallet_output_inventory_totals,
     wallet_output_inventory_summary,
 )
 from kassiber.core.sync import WalletSyncState
@@ -197,6 +198,86 @@ class OutputInventoryTest(unittest.TestCase):
             finally:
                 conn.close()
 
+    def test_inventory_rows_can_be_limited_without_truncating_totals(self):
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="mainnet",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[],
+            tracked_scripts={},
+            history_cache={},
+        )
+        with tempfile.TemporaryDirectory(prefix="kassiber-utxo-limit-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            try:
+                profile, wallet = _seed_wallet(conn)
+                outputs = [
+                    {
+                        "txid": f"{index:064x}",
+                        "vout": 0,
+                        "amount_sats": 1_000 + index,
+                        "asset": "BTC",
+                        "chain": "bitcoin",
+                        "network": "mainnet",
+                        "confirmation_status": "confirmed",
+                        "block_height": 800_000 + index,
+                    }
+                    for index in range(1, 6)
+                ]
+                update_wallet_output_inventory(
+                    conn,
+                    profile,
+                    wallet,
+                    {"name": "renamed-mempool", "kind": "esplora"},
+                    sync_state,
+                    outputs,
+                    seen_at="2026-01-01T12:00:00Z",
+                )
+
+                rows = list_wallet_output_inventory(
+                    conn,
+                    wallet["id"],
+                    backend_kind="esplora",
+                    chain="bitcoin",
+                    network="mainnet",
+                    limit=2,
+                )
+                self.assertEqual(len(rows), 2)
+                totals = wallet_output_inventory_totals(
+                    conn,
+                    wallet["id"],
+                    backend_kind="esplora",
+                    chain="bitcoin",
+                    network="mainnet",
+                )
+                self.assertEqual(
+                    totals[0]["amount_sat"],
+                    sum(1_000 + index for index in range(1, 6)),
+                )
+                unrenamed_summary = wallet_output_inventory_summary(
+                    conn,
+                    wallet["id"],
+                    backend_kind="esplora",
+                    chain="bitcoin",
+                    network="mainnet",
+                )
+                self.assertEqual(unrenamed_summary["active_count"], 5)
+                self.assertEqual(unrenamed_summary["observed_count"], 5)
+                summary = wallet_output_inventory_summary(
+                    conn,
+                    wallet["id"],
+                    backend_name="old-mempool-name",
+                    backend_kind="esplora",
+                    chain="bitcoin",
+                    network="mainnet",
+                )
+                self.assertEqual(summary["active_count"], 0)
+                self.assertEqual(summary["observed_count"], 5)
+                self.assertEqual(summary["last_seen_at"], "2026-01-01T12:00:00Z")
+            finally:
+                conn.close()
+
     def test_esplora_utxos_keep_derivation_metadata_and_spent_detection(self):
         target_receive = {
             "chain": "bitcoin",
@@ -260,6 +341,9 @@ class OutputInventoryTest(unittest.TestCase):
         with patch(
             "kassiber.core.sync_backends.fetch_esplora_scripthash_utxos",
             side_effect=fake_fetch,
+        ), patch(
+            "kassiber.core.sync_backends.http_get_text",
+            return_value="800002\n",
         ):
             outputs = esplora_utxos_for_wallet(
                 {"name": "esplora", "kind": "esplora", "url": "https://example.invalid"},
@@ -268,9 +352,11 @@ class OutputInventoryTest(unittest.TestCase):
 
         self.assertEqual(len(outputs), 2)
         self.assertEqual(outputs[0]["address_label"], "receive #0")
+        self.assertEqual(outputs[0]["confirmations"], 3)
         self.assertEqual(outputs[0]["block_time"], timestamp_to_iso(1_700_000_000))
         self.assertEqual(outputs[1]["branch_label"], "change")
         self.assertEqual(outputs[1]["address_index"], 7)
+        self.assertIsNone(outputs[1]["confirmations"])
 
         with tempfile.TemporaryDirectory(prefix="kassiber-utxos-") as tmp:
             conn = open_db(Path(tmp) / "data")

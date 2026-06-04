@@ -772,6 +772,31 @@ def _block_time_from_status(status):
     return timestamp_to_iso(status.get("block_time"), default=None)
 
 
+def _confirmations_from_heights(block_height, tip_height):
+    if block_height in (None, "", 0, "0") or tip_height in (None, "", 0, "0"):
+        return None
+    try:
+        normalized_block_height = int(block_height)
+        normalized_tip_height = int(tip_height)
+    except (TypeError, ValueError):
+        return None
+    if normalized_block_height <= 0 or normalized_tip_height < normalized_block_height:
+        return None
+    return normalized_tip_height - normalized_block_height + 1
+
+
+def _esplora_tip_height(base_url, timeout=30):
+    try:
+        return int(
+            http_get_text(
+                append_url_path(base_url, "blocks/tip/height"),
+                timeout=timeout,
+            ).strip()
+        )
+    except (AppError, TypeError, ValueError):
+        return None
+
+
 def _block_height_from_status(status):
     if not isinstance(status, dict):
         return None
@@ -781,7 +806,7 @@ def _block_height_from_status(status):
     return int(block_height)
 
 
-def _esplora_bitcoin_utxo_record(raw_utxo, target, sync_state):
+def _esplora_bitcoin_utxo_record(raw_utxo, target, sync_state, tip_height=None):
     status = raw_utxo.get("status") or {}
     block_height = _block_height_from_status(status)
     return {
@@ -790,6 +815,7 @@ def _esplora_bitcoin_utxo_record(raw_utxo, target, sync_state):
         "asset": "BTC",
         "amount_sats": int(raw_utxo.get("value") or 0),
         "confirmation_status": "confirmed" if block_height else "mempool",
+        "confirmations": _confirmations_from_heights(block_height, tip_height),
         "block_height": block_height,
         "block_time": _block_time_from_status(status),
         "chain": sync_state.chain,
@@ -811,6 +837,7 @@ def _liquid_utxo_record_from_output(
     sync_state,
     *,
     source,
+    tip_height=None,
 ):
     if vout is None or int(vout) < 0 or int(vout) >= len(decoded_tx.vout):
         raise AppError(f"Liquid UTXO output index {vout} is out of range for transaction {txid}")
@@ -830,6 +857,7 @@ def _liquid_utxo_record_from_output(
         "asset": liquid_asset_code(asset_id, sync_state.policy_asset_id),
         "amount_sats": value_sats,
         "confirmation_status": "confirmed" if block_height else "mempool",
+        "confirmations": _confirmations_from_heights(block_height, tip_height),
         "block_height": block_height,
         "block_time": _block_time_from_status(status),
         "chain": sync_state.chain,
@@ -846,6 +874,7 @@ def _liquid_utxo_record_from_output(
 def esplora_utxos_for_wallet(backend, sync_state: WalletSyncState):
     timeout = backend_timeout(backend)
     raw_tx_cache = {}
+    tip_height = _esplora_tip_height(backend["url"], timeout=timeout)
 
     def liquid_tx(txid):
         if txid not in raw_tx_cache:
@@ -874,10 +903,18 @@ def esplora_utxos_for_wallet(backend, sync_state: WalletSyncState):
                         target,
                         sync_state,
                         source="liquid_esplora_scripthash_utxo",
+                        tip_height=tip_height,
                     )
                 )
             else:
-                outputs.append(_esplora_bitcoin_utxo_record(raw_utxo, target, sync_state))
+                outputs.append(
+                    _esplora_bitcoin_utxo_record(
+                        raw_utxo,
+                        target,
+                        sync_state,
+                        tip_height=tip_height,
+                    )
+                )
     return outputs
 
 
@@ -1595,7 +1632,20 @@ def _electrum_utxo_status(raw_utxo, header_timestamps):
     }
 
 
-def _electrum_bitcoin_utxo_record(raw_utxo, target, sync_state, header_timestamps):
+def _electrum_tip_height(client):
+    try:
+        header = client.call("blockchain.headers.subscribe", [])
+    except AppError:
+        return None
+    if not isinstance(header, dict):
+        return None
+    try:
+        return int(header.get("height"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _electrum_bitcoin_utxo_record(raw_utxo, target, sync_state, header_timestamps, tip_height=None):
     status = _electrum_utxo_status(raw_utxo, header_timestamps)
     block_height = status["block_height"]
     return {
@@ -1604,6 +1654,7 @@ def _electrum_bitcoin_utxo_record(raw_utxo, target, sync_state, header_timestamp
         "asset": "BTC",
         "amount_sats": int(raw_utxo.get("value") or 0),
         "confirmation_status": "confirmed" if block_height else "mempool",
+        "confirmations": _confirmations_from_heights(block_height, tip_height),
         "block_height": block_height,
         "block_time": status["block_time"],
         "chain": sync_state.chain,
@@ -1621,6 +1672,7 @@ def electrum_utxos_for_wallet(backend, sync_state: WalletSyncState):
     batch_size = backend_batch_size(backend)
     header_timestamps = {}
     with ElectrumClient(backend) as client:
+        tip_height = _electrum_tip_height(client)
         scripthashes = [scriptpubkey_scripthash(target["script_pubkey"]) for target in sync_state.targets]
         target_by_scripthash = dict(zip(scripthashes, sync_state.targets))
         raw_results = electrum_call_many(
@@ -1663,19 +1715,24 @@ def electrum_utxos_for_wallet(backend, sync_state: WalletSyncState):
                         {
                             "confirmed": bool(status["confirmed"]),
                             "block_height": status["block_height"],
-                            "block_time": None,
+                            "block_time": status["block_time"],
                         },
                         liquid_tx(raw_utxo.get("tx_hash")),
                         target,
                         sync_state,
                         source="liquid_electrum_scripthash_listunspent",
+                        tip_height=tip_height,
                     )
                 )
-                if outputs[-1]["block_time"] is None:
-                    outputs[-1]["block_time"] = status["block_time"]
                 continue
             outputs.append(
-                _electrum_bitcoin_utxo_record(raw_utxo, target, sync_state, header_timestamps)
+                _electrum_bitcoin_utxo_record(
+                    raw_utxo,
+                    target,
+                    sync_state,
+                    header_timestamps,
+                    tip_height=tip_height,
+                )
             )
     return outputs
 

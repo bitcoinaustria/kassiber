@@ -66,9 +66,10 @@ wallet sources. Refreshing a descriptor/xpub/address wallet updates the local
 output inventory, and the detail page shows current unspent transaction outputs with
 outpoint, amount, confirmation state, receive/change branch/index when known,
 address or safe label, and source freshness. It shows all rows returned by the
-daemon payload, offers sorting by size, chain date, confirmations, or outpoint,
-and can open the UTXO's transaction in a configured/public explorer after the
-same privacy warning used by transaction detail explorer links. The table is
+daemon payload, reports when that payload is capped while keeping full totals
+visible, offers sorting by size, chain date, confirmations, or outpoint, and can
+open the UTXO's transaction in a configured/public explorer after the same
+privacy warning used by transaction detail explorer links. The table is
 inventory-only: there is no spend, PSBT, signing, broadcast, coin-selection, or
 freeze action.
 Unsupported file/BTCPay/Lightning-style sources show an unsupported state, and

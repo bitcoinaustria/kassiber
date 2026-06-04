@@ -304,4 +304,21 @@ describe("UtxosInventoryPanel", () => {
     expect(html).toContain("bc1qvisiblerow0");
     expect(html).not.toContain("bc1qhiddenrowmarker");
   });
+
+  it("surfaces server-side UTXO response caps separately from table pagination", () => {
+    const html = renderPanel({
+      ...baseInventory,
+      summary: {
+        count: 1_234,
+        returned_count: 500,
+        truncated: true,
+        row_limit: 500,
+      },
+    });
+
+    expect(html).toContain("500 of 1,234");
+    expect(html).toContain("Showing the first 500 UTXOs returned by this source.");
+    expect(html).toContain("the table response is capped at 500 rows");
+    expect(html).toContain("Showing 500 transported rows of 1,234 total active UTXOs.");
+  });
 });

@@ -120,9 +120,10 @@ Assistant — is one click away in the sidebar.
 Open a wallet in Connections to refresh its source and review its read-only
 UTXOs table: currently unspent transaction outputs, amounts, confirmation state,
 receive/change position when known, and source freshness. The table shows every
-UTXO returned by the wallet inventory payload, can be sorted by size, chain
-date, confirmations, or outpoint, and can open a matching public explorer after
-the same privacy warning used by transaction details. Kassiber never constructs
+UTXO returned by the capped wallet inventory payload, keeps full totals in the
+header when the response is truncated, can be sorted by size, chain date,
+confirmations, or outpoint, and can open a matching public explorer after the
+same privacy warning used by transaction details. Kassiber never constructs
 transactions, signs, broadcasts, freezes coins, or selects coins.
 
 ### CLI

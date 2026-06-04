@@ -136,11 +136,15 @@ row. It does not create a browser-side search index.
 active local UTXO inventory for one wallet. Rows include outpoint, txid, vout,
 asset, amount, confirmation status, block/time when known, address or safe
 receive/change label, branch/index when known, and first/last-seen freshness.
-The response includes backend name/kind only; it never returns descriptors,
-xpubs, backend URLs/tokens, raw wallet config, wallet files, or raw backend
-payloads. Unsupported sources return `support.status="unsupported_source"`.
-Liquid wallets return `support.status="liquid_unblind_blocked"` unless their
-descriptor material can unblind and account for outputs locally.
+The row payload is capped and includes `summary.returned_count`,
+`summary.count`, `summary.truncated`, and `summary.row_limit`; asset totals and
+freshness counts are computed against the full active inventory, not just the
+returned rows. The response includes backend name/kind only; it never returns
+descriptors, xpubs, backend URLs/tokens, raw wallet config, wallet files, or raw
+backend payloads. Unsupported sources return
+`support.status="unsupported_source"`. Liquid wallets return
+`support.status="liquid_unblind_blocked"` unless their descriptor material can
+unblind and account for outputs locally.
 
 `ai.providers.set_api_key` accepts
 `{"name":"provider","api_key":"..."}` or `{"name":"provider","api_key":null}`.
