@@ -17,6 +17,7 @@ from ..wallet_descriptors import (
     liquid_plan_can_unblind,
     normalize_asset_code,
 )
+from . import output_inventory as core_output_inventory
 from .repo import (
     fetch_wallet_with_account,
     invalidate_journals,
@@ -638,6 +639,7 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
 
     # Preserve legacy Austrian provenance metadata until a deliberate migration removes it.
     config = json.loads(wallet["config_json"] or "{}")
+    original_config_json = json.dumps(config, sort_keys=True)
     for field in clear_fields:
         if field not in config:
             raise AppError(
@@ -653,6 +655,8 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
             config[key] = value
 
     config = _validated_wallet_config(wallet["kind"], config)
+    config_json = json.dumps(config, sort_keys=True)
+    config_changed = config_json != original_config_json
 
     try:
         conn.execute(
@@ -661,7 +665,7 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
             SET label = ?, account_id = ?, config_json = ?
             WHERE id = ?
             """,
-            (label_value, account_id, json.dumps(config, sort_keys=True), wallet["id"]),
+            (label_value, account_id, config_json, wallet["id"]),
         )
     except sqlite3.IntegrityError as exc:
         raise AppError(
@@ -669,6 +673,12 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
             code="conflict",
             hint="Choose a different wallet label.",
         ) from exc
+    if config_changed:
+        core_output_inventory.clear_wallet_output_inventory(
+            conn,
+            wallet["id"],
+            commit=False,
+        )
     invalidate_journals(conn, profile["id"])
     conn.commit()
     updated = fetch_wallet_with_account(conn, wallet["id"])

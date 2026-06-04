@@ -36,6 +36,7 @@ from ..core import commercial as core_commercial
 from ..core import imports as core_imports
 from ..core.lightning import cln as core_lightning_cln
 from ..core import metadata as core_metadata
+from ..core import output_inventory as core_output_inventory
 from ..core import pricing
 from ..core import rates as core_rates
 from ..core import reports as core_reports
@@ -1866,6 +1867,15 @@ def _wallet_sync_hooks(commit=True):
         resolve_sync_state=core_sync_backends.resolve_wallet_sync_targets,
         normalize_addresses=core_wallets.normalize_addresses,
         backend_adapters=core_sync_backends.SYNC_BACKEND_ADAPTERS,
+        update_output_inventory=lambda conn, profile, wallet, backend, sync_state, outputs: core_output_inventory.update_wallet_output_inventory(
+            conn,
+            profile,
+            wallet,
+            backend,
+            sync_state,
+            outputs,
+            commit=commit,
+        ),
         sync_btcpay_wallet=lambda conn, runtime_config, profile, wallet: sync_configured_btcpay_wallet(
             conn,
             runtime_config,

@@ -258,6 +258,31 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         summary_template="Read wallets",
     ),
     ToolEntry(
+        name="ui.wallets.utxos",
+        description=(
+            "Read one wallet's watch-only coin/UTXO inventory with outpoints, "
+            "amounts, status, coarse branch metadata, and source freshness; "
+            "never returns wallet addresses, derivation indices, descriptors, "
+            "xpubs, blinding keys, backend URLs/tokens, raw wallet config, or "
+            "raw wallet files."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["wallet"],
+            "properties": {
+                "wallet": {
+                    "type": "string",
+                    "description": "Wallet id or label to read coin inventory for.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_wallets_utxos",
+        daemon_kind="ui.wallets.utxos",
+        summary_template="Read wallet coins",
+    ),
+    ToolEntry(
         name="ui.backends.list",
         description=(
             "Read sync backends referenced by the active profile with coarse URL "
@@ -1289,7 +1314,8 @@ process journals -> review quarantine and transfer/swap pairs -> run reports ->
 export or back up.
 
 Before answering workspace-specific questions, use safe read tools such as
-ui.workspace.health, ui.next_actions, ui.wallets.list, ui.backends.list,
+ui.workspace.health, ui.next_actions, ui.wallets.list, ui.wallets.utxos,
+ui.backends.list,
 ui.transactions.list, ui.transactions.extremes, ui.transactions.search,
 ui.journals.quarantine, ui.journals.events.list,
 ui.journals.transfers.list, ui.transfers.review_context, ui.rates.summary,

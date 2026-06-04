@@ -168,6 +168,58 @@ CREATE TABLE IF NOT EXISTS transaction_tags (
 CREATE INDEX IF NOT EXISTS idx_transactions_profile_external_id
     ON transactions(profile_id, external_id) WHERE external_id IS NOT NULL;
 
+CREATE TABLE IF NOT EXISTS wallet_utxos (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+    backend_name TEXT,
+    backend_kind TEXT,
+    chain TEXT NOT NULL,
+    network TEXT NOT NULL,
+    asset TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    txid TEXT NOT NULL,
+    vout INTEGER NOT NULL,
+    outpoint TEXT NOT NULL,
+    confirmation_status TEXT NOT NULL,
+    confirmations INTEGER,
+    block_height INTEGER,
+    block_time TEXT,
+    address TEXT,
+    address_label TEXT,
+    branch_label TEXT,
+    branch_index INTEGER,
+    address_index INTEGER,
+    first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    spent_at TEXT,
+    raw_json TEXT NOT NULL DEFAULT '{}',
+    UNIQUE (wallet_id, txid, vout)
+);
+
+CREATE INDEX IF NOT EXISTS idx_wallet_utxos_wallet_active
+    ON wallet_utxos(wallet_id, spent_at, asset, block_height, txid, vout);
+
+CREATE INDEX IF NOT EXISTS idx_wallet_utxos_profile_wallet
+    ON wallet_utxos(profile_id, wallet_id, asset);
+
+CREATE TABLE IF NOT EXISTS wallet_utxo_refreshes (
+    wallet_id TEXT PRIMARY KEY REFERENCES wallets(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    backend_name TEXT,
+    backend_kind TEXT,
+    chain TEXT NOT NULL,
+    network TEXT NOT NULL,
+    observed_count INTEGER NOT NULL DEFAULT 0,
+    active_count INTEGER NOT NULL DEFAULT 0,
+    last_seen_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_wallet_utxo_refreshes_profile
+    ON wallet_utxo_refreshes(profile_id, wallet_id);
+
 CREATE TABLE IF NOT EXISTS transaction_edit_events (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

@@ -29,6 +29,7 @@ import { overviewDetailTransactions } from "./overviewTransactionDetailModel";
 
 type OverviewTransactionDetailOptions = {
   snapshot: OverviewSnapshot;
+  extraTransactions?: OverviewSnapshot["txs"];
   hideSensitive: boolean;
   currency: Currency;
   explorerSettings: ExplorerSettings;
@@ -36,6 +37,7 @@ type OverviewTransactionDetailOptions = {
 
 export function useOverviewTransactionDetail({
   snapshot,
+  extraTransactions = [],
   hideSensitive,
   currency,
   explorerSettings,
@@ -63,8 +65,8 @@ export function useOverviewTransactionDetail({
     { enabled: Boolean(detailTransaction) },
   );
   const transactions = React.useMemo(
-    () => overviewDetailTransactions(snapshot),
-    [snapshot],
+    () => overviewDetailTransactions(snapshot, extraTransactions),
+    [extraTransactions, snapshot],
   );
   const getDraft = React.useCallback(
     (txn: Transaction) => drafts[txn.id] ?? draftForTransaction(txn),

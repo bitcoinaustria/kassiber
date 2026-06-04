@@ -545,6 +545,66 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.wallets.utxos") {
+      const overview = mockOverviewSnapshot();
+      const args = (req.args ?? {}) as { wallet?: unknown; connection?: unknown };
+      const walletRef =
+        typeof args.wallet === "string"
+          ? args.wallet
+          : typeof args.connection === "string"
+            ? args.connection
+            : "";
+      const connection =
+        overview.connections.find(
+          (item) => item.id === walletRef || item.label === walletRef,
+        ) ?? overview.connections[0];
+      const payload = JSON.parse(
+        JSON.stringify(fixtures["ui.wallets.utxos"]),
+      ) as {
+        wallet: { id: string; label: string };
+        utxos: unknown[];
+        totals: unknown[];
+        support: {
+          supported: boolean;
+          status: string;
+          reason: string;
+          message: string;
+        };
+        freshness: { status: string; stale: boolean; active_count: number };
+        summary: { count: number };
+      };
+      payload.wallet = {
+        id: connection?.id ?? "mock-wallet",
+        label: connection?.label ?? "Mock wallet",
+      };
+      const chainBacked =
+        connection?.kind === "xpub" ||
+        connection?.kind === "descriptor" ||
+        connection?.kind === "address";
+      if (!chainBacked) {
+        payload.utxos = [];
+        payload.totals = [];
+        payload.support = {
+          supported: false,
+          status: "unsupported_source",
+          reason: "not_chain_backed",
+          message: "This source is not a chain-backed watch-only wallet.",
+        };
+        payload.freshness = {
+          status: "unsupported_source",
+          stale: false,
+          active_count: 0,
+        };
+        payload.summary.count = 0;
+      }
+      return {
+        kind: "ui.wallets.utxos",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: payload as T,
+      };
+    }
+
     if (req.kind === "daemon.lock") {
       return {
         kind: "daemon.lock",

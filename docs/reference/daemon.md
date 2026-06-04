@@ -46,6 +46,7 @@ daemon for the exact current allowlist:
       "ui.activity.history",
       "ui.activity.stale",
       "ui.wallets.list",
+      "ui.wallets.utxos",
       "ui.backends.list",
       "ui.backends.options",
       "ui.reports.capital_gains",
@@ -140,6 +141,20 @@ material.
 global search: it accepts a Kassiber transaction id or external transaction id
 scoped to the active profile and returns at most one safe transaction display
 row. It does not create a browser-side search index.
+
+`ui.wallets.utxos` accepts `{"wallet":"<wallet id or label>"}` and returns the
+active local UTXO inventory for one wallet. Rows include outpoint, txid, vout,
+asset, amount, confirmation status, block/time when known, address or safe
+receive/change label, branch/index when known, and first/last-seen freshness.
+The row payload is capped and includes `summary.returned_count`,
+`summary.count`, `summary.truncated`, and `summary.row_limit`; asset totals and
+freshness counts are computed against the full active inventory, not just the
+returned rows. The response includes backend name/kind only; it never returns
+descriptors, xpubs, backend URLs/tokens, raw wallet config, wallet files, or raw
+backend payloads. Unsupported sources return
+`support.status="unsupported_source"`. Liquid wallets return
+`support.status="liquid_unblind_blocked"` unless their descriptor material can
+unblind and account for outputs locally.
 
 `ui.transactions.history` and `ui.activity.history` read redacted,
 append-only metadata edit events from the same local database as transactions.

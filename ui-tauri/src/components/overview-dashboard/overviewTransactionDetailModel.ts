@@ -4,6 +4,7 @@ import type { OverviewSnapshot } from "@/mocks/seed";
 
 export function overviewDetailTransactions(
   snapshot: OverviewSnapshot,
+  extraTransactions: OverviewSnapshot["txs"] = [],
 ): Transaction[] {
   const transactionsById = new Map<string, Transaction>();
   const addTransactions = (transactions: OverviewSnapshot["txs"]) => {
@@ -18,5 +19,6 @@ export function overviewDetailTransactions(
 
   addTransactions(snapshot.txs);
   addTransactions(snapshot.activityTxs ?? []);
+  addTransactions(extraTransactions);
   return Array.from(transactionsById.values());
 }

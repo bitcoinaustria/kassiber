@@ -206,6 +206,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.secrets.init",
     "ui.secrets.change_passphrase",
     "ui.next_actions",
+    "ui.wallets.utxos",
     "ui.wallets.create",
     "ui.wallets.import_file",
     "ui.wallets.preview_descriptor",
@@ -2657,6 +2658,20 @@ mod tests {
             "ui.attachments.remove",
             "ui.attachments.open",
         ];
+        for kind in required {
+            assert!(
+                ALLOWED_DAEMON_KINDS.contains(kind),
+                "daemon kind missing from Tauri allowlist: {kind}"
+            );
+        }
+    }
+
+    #[test]
+    fn wallet_detail_daemon_kinds_are_in_allowlist() {
+        // ConnectionDetail.tsx reads wallet-detail panes through these daemon
+        // kinds. Missing entries fail at the Tauri shell before the Python
+        // daemon can return the feature payload.
+        let required: &[&str] = &["ui.wallets.utxos"];
         for kind in required {
             assert!(
                 ALLOWED_DAEMON_KINDS.contains(kind),

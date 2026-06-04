@@ -3346,6 +3346,136 @@ class ReviewRegressionTest(unittest.TestCase):
         conn.close()
         self.assertTrue(json.loads(stored)["altbestand"])
 
+    def test_wallets_update_invalidates_cached_output_inventory_on_config_change(self):
+        self._bootstrap_profile()
+        payload, result = self._run_json(
+            "wallets",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--label",
+            "AddressWallet",
+            "--kind",
+            "address",
+            "--address",
+            "bc1qoldwatchtarget0000000000000000000000000",
+            "--backend",
+            "mempool",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+
+        conn = open_db(self.data_root)
+        try:
+            wallet = conn.execute(
+                """
+                SELECT w.id, w.workspace_id, w.profile_id
+                FROM wallets w
+                WHERE w.label = ?
+                """,
+                ("AddressWallet",),
+            ).fetchone()
+            self.assertIsNotNone(wallet)
+            conn.execute(
+                """
+                INSERT INTO wallet_utxos(
+                    id, workspace_id, profile_id, wallet_id, backend_name,
+                    backend_kind, chain, network, asset, amount, txid, vout,
+                    outpoint, confirmation_status, confirmations, block_height,
+                    block_time, address, address_label, branch_label,
+                    branch_index, address_index, first_seen_at, last_seen_at,
+                    spent_at, raw_json
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "utxo-old",
+                    wallet["workspace_id"],
+                    wallet["profile_id"],
+                    wallet["id"],
+                    "mempool",
+                    "esplora",
+                    "bitcoin",
+                    "mainnet",
+                    "BTC",
+                    1_000_000,
+                    "aa" * 32,
+                    0,
+                    f"{'aa' * 32}:0",
+                    "confirmed",
+                    1,
+                    800_000,
+                    "2026-01-01T00:00:00Z",
+                    "bc1qoldwatchtarget0000000000000000000000000",
+                    "address #0",
+                    "address",
+                    None,
+                    0,
+                    "2026-01-01T00:00:00Z",
+                    "2026-01-01T00:00:00Z",
+                    None,
+                    "{}",
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO wallet_utxo_refreshes(
+                    wallet_id, workspace_id, profile_id, backend_name,
+                    backend_kind, chain, network, observed_count,
+                    active_count, last_seen_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    wallet["id"],
+                    wallet["workspace_id"],
+                    wallet["profile_id"],
+                    "mempool",
+                    "esplora",
+                    "bitcoin",
+                    "mainnet",
+                    1,
+                    1,
+                    "2026-01-01T00:00:00Z",
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        payload, result = self._run_json(
+            "wallets",
+            "update",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--wallet",
+            "AddressWallet",
+            "--config",
+            json.dumps({"addresses": ["bc1qnewwatchtarget0000000000000000000000000"]}),
+        )
+        self._assert_ok(payload, result, "wallets.update")
+
+        conn = open_db(self.data_root)
+        try:
+            wallet_id = payload["data"]["id"]
+            self.assertEqual(
+                conn.execute(
+                    "SELECT COUNT(*) FROM wallet_utxos WHERE wallet_id = ?",
+                    (wallet_id,),
+                ).fetchone()[0],
+                0,
+            )
+            self.assertEqual(
+                conn.execute(
+                    "SELECT COUNT(*) FROM wallet_utxo_refreshes WHERE wallet_id = ?",
+                    (wallet_id,),
+                ).fetchone()[0],
+                0,
+            )
+        finally:
+            conn.close()
+
     def test_wallet_outputs_redact_descriptor_material_but_keep_state_flags(self):
         self._bootstrap_profile()
         descriptor, change_descriptor = _sample_descriptor_pair()
@@ -3947,6 +4077,141 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertNotIn("username", stored_config)
         self.assertNotIn("password", stored_config)
         self.assertNotIn("walletprefix", stored_config)
+
+    def test_backends_update_clears_cached_output_inventory_for_backend(self):
+        self._bootstrap_profile()
+        payload, result = self._run_json(
+            "backends",
+            "create",
+            "coin-source",
+            "--kind",
+            "esplora",
+            "--url",
+            "https://coins-one.example",
+            "--chain",
+            "bitcoin",
+            "--network",
+            "mainnet",
+        )
+        self._assert_ok(payload, result, "backends.create")
+        payload, result = self._run_json(
+            "wallets",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--label",
+            "CoinWallet",
+            "--kind",
+            "address",
+            "--address",
+            "bc1qcoinwatchtarget0000000000000000000000000",
+            "--backend",
+            "coin-source",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+        wallet_id = payload["data"]["id"]
+
+        conn = open_db(self.data_root)
+        try:
+            wallet = conn.execute(
+                "SELECT id, workspace_id, profile_id FROM wallets WHERE id = ?",
+                (wallet_id,),
+            ).fetchone()
+            self.assertIsNotNone(wallet)
+            conn.execute(
+                """
+                INSERT INTO wallet_utxos(
+                    id, workspace_id, profile_id, wallet_id, backend_name,
+                    backend_kind, chain, network, asset, amount, txid, vout,
+                    outpoint, confirmation_status, confirmations, block_height,
+                    block_time, address, address_label, branch_label,
+                    branch_index, address_index, first_seen_at, last_seen_at,
+                    spent_at, raw_json
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "utxo-backend-update",
+                    wallet["workspace_id"],
+                    wallet["profile_id"],
+                    wallet["id"],
+                    "coin-source",
+                    "esplora",
+                    "bitcoin",
+                    "mainnet",
+                    "BTC",
+                    1_000_000,
+                    "cc" * 32,
+                    0,
+                    f"{'cc' * 32}:0",
+                    "confirmed",
+                    1,
+                    800_000,
+                    "2026-01-01T00:00:00Z",
+                    "bc1qcoinwatchtarget0000000000000000000000000",
+                    "address #0",
+                    "address",
+                    None,
+                    0,
+                    "2026-01-01T00:00:00Z",
+                    "2026-01-01T00:00:00Z",
+                    None,
+                    "{}",
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO wallet_utxo_refreshes(
+                    wallet_id, workspace_id, profile_id, backend_name,
+                    backend_kind, chain, network, observed_count,
+                    active_count, last_seen_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    wallet["id"],
+                    wallet["workspace_id"],
+                    wallet["profile_id"],
+                    "coin-source",
+                    "esplora",
+                    "bitcoin",
+                    "mainnet",
+                    1,
+                    1,
+                    "2026-01-01T00:00:00Z",
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        payload, result = self._run_json(
+            "backends",
+            "update",
+            "coin-source",
+            "--url",
+            "https://coins-two.example",
+        )
+        self._assert_ok(payload, result, "backends.update")
+
+        conn = open_db(self.data_root)
+        try:
+            self.assertEqual(
+                conn.execute(
+                    "SELECT COUNT(*) FROM wallet_utxos WHERE backend_name = ?",
+                    ("coin-source",),
+                ).fetchone()[0],
+                0,
+            )
+            self.assertEqual(
+                conn.execute(
+                    "SELECT COUNT(*) FROM wallet_utxo_refreshes WHERE backend_name = ?",
+                    ("coin-source",),
+                ).fetchone()[0],
+                0,
+            )
+        finally:
+            conn.close()
 
     def test_backend_outputs_redact_secret_values_but_keep_presence_flags(self):
         payload, result = self._run_json("init")

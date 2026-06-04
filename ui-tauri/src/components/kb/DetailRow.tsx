@@ -1,8 +1,6 @@
-import { type ReactNode, useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { type ReactNode } from "react";
 
-import { Button } from "@/components/ui/button";
-import { copyTextWithPolicy } from "@/lib/clipboard";
+import { CopyButton } from "@/components/kb/CopyButton";
 import { cn } from "@/lib/utils";
 
 interface DetailRowProps {
@@ -28,42 +26,5 @@ export function DetailRow({ label, value, mono, copy }: DetailRowProps) {
       </span>
       {copy && typeof value === "string" ? <CopyButton value={value} /> : null}
     </div>
-  );
-}
-
-function CopyButton({
-  value,
-  ariaLabel = "Copy",
-}: {
-  value: string;
-  ariaLabel?: string;
-}) {
-  const [copied, setCopied] = useState(false);
-  const onCopy = async () => {
-    try {
-      await copyTextWithPolicy(value);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1100);
-    } catch {
-      // Clipboard access is best-effort in browser preview.
-    }
-  };
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      size="icon-xs"
-      aria-label={copied ? "Copied" : ariaLabel}
-      onClick={onCopy}
-    >
-      {copied ? (
-        <Check
-          className="size-3 text-emerald-600 dark:text-emerald-400"
-          aria-hidden="true"
-        />
-      ) : (
-        <Copy className="size-3" aria-hidden="true" />
-      )}
-    </Button>
   );
 }

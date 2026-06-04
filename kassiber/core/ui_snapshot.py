@@ -8,17 +8,30 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
-from ..backends import redact_backend_for_output
+from ..backends import backend_value, redact_backend_for_output
 from ..errors import AppError
 from ..msat import msat_to_btc
 from ..tax_policy import build_tax_policy
 from ..time_utils import _iso_z, _parse_iso_datetime
-from ..wallet_descriptors import DEFAULT_DESCRIPTOR_GAP_LIMIT
+from ..wallet_descriptors import (
+    BITCOIN_NETWORK_ALIASES,
+    CHAIN_ALIASES,
+    DEFAULT_DESCRIPTOR_GAP_LIMIT,
+    LIQUID_NETWORK_ALIASES,
+    liquid_plan_can_unblind,
+    normalize_chain,
+    normalize_network,
+)
+from . import output_inventory as core_output_inventory
 from . import rates as core_rates
 from . import reports as report_builders
 from . import transaction_history
 from .repo import current_context_snapshot
-from .wallets import wallet_btcpay_provenance_config
+from .sync import normalize_backend_kind
+from .wallets import (
+    load_wallet_descriptor_plan_from_config,
+    wallet_btcpay_provenance_config,
+)
 
 
 MAX_UI_LIST_LIMIT = 500
@@ -340,6 +353,80 @@ def _wallet_backend_summary(
         "name": backend_name,
         "source": backend_source,
         "sync_mode": sync_mode,
+    }
+
+
+def _unique_text_values(values: list[Any]) -> list[str]:
+    output = []
+    for value in values:
+        text = _string_or_empty(value)
+        if text and text not in output:
+            output.append(text)
+    return output
+
+
+def _wallet_utxo_chain_filter_values(value: Any) -> list[str]:
+    try:
+        canonical = normalize_chain(value)
+    except ValueError:
+        return _unique_text_values([value])
+    aliases = [alias for alias, target in CHAIN_ALIASES.items() if target == canonical]
+    return _unique_text_values([canonical, value, *aliases])
+
+
+def _wallet_utxo_network_filter_values(chain: str, value: Any) -> list[str]:
+    try:
+        canonical = normalize_network(chain, value)
+    except ValueError:
+        return _unique_text_values([value])
+    aliases_map = BITCOIN_NETWORK_ALIASES if chain == "bitcoin" else LIQUID_NETWORK_ALIASES
+    aliases = [alias for alias, target in aliases_map.items() if target == canonical]
+    return _unique_text_values([canonical, value, *aliases])
+
+
+def _wallet_utxo_source_filter(
+    config: dict[str, Any],
+    backend_summary: dict[str, str],
+    backend: Any,
+) -> dict[str, Any]:
+    backend_chain = (
+        backend_value(backend, "chain")
+        if isinstance(backend, dict)
+        else None
+    )
+    chain_source = backend_chain or config.get("chain")
+    chain_values = _wallet_utxo_chain_filter_values(chain_source)
+    chain = chain_values[0] if chain_values else _string_or_empty(chain_source)
+    backend_network = (
+        backend_value(backend, "network")
+        if isinstance(backend, dict)
+        else None
+    )
+    network_values = _wallet_utxo_network_filter_values(
+        chain or "bitcoin",
+        backend_network or config.get("network"),
+    )
+    backend_kind = (
+        backend_value(backend, "kind")
+        if isinstance(backend, dict)
+        else None
+    )
+    backend_kind_values = (
+        _unique_text_values([normalize_backend_kind(backend_kind), backend_kind])
+        if _string_or_empty(backend_kind)
+        else []
+    )
+    backend_name_values = _unique_text_values(
+        [
+            backend_summary.get("name"),
+            backend.get("name") if isinstance(backend, dict) else None,
+        ]
+    )
+    return {
+        "backend_name": backend_name_values or None,
+        "backend_kind": backend_kind_values or None,
+        "chain": chain_values,
+        "network": network_values,
     }
 
 
@@ -2744,6 +2831,282 @@ def build_wallets_list_snapshot(
             "transaction_count": sum(wallet["transaction_count"] for wallet in wallets),
             "needs_journals": bool(freshness["needs_processing"]),
         },
+    }
+
+
+def _wallet_ref_arg(args: Any) -> str:
+    if not isinstance(args, dict):
+        raise AppError(
+            "ui.wallets.utxos args must be an object",
+            code="validation",
+            retryable=False,
+        )
+    wallet = args.get("wallet") or args.get("connection")
+    if not isinstance(wallet, str) or not wallet.strip():
+        raise AppError(
+            "ui.wallets.utxos wallet must be a non-empty string",
+            code="validation",
+            retryable=False,
+        )
+    return wallet.strip()
+
+
+def _resolve_wallet_for_utxos(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    wallet_ref: str,
+) -> sqlite3.Row:
+    row = conn.execute(
+        """
+        SELECT
+            w.id,
+            w.label,
+            w.kind,
+            w.config_json,
+            w.created_at,
+            a.code AS account_code,
+            a.label AS account_label
+        FROM wallets w
+        LEFT JOIN accounts a ON a.id = w.account_id
+        WHERE w.profile_id = ?
+          AND (w.id = ? OR w.label = ?)
+        ORDER BY CASE WHEN w.id = ? THEN 0 ELSE 1 END, w.label ASC
+        LIMIT 1
+        """,
+        (profile_id, wallet_ref, wallet_ref, wallet_ref),
+    ).fetchone()
+    if row is None:
+        raise AppError(
+            f"Wallet '{wallet_ref}' was not found in the active profile",
+            code="not_found",
+            retryable=False,
+        )
+    return row
+
+
+def _wallet_utxo_support(
+    wallet: sqlite3.Row,
+    config: dict[str, Any],
+    backend_summary: dict[str, str],
+    backend: Any,
+) -> dict[str, Any]:
+    sync_mode = backend_summary["sync_mode"]
+    has_descriptor = bool(config.get("descriptor"))
+    has_addresses = bool(config.get("addresses"))
+    if sync_mode not in {"backend_descriptor", "backend_addresses"}:
+        return {
+            "supported": False,
+            "status": "unsupported_source",
+            "reason": "not_chain_backed",
+            "message": "This source is not a chain-backed watch-only wallet.",
+        }
+    if not isinstance(backend, dict):
+        return {
+            "supported": False,
+            "status": "unsupported_source",
+            "reason": "backend_missing",
+            "message": "This wallet needs a configured Esplora, Electrum, or Bitcoin Core backend before UTXO inventory can refresh.",
+        }
+    backend_kind = normalize_backend_kind(backend.get("kind"))
+    if backend_kind not in {"esplora", "electrum", "bitcoinrpc"}:
+        return {
+            "supported": False,
+            "status": "unsupported_source",
+            "reason": "backend_kind",
+            "message": f"UTXO inventory is not implemented for {backend_kind or 'this backend'} sources yet.",
+        }
+    chain = str(config.get("chain") or "bitcoin").strip().lower() or "bitcoin"
+    if has_descriptor and backend_kind == "bitcoinrpc":
+        return {
+            "supported": False,
+            "status": "unsupported_source",
+            "reason": "bitcoinrpc_descriptor",
+            "message": "Bitcoin Core UTXO inventory is available for address-backed wallets only.",
+        }
+    if chain == "liquid":
+        if not has_descriptor:
+            return {
+                "supported": False,
+                "status": "liquid_unblind_blocked",
+                "reason": "liquid_descriptor_required",
+                "message": "Liquid UTXO inventory requires descriptor-backed outputs so Kassiber can unblind them locally.",
+            }
+        try:
+            descriptor_plan = load_wallet_descriptor_plan_from_config(config)
+        except AppError as exc:
+            return {
+                "supported": False,
+                "status": "liquid_unblind_blocked",
+                "reason": "descriptor_unavailable",
+                "message": str(exc),
+            }
+        if not liquid_plan_can_unblind(descriptor_plan):
+            return {
+                "supported": False,
+                "status": "liquid_unblind_blocked",
+                "reason": "missing_blinding_keys",
+                "message": "Liquid UTXO inventory needs private blinding keys before Kassiber can account for outputs.",
+            }
+    if not has_descriptor and not has_addresses:
+        return {
+            "supported": False,
+            "status": "unsupported_source",
+            "reason": "no_watch_targets",
+            "message": "This wallet has no descriptor, xpub, or addresses to scan.",
+        }
+    return {
+        "supported": True,
+        "status": "supported",
+        "reason": "",
+        "message": "",
+    }
+
+
+def build_wallet_utxos_snapshot(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object] | None,
+    args: Any,
+) -> dict[str, Any]:
+    context, profile = _active_context_and_profile(conn)
+    if profile is None:
+        return {
+            "wallet": None,
+            "utxos": [],
+            "totals": [],
+            "support": {
+                "supported": False,
+                "status": "unsupported_source",
+                "reason": "no_active_profile",
+                "message": "No active profile is selected.",
+            },
+            "freshness": {
+                "status": "no_profile",
+                "last_seen_at": None,
+                "last_synced_at": None,
+                "stale": False,
+            },
+        }
+    wallet_ref = _wallet_ref_arg(args)
+    wallet = _resolve_wallet_for_utxos(conn, profile["id"], wallet_ref)
+    config = _json_config(wallet["config_json"])
+    runtime_backends = (
+        runtime_config.get("backends", {})
+        if isinstance(runtime_config, dict)
+        else {}
+    )
+    default_backend = (
+        runtime_config.get("default_backend")
+        if isinstance(runtime_config, dict)
+        else None
+    )
+    backend_summary = _wallet_backend_summary(wallet["kind"], config, default_backend)
+    backend_name = backend_summary["name"]
+    backend = (
+        runtime_backends.get(str(backend_name))
+        if isinstance(runtime_backends, dict) and backend_name
+        else None
+    )
+    support = _wallet_utxo_support(wallet, config, backend_summary, backend)
+    if support["supported"]:
+        source_filter = _wallet_utxo_source_filter(config, backend_summary, backend)
+        rows = core_output_inventory.list_wallet_output_inventory(
+            conn,
+            wallet["id"],
+            limit=core_output_inventory.DEFAULT_WALLET_OUTPUT_INVENTORY_LIMIT,
+            **source_filter,
+        )
+        inventory_summary = core_output_inventory.wallet_output_inventory_summary(
+            conn,
+            wallet["id"],
+            **source_filter,
+        )
+        totals = core_output_inventory.wallet_output_inventory_totals(
+            conn,
+            wallet["id"],
+            **source_filter,
+        )
+        last_seen_at = inventory_summary["last_seen_at"]
+    else:
+        rows = []
+        totals = []
+        last_seen_at = None
+    last_synced_at = _string_or_empty(config.get("last_synced_at")) or None
+    if not support["supported"]:
+        freshness_status = support["status"]
+    elif last_seen_at:
+        freshness_status = "current"
+    elif last_synced_at:
+        freshness_status = "stale"
+    else:
+        freshness_status = "never_refreshed"
+    return {
+        "wallet": {
+            "id": wallet["id"],
+            "label": wallet["label"],
+            "kind": wallet["kind"],
+            "account": {
+                "code": wallet["account_code"] or "",
+                "label": wallet["account_label"] or "",
+            },
+            "backend": {
+                "name": str(backend_name) if backend_name else "",
+                "source": backend_summary["source"],
+                "kind": str(backend.get("kind") or "") if isinstance(backend, dict) else "",
+            },
+            "chain": str(config.get("chain") or ""),
+            "network": str(config.get("network") or ""),
+            "sync_mode": backend_summary["sync_mode"],
+        },
+        "utxos": rows,
+        "totals": totals,
+        "support": support,
+        "freshness": {
+            "status": freshness_status,
+            "last_seen_at": last_seen_at,
+            "last_synced_at": last_synced_at,
+            "stale": support["supported"] and freshness_status != "current",
+            "active_count": inventory_summary["active_count"] if support["supported"] else 0,
+        },
+        "summary": {
+            "workspace": context["workspace_label"] or None,
+            "profile": context["profile_label"] or None,
+            "count": inventory_summary["active_count"] if support["supported"] else 0,
+            "returned_count": len(rows),
+            "truncated": (
+                support["supported"]
+                and inventory_summary["active_count"] > len(rows)
+            ),
+            "row_limit": (
+                core_output_inventory.DEFAULT_WALLET_OUTPUT_INVENTORY_LIMIT
+                if support["supported"]
+                else None
+            ),
+        },
+    }
+
+
+def _wallet_utxo_row_for_ai(row: dict[str, Any]) -> dict[str, Any]:
+    redacted = dict(row)
+    redacted.pop("address", None)
+    redacted.pop("address_label", None)
+    redacted.pop("branch_index", None)
+    redacted.pop("address_index", None)
+    return redacted
+
+
+def build_wallet_utxos_snapshot_for_ai(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object] | None,
+    args: Any,
+) -> dict[str, Any]:
+    payload = build_wallet_utxos_snapshot(conn, runtime_config, args)
+    return {
+        **payload,
+        "utxos": [
+            _wallet_utxo_row_for_ai(row)
+            for row in payload.get("utxos", [])
+            if isinstance(row, dict)
+        ],
     }
 
 

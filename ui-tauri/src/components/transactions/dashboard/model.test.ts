@@ -4,8 +4,10 @@ import {
   bucketTransactionDate,
   flowChartSelectionLabel,
   matchesFlowChartSelection,
+  toDashboardTransaction,
   type FlowChartSelection,
 } from "./model";
+import type { Tx } from "@/mocks/seed";
 import type { Transaction, TransactionFlow } from "@/components/transactions";
 
 function transaction(
@@ -27,6 +29,30 @@ function transaction(
 }
 
 describe("transaction dashboard chart selection", () => {
+  it("classifies consolidation rows as transfers even when only the fee is negative", () => {
+    const tx: Tx = {
+      id: "tx12",
+      date: "2026-04-03 09:22",
+      type: "Consolidation",
+      account: "Cold Storage",
+      counter: "12 UTXOs -> 1",
+      amountSat: 0,
+      feeSat: 42_180,
+      eur: -30.13,
+      rate: 71432.0,
+      tag: "Consolidation fee",
+      conf: 210,
+    };
+
+    const transaction = toDashboardTransaction(tx, 0);
+
+    expect(transaction.flow).toBe("transfer");
+    expect(transaction.direction).toBe("Transfer");
+    expect(transaction.amountBtc).toBe(0.0004218);
+    expect(transaction.amount).toBe(30.13);
+    expect(transaction.feeBtc).toBe(0.0004218);
+  });
+
   it("labels and matches a whole bucket selection across flows", () => {
     const bucket = bucketTransactionDate(
       new Date("2026-04-15T12:00:00Z"),

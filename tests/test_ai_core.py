@@ -144,6 +144,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_transactions_extremes",
             "ui_transactions_search",
             "ui_wallets_list",
+            "ui_wallets_utxos",
             "ui_backends_list",
             "ui_profiles_snapshot",
             "ui_reports_capital_gains",
@@ -201,6 +202,8 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertEqual(get_tool("ui_transactions_extremes").name, "ui.transactions.extremes")
         self.assertEqual(get_tool("ui_transactions_search").name, "ui.transactions.search")
         self.assertEqual(get_tool("ui_wallets_list").kind_class, "read_only")
+        self.assertEqual(get_tool("ui_wallets_utxos").name, "ui.wallets.utxos")
+        self.assertEqual(get_tool("ui_wallets_utxos").kind_class, "read_only")
         self.assertEqual(get_tool("ui_backends_list").kind_class, "read_only")
         self.assertEqual(get_tool("ui_reports_summary").name, "ui.reports.summary")
         self.assertEqual(get_tool("ui_reports_summary").kind_class, "read_only")

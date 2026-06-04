@@ -200,7 +200,10 @@ Use a Greenfield API key with wallet-history permissions for
 BTCPay payment into authoritative `btcpay_payment` pricing or a commercial
 transaction kind.
 
-Note: `bitcoinrpc` support is currently partial. Kassiber can use it for Bitcoin address-based wallets, but descriptor- and xpub-backed source refresh still require Esplora or Electrum.
+Note: `bitcoinrpc` support is currently partial. Kassiber can use it for
+Bitcoin address-based wallets, including the read-only UTXO inventory,
+but descriptor- and xpub-backed source refresh still require Esplora or
+Electrum.
 
 The backend CLI now accepts the common backend-specific knobs directly:
 
@@ -331,7 +334,9 @@ Use this when you run your own node.
 
 ## Descriptor and Liquid notes
 
-Descriptor wallets derive receive and change scripts locally and then refresh through an Esplora- or Electrum-backed backend.
+Descriptor wallets derive receive and change scripts locally and then refresh
+through an Esplora- or Electrum-backed backend. Source refresh also updates the
+durable local UTXO inventory shown in the desktop wallet detail view.
 The default gap limit is 40 unused addresses per branch, and Kassiber caps the configured gap limit at 5,000 to avoid accidental runaway scans.
 
 Example Bitcoin descriptor wallet:
@@ -366,6 +371,11 @@ bash -c 'python3 -m kassiber wallets create \
   3< <(printf '%s\n' 'ct(slip77(...),elwpkh(.../0/*))') \
   4< <(printf '%s\n' 'ct(slip77(...),elwpkh(.../1/*))')
 ```
+
+Liquid UTXO inventory is only populated when Kassiber can unblind the output
+locally from descriptor material. If private blinding keys are missing, the
+desktop UTXOs table shows a Liquid unblind blocker instead of guessing output
+amounts or assets.
 
 For Liquid:
 

@@ -5,7 +5,7 @@
  * Connections and Overview screens.
  */
 
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import {
@@ -24,8 +24,14 @@ import {
 
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { ConnectionStatusPill } from "@/components/kb/ConnectionStatusPill";
+import { CountBadge } from "@/components/kb/CountBadge";
 import { DetailRow } from "@/components/kb/DetailRow";
 import { MetricCard } from "@/components/kb/MetricCard";
+import {
+  UtxosInventoryPanel,
+  type WalletUtxosData,
+} from "@/components/kb/wallets";
+import { useOverviewTransactionDetail } from "@/components/overview-dashboard/useOverviewTransactionDetail";
 import { NodeConnectionDetail } from "./NodeConnectionDetail";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -249,6 +255,7 @@ export function ConnectionDetail() {
   return (
     <ConnectionDetailView
       connection={connection}
+      snapshot={snapshot}
       priceEur={snapshot.priceEur}
       txs={snapshot.txs}
       hideSensitive={hideSensitive}
@@ -401,6 +408,7 @@ function NodeConnectionContainer({
 
 interface ConnectionDetailViewProps {
   connection: Connection;
+  snapshot: OverviewSnapshot;
   priceEur: number;
   txs: OverviewSnapshot["txs"];
   hideSensitive: boolean;
@@ -408,6 +416,7 @@ interface ConnectionDetailViewProps {
 
 function ConnectionDetailView({
   connection,
+  snapshot,
   priceEur,
   txs,
   hideSensitive,
@@ -418,6 +427,10 @@ function ConnectionDetailView({
   const addNotification = useUiStore((state) => state.addNotification);
   const updateNotification = useUiStore((state) => state.updateNotification);
   const identity = useUiStore((state) => state.identity);
+  const explorerSettings = useUiStore((state) => state.explorerSettings);
+  const currency = useUiStore((state) => state.currency);
+  const [pendingUtxoTransactionId, setPendingUtxoTransactionId] =
+    useState<string | null>(null);
   const syncNoticeIdRef = useRef<string | null>(null);
   const walletSyncMutationKey = daemonMutationKey(dataMode, "ui.wallets.sync");
   const walletSyncsInFlight = useIsMutating({
@@ -473,6 +486,32 @@ function ConnectionDetailView({
       (wallet.id && wallet.id === connection.id) ||
       wallet.label === connection.label,
   );
+  const coinsInventoryQuery = useDaemon<WalletUtxosData>(
+    "ui.wallets.utxos",
+    { wallet: connection.id },
+    { retry: false },
+  );
+  const utxoTransactionQuery = useDaemon<{
+    transaction?: OverviewSnapshot["txs"][number] | null;
+  }>(
+    "ui.transactions.resolve",
+    { query: pendingUtxoTransactionId ?? "" },
+    { enabled: Boolean(pendingUtxoTransactionId), retry: false },
+  );
+  const resolvedUtxoTransaction =
+    utxoTransactionQuery.data?.data?.transaction ?? null;
+  const { detailSheet, openTransactionDetail } = useOverviewTransactionDetail({
+    snapshot,
+    extraTransactions: resolvedUtxoTransaction
+      ? [resolvedUtxoTransaction]
+      : [],
+    hideSensitive,
+    currency,
+    explorerSettings,
+  });
+  const openUtxoTransaction = (transactionId: string) => {
+    setPendingUtxoTransactionId(transactionId);
+  };
   const walletProvenanceRoutes = walletDetail?.btcpay_provenance ?? [];
   const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -514,6 +553,45 @@ function ConnectionDetailView({
       return account === label || account.includes(label);
     })
     .slice(0, 6);
+
+  useEffect(() => {
+    if (!pendingUtxoTransactionId || utxoTransactionQuery.isLoading) return;
+    if (resolvedUtxoTransaction) {
+      openTransactionDetail(resolvedUtxoTransaction.id);
+      setPendingUtxoTransactionId(null);
+      return;
+    }
+    if (utxoTransactionQuery.error) {
+      addNotification({
+        title: "Transaction not opened",
+        body:
+          utxoTransactionQuery.error instanceof Error
+            ? utxoTransactionQuery.error.message
+            : "Kassiber could not resolve this UTXO transaction.",
+        tone: "warning",
+        dedupeKey: `utxo-transaction-open-${pendingUtxoTransactionId}`,
+      });
+      setPendingUtxoTransactionId(null);
+      return;
+    }
+    if (utxoTransactionQuery.data) {
+      addNotification({
+        title: "Transaction not found",
+        body: "This UTXO has no matching imported Kassiber transaction yet.",
+        tone: "warning",
+        dedupeKey: `utxo-transaction-missing-${pendingUtxoTransactionId}`,
+      });
+      setPendingUtxoTransactionId(null);
+    }
+  }, [
+    addNotification,
+    openTransactionDetail,
+    pendingUtxoTransactionId,
+    resolvedUtxoTransaction,
+    utxoTransactionQuery.data,
+    utxoTransactionQuery.error,
+    utxoTransactionQuery.isLoading,
+  ]);
   const txCount = connection.transactionCount ?? txsForConnection.length;
   const isWalletSyncRunning =
     syncWallet.isPending ||
@@ -591,6 +669,7 @@ function ConnectionDetailView({
           clearSyncNotice();
           syncNoticeIdRef.current = null;
           setSyncProgress(null);
+          void queryClient.invalidateQueries({ queryKey: ["daemon"] });
         },
       },
     );
@@ -930,6 +1009,21 @@ function ConnectionDetailView({
         />
       </div>
 
+      <UtxosInventoryPanel
+        inventory={coinsInventoryQuery.data?.data}
+        isLoading={coinsInventoryQuery.isLoading}
+        errorMessage={
+          coinsInventoryQuery.error instanceof Error
+            ? coinsInventoryQuery.error.message
+            : null
+        }
+        hideSensitive={hideSensitive}
+        isRefreshing={isWalletSyncRunning}
+        explorerSettings={explorerSettings}
+        onRefresh={onSync}
+        onOpenTransaction={openUtxoTransaction}
+      />
+
       {walletProvenanceRoutes.length > 0 ? (
         <Card>
           <CardHeader className="border-b px-4 pb-3">
@@ -975,9 +1069,7 @@ function ConnectionDetailView({
           <CardHeader className="border-b px-4 pb-3">
             <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
               Recent transactions
-              <span className="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-[10px] font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
-                {txsForConnection.length}
-              </span>
+              <CountBadge>{txsForConnection.length}</CountBadge>
             </CardTitle>
             <CardDescription>
               Recent transactions for this wallet source.
@@ -1358,6 +1450,7 @@ function ConnectionDetailView({
           </form>
         </DialogContent>
       </Dialog>
+      {detailSheet}
     </div>
   );
 }
