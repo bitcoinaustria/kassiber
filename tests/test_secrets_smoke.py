@@ -265,6 +265,71 @@ class OpenDbEncryptedTests(unittest.TestCase):
                 open_db(str(data_root)).close()
             self.assertEqual(ctx.exception.code, "passphrase_required")
 
+    def test_encrypted_open_db_configures_wal_and_busy_timeout_for_daemon_workers(self):
+        with tempfile.TemporaryDirectory() as root:
+            data_root = Path(root) / "data"
+            data_root.mkdir()
+            passphrase = "encrypted-worker-passphrase"
+            seed = open_db(str(data_root))
+            seed.execute(
+                "INSERT INTO workspaces(id, label, created_at) VALUES('ws', 'Main', '2026-06-04T00:00:00Z')"
+            )
+            seed.commit()
+            seed.close()
+            migrate_plaintext_to_encrypted(Path(data_root) / "kassiber.sqlite3", passphrase)
+
+            primary = open_db(str(data_root), passphrase=passphrase)
+            try:
+                self.assertEqual(
+                    primary.execute("PRAGMA journal_mode").fetchone()[0].lower(),
+                    DB_JOURNAL_MODE,
+                )
+                self.assertGreaterEqual(
+                    primary.execute("PRAGMA busy_timeout").fetchone()[0],
+                    DB_BUSY_TIMEOUT_MS,
+                )
+
+                ready = threading.Event()
+                proceed = threading.Event()
+                outcome = []
+
+                def second_writer():
+                    secondary = open_db(str(data_root), passphrase=passphrase)
+                    try:
+                        ready.set()
+                        self.assertTrue(proceed.wait(timeout=2))
+                        secondary.execute(
+                            "INSERT INTO settings(key, value) VALUES('encrypted-second-writer', 'ok')"
+                        )
+                        secondary.commit()
+                        outcome.append("ok")
+                    except Exception as exc:  # pragma: no cover - assertion reports object
+                        outcome.append(exc)
+                    finally:
+                        secondary.close()
+
+                worker = threading.Thread(target=second_writer)
+                worker.start()
+                self.assertTrue(ready.wait(timeout=2))
+
+                primary.execute("BEGIN IMMEDIATE")
+                primary.execute("INSERT INTO settings(key, value) VALUES('encrypted-held-lock', '1')")
+                proceed.set()
+                time.sleep(0.2)
+                primary.commit()
+                worker.join(timeout=5)
+
+                self.assertFalse(worker.is_alive())
+                self.assertEqual(outcome, ["ok"])
+                self.assertEqual(
+                    primary.execute(
+                        "SELECT value FROM settings WHERE key = 'encrypted-second-writer'"
+                    ).fetchone()[0],
+                    "ok",
+                )
+            finally:
+                primary.close()
+
 
 class MigrationTests(unittest.TestCase):
     def test_round_trip_preserves_user_version(self):
