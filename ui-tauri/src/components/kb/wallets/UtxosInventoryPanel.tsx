@@ -512,7 +512,6 @@ export function UtxosInventoryPanel({
   onRefresh,
 }: UtxosInventoryPanelProps) {
   const rows = inventory?.utxos ?? [];
-  const totals = inventory?.totals ?? [];
   const walletId = inventory?.wallet?.id ?? null;
   const totalCount = inventory?.summary?.count ?? inventory?.freshness.active_count ?? rows.length;
   const returnedCount = inventory?.summary?.returned_count ?? rows.length;
@@ -556,19 +555,6 @@ export function UtxosInventoryPanel({
                   : totalCount.toLocaleString("en-US")}
               </CountBadge>
             </CardTitle>
-            {totals.length > 0 ? (
-              <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                {totals.map((total) => (
-                  <AmountDisplay
-                    key={total.asset}
-                    value={total.amount}
-                    asset={total.asset}
-                    hideSensitive={hideSensitive}
-                    className="text-base font-semibold sm:text-lg"
-                  />
-                ))}
-              </div>
-            ) : null}
             <CardDescription className="mt-1">
               {serverTruncated
                 ? `Showing the first ${returnedCount.toLocaleString("en-US")} UTXOs returned by this source.`

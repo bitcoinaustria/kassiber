@@ -246,14 +246,15 @@ describe("UtxosInventoryPanel", () => {
     expect(liquidHtml).toContain("private blinding keys");
   });
 
-  it("surfaces totals, freshness, and copy affordances", () => {
+  it("surfaces freshness and copy affordances without duplicating wallet balance", () => {
     const html = renderPanel();
 
     expect(html).toContain("As of");
     expect(html).toContain("Copy outpoint");
     expect(html).toContain("Copy address");
-    // The summed total renders in the header in addition to the per-row amount.
-    expect((html.match(/₿ 0\.12500000/g) ?? []).length).toBeGreaterThan(1);
+    // Static rendering includes both desktop and mobile row layouts; there
+    // should be no third copy from a duplicated balance in the panel header.
+    expect((html.match(/₿ 0\.12500000/g) ?? []).length).toBe(2);
   });
 
   it("renders Liquid amounts with an explicit ticker and no bitcoin glyph", () => {
