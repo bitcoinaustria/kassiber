@@ -18,14 +18,16 @@ from kassiber.daemon import (
     AiToolRuntime,
     MAX_REQUEST_LINE_CHARS,
     ParsedAiToolCall,
-    _auto_sync_wallets_if_enabled,
     _auto_tool_context_for_model,
-    _auto_process_journals_if_needed,
     _execute_mutating_ai_tool,
     _execute_read_only_ai_tool,
-    _maintenance_run_payload,
     _planned_auto_read_tools,
     _reports_tax_summary_payload,
+)
+from kassiber.daemon_freshness import (
+    _auto_process_journals_if_needed,
+    _auto_sync_wallets_if_enabled,
+    _maintenance_run_payload,
 )
 from kassiber.secrets.sqlcipher import sqlcipher_available
 from kassiber.wallet_descriptors import (
@@ -3910,7 +3912,7 @@ class DaemonSmokeTest(unittest.TestCase):
             conn.commit()
 
             with mock.patch(
-                "kassiber.daemon._journals_process_payload",
+                "kassiber.daemon_freshness._journals_process_payload",
                 return_value={"processed": True},
             ) as process_mock:
                 result = _auto_process_journals_if_needed(conn)
@@ -3950,7 +3952,7 @@ class DaemonSmokeTest(unittest.TestCase):
                 ]
             }
 
-            with mock.patch("kassiber.daemon._wallets_sync_payload", return_value=raw_sync):
+            with mock.patch("kassiber.daemon_freshness._wallets_sync_payload", return_value=raw_sync):
                 state: dict[str, object] = {}
                 payload = _auto_sync_wallets_if_enabled(conn, {}, state=state)
                 cached_payload = _auto_sync_wallets_if_enabled(conn, {}, state={})
@@ -3987,7 +3989,7 @@ class DaemonSmokeTest(unittest.TestCase):
             conn.commit()
 
             with mock.patch(
-                "kassiber.daemon._wallets_sync_payload",
+                "kassiber.daemon_freshness._wallets_sync_payload",
                 return_value={"results": [{"wallet": "Cold", "status": "synced"}]},
             ) as sync_mock:
                 first = _auto_sync_wallets_if_enabled(conn, {}, state={})
@@ -4016,7 +4018,7 @@ class DaemonSmokeTest(unittest.TestCase):
                 ]
             }
 
-            with mock.patch("kassiber.daemon._wallets_sync_payload", return_value=raw_sync):
+            with mock.patch("kassiber.daemon_freshness._wallets_sync_payload", return_value=raw_sync):
                 payload = _maintenance_run_payload(
                     conn,
                     {},

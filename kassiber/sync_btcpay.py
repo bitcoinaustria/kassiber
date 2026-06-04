@@ -20,12 +20,15 @@ from urllib import request as urlrequest
 from .backends import backend_timeout, backend_value
 from .errors import AppError
 from .importers import normalize_btcpay_record, parse_btcpay_labels
+from .retry import retry_after_seconds_from_http_error
 
 
 DEFAULT_PAYMENT_METHOD_ID = "BTC-CHAIN"
 DEFAULT_PAGE_SIZE = 100
 DEFAULT_STATUS_FILTER = "Confirmed"
 MAX_PAGES = 10_000
+INCREMENTAL_UNCHANGED_PAGE_WINDOW = 5
+INCREMENTAL_DEEP_AUDIT_PAGES = 1
 
 # Kassiber currently understands wallet-history sync for Bitcoin and Liquid
 # on-chain only. Adding a new entry here is the single step required to
@@ -60,19 +63,11 @@ def fetch_btcpay_records(
         raise AppError("BTCPay page_size must be positive", code="validation")
     timeout = backend_timeout(backend)
     http_opener = opener or urlrequest.build_opener()
-    records = []
     checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
     previous_pages = checkpoint.get("btcpay_pages") or {}
-    next_pages = {}
-    stopped_by_known_page = False
-    skip = 0
-    page_count = 0
-    while True:
-        if page_count >= MAX_PAGES:
-            raise AppError(
-                f"BTCPay sync exceeded {MAX_PAGES} pages; aborting for safety",
-                code="config_error",
-            )
+    previous_pagination = checkpoint.get("btcpay_pagination") or {}
+
+    def fetch_page(skip):
         url = _build_list_url(base, store_id, payment_method_id, skip, page_size)
         page = _http_get_json(
             http_opener,
@@ -89,31 +84,32 @@ def fetch_btcpay_records(
                 f"BTCPay response for {url} was not a JSON array",
                 code="protocol_error",
             )
-        page_count += 1
-        fingerprint = _page_fingerprint(page)
-        page_key = str(skip)
-        previous = previous_pages.get(page_key) if isinstance(previous_pages, dict) else None
-        if isinstance(previous, dict) and previous.get("fingerprint") == fingerprint:
-            next_pages[page_key] = previous
-            stopped_by_known_page = True
-        else:
-            for tx in page:
-                if _is_confirmed_transaction(tx):
-                    records.append(_to_record(tx, payment_method_id))
-            next_pages[page_key] = {
-                "fingerprint": fingerprint,
-                "stable_ids": _page_stable_ids(page),
-                "rows": len(page),
-            }
-        if len(page) < page_size:
-            break
-        skip += page_size
+        return page
+
+    records, next_pages, page_metadata = _fetch_incremental_pages(
+        fetch_page=fetch_page,
+        page_size=page_size,
+        previous_pages=previous_pages,
+        previous_pagination=previous_pagination,
+        fingerprint_fn=_page_fingerprint,
+        stable_ids_fn=_page_stable_ids,
+        normalize_page=lambda page: [
+            _to_record(tx, payment_method_id)
+            for tx in page
+            if _is_confirmed_transaction(tx)
+        ],
+        max_pages_message=f"BTCPay sync exceeded {MAX_PAGES} pages; aborting for safety",
+    )
     if metadata is not None:
         metadata.update(
             {
-                "btcpay_pages": dict(sorted(next_pages.items())),
-                "pages_fetched": page_count,
-                "stopped_by_known_page": stopped_by_known_page,
+                "btcpay_pages": _sorted_page_map(next_pages),
+                "btcpay_pagination": page_metadata["pagination"],
+                "pages_fetched": page_metadata["pages_fetched"],
+                "stopped_by_known_page": page_metadata["stopped_by_known_page"],
+                "stop_reason": page_metadata["stop_reason"],
+                "deep_audit": page_metadata.get("deep_audit"),
+                "changed_pages": page_metadata["changed_pages"],
             }
         )
     return records
@@ -146,19 +142,11 @@ def fetch_btcpay_invoice_provenance(
         raise AppError("BTCPay page_size must be positive", code="validation")
     timeout = backend_timeout(backend)
     http_opener = opener or urlrequest.build_opener()
-    invoices = []
     checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
     previous_pages = checkpoint.get("btcpay_invoice_pages") or {}
-    next_pages = {}
-    stopped_by_known_page = False
-    skip = 0
-    page_count = 0
-    while True:
-        if page_count >= MAX_PAGES:
-            raise AppError(
-                f"BTCPay invoice sync exceeded {MAX_PAGES} pages; aborting for safety",
-                code="config_error",
-            )
+    previous_pagination = checkpoint.get("btcpay_invoice_pagination") or {}
+
+    def fetch_page(skip):
         url = _build_invoices_url(base, store_id, skip, page_size)
         page = _http_get_json(
             http_opener,
@@ -172,29 +160,30 @@ def fetch_btcpay_invoice_provenance(
                 f"BTCPay response for {url} was not a JSON array",
                 code="protocol_error",
             )
-        page_count += 1
-        page_key = str(skip)
-        fingerprint = _invoice_page_fingerprint(page)
-        previous = previous_pages.get(page_key) if isinstance(previous_pages, dict) else None
-        if isinstance(previous, dict) and previous.get("fingerprint") == fingerprint:
-            next_pages[page_key] = previous
-            stopped_by_known_page = True
-        else:
-            invoices.extend(_normalize_invoice_provenance(store_id, invoice) for invoice in page)
-            next_pages[page_key] = {
-                "fingerprint": fingerprint,
-                "stable_ids": _invoice_page_stable_ids(page),
-                "rows": len(page),
-            }
-        if len(page) < page_size:
-            break
-        skip += page_size
+        return page
+
+    invoices, next_pages, page_metadata = _fetch_incremental_pages(
+        fetch_page=fetch_page,
+        page_size=page_size,
+        previous_pages=previous_pages,
+        previous_pagination=previous_pagination,
+        fingerprint_fn=_invoice_page_fingerprint,
+        stable_ids_fn=_invoice_page_stable_ids,
+        normalize_page=lambda page: [
+            _normalize_invoice_provenance(store_id, invoice) for invoice in page
+        ],
+        max_pages_message=f"BTCPay invoice sync exceeded {MAX_PAGES} pages; aborting for safety",
+    )
     if metadata is not None:
         metadata.update(
             {
-                "btcpay_invoice_pages": dict(sorted(next_pages.items())),
-                "pages_fetched": page_count,
-                "stopped_by_known_page": stopped_by_known_page,
+                "btcpay_invoice_pages": _sorted_page_map(next_pages),
+                "btcpay_invoice_pagination": page_metadata["pagination"],
+                "pages_fetched": page_metadata["pages_fetched"],
+                "stopped_by_known_page": page_metadata["stopped_by_known_page"],
+                "stop_reason": page_metadata["stop_reason"],
+                "deep_audit": page_metadata.get("deep_audit"),
+                "changed_pages": page_metadata["changed_pages"],
             }
         )
     return invoices
@@ -336,6 +325,214 @@ def _build_invoices_url(base, store_id, skip, limit):
     return f"{base.rstrip('/')}/api/v1/stores/{store_q}/invoices?{query}"
 
 
+def _page_sort_key(item):
+    key, _ = item
+    try:
+        return int(key)
+    except (TypeError, ValueError):
+        return MAX_PAGES * DEFAULT_PAGE_SIZE
+
+
+def _sorted_page_map(pages):
+    if not isinstance(pages, dict):
+        return {}
+    return {
+        str(key): value
+        for key, value in sorted(pages.items(), key=_page_sort_key)
+        if isinstance(value, dict)
+    }
+
+
+def _positive_checkpoint_int(value, default, *, maximum):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    if parsed <= 0:
+        return default
+    return min(parsed, maximum)
+
+
+def _page_checkpoint(page, *, fingerprint, stable_ids, page_size):
+    return {
+        "fingerprint": fingerprint,
+        "stable_ids": stable_ids,
+        "rows": len(page),
+        "page_size": page_size,
+    }
+
+
+def _same_page(previous, *, fingerprint, stable_ids, page_size):
+    if not isinstance(previous, dict):
+        return False
+    previous_stable_ids = previous.get("stable_ids")
+    return (
+        isinstance(previous_stable_ids, list)
+        and previous_stable_ids == stable_ids
+        and previous.get("fingerprint") == fingerprint
+        and previous.get("page_size") == page_size
+    )
+
+
+def _int_page_key(key):
+    try:
+        return int(key)
+    except (TypeError, ValueError):
+        return None
+
+
+def _prune_pages_after_terminal(pages, terminal_skip):
+    if terminal_skip is None:
+        return pages
+    pruned = {}
+    for key, value in pages.items():
+        numeric = _int_page_key(key)
+        if numeric is None or numeric <= terminal_skip:
+            pruned[key] = value
+    return pruned
+
+
+def _fetch_incremental_pages(
+    *,
+    fetch_page,
+    page_size,
+    previous_pages,
+    previous_pagination,
+    fingerprint_fn,
+    stable_ids_fn,
+    normalize_page,
+    max_pages_message,
+):
+    previous_pages = _sorted_page_map(previous_pages)
+    previous_pagination = (
+        previous_pagination if isinstance(previous_pagination, dict) else {}
+    )
+    unchanged_window = _positive_checkpoint_int(
+        previous_pagination.get("unchanged_page_window"),
+        INCREMENTAL_UNCHANGED_PAGE_WINDOW,
+        maximum=100,
+    )
+    deep_audit_pages = _positive_checkpoint_int(
+        previous_pagination.get("deep_audit_pages"),
+        INCREMENTAL_DEEP_AUDIT_PAGES,
+        maximum=20,
+    )
+    next_pages = dict(previous_pages)
+    records = []
+    pages_fetched = 0
+    fetched_skips: set[int] = set()
+    changed_pages: list[int] = []
+    unchanged_pages: list[int] = []
+    stopped_by_known_page = False
+    terminal_skip: int | None = None
+    unchanged_streak = 0
+    skip = 0
+
+    def load_page(page_skip):
+        nonlocal pages_fetched
+        if pages_fetched >= MAX_PAGES:
+            raise AppError(max_pages_message, code="config_error")
+        page = fetch_page(page_skip)
+        pages_fetched += 1
+        fetched_skips.add(page_skip)
+        return page
+
+    def process_page(page_skip, page):
+        nonlocal stopped_by_known_page, unchanged_streak
+        page_key = str(page_skip)
+        stable_ids = stable_ids_fn(page)
+        fingerprint = fingerprint_fn(page)
+        previous = previous_pages.get(page_key)
+        unchanged = _same_page(
+            previous,
+            fingerprint=fingerprint,
+            stable_ids=stable_ids,
+            page_size=page_size,
+        )
+        if unchanged:
+            next_pages[page_key] = previous
+            stopped_by_known_page = True
+            unchanged_pages.append(page_skip)
+            unchanged_streak += 1
+            return False
+        records.extend(normalize_page(page))
+        next_pages[page_key] = _page_checkpoint(
+            page,
+            fingerprint=fingerprint,
+            stable_ids=stable_ids,
+            page_size=page_size,
+        )
+        changed_pages.append(page_skip)
+        unchanged_streak = 0
+        return True
+
+    while True:
+        page = load_page(skip)
+        process_page(skip, page)
+        if len(page) < page_size:
+            terminal_skip = skip
+            stop_reason = "end_of_results"
+            break
+        if previous_pages and unchanged_streak >= unchanged_window:
+            stop_reason = "unchanged_page_window"
+            break
+        skip += page_size
+
+    deep_audit = None
+    next_deep_audit_skip = None
+    if stop_reason == "unchanged_page_window" and deep_audit_pages > 0:
+        minimum_deep_skip = skip + page_size
+        saved_deep_skip = _int_page_key(previous_pagination.get("next_deep_audit_skip"))
+        audit_skip = (
+            saved_deep_skip
+            if saved_deep_skip is not None and saved_deep_skip >= minimum_deep_skip
+            else minimum_deep_skip
+        )
+        audit_start = audit_skip
+        audited = 0
+        audit_stop_reason = "deep_audit_window"
+        while audited < deep_audit_pages:
+            if audit_skip in fetched_skips:
+                audit_skip += page_size
+                continue
+            page = load_page(audit_skip)
+            process_page(audit_skip, page)
+            audited += 1
+            if len(page) < page_size:
+                terminal_skip = audit_skip if terminal_skip is None else min(terminal_skip, audit_skip)
+                audit_stop_reason = "end_of_results"
+                audit_skip = minimum_deep_skip
+                break
+            audit_skip += page_size
+        next_deep_audit_skip = audit_skip
+        deep_audit = {
+            "start_skip": audit_start,
+            "pages": audited,
+            "stop_reason": audit_stop_reason,
+            "next_skip": next_deep_audit_skip,
+        }
+
+    next_pages = _prune_pages_after_terminal(next_pages, terminal_skip)
+    pagination = {
+        "unchanged_page_window": unchanged_window,
+        "deep_audit_pages": deep_audit_pages,
+        "last_stop_reason": stop_reason,
+        "next_deep_audit_skip": next_deep_audit_skip,
+    }
+    if deep_audit is not None:
+        pagination["last_deep_audit"] = deep_audit
+    metadata = {
+        "pages_fetched": pages_fetched,
+        "stopped_by_known_page": stopped_by_known_page,
+        "stop_reason": stop_reason,
+        "changed_pages": changed_pages,
+        "unchanged_pages": unchanged_pages,
+        "deep_audit": deep_audit,
+        "pagination": pagination,
+    }
+    return records, _sorted_page_map(next_pages), metadata
+
+
 def _stable_transaction_id(tx):
     if not isinstance(tx, dict):
         return ""
@@ -432,7 +629,7 @@ def _http_get_json(opener, url, token, timeout, *, permission_hint=None):
                 f"BTCPay rate limited the request (HTTP 429) for {url}",
                 code="rate_limited",
                 retryable=True,
-                details={"retry_after_seconds": _retry_after_seconds(exc)},
+                details={"retry_after_seconds": retry_after_seconds_from_http_error(exc)},
             ) from exc
         if exc.code == 401:
             raise AppError(
@@ -463,20 +660,6 @@ def _http_get_json(opener, url, token, timeout, *, permission_hint=None):
             code="network_error",
             retryable=True,
         ) from exc
-
-
-def _retry_after_seconds(exc):
-    value = exc.headers.get("Retry-After") if getattr(exc, "headers", None) else None
-    if not value:
-        return None
-    try:
-        return max(0, int(value))
-    except ValueError:
-        try:
-            parsed = _dt.datetime.strptime(value, "%a, %d %b %Y %H:%M:%S %z")
-        except ValueError:
-            return None
-        return max(0, int((parsed - _dt.datetime.now(parsed.tzinfo)).total_seconds()))
 
 
 def _normalize_store(raw_store):

@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from kassiber import daemon as daemon_runtime
+from kassiber import daemon_freshness
 from kassiber.core import freshness
 from kassiber.db import open_db
 from kassiber.errors import AppError
@@ -27,6 +28,14 @@ def _seed_profile(conn: sqlite3.Connection) -> str:
     )
     conn.commit()
     return "profile"
+
+
+class _Out:
+    def __init__(self):
+        self.payloads = []
+
+    def write(self, payload):
+        self.payloads.append(payload)
 
 
 class FreshnessTest(unittest.TestCase):
@@ -295,11 +304,11 @@ class FreshnessTest(unittest.TestCase):
             return [{"pair": "BTC-EUR", "samples": 0}]
 
         progress = []
-        handler = daemon_runtime._freshness_handlers({})[freshness.JOB_MARKET_RATES]
+        handler = daemon_freshness._freshness_handlers({})[freshness.JOB_MARKET_RATES]
         with patch(
-            "kassiber.daemon.core_rates.ensure_bundled_kraken_btc_daily_seed",
+            "kassiber.daemon_freshness.core_rates.ensure_bundled_kraken_btc_daily_seed",
             fake_seed,
-        ), patch("kassiber.daemon.core_rates.sync_rates", fake_sync):
+        ), patch("kassiber.daemon_freshness.core_rates.sync_rates", fake_sync):
             result = handler(
                 conn,
                 {},
@@ -323,7 +332,7 @@ class FreshnessTest(unittest.TestCase):
             "source_label": "Cold wallet",
         }
         self.assertEqual(
-            daemon_runtime._filter_freshness_specs_for_background(conn, profile_id, [spec]),
+            daemon_freshness._filter_freshness_specs_for_background(conn, profile_id, [spec]),
             [spec],
         )
 
@@ -338,7 +347,7 @@ class FreshnessTest(unittest.TestCase):
         )
         conn.commit()
         self.assertEqual(
-            daemon_runtime._filter_freshness_specs_for_background(conn, profile_id, [spec]),
+            daemon_freshness._filter_freshness_specs_for_background(conn, profile_id, [spec]),
             [],
         )
 
@@ -362,7 +371,7 @@ class FreshnessTest(unittest.TestCase):
         )
         conn.commit()
         self.assertEqual(
-            daemon_runtime._filter_freshness_specs_for_background(conn, profile_id, [spec]),
+            daemon_freshness._filter_freshness_specs_for_background(conn, profile_id, [spec]),
             [],
         )
 
@@ -400,7 +409,7 @@ class FreshnessTest(unittest.TestCase):
         cold_key = freshness.source_key(freshness.SOURCE_ONCHAIN, "wallet-cold")
         hot_key = freshness.source_key(freshness.SOURCE_ONCHAIN, "wallet-hot")
 
-        scoped = daemon_runtime._freshness_run_payload(
+        scoped = daemon_freshness._freshness_run_payload(
             conn,
             {},
             {"wallet": "Cold", "all": False, "rates": False, "journals": False, "run": False},
@@ -411,7 +420,7 @@ class FreshnessTest(unittest.TestCase):
         ]
         self.assertEqual(scoped_active_keys, [cold_key])
 
-        global_run = daemon_runtime._freshness_run_payload(
+        global_run = daemon_freshness._freshness_run_payload(
             conn,
             {},
             {"all": True, "rates": True, "journals": True, "run": False},
@@ -432,13 +441,6 @@ class FreshnessTest(unittest.TestCase):
         conn.execute("INSERT INTO settings(key, value) VALUES('context_profile', ?)", (profile_id,))
         freshness.set_policy(conn, profile_id, background_enabled=True)
         conn.commit()
-
-        class _Out:
-            def __init__(self):
-                self.payloads = []
-
-            def write(self, payload):
-                self.payloads.append(payload)
 
         ctx = daemon_runtime.DaemonContext(
             conn=conn,
@@ -469,12 +471,13 @@ class FreshnessTest(unittest.TestCase):
 
         try:
             with (
-                patch.object(daemon_runtime, "open_db", side_effect=fake_open_db),
-                patch.object(daemon_runtime, "merge_db_backends"),
-                patch.object(daemon_runtime, "_freshness_background_tick"),
+                patch.object(daemon_freshness, "open_db", side_effect=fake_open_db),
+                patch.object(daemon_freshness, "merge_db_backends"),
+                patch.object(daemon_freshness, "_freshness_background_tick"),
             ):
-                daemon_runtime._start_freshness_background_worker(ctx)
+                daemon_freshness._start_freshness_background_worker(ctx)
                 self.assertTrue(opened.wait(timeout=2))
+                self.assertEqual(getattr(ctx.freshness_worker, "_args", ()), ())
         finally:
             ctx.freshness_stop_event.set()
             if ctx.freshness_worker is not None:
@@ -482,6 +485,77 @@ class FreshnessTest(unittest.TestCase):
 
         self.assertEqual(captured, ["remembered-passphrase"])
         self.assertTrue(closed.wait(timeout=2))
+
+    def test_daemon_lock_clears_remembered_background_passphrase(self):
+        conn = self._db()
+        _seed_profile(conn)
+        ctx = daemon_runtime.DaemonContext(
+            conn=conn,
+            data_root="encrypted-data-root",
+            runtime_config={},
+            active_ai_chats=daemon_runtime.ActiveAiChats(),
+            main_thread_tasks=queue.Queue(),
+            auth_backoff=daemon_runtime.AuthAttemptBackoff(),
+            input_lines=queue.Queue(),
+            deferred_input_lines=[],
+            out=_Out(),
+            freshness_stop_event=threading.Event(),
+            db_passphrase="remembered-passphrase",
+        )
+
+        response, should_shutdown = daemon_runtime.handle_request(
+            ctx,
+            {"request_id": "lock-1", "kind": "daemon.lock"},
+            ctx.out,
+        )
+
+        self.assertFalse(should_shutdown)
+        self.assertEqual(response["kind"], "daemon.lock")
+        self.assertIsNone(ctx.conn)
+        self.assertIsNone(ctx.db_passphrase)
+
+    def test_rekey_error_clears_remembered_background_passphrase(self):
+        conn = self._db()
+        _seed_profile(conn)
+        ctx = daemon_runtime.DaemonContext(
+            conn=conn,
+            data_root="encrypted-data-root",
+            runtime_config={},
+            active_ai_chats=daemon_runtime.ActiveAiChats(),
+            main_thread_tasks=queue.Queue(),
+            auth_backoff=daemon_runtime.AuthAttemptBackoff(),
+            input_lines=queue.Queue(),
+            deferred_input_lines=[],
+            out=_Out(),
+            freshness_stop_event=threading.Event(),
+            db_passphrase="current-passphrase",
+        )
+
+        with (
+            patch.object(daemon_runtime, "_database_file_is_encrypted", return_value=True),
+            patch.object(daemon_runtime, "_verify_passphrase_with_backoff", return_value=True),
+            patch.object(
+                daemon_runtime,
+                "change_database_passphrase",
+                side_effect=AppError("rotation failed", code="rotation_failed"),
+            ),
+        ):
+            with self.assertRaises(AppError):
+                daemon_runtime.handle_request(
+                    ctx,
+                    {
+                        "request_id": "rekey-1",
+                        "kind": "ui.secrets.change_passphrase",
+                        "args": {
+                            "auth_response": {"passphrase_secret": "current-passphrase"},
+                            "new_passphrase_secret": "new-passphrase-123",
+                        },
+                    },
+                    ctx.out,
+                )
+
+        self.assertIsNone(ctx.conn)
+        self.assertIsNone(ctx.db_passphrase)
 
 
 if __name__ == "__main__":

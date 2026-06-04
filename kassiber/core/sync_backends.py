@@ -9,7 +9,6 @@ import json
 import socket
 import ssl
 from collections import defaultdict
-from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from types import MappingProxyType
@@ -23,6 +22,7 @@ from ..db import APP_NAME
 from ..envelope import json_ready
 from ..errors import AppError
 from ..msat import SATS_PER_BTC, dec
+from ..retry import retry_after_seconds_from_http_error
 from ..time_utils import UNKNOWN_OCCURRED_AT, timestamp_to_iso
 from ..util import normalize_chain_value, normalize_network_value, parse_bool, parse_int
 from ..wallet_descriptors import (
@@ -66,7 +66,7 @@ def http_get_json(url, timeout=30):
                 f"Backend rate limited the request for {url} (HTTP 429)",
                 code="rate_limited",
                 retryable=True,
-                details={"retry_after_seconds": retry_after_seconds(exc)},
+                details={"retry_after_seconds": retry_after_seconds_from_http_error(exc)},
             ) from exc
         raise AppError(f"HTTP {exc.code} from backend for {url}: {detail[:200]}") from exc
     except urlerror.URLError as exc:
@@ -91,7 +91,7 @@ def http_get_text(url, timeout=30, accept="text/plain"):
                 f"Backend rate limited the request for {url} (HTTP 429)",
                 code="rate_limited",
                 retryable=True,
-                details={"retry_after_seconds": retry_after_seconds(exc)},
+                details={"retry_after_seconds": retry_after_seconds_from_http_error(exc)},
             ) from exc
         raise AppError(f"HTTP {exc.code} from backend for {url}: {detail[:200]}") from exc
     except urlerror.URLError as exc:
@@ -120,7 +120,7 @@ def http_post_json(url, payload, headers=None, timeout=30):
                 f"Backend rate limited the request for {url} (HTTP 429)",
                 code="rate_limited",
                 retryable=True,
-                details={"retry_after_seconds": retry_after_seconds(exc)},
+                details={"retry_after_seconds": retry_after_seconds_from_http_error(exc)},
             ) from exc
         raise AppError(f"HTTP {exc.code} from backend for {url}: {detail[:200]}") from exc
     except urlerror.URLError as exc:
@@ -132,20 +132,6 @@ def append_url_path(base_url, extra_path):
     path = (parts.path or "").rstrip("/")
     full_path = f"{path}/{extra_path.lstrip('/')}" if extra_path else (path or "/")
     return urlparse.urlunsplit((parts.scheme, parts.netloc, full_path, parts.query, parts.fragment))
-
-
-def retry_after_seconds(exc):
-    value = exc.headers.get("Retry-After") if getattr(exc, "headers", None) else None
-    if not value:
-        return None
-    try:
-        return max(0, int(value))
-    except ValueError:
-        try:
-            parsed = datetime.strptime(value, "%a, %d %b %Y %H:%M:%S %z")
-        except ValueError:
-            return None
-        return max(0, int((parsed - datetime.now(parsed.tzinfo)).total_seconds()))
 
 
 def parse_socket_backend_url(url, default_scheme="ssl", default_ports=None):
