@@ -46,6 +46,9 @@ LEGACY_XDG_DATA_ROOT = os.path.expanduser(f"~/.local/share/{APP_NAME}")
 LEGACY_DATA_ROOT = os.path.expanduser(f"~/.local/share/{LEGACY_APP_NAME}")
 DEFAULT_DB_FILENAME = f"{APP_NAME}.sqlite3"
 LEGACY_DB_FILENAME = f"{LEGACY_APP_NAME}.sqlite3"
+DB_BUSY_TIMEOUT_MS = 30_000
+DB_BUSY_TIMEOUT_SECONDS = DB_BUSY_TIMEOUT_MS / 1000
+DB_JOURNAL_MODE = "wal"
 
 
 SCHEMA = """
@@ -894,6 +897,13 @@ def database_has_core_schema(conn):
     return True
 
 
+def _configure_connection_pragmas(conn):
+    """Apply connection settings used by daemon foreground/background writers."""
+    conn.execute(f"PRAGMA busy_timeout = {DB_BUSY_TIMEOUT_MS}")
+    conn.execute(f"PRAGMA journal_mode = {DB_JOURNAL_MODE}")
+    conn.execute("PRAGMA foreign_keys = ON")
+
+
 def open_db(data_root, *, passphrase=None, require_existing_schema=False):
     """Open (and lazily migrate) the SQLite store rooted at `data_root`.
 
@@ -932,21 +942,24 @@ def open_db(data_root, *, passphrase=None, require_existing_schema=False):
                 hint="Use `kassiber --db-passphrase-fd <fd> <command>` or rely on the GUI unlock prompt.",
                 retryable=False,
             )
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(db_path, timeout=DB_BUSY_TIMEOUT_SECONDS)
         conn.row_factory = sqlite3.Row
-        if require_existing_schema and not database_has_core_schema(conn):
+        try:
+            if require_existing_schema and not database_has_core_schema(conn):
+                raise AppError(
+                    "database does not contain a Kassiber project schema",
+                    code="invalid_project_database",
+                    hint="Choose an existing Kassiber project database, not an empty or unrelated SQLite file.",
+                    details={"database": str(db_path)},
+                    retryable=False,
+                )
+            _configure_connection_pragmas(conn)
+            conn.executescript(SCHEMA)
+            ensure_schema_compat(conn)
+            return conn
+        except Exception:
             conn.close()
-            raise AppError(
-                "database does not contain a Kassiber project schema",
-                code="invalid_project_database",
-                hint="Choose an existing Kassiber project database, not an empty or unrelated SQLite file.",
-                details={"database": str(db_path)},
-                retryable=False,
-            )
-        conn.executescript(SCHEMA)
-        ensure_schema_compat(conn)
-        conn.execute("PRAGMA foreign_keys = ON")
-        return conn
+            raise
 
     if file_present and plaintext_header:
         raise AppError(
@@ -962,18 +975,22 @@ def open_db(data_root, *, passphrase=None, require_existing_schema=False):
         passphrase,
         row_factory=secrets_sqlcipher.get_row_class(),
     )
-    if require_existing_schema and not database_has_core_schema(conn):
+    try:
+        if require_existing_schema and not database_has_core_schema(conn):
+            raise AppError(
+                "database does not contain a Kassiber project schema",
+                code="invalid_project_database",
+                hint="Choose an existing Kassiber project database, not an empty or unrelated SQLCipher file.",
+                details={"database": str(db_path)},
+                retryable=False,
+            )
+        _configure_connection_pragmas(conn)
+        conn.executescript(SCHEMA)
+        ensure_schema_compat(conn)
+        return conn
+    except Exception:
         conn.close()
-        raise AppError(
-            "database does not contain a Kassiber project schema",
-            code="invalid_project_database",
-            hint="Choose an existing Kassiber project database, not an empty or unrelated SQLCipher file.",
-            details={"database": str(db_path)},
-            retryable=False,
-        )
-    conn.executescript(SCHEMA)
-    ensure_schema_compat(conn)
-    return conn
+        raise
 
 
 def set_setting(conn, key, value):

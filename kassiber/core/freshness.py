@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """SQLite-backed source freshness and daemon job orchestration helpers."""
+
+from __future__ import annotations
 
 import hashlib
 import json

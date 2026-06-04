@@ -1,3 +1,4 @@
+import ast
 import json
 import sqlite3
 import tempfile
@@ -33,6 +34,13 @@ class FreshnessTest(unittest.TestCase):
         conn = open_db(Path(tmp.name) / "data")
         self.addCleanup(conn.close)
         return conn
+
+    def test_module_docstring_is_visible_to_ast(self):
+        source = Path(freshness.__file__).read_text(encoding="utf-8")
+        self.assertEqual(
+            ast.get_docstring(ast.parse(source)),
+            "SQLite-backed source freshness and daemon job orchestration helpers.",
+        )
 
     def test_rate_limited_source_keeps_other_jobs_moving_and_redacts(self):
         conn = self._db()
@@ -355,6 +363,65 @@ class FreshnessTest(unittest.TestCase):
             daemon_runtime._filter_freshness_specs_for_background(conn, profile_id, [spec]),
             [],
         )
+
+    def test_wallet_scoped_refresh_single_flights_inside_global_refresh(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        conn.execute("INSERT INTO settings(key, value) VALUES('context_workspace', 'ws')")
+        conn.execute("INSERT INTO settings(key, value) VALUES('context_profile', ?)", (profile_id,))
+        now = now_iso()
+        conn.executemany(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, account_id, label, kind, config_json, created_at
+            )
+            VALUES(?, 'ws', ?, NULL, ?, 'address', ?, ?)
+            """,
+            [
+                (
+                    "wallet-cold",
+                    profile_id,
+                    "Cold",
+                    json.dumps({"addresses": ["bc1qcold"], "chain": "bitcoin", "network": "mainnet"}),
+                    now,
+                ),
+                (
+                    "wallet-hot",
+                    profile_id,
+                    "Hot",
+                    json.dumps({"addresses": ["bc1qhot"], "chain": "bitcoin", "network": "mainnet"}),
+                    now,
+                ),
+            ],
+        )
+        conn.commit()
+        cold_key = freshness.source_key(freshness.SOURCE_ONCHAIN, "wallet-cold")
+        hot_key = freshness.source_key(freshness.SOURCE_ONCHAIN, "wallet-hot")
+
+        scoped = daemon_runtime._freshness_run_payload(
+            conn,
+            {},
+            {"wallet": "Cold", "all": False, "rates": False, "journals": False, "run": False},
+        )
+        self.assertEqual([job["source_key"] for job in scoped["enqueued"]], [cold_key])
+        scoped_active_keys = [
+            job["source_key"] for job in freshness.list_jobs(conn, profile_id, active_only=True)
+        ]
+        self.assertEqual(scoped_active_keys, [cold_key])
+
+        global_run = daemon_runtime._freshness_run_payload(
+            conn,
+            {},
+            {"all": True, "rates": True, "journals": True, "run": False},
+        )
+        active = freshness.list_jobs(conn, profile_id, active_only=True)
+        active_keys = [job["source_key"] for job in active]
+
+        self.assertIn(cold_key, [job["source_key"] for job in global_run["enqueued"]])
+        self.assertIn(hot_key, active_keys)
+        self.assertIn(freshness.rate_source_key(profile_id), active_keys)
+        self.assertIn(freshness.journal_source_key(profile_id), active_keys)
+        self.assertEqual(active_keys.count(cold_key), 1)
 
 
 if __name__ == "__main__":

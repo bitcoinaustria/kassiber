@@ -370,14 +370,21 @@ jobs, and summary counts. `ui.freshness.configure` writes the general freshness
 policy (`background_enabled`, `report_read_sync`, and per-source-class opt-ins).
 The legacy `auto_sync_before_report_reads` argument remains accepted and maps
 onto `report_read_sync` plus wallet-source opt-ins. `ui.freshness.run` enqueues
-and optionally drains due jobs. `ui.freshness.cancel`, `ui.freshness.pause`, and
+and optionally drains due jobs. `ui.wallets.sync` now delegates to that same
+daemon-owned queue with `rates=false` and `journals=false`; when a wallet is
+supplied it is source-scoped to that wallet, while a book/global refresh can
+enqueue the remaining wallet, rate, and journal jobs without duplicating the
+already queued source. `ui.freshness.cancel`, `ui.freshness.pause`, and
 `ui.freshness.resume` mutate the job/source state.
 
 When `background_enabled` is true, the daemon starts an opt-in freshness worker
 while the app is running. The worker opens its own SQLite connection, enqueues
 only policy-enabled sources that are missing, stale, failed, or past the refresh
 interval, and drains one due job per pass so manual requests can still observe
-and cancel jobs through the same tables.
+and cancel jobs through the same tables. Kassiber opens local databases in WAL
+mode with an explicit busy timeout so the daemon foreground connection and the
+freshness worker can safely serialize writes instead of failing immediately on
+ordinary lock contention.
 
 First sync progress phases are `discovery`, `backend_fetch`, `decode_enrich`,
 `import`, `rate_coverage`, `journal_refresh`, `done`, and `error`. The streaming

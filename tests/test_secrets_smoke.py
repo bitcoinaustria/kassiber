@@ -27,6 +27,8 @@ import shutil
 import sqlite3
 import tarfile
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -42,7 +44,7 @@ from kassiber.backup.safe_tar import (
     UnsafeTarMember,
     inspect_tar_members,
 )
-from kassiber.db import open_db
+from kassiber.db import DB_BUSY_TIMEOUT_MS, DB_JOURNAL_MODE, open_db
 from kassiber.errors import AppError
 from kassiber.secrets.migration import migrate_plaintext_to_encrypted
 from kassiber.secrets.passphrase import change_database_passphrase
@@ -102,6 +104,64 @@ class OpenDbPlaintextTests(unittest.TestCase):
                 conn.close()
             db_path = Path(root) / "kassiber.sqlite3"
             self.assertTrue(looks_like_plaintext_sqlite(db_path))
+
+    def test_open_db_configures_wal_and_busy_timeout_for_daemon_workers(self):
+        with tempfile.TemporaryDirectory() as root:
+            primary = open_db(root)
+            try:
+                primary.execute(
+                    "INSERT INTO workspaces(id, label, created_at) VALUES('ws', 'Main', '2026-06-04T00:00:00Z')"
+                )
+                primary.commit()
+                self.assertEqual(
+                    primary.execute("PRAGMA journal_mode").fetchone()[0].lower(),
+                    DB_JOURNAL_MODE,
+                )
+                self.assertGreaterEqual(
+                    primary.execute("PRAGMA busy_timeout").fetchone()[0],
+                    DB_BUSY_TIMEOUT_MS,
+                )
+
+                ready = threading.Event()
+                proceed = threading.Event()
+                outcome = []
+
+                def second_writer():
+                    secondary = open_db(root)
+                    try:
+                        ready.set()
+                        self.assertTrue(proceed.wait(timeout=2))
+                        secondary.execute(
+                            "INSERT INTO settings(key, value) VALUES('second-writer', 'ok')"
+                        )
+                        secondary.commit()
+                        outcome.append("ok")
+                    except Exception as exc:  # pragma: no cover - assertion reports object
+                        outcome.append(exc)
+                    finally:
+                        secondary.close()
+
+                worker = threading.Thread(target=second_writer)
+                worker.start()
+                self.assertTrue(ready.wait(timeout=2))
+
+                primary.execute("BEGIN IMMEDIATE")
+                primary.execute("INSERT INTO settings(key, value) VALUES('held-lock', '1')")
+                proceed.set()
+                time.sleep(0.2)
+                primary.commit()
+                worker.join(timeout=5)
+
+                self.assertFalse(worker.is_alive())
+                self.assertEqual(outcome, ["ok"])
+                self.assertEqual(
+                    primary.execute(
+                        "SELECT value FROM settings WHERE key = 'second-writer'"
+                    ).fetchone()[0],
+                    "ok",
+                )
+            finally:
+                primary.close()
 
     def test_require_existing_schema_accepts_kassiber_database(self):
         with tempfile.TemporaryDirectory() as root:
