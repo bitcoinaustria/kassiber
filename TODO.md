@@ -446,13 +446,11 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 
 ## Later backlog
 
-- [ ] Split `TransactionDetailSheet.tsx` tab bodies into siblings —
-  the main component is ~1600 lines because the six tab panels live
-  inline. Extract `TabDetails`, `TabClassify`, `TabPricing`, `TabTax`,
-  `TabLinked`, `TabLedger` (and the right-rail children) into their
-  own files; pass `localDraft`, `updateDraft`, `transaction`,
-  `hideSensitive`, `currency`, dirty flags as props. Should land the
-  main file under ~800 lines without changing behavior.
+- [x] Split `TransactionDetailSheet.tsx` tab bodies into siblings —
+  the detail sheet now delegates display helpers, header chrome, the
+  right rail, attachments/commercial panels, and each tab body to focused
+  transaction-detail sibling components, leaving the main state/save
+  coordinator under 800 lines without changing behavior.
 - [x] Wire transaction-detail pricing edits through
   `ui.transactions.metadata.update` — the daemon accepts pricing source
   kind/quality, fiat currency, manual price/value, and evidence reference,
