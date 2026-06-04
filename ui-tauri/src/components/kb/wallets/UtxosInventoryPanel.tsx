@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Coins,
   ExternalLink,
-  Filter,
   RefreshCw,
   ShieldAlert,
 } from "lucide-react";
@@ -29,14 +31,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -139,23 +133,54 @@ type UtxoSortValue =
   | "confirmations-asc"
   | "outpoint-asc"
   | "outpoint-desc";
+type SortableUtxoColumn = "outpoint" | "amount" | "status" | "confirmed";
 
 // Render in pages so wallets with hundreds of coins stay responsive — the
 // header total stays accurate (it sums the full set server-side) regardless of
 // how many rows are currently revealed.
 export const UTXO_PAGE_SIZE = 50;
 
-export const UTXO_SORT_OPTIONS: Array<{ value: UtxoSortValue; label: string }> = [
-  { value: "default", label: "Default order" },
-  { value: "size-desc", label: "Size: largest first" },
-  { value: "size-asc", label: "Size: smallest first" },
-  { value: "date-desc", label: "Confirmed: newest first" },
-  { value: "date-asc", label: "Confirmed: oldest first" },
-  { value: "confirmations-desc", label: "Confirmations: most first" },
-  { value: "confirmations-asc", label: "Confirmations: fewest first" },
-  { value: "outpoint-asc", label: "Outpoint: A-Z" },
-  { value: "outpoint-desc", label: "Outpoint: Z-A" },
-];
+const UTXO_COLUMN_SORTS: Record<
+  SortableUtxoColumn,
+  { asc: UtxoSortValue; desc: UtxoSortValue; default: UtxoSortValue }
+> = {
+  outpoint: {
+    asc: "outpoint-asc",
+    desc: "outpoint-desc",
+    default: "outpoint-asc",
+  },
+  amount: {
+    asc: "size-asc",
+    desc: "size-desc",
+    default: "size-desc",
+  },
+  status: {
+    asc: "confirmations-asc",
+    desc: "confirmations-desc",
+    default: "confirmations-desc",
+  },
+  confirmed: {
+    asc: "date-asc",
+    desc: "date-desc",
+    default: "date-desc",
+  },
+};
+
+function nextSortForColumn(sort: UtxoSortValue, column: SortableUtxoColumn) {
+  const options = UTXO_COLUMN_SORTS[column];
+  if (sort === options.default) {
+    return options.default === options.desc ? options.asc : options.desc;
+  }
+  if (sort === options.asc || sort === options.desc) return "default";
+  return options.default;
+}
+
+function directionForColumn(sort: UtxoSortValue, column: SortableUtxoColumn) {
+  const options = UTXO_COLUMN_SORTS[column];
+  if (sort === options.asc) return "ascending";
+  if (sort === options.desc) return "descending";
+  return null;
+}
 
 function formatAmountText(value: number | string) {
   const amount = Number(value);
@@ -384,6 +409,44 @@ function LocationBlock({
   );
 }
 
+function SortableTableHead({
+  children,
+  column,
+  sort,
+  onSort,
+  className,
+}: {
+  children: ReactNode;
+  column: SortableUtxoColumn;
+  sort: UtxoSortValue;
+  onSort: (column: SortableUtxoColumn) => void;
+  className?: string;
+}) {
+  const direction = directionForColumn(sort, column);
+  const Icon =
+    direction === "ascending"
+      ? ArrowUp
+      : direction === "descending"
+        ? ArrowDown
+        : ArrowUpDown;
+  return (
+    <TableHead aria-sort={direction ?? "none"} className={className}>
+      <button
+        type="button"
+        className={cn(
+          "inline-flex h-8 items-center gap-1.5 rounded-sm text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          direction ? "text-foreground" : "text-muted-foreground",
+          className?.includes("text-right") && "ml-auto",
+        )}
+        onClick={() => onSort(column)}
+      >
+        <span>{children}</span>
+        <Icon className="size-3.5" aria-hidden="true" />
+      </button>
+    </TableHead>
+  );
+}
+
 function UtxoExplorerOpenDialog({
   row,
   target,
@@ -525,11 +588,14 @@ export function UtxosInventoryPanel({
   // Collapse back to the first page when switching wallets.
   useEffect(() => {
     setVisibleCount(UTXO_PAGE_SIZE);
-  }, [walletId]);
+  }, [walletId, sort]);
   const sortedRows = useMemo(
     () => sortUtxosForDisplay(rows, sort),
     [rows, sort],
   );
+  const handleSort = (column: SortableUtxoColumn) => {
+    setSort((current) => nextSortForColumn(current, column));
+  };
   const visibleRows = sortedRows.slice(0, visibleCount);
   const hiddenCount = sortedRows.length - visibleRows.length;
   const explorerTarget = explorerRow
@@ -567,45 +633,6 @@ export function UtxosInventoryPanel({
                 Full totals stay current; the table response is capped at{" "}
                 {rowLimit.toLocaleString("en-US")} rows for preview performance.
               </p>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {rows.length > 1 ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={cn(
-                      "h-8 gap-1.5 sm:h-9 sm:gap-2",
-                      sort !== "default" && "border-primary",
-                    )}
-                    aria-label="Sort UTXOs"
-                  >
-                    <Filter className="size-3.5 sm:size-4" aria-hidden="true" />
-                    <span className="hidden sm:inline">Sort</span>
-                    {sort !== "default" ? (
-                      <span className="size-1.5 rounded-full bg-primary sm:size-2" />
-                    ) : null}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-[220px]">
-                  <DropdownMenuLabel>Sort UTXOs</DropdownMenuLabel>
-                  <DropdownMenuRadioGroup
-                    value={sort}
-                    onValueChange={(value) => setSort(value as UtxoSortValue)}
-                  >
-                    {UTXO_SORT_OPTIONS.map((option) => (
-                      <DropdownMenuRadioItem
-                        key={option.value}
-                        value={option.value}
-                      >
-                        {option.label}
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
             ) : null}
           </div>
         </div>
@@ -663,11 +690,36 @@ export function UtxosInventoryPanel({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Outpoint</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead
+                      column="outpoint"
+                      sort={sort}
+                      onSort={handleSort}
+                    >
+                      Outpoint
+                    </SortableTableHead>
+                    <SortableTableHead
+                      column="amount"
+                      sort={sort}
+                      onSort={handleSort}
+                    >
+                      Amount
+                    </SortableTableHead>
+                    <SortableTableHead
+                      column="status"
+                      sort={sort}
+                      onSort={handleSort}
+                    >
+                      Status
+                    </SortableTableHead>
                     <TableHead>Address</TableHead>
-                    <TableHead className="text-right">Confirmed</TableHead>
+                    <SortableTableHead
+                      column="confirmed"
+                      sort={sort}
+                      onSort={handleSort}
+                      className="text-right"
+                    >
+                      Confirmed
+                    </SortableTableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

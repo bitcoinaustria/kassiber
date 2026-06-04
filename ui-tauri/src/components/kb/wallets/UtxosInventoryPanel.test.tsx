@@ -5,7 +5,6 @@ import {
   explorerButtonTitle,
   explorerTargetForUtxo,
   sortUtxosForDisplay,
-  UTXO_SORT_OPTIONS,
   UtxosInventoryPanel,
   type WalletUtxosData,
 } from "./UtxosInventoryPanel";
@@ -95,7 +94,7 @@ describe("UtxosInventoryPanel", () => {
     expect(html).not.toContain("Sort UTXOs");
   });
 
-  it("shows sorting controls when multiple UTXOs are present", () => {
+  it("uses sortable table headers instead of a separate sort menu", () => {
     const html = renderPanel({
       ...baseInventory,
       utxos: [
@@ -121,11 +120,14 @@ describe("UtxosInventoryPanel", () => {
       ],
     });
 
-    expect(html).toContain("Sort UTXOs");
+    expect(html).toContain('aria-sort="none"');
+    expect(html).toContain(">Outpoint<");
+    expect(html).toContain(">Amount<");
+    expect(html).toContain(">Status<");
+    expect(html).toContain(">Confirmed<");
+    expect(html).not.toContain("Sort UTXOs");
     expect(html).not.toContain(">Refresh</button>");
-    expect(UTXO_SORT_OPTIONS.map((option) => option.label)).toContain(
-      "Confirmed: newest first",
-    );
+    expect(html).not.toContain("Confirmed: newest first");
   });
 
   it("sorts UTXOs by value, chain date, confirmations, and outpoint", () => {
