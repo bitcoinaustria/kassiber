@@ -1,10 +1,10 @@
 import {
   Check,
+  Copy,
   FileText,
   Link2,
   Paperclip,
   Pencil,
-  Repeat2,
   X,
 } from "lucide-react";
 import * as React from "react";
@@ -519,12 +519,13 @@ export function AttachmentsPanel({
           type="button"
           variant="outline"
           size="sm"
-          className="gap-1.5"
+          className="px-2"
           disabled={!onReuseEvidence}
+          aria-label="Reuse evidence"
+          title="Reuse evidence"
           onClick={onReuseEvidence}
         >
-          <Repeat2 className="size-3.5" aria-hidden="true" />
-          Reuse
+          <Copy className="size-3.5" aria-hidden="true" />
         </Button>
       </div>
       {onAddLinks ? (
