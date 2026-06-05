@@ -79,9 +79,10 @@ workflow almost nobody else covers.
 - **Tax & reports** — RP2 lot accounting (FIFO/LIFO/HIFO/LOFO and moving
   average); Austrian § 27b EStG with E 1kv PDF / XLSX / CSV; summary,
   balance sheet, capital gains, portfolio, balance history; local
-  BTC-USD / BTC-EUR rates cache (Coinbase + CoinGecko fallback + Kraken
-  OHLCVT local archive, plus auto-seeded bundled BTC-only Kraken offline
-  history for daily values).
+  BTC-USD / BTC-EUR rates cache (configurable live provider, Coinbase by
+  default, CoinGecko supported, plus Kraken OHLCVT local archive and
+  auto-seeded bundled BTC-only Kraken offline history for daily values) and
+  opt-in desktop background refresh for the latest BTC price.
 - **Sovereign storage** — SQLite system of record; optional SQLCipher 4
   passphrase encryption; single-file `tar | age` backups recoverable with
   stock `age` + `tar` + `sqlcipher` even if Kassiber disappears.

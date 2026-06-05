@@ -1430,6 +1430,17 @@ export const fixtures: Record<string, unknown> = {
     workspace: "My Books",
     profile: { id: "mock-profile", label: "local books" },
     settings: {
+      background_enabled: false,
+      report_read_sync: false,
+      source_classes: {
+        onchain_wallet: false,
+        btcpay_wallet: false,
+        btcpay_provenance: false,
+        market_rates: true,
+        journals: true,
+      },
+      market_rate_provider: "coinbase-exchange",
+      market_rate_providers: ["coinbase-exchange", "coingecko"],
       auto_sync_before_report_reads: false,
       setting_key: "ai.auto_sync_before_report_reads.profile.mock-profile",
     },
@@ -1438,6 +1449,17 @@ export const fixtures: Record<string, unknown> = {
     workspace: "My Books",
     profile: { id: "mock-profile", label: "local books" },
     settings: {
+      background_enabled: true,
+      report_read_sync: true,
+      source_classes: {
+        onchain_wallet: true,
+        btcpay_wallet: true,
+        btcpay_provenance: true,
+        market_rates: true,
+        journals: true,
+      },
+      market_rate_provider: "coinbase-exchange",
+      market_rate_providers: ["coinbase-exchange", "coingecko"],
       auto_sync_before_report_reads: true,
       setting_key: "ai.auto_sync_before_report_reads.profile.mock-profile",
     },
@@ -1462,7 +1484,20 @@ export const fixtures: Record<string, unknown> = {
       journals: { status: "current", needs_processing: false },
       reports: { ready: true },
     },
-    settings: { auto_sync_before_report_reads: false },
+    settings: {
+      background_enabled: false,
+      report_read_sync: false,
+      source_classes: {
+        onchain_wallet: false,
+        btcpay_wallet: false,
+        btcpay_provenance: false,
+        market_rates: true,
+        journals: true,
+      },
+      market_rate_provider: "coinbase-exchange",
+      market_rate_providers: ["coinbase-exchange", "coingecko"],
+      auto_sync_before_report_reads: false,
+    },
   },
   "ai.providers.list": {
     providers: [

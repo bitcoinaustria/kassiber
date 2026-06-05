@@ -167,6 +167,33 @@ export interface RateRebuildJournalResult {
   auto_priced?: number;
 }
 
+export type FreshnessSourceClass =
+  | "onchain_wallet"
+  | "btcpay_wallet"
+  | "btcpay_provenance"
+  | "market_rates"
+  | "journals";
+
+export type MarketRateProvider = "coinbase-exchange" | "coingecko";
+
+export interface MaintenanceFreshnessSettings {
+  background_enabled: boolean;
+  report_read_sync: boolean;
+  source_classes: Partial<Record<FreshnessSourceClass, boolean>>;
+  market_rate_provider: MarketRateProvider;
+  market_rate_providers?: MarketRateProvider[];
+  auto_sync_before_report_reads?: boolean;
+  setting_key?: string;
+}
+
+export interface MaintenanceSettingsData {
+  workspace: string | null;
+  profile: { id: string; label: string } | null;
+  settings: MaintenanceFreshnessSettings;
+  freshness?: unknown;
+  configured?: MaintenanceFreshnessSettings;
+}
+
 export interface DaemonErrorPayload {
   code?: string;
   message?: string;
@@ -312,6 +339,13 @@ export function backendNetFromRow(row: BackendSettingsRow): Net {
   const kind = (row.kind ?? "").toLowerCase();
   if (kind === "lnd" || kind === "coreln") return "LN";
   if (chain === "liquid" || kind === "liquid-esplora") return "LIQUID";
+  if (
+    chain === "fx" ||
+    chain === "market" ||
+    ["coinbase-exchange", "coingecko", "kraken-csv"].includes(kind)
+  ) {
+    return "FX";
+  }
   return "BTC";
 }
 

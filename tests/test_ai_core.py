@@ -304,6 +304,13 @@ class ToolCatalogPromptTest(unittest.TestCase):
             ),
             "Enable freshness refresh before report reads",
         )
+        self.assertEqual(
+            summarize_tool_call(
+                configure_tool,
+                {"market_rate_provider": "coingecko"},
+            ),
+            "Set market-rate provider to coingecko",
+        )
 
     def test_read_skill_reference_allowlist(self):
         self.assertIn("index", SKILL_REFERENCE_NAMES)

@@ -14,7 +14,7 @@ from urllib import parse as urlparse
 from urllib import request as urlrequest
 
 from .. import __version__
-from ..db import APP_NAME
+from ..db import APP_NAME, get_setting, set_setting
 from ..errors import AppError
 from ..retry import retry_after_seconds_from_http_error
 from . import pricing
@@ -31,6 +31,11 @@ SUPPORTED_RATE_SOURCES = (
     RATE_SOURCE_KRAKEN_CSV,
     RATE_SOURCE_COINGECKO,
 )
+LIVE_MARKET_RATE_SOURCES = (
+    RATE_SOURCE_COINBASE_EXCHANGE,
+    RATE_SOURCE_COINGECKO,
+)
+MARKET_RATE_PROVIDER_SETTING = "market_rate_provider"
 _COINGECKO_VS = {"USD": "usd", "EUR": "eur"}
 _COINGECKO_COIN = {"BTC": "bitcoin"}
 _COINBASE_EXCHANGE_PRODUCT = {"BTC-USD": "BTC-USD", "BTC-EUR": "BTC-EUR"}
@@ -112,6 +117,33 @@ def transaction_rate_pair(asset, fiat_currency):
     if pair not in SUPPORTED_RATE_PAIRS:
         return None
     return pair
+
+
+def normalize_market_rate_provider(source=None):
+    normalized = str(source or RATE_SOURCE_COINBASE_EXCHANGE).strip().lower()
+    if normalized not in LIVE_MARKET_RATE_SOURCES:
+        raise AppError(
+            f"Market-rate provider '{source}' is not supported for automatic refresh",
+            code="validation",
+            hint=f"Supported automatic market-rate providers: {', '.join(LIVE_MARKET_RATE_SOURCES)}",
+        )
+    return normalized
+
+
+def get_market_rate_provider(conn):
+    configured = get_setting(conn, MARKET_RATE_PROVIDER_SETTING)
+    try:
+        return normalize_market_rate_provider(configured)
+    except AppError:
+        return RATE_SOURCE_COINBASE_EXCHANGE
+
+
+def set_market_rate_provider(conn, source, *, commit=True):
+    normalized = normalize_market_rate_provider(source)
+    set_setting(conn, MARKET_RATE_PROVIDER_SETTING, normalized)
+    if commit:
+        conn.commit()
+    return normalized
 
 
 def _transaction_price_missing_sql(prefix: str):
@@ -611,6 +643,25 @@ def _parse_coinbase_exchange_rows(rows, granularity=60):
     return sorted(output, key=lambda candle: candle["timestamp"])
 
 
+def _upsert_coinbase_exchange_candle(conn, pair, candle, source, fetched_at):
+    return upsert_rate(
+        conn,
+        pair,
+        candle["timestamp"],
+        candle["close"],
+        source,
+        fetched_at=fetched_at,
+        granularity="minute",
+        method="product_candles",
+        open_rate=candle["open"],
+        high_rate=candle["high"],
+        low_rate=candle["low"],
+        close_rate=candle["close"],
+        volume=candle["volume"],
+        trades=candle["trades"],
+    )
+
+
 def _floor_to_minute(value):
     dt = _parse_iso_datetime(value, "timestamp")
     return _iso_z(dt.replace(second=0, microsecond=0))
@@ -1066,12 +1117,102 @@ def fetch_rates_coinbase_exchange(pair, days=30, granularity=60):
     return deduped
 
 
+def sync_latest_rates(
+    conn,
+    pair=None,
+    source=None,
+    commit=True,
+    lookback_minutes=5,
+):
+    normalized_source = (
+        get_market_rate_provider(conn)
+        if source is None
+        else normalize_market_rate_provider(source)
+    )
+    if pair:
+        pairs = [require_supported_pair(pair)]
+    else:
+        pairs = list(SUPPORTED_RATE_PAIRS)
+    fetched_at = _iso_z(datetime.now(timezone.utc))
+    summary = []
+    for normalized_pair in pairs:
+        if normalized_source == RATE_SOURCE_COINBASE_EXCHANGE:
+            minutes = max(2, int(lookback_minutes))
+            end = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+            start = end - timedelta(minutes=minutes)
+            rows = _coinbase_exchange_candles(
+                normalized_pair,
+                start,
+                end,
+                granularity=60,
+            )
+            samples = [
+                candle
+                for candle in _parse_coinbase_exchange_rows(rows, granularity=60)
+                if _parse_iso_datetime(candle["timestamp"], "rate_timestamp") <= end
+            ]
+            latest = samples[-1] if samples else None
+            inserted = 0
+            timestamp = None
+            if latest:
+                _upsert_coinbase_exchange_candle(
+                    conn,
+                    normalized_pair,
+                    latest,
+                    normalized_source,
+                    fetched_at,
+                )
+                inserted = 1
+                timestamp = latest["timestamp"]
+            granularity = "minute"
+            method = "product_candles"
+            lookback = minutes
+        else:
+            samples = fetch_rates_coingecko(normalized_pair, days=1)
+            latest = samples[-1] if samples else None
+            inserted = 0
+            timestamp = None
+            if latest:
+                timestamp, rate = latest
+                upsert_rate(
+                    conn,
+                    normalized_pair,
+                    timestamp,
+                    str(rate),
+                    normalized_source,
+                    fetched_at=fetched_at,
+                    granularity=_coingecko_granularity(1),
+                    method="market_chart",
+                )
+                inserted = 1
+            granularity = _coingecko_granularity(1)
+            method = "market_chart"
+            lookback = 24 * 60
+        if commit:
+            conn.commit()
+        summary.append(
+            {
+                "pair": normalized_pair,
+                "source": normalized_source,
+                "samples": inserted,
+                "granularity": granularity,
+                "method": method,
+                "mode": "latest_quote",
+                "lookback_minutes": lookback,
+                "timestamp": timestamp,
+                "fetched_at": fetched_at,
+            }
+        )
+    return summary
+
+
 def _sync_rates_coinbase_exchange(
     conn,
     pair=None,
     days=30,
     source=RATE_SOURCE_COINBASE_EXCHANGE,
     commit=True,
+    warm_cache_when_idle=True,
 ):
     if int(days) <= 0:
         raise AppError("--days must be positive", code="validation")
@@ -1105,21 +1246,12 @@ def _sync_rates_coinbase_exchange(
                 )
                 samples = _parse_coinbase_exchange_rows(rows, granularity=60)
                 for candle in samples:
-                    upsert_rate(
+                    _upsert_coinbase_exchange_candle(
                         conn,
                         normalized_pair,
-                        candle["timestamp"],
-                        candle["close"],
+                        candle,
                         source,
-                        fetched_at=fetched_at,
-                        granularity="minute",
-                        method="product_candles",
-                        open_rate=candle["open"],
-                        high_rate=candle["high"],
-                        low_rate=candle["low"],
-                        close_rate=candle["close"],
-                        volume=candle["volume"],
-                        trades=candle["trades"],
+                        fetched_at,
                     )
                     inserted += 1
                 checked_minutes += _mark_rate_minutes_checked(
@@ -1135,7 +1267,7 @@ def _sync_rates_coinbase_exchange(
                     _invalidate_profile_journals_for_pair(conn, normalized_pair)
                 if commit:
                     conn.commit()
-        elif not has_any_needed_minutes:
+        elif not has_any_needed_minutes and warm_cache_when_idle:
             mode = "continuous_days"
             samples = fetch_rates_coinbase_exchange(
                 normalized_pair,
@@ -1143,27 +1275,20 @@ def _sync_rates_coinbase_exchange(
                 granularity=60,
             )
             for candle in samples:
-                upsert_rate(
+                _upsert_coinbase_exchange_candle(
                     conn,
                     normalized_pair,
-                    candle["timestamp"],
-                    candle["close"],
+                    candle,
                     source,
-                    fetched_at=fetched_at,
-                    granularity="minute",
-                    method="product_candles",
-                    open_rate=candle["open"],
-                    high_rate=candle["high"],
-                    low_rate=candle["low"],
-                    close_rate=candle["close"],
-                    volume=candle["volume"],
-                    trades=candle["trades"],
+                    fetched_at,
                 )
                 inserted += 1
             if samples:
                 _invalidate_profile_journals_for_pair(conn, normalized_pair)
             if commit:
                 conn.commit()
+        elif not has_any_needed_minutes:
+            mode = "idle_no_missing_minutes"
         summary.append(
             {
                 "pair": normalized_pair,
@@ -1545,6 +1670,7 @@ def sync_rates(
     source=RATE_SOURCE_COINBASE_EXCHANGE,
     path=None,
     commit=True,
+    warm_cache_when_idle=True,
 ):
     normalized_source = str(source or "").strip().lower()
     if normalized_source == RATE_SOURCE_COINBASE_EXCHANGE:
@@ -1559,6 +1685,7 @@ def sync_rates(
             days=days,
             source=normalized_source,
             commit=commit,
+            warm_cache_when_idle=warm_cache_when_idle,
         )
     if normalized_source == RATE_SOURCE_COINGECKO:
         if path:
@@ -1608,6 +1735,8 @@ def set_manual_rate(conn, pair, timestamp, rate, source="manual", granularity=No
 
 
 __all__ = [
+    "LIVE_MARKET_RATE_SOURCES",
+    "MARKET_RATE_PROVIDER_SETTING",
     "RATE_SOURCE_COINBASE_EXCHANGE",
     "RATE_SOURCE_COINGECKO",
     "RATE_SOURCE_KRAKEN_CSV",
@@ -1618,13 +1747,17 @@ __all__ = [
     "fetch_rates_coingecko",
     "get_cached_rate_at_or_before",
     "get_latest_rate",
+    "get_market_rate_provider",
     "get_rate_range",
     "list_cached_pairs",
+    "normalize_market_rate_provider",
     "rate_pair_parts",
     "rebuild_rates_cache",
     "require_supported_pair",
+    "set_market_rate_provider",
     "set_manual_rate",
     "sync_bundled_kraken_btc_daily",
+    "sync_latest_rates",
     "sync_rates",
     "transaction_price_missing_sql",
     "transaction_price_missing_sql_unqualified",

@@ -396,8 +396,15 @@ Job types are separate so partial success stays usable:
 - `journal_refresh` for follow-up local journal processing.
 
 Market-rate jobs first seed the bundled Kraken BTC daily BTC-EUR/BTC-USD
-archive into `rates_cache` when missing, then perform the existing live
-incremental minute coverage for exact transaction timestamps.
+archive into `rates_cache` when missing, then fetch a small latest quote from
+the configured live market-rate provider for current BTC price display.
+Coinbase Exchange is the default provider when none is configured; CoinGecko is
+also supported for live latest-price refresh. When the configured provider is
+Coinbase Exchange, the job also performs the existing live incremental
+minute-coverage pass for exact transaction timestamps. Background jobs skip the
+manual 30-day warm-cache fallback when no transaction minute is missing, so
+hourly price refresh stays provider-light. Kraken CSV remains an offline
+archive/import path because it needs a local file or bundled archive.
 
 Source states are `fresh`, `queued`, `syncing`, `paused`, `rate_limited`,
 `partially_stale`, `failed`, and `blocking_reports`. Report reads are blocked
@@ -423,10 +430,12 @@ When `background_enabled` is true, the daemon starts an opt-in freshness worker
 while the app is running. The worker opens its own SQLite connection, enqueues
 only policy-enabled sources that are missing, stale, failed, or past the refresh
 interval, and drains one due job per pass so manual requests can still observe
-and cancel jobs through the same tables. Kassiber opens local databases in WAL
-mode with an explicit busy timeout so the daemon foreground connection and the
-freshness worker can safely serialize writes instead of failing immediately on
-ordinary lock contention.
+and cancel jobs through the same tables. Wallet and journal sources use the
+general 15-minute background interval; market-rate sources use an hourly
+interval by default. Kassiber opens local databases in WAL mode with an explicit
+busy timeout so the daemon foreground connection and the freshness worker can
+safely serialize writes instead of failing immediately on ordinary lock
+contention.
 
 For SQLCipher databases, the daemon keeps the verified database passphrase only
 as unlocked-session state so the background worker can open its own connection.

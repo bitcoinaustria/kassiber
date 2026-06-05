@@ -162,9 +162,12 @@ round out the standard set. The desktop Reports screen exposes the Summary
 PDF with wallet scope controls and an optional live snapshot cover.
 
 For transaction pricing, the `rates` command tree maintains a local
-BTC-USD / BTC-EUR cache: Coinbase Exchange primary, CoinGecko fallback,
+BTC-USD / BTC-EUR cache: Coinbase Exchange and CoinGecko live providers,
 Kraken OHLCVT local archive (`rates sync --source kraken-csv --path ...`),
-and manual overrides (`rates set BTC-USD <ts> <rate>`).
+and manual overrides (`rates set BTC-USD <ts> <rate>`). Desktop maintenance
+can use the configured live market-rate provider for automatic latest-price
+refresh and default pricing-cache rebuilds; Coinbase Exchange remains the
+default when no provider is configured.
 The repository also ships a small BTC-only Kraken offline history bundle for
 EUR and USD daily values under `kassiber/data/rates/kraken/btc_daily`, which
 freshness/rate-coverage jobs seed automatically when missing. It can also be

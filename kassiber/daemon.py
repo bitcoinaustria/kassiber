@@ -2373,7 +2373,7 @@ def _rates_rebuild_payload(
     args: dict[str, Any],
 ) -> dict[str, Any]:
     source = str(
-        args.get("source") or core_rates.RATE_SOURCE_COINBASE_EXCHANGE
+        args.get("source") or core_rates.get_market_rate_provider(conn)
     ).strip().lower()
     pair_arg = args.get("pair")
     if pair_arg is not None and not isinstance(pair_arg, str):

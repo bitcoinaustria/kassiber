@@ -4367,19 +4367,30 @@ class DaemonSmokeTest(unittest.TestCase):
             settings = _read_payload_timeout(proc)
             self.assertEqual(settings["kind"], "ui.maintenance.settings")
             self.assertFalse(settings["data"]["settings"]["auto_sync_before_report_reads"])
+            self.assertEqual(
+                settings["data"]["settings"]["market_rate_provider"],
+                "coinbase-exchange",
+            )
 
             _write_payload(
                 proc,
                 {
                     "request_id": "maintenance-configure-1",
                     "kind": "ui.maintenance.configure",
-                    "args": {"auto_sync_before_report_reads": True},
+                    "args": {
+                        "auto_sync_before_report_reads": True,
+                        "market_rate_provider": "coingecko",
+                    },
                 },
             )
             configured = _read_payload_timeout(proc)
             self.assertEqual(configured["kind"], "ui.maintenance.configure")
             self.assertTrue(
                 configured["data"]["settings"]["auto_sync_before_report_reads"]
+            )
+            self.assertEqual(
+                configured["data"]["settings"]["market_rate_provider"],
+                "coingecko",
             )
 
             _write_payload(

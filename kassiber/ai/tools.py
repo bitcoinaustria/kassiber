@@ -625,8 +625,8 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "properties": {
                 "source": {
                     "type": "string",
-                    "enum": ["coinbase-exchange"],
-                    "description": "Provider to fetch from. Defaults to coinbase-exchange.",
+                    "enum": ["coinbase-exchange", "coingecko"],
+                    "description": "Provider to fetch from. Defaults to the configured market-rate provider.",
                 },
                 "pair": {
                     "type": "string",
@@ -850,6 +850,11 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                     "type": "object",
                     "additionalProperties": {"type": "boolean"},
                     "description": "Per-source-class opt-ins such as onchain_wallet, btcpay_wallet, btcpay_provenance, market_rates, and journals.",
+                },
+                "market_rate_provider": {
+                    "type": "string",
+                    "enum": ["coinbase-exchange", "coingecko"],
+                    "description": "Default live market-rate provider for automatic price refresh and default rate rebuilds.",
                 },
             },
         },
@@ -1287,6 +1292,9 @@ def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
         return "Fetch missing spot prices and reprocess journals"
     if tool.name == "ui.maintenance.configure":
         enabled = arguments.get("report_read_sync", arguments.get("auto_sync_before_report_reads"))
+        provider = arguments.get("market_rate_provider")
+        if enabled is None and isinstance(provider, str) and provider.strip():
+            return f"Set market-rate provider to {provider.strip()}"
         return (
             "Enable freshness refresh before report reads"
             if enabled is True

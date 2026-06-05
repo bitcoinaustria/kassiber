@@ -5,15 +5,25 @@ import sqlite3
 import tempfile
 import threading
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
 from kassiber import daemon as daemon_runtime
 from kassiber import daemon_freshness
-from kassiber.core import freshness
-from kassiber.db import open_db
+from kassiber.core import freshness, rates as core_rates
+from kassiber.db import open_db, set_setting
 from kassiber.errors import AppError
 from kassiber.time_utils import now_iso
+
+
+def _minutes_ago(minutes: int) -> str:
+    return (
+        (datetime.now(timezone.utc) - timedelta(minutes=minutes))
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
 def _seed_profile(conn: sqlite3.Connection) -> str:
@@ -282,6 +292,7 @@ class FreshnessTest(unittest.TestCase):
 
         self.assertTrue(policy.report_read_sync)
         self.assertTrue(policy.source_classes[freshness.SOURCE_ONCHAIN])
+        self.assertTrue(policy.source_classes[freshness.SOURCE_RATES])
         self.assertFalse(policy.background_enabled)
 
     def test_market_rate_job_seeds_bundled_kraken_before_live_sync(self):
@@ -297,18 +308,39 @@ class FreshnessTest(unittest.TestCase):
                 {"pair": "BTC-EUR", "samples": 2, "already_seeded": False}
             ]
 
-        def fake_sync(conn_arg, commit=True):
+        def fake_sync(
+            conn_arg,
+            source=core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+            commit=True,
+            warm_cache_when_idle=True,
+        ):
             self.assertIs(conn_arg, conn)
+            self.assertEqual(source, core_rates.RATE_SOURCE_COINBASE_EXCHANGE)
             self.assertTrue(commit)
+            self.assertFalse(warm_cache_when_idle)
             calls.append("sync")
             return [{"pair": "BTC-EUR", "samples": 0}]
+
+        def fake_latest(
+            conn_arg,
+            source=core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+            commit=True,
+        ):
+            self.assertIs(conn_arg, conn)
+            self.assertEqual(source, core_rates.RATE_SOURCE_COINBASE_EXCHANGE)
+            self.assertTrue(commit)
+            calls.append("latest")
+            return [{"pair": "BTC-EUR", "samples": 1, "mode": "latest_quote"}]
 
         progress = []
         handler = daemon_freshness._freshness_handlers({})[freshness.JOB_MARKET_RATES]
         with patch(
             "kassiber.daemon_freshness.core_rates.ensure_bundled_kraken_btc_daily_seed",
             fake_seed,
-        ), patch("kassiber.daemon_freshness.core_rates.sync_rates", fake_sync):
+        ), patch("kassiber.daemon_freshness.core_rates.sync_latest_rates", fake_latest), patch(
+            "kassiber.daemon_freshness.core_rates.sync_rates",
+            fake_sync,
+        ):
             result = handler(
                 conn,
                 {},
@@ -316,11 +348,82 @@ class FreshnessTest(unittest.TestCase):
                 lambda: None,
             )
 
-        self.assertEqual(calls, ["seed", "sync"])
+        self.assertEqual(calls, ["seed", "latest", "sync"])
         self.assertEqual(progress[0]["phase"], freshness.PHASE_RATE_COVERAGE)
+        self.assertEqual(result["provider"], core_rates.RATE_SOURCE_COINBASE_EXCHANGE)
         self.assertEqual(result["bundled_seed"]["path"], "memory://bundled-kraken")
         self.assertEqual(result["bundled_seed"]["summary"][0]["pair"], "BTC-EUR")
+        self.assertEqual(result["latest"][0]["mode"], "latest_quote")
         self.assertEqual(result["sync"][0]["pair"], "BTC-EUR")
+
+    def test_market_rate_job_uses_configured_coingecko_provider_for_latest_sync(self):
+        conn = self._db()
+        _seed_profile(conn)
+        core_rates.set_market_rate_provider(
+            conn,
+            core_rates.RATE_SOURCE_COINGECKO,
+            commit=True,
+        )
+        calls = []
+
+        def fake_seed(conn_arg, commit=True):
+            self.assertIs(conn_arg, conn)
+            self.assertTrue(commit)
+            calls.append("seed")
+            return "memory://bundled-kraken", []
+
+        def fake_latest(
+            conn_arg,
+            source=core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+            commit=True,
+        ):
+            self.assertIs(conn_arg, conn)
+            self.assertEqual(source, core_rates.RATE_SOURCE_COINGECKO)
+            self.assertTrue(commit)
+            calls.append("latest")
+            return [{"pair": "BTC-EUR", "source": source, "samples": 1}]
+
+        progress = []
+        handler = daemon_freshness._freshness_handlers({})[freshness.JOB_MARKET_RATES]
+        with patch(
+            "kassiber.daemon_freshness.core_rates.ensure_bundled_kraken_btc_daily_seed",
+            fake_seed,
+        ), patch("kassiber.daemon_freshness.core_rates.sync_latest_rates", fake_latest), patch(
+            "kassiber.daemon_freshness.core_rates.sync_rates",
+        ) as sync_rates:
+            result = handler(
+                conn,
+                {},
+                lambda payload: progress.append(dict(payload)),
+                lambda: None,
+            )
+
+        sync_rates.assert_not_called()
+        self.assertEqual(calls, ["seed", "latest"])
+        self.assertEqual(progress[0]["phase"], freshness.PHASE_RATE_COVERAGE)
+        self.assertEqual(result["provider"], core_rates.RATE_SOURCE_COINGECKO)
+        self.assertEqual(result["latest"][0]["source"], core_rates.RATE_SOURCE_COINGECKO)
+        self.assertEqual(result["sync"], [])
+
+    def test_freshness_configure_persists_market_rate_provider(self):
+        conn = self._db()
+        _seed_profile(conn)
+        set_setting(conn, "context_workspace", "ws")
+        set_setting(conn, "context_profile", "profile")
+
+        payload = daemon_freshness._freshness_configure_payload(
+            conn,
+            {"market_rate_provider": core_rates.RATE_SOURCE_COINGECKO},
+        )
+
+        self.assertEqual(
+            payload["settings"]["market_rate_provider"],
+            core_rates.RATE_SOURCE_COINGECKO,
+        )
+        self.assertEqual(
+            core_rates.get_market_rate_provider(conn),
+            core_rates.RATE_SOURCE_COINGECKO,
+        )
 
     def test_background_due_filter_skips_recent_fresh_sources(self):
         conn = self._db()
@@ -373,6 +476,70 @@ class FreshnessTest(unittest.TestCase):
         self.assertEqual(
             daemon_freshness._filter_freshness_specs_for_background(conn, profile_id, [spec]),
             [],
+        )
+
+    def test_background_due_filter_uses_hourly_market_rate_interval(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        onchain_spec = {
+            "job_type": freshness.JOB_ONCHAIN_WALLET,
+            "source_key": "onchain_wallet:cold",
+            "source_type": freshness.SOURCE_ONCHAIN,
+            "source_label": "Cold wallet",
+        }
+        rate_spec = {
+            "job_type": freshness.JOB_MARKET_RATES,
+            "source_key": freshness.rate_source_key(profile_id),
+            "source_type": freshness.SOURCE_RATES,
+            "source_label": "Market-rate coverage",
+        }
+        freshness.upsert_source_state(
+            conn,
+            profile_id=profile_id,
+            source_key=onchain_spec["source_key"],
+            source_type=onchain_spec["source_type"],
+            source_label=onchain_spec["source_label"],
+            status=freshness.STATUS_FRESH,
+            last_success_at=_minutes_ago(16),
+        )
+        freshness.upsert_source_state(
+            conn,
+            profile_id=profile_id,
+            source_key=rate_spec["source_key"],
+            source_type=rate_spec["source_type"],
+            source_label=rate_spec["source_label"],
+            status=freshness.STATUS_FRESH,
+            last_success_at=_minutes_ago(30),
+        )
+        conn.commit()
+
+        self.assertEqual(
+            daemon_freshness._filter_freshness_specs_for_background(
+                conn,
+                profile_id,
+                [onchain_spec, rate_spec],
+            ),
+            [onchain_spec],
+        )
+
+        freshness.upsert_source_state(
+            conn,
+            profile_id=profile_id,
+            source_key=rate_spec["source_key"],
+            source_type=rate_spec["source_type"],
+            source_label=rate_spec["source_label"],
+            status=freshness.STATUS_FRESH,
+            last_success_at=_minutes_ago(61),
+        )
+        conn.commit()
+
+        self.assertEqual(
+            daemon_freshness._filter_freshness_specs_for_background(
+                conn,
+                profile_id,
+                [rate_spec],
+            ),
+            [rate_spec],
         )
 
     def test_wallet_scoped_refresh_single_flights_inside_global_refresh(self):

@@ -48,6 +48,7 @@ class FreshnessDaemonContext(Protocol):
 AUTO_SYNC_PROFILE_MIN_INTERVAL_SECONDS = 60
 FRESHNESS_BACKGROUND_POLL_SECONDS = 5.0
 FRESHNESS_BACKGROUND_REFRESH_INTERVAL_SECONDS = 15 * 60
+FRESHNESS_BACKGROUND_RATE_REFRESH_INTERVAL_SECONDS = 60 * 60
 _AUTO_SYNC_PROFILE_LAST_ATTEMPT: dict[str, float] = {}
 _AUTO_SYNC_PROFILE_LAST_RESULT: dict[str, dict[str, Any]] = {}
 _AUTO_SYNC_PROFILE_LOCK = threading.Lock()
@@ -511,14 +512,32 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
             commit=True,
         )
         check_cancelled()
-        summary = core_rates.sync_rates(conn, commit=True)
+        provider = core_rates.get_market_rate_provider(conn)
+        latest_summary = core_rates.sync_latest_rates(
+            conn,
+            source=provider,
+            commit=True,
+        )
+        check_cancelled()
+        summary = (
+            core_rates.sync_rates(
+                conn,
+                source=provider,
+                commit=True,
+                warm_cache_when_idle=False,
+            )
+            if provider == core_rates.RATE_SOURCE_COINBASE_EXCHANGE
+            else []
+        )
         return {
             "status": "synced",
+            "provider": provider,
             "bundled_seed": {
                 "source": core_rates.RATE_SOURCE_KRAKEN_CSV,
                 "path": archive_path,
                 "summary": seed_summary,
             },
+            "latest": latest_summary,
             "sync": summary,
         }
 
@@ -554,11 +573,27 @@ def _freshness_status_payload(conn: sqlite3.Connection) -> dict[str, Any]:
     }
 
 
+def _market_rate_provider_settings(conn: sqlite3.Connection) -> dict[str, Any]:
+    return {
+        "market_rate_provider": core_rates.get_market_rate_provider(conn),
+        "market_rate_providers": list(core_rates.LIVE_MARKET_RATE_SOURCES),
+    }
+
+
 def _freshness_configure_payload(
     conn: sqlite3.Connection,
     raw_args: dict[str, Any],
 ) -> dict[str, Any]:
-    unknown = sorted(set(raw_args) - {"background_enabled", "report_read_sync", "source_classes", "auto_sync_before_report_reads"})
+    unknown = sorted(
+        set(raw_args)
+        - {
+            "auto_sync_before_report_reads",
+            "background_enabled",
+            "market_rate_provider",
+            "report_read_sync",
+            "source_classes",
+        }
+    )
     if unknown:
         raise AppError(
             "ui.freshness.configure received unsupported arguments",
@@ -577,6 +612,14 @@ def _freshness_configure_payload(
             details={"type": type(source_classes).__name__},
             retryable=False,
         )
+    market_rate_provider = raw_args.get("market_rate_provider")
+    if market_rate_provider is not None and not isinstance(market_rate_provider, str):
+        raise AppError(
+            "ui.freshness.configure market_rate_provider must be a string",
+            code="validation",
+            details={"type": type(market_rate_provider).__name__},
+            retryable=False,
+        )
     legacy_value = raw_args.get("auto_sync_before_report_reads")
     report_read_sync = raw_args.get("report_read_sync")
     if legacy_value is not None:
@@ -593,6 +636,12 @@ def _freshness_configure_payload(
             core_freshness.SOURCE_BTCPAY_WALLET: legacy_value,
             core_freshness.SOURCE_BTCPAY_PROVENANCE: legacy_value,
         }
+    if market_rate_provider is not None:
+        core_rates.set_market_rate_provider(
+            conn,
+            market_rate_provider,
+            commit=False,
+        )
     policy = core_freshness.set_policy(
         conn,
         profile["id"],
@@ -605,6 +654,7 @@ def _freshness_configure_payload(
         "profile": {"id": profile["id"], "label": profile["label"]},
         "settings": {
             **policy.to_payload(),
+            **_market_rate_provider_settings(conn),
             "auto_sync_before_report_reads": policy.report_read_sync,
             "setting_key": core_freshness.policy_setting_key(profile["id"]),
         },
@@ -693,7 +743,12 @@ def _freshness_background_source_due(
     if last_success is None:
         return True
     age_seconds = (now - last_success).total_seconds()
-    return age_seconds >= FRESHNESS_BACKGROUND_REFRESH_INTERVAL_SECONDS
+    refresh_interval = (
+        FRESHNESS_BACKGROUND_RATE_REFRESH_INTERVAL_SECONDS
+        if spec.get("source_type") == core_freshness.SOURCE_RATES
+        else FRESHNESS_BACKGROUND_REFRESH_INTERVAL_SECONDS
+    )
+    return age_seconds >= refresh_interval
 
 
 def _filter_freshness_specs_for_background(
@@ -1008,6 +1063,7 @@ def _maintenance_settings_payload(conn: sqlite3.Connection) -> dict[str, Any]:
             "profile": None,
             "settings": {
                 **core_freshness.default_policy().to_payload(),
+                **_market_rate_provider_settings(conn),
                 "auto_sync_before_report_reads": False,
             },
             "freshness": {"sources": [], "jobs": []},
@@ -1022,6 +1078,7 @@ def _maintenance_settings_payload(conn: sqlite3.Connection) -> dict[str, Any]:
         },
         "settings": {
             **policy.to_payload(),
+            **_market_rate_provider_settings(conn),
             "auto_sync_before_report_reads": policy.report_read_sync,
             "setting_key": core_freshness.policy_setting_key(profile["id"]),
         },
@@ -1038,6 +1095,7 @@ def _maintenance_configure_payload(
         - {
             "auto_sync_before_report_reads",
             "background_enabled",
+            "market_rate_provider",
             "report_read_sync",
             "source_classes",
         }
