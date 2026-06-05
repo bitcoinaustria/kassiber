@@ -371,6 +371,21 @@ function removeAttachmentRecord(
   return attachments.filter((attachment) => attachment.id !== attachmentId);
 }
 
+function isAttachmentListQueryKeyForTransaction(
+  queryKey: readonly unknown[],
+  transactionId: string,
+) {
+  return (
+    queryKey.includes("ui.attachments.list") &&
+    queryKey.some((part) => {
+      if (!part || typeof part !== "object" || Array.isArray(part)) {
+        return false;
+      }
+      return (part as { transaction?: unknown }).transaction === transactionId;
+    })
+  );
+}
+
 const periodLabels: Record<PeriodKey, string> = {
   ytd: "YTD",
   "1year": "1 Year",
@@ -1079,6 +1094,7 @@ export {
   formatCountBarLabel,
   formatFlowTooltipValue,
   initialPeriodFromUrl,
+  isAttachmentListQueryKeyForTransaction,
   isRedundantTransactionLabel,
   matchesFlowChartSelection,
   matchesTransactionDeepLink,

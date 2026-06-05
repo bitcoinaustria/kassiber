@@ -105,6 +105,7 @@ import {
   dateFilterOptions,
   filterChipClassName,
   flowChartSelectionLabel,
+  isAttachmentListQueryKeyForTransaction,
   isRedundantTransactionLabel,
   matchesFlowChartSelection,
   matchesTransactionDeepLink,
@@ -395,12 +396,18 @@ const TransactionsTable = ({
     [attachmentsQuery.data?.data?.attachments, detailTransaction],
   );
   const updateAttachmentListQueryCache = React.useCallback(
-    (updater: (attachments: AttachmentRecord[]) => AttachmentRecord[]) => {
+    (
+      transactionId: string,
+      updater: (attachments: AttachmentRecord[]) => AttachmentRecord[],
+    ) => {
       queryClient.setQueriesData<DaemonEnvelope<AttachmentsListData>>(
         {
           queryKey: ["daemon"],
           predicate: (query) =>
-            query.queryKey.includes("ui.attachments.list"),
+            isAttachmentListQueryKeyForTransaction(
+              query.queryKey,
+              transactionId,
+            ),
         },
         (current) =>
           current?.data
@@ -1542,8 +1549,9 @@ const TransactionsTable = ({
             updateDetailAttachmentRecords((attachments) =>
               upsertAttachmentRecords(attachments, added),
             );
-            updateAttachmentListQueryCache((attachments) =>
-              upsertAttachmentRecords(attachments, added),
+            updateAttachmentListQueryCache(
+              detailTransaction.id,
+              (attachments) => upsertAttachmentRecords(attachments, added),
             );
           }
           useUiStore.getState().addNotification({
@@ -1569,8 +1577,9 @@ const TransactionsTable = ({
             updateDetailAttachmentRecords((attachments) =>
               upsertAttachmentRecords(attachments, added),
             );
-            updateAttachmentListQueryCache((attachments) =>
-              upsertAttachmentRecords(attachments, added),
+            updateAttachmentListQueryCache(
+              detailTransaction.id,
+              (attachments) => upsertAttachmentRecords(attachments, added),
             );
           }
           useUiStore.getState().addNotification({
@@ -1612,8 +1621,9 @@ const TransactionsTable = ({
             updateDetailAttachmentRecords((attachments) =>
               replaceAttachmentRecord(attachments, updated),
             );
-            updateAttachmentListQueryCache((attachments) =>
-              replaceAttachmentRecord(attachments, updated),
+            updateAttachmentListQueryCache(
+              detailTransaction.id,
+              (attachments) => replaceAttachmentRecord(attachments, updated),
             );
           }
           useUiStore.getState().addNotification({
@@ -1623,12 +1633,14 @@ const TransactionsTable = ({
           });
         }}
         onRemoveAttachment={async (item) => {
+          if (!detailTransaction) return;
           await attachmentRemove.mutateAsync({ attachment: item.id });
           updateDetailAttachmentRecords((attachments) =>
             removeAttachmentRecord(attachments, item.id),
           );
-          updateAttachmentListQueryCache((attachments) =>
-            removeAttachmentRecord(attachments, item.id),
+          updateAttachmentListQueryCache(
+            detailTransaction.id,
+            (attachments) => removeAttachmentRecord(attachments, item.id),
           );
           useUiStore.getState().addNotification({
             title: "Attachment removed",
@@ -1727,8 +1739,10 @@ const TransactionsTable = ({
             updateDetailAttachmentRecords((attachments) =>
               upsertAttachmentRecords(attachments, copiedAttachments),
             );
-            updateAttachmentListQueryCache((attachments) =>
-              upsertAttachmentRecords(attachments, copiedAttachments),
+            updateAttachmentListQueryCache(
+              detailTransaction.id,
+              (attachments) =>
+                upsertAttachmentRecords(attachments, copiedAttachments),
             );
           }
           setReuseDialogOpen(false);

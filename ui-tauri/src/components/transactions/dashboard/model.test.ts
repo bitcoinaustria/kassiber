@@ -4,6 +4,7 @@ import {
   attachmentRecordToItem,
   bucketTransactionDate,
   flowChartSelectionLabel,
+  isAttachmentListQueryKeyForTransaction,
   matchesFlowChartSelection,
   removeAttachmentRecord,
   replaceAttachmentRecord,
@@ -174,6 +175,42 @@ describe("transaction attachment URL labels", () => {
 });
 
 describe("transaction attachment cache updates", () => {
+  it("matches attachment list query keys by transaction", () => {
+    const targetKey = [
+      "daemon",
+      "mock",
+      0,
+      "ui.attachments.list",
+      { transaction: "tx-target" },
+    ];
+    const sourceKey = [
+      "daemon",
+      "mock",
+      0,
+      "ui.attachments.list",
+      { transaction: "tx-source" },
+    ];
+
+    expect(
+      isAttachmentListQueryKeyForTransaction(targetKey, "tx-target"),
+    ).toBe(true);
+    expect(
+      isAttachmentListQueryKeyForTransaction(sourceKey, "tx-target"),
+    ).toBe(false);
+    expect(
+      isAttachmentListQueryKeyForTransaction(
+        [
+          "daemon",
+          "mock",
+          0,
+          "ui.transactions.history",
+          { transaction: "tx-target" },
+        ],
+        "tx-target",
+      ),
+    ).toBe(false);
+  });
+
   it("replaces the renamed attachment without changing the others", () => {
     const current: AttachmentRecord[] = [
       {
