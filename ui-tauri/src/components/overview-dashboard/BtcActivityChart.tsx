@@ -663,15 +663,19 @@ export const BtcActivityChart = ({
 
         <div className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
           {legendItems.map((item) => (
-            <div
+            <button
               key={item.key}
+              type="button"
+              aria-label={`${seriesVisible[item.key] ? "Hide" : "Show"} ${item.label}`}
+              aria-pressed={seriesVisible[item.key]}
               className={cn(
-                "flex items-center gap-1.5 transition-opacity duration-200 motion-reduce:transition-none",
+                "inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-current transition-[background-color,opacity] duration-200 hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
                 !seriesVisible[item.key] && "opacity-30",
                 activeSeries !== null &&
                   activeSeries !== item.key &&
                   "opacity-40",
               )}
+              onClick={() => toggleSeries(item.key)}
               onMouseEnter={() => handleHover(item.key)}
               onMouseLeave={() => handleHover(null)}
             >
@@ -690,7 +694,7 @@ export const BtcActivityChart = ({
                 />
               )}
               <span>{item.label}</span>
-            </div>
+            </button>
           ))}
         </div>
 
