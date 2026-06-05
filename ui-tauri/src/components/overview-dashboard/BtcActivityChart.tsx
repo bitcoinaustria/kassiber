@@ -137,7 +137,7 @@ export const BtcActivityChart = ({
     () =>
       ({
         primary: {
-          label: "BTC Balance",
+          label: "Bitcoin Balance",
           color: primaryColor,
         },
         price: {
@@ -159,7 +159,7 @@ export const BtcActivityChart = ({
   const legendItems: TreasuryLegendItem[] = [
     {
       key: "primary" as const,
-      label: "BTC Balance",
+      label: "Bitcoin Balance",
       color: primaryColor,
       dashed: false,
     },
@@ -624,7 +624,7 @@ export const BtcActivityChart = ({
         {expanded && chartStats && (
           <div className="grid gap-2 rounded-lg border bg-muted/25 p-2 sm:grid-cols-3">
             <ChartStat
-              label="Change in BTC balance"
+              label="Change in Bitcoin balance"
               value={formatBtc(Math.abs(chartStats.delta), { precision: 4 })}
               detail={
                 chartStats.pct === null
@@ -708,7 +708,7 @@ export const BtcActivityChart = ({
             <div className="grid min-h-0 flex-1 grid-cols-[18px_minmax(0,1fr)_20px]">
               <div className="pointer-events-none flex items-center justify-center">
                 <span className="-rotate-90 whitespace-nowrap text-[10px] font-semibold text-muted-foreground">
-                  BTC Balance
+                  Bitcoin Balance
                 </span>
               </div>
               <div

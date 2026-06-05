@@ -874,6 +874,197 @@ class ReviewRegressionTest(unittest.TestCase):
             [1.0, 1.0, 1.0],
         )
 
+    def test_overview_portfolio_series_treats_btc_lbtc_swaps_as_bitcoin_balance(self):
+        self._bootstrap_wallet(label="BTC Wallet")
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        profile = conn.execute(
+            "SELECT id, workspace_id FROM profiles WHERE label = 'Default'"
+        ).fetchone()
+        btc_wallet = conn.execute(
+            "SELECT id FROM wallets WHERE label = 'BTC Wallet'"
+        ).fetchone()
+        conn.execute(
+            "UPDATE profiles SET fiat_currency = 'EUR' WHERE id = ?",
+            (profile["id"],),
+        )
+        conn.execute(
+            """
+            INSERT INTO accounts(id, workspace_id, profile_id, code, label, account_type, asset, created_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "acct-liquid-overview",
+                profile["workspace_id"],
+                profile["id"],
+                "asset:lbtc-overview",
+                "Liquid Overview",
+                "asset",
+                "LBTC",
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(id, workspace_id, profile_id, account_id, label, kind, config_json, created_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "wallet-liquid-overview",
+                profile["workspace_id"],
+                profile["id"],
+                "acct-liquid-overview",
+                "Liquid Wallet",
+                "descriptor",
+                "{}",
+                now,
+            ),
+        )
+        conn.executemany(
+            """
+            INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at, granularity, method)
+            VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                ("BTC-EUR", "2026-01-01T00:00:00Z", 62_000, "manual", now, "daily", "close"),
+                ("BTC-EUR", "2026-01-02T00:00:00Z", 62_000, "manual", now, "daily", "close"),
+            ],
+        )
+        conn.executemany(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "lbtc-before-peg-out",
+                    profile["workspace_id"],
+                    profile["id"],
+                    "wallet-liquid-overview",
+                    "lbtc-before-peg-out",
+                    "fp-lbtc-before-peg-out",
+                    "2026-01-01T10:00:00Z",
+                    "2026-01-01T10:10:00Z",
+                    "inbound",
+                    "LBTC",
+                    btc_to_msat("0.12426275"),
+                    0,
+                    "EUR",
+                    62_000,
+                    7704.2905,
+                    "import",
+                    "deposit",
+                    "Initial Liquid balance",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
+                (
+                    "peg-out-lbtc",
+                    profile["workspace_id"],
+                    profile["id"],
+                    "wallet-liquid-overview",
+                    "peg-out-lbtc",
+                    "fp-peg-out-lbtc",
+                    "2026-01-02T10:00:00Z",
+                    "2026-01-02T10:10:00Z",
+                    "outbound",
+                    "LBTC",
+                    btc_to_msat("0.12426275"),
+                    0,
+                    "EUR",
+                    62_000,
+                    -7704.2905,
+                    "import",
+                    "swap",
+                    "Peg-out send leg",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
+                (
+                    "peg-out-btc",
+                    profile["workspace_id"],
+                    profile["id"],
+                    btc_wallet["id"],
+                    "peg-out-btc",
+                    "fp-peg-out-btc",
+                    "2026-01-02T10:05:00Z",
+                    "2026-01-02T10:15:00Z",
+                    "inbound",
+                    "BTC",
+                    btc_to_msat("0.12413298"),
+                    0,
+                    "EUR",
+                    62_000,
+                    7696.24476,
+                    "import",
+                    "swap",
+                    "Peg-out receive leg",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
+            ],
+        )
+        conn.execute(
+            """
+            INSERT INTO transaction_pairs(
+                id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
+                kind, policy, swap_fee_msat, swap_fee_kind, pair_source, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pair-overview-peg-out",
+                profile["workspace_id"],
+                profile["id"],
+                "peg-out-lbtc",
+                "peg-out-btc",
+                "peg-out",
+                "carrying-value",
+                btc_to_msat("0.00012977"),
+                "combined",
+                "manual",
+                now,
+            ),
+        )
+        set_setting(conn, "context_workspace", profile["workspace_id"])
+        set_setting(conn, "context_profile", profile["id"])
+        conn.commit()
+
+        overview = build_overview_snapshot(conn)
+
+        self.assertEqual(
+            [point["date"] for point in overview["portfolioSeries"]],
+            ["2026-01-01", "2026-01-02"],
+        )
+        self.assertAlmostEqual(
+            overview["portfolioSeries"][0]["balanceBtc"],
+            0.12426275,
+            places=8,
+        )
+        self.assertAlmostEqual(
+            overview["portfolioSeries"][1]["balanceBtc"],
+            0.12413298,
+            places=8,
+        )
+        self.assertLess(
+            overview["portfolioSeries"][1]["balanceBtc"],
+            overview["portfolioSeries"][0]["balanceBtc"],
+        )
+        self.assertAlmostEqual(overview["fiat"]["eurBalance"], 7696.24476, places=4)
+
     def test_overview_connection_balances_use_raw_wallet_transactions_when_journals_are_partial(self):
         conn = open_db(self.data_root)
         self.addCleanup(conn.close)
@@ -1678,6 +1869,14 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(overview_swap["pair"]["outAmountSat"], 10_000_000)
         self.assertEqual(overview_swap["pair"]["inAmountSat"], 9_990_000)
         self.assertEqual(overview_swap["pair"]["feeSat"], 10_000)
+        overview_activity_swap_rows = [
+            row
+            for row in overview["activityTxs"]
+            if row["id"] in {"swap-in-leg", "swap-out-leg"}
+        ]
+        self.assertEqual(len(overview_activity_swap_rows), 1)
+        self.assertEqual(overview_activity_swap_rows[0]["id"], "swap-in-leg")
+        self.assertAlmostEqual(overview_activity_swap_rows[0]["balanceBtc"], 0.0099)
         connection_by_label = {
             connection["label"]: connection
             for connection in overview["connections"]

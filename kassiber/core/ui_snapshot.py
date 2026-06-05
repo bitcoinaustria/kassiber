@@ -885,7 +885,7 @@ def _activity_transactions(conn: sqlite3.Connection, profile_id: str) -> list[di
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
-        WHERE t.profile_id = ?
+        WHERE t.profile_id = ? AND t.asset IN ('BTC', 'LBTC')
         ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
         """,
         (profile_id,),
@@ -1218,7 +1218,7 @@ def _balance_series(conn: sqlite3.Connection, profile_id: str) -> list[float]:
         """
         SELECT occurred_at, direction, amount, fee
         FROM transactions
-        WHERE profile_id = ? AND excluded = 0 AND asset = 'BTC'
+        WHERE profile_id = ? AND excluded = 0 AND asset IN ('BTC', 'LBTC')
         ORDER BY occurred_at ASC, created_at ASC, id ASC
         """,
         (profile_id,),
@@ -1263,7 +1263,7 @@ def _portfolio_cost_basis_by_date(
         """
         SELECT occurred_at, quantity, fiat_value, COALESCE(cost_basis, 0) AS cost_basis
         FROM journal_entries
-        WHERE profile_id = ? AND asset = 'BTC'
+        WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
         ORDER BY occurred_at ASC, created_at ASC, id ASC
         """,
         (profile_id,),
@@ -1345,7 +1345,7 @@ def _portfolio_cost_basis_by_transaction(
         """
         SELECT transaction_id, quantity, fiat_value, cost_basis
         FROM journal_entries
-        WHERE profile_id = ? AND asset = 'BTC'
+        WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
         ORDER BY occurred_at ASC, created_at ASC, id ASC
         """,
         (profile_id,),
@@ -1373,7 +1373,7 @@ def _current_portfolio_cost_basis(
         """
         SELECT quantity, fiat_value, cost_basis
         FROM journal_entries
-        WHERE profile_id = ? AND asset = 'BTC'
+        WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
         ORDER BY occurred_at ASC, created_at ASC, id ASC
         """,
         (profile_id,),
@@ -1400,7 +1400,7 @@ def _portfolio_series(
         """
         SELECT occurred_at, direction, amount, fee, fiat_rate, fiat_value
         FROM transactions
-        WHERE profile_id = ? AND excluded = 0 AND asset = 'BTC'
+        WHERE profile_id = ? AND excluded = 0 AND asset IN ('BTC', 'LBTC')
         ORDER BY occurred_at ASC, created_at ASC, id ASC
         """,
         (profile_id,),
@@ -4289,14 +4289,22 @@ def _activity_transaction_rows_to_ui(
 
     output = []
     rendered_pair_ids: set[str] = set()
+    pair_final_rows: dict[str, sqlite3.Row | dict[str, Any]] = {}
     for row in rows:
         pair_meta = pair_meta_by_transaction.get(row["id"])
+        if pair_meta:
+            pair_final_rows[str(pair_meta["pair_id"])] = row
+
+    for row in rows:
+        pair_meta = pair_meta_by_transaction.get(row["id"])
+        output_row = row
         if pair_meta:
             pair_id = str(pair_meta["pair_id"])
             if pair_id in rendered_pair_ids:
                 continue
             rendered_pair_ids.add(pair_id)
+            output_row = pair_final_rows.get(pair_id, row)
         # Activity chart rows intentionally skip metadata tags to keep the
         # uncapped overview payload and SQLite parameter count bounded.
-        output.append(_transaction_row_to_ui(row, [], pair_meta))
+        output.append(_transaction_row_to_ui(output_row, [], pair_meta))
     return output

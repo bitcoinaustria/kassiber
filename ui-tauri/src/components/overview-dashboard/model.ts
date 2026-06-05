@@ -553,7 +553,7 @@ export function buildStatsData(
         : 0,
       isPositive: snapshot.fiat.eurUnrealized >= 0,
       comparisonLabel: isBitcoinMode
-        ? "BTC balance"
+        ? "Bitcoin balance"
         : snapshot.fiat.eurCostBasis
           ? "vs cost basis"
           : "from loaded rows",
