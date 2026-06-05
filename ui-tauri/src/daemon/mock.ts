@@ -2119,6 +2119,7 @@ export const mockDaemon: DaemonTransport = {
             { kind: "coinfinity", summary: "Coinfinity CSV importer." },
             { kind: "21bitcoin", summary: "21bitcoin CSV importer." },
             { kind: "strike", summary: "Strike CSV importer." },
+            { kind: "wasabi", summary: "Wasabi Wallet sanitized bundle importer." },
           ],
           source_formats: [
             "btcpay_csv",
@@ -2131,6 +2132,7 @@ export const mockDaemon: DaemonTransport = {
             "coinfinity_csv",
             "21bitcoin_csv",
             "strike_csv",
+            "wasabi_bundle",
           ],
         } as T,
       };

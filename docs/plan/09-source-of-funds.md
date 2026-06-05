@@ -68,6 +68,9 @@ Privacy techniques make this boundary more important:
   evidence. Wallet-specific privacy importers may set the typed transaction
   privacy-boundary marker when a transaction crossed an opaque boundary, but
   that evidence alone must not be expanded into exact participant lineage.
+  Wasabi imports, for example, can mark likely CoinJoin transactions and current
+  payment-in-CoinJoin state, but those markers are not a completed round ledger
+  or participant ownership map.
 - If an exchange, broker, or old wallet export is missing, the report must show
   a missing-history node and tell the user what evidence is needed.
 

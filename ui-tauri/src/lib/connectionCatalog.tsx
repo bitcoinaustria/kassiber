@@ -51,7 +51,8 @@ export type ConnectionSourceFormat =
   | "bullbitcoin_csv"
   | "coinfinity_csv"
   | "21bitcoin_csv"
-  | "strike_csv";
+  | "strike_csv"
+  | "wasabi_bundle";
 
 export interface ConnectionSource {
   id: string;
@@ -402,6 +403,25 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     details: [
       "Signed msat amounts drive direction",
       "Phoenix type is preserved as a tag",
+    ],
+  },
+  {
+    id: "wasabi",
+    title: "Wasabi Wallet",
+    description: "Sanitized RPC/export bundle import with CoinJoin and anonymity evidence.",
+    category: "wallets",
+    image: sourceIcon("WSB", "#111827", "#ffffff"),
+    status: "ready",
+    pathLabel: "Wallet export",
+    formatLabel: "wasabi_bundle",
+    setupKind: "file-wallet",
+    walletKind: "wasabi",
+    sourceFormat: "wasabi_bundle",
+    chain: "bitcoin",
+    details: [
+      "gethistory imports signed wallet activity",
+      "listcoins/listunspentcoins updates Coins anonymity state",
+      "CoinJoin evidence becomes review warnings, not fabricated provenance",
     ],
   },
   {

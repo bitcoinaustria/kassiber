@@ -41,6 +41,7 @@ WALLET_KINDS = [
     "21bitcoin",
     "pocketbitcoin",
     "strike",
+    "wasabi",
     "custom",
 ]
 REDACTED_CONFIG_VALUE = "[redacted]"
@@ -61,6 +62,7 @@ WALLET_SAFE_CONFIG_FIELDS = (
     "source_file",
     "source_format",
     "altbestand",
+    "wasabi_metadata",
 )
 WALLET_REDACTED_CONFIG_FIELDS = ("descriptor", "change_descriptor")
 
@@ -528,6 +530,11 @@ WALLET_KIND_CATALOG = {
     "strike": {
         "summary": "Strike custodial platform CSV importer for exchange, Bitcoin, and Lightning rows.",
         "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
+    "wasabi": {
+        "summary": "Wasabi Wallet sanitized RPC/export bundle importer with CoinJoin and anonymity evidence.",
+        "config_fields": ["source_file", "source_format", "wasabi_metadata"],
         "requires": [],
     },
     "custom": {

@@ -68,7 +68,9 @@ Treat as self-transfer only with explicit CoinJoin/user-owned provenance. A
 typed transaction privacy-boundary marker may identify an opaque privacy hop,
 but Kassiber must quarantine unresolved CoinJoin/PayJoin/mixing cases instead
 of inferring taxable proceeds, round membership, or self-transfer status from
-transaction shape alone.
+transaction shape alone. Wasabi's `islikelycoinjoin`, CoinJoin payment state,
+GUI clusters, and coin anonymity scores are examples of boundary evidence, not
+proof of completed-round ownership mapping or foreign-input fees.
 
 ### AT-006 RBF / CPFP
 

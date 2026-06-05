@@ -7,6 +7,7 @@ Kassiber can ingest transactions and metadata from several sources. Imported dat
 - generic JSON / CSV transaction files
 - BTCPay CSV / JSON exports
 - BTCPay Greenfield confirmed wallet history
+- Wasabi Wallet sanitized RPC/export bundles
 - Phoenix CSV exports
 - River Bitcoin Activity / Account Activity CSV exports
 - Bull Bitcoin order CSV exports
@@ -19,6 +20,7 @@ Kassiber can ingest transactions and metadata from several sources. Imported dat
 Format references used by the dedicated importers:
 
 - BTCPay Greenfield API: <https://docs.btcpayserver.org/Development/GreenFieldExample/>
+- Wasabi RPC export methods: <https://docs.wasabiwallet.io/using-wasabi/RPC.html>
 - River Account Activity CSV: <https://support.river.com/hc/en-us/articles/45513824178963-How-do-I-download-my-account-activity>
 - Bull Bitcoin order CSV export from the Bull account order history
 - Coinfinity order CSV export from the Coinfinity account order history
@@ -229,6 +231,57 @@ python3 -m kassiber wallets create \
   --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq \
   --source-file /path/to/btcpay-transactions.csv \
   --source-format btcpay_csv
+```
+
+## Wasabi Wallet
+
+Kassiber accepts a sanitized Wasabi JSON bundle as watch-only accounting
+evidence. The bundle can contain `gethistory`,
+`listcoins`/`listunspentcoins`, `getwalletinfo`, `listkeys`,
+`listpaymentsincoinjoin`, and optional `wallet_json` metadata. Kassiber does
+not control the wallet, does not persist raw `wallet.json`, and does not expose
+seeds, encrypted secrets, chain code, xpub/extpub/public keys, full key paths,
+backend URLs, or raw wallet blobs through UI, AI, diagnostics, or public report
+surfaces.
+
+Import directly:
+
+```bash
+python3 -m kassiber wallets import-wasabi \
+  --wallet wasabi \
+  --file /path/to/wasabi-sanitized-bundle.json
+```
+
+Behavior:
+
+- `gethistory` rows become wallet transactions using Wasabi's signed net wallet
+  effect, timestamp/block height, label, txid, and `islikelycoinjoin` evidence
+- `listcoins` / `listunspentcoins` refresh the durable Coins/UTXO inventory,
+  including amount, confirmations, address label, safe receive/change branch
+  and index, anonymity score, spent-by txid, CoinJoin exclusion, key state, and
+  sanitized anonymity history when present
+- `getwalletinfo`, `listkeys`, and `wallet_json` only enrich safe wallet
+  metadata such as anonymity-score target, AutoCoinJoin/RedCoinIsolation,
+  watch-only/hardware flags, gap limit, account-path hints, and key-state
+  counts
+- CoinJoin and PayJoin evidence is treated as a reviewed privacy boundary:
+  Kassiber preserves tx-level flags and coin-level anonymity evidence, but does
+  not fabricate round ids, participant mappings, upstream ownership, or exact
+  foreign-input fees
+- Journal/report readiness marks ambiguous CoinJoin, payment-in-CoinJoin,
+  PayJoin, or sweep evidence as `privacy_hop_unresolved` until the user adds
+  explicit user-owned provenance
+
+You can also create a wallet whose source file is a Wasabi bundle:
+
+```bash
+python3 -m kassiber wallets create \
+  --label wasabi \
+  --kind wasabi \
+  --source-file /path/to/wasabi-sanitized-bundle.json \
+  --source-format wasabi_bundle
+
+python3 -m kassiber wallets sync --wallet wasabi
 ```
 
 ## Phoenix
