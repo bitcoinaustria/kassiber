@@ -15,6 +15,7 @@ export function ActivityScatterDot({
   payload,
   activeSeries,
   onOpenTransactionDetail,
+  onHoverActivityPoint,
 }: ActivityScatterDotProps) {
   const navigate = useNavigate();
   const openedOnPointerDownRef = React.useRef(false);
@@ -60,6 +61,8 @@ export function ActivityScatterDot({
     event.stopPropagation();
     openTransactionDetail();
   };
+  const handlePointerEnter = () => onHoverActivityPoint?.(payload);
+  const handlePointerLeave = () => onHoverActivityPoint?.(null);
 
   const interactiveProps = transactionId
     ? {
@@ -68,8 +71,12 @@ export function ActivityScatterDot({
         "data-activity-marker": true,
         focusable: true,
         onClick: handleClick,
+        onBlur: handlePointerLeave,
+        onFocus: handlePointerEnter,
         onKeyDown: handleKeyDown,
         onPointerDown: handlePointerDown,
+        onPointerEnter: handlePointerEnter,
+        onPointerLeave: handlePointerLeave,
         onMouseDown: (event: React.MouseEvent<SVGGElement>) =>
           event.preventDefault(),
         role: "button",

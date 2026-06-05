@@ -39,6 +39,7 @@ import {
   activeMarketFiatCurrency,
   activeMarketFiatRate,
   activityMarkerView,
+  brushedActivityMarkers,
   buildTreasuryChartStats,
   blurClass,
   defaultTreasurySeriesVisibility,
@@ -125,6 +126,8 @@ export const BtcActivityChart = ({
     React.useState<TreasuryBrushRange | null>(null);
   const [compactBrushRevision, setCompactBrushRevision] = React.useState(0);
   const [expandedBrushRevision, setExpandedBrushRevision] = React.useState(0);
+  const [hoveredActivityPoint, setHoveredActivityPoint] =
+    React.useState<TreasuryChartPoint | null>(null);
   const { active: activeSeries, handleHover } =
     useHoverHighlight<TreasuryChartSeriesKey>();
   const colorMode = useResolvedColorMode();
@@ -135,7 +138,7 @@ export const BtcActivityChart = ({
     () =>
       ({
         primary: {
-          label: "BTC Balance",
+          label: "Bitcoin Balance",
           color: primaryColor,
         },
         price: {
@@ -157,7 +160,7 @@ export const BtcActivityChart = ({
   const legendItems: TreasuryLegendItem[] = [
     {
       key: "primary" as const,
-      label: "BTC Balance",
+      label: "Bitcoin Balance",
       color: primaryColor,
       dashed: false,
     },
@@ -215,6 +218,7 @@ export const BtcActivityChart = ({
 
   React.useEffect(() => {
     setExpandedPointDate(null);
+    setHoveredActivityPoint(null);
   }, [currency, period]);
 
   const chartData = React.useMemo(
@@ -270,8 +274,9 @@ export const BtcActivityChart = ({
         chartData,
         seriesVisible.events,
         activityMarkerMinimumForPoint,
+        period === "30days",
       ),
-    [activityMarkerMinimumForPoint, chartData, seriesVisible.events],
+    [activityMarkerMinimumForPoint, chartData, period, seriesVisible.events],
   );
   const expandedMarkerView = React.useMemo(
     () =>
@@ -279,8 +284,9 @@ export const BtcActivityChart = ({
         expandedChartData,
         seriesVisible.events,
         activityMarkerMinimumForPoint,
+        period === "30days",
       ),
-    [activityMarkerMinimumForPoint, expandedChartData, seriesVisible.events],
+    [activityMarkerMinimumForPoint, expandedChartData, period, seriesVisible.events],
   );
 
   React.useEffect(() => {
@@ -338,6 +344,10 @@ export const BtcActivityChart = ({
             effectiveBrushRange.endIndex + 1,
           )
         : chartDisplayData;
+    const selectedActivityMarkers = brushedActivityMarkers(
+      visibleActivityMarkers,
+      selectedChartDisplayData,
+    );
     const handleBrushChange = (range: TreasuryBrushChange) => {
       const normalizedRange = normalizeTreasuryBrushRange(
         chartDisplayData,
@@ -619,7 +629,7 @@ export const BtcActivityChart = ({
         {expanded && chartStats && (
           <div className="grid gap-2 rounded-lg border bg-muted/25 p-2 sm:grid-cols-3">
             <ChartStat
-              label="Change in BTC balance"
+              label="Change in Bitcoin balance"
               value={formatBtc(Math.abs(chartStats.delta), { precision: 4 })}
               detail={
                 chartStats.pct === null
@@ -653,15 +663,19 @@ export const BtcActivityChart = ({
 
         <div className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
           {legendItems.map((item) => (
-            <div
+            <button
               key={item.key}
+              type="button"
+              aria-label={`${seriesVisible[item.key] ? "Hide" : "Show"} ${item.label}`}
+              aria-pressed={seriesVisible[item.key]}
               className={cn(
-                "flex items-center gap-1.5 transition-opacity duration-200 motion-reduce:transition-none",
+                "inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-current transition-[background-color,opacity] duration-200 hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
                 !seriesVisible[item.key] && "opacity-30",
                 activeSeries !== null &&
                   activeSeries !== item.key &&
                   "opacity-40",
               )}
+              onClick={() => toggleSeries(item.key)}
               onMouseEnter={() => handleHover(item.key)}
               onMouseLeave={() => handleHover(null)}
             >
@@ -680,7 +694,7 @@ export const BtcActivityChart = ({
                 />
               )}
               <span>{item.label}</span>
-            </div>
+            </button>
           ))}
         </div>
 
@@ -703,7 +717,7 @@ export const BtcActivityChart = ({
             <div className="grid min-h-0 flex-1 grid-cols-[18px_minmax(0,1fr)_20px]">
               <div className="pointer-events-none flex items-center justify-center">
                 <span className="-rotate-90 whitespace-nowrap text-[10px] font-semibold text-muted-foreground">
-                  BTC Balance
+                  Bitcoin Balance
                 </span>
               </div>
               <div
@@ -740,6 +754,9 @@ export const BtcActivityChart = ({
                   />
                   <XAxis
                     dataKey="date"
+                    // Scatter has its own marker data; category lookup must use
+                    // the date value instead of the marker array index.
+                    allowDuplicatedCategory={false}
                     axisLine={false}
                     tickLine={false}
                     tick={{ fontSize: 10 }}
@@ -795,6 +812,7 @@ export const BtcActivityChart = ({
                     allowEscapeViewBox={{ x: false, y: true }}
                     content={
                       <TreasuryTooltip
+                        activityPointOverride={hoveredActivityPoint}
                         hideSensitive={hideSensitive}
                         priceEur={fiatRate}
                         fiatCurrency={fiatCurrency}
@@ -868,7 +886,8 @@ export const BtcActivityChart = ({
                   {seriesVisible.events && (
                     <Scatter
                       yAxisId="btc"
-                      dataKey="eventBalanceBtc"
+                      data={selectedActivityMarkers}
+                      dataKey="markerBalanceBtc"
                       name="Activity"
                       fill="transparent"
                       onClick={openActivityPointTransaction}
@@ -876,6 +895,7 @@ export const BtcActivityChart = ({
                         <ActivityScatterDot
                           {...props}
                           activeSeries={activeSeries}
+                          onHoverActivityPoint={setHoveredActivityPoint}
                           onOpenTransactionDetail={onOpenTransactionDetail}
                         />
                       )}

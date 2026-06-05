@@ -256,6 +256,9 @@ export interface PortfolioPoint {
   balanceBtc: number;
   valueEur: number;
   costBasisEur: number;
+  priceEur?: number;
+  priceTimestamp?: string | null;
+  priceSource?: string | null;
 }
 
 export interface MarketRateSnapshot {

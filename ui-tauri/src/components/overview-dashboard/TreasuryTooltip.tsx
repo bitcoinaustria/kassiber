@@ -22,6 +22,7 @@ export interface TreasuryTooltipProps {
   active?: boolean;
   payload?: TreasuryTooltipPayload[];
   label?: string | number;
+  activityPointOverride?: TreasuryChartPoint | null;
   hideSensitive: boolean;
   priceEur: number;
   fiatCurrency: string;
@@ -31,15 +32,17 @@ export function TreasuryTooltip({
   active,
   payload,
   label,
+  activityPointOverride,
   hideSensitive,
   priceEur,
   fiatCurrency,
 }: TreasuryTooltipProps) {
-  if (!active || !payload?.length) return null;
+  if ((!active || !payload?.length) && !activityPointOverride) return null;
 
-  const point =
-    payload.find((p) => p.payload?.isActivityEvent)?.payload ??
-    payload.find((p) => p.payload)?.payload;
+  const payloadPoint =
+    payload?.find((p) => p.payload?.isActivityEvent)?.payload ??
+    payload?.find((p) => p.payload)?.payload;
+  const point = activityPointOverride ?? payloadPoint;
   if (!point) return null;
 
   const unrealizedPct = point.costBasisEur

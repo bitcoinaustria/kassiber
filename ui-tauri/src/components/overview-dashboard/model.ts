@@ -68,6 +68,7 @@ export type PortfolioChartPoint = {
   balanceBtc: number;
   valueEur: number;
   costBasisEur: number;
+  priceEur?: number;
   unrealizedEur: number;
 };
 
@@ -114,6 +115,7 @@ export type TreasuryChartPoint = PortfolioChartPoint & {
   activityValueEur: number;
   eventPriceEur?: number;
   eventBalanceBtc?: number;
+  markerBalanceBtc?: number;
   eventSize: number;
   eventFlow?: ActivityFlow;
   eventSignedBtc?: number;
@@ -152,6 +154,7 @@ export type ActivityScatterDotProps = {
   payload?: TreasuryChartPoint;
   activeSeries: TreasuryChartSeriesKey | null;
   onOpenTransactionDetail?: (transactionId: string) => void;
+  onHoverActivityPoint?: (point: TreasuryChartPoint | null) => void;
 };
 
 export type ActivityMarkerView = {
@@ -165,6 +168,8 @@ export type TreasuryActivityEvent = {
   btc: number;
   signedBtc: number;
   feeBtc: number;
+  postBalanceBtc?: number;
+  postCostBasisEur?: number;
   occurredAt: Date;
   priceEur: number;
   valueEur: number;
@@ -548,7 +553,7 @@ export function buildStatsData(
         : 0,
       isPositive: snapshot.fiat.eurUnrealized >= 0,
       comparisonLabel: isBitcoinMode
-        ? "BTC balance"
+        ? "Bitcoin balance"
         : snapshot.fiat.eurCostBasis
           ? "vs cost basis"
           : "from loaded rows",
@@ -896,7 +901,12 @@ export function isPointInPeriod(
 export function buildPortfolioChartPoint(
   point: Pick<
     PortfolioPoint,
-    "date" | "label" | "balanceBtc" | "valueEur" | "costBasisEur"
+    | "date"
+    | "label"
+    | "balanceBtc"
+    | "valueEur"
+    | "costBasisEur"
+    | "priceEur"
   >,
   month: string,
   detailLabel: string,
@@ -928,6 +938,7 @@ export function buildPortfolioChartPoint(
     balanceBtc: point.balanceBtc,
     valueEur: point.valueEur,
     costBasisEur: point.costBasisEur,
+    priceEur: point.priceEur,
     unrealizedEur,
   };
 }
@@ -954,10 +965,17 @@ export function parseOverviewTxDate(value: string | undefined) {
   return Number.isNaN(parsed.valueOf()) ? null : parsed;
 }
 
+export function endOfIsoDayDate(value: string | undefined) {
+  const parsed = parseIsoDayDate(value);
+  if (!parsed) return null;
+  parsed.setUTCHours(23, 59, 59, 999);
+  return parsed;
+}
+
 export function treasurySortTime(value: string | undefined) {
   if (!value) return null;
   const key = value.split("#")[0] ?? value;
-  const parsed = key.includes("T") ? new Date(key) : parseIsoDayDate(key);
+  const parsed = key.includes("T") ? new Date(key) : endOfIsoDayDate(key);
   return parsed && !Number.isNaN(parsed.valueOf()) ? parsed.valueOf() : null;
 }
 
@@ -1255,12 +1273,22 @@ export function activityTxs(snapshot: OverviewSnapshot): TreasuryActivityEvent[]
       const valueEur = Math.abs(tx.eur ?? 0);
       const priceEur =
         valueEur > 0 && btc > 0 ? valueEur / btc : tx.rate ?? fiatRate;
+      const postBalanceBtc =
+        typeof tx.balanceBtc === "number" && Number.isFinite(tx.balanceBtc)
+          ? tx.balanceBtc
+          : undefined;
+      const postCostBasisEur =
+        typeof tx.costBasisEur === "number" && Number.isFinite(tx.costBasisEur)
+          ? tx.costBasisEur
+          : undefined;
       return [
         {
           tx,
           btc,
           signedBtc,
           feeBtc,
+          postBalanceBtc,
+          postCostBasisEur,
           occurredAt,
           priceEur,
           valueEur,
@@ -1308,7 +1336,11 @@ export function buildTreasuryBasePoint(
 ): TreasuryChartPoint {
   const fiatRate = activeMarketFiatRate(snapshot);
   const bitcoinPriceEur =
-    point.balanceBtc > 0 ? point.valueEur / point.balanceBtc : fiatRate;
+    point.priceEur && point.priceEur > 0
+      ? point.priceEur
+      : point.balanceBtc > 0
+        ? point.valueEur / point.balanceBtc
+        : fiatRate;
   const avgCostEur =
     point.balanceBtc > 0 && point.costBasisEur > 0
       ? point.costBasisEur / point.balanceBtc
@@ -1349,20 +1381,30 @@ export function buildTreasuryActivityPoint(
   event: TreasuryActivityEvent,
   anchor: TreasuryChartPoint | null,
   snapshot: OverviewSnapshot,
+  options: {
+    drawLineValues?: boolean;
+    markerAnchor?: TreasuryChartPoint | null;
+  } = {},
 ): TreasuryChartPoint {
-  const balanceBtc = anchor?.balanceBtc ?? latestPortfolioBalanceBtc(snapshot);
-  const costBasisEur = anchor?.costBasisEur ?? snapshot.fiat.eurCostBasis;
+  const balanceBtc =
+    event.postBalanceBtc ?? anchor?.balanceBtc ?? latestPortfolioBalanceBtc(snapshot);
+  const costBasisEur =
+    event.postCostBasisEur ?? anchor?.costBasisEur ?? snapshot.fiat.eurCostBasis;
   const valueEur =
     balanceBtc > 0
       ? balanceBtc * event.priceEur
       : anchor?.valueEur ?? snapshot.fiat.eurBalance;
   const avgCostEur =
     balanceBtc > 0 && costBasisEur > 0 ? costBasisEur / balanceBtc : null;
-  const date = activityDateKey(event);
+  const markerAnchor = options.markerAnchor ?? null;
+  const eventDate = activityDateKey(event);
+  const date = options.drawLineValues
+    ? eventDate
+    : markerAnchor?.date ?? eventDate;
   return {
     date,
     month: formatTreasuryTick(date),
-    detailLabel: formatTreasuryDetailDate(date),
+    detailLabel: formatTreasuryDetailDate(eventDate),
     thisYear: valueEur,
     prevYear: costBasisEur,
     balanceBtc,
@@ -1371,9 +1413,9 @@ export function buildTreasuryActivityPoint(
     unrealizedEur: valueEur - costBasisEur,
     bitcoinPriceEur: event.priceEur,
     avgCostEur,
-    lineBalanceBtc: balanceBtc,
-    lineBitcoinPriceEur: event.priceEur,
-    lineAvgCostEur: avgCostEur,
+    lineBalanceBtc: options.drawLineValues ? balanceBtc : undefined,
+    lineBitcoinPriceEur: undefined,
+    lineAvgCostEur: options.drawLineValues ? avgCostEur : undefined,
     brushBalanceBtc: balanceBtc,
     reserveValueEur: valueEur,
     activityBtc: event.volumeBtc,
@@ -1381,6 +1423,7 @@ export function buildTreasuryActivityPoint(
     activityValueEur: event.valueEur,
     eventPriceEur: event.priceEur,
     eventBalanceBtc: balanceBtc,
+    markerBalanceBtc: markerAnchor?.balanceBtc ?? balanceBtc,
     eventSize: Math.max(event.volumeBtc, event.feeBtc),
     eventFlow: event.flow,
     eventSignedBtc: event.signedBtc,
@@ -1406,6 +1449,21 @@ export function enrichTreasuryChartData(
 ): TreasuryChartPoint[] {
   const basePoints = points.map((point) => buildTreasuryBasePoint(point, snapshot));
   const events = activityTxs(snapshot);
+  const drawActivityLineValues = period === "30days";
+  const basePointsByDay = new Map(
+    basePoints.map((point) => [String(point.date).slice(0, 10), point]),
+  );
+  const findMarkerAnchor = (event: TreasuryActivityEvent) => {
+    if (drawActivityLineValues) return null;
+    const eventDay = event.occurredAt.toISOString().slice(0, 10);
+    const sameDayPoint = basePointsByDay.get(eventDay);
+    if (sameDayPoint) return sameDayPoint;
+    const eventTime = event.occurredAt.valueOf();
+    return (
+      basePoints.find((point) => point.sortTimeMs >= eventTime) ??
+      nearestTreasuryAnchor(basePoints, event)
+    );
+  };
   const candidateTimes = [
     ...basePoints.map((point) => point.sortTimeMs).filter((time) => time > 0),
     ...events.map((event) => event.occurredAt.valueOf()),
@@ -1419,6 +1477,10 @@ export function enrichTreasuryChartData(
         event,
         nearestTreasuryAnchor(basePoints, event),
         snapshot,
+        {
+          drawLineValues: drawActivityLineValues,
+          markerAnchor: findMarkerAnchor(event),
+        },
       ),
     );
 
@@ -1461,6 +1523,7 @@ export function activityMarkerView(
   plottedData: TreasuryChartPoint[],
   showEvents: boolean,
   markerMinimumForPoint: (point: TreasuryChartPoint) => number,
+  includeActivityPointsInDisplay = false,
 ): ActivityMarkerView {
   const activityPoints = plottedData.filter((point) => point.isActivityEvent);
   const visibleActivityMarkers = activityPoints.filter(
@@ -1468,17 +1531,24 @@ export function activityMarkerView(
       showEvents &&
       (point.eventSize || point.activityBtc) >= markerMinimumForPoint(point),
   );
-  const visibleActivityMarkerIds = new Set(
-    visibleActivityMarkers.map((point) => point.date),
-  );
   const chartDisplayData = plottedData.filter(
-    (point) => !point.isActivityEvent || visibleActivityMarkerIds.has(point.date),
+    (point) => !point.isActivityEvent || includeActivityPointsInDisplay,
   );
   return {
     activityPoints,
     chartDisplayData,
     visibleActivityMarkers,
   };
+}
+
+export function brushedActivityMarkers(
+  activityMarkers: TreasuryChartPoint[],
+  selectedChartDisplayData: TreasuryChartPoint[],
+) {
+  const selectedDates = new Set(
+    selectedChartDisplayData.map((point) => String(point.date)),
+  );
+  return activityMarkers.filter((point) => selectedDates.has(String(point.date)));
 }
 
 export function expandFallbackYearData(
