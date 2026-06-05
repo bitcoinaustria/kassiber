@@ -742,6 +742,9 @@ export const BtcActivityChart = ({
                   />
                   <XAxis
                     dataKey="date"
+                    // Scatter has its own marker data; category lookup must use
+                    // the date value instead of the marker array index.
+                    allowDuplicatedCategory={false}
                     axisLine={false}
                     tickLine={false}
                     tick={{ fontSize: 10 }}
