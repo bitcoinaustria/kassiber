@@ -124,6 +124,10 @@ Source findings that shape the import:
   backup version `1` with Samourai's legacy PBKDF2/AES-CBC routine, decrypts
   version `2` with the SHA256 PBKDF2/AES-CBC routine, reads `wallet.seed`, and
   turns that seed into a normal single-sig keystore.
+- Kassiber's backup import treats the backup passphrase as the Samourai wallet
+  / BIP39 passphrase by default, matching standard Samourai recovery. If local
+  evidence shows the backup encryption passphrase and BIP39 passphrase differ,
+  provide the BIP39 value through the mnemonic-passphrase input as an override.
 - Drongo's `StandardAccount` defines Whirlpool accounts as native segwit
   account roots: Badbank `2147483644'`, Premix `2147483645'`, and Postmix
   `2147483646'`; Postmix uses a minimum lookahead twice the normal default.
@@ -200,6 +204,9 @@ python3 -m kassiber wallets import-samourai \
   --backup-passphrase-stdin \
   --backend mempool \
   --gap-limit 80
+
+# Add --mnemonic-passphrase-fd 3 only when the BIP39 passphrase differs from
+# the backup passphrase.
 
 python3 -m kassiber wallets import-samourai \
   --label "Samourai Recovery" \

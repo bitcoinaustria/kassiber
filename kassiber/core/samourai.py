@@ -6,6 +6,7 @@ import json
 import re
 import sqlite3
 import uuid
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,7 @@ from ..util import normalize_network_value, str_or_none
 from ..wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
     MAX_DESCRIPTOR_GAP_LIMIT,
+    derive_descriptor_target,
     load_descriptor_plan,
 )
 from . import wallets as core_wallets
@@ -630,6 +632,33 @@ def _validate_descriptor_config(config: dict[str, Any]) -> None:
         ) from exc
 
 
+def _validate_descriptor_origin_matches_template(
+    config: dict[str, Any],
+    *,
+    root_path: str,
+) -> None:
+    try:
+        plan = load_descriptor_plan(config)
+        if plan is None:
+            raise ValueError("missing descriptor")
+        for branch in plan.branches:
+            target = derive_descriptor_target(plan, branch.branch_index, 0)
+            expected = f"{root_path}/{branch.branch_index}/0"
+            derivation_paths = set(target.derivation_paths)
+            if derivation_paths != {expected}:
+                raise ValueError(
+                    f"expected descriptor origin {expected}, got {sorted(derivation_paths)}"
+                )
+    except ValueError as exc:
+        raise AppError(
+            "Samourai descriptor origin does not match the declared account path",
+            code="validation",
+            hint="Use descriptors with key origins that match the declared Samourai section/root_path.",
+            details={"expected_root_path": root_path},
+            retryable=False,
+        ) from exc
+
+
 def _template_for(
     section: str,
     script_type: str,
@@ -784,6 +813,7 @@ def _explicit_descriptor_source(
     if change_descriptor:
         config["change_descriptor"] = change_descriptor
     _validate_descriptor_config(config)
+    _validate_descriptor_origin_matches_template(config, root_path=root_path)
     return {
         "section": template.section,
         "label": str_or_none(raw_source.get("label")) or template.label,
@@ -862,6 +892,7 @@ def build_samourai_sources_from_backup(
     backup_file: str,
     backup_passphrase: str,
     *,
+    mnemonic_passphrase: str | None = None,
     network: str | None,
     gap_limit: int | None,
 ) -> tuple[list[dict[str, Any]], str]:
@@ -878,18 +909,15 @@ def build_samourai_sources_from_backup(
     payload = decrypt_samourai_backup_text(backup_text, backup_passphrase)
     mnemonic, backup_network = mnemonic_from_samourai_backup_payload(payload)
     normalized_network = _normalize_import_network(network, backup_network)
-    try:
-        return (
-            derive_samourai_wallet_sources(
-                mnemonic,
-                backup_passphrase,
-                network=normalized_network,
-                gap_limit=gap_limit,
-            ),
-            normalized_network,
-        )
-    finally:
-        mnemonic = ""
+    return (
+        derive_samourai_wallet_sources(
+            mnemonic,
+            backup_passphrase if mnemonic_passphrase is None else mnemonic_passphrase,
+            network=normalized_network,
+            gap_limit=gap_limit,
+        ),
+        normalized_network,
+    )
 
 
 def build_samourai_sources_from_mnemonic(
@@ -958,6 +986,17 @@ def import_samourai_wallet_group(
     account = resolve_account(conn, profile["id"], account_ref or "treasury")
     group_id = str(uuid.uuid4())
     labels = [group_label] + [_child_label(group_label, source) for source in sources]
+    duplicate_labels = sorted(
+        label for label, count in Counter(labels).items() if count > 1
+    )
+    if duplicate_labels:
+        raise AppError(
+            "Samourai import contains duplicate wallet labels",
+            code="validation",
+            hint="Give duplicate source entries distinct labels or remove the duplicate entry.",
+            details={"duplicate_labels": duplicate_labels},
+            retryable=False,
+        )
     conflicts = sorted(_existing_wallet_labels(conn, profile["id"], labels))
     if conflicts:
         raise AppError(
@@ -1058,6 +1097,7 @@ def _resolve_import_sources(
         sources, normalized_network = build_samourai_sources_from_backup(
             backup_file,
             backup_passphrase or "",
+            mnemonic_passphrase=mnemonic_passphrase,
             network=network,
             gap_limit=gap_limit,
         )

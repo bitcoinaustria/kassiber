@@ -12,6 +12,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from kassiber.core import samourai as core_samourai
+from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
 from kassiber.core.output_inventory import (
     list_wallet_output_inventory,
     update_wallet_output_inventory,
@@ -180,6 +181,46 @@ class SamouraiImportTest(unittest.TestCase):
             )
         self.assertEqual(raised.exception.code, "validation")
 
+    def test_backup_import_supports_distinct_bip39_passphrase(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-samourai-backup-") as tmp:
+            backup_path = Path(tmp) / "samourai.txt"
+            backup_path.write_text(_encrypted_backup_v2(), encoding="utf-8")
+
+            backup_sources, _ = core_samourai.build_samourai_sources_from_backup(
+                str(backup_path),
+                _passphrase(),
+                mnemonic_passphrase="",
+                network="main",
+                gap_limit=40,
+            )
+            mnemonic_sources = core_samourai.derive_samourai_wallet_sources(
+                _mnemonic(),
+                "",
+                network="main",
+                gap_limit=40,
+            )
+            self.assertEqual(
+                backup_sources[0]["config"]["descriptor"],
+                mnemonic_sources[0]["config"]["descriptor"],
+            )
+
+            default_backup_sources, _ = core_samourai.build_samourai_sources_from_backup(
+                str(backup_path),
+                _passphrase(),
+                network="main",
+                gap_limit=40,
+            )
+            passphrase_sources = core_samourai.derive_samourai_wallet_sources(
+                _mnemonic(),
+                _passphrase(),
+                network="main",
+                gap_limit=40,
+            )
+            self.assertEqual(
+                default_backup_sources[0]["config"]["descriptor"],
+                passphrase_sources[0]["config"]["descriptor"],
+            )
+
     def test_import_from_mnemonic_creates_redacted_group_and_all_paths(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-samourai-") as tmp:
             conn = open_db(Path(tmp) / "data")
@@ -237,6 +278,12 @@ class SamouraiImportTest(unittest.TestCase):
                 source
                 for source in sources
                 if source["config"]["samourai"]["section"] == "postmix"
+            )
+            deposit_native_source = next(
+                source
+                for source in sources
+                if source["config"]["samourai"]["section"] == "deposit"
+                and source["config"]["samourai"]["root_path"] == "m/84'/0'/0'"
             )
             paynym_xpub, fingerprint = _account_xpub("m/47'/0'/0'")
             source_set_path = Path(tmp) / "samourai-sources.json"
@@ -374,6 +421,82 @@ class SamouraiImportTest(unittest.TestCase):
                 )
             self.assertEqual(raised.exception.code, "validation")
 
+            bad_origin_path = Path(tmp) / "bad-origin-samourai-sources.json"
+            bad_origin_path.write_text(
+                json.dumps(
+                    {
+                        "network": "main",
+                        "children": [
+                            {
+                                "section": "postmix",
+                                "script_type": "p2wpkh",
+                                "root_path": "m/84'/0'/2147483646'",
+                                "descriptor": deposit_native_source["config"]["descriptor"],
+                                "change_descriptor": deposit_native_source["config"][
+                                    "change_descriptor"
+                                ],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaises(AppError) as raised:
+                core_samourai.import_samourai_wallet_group(
+                    conn,
+                    "Main",
+                    "Default",
+                    label="Bad Samourai Origin",
+                    source_set_file=str(bad_origin_path),
+                    network="main",
+                )
+            self.assertEqual(raised.exception.code, "validation")
+            self.assertIn("origin", str(raised.exception).lower())
+
+            duplicate_path = Path(tmp) / "duplicate-samourai-sources.json"
+            duplicate_path.write_text(
+                json.dumps(
+                    {
+                        "network": "main",
+                        "children": [
+                            {
+                                "section": "postmix",
+                                "script_type": "p2wpkh",
+                                "root_path": "m/84'/0'/2147483646'",
+                                "descriptor": postmix_source["config"]["descriptor"],
+                                "change_descriptor": postmix_source["config"][
+                                    "change_descriptor"
+                                ],
+                            },
+                            {
+                                "section": "postmix",
+                                "script_type": "p2wpkh",
+                                "root_path": "m/84'/0'/2147483646'",
+                                "descriptor": postmix_source["config"]["descriptor"],
+                                "change_descriptor": postmix_source["config"][
+                                    "change_descriptor"
+                                ],
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaises(AppError) as raised:
+                core_samourai.import_samourai_wallet_group(
+                    conn,
+                    "Main",
+                    "Default",
+                    label="Duplicate Samourai",
+                    source_set_file=str(duplicate_path),
+                    network="main",
+                )
+            self.assertEqual(raised.exception.code, "validation")
+            self.assertEqual(
+                raised.exception.details["duplicate_labels"],
+                ["Duplicate Samourai - Postmix"],
+            )
+
     def test_tax_events_skip_internal_whirlpool_rows_but_quarantine_external_spend(self):
         wallet_refs = {
             "wallet-deposit": {"id": "wallet-deposit", "label": "Deposit"},
@@ -418,8 +541,17 @@ class SamouraiImportTest(unittest.TestCase):
         self.assertEqual(normalized.events[0].amount, 0)
         self.assertGreater(normalized.events[0].fee, 0)
         self.assertEqual(normalized.events[0].spot_price, 60_000)
-        self.assertEqual(normalized.transfers, [])
-        self.assertEqual(normalized.ordered_items, [("event", "tx0-out")])
+        self.assertEqual(len(normalized.transfers), 2)
+        self.assertEqual(
+            normalized.ordered_items,
+            [
+                ("transfer", "tx0-out::tx0-premix"),
+                ("transfer", "tx0-out::tx0-badbank"),
+                ("event", "tx0-out"),
+            ],
+        )
+        self.assertEqual(normalized.transfers[0].to_wallet_label, "Premix")
+        self.assertEqual(normalized.transfers[1].to_wallet_label, "Badbank")
         self.assertEqual(normalized.quarantines, [])
 
         missing_price = normalize_tax_asset_inputs(
@@ -523,6 +655,122 @@ class SamouraiImportTest(unittest.TestCase):
                 normalized_spend.quarantines[0]["reason"],
                 "missing_spot_price",
             )
+
+    def test_tx0_multi_output_updates_per_wallet_holdings(self):
+        profile = {
+            "id": "profile-1",
+            "workspace_id": "ws-1",
+            "label": "Default",
+            "fiat_currency": "EUR",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+        }
+        wallet_refs = {
+            "wallet-deposit": {
+                "id": "wallet-deposit",
+                "label": "Deposit",
+                "wallet_account_id": "acct-1",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+            "wallet-premix": {
+                "id": "wallet-premix",
+                "label": "Premix",
+                "wallet_account_id": "acct-1",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+            "wallet-badbank": {
+                "id": "wallet-badbank",
+                "label": "Badbank",
+                "wallet_account_id": "acct-1",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+        }
+
+        def engine_row(row):
+            wallet = wallet_refs[row["wallet_id"]]
+            return {
+                **row,
+                "wallet_label": wallet["label"],
+                "wallet_account_id": wallet["wallet_account_id"],
+                "account_code": wallet["account_code"],
+                "account_label": wallet["account_label"],
+                "created_at": row["occurred_at"],
+            }
+
+        rows = [
+            engine_row(
+                _tax_row(
+                    "deposit-acquisition",
+                    "deposit",
+                    "inbound",
+                    external_id="deposit-acquisition",
+                    amount=100_001_000,
+                    fiat_rate=60_000,
+                )
+            ),
+            engine_row(
+                _tax_row(
+                    "tx0-out",
+                    "deposit",
+                    "outbound",
+                    external_id="tx0",
+                    amount=100_000_000,
+                    fee=1_000,
+                    fiat_rate=60_000,
+                )
+            ),
+            engine_row(
+                _tax_row(
+                    "tx0-premix",
+                    "premix",
+                    "inbound",
+                    external_id="tx0",
+                    amount=80_000_000,
+                )
+            ),
+            engine_row(
+                _tax_row(
+                    "tx0-badbank",
+                    "badbank",
+                    "inbound",
+                    external_id="tx0",
+                    amount=19_999_000,
+                )
+            ),
+        ]
+        state = build_tax_engine(profile).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=wallet_refs,
+                manual_pair_records=[],
+            )
+        )
+
+        self.assertEqual(state.quarantines, [])
+        holdings = {
+            wallet_label: totals["quantity"]
+            for (_, wallet_label, _, _), totals in state.wallet_holdings.items()
+        }
+        self.assertNotIn("Deposit", holdings)
+        self.assertAlmostEqual(float(holdings["Premix"]), 0.0008, places=8)
+        self.assertAlmostEqual(float(holdings["Badbank"]), 0.00019999, places=8)
+
+        entry_types = sorted(entry["entry_type"] for entry in state.entries)
+        self.assertEqual(
+            entry_types,
+            [
+                "acquisition",
+                "fee",
+                "transfer_in",
+                "transfer_in",
+                "transfer_out",
+                "transfer_out",
+            ],
+        )
 
     def test_source_funds_suggests_whirlpool_as_coinjoin_boundary(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-samourai-sof-") as tmp:

@@ -74,6 +74,9 @@ class NormalizedTaxTransfer:
     # Kassiber models pools as per-wallet. Intra transfers don't have
     # a regime or swap-link concept; only the pool marker applies.
     at_pool: Optional[str] = None
+    # Optional stable id for one logical movement split out of a multi-output
+    # wallet transaction. Journal rows still point at the real out/in rows.
+    transfer_id: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -252,8 +255,8 @@ def _collect_samourai_internal_transfers(
     wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
     is_at: bool,
     quarantines: list[dict[str, Any]],
-) -> tuple[dict[str, NormalizedTaxTransfer], dict[str, NormalizedTaxEvent]]:
-    collected: dict[str, NormalizedTaxTransfer] = {}
+) -> tuple[dict[str, list[NormalizedTaxTransfer]], dict[str, NormalizedTaxEvent]]:
+    collected: dict[str, list[NormalizedTaxTransfer]] = {}
     fee_events: dict[str, NormalizedTaxEvent] = {}
     for entries in groups:
         out_rows = [
@@ -349,6 +352,34 @@ def _collect_samourai_internal_transfers(
             wallet_refs_by_id[row["wallet_id"]]["label"] for row in in_rows
         }
         if len(in_rows) > 1 or len(to_wallet_labels) > 1:
+            collected[str(first_out["id"])] = [
+                NormalizedTaxTransfer(
+                    asset=asset,
+                    occurred_at=first_out["occurred_at"],
+                    out_transaction_id=first_out["id"],
+                    in_transaction_id=in_row["id"],
+                    from_wallet_id=from_wallet["id"],
+                    from_wallet_label=from_wallet["label"],
+                    to_wallet_id=wallet_refs_by_id[in_row["wallet_id"]]["id"],
+                    to_wallet_label=wallet_refs_by_id[in_row["wallet_id"]]["label"],
+                    sent=msat_to_btc(in_row["amount"]),
+                    received=msat_to_btc(in_row["amount"]),
+                    fee=Decimal("0"),
+                    spot_price=spot_price,
+                    description=(
+                        first_out["note"]
+                        or first_out["description"]
+                        or first_out["kind"]
+                        or "Samourai Whirlpool privacy movement"
+                    ),
+                    external_id=_row_get(first_out, "external_id"),
+                    out_row=first_out,
+                    in_row=in_row,
+                    at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
+                    transfer_id=f"{first_out['id']}::{in_row['id']}",
+                )
+                for in_row in in_rows
+            ]
             if fee > 0:
                 fee_events[str(first_out["id"])] = NormalizedTaxEvent(
                     transaction_id=first_out["id"],
@@ -372,30 +403,32 @@ def _collect_samourai_internal_transfers(
                 )
             continue
 
-        collected[str(first_out["id"])] = NormalizedTaxTransfer(
-            asset=asset,
-            occurred_at=first_out["occurred_at"],
-            out_transaction_id=first_out["id"],
-            in_transaction_id=first_in["id"],
-            from_wallet_id=from_wallet["id"],
-            from_wallet_label=from_wallet["label"],
-            to_wallet_id=to_wallet["id"],
-            to_wallet_label=to_wallet["label"],
-            sent=sent,
-            received=received,
-            fee=fee,
-            spot_price=spot_price,
-            description=(
-                first_out["note"]
-                or first_out["description"]
-                or first_out["kind"]
-                or "Samourai Whirlpool privacy movement"
-            ),
-            external_id=_row_get(first_out, "external_id"),
-            out_row=first_out,
-            in_row=first_in,
-            at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
-        )
+        collected[str(first_out["id"])] = [
+            NormalizedTaxTransfer(
+                asset=asset,
+                occurred_at=first_out["occurred_at"],
+                out_transaction_id=first_out["id"],
+                in_transaction_id=first_in["id"],
+                from_wallet_id=from_wallet["id"],
+                from_wallet_label=from_wallet["label"],
+                to_wallet_id=to_wallet["id"],
+                to_wallet_label=to_wallet["label"],
+                sent=sent,
+                received=received,
+                fee=fee,
+                spot_price=spot_price,
+                description=(
+                    first_out["note"]
+                    or first_out["description"]
+                    or first_out["kind"]
+                    or "Samourai Whirlpool privacy movement"
+                ),
+                external_id=_row_get(first_out, "external_id"),
+                out_row=first_out,
+                in_row=first_in,
+                at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
+            )
+        ]
     return collected, fee_events
 
 
@@ -442,10 +475,11 @@ def normalize_tax_asset_inputs(
 
     for row in rows:
         if row["id"] in samourai_internal_row_ids:
-            transfer = samourai_transfer_by_out_id.get(row["id"])
-            if transfer is not None:
+            for transfer in samourai_transfer_by_out_id.get(row["id"], []):
                 transfers.append(transfer)
-                ordered_items.append(("transfer", row["id"]))
+                ordered_items.append(
+                    ("transfer", transfer.transfer_id or transfer.out_transaction_id)
+                )
             event = samourai_fee_event_by_out_id.get(row["id"])
             if event is not None:
                 events.append(event)

@@ -241,8 +241,10 @@ material contains both.
 It accepts `label`, optional `backend`, `network`, and `gap_limit`, plus exactly
 one local recovery source: `backup_file` with `backup_passphrase`, `mnemonic`
 with optional `mnemonic_passphrase`, or `source_set_file` containing explicit
-descriptor/xpub sources. Backup and mnemonic material are used only inside the
-local daemon request to derive watch-only descriptor children for Deposit,
+descriptor/xpub sources. For backup imports, `mnemonic_passphrase` is an
+optional BIP39 override; when omitted, Kassiber uses the Samourai backup
+passphrase as the wallet passphrase. Backup and mnemonic material are used only
+inside the local daemon request to derive watch-only descriptor children for Deposit,
 Badbank/Toxic Change, Premix, Postmix, and Ricochet. The response returns a
 redacted logical group plus child wallet summaries and safe warnings; it does
 not return backup contents, recovery words, passphrases, descriptors, xpubs,

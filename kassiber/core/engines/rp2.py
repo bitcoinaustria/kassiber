@@ -394,9 +394,19 @@ def _build_rp2_accounting_engine(profile: Mapping[str, Any]):
 def _rows_by_transaction_id(normalized_inputs: NormalizedTaxAssetInputs) -> dict[str, Mapping[str, Any]]:
     rows_by_id = {event.transaction_id: event.raw_row for event in normalized_inputs.events}
     for transfer in normalized_inputs.transfers:
+        transfer_id = _transfer_item_id(transfer)
+        if transfer_id != transfer.out_transaction_id:
+            rows_by_id[transfer_id] = {
+                **dict(transfer.out_row),
+                "journal_transaction_id": transfer.out_transaction_id,
+            }
         rows_by_id[transfer.out_transaction_id] = transfer.out_row
         rows_by_id[transfer.in_transaction_id] = transfer.in_row
     return rows_by_id
+
+
+def _transfer_item_id(transfer: NormalizedTaxTransfer) -> str:
+    return str(transfer.transfer_id or transfer.out_transaction_id)
 
 
 def _row_get(row: Mapping[str, Any] | None, key: str, default: Any = None) -> Any:
@@ -447,11 +457,15 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
     intra_audit = []
     row_index = 1
     events_by_id = {event.transaction_id: event for event in normalized_inputs.events}
-    transfers_by_id = {transfer.out_transaction_id: transfer for transfer in normalized_inputs.transfers}
+    transfers_by_id = {
+        _transfer_item_id(transfer): transfer
+        for transfer in normalized_inputs.transfers
+    }
 
     for item_kind, item_id in normalized_inputs.ordered_items:
         if item_kind == "transfer":
             transfer = transfers_by_id[item_id]
+            transfer_id = _transfer_item_id(transfer)
             if total_available < transfer.sent:
                 quarantines.append(
                     build_tax_quarantine(
@@ -495,30 +509,31 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                     crypto_sent=_rp2_decimal(transfer.sent),
                     crypto_received=_rp2_decimal(transfer.received),
                     row=row_index,
-                    unique_id=transfer.out_transaction_id,
+                    unique_id=transfer_id,
                     notes=_compose_transfer_notes(transfer),
                 )
             )
             row_index += 1
             total_available -= transfer.fee
             priced_available -= transfer.fee
-            intra_audit.append(
-                {
-                    "out_id": transfer.out_transaction_id,
-                    "in_id": transfer.in_transaction_id,
-                    "from_wallet_id": transfer.from_wallet_id,
-                    "from_wallet_label": transfer.from_wallet_label,
-                    "to_wallet_id": transfer.to_wallet_id,
-                    "to_wallet_label": transfer.to_wallet_label,
-                    "asset": asset,
-                    "occurred_at": transfer.occurred_at,
-                    "external_id": transfer.external_id,
-                    "crypto_sent": float(transfer.sent),
-                    "crypto_received": float(transfer.received),
-                    "crypto_fee": float(transfer.fee),
-                    "spot_price": float(transfer.spot_price) if transfer.spot_price is not None else 0.0,
-                }
-            )
+            audit_row = {
+                "out_id": transfer.out_transaction_id,
+                "in_id": transfer.in_transaction_id,
+                "from_wallet_id": transfer.from_wallet_id,
+                "from_wallet_label": transfer.from_wallet_label,
+                "to_wallet_id": transfer.to_wallet_id,
+                "to_wallet_label": transfer.to_wallet_label,
+                "asset": asset,
+                "occurred_at": transfer.occurred_at,
+                "external_id": transfer.external_id,
+                "crypto_sent": float(transfer.sent),
+                "crypto_received": float(transfer.received),
+                "crypto_fee": float(transfer.fee),
+                "spot_price": float(transfer.spot_price) if transfer.spot_price is not None else 0.0,
+            }
+            if transfer_id != transfer.out_transaction_id:
+                audit_row["rp2_unique_id"] = transfer_id
+            intra_audit.append(audit_row)
             continue
 
         event = events_by_id[item_id]
@@ -770,14 +785,17 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
             }
         )
 
-    audit_by_out_id = {audit["out_id"]: audit for audit in intra_audit}
+    audit_by_rp2_id = {
+        audit.get("rp2_unique_id", audit["out_id"]): audit
+        for audit in intra_audit
+    }
     realized_by_event = {}
     for gain_loss in computed_data.gain_loss_set:
         taxable_event = gain_loss.taxable_event
         wallet = _wallet_for(taxable_event)
         is_earn = _is_rp2_earn_transaction_type(taxable_event.transaction_type)
         is_intra = (
-            taxable_event.unique_id in audit_by_out_id
+            taxable_event.unique_id in audit_by_rp2_id
             and taxable_event.asset == computed_data.asset
             and _rp2_transaction_type_value(taxable_event.transaction_type) == "move"
         )

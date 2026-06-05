@@ -609,8 +609,15 @@ export function AddConnectionDialog({
   }, [initialSourceId, open]);
 
   React.useEffect(() => {
-    if (!open) setScannerOpen(false);
-  }, [open]);
+    if (open) return;
+    setScannerOpen(false);
+    setForm(formDefaultsFor(selected));
+    setFieldErrors({});
+    setSetupError(null);
+    setLastImportResult(null);
+    setPreviewAddresses(null);
+    setPreviewError(null);
+  }, [open, selected]);
 
   React.useEffect(() => {
     if (!defaultBackendName) return;
@@ -865,6 +872,7 @@ export function AddConnectionDialog({
             ? {
                 backup_file: form.sourceFile.trim(),
                 backup_passphrase: form.backupPassphrase,
+                mnemonic_passphrase: form.mnemonicPassphrase || undefined,
               }
             : form.samouraiSourceMode === "mnemonic"
               ? {
@@ -893,6 +901,13 @@ export function AddConnectionDialog({
           body: `${label} created ${childLabels.length.toLocaleString("en-US")} watch-only sources${form.syncAfterCreate ? " and started scanning" : ""}.`,
           tone: "success",
         });
+        setForm((current) => ({
+          ...current,
+          backupPassphrase: "",
+          mnemonicPassphrase: "",
+          sourceFile: "",
+          walletMaterial: "",
+        }));
       } else if (setupKind === "file-wallet") {
         const sourceFormat =
           selected.id === "csv" ? form.sourceFormat : selected.sourceFormat;
@@ -1305,7 +1320,14 @@ export function AddConnectionDialog({
                   type="button"
                   variant={form.samouraiSourceMode === value ? "secondary" : "outline"}
                   onClick={() => {
-                    updateForm("samouraiSourceMode", value);
+                    setForm((current) => ({
+                      ...current,
+                      samouraiSourceMode: value,
+                      backupPassphrase: "",
+                      mnemonicPassphrase: "",
+                      sourceFile: "",
+                      walletMaterial: "",
+                    }));
                     setLastImportResult(null);
                   }}
                 >
@@ -1387,21 +1409,37 @@ export function AddConnectionDialog({
                 </div>
               </SetupField>
               {form.samouraiSourceMode === "backup" ? (
-                <SetupField
-                  id="connection-samourai-backup-passphrase"
-                  label="Backup passphrase"
-                  error={fieldErrors.backupPassphrase}
-                >
-                  <Input
+                <>
+                  <SetupField
                     id="connection-samourai-backup-passphrase"
-                    type="password"
-                    value={form.backupPassphrase}
-                    onChange={(event) =>
-                      updateForm("backupPassphrase", event.target.value)
-                    }
-                    required
-                  />
-                </SetupField>
+                    label="Backup passphrase"
+                    error={fieldErrors.backupPassphrase}
+                  >
+                    <Input
+                      id="connection-samourai-backup-passphrase"
+                      type="password"
+                      value={form.backupPassphrase}
+                      onChange={(event) =>
+                        updateForm("backupPassphrase", event.target.value)
+                      }
+                      required
+                    />
+                  </SetupField>
+                  <SetupField
+                    id="connection-samourai-backup-mnemonic-passphrase"
+                    label="BIP39 passphrase override"
+                    helper="Leave blank to use the Samourai backup passphrase."
+                  >
+                    <Input
+                      id="connection-samourai-backup-mnemonic-passphrase"
+                      type="password"
+                      value={form.mnemonicPassphrase}
+                      onChange={(event) =>
+                        updateForm("mnemonicPassphrase", event.target.value)
+                      }
+                    />
+                  </SetupField>
+                </>
               ) : null}
             </>
           )}
