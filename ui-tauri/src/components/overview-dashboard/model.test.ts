@@ -172,7 +172,7 @@ describe("overview treasury chart", () => {
     expect(points[0]?.lineBitcoinPriceEur).toBe(60_000);
   });
 
-  it("keeps transaction prices out of the BTC price line and steps balance at events", () => {
+  it("keeps transaction prices and event balances out of long-range overview lines", () => {
     const snapshot: OverviewSnapshot = {
       ...MOCK_OVERVIEW,
       portfolioSeries: [
@@ -241,14 +241,79 @@ describe("overview treasury chart", () => {
     ]);
     expect(points.map((point) => point.lineBalanceBtc)).toEqual([
       1,
+      undefined,
+      1.1,
+      1.1,
+    ]);
+    expect(eventPoint?.lineBalanceBtc).toBeUndefined();
+    expect(eventPoint?.lineBitcoinPriceEur).toBeUndefined();
+    expect(eventPoint?.bitcoinPriceEur).toBe(50_000);
+    expect(eventPoint?.eventPriceEur).toBe(50_000);
+    expect(eventPoint?.eventBalanceBtc).toBe(1.1);
+    expect(eventPoint?.lineAvgCostEur).toBeUndefined();
+  });
+
+  it("uses event balances for 30-day detail lines", () => {
+    const snapshot: OverviewSnapshot = {
+      ...MOCK_OVERVIEW,
+      portfolioSeries: [
+        {
+          date: "2026-01-01",
+          label: "2026-01-01",
+          balanceBtc: 1,
+          valueEur: 100_000,
+          costBasisEur: 80_000,
+          priceEur: 100_000,
+        },
+        {
+          date: "2026-01-02",
+          label: "2026-01-02",
+          balanceBtc: 1.1,
+          valueEur: 121_000,
+          costBasisEur: 85_000,
+          priceEur: 110_000,
+        },
+        {
+          date: "2026-01-03",
+          label: "2026-01-03",
+          balanceBtc: 1.1,
+          valueEur: 132_000,
+          costBasisEur: 85_000,
+          priceEur: 120_000,
+        },
+      ],
+      activityTxs: [
+        {
+          id: "tx-event",
+          date: "2026-01-02 12:00",
+          occurredAt: "2026-01-02T12:00:00Z",
+          type: "Income",
+          account: "Treasury",
+          counter: "Event-priced invoice",
+          amountSat: 10_000_000,
+          eur: 5_000,
+          rate: 50_000,
+          tag: "Revenue",
+          conf: 6,
+          balanceBtc: 1.1,
+          costBasisEur: 85_000,
+        },
+      ],
+    };
+
+    const points = enrichTreasuryChartData(
+      getDataForPeriod("30days", snapshot, "value", "eur", "detailed"),
+      snapshot,
+      "30days",
+    );
+    const eventPoint = points.find((point) => point.isActivityEvent);
+
+    expect(points.map((point) => point.lineBalanceBtc)).toEqual([
+      1,
       1.1,
       1.1,
       1.1,
     ]);
-    expect(eventPoint?.lineBalanceBtc).toBe(1.1);
-    expect(eventPoint?.lineBitcoinPriceEur).toBeUndefined();
-    expect(eventPoint?.bitcoinPriceEur).toBe(50_000);
-    expect(eventPoint?.eventPriceEur).toBe(50_000);
     expect(eventPoint?.lineAvgCostEur).toBeCloseTo(85_000 / 1.1);
   });
 });

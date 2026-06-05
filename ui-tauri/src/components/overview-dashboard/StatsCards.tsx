@@ -17,7 +17,20 @@ import {
   marketRateCompactLabel,
   marketRateDetailLabel,
   numberFormatter,
+  type StatItem,
 } from "./model";
+
+export function statStatusText(stat: StatItem, isBitcoinPortfolio: boolean) {
+  if (stat.previousValue > 0) {
+    return `${stat.isPositive ? "+" : "-"}${stat.changePercent.toFixed(1)}%`;
+  }
+  if (isBitcoinPortfolio) return "Current";
+  if (stat.value === 0) return "Clear";
+  if (stat.title === "Portfolio value") return "Estimate";
+  if (stat.title === "Transactions") return "Loaded";
+  if (stat.title === "Connections") return "Configured";
+  return "Open";
+}
 
 export const StatsCards = ({
   snapshot,
@@ -93,19 +106,9 @@ export const StatsCards = ({
           const formatter =
             stat.format === "currency" ? currencyFormatter : numberFormatter;
           const hasComparison = stat.previousValue > 0;
-          const statusText = hasComparison
-            ? `${stat.isPositive ? "+" : "-"}${stat.changePercent.toFixed(1)}%`
-            : stat.value === 0
-              ? "Clear"
-              : stat.title === "Portfolio value"
-                ? "Estimate"
-                : stat.title === "Transactions"
-                  ? "Loaded"
-                  : stat.title === "Connections"
-                    ? "Configured"
-                    : "Open";
           const isBitcoinPortfolio =
             currency === "btc" && stat.title === "Portfolio value";
+          const statusText = statStatusText(stat, isBitcoinPortfolio);
 
           return (
             <div

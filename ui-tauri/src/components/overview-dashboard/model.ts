@@ -1379,6 +1379,7 @@ export function buildTreasuryActivityPoint(
   event: TreasuryActivityEvent,
   anchor: TreasuryChartPoint | null,
   snapshot: OverviewSnapshot,
+  options: { drawLineValues?: boolean } = {},
 ): TreasuryChartPoint {
   const balanceBtc =
     event.postBalanceBtc ?? anchor?.balanceBtc ?? latestPortfolioBalanceBtc(snapshot);
@@ -1403,9 +1404,9 @@ export function buildTreasuryActivityPoint(
     unrealizedEur: valueEur - costBasisEur,
     bitcoinPriceEur: event.priceEur,
     avgCostEur,
-    lineBalanceBtc: balanceBtc,
+    lineBalanceBtc: options.drawLineValues ? balanceBtc : undefined,
     lineBitcoinPriceEur: undefined,
-    lineAvgCostEur: avgCostEur,
+    lineAvgCostEur: options.drawLineValues ? avgCostEur : undefined,
     brushBalanceBtc: balanceBtc,
     reserveValueEur: valueEur,
     activityBtc: event.volumeBtc,
@@ -1438,6 +1439,7 @@ export function enrichTreasuryChartData(
 ): TreasuryChartPoint[] {
   const basePoints = points.map((point) => buildTreasuryBasePoint(point, snapshot));
   const events = activityTxs(snapshot);
+  const drawActivityLineValues = period === "30days";
   const candidateTimes = [
     ...basePoints.map((point) => point.sortTimeMs).filter((time) => time > 0),
     ...events.map((event) => event.occurredAt.valueOf()),
@@ -1451,6 +1453,7 @@ export function enrichTreasuryChartData(
         event,
         nearestTreasuryAnchor(basePoints, event),
         snapshot,
+        { drawLineValues: drawActivityLineValues },
       ),
     );
 
