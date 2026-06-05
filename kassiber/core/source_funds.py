@@ -279,6 +279,20 @@ def _wallet_chain_network(config_json: Any, asset: Any) -> tuple[str, str]:
     return chain, network
 
 
+def _samourai_metadata_from_wallet_config(config_json: Any) -> dict[str, str] | None:
+    config = _safe_json_loads(config_json)
+    if not isinstance(config, dict):
+        return None
+    metadata = config.get("samourai")
+    if not isinstance(metadata, dict) or metadata.get("role") != "child":
+        return None
+    group_id = str(metadata.get("group_id") or "").strip()
+    section = str(metadata.get("section") or "").strip().lower()
+    if not group_id or not section:
+        return None
+    return {"group_id": group_id, "section": section}
+
+
 def _public_explorer_link(
     txid: str,
     asset: Any,
@@ -1230,7 +1244,7 @@ def bulk_review_suggestions(
 def _active_transaction_rows(conn: sqlite3.Connection, profile_id: str):
     return conn.execute(
         """
-        SELECT t.*, w.label AS wallet_label
+        SELECT t.*, w.label AS wallet_label, w.config_json AS wallet_config_json
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         WHERE t.profile_id = ? AND t.excluded = 0
@@ -1400,6 +1414,14 @@ def suggest_links(
         if len(outs) != 1 or len(ins) != 1:
             continue
         out_tx, in_tx = outs[0], ins[0]
+        out_samourai = _samourai_metadata_from_wallet_config(
+            out_tx["wallet_config_json"]
+        )
+        in_samourai = _samourai_metadata_from_wallet_config(
+            in_tx["wallet_config_json"]
+        )
+        if out_samourai or in_samourai:
+            continue
         if out_tx["wallet_id"] == in_tx["wallet_id"]:
             continue
         if not in_scope(out_tx, in_tx):
@@ -1420,6 +1442,54 @@ def suggest_links(
             explanation="Same external transaction id appears as an outbound and inbound row in two owned wallets.",
         )
         remember(link)
+
+    by_samourai_tx = defaultdict(list)
+    for row in rows:
+        if not row["external_id"]:
+            continue
+        metadata = _samourai_metadata_from_wallet_config(row["wallet_config_json"])
+        if metadata is None:
+            continue
+        by_samourai_tx[(metadata["group_id"], row["external_id"], row["asset"])].append(
+            (row, metadata)
+        )
+    for group in by_samourai_tx.values():
+        outs = [(row, meta) for row, meta in group if row["direction"] == "outbound"]
+        ins = [(row, meta) for row, meta in group if row["direction"] == "inbound"]
+        if not outs or not ins:
+            continue
+        out_sections = {meta["section"] for _, meta in outs}
+        in_sections = {meta["section"] for _, meta in ins}
+        is_whirlpool_boundary = (
+            ("deposit" in out_sections and bool(in_sections & {"premix", "badbank"}))
+            or ("premix" in out_sections and "postmix" in in_sections)
+            or ("postmix" in out_sections and "postmix" in in_sections)
+        )
+        if not is_whirlpool_boundary:
+            continue
+        for out_tx, _out_meta in outs:
+            for in_tx, in_meta in ins:
+                if in_meta["section"] == "badbank":
+                    continue
+                if out_tx["id"] == in_tx["id"] or not in_scope(out_tx, in_tx):
+                    continue
+                link = _insert_suggestion(
+                    conn,
+                    workspace["id"],
+                    profile["id"],
+                    from_tx=out_tx,
+                    to_tx=in_tx,
+                    link_type="coinjoin",
+                    method="samourai_whirlpool",
+                    confidence="unknown",
+                    allocation_msat=int(in_tx["amount"]),
+                    from_allocation_msat=int(out_tx["amount"]),
+                    explanation=(
+                        "Samourai Whirlpool section transition in the same imported wallet group; "
+                        "review as a privacy boundary, not exact participant lineage."
+                    ),
+                )
+                remember(link)
 
     pair_rows = conn.execute(
         "SELECT * FROM transaction_pairs WHERE profile_id = ? AND deleted_at IS NULL "

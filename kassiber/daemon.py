@@ -85,6 +85,7 @@ from .core import attachments as core_attachments
 from .core import lightning as core_lightning
 from .core.lightning import lnd as _core_lightning_lnd  # noqa: F401 — registers the LND adapter on import.
 from .core import reports as core_reports
+from .core import samourai as core_samourai
 from .core import source_funds as core_source_funds
 from .core import transfer_matching as core_transfer_matching
 from .core import source_funds_coverage as core_source_funds_coverage
@@ -319,6 +320,7 @@ SUPPORTED_KINDS = (
     "ui.next_actions",
     "ui.wallets.create",
     "ui.wallets.import_file",
+    "ui.wallets.import_samourai",
     "ui.wallets.preview_descriptor",
     "ui.connections.sources",
     "ui.connections.btcpay.create",
@@ -5482,6 +5484,43 @@ def _import_wallet_file_payload(
     return import_into_wallet(conn, None, None, wallet_ref, source_file, source_format)
 
 
+def _import_samourai_payload(
+    conn: sqlite3.Connection,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    label = _required_str_arg(args, "label", "Connection label")
+    backup_file = _optional_str_arg(args, "backup_file")
+    source_file = _optional_str_arg(args, "source_file")
+    source_set_file = _optional_str_arg(args, "source_set_file")
+    if not backup_file and source_file and not source_set_file:
+        backup_file = source_file
+    gap_limit = None
+    if args.get("gap_limit") not in (None, ""):
+        if not isinstance(args.get("gap_limit"), int):
+            raise AppError(
+                "gap_limit must be an integer",
+                code="validation",
+                details={"type": type(args.get("gap_limit")).__name__},
+                retryable=False,
+            )
+        gap_limit = int(args["gap_limit"])
+    return core_samourai.import_samourai_wallet_group(
+        conn,
+        None,
+        None,
+        label=label,
+        account_ref=_optional_str_arg(args, "account"),
+        backend=_optional_str_arg(args, "backend"),
+        network=_optional_str_arg(args, "network"),
+        gap_limit=gap_limit,
+        backup_file=backup_file,
+        backup_passphrase=_optional_str_arg(args, "backup_passphrase"),
+        mnemonic=_optional_str_arg(args, "mnemonic"),
+        mnemonic_passphrase=_optional_str_arg(args, "mnemonic_passphrase"),
+        source_set_file=source_set_file,
+    )
+
+
 def _slug_btcpay_backend_label(label: str) -> str:
     name = re.sub(r"[^a-z0-9_.-]+", "-", label.strip().lower()).strip("-")
     if not name:
@@ -8011,6 +8050,21 @@ def handle_request(
                 build_envelope(
                     "ui.wallets.import_file",
                     _import_wallet_file_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            True,
+        )
+
+    if kind == "ui.wallets.import_samourai":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.wallets.import_samourai",
+                    _import_samourai_payload(
                         ctx.conn,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),

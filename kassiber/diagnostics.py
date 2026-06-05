@@ -53,6 +53,7 @@ _SENSITIVE_KEY_TOKENS = {
     "key",
     "label",
     "loss",
+    "mnemonic",
     "name",
     "note",
     "output",
@@ -64,8 +65,10 @@ _SENSITIVE_KEY_TOKENS = {
     "profile",
     "rate",
     "raw",
+    "recovery",
     "ref",
     "secret",
+    "seed",
     "source",
     "start",
     "store",
@@ -127,9 +130,19 @@ _XKEY_RE = re.compile(
 _BEARER_SECRET_RE = re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]{6,}", re.IGNORECASE)
 _SK_SECRET_RE = re.compile(r"\bsk-[A-Za-z0-9._-]{6,}\b")
 _ASSIGNED_SECRET_RE = re.compile(
-    r"\b(?P<key>[A-Za-z0-9_.-]*(?:api[_-]?key|auth[_-]?header|cookie|passphrase|password|secret|token)[A-Za-z0-9_.-]*)"
+    r"\b(?P<key>[A-Za-z0-9_.-]*(?:api[_-]?key|auth[_-]?header|cookie|mnemonic|"
+    r"passphrase|password|recovery[_-]?phrase|secret|seed(?:[_-]?(?:phrase|words))?|token)"
+    r"[A-Za-z0-9_.-]*)"
     r"(?P<sep>\s*[:=]\s*)"
     r"(?P<value>[^\s,;]+)",
+    re.IGNORECASE,
+)
+_RECOVERY_ASSIGNMENT_RE = re.compile(
+    r"\b(?P<key>[A-Za-z0-9_.-]*(?:mnemonic|recovery[_-]?phrase|"
+    r"seed(?:[_-]?(?:phrase|words))?)[A-Za-z0-9_.-]*)"
+    r"(?P<sep>\s*[:=]\s*)"
+    r"(?P<value>[^,;}{]*?)"
+    r"(?=(?:\s+[A-Za-z0-9_.-]+\s*[:=])|[,;}'\"]|$)",
     re.IGNORECASE,
 )
 _BECH32_RE = re.compile(r"\b(?:bc1|tb1|bcrt1|lq1|ex1)[0-9a-z]{8,90}\b", re.IGNORECASE)
@@ -687,6 +700,7 @@ def sanitize_text(value: Any) -> str | None:
     text = str(value)
     text = _BEARER_SECRET_RE.sub("Bearer <redacted>", text)
     text = _SK_SECRET_RE.sub("<redacted-secret>", text)
+    text = _RECOVERY_ASSIGNMENT_RE.sub(r"\g<key>\g<sep><redacted>", text)
     text = _ASSIGNED_SECRET_RE.sub(r"\g<key>\g<sep><redacted>", text)
     text = _URL_RE.sub("<url>", text)
     text = _TIMESTAMP_RE.sub("<timestamp>", text)

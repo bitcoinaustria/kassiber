@@ -2716,11 +2716,15 @@ class ReviewRegressionTest(unittest.TestCase):
         sample_xprv = "xprv" + ("B" * 80)
         sanitized = sanitize_text(
             f"descriptor={sample_upub} backup={sample_xprv} api_key=sk-diagnostics-secret "
+            "mnemonic=abandon abandon abandon seed_phrase=legal winner thank "
             "auth_header=Bearer diagnostics-token amount=12345 sat fee=2500msat "
             "timestamp=2026-04-24T09:00:00Z"
         )
         self.assertNotIn(sample_upub, sanitized)
         self.assertNotIn(sample_xprv, sanitized)
+        self.assertNotIn("abandon", sanitized)
+        self.assertNotIn("legal", sanitized)
+        self.assertNotIn("winner", sanitized)
         self.assertNotIn("sk-diagnostics-secret", sanitized)
         self.assertNotIn("diagnostics-token", sanitized)
         self.assertNotIn("12345", sanitized)
@@ -2740,6 +2744,7 @@ class ReviewRegressionTest(unittest.TestCase):
             backend="secret-backend",
             account="private-account",
             api_key="sk-argv-diagnostics",
+            mnemonic="abandon abandon abandon",
             passphrase="very-private-passphrase",
             type="private-type",
             asset="PRIVATEASSET",
@@ -2754,8 +2759,9 @@ class ReviewRegressionTest(unittest.TestCase):
                 code="secret_error",
                 details={
                     "api_key": "sk-detail-diagnostics",
+                    "mnemonic": "abandon abandon abandon",
                     "nested": {"token": "nested-token"},
-                    "message": "Bearer diagnostics-detail-token",
+                    "message": "Bearer diagnostics-detail-token recovery_phrase=legal winner thank",
                 },
             ),
         )
@@ -2765,6 +2771,9 @@ class ReviewRegressionTest(unittest.TestCase):
             "very-private-passphrase",
             "sk-error-diagnostics",
             "sk-detail-diagnostics",
+            "abandon",
+            "legal",
+            "winner",
             "nested-token",
             "diagnostics-detail-token",
         ):
@@ -2777,6 +2786,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(values["backend"]["value_class"], "redacted")
         self.assertEqual(values["account"]["value_class"], "redacted")
         self.assertEqual(values["api_key"]["value_class"], "redacted")
+        self.assertEqual(values["mnemonic"]["value_class"], "redacted")
         self.assertEqual(values["passphrase"]["value_class"], "redacted")
         self.assertEqual(values["type"]["value_class"], "redacted")
         self.assertEqual(values["asset"]["value_class"], "redacted")

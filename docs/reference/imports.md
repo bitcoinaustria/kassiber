@@ -15,6 +15,7 @@ Kassiber can ingest transactions and metadata from several sources. Imported dat
 - 21bitcoin transaction CSV exports
 - Pocket Bitcoin account CSV exports
 - Strike CSV exports
+- Samourai Wallet recovery material for watch-only Whirlpool history
 - BIP329 JSONL labels
 
 Format references used by the dedicated importers:
@@ -27,6 +28,19 @@ Format references used by the dedicated importers:
 - 21bitcoin transaction CSV export from the 21bitcoin app
 - Pocket Bitcoin account CSV export
 - Strike CSV export from Strike transaction history
+- Samourai backup and recovery docs: <https://samourai.kayako.com/section/5-samourai-backup>
+- Samourai Whirlpool account docs: <https://samourai.kayako.com/article/82-understanding-deposit-premix-and-postmix-accounts>
+- Samourai Whirlpool pool-fee docs: <https://samourai.kayako.com/article/81-understanding-pools-and-pool-fees>
+- Samourai BIP44/BIP49/BIP84 docs: <https://samourai.kayako.com/article/65-bip-44-bip-49-and-bip84>
+- Sparrow Samourai backup importer: <https://raw.githubusercontent.com/sparrowwallet/sparrow/master/src/main/java/com/sparrowwallet/sparrow/io/Samourai.java>
+- Drongo Samourai crypto/account helpers:
+  <https://raw.githubusercontent.com/sparrowwallet/drongo/master/src/main/java/com/sparrowwallet/drongo/crypto/SamouraiUtil.java>
+  and
+  <https://raw.githubusercontent.com/sparrowwallet/drongo/master/src/main/java/com/sparrowwallet/drongo/wallet/StandardAccount.java>
+- Historical Sparrow Whirlpool mix-status code:
+  <https://code.sparrowwallet.com/sparrowwallet/sparrow/src/commit/78f0721168f8035f418f0a01fb89ea8e942038c0/src/main/java/com/sparrowwallet/sparrow/control/MixStatusCell.java>
+  and
+  <https://code.sparrowwallet.com/sparrowwallet/sparrow/blame/commit/176e440195f975253cdfeab08636b1a897bf78a5/src/main/java/com/sparrowwallet/sparrow/wallet/UtxoEntry.java>
 - BIP329 labels JSONL: <https://bips.xyz/329>
 
 ## Generic transaction imports
@@ -88,6 +102,127 @@ explicit user-owned provenance, reviewed links, or protocol-specific same-owner
 recovery evidence resolves the boundary. Source-of-funds reports surface the
 same marker as a warning instead of walking through unrelated participant inputs
 or suggesting automatic same-transaction-id self-transfer links across it.
+
+## Samourai Wallet and Whirlpool
+
+`wallets import-samourai` is a local recovery importer for historical
+Samourai Wallet activity. It is deliberately watch-only: Kassiber can decrypt a
+local `samourai.txt` backup or consume mnemonic / descriptor material only long
+enough to derive public watch descriptors, then persists the redacted wallet
+configuration needed for ordinary descriptor sync. It does not connect to a
+Whirlpool coordinator, does not run an active mixing client, does not create or
+broadcast transactions, and does not expose seed words, passphrases, descriptors,
+xpubs, PayNym secrets, backup payloads, backend URLs/tokens, or raw wallet files
+through daemon results, AI tools, diagnostics, docs, or tests.
+
+Source findings that shape the import:
+
+- Samourai's backup docs describe an encrypted full-wallet backup restored with
+  the exact wallet passphrase, and its mnemonic docs treat secret words plus the
+  BIP39 passphrase as the last-resort recovery path.
+- Sparrow's Samourai importer accepts the local `samourai.txt` payload, decrypts
+  backup version `1` with Samourai's legacy PBKDF2/AES-CBC routine, decrypts
+  version `2` with the SHA256 PBKDF2/AES-CBC routine, reads `wallet.seed`, and
+  turns that seed into a normal single-sig keystore.
+- Kassiber's backup import treats the backup passphrase as the Samourai wallet
+  / BIP39 passphrase by default, matching standard Samourai recovery. If local
+  evidence shows the backup encryption passphrase and BIP39 passphrase differ,
+  provide the BIP39 value through the mnemonic-passphrase input as an override.
+- Drongo's `StandardAccount` defines Whirlpool accounts as native segwit
+  account roots: Badbank `2147483644'`, Premix `2147483645'`, and Postmix
+  `2147483646'`; Postmix uses a minimum lookahead twice the normal default.
+- Samourai's Whirlpool docs define Deposit, Premix, and Postmix as segregated
+  address spaces covered by the same recovery words/passphrase. Deposit contains
+  unmixed bech32 UTXOs; Premix contains UTXOs prepared by Tx0 and pending their
+  first cycle; Postmix contains UTXOs that completed at least one cycle and may
+  remix for free.
+- Whirlpool pool docs describe Tx0 as splitting Deposit inputs into equal-sized
+  Premix outputs, a flat coordinator-fee output, and toxic change. Toxic change
+  belongs in Badbank / Do Not Spend review, not in the Postmix privacy set.
+- Historical Sparrow Whirlpool UI treated Postmix UTXOs without stored mix data
+  as at least one mix and showed exact stored mix counts when available. Kassiber
+  mirrors that distinction with `minimum_mix_count=1` and separate confidence
+  metadata instead of claiming exact sat lineage.
+- BIP47 / PayNym roots (`m/47'/coin_type'/identity'`) are not ordinary unilateral
+  receive descriptors. Kassiber records the recognized recovery root as a
+  privacy limitation and only scans BIP47-derived activity when the user supplies
+  explicit descriptors or already-imported transactions that prove the addresses.
+
+Samourai source roots are interpreted as follows. Mainnet uses coin type `0'`;
+testnet, signet, and regtest use coin type `1'`. The descriptor sync branches
+remain normal receive/change branches (`/0/*` and `/1/*`) under each account
+root.
+
+| Section | Mainnet root | Scripts |
+|---|---:|---|
+| Deposit | `m/44'/0'/0'`, `m/49'/0'/0'`, `m/84'/0'/0'` | P2PKH, P2SH-P2WPKH, P2WPKH |
+| Deposit PayNym | `m/47'/0'/0'` | Recognized, not scanned without explicit descriptors |
+| Badbank / Toxic Change | `m/84'/0'/2147483644'` | P2WPKH |
+| Premix | `m/84'/0'/2147483645'` | P2WPKH |
+| Postmix | `m/84'/0'/2147483646'` | P2WPKH |
+| Ricochet | `m/44'/0'/2147483647'`, `m/49'/0'/2147483647'`, `m/84'/0'/2147483647'` | P2PKH, P2SH-P2WPKH, P2WPKH |
+
+The importer creates one logical Samourai group and child wallet sources for the
+scannable sections. Child sources carry safe `samourai` metadata in their
+wallet config and in UTXO provenance: section, script type, root path, pool role,
+privacy boundary, minimum mix count, exact mix-count confidence when known, and
+safe warning state. Descriptor and xpub material remain behind the existing
+wallet redaction boundary and can only be revealed through the explicit
+`wallets reveal-descriptor` owner command.
+Explicit descriptor source-set imports must cover both Samourai descriptor
+branches for each scanned section: branch `0` receive and branch `1` change.
+Provide a separate `change_descriptor` or a descriptor expression that expands
+to both branches; single-branch descriptors are rejected because they can miss
+change history and understate balances, reports, and source-of-funds evidence.
+
+Accounting behavior is intentionally conservative:
+
+- Tx0, premix, first mix, and remix rows across the same Samourai group are
+  internal same-asset privacy movement. They are not modeled as taxable disposals
+  merely because public CoinJoin transactions contain unrelated participant
+  inputs and outputs.
+- Coordinator and miner fees remain visible on the imported/synced transaction
+  rows and, when priced, through fee-only privacy events. Multi-output Tx0 rows
+  are not collapsed into a fake one-to-one transfer because premix and toxic
+  change are separate local destinations.
+- Safe Whirlpool provenance (`pool_denomination_sat`, `target_mix_count`,
+  `mix_count`, confidence, and round txids) may be carried in wallet metadata or
+  UTXO `raw_json`. Kassiber drops participant graph fields and does not infer
+  exact fee allocation across unrelated CoinJoin participants.
+- External spends from Deposit, Postmix, Ricochet, or Badbank remain normal
+  reportable rows. Toxic-change spends keep Badbank warning metadata.
+- Postmix rows with no stored Whirlpool metadata are represented as "at least
+  one mix" with low confidence, not as an exact round count.
+- Missing prices, malformed same-asset movement, unsupported paths, or ambiguous
+  privacy transitions quarantine/report blockers with actionable hints instead
+  of zero-basis treatment.
+- Source-of-funds reports may use `coinjoin` / `payjoin` reviewed links as
+  privacy boundaries. They must not traverse, disclose, or use unrelated
+  participant inputs as proof of funds.
+
+Example CLI flows:
+
+```bash
+python3 -m kassiber wallets import-samourai \
+  --label "Samourai Recovery" \
+  --backup-file /path/to/samourai.txt \
+  --backup-passphrase-stdin \
+  --backend mempool \
+  --gap-limit 80
+
+# Add --mnemonic-passphrase-fd 3 only when the BIP39 passphrase differs from
+# the backup passphrase.
+
+python3 -m kassiber wallets import-samourai \
+  --label "Samourai Recovery" \
+  --mnemonic-stdin \
+  --mnemonic-passphrase-fd 3 \
+  --backend mempool
+```
+
+After import, run wallet sync, review any warnings or source-funds privacy
+boundaries, sync/rebuild rates when pricing is missing, then run
+`journals process` before trusting reports.
 
 ## BTCPay
 

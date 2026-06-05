@@ -183,7 +183,32 @@ type WalletListItem = {
     store_id: string;
     payment_method_id: string;
   }>;
+  samourai?: SamouraiWalletMetadata | null;
 };
+
+interface SamouraiWalletMetadata {
+  role?: string;
+  group_id?: string;
+  group_label?: string;
+  source?: string;
+  section?: string;
+  script_type?: string;
+  root_path?: string;
+  gap_limit?: number;
+  privacy_boundary?: boolean;
+  whirlpool?: boolean;
+  toxic_change?: boolean;
+  minimum_mix_count?: number;
+  mix_count?: number;
+  mix_count_confidence?: string;
+  target_mix_count?: number;
+  pool_denomination_sat?: number;
+  watch_only?: boolean;
+  bip47?: string;
+  paynym?: boolean;
+  scanned_without_explicit_descriptor?: boolean;
+  sections?: string[];
+}
 
 const syncModeLabels: Record<string, string> = {
   backend_descriptor: "Watch-only descriptor",
@@ -199,6 +224,26 @@ function formatBackendDetail(backend?: WalletListItem["backend"]) {
   const source =
     backend.source && backend.source !== "none" ? ` (${backend.source})` : "";
   return `${backend.name}${kind}${source}`;
+}
+
+function samouraiSectionLabel(value?: string) {
+  const labels: Record<string, string> = {
+    deposit: "Deposit",
+    badbank: "Badbank / Toxic Change",
+    premix: "Premix",
+    postmix: "Postmix",
+    ricochet: "Ricochet",
+  };
+  return labels[value ?? ""] ?? value ?? "Samourai group";
+}
+
+function samouraiSourceLabel(value?: string) {
+  const labels: Record<string, string> = {
+    backup: "Backup",
+    mnemonic: "Recovery words",
+    source_set: "Descriptor/xpub set",
+  };
+  return labels[value ?? ""] ?? value ?? "Imported";
 }
 
 function backendOptionLabel(backend: { name: string; display_name?: string }) {
@@ -513,6 +558,8 @@ function ConnectionDetailView({
     setPendingUtxoTransactionId(transactionId);
   };
   const walletProvenanceRoutes = walletDetail?.btcpay_provenance ?? [];
+  const samouraiMetadata = walletDetail?.samourai ?? null;
+  const samouraiInventory = coinsInventoryQuery.data?.data;
   const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -1023,6 +1070,142 @@ function ConnectionDetailView({
         onRefresh={onSync}
         onOpenTransaction={openUtxoTransaction}
       />
+
+      {samouraiMetadata ? (
+        <Card>
+          <CardHeader className="border-b px-4 pb-3">
+            <CardTitle className="flex flex-wrap items-center gap-2 text-sm sm:text-base">
+              Samourai Wallet
+              <Badge variant="secondary">
+                {samouraiMetadata.role === "parent"
+                  ? "Group"
+                  : samouraiSectionLabel(samouraiMetadata.section)}
+              </Badge>
+              {samouraiMetadata.privacy_boundary ? (
+                <Badge variant="outline">Privacy boundary</Badge>
+              ) : null}
+              {samouraiMetadata.paynym ? (
+                <Badge variant="outline">BIP47</Badge>
+              ) : null}
+            </CardTitle>
+            <CardDescription>
+              Watch-only Samourai/Whirlpool import state.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 px-4 pt-4 md:grid-cols-2">
+            <DetailRow
+              label="Source"
+              value={samouraiSourceLabel(samouraiMetadata.source)}
+            />
+            <DetailRow
+              label="Group"
+              value={samouraiMetadata.group_label || connection.label}
+            />
+            {samouraiMetadata.role !== "parent" ? (
+              <>
+                <DetailRow
+                  label="Section"
+                  value={samouraiSectionLabel(samouraiMetadata.section)}
+                />
+                <DetailRow
+                  label="Script"
+                  value={samouraiMetadata.script_type || "—"}
+                />
+                <DetailRow
+                  label="Root"
+                  value={samouraiMetadata.root_path || "—"}
+                  mono
+                />
+                <DetailRow
+                  label="Gap"
+                  value={
+                    samouraiMetadata.gap_limit?.toLocaleString("en-US") ??
+                    connection.gap?.toLocaleString("en-US") ??
+                    "—"
+                  }
+                />
+              </>
+            ) : (
+              <DetailRow
+                label="Sections"
+                value={(samouraiMetadata.sections ?? [])
+                  .map(samouraiSectionLabel)
+                  .join(", ")}
+              />
+            )}
+            {samouraiMetadata.minimum_mix_count ? (
+              <DetailRow
+                label="Mix count"
+                value={`at least ${samouraiMetadata.minimum_mix_count.toLocaleString("en-US")} · ${samouraiMetadata.mix_count_confidence ?? "minimum"}`}
+              />
+            ) : null}
+            {samouraiMetadata.mix_count ? (
+              <DetailRow
+                label="Observed mixes"
+                value={`${samouraiMetadata.mix_count.toLocaleString("en-US")} · ${samouraiMetadata.mix_count_confidence ?? "imported"}`}
+              />
+            ) : null}
+            {samouraiMetadata.target_mix_count ? (
+              <DetailRow
+                label="Target mixes"
+                value={samouraiMetadata.target_mix_count.toLocaleString("en-US")}
+              />
+            ) : null}
+            {samouraiMetadata.pool_denomination_sat ? (
+              <DetailRow
+                label="Pool"
+                value={`${samouraiMetadata.pool_denomination_sat.toLocaleString("en-US")} sats`}
+              />
+            ) : null}
+            {samouraiMetadata.role !== "parent" ? (
+              <DetailRow
+                label="Coins"
+                value={
+                  samouraiInventory?.freshness.active_count?.toLocaleString(
+                    "en-US",
+                  ) ??
+                  samouraiInventory?.summary?.count?.toLocaleString("en-US") ??
+                  "—"
+                }
+              />
+            ) : null}
+          </CardContent>
+          <div className="space-y-2 border-t px-4 py-3 text-sm">
+            {samouraiMetadata.toxic_change ? (
+              <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+                Toxic-change spends remain reportable and need normal pricing
+                evidence.
+              </div>
+            ) : null}
+            {samouraiMetadata.section === "postmix" ? (
+              <div className="rounded-md border bg-background px-3 py-2 text-muted-foreground">
+                Postmix rows without exact Whirlpool metadata are shown as
+                having at least one mix; Kassiber does not claim exact sat
+                lineage through other participants.
+              </div>
+            ) : null}
+            {samouraiInventory?.freshness.stale ? (
+              <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+                Samourai inventory is stale. Refresh before relying on wallet
+                detail, reports, or source-of-funds readiness.
+              </div>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isWalletSyncRunning}
+              onClick={onSync}
+            >
+              <RefreshCw
+                className={cn("size-4", isWalletSyncRunning && "animate-spin")}
+                aria-hidden="true"
+              />
+              {isWalletSyncRunning ? "Refreshing" : "Refresh Samourai source"}
+            </Button>
+          </div>
+        </Card>
+      ) : null}
 
       {walletProvenanceRoutes.length > 0 ? (
         <Card>

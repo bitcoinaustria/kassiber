@@ -98,6 +98,7 @@ from ..core.lightning import lnd as _core_lightning_lnd  # noqa: F401 — regist
 from ..core import metadata as core_metadata
 from ..core import rates as core_rates
 from ..core import reports as core_reports
+from ..core import samourai as core_samourai
 from ..core import source_funds as core_source_funds
 from ..core import source_funds_coverage as core_source_funds_coverage
 from ..core import source_funds_recipients as core_source_funds_recipients
@@ -222,6 +223,38 @@ def _normalized_backend_clear_fields(values: Sequence[str] | None) -> list[str]:
 def _add_workspace_profile_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--workspace")
     parser.add_argument("--profile")
+
+
+def _read_optional_text_file(file_path: str | None, label: str) -> str | None:
+    if not file_path:
+        return None
+    try:
+        with open(file_path, "r", encoding="utf-8") as handle:
+            text = handle.read()
+    except OSError as exc:
+        raise AppError(
+            f"Could not read {label} file",
+            code="validation",
+            hint="Choose a readable local file path.",
+            details={"path": file_path},
+            retryable=False,
+        ) from exc
+    text = text.strip()
+    if not text:
+        raise AppError(
+            f"{label} file is empty",
+            code="validation",
+            details={"path": file_path},
+            retryable=False,
+        )
+    if "\x00" in text:
+        raise AppError(
+            f"{label} file contains NUL bytes",
+            code="validation",
+            details={"path": file_path},
+            retryable=False,
+        )
+    return text
 
 
 def _add_austrian_e1kv_report_args(parser: argparse.ArgumentParser) -> None:
@@ -774,6 +807,35 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_import_strike.add_argument("--profile")
     wallets_import_strike.add_argument("--wallet")
     wallets_import_strike.add_argument("--file", required=True)
+    wallets_import_samourai = wallets_sub.add_parser("import-samourai")
+    wallets_import_samourai.add_argument("--workspace")
+    wallets_import_samourai.add_argument("--profile")
+    wallets_import_samourai.add_argument("--label", required=True)
+    wallets_import_samourai.add_argument("--account", help="Wallet/reporting bucket code, id, or unique label")
+    wallets_import_samourai.add_argument("--backend")
+    wallets_import_samourai.add_argument("--network")
+    wallets_import_samourai.add_argument("--gap-limit", type=int)
+    wallets_import_samourai.add_argument("--backup-file")
+    add_secret_stdin_options(
+        wallets_import_samourai,
+        "backup-passphrase",
+        label="Samourai backup passphrase",
+    )
+    wallets_import_samourai.add_argument("--mnemonic-file")
+    add_secret_stdin_options(
+        wallets_import_samourai,
+        "mnemonic",
+        label="Samourai mnemonic",
+    )
+    add_secret_stdin_options(
+        wallets_import_samourai,
+        "mnemonic-passphrase",
+        label="Samourai mnemonic passphrase",
+    )
+    wallets_import_samourai.add_argument(
+        "--source-set-file",
+        help="Local JSON file containing explicit Samourai descriptor/xpub sources",
+    )
     wallets_sync_btcpay = wallets_sub.add_parser("sync-btcpay")
     wallets_sync_btcpay.add_argument("--workspace")
     wallets_sync_btcpay.add_argument("--profile")
@@ -2154,6 +2216,53 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.file,
                     "strike_csv",
                     "full",
+                ),
+            )
+        if args.wallets_command == "import-samourai":
+            enforce_single_stdin_consumer(
+                args,
+                ("backup_passphrase", "mnemonic", "mnemonic_passphrase"),
+            )
+            mnemonic = read_secret_from_args(
+                args,
+                "mnemonic",
+                label="Samourai mnemonic",
+            )
+            mnemonic_file_value = _read_optional_text_file(
+                args.mnemonic_file,
+                "Samourai mnemonic",
+            )
+            if mnemonic and mnemonic_file_value:
+                raise AppError(
+                    "Use only one mnemonic input",
+                    code="invalid_secret_input",
+                    hint="Choose --mnemonic-file, --mnemonic-stdin, or --mnemonic-fd.",
+                    retryable=False,
+                )
+            return emit(
+                args,
+                core_samourai.import_samourai_wallet_group(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    label=args.label,
+                    account_ref=args.account,
+                    backend=args.backend,
+                    network=args.network,
+                    gap_limit=args.gap_limit,
+                    backup_file=args.backup_file,
+                    backup_passphrase=read_secret_from_args(
+                        args,
+                        "backup-passphrase",
+                        label="Samourai backup passphrase",
+                    ),
+                    mnemonic=mnemonic or mnemonic_file_value,
+                    mnemonic_passphrase=read_secret_from_args(
+                        args,
+                        "mnemonic-passphrase",
+                        label="Samourai mnemonic passphrase",
+                    ),
+                    source_set_file=args.source_set_file,
                 ),
             )
         if args.wallets_command == "sync-btcpay":

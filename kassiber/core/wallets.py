@@ -42,6 +42,7 @@ WALLET_KINDS = [
     "pocketbitcoin",
     "strike",
     "wasabi",
+    "samourai",
     "custom",
 ]
 REDACTED_CONFIG_VALUE = "[redacted]"
@@ -63,6 +64,7 @@ WALLET_SAFE_CONFIG_FIELDS = (
     "source_format",
     "altbestand",
     "wasabi_metadata",
+    "samourai",
 )
 WALLET_REDACTED_CONFIG_FIELDS = ("descriptor", "change_descriptor")
 
@@ -536,6 +538,11 @@ WALLET_KIND_CATALOG = {
         "summary": "Wasabi Wallet sanitized RPC/export bundle importer with CoinJoin and anonymity evidence.",
         "config_fields": ["source_file", "source_format", "wasabi_metadata"],
         "requires": [],
+    },
+    "samourai": {
+        "summary": "Logical Samourai/Whirlpool watch-only wallet group; child descriptor wallets carry sync targets.",
+        "config_fields": ["backend", "chain", "network", "gap_limit", "samourai"],
+        "requires": ["wallets import-samourai"],
     },
     "custom": {
         "summary": "Custom CSV/JSON source; use with --config/--config-file to describe field mapping.",

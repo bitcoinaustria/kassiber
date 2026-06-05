@@ -25,6 +25,7 @@ from ..wallet_descriptors import (
 from . import output_inventory as core_output_inventory
 from . import rates as core_rates
 from . import reports as report_builders
+from .samourai import samourai_metadata_from_wallet_config
 from . import transaction_history
 from .repo import current_context_snapshot
 from .sync import normalize_backend_kind
@@ -2792,6 +2793,7 @@ def build_wallets_list_snapshot(
     wallets = []
     for row in rows:
         config = _json_config(row["config_json"])
+        samourai_metadata = samourai_metadata_from_wallet_config(config)
         backend_summary = _wallet_backend_summary(row["kind"], config, default_backend)
         backend_name = backend_summary["name"]
         last_synced_at = _string_or_empty(config.get("last_synced_at"))
@@ -2830,6 +2832,7 @@ def build_wallets_list_snapshot(
                 "sync_status": "has_transactions" if tx_count else "empty",
                 "journals_stale": freshness["needs_processing"] and tx_count > 0,
                 "btcpay_provenance": provenance_routes,
+                "samourai": samourai_metadata,
                 "created_at": row["created_at"],
             }
         )

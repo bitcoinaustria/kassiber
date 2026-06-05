@@ -74,6 +74,9 @@ class NormalizedTaxTransfer:
     # Kassiber models pools as per-wallet. Intra transfers don't have
     # a regime or swap-link concept; only the pool marker applies.
     at_pool: Optional[str] = None
+    # Optional stable id for one logical movement split out of a multi-output
+    # wallet transaction. Journal rows still point at the real out/in rows.
+    transfer_id: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -174,6 +177,261 @@ def _append_privacy_hop_quarantine(
     )
 
 
+def _samourai_metadata(row: Mapping[str, Any]) -> dict[str, Any] | None:
+    config_json = _row_get(row, "config_json")
+    if not config_json:
+        return None
+    try:
+        config = json.loads(config_json)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(config, dict):
+        return None
+    metadata = config.get("samourai")
+    if not isinstance(metadata, dict):
+        return None
+    if metadata.get("role") != "child":
+        return None
+    group_id = str(metadata.get("group_id") or "").strip()
+    section = str(metadata.get("section") or "").strip().lower()
+    if not group_id or not section:
+        return None
+    return {"group_id": group_id, "section": section}
+
+
+SamouraiGroupEntry = tuple[Mapping[str, Any], dict[str, Any]]
+
+
+def _samourai_internal_privacy_groups(
+    rows: Sequence[Mapping[str, Any]],
+) -> list[list[SamouraiGroupEntry]]:
+    grouped: dict[tuple[str, str], list[tuple[Mapping[str, Any], dict[str, Any]]]] = {}
+    for row in rows:
+        metadata = _samourai_metadata(row)
+        external_id = str(_row_get(row, "external_id") or "").strip().lower()
+        if metadata is None or not external_id:
+            continue
+        grouped.setdefault((metadata["group_id"], external_id), []).append((row, metadata))
+
+    internal_groups: list[list[SamouraiGroupEntry]] = []
+    for _, entries in grouped.items():
+        if len(entries) < 2:
+            continue
+        outbound_sections = {
+            metadata["section"]
+            for row, metadata in entries
+            if _row_get(row, "direction") == "outbound"
+        }
+        inbound_sections = {
+            metadata["section"]
+            for row, metadata in entries
+            if _row_get(row, "direction") == "inbound"
+        }
+        if not outbound_sections or not inbound_sections:
+            continue
+        is_tx0 = "deposit" in outbound_sections and bool(
+            inbound_sections & {"premix", "badbank"}
+        )
+        is_first_mix = "premix" in outbound_sections and "postmix" in inbound_sections
+        is_remix = "postmix" in outbound_sections and "postmix" in inbound_sections
+        is_whirlpool_cycle = bool(outbound_sections & {"premix", "postmix"}) and bool(
+            inbound_sections & {"premix", "postmix"}
+        )
+        if is_tx0 or is_first_mix or is_remix or is_whirlpool_cycle:
+            internal_groups.append(entries)
+    return internal_groups
+
+
+def _samourai_internal_privacy_row_ids(
+    groups: Sequence[Sequence[SamouraiGroupEntry]],
+) -> set[str]:
+    return {str(row["id"]) for group in groups for row, _ in group}
+
+
+def _collect_samourai_internal_transfers(
+    profile: Mapping[str, Any],
+    asset: str,
+    groups: Sequence[Sequence[SamouraiGroupEntry]],
+    wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
+    is_at: bool,
+    quarantines: list[dict[str, Any]],
+) -> tuple[dict[str, list[NormalizedTaxTransfer]], dict[str, NormalizedTaxEvent]]:
+    collected: dict[str, list[NormalizedTaxTransfer]] = {}
+    fee_events: dict[str, NormalizedTaxEvent] = {}
+    for entries in groups:
+        out_rows = [
+            row
+            for row, _ in entries
+            if _row_get(row, "direction") == "outbound"
+        ]
+        in_rows = [
+            row
+            for row, _ in entries
+            if _row_get(row, "direction") == "inbound"
+        ]
+        if not out_rows or not in_rows:
+            continue
+
+        first_out = out_rows[0]
+        first_in = in_rows[0]
+        from_wallet = wallet_refs_by_id[first_out["wallet_id"]]
+        to_wallet = wallet_refs_by_id[first_in["wallet_id"]]
+        sent = sum(
+            msat_to_btc(row["amount"]) + msat_to_btc(row["fee"])
+            for row in out_rows
+        )
+        received = sum(msat_to_btc(row["amount"]) for row in in_rows)
+        if sent < received:
+            quarantines.append(
+                build_tax_quarantine(
+                    profile,
+                    first_out,
+                    "transfer_mismatch",
+                    {
+                        "from_wallet": from_wallet["label"],
+                        "to_wallet": to_wallet["label"],
+                        "sent": float(sent),
+                        "received": float(received),
+                        "protocol": "samourai_whirlpool",
+                    },
+                )
+            )
+            continue
+
+        fee = sent - received
+        spot_price = None
+        spot_price_row = first_out
+        spot_price_wallet_label = from_wallet["label"]
+        if fee > 0:
+            for candidate in [*out_rows, *in_rows]:
+                quantity = msat_to_btc(candidate["amount"]) + msat_to_btc(
+                    _row_get(candidate, "fee") or 0
+                )
+                candidate_price = _spot_price_from_row(candidate, quantity)
+                if candidate_price is not None:
+                    spot_price = candidate_price
+                    spot_price_row = candidate
+                    spot_price_wallet_label = wallet_refs_by_id[candidate["wallet_id"]][
+                        "label"
+                    ]
+                    break
+            if spot_price is not None and _pricing_needs_review(spot_price_row):
+                quarantines.append(
+                    build_tax_quarantine(
+                        profile,
+                        spot_price_row,
+                        "pricing_review_required",
+                        _pricing_review_detail(
+                            spot_price_row,
+                            spot_price_wallet_label,
+                            asset,
+                            "samourai_privacy_transfer",
+                        ),
+                    )
+                )
+                continue
+            if spot_price is None:
+                quarantines.append(
+                    build_tax_quarantine(
+                        profile,
+                        first_out,
+                        "missing_spot_price",
+                        {
+                            "from_wallet": from_wallet["label"],
+                            "to_wallet": to_wallet["label"],
+                            "asset": asset,
+                            "direction": "transfer",
+                            "required_for": "samourai_privacy_fee",
+                            "protocol": "samourai_whirlpool",
+                        },
+                    )
+                )
+                continue
+
+        to_wallet_labels = {
+            wallet_refs_by_id[row["wallet_id"]]["label"] for row in in_rows
+        }
+        if len(in_rows) > 1 or len(to_wallet_labels) > 1:
+            collected[str(first_out["id"])] = [
+                NormalizedTaxTransfer(
+                    asset=asset,
+                    occurred_at=first_out["occurred_at"],
+                    out_transaction_id=first_out["id"],
+                    in_transaction_id=in_row["id"],
+                    from_wallet_id=from_wallet["id"],
+                    from_wallet_label=from_wallet["label"],
+                    to_wallet_id=wallet_refs_by_id[in_row["wallet_id"]]["id"],
+                    to_wallet_label=wallet_refs_by_id[in_row["wallet_id"]]["label"],
+                    sent=msat_to_btc(in_row["amount"]),
+                    received=msat_to_btc(in_row["amount"]),
+                    fee=Decimal("0"),
+                    spot_price=spot_price,
+                    description=(
+                        first_out["note"]
+                        or first_out["description"]
+                        or first_out["kind"]
+                        or "Samourai Whirlpool privacy movement"
+                    ),
+                    external_id=_row_get(first_out, "external_id"),
+                    out_row=first_out,
+                    in_row=in_row,
+                    at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
+                    transfer_id=f"{first_out['id']}::{in_row['id']}",
+                )
+                for in_row in in_rows
+            ]
+            if fee > 0:
+                fee_events[str(first_out["id"])] = NormalizedTaxEvent(
+                    transaction_id=first_out["id"],
+                    asset=asset,
+                    occurred_at=first_out["occurred_at"],
+                    wallet_id=from_wallet["id"],
+                    wallet_label=from_wallet["label"],
+                    direction="outbound",
+                    amount=Decimal("0"),
+                    fee=fee,
+                    spot_price=spot_price,
+                    fiat_value=None,
+                    description=(
+                        first_out["note"]
+                        or first_out["description"]
+                        or first_out["kind"]
+                        or "Samourai Whirlpool privacy fee"
+                    ),
+                    raw_row=first_out,
+                    at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
+                )
+            continue
+
+        collected[str(first_out["id"])] = [
+            NormalizedTaxTransfer(
+                asset=asset,
+                occurred_at=first_out["occurred_at"],
+                out_transaction_id=first_out["id"],
+                in_transaction_id=first_in["id"],
+                from_wallet_id=from_wallet["id"],
+                from_wallet_label=from_wallet["label"],
+                to_wallet_id=to_wallet["id"],
+                to_wallet_label=to_wallet["label"],
+                sent=sent,
+                received=received,
+                fee=fee,
+                spot_price=spot_price,
+                description=(
+                    first_out["note"]
+                    or first_out["description"]
+                    or first_out["kind"]
+                    or "Samourai Whirlpool privacy movement"
+                ),
+                external_id=_row_get(first_out, "external_id"),
+                out_row=first_out,
+                in_row=first_in,
+                at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
+            )
+        ]
+    return collected, fee_events
+
+
 def normalize_tax_asset_inputs(
     profile: Mapping[str, Any],
     asset: str,
@@ -194,6 +452,20 @@ def normalize_tax_asset_inputs(
     transfers: list[NormalizedTaxTransfer] = []
     ordered_items: list[tuple[str, str]] = []
     quarantines: list[dict[str, Any]] = []
+    samourai_internal_groups = _samourai_internal_privacy_groups(rows)
+    samourai_internal_row_ids = _samourai_internal_privacy_row_ids(
+        samourai_internal_groups
+    )
+    samourai_transfer_by_out_id, samourai_fee_event_by_out_id = (
+        _collect_samourai_internal_transfers(
+            profile,
+            asset,
+            samourai_internal_groups,
+            wallet_refs_by_id,
+            is_at,
+            quarantines,
+        )
+    )
 
     pair_by_row: dict[str, tuple[str, Mapping[str, Any]]] = {}
     for pair in intra_pairs:
@@ -202,6 +474,17 @@ def normalize_tax_asset_inputs(
     handled_pairs: set[tuple[str, str]] = set()
 
     for row in rows:
+        if row["id"] in samourai_internal_row_ids:
+            for transfer in samourai_transfer_by_out_id.get(row["id"], []):
+                transfers.append(transfer)
+                ordered_items.append(
+                    ("transfer", transfer.transfer_id or transfer.out_transaction_id)
+                )
+            event = samourai_fee_event_by_out_id.get(row["id"])
+            if event is not None:
+                events.append(event)
+                ordered_items.append(("event", row["id"]))
+            continue
         role_pair = pair_by_row.get(row["id"])
         if role_pair is not None:
             _, pair = role_pair

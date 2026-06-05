@@ -151,10 +151,13 @@ fn is_sensitive_key(key: &str) -> bool {
         "auth_response",
         "cookie",
         "descriptor",
+        "mnemonic",
         "password",
         "passphrase",
         "private",
+        "recovery",
         "secret",
+        "seed",
         "token",
         "xprv",
     ]
@@ -164,18 +167,59 @@ fn is_sensitive_key(key: &str) -> bool {
 
 fn redact_sensitive_text(text: &str) -> String {
     let mut redact_next = false;
+    let mut recovery_tail_words = 0usize;
     let mut words = Vec::new();
     for word in text.split_whitespace() {
+        if recovery_tail_words > 0 {
+            if looks_like_recovery_tail_word(word) {
+                words.push("[redacted]".to_string());
+                recovery_tail_words -= 1;
+                continue;
+            }
+            recovery_tail_words = 0;
+        }
         if redact_next {
             words.push("[redacted]".to_string());
             redact_next = false;
             continue;
         }
+        let recovery_assignment = is_recovery_assignment_word(word);
         let redacted = redact_sensitive_word(word);
+        if recovery_assignment {
+            recovery_tail_words = 23;
+        }
         redact_next = word.eq_ignore_ascii_case("bearer") || redacted == "Bearer";
         words.push(redacted);
     }
     words.join(" ")
+}
+
+fn is_recovery_assignment_word(word: &str) -> bool {
+    let lowered = word.to_ascii_lowercase();
+    for marker in [
+        "mnemonic",
+        "recovery_phrase",
+        "recovery-phrase",
+        "seed",
+        "seed_phrase",
+        "seed-phrase",
+        "seed_words",
+        "seed-words",
+    ] {
+        if let Some(index) = lowered.find(marker) {
+            let after = &word[index + marker.len()..];
+            if after.starts_with('=') || after.starts_with(':') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn looks_like_recovery_tail_word(word: &str) -> bool {
+    let trimmed = word.trim_matches(|c: char| !c.is_ascii_alphabetic());
+    let len = trimmed.len();
+    (2..=12).contains(&len) && trimmed.chars().all(|c| c.is_ascii_alphabetic())
 }
 
 fn redact_sensitive_word(word: &str) -> String {
@@ -196,9 +240,17 @@ fn redact_sensitive_word(word: &str) -> String {
         "auth-header",
         "cookie",
         "descriptor",
+        "mnemonic",
         "password",
         "passphrase",
+        "recovery_phrase",
+        "recovery-phrase",
         "secret",
+        "seed",
+        "seed_phrase",
+        "seed-phrase",
+        "seed_words",
+        "seed-words",
         "token",
         "xprv",
     ] {
@@ -1395,12 +1447,18 @@ mod tests {
         let error = SupervisorError::new("internal", "failed")
             .details(json!({
                 "api_key": "sk-detail-secret",
-                "line": "token=btcpay-secret Bearer openai-secret descriptor=wpkh(xpub661MyMwAqRbcF12345678901234567890)"
+                "mnemonic": "abandon abandon abandon",
+                "line": "token=btcpay-secret Bearer openai-secret descriptor=wpkh(xpub661MyMwAqRbcF12345678901234567890) recovery_phrase=legal winner thank"
             }))
             .with_stderr_tail(
-                "api_key=sk-stderr-secret Bearer stderr-secret passphrase_secret=correct raw xpub661MyMwAqRbcF12345678901234567890".to_string(),
+                "api_key=sk-stderr-secret Bearer stderr-secret passphrase_secret=correct seed_phrase=letter advice cage raw xpub661MyMwAqRbcF12345678901234567890".to_string(),
             );
         let encoded = serde_json::to_string(&error.details).expect("details json");
+        assert!(!encoded.contains("abandon"));
+        assert!(!encoded.contains("legal"));
+        assert!(!encoded.contains("winner"));
+        assert!(!encoded.contains("letter"));
+        assert!(!encoded.contains("advice"));
         assert!(!encoded.contains("sk-detail-secret"));
         assert!(!encoded.contains("btcpay-secret"));
         assert!(!encoded.contains("openai-secret"));

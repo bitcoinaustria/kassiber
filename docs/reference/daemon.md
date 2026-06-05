@@ -83,6 +83,8 @@ daemon for the exact current allowlist:
       "ui.secrets.change_passphrase",
       "ui.next_actions",
       "ui.wallets.create",
+      "ui.wallets.import_file",
+      "ui.wallets.import_samourai",
       "ui.connections.btcpay.create",
       "ui.connections.btcpay.discover",
       "ui.connections.btcpay.test",
@@ -234,6 +236,22 @@ etc.) and returns the redacted wallet row. Desktop callers can pass
 `wallet_material` instead of separate descriptor fields; the daemon recognizes
 common descriptor export shapes and stores receive/change descriptors when the
 material contains both.
+
+`ui.wallets.import_samourai` is the desktop Samourai/Whirlpool recovery path.
+It accepts `label`, optional `backend`, `network`, and `gap_limit`, plus exactly
+one local recovery source: `backup_file` with `backup_passphrase`, `mnemonic`
+with optional `mnemonic_passphrase`, or `source_set_file` containing explicit
+descriptor/xpub sources. For backup imports, `mnemonic_passphrase` is an
+optional BIP39 override; when omitted, Kassiber uses the Samourai backup
+passphrase as the wallet passphrase. Backup and mnemonic material are used only
+inside the local daemon request to derive watch-only descriptor children for Deposit,
+Badbank/Toxic Change, Premix, Postmix, and Ricochet. The response returns a
+redacted logical group plus child wallet summaries and safe warnings; it does
+not return backup contents, recovery words, passphrases, descriptors, xpubs,
+PayNym secrets, backend URLs, tokens, or raw file payloads.
+Explicit Samourai descriptor source sets must include both receive and change
+coverage for scanned sections, either via `descriptor` plus `change_descriptor`
+or a descriptor expression that expands to branches `0` and `1`.
 
 `ui.wallets.preview_descriptor` is a read-only helper for the connection
 setup form. It accepts `wallet_material` (or explicit `descriptor` /

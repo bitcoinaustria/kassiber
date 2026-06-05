@@ -14,6 +14,7 @@ export type ConnectionKind =
   | "xpub"
   | "address"
   | "descriptor"
+  | "samourai"
   | "core-ln"
   | "lnd"
   | "nwc"

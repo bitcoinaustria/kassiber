@@ -68,13 +68,21 @@ Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the 
   typed transaction-level privacy-boundary markers, generic privacy-hop tax
   quarantine, source-funds opaque-boundary warnings, and typed desktop
   source-format plumbing. Protocol-specific Wasabi coin-anonymity fields and
-  Samourai/Whirlpool importers remain separate PRs.
+  Samourai/Whirlpool importers landed in separate follow-up PRs.
 - [x] Add Wasabi Wallet watch-only import and privacy-hop evidence handling:
   sanitized `wasabi_bundle` imports normalize `gethistory`, refresh durable
   Coins/UTXO anonymity state from `listcoins` / `listunspentcoins`, preserve
   safe wallet metadata only, wire CLI/daemon/desktop catalog surfaces, and
   mark ambiguous CoinJoin/PayJoin-style evidence as `privacy_hop_unresolved`
   instead of guessing provenance or taxable proceeds.
+- [x] Add Samourai/Whirlpool watch-only recovery import: local backup v1/v2
+  decryption, mnemonic and explicit descriptor/xpub source-set import,
+  Deposit/Badbank/Premix/Postmix/Ricochet child sources, redacted daemon/CLI
+  output, UTXO provenance, desktop import/detail surfaces, internal
+  Tx0/mix/remix tax handling, and source-funds privacy-boundary suggestions.
+  Deferred: coordinator-backed mix-status fetches, exact round metadata beyond
+  imported/local evidence, and active Whirlpool client behavior remain out of
+  scope.
 - [ ] Design an opt-in encrypted Lightning **evidence vault** for
   operators who need proof-of-payment for legal disputes, full invoice
   replay for corrupted-bookkeeper recovery, or chain-of-custody records
