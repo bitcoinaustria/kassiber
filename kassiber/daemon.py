@@ -213,6 +213,7 @@ SUPPORTED_KINDS = (
     "ui.attachments.list",
     "ui.attachments.add",
     "ui.attachments.copy",
+    "ui.attachments.rename",
     "ui.attachments.remove",
     "ui.attachments.open",
     "ui.wallets.list",
@@ -6194,6 +6195,22 @@ def _ui_attachment_payload(
             hooks,
             source_tx_ref=source_transaction.strip(),
         )
+    if kind == "ui.attachments.rename":
+        attachment_id = args.get("attachment") or args.get("attachment_id")
+        if not isinstance(attachment_id, str) or not attachment_id.strip():
+            raise AppError("ui.attachments.rename requires args.attachment", code="validation")
+        label = args.get("label")
+        if not isinstance(label, str) or not label.strip():
+            raise AppError("ui.attachments.rename requires args.label", code="validation")
+        return core_attachments.rename_attachment(
+            conn,
+            ctx.data_root,
+            None,
+            None,
+            attachment_id.strip(),
+            label,
+            hooks,
+        )
     if kind == "ui.attachments.remove":
         attachment_id = args.get("attachment") or args.get("attachment_id")
         if not isinstance(attachment_id, str) or not attachment_id.strip():
@@ -7166,6 +7183,7 @@ def handle_request(
         "ui.attachments.list",
         "ui.attachments.add",
         "ui.attachments.copy",
+        "ui.attachments.rename",
         "ui.attachments.remove",
         "ui.attachments.open",
     }:

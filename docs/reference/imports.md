@@ -784,6 +784,9 @@ Attachments can be added after import:
 ```bash
 python3 -m kassiber attachments add --transaction <ID> --file /path/to/receipt.pdf
 python3 -m kassiber attachments add --transaction <ID> --url https://example.com/receipt
+python3 -m kassiber attachments rename <ATTACHMENT_ID> --label "Accountant approval"
 ```
 
-File attachments are copied into Kassiber's managed attachment store. URL attachments are stored literally and are not fetched.
+File attachments are copied into Kassiber's managed attachment store. URL
+attachments are stored literally and are not fetched. Kassiber shows a display
+label derived from the URL, which you can edit without changing the URL target.

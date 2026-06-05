@@ -14,6 +14,7 @@ from ..envelope import json_ready
 from ..errors import AppError
 from ..msat import msat_to_btc
 from . import source_funds as core_source_funds
+from .attachments import attachment_display_label
 from . import transaction_history
 
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
@@ -197,7 +198,7 @@ def _attachment_summary(
     item = {
         "id": row["id"],
         "attachment_type": row["attachment_type"],
-        "label": row["label"],
+        "label": attachment_display_label(row),
         "original_filename": row["original_filename"] or "",
         "media_type": row["media_type"] or "",
         "size_bytes": int(row["size_bytes"]) if row["size_bytes"] is not None else None,
@@ -945,7 +946,8 @@ def _copy_evidence_files(
                 )
             )
             continue
-        safe_name = _safe_filename(row["original_filename"] or row["label"])
+        display_label = attachment_display_label(row)
+        safe_name = _safe_filename(row["original_filename"] or display_label)
         relpath = Path("evidence") / f"{row['id']}-{safe_name}"
         destination = output_dir / relpath
         evidence_dir.mkdir(parents=True, exist_ok=True)
@@ -953,7 +955,7 @@ def _copy_evidence_files(
         included.append(
             {
                 "attachment_id": row["id"],
-                "label": row["label"],
+                "label": display_label,
                 "path": relpath.as_posix(),
                 "sha256": sha256,
                 "size_bytes": size_bytes,
@@ -984,7 +986,7 @@ def _url_references(rows: Sequence[Mapping[str, Any]], *, include_url_references
         safety = _url_safety(row["source_url"])
         item = {
             "attachment_id": row["id"],
-            "label": row["label"],
+            "label": attachment_display_label(row),
             "host": safety.get("host", ""),
             "scheme": safety.get("scheme", ""),
             "redacted": bool(safety.get("redacted")),

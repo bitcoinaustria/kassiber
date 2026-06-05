@@ -9696,6 +9696,48 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(broken["status"], "broken")
         self.assertEqual(broken["issues"], ["missing_file"])
 
+    def test_attachments_add_invalid_file_label_does_not_copy_managed_file(self):
+        self._bootstrap_wallet(label="AttachInvalidLabel")
+        self._insert_transaction(
+            wallet_label="AttachInvalidLabel",
+            tx_id="attach-invalid-label",
+            occurred_at="2024-01-01T00:00:00Z",
+            amount_msat=100_000_000,
+        )
+        attachment_file = self.case_dir / "invalid-label-receipt.txt"
+        attachment_file.write_text("receipt\n", encoding="utf-8")
+
+        payload, result = self._run_json(
+            "attachments",
+            "add",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--transaction",
+            "attach-invalid-label",
+            "--file",
+            str(attachment_file),
+            "--label",
+            "   ",
+        )
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+
+        attachments_root = self.case_dir / "attachments"
+        managed_files = (
+            [path for path in attachments_root.rglob("*") if path.is_file()]
+            if attachments_root.exists()
+            else []
+        )
+        self.assertEqual(managed_files, [])
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        count = conn.execute("SELECT COUNT(*) FROM attachments").fetchone()[0]
+        conn.close()
+        self.assertEqual(count, 0)
+
     def test_attachments_verify_and_remove_ignore_escaped_storage_path(self):
         self._bootstrap_wallet(label="AttachEscape")
         json_file = self.case_dir / "attachment-escape-import.json"

@@ -51,9 +51,10 @@ accounting handoff:
   included transactions to direct attachments, copied-file hashes, URL
   references, source-funds links, review state, journal context, copied-evidence
   provenance, and missing evidence warnings. URL/cloud documents remain
-  references only; Kassiber does not fetch or mirror them. When evidence is
-  reused between transactions, file attachments are duplicated under a new
-  attachment id instead of sharing `stored_relpath`.
+  references only; Kassiber does not fetch or mirror them. Kassiber derives an
+  editable display label from the URL itself; the stored URL is unchanged.
+  When evidence is reused between transactions, file attachments are duplicated
+  under a new attachment id instead of sharing `stored_relpath`.
 - **Technical wallet evidence** is a separate restricted action, not a normal
   export checkbox. If it is ever implemented, it must require explicit approval
   and should explain that descriptors or xpub-like material can reveal wallet

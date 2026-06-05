@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  attachmentRecordToItem,
   bucketTransactionDate,
   flowChartSelectionLabel,
   matchesFlowChartSelection,
   toDashboardTransaction,
+  type AttachmentRecord,
   type FlowChartSelection,
 } from "./model";
 import type { Tx } from "@/mocks/seed";
@@ -126,5 +128,44 @@ describe("transaction dashboard chart selection", () => {
         (txn) => txn.flow as TransactionFlow,
       ),
     ).toBe(false);
+  });
+});
+
+describe("transaction attachment URL labels", () => {
+  it("uses daemon display labels when a saved URL row has no stored label", () => {
+    const url = "https://docs.google.com/spreadsheets/d/abc123/edit?usp=sharing";
+    const record: AttachmentRecord = {
+      id: "att-1",
+      attachment_type: "url",
+      label: null,
+      display_label: "Google Sheet",
+      url,
+      media_type: "text/uri-list",
+      size_bytes: null,
+      exists: null,
+    };
+
+    const item = attachmentRecordToItem(record);
+
+    expect(item.label).toBe("Google Sheet");
+    expect(item.detail).toBe(url);
+  });
+
+  it("suppresses duplicate detail for daemon-derived host path labels", () => {
+    const record: AttachmentRecord = {
+      id: "att-2",
+      attachment_type: "url",
+      label: null,
+      display_label: "btcpay.example.com - abc123",
+      url: "https://btcpay.example.com/invoices/abc123",
+      media_type: "text/uri-list",
+      size_bytes: null,
+      exists: null,
+    };
+
+    const item = attachmentRecordToItem(record);
+
+    expect(item.label).toBe("btcpay.example.com - abc123");
+    expect(item.detail).toBeUndefined();
   });
 });

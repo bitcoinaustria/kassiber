@@ -916,6 +916,12 @@ def build_parser() -> argparse.ArgumentParser:
     attachments_list.add_argument("--profile")
     attachments_list.add_argument("--transaction")
 
+    attachments_rename = attachments_sub.add_parser("rename")
+    attachments_rename.add_argument("--workspace")
+    attachments_rename.add_argument("--profile")
+    attachments_rename.add_argument("attachment_id")
+    attachments_rename.add_argument("--label", required=True)
+
     attachments_remove = attachments_sub.add_parser("remove")
     attachments_remove.add_argument("--workspace")
     attachments_remove.add_argument("--profile")
@@ -2358,6 +2364,19 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.profile,
                     attachment_hooks,
                     tx_ref=args.transaction,
+                ),
+            )
+        if args.attachments_command == "rename":
+            return emit(
+                args,
+                core_attachments.rename_attachment(
+                    conn,
+                    args.data_root,
+                    args.workspace,
+                    args.profile,
+                    args.attachment_id,
+                    args.label,
+                    attachment_hooks,
                 ),
             )
         if args.attachments_command == "remove":

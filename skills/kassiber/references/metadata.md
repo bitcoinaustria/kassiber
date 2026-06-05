@@ -89,8 +89,9 @@ kassiber metadata bip329 export --wallet satoshi-liquid --file /path/to/export.j
 kassiber attachments add --transaction <transaction-id> --file /path/to/document.pdf
 kassiber attachments add --transaction <transaction-id> --url https://example.invalid/proof
 kassiber attachments list --transaction <transaction-id>
+kassiber attachments rename <attachment-id> --label "Accountant approval"
 kassiber attachments verify
 kassiber attachments gc
 ```
 
-Attachments are managed local files or literal URL references. Kassiber does not fetch and index URL attachments.
+Attachments are managed local files or literal URL references. Kassiber does not fetch and index URL attachments. Unnamed URL labels are derived for display and can be renamed without changing the URL target.

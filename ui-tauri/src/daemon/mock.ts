@@ -24,6 +24,42 @@ import { MOCK_AI_CHAT_STREAM, fixtures } from "./fixtures";
 
 const SIMULATED_LATENCY_MS = 50;
 const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
+const MAX_ATTACHMENT_LABEL_LENGTH = 200;
+
+function mockUrlDisplayLabel(rawUrl?: string) {
+  if (!rawUrl) return "Link attachment";
+  try {
+    const parsed = new URL(rawUrl);
+    const host = parsed.hostname.replace(/^www\./i, "");
+    if (host === "docs.google.com") {
+      if (parsed.pathname.startsWith("/document/d/")) return "Google Doc";
+      if (parsed.pathname.startsWith("/spreadsheets/d/")) return "Google Sheet";
+      if (parsed.pathname.startsWith("/presentation/d/")) return "Google Slides deck";
+      return "Google Workspace link";
+    }
+    if (host === "drive.google.com") return "Google Drive link";
+    const pathParts = parsed.pathname.split("/").filter(Boolean);
+    const slug = pathParts.at(-1)?.replace(/\.[a-z0-9]{2,5}$/i, "");
+    if (slug && !/^[a-f0-9-]{16,}$/i.test(slug)) {
+      return `${host} - ${decodeURIComponent(slug).replace(/[-_+]+/g, " ")}`;
+    }
+    return host || "Link attachment";
+  } catch {
+    return "Link attachment";
+  }
+}
+
+function mockAttachmentDisplayLabel(attachment: {
+  attachment_type: "file" | "url";
+  label?: string | null;
+  original_filename?: string;
+  url?: string;
+}) {
+  const label = attachment.label?.trim();
+  if (label) return label;
+  if (attachment.attachment_type === "url") return mockUrlDisplayLabel(attachment.url);
+  return attachment.original_filename || "File attachment";
+}
 
 const cloneMockProfiles = () => ({
   activeWorkspaceId: MOCK_PROFILES.activeWorkspaceId,
@@ -40,7 +76,8 @@ type MockAttachment = {
   id: string;
   transaction_id: string;
   attachment_type: "file" | "url";
-  label: string;
+  label?: string | null;
+  display_label: string;
   original_filename?: string;
   url?: string;
   media_type?: string;
@@ -53,12 +90,44 @@ type MockAttachment = {
   created_at: string;
 };
 
+type MockTransactionHistoryField = {
+  id: string;
+  field: string;
+  label: string;
+  family: string;
+  before_value: unknown;
+  after_value: unknown;
+  before_label: string;
+  after_label: string;
+  diff: Record<string, unknown>;
+  redacted?: boolean;
+};
+
+type MockTransactionHistoryEvent = {
+  id: string;
+  transaction_id: string;
+  transaction_external_id: string;
+  transaction_occurred_at: string;
+  wallet_id: string;
+  wallet_label: string;
+  source: string;
+  source_label: string;
+  reason: string;
+  changed_at: string;
+  summary: string;
+  families: string[];
+  report_anchor: Record<string, unknown>;
+  transaction: Record<string, unknown>;
+  fields: MockTransactionHistoryField[];
+};
+
 let mockAttachments: MockAttachment[] = [
   {
     id: "att-tx2-1",
     transaction_id: "tx2",
     attachment_type: "url",
     label: "Board approval reference",
+    display_label: "Board approval reference",
     url: "https://docs.example.com/board/approval",
     media_type: "text/uri-list",
     exists: null,
@@ -69,6 +138,7 @@ let mockAttachments: MockAttachment[] = [
     transaction_id: "tx1",
     attachment_type: "file",
     label: "invoice-2026-04-18.pdf",
+    display_label: "invoice-2026-04-18.pdf",
     original_filename: "invoice-2026-04-18.pdf",
     media_type: "application/pdf",
     size_bytes: 248_000,
@@ -81,7 +151,8 @@ let mockAttachments: MockAttachment[] = [
     id: "att-tx1-2",
     transaction_id: "tx1",
     attachment_type: "url",
-    label: "btcpay.example.com/invoices/abc123",
+    label: null,
+    display_label: "btcpay.example.com - abc123",
     url: "https://btcpay.example.com/invoices/abc123",
     media_type: "text/uri-list",
     exists: null,
@@ -89,7 +160,7 @@ let mockAttachments: MockAttachment[] = [
   },
 ];
 
-let mockTransactionHistory: Array<Record<string, any>> = [
+let mockTransactionHistory: MockTransactionHistoryEvent[] = [
   {
     id: "edit-mock-2",
     transaction_id: "tx2",
@@ -1820,10 +1891,10 @@ export const mockDaemon: DaemonTransport = {
         mockTransactionHistory.find((event) => event.id === eventId) ??
         mockTransactionHistory.find((event) => event.transaction_id === transactionId);
       const sourceField = fieldName
-        ? sourceEvent?.fields.find((field: Record<string, any>) => field.field === fieldName)
+        ? sourceEvent?.fields.find((field) => field.field === fieldName)
         : undefined;
       const fields = sourceField ? [sourceField] : sourceEvent?.fields ?? [];
-      const revertedFields = fields.map((field: Record<string, any>) => field.field);
+      const revertedFields = fields.map((field) => field.field);
       const newEvent = {
         id: `edit-mock-revert-${Date.now()}`,
         transaction_id: transactionId,
@@ -1836,10 +1907,10 @@ export const mockDaemon: DaemonTransport = {
         reason: typeof args.reason === "string" ? args.reason : "Reverted edit history event",
         changed_at: new Date().toISOString(),
         summary: sourceField ? `Updated ${sourceField.label}` : "Reverted edit history event",
-        families: Array.from(new Set(fields.map((field: Record<string, any>) => field.family))),
+        families: Array.from(new Set(fields.map((field) => field.family))),
         report_anchor: { stale_for_reports: true, journal_input_version_after: 9 },
         transaction: sourceEvent?.transaction ?? { id: transactionId },
-        fields: fields.map((field: Record<string, any>) => ({
+        fields: fields.map((field) => ({
           ...field,
           id: `${field.id}-revert`,
           before_value: field.after_value,
@@ -1909,19 +1980,34 @@ export const mockDaemon: DaemonTransport = {
         typeof args.label === "string" && args.label.trim()
           ? args.label.trim()
           : isUrl
-            ? source
+            ? null
             : source.split(/[\\/]/).pop() || "attachment.bin";
+      if (label && label.length > MAX_ATTACHMENT_LABEL_LENGTH) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: `Attachment label must be ${MAX_ATTACHMENT_LABEL_LENGTH} characters or fewer`,
+            retryable: false,
+          },
+        };
+      }
       const attachment: MockAttachment = {
         id: `att-mock-${(mockAttachmentCounter += 1)}`,
         transaction_id: transactionId,
         attachment_type: isUrl ? "url" : "file",
         label,
-        original_filename: isUrl ? undefined : label,
+        display_label: isUrl
+          ? label || mockUrlDisplayLabel(source)
+          : label || "attachment.bin",
+        original_filename: isUrl ? undefined : label || "attachment.bin",
         url: isUrl ? source : undefined,
         media_type: isUrl ? "text/uri-list" : "application/octet-stream",
         size_bytes: isUrl ? null : 1024,
         sha256: isUrl ? "" : "mock",
-        stored_relpath: isUrl ? "" : `mock/${label}`,
+        stored_relpath: isUrl ? "" : `mock/${label || "attachment.bin"}`,
         exists: isUrl ? null : true,
         created_at: new Date().toISOString(),
       };
@@ -1988,6 +2074,53 @@ export const mockDaemon: DaemonTransport = {
           source_transaction_id: sourceTransactionId,
           target_transaction_id: transactionId,
         } as T,
+      };
+    }
+
+    if (req.kind === "ui.attachments.rename") {
+      const args = (req.args ?? {}) as {
+        attachment?: unknown;
+        attachment_id?: unknown;
+        label?: unknown;
+      };
+      const attachmentId =
+        typeof args.attachment === "string"
+          ? args.attachment
+          : typeof args.attachment_id === "string"
+            ? args.attachment_id
+            : "";
+      const label = typeof args.label === "string" ? args.label.trim() : "";
+      const attachment = mockAttachments.find((item) => item.id === attachmentId);
+      if (
+        !attachment ||
+        !label ||
+        label.length > MAX_ATTACHMENT_LABEL_LENGTH ||
+        attachment.attachment_type !== "url"
+      ) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: attachment ? "validation" : "not_found",
+            message: !attachment
+              ? `Attachment '${attachmentId}' not found`
+              : attachment.attachment_type !== "url"
+                ? "Only URL attachment link text can be renamed"
+                : label.length > MAX_ATTACHMENT_LABEL_LENGTH
+                  ? `Attachment label must be ${MAX_ATTACHMENT_LABEL_LENGTH} characters or fewer`
+                  : "ui.attachments.rename requires label",
+            retryable: false,
+          },
+        };
+      }
+      attachment.label = label;
+      attachment.display_label = mockAttachmentDisplayLabel(attachment);
+      return {
+        kind: "ui.attachments.rename",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: attachment as T,
       };
     }
 

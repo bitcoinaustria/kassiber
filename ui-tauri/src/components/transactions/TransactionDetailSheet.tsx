@@ -97,6 +97,7 @@ export function TransactionDetailSheet({
   onAddAttachmentLinks,
   onReuseEvidence,
   onOpenAttachment,
+  onRenameAttachment,
   onRemoveAttachment,
   onUnpair,
   isUnpairing,
@@ -131,6 +132,10 @@ export function TransactionDetailSheet({
   onAddAttachmentLinks?: (urls: string[]) => void | Promise<void>;
   onReuseEvidence?: () => void;
   onOpenAttachment?: (item: AttachmentItem) => void;
+  onRenameAttachment?: (
+    item: AttachmentItem,
+    label: string,
+  ) => void | Promise<void>;
   onRemoveAttachment?: (item: AttachmentItem) => void;
   onUnpair?: (pairId: string) => void | Promise<void>;
   isUnpairing?: boolean;
@@ -644,6 +649,7 @@ export function TransactionDetailSheet({
                 onAddAttachmentLinks={onAddAttachmentLinks}
                 onReuseEvidence={onReuseEvidence}
                 onOpenAttachment={onOpenAttachment}
+                onRenameAttachment={onRenameAttachment}
                 onRemoveAttachment={onRemoveAttachment}
                 tags={tags}
                 dirtyTags={dirtyTags}

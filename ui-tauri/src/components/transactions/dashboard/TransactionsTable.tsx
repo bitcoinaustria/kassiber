@@ -188,6 +188,8 @@ const TransactionsTable = ({
   const attachmentCopy = useDaemonMutation<AttachmentsCopyData>(
     "ui.attachments.copy",
   );
+  const attachmentRename =
+    useDaemonMutation<AttachmentRecord>("ui.attachments.rename");
   const attachmentRemove = useDaemonMutation<AttachmentRecord>(
     "ui.attachments.remove",
   );
@@ -1507,6 +1509,17 @@ const TransactionsTable = ({
           if (data.target_type === "file" && data.path) {
             await openAttachmentFile(data.path);
           }
+        }}
+        onRenameAttachment={async (item, label) => {
+          await attachmentRename.mutateAsync({
+            attachment: item.id,
+            label,
+          });
+          useUiStore.getState().addNotification({
+            title: "Link text updated",
+            body: "Attachment link label saved.",
+            tone: "success",
+          });
         }}
         onRemoveAttachment={async (item) => {
           await attachmentRemove.mutateAsync({ attachment: item.id });

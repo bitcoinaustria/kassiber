@@ -240,7 +240,8 @@ const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 type AttachmentRecord = {
   id: string;
   attachment_type: "file" | "url";
-  label: string;
+  label?: string | null;
+  display_label?: string;
   original_filename?: string;
   url?: string;
   media_type?: string;
@@ -280,6 +281,25 @@ function compactBytes(bytes: number | null | undefined) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function urlAttachmentDetail(
+  rawUrl: string | undefined,
+  label: string,
+  hasStoredLabel: boolean,
+) {
+  if (!rawUrl || rawUrl === label) return undefined;
+  if (hasStoredLabel) return rawUrl;
+  try {
+    const parsed = new URL(rawUrl);
+    const host = parsed.hostname.replace(/^www\./i, "");
+    if (label === host || label.startsWith(`${host} - `)) {
+      return undefined;
+    }
+  } catch {
+    return rawUrl;
+  }
+  return rawUrl;
+}
+
 function attachmentRecordToItem(record: AttachmentRecord): AttachmentItem {
   const kind = record.attachment_type === "url" ? "url" : "file";
   const size = compactBytes(record.size_bytes);
@@ -290,17 +310,21 @@ function attachmentRecordToItem(record: AttachmentRecord): AttachmentItem {
     hash,
     record.exists === false ? "missing file" : null,
   ].filter(Boolean);
+  const storedLabel = record.label?.trim();
+  const label =
+    kind === "url"
+      ? record.display_label || storedLabel || "Link attachment"
+      : record.display_label ||
+        storedLabel ||
+        record.original_filename ||
+        "File attachment";
   return {
     id: record.id,
     kind,
-    label:
-      record.label ||
-      record.original_filename ||
-      record.url ||
-      (kind === "url" ? "Link attachment" : "File attachment"),
+    label,
     detail:
       kind === "url"
-        ? record.url || record.media_type || undefined
+        ? urlAttachmentDetail(record.url, label, Boolean(storedLabel))
         : fileBits.join(" · ") || record.original_filename || undefined,
     href: record.url || undefined,
     copiedFromAttachmentId: record.copied_from_attachment_id || undefined,

@@ -146,6 +146,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.attachments.list",
     "ui.attachments.add",
     "ui.attachments.copy",
+    "ui.attachments.rename",
     "ui.attachments.remove",
     "ui.attachments.open",
     "ui.wallets.list",
@@ -2656,6 +2657,7 @@ mod tests {
             "ui.attachments.list",
             "ui.attachments.add",
             "ui.attachments.copy",
+            "ui.attachments.rename",
             "ui.attachments.remove",
             "ui.attachments.open",
         ];

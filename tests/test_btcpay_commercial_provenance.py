@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from kassiber.core import commercial
-from kassiber.db import _migrate_nullable_attachment_transactions, open_db
+from kassiber.db import _migrate_attachment_table_shape, open_db
 from kassiber.errors import AppError
 from kassiber.msat import btc_to_msat
 from kassiber.sync_btcpay import fetch_btcpay_invoice_provenance
@@ -778,23 +778,26 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
         )
         self.conn.commit()
 
-        _migrate_nullable_attachment_transactions(self.conn)
+        _migrate_attachment_table_shape(self.conn)
 
         attachment = self.conn.execute(
-            "SELECT source_url FROM attachments WHERE id = ?",
+            "SELECT source_url, label FROM attachments WHERE id = ?",
             (result["attachment_id"],),
         ).fetchone()
         self.assertEqual(attachment["source_url"], "https://example.test/invoice")
+        self.assertIsNone(attachment["label"])
         for child_table in (
             "external_document_attachments",
             "source_funds_link_attachments",
             "source_funds_source_attachments",
         ):
             self.assertEqual(_attachment_fk_targets(self.conn, child_table), {"attachments"})
-        legacy = self.conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='attachments_legacy_notnull_tx'"
-        ).fetchone()
-        self.assertIsNone(legacy)
+        for legacy_name in ("attachments_legacy_shape", "attachments_legacy_notnull_tx"):
+            legacy = self.conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                (legacy_name,),
+            ).fetchone()
+            self.assertIsNone(legacy)
 
     def test_attachment_migration_removes_copied_provenance_foreign_keys(self):
         now = now_iso()
@@ -860,7 +863,7 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
             {"copied_from_attachment_id", "copied_from_transaction_id"},
         )
 
-        _migrate_nullable_attachment_transactions(self.conn)
+        _migrate_attachment_table_shape(self.conn)
 
         copied_fk_columns = {
             row["from"]

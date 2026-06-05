@@ -41,6 +41,7 @@ export function TransactionDetailRightRail({
   onAddAttachmentLinks,
   onReuseEvidence,
   onOpenAttachment,
+  onRenameAttachment,
   onRemoveAttachment,
   tags,
   dirtyTags,
@@ -65,6 +66,10 @@ export function TransactionDetailRightRail({
   onAddAttachmentLinks?: (urls: string[]) => void | Promise<void>;
   onReuseEvidence?: () => void;
   onOpenAttachment?: (item: AttachmentItem) => void;
+  onRenameAttachment?: (
+    item: AttachmentItem,
+    label: string,
+  ) => void | Promise<void>;
   onRemoveAttachment?: (item: AttachmentItem) => void;
   tags: string[];
   dirtyTags?: boolean;
@@ -137,6 +142,7 @@ export function TransactionDetailRightRail({
         onAddLinks={onAddAttachmentLinks}
         onReuseEvidence={onReuseEvidence}
         onOpen={onOpenAttachment}
+        onRename={onRenameAttachment}
         onRemove={onRemoveAttachment}
       />
       {tags.length ? (

@@ -1,4 +1,12 @@
-import { FileText, Link2, Paperclip, Repeat2, X } from "lucide-react";
+import {
+  Check,
+  FileText,
+  Link2,
+  Paperclip,
+  Pencil,
+  Repeat2,
+  X,
+} from "lucide-react";
 import * as React from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { isFilePickerAvailable, pickFiles } from "@/lib/filePicker";
@@ -18,6 +27,8 @@ import { cn } from "@/lib/utils";
 
 import { blurClass } from "./model";
 import type { AttachmentItem } from "./TransactionDetailSheetParts";
+
+const MAX_ATTACHMENT_LABEL_LENGTH = 200;
 
 function AttachLinksDialog({
   open,
@@ -93,7 +104,8 @@ function AttachLinksDialog({
           <DialogTitle>Attach links</DialogTitle>
           <DialogDescription>
             One URL per line. Links are stored as references — Kassiber does
-            not fetch or index the content.
+            not fetch or index the content. You can edit the link text after
+            attaching.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-2">
@@ -172,6 +184,7 @@ export function AttachmentsPanel({
   onAddLinks,
   onReuseEvidence,
   onOpen,
+  onRename,
   onRemove,
 }: {
   items?: AttachmentItem[];
@@ -180,10 +193,18 @@ export function AttachmentsPanel({
   onAddLinks?: (urls: string[]) => void | Promise<void>;
   onReuseEvidence?: () => void;
   onOpen?: (item: AttachmentItem) => void;
+  onRename?: (item: AttachmentItem, label: string) => void | Promise<void>;
   onRemove?: (item: AttachmentItem) => void;
 }) {
   const [linkDialogOpen, setLinkDialogOpen] = React.useState(false);
   const [pickerBusy, setPickerBusy] = React.useState(false);
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [editingLabel, setEditingLabel] = React.useState("");
+  const [renameError, setRenameError] = React.useState<string | null>(null);
+  const [savingRenameId, setSavingRenameId] = React.useState<string | null>(
+    null,
+  );
+  const renameButtonRefs = React.useRef(new Map<string, HTMLButtonElement>());
   const wired = Boolean(onAddFiles || onAddLinks);
   const filePickerEnabled = Boolean(onAddFiles) && isFilePickerAvailable;
 
@@ -208,6 +229,57 @@ export function AttachmentsPanel({
     }
   };
 
+  const startRename = (item: AttachmentItem) => {
+    setEditingId(item.id);
+    setEditingLabel(item.label);
+    setRenameError(null);
+  };
+
+  const focusRenameTrigger = (itemId: string | null) => {
+    if (!itemId) return;
+    window.requestAnimationFrame(() => {
+      renameButtonRefs.current.get(itemId)?.focus();
+    });
+  };
+
+  const cancelRename = (itemId = editingId) => {
+    setEditingId(null);
+    setEditingLabel("");
+    setRenameError(null);
+    focusRenameTrigger(itemId);
+  };
+
+  const saveRename = async (item: AttachmentItem) => {
+    if (!onRename) return;
+    const label = editingLabel.trim();
+    if (!label) {
+      setRenameError("Add link text.");
+      return;
+    }
+    if (label.length > MAX_ATTACHMENT_LABEL_LENGTH) {
+      setRenameError(
+        `Keep link text to ${MAX_ATTACHMENT_LABEL_LENGTH} characters or fewer.`,
+      );
+      return;
+    }
+    if (label === item.label) {
+      cancelRename(item.id);
+      return;
+    }
+    setSavingRenameId(item.id);
+    setRenameError(null);
+    try {
+      await onRename(item, label);
+      cancelRename(item.id);
+    } catch (err) {
+      setRenameError(
+        err instanceof Error ? err.message : "Could not rename link.",
+      );
+    } finally {
+      setSavingRenameId(null);
+    }
+  };
+
   return (
     <div className="rounded-md border bg-card p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -228,6 +300,11 @@ export function AttachmentsPanel({
             const hiddenTitle = hideSensitive
               ? "Attachment detail hidden"
               : item.detail;
+            const isEditing = editingId === item.id;
+            const canRename = Boolean(
+              onRename && item.kind === "url" && !hideSensitive,
+            );
+            const renameBusy = savingRenameId === item.id;
             return (
               <li
                 key={item.id}
@@ -240,7 +317,42 @@ export function AttachmentsPanel({
                     <FileText className="size-3.5" aria-hidden="true" />
                   )}
                 </span>
-                {onOpen ? (
+                {isEditing ? (
+                  <div className="min-w-0 flex-1">
+                    <Input
+                      value={editingLabel}
+                      onChange={(event) => {
+                        setEditingLabel(event.target.value);
+                        setRenameError(null);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          void saveRename(item);
+                        }
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          cancelRename(item.id);
+                        }
+                      }}
+                      maxLength={MAX_ATTACHMENT_LABEL_LENGTH}
+                      className="h-7 text-xs"
+                      aria-label={`Link text for ${item.detail || item.label}`}
+                      disabled={renameBusy}
+                      autoFocus
+                    />
+                    {item.detail ? (
+                      <div className="truncate text-[10px] text-muted-foreground">
+                        {item.detail}
+                      </div>
+                    ) : null}
+                    {renameError ? (
+                      <div role="alert" className="text-[10px] text-destructive">
+                        {renameError}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : onOpen ? (
                   <button
                     type="button"
                     onClick={() => onOpen(item)}
@@ -298,7 +410,51 @@ export function AttachmentsPanel({
                     ) : null}
                   </div>
                 )}
-                {onRemove ? (
+                {isEditing ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-6 shrink-0 text-muted-foreground"
+                      aria-label="Save link text"
+                      disabled={renameBusy || !editingLabel.trim()}
+                      onClick={() => void saveRename(item)}
+                    >
+                      <Check className="size-3.5" aria-hidden="true" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-6 shrink-0 text-muted-foreground"
+                      aria-label="Cancel link text edit"
+                      disabled={renameBusy}
+                      onClick={() => cancelRename(item.id)}
+                    >
+                      <X className="size-3.5" aria-hidden="true" />
+                    </Button>
+                  </>
+                ) : canRename ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-6 shrink-0 text-muted-foreground"
+                    aria-label={`Edit link text for ${item.label}`}
+                    ref={(node) => {
+                      if (node) {
+                        renameButtonRefs.current.set(item.id, node);
+                      } else {
+                        renameButtonRefs.current.delete(item.id);
+                      }
+                    }}
+                    onClick={() => startRename(item)}
+                  >
+                    <Pencil className="size-3.5" aria-hidden="true" />
+                  </Button>
+                ) : null}
+                {!isEditing && onRemove ? (
                   <Button
                     type="button"
                     variant="ghost"
