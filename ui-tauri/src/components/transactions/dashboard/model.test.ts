@@ -5,7 +5,10 @@ import {
   bucketTransactionDate,
   flowChartSelectionLabel,
   matchesFlowChartSelection,
+  removeAttachmentRecord,
+  replaceAttachmentRecord,
   toDashboardTransaction,
+  upsertAttachmentRecords,
   type AttachmentRecord,
   type FlowChartSelection,
 } from "./model";
@@ -167,5 +170,79 @@ describe("transaction attachment URL labels", () => {
 
     expect(item.label).toBe("btcpay.example.com - abc123");
     expect(item.detail).toBeUndefined();
+  });
+});
+
+describe("transaction attachment cache updates", () => {
+  it("replaces the renamed attachment without changing the others", () => {
+    const current: AttachmentRecord[] = [
+      {
+        id: "file-1",
+        attachment_type: "file",
+        display_label: "invoice.pdf",
+      },
+      {
+        id: "url-1",
+        attachment_type: "url",
+        display_label: "Old link",
+      },
+    ];
+    const updated: AttachmentRecord = {
+      ...current[1],
+      label: "New link",
+      display_label: "New link",
+    };
+
+    expect(replaceAttachmentRecord(current, updated)).toEqual([
+      current[0],
+      updated,
+    ]);
+  });
+
+  it("prepends newly added attachments and replaces existing records", () => {
+    const current: AttachmentRecord[] = [
+      {
+        id: "file-1",
+        attachment_type: "file",
+        display_label: "invoice.pdf",
+      },
+      {
+        id: "url-1",
+        attachment_type: "url",
+        display_label: "Old link",
+      },
+    ];
+    const renamed: AttachmentRecord = {
+      ...current[1],
+      display_label: "Renamed link",
+    };
+    const created: AttachmentRecord = {
+      id: "url-2",
+      attachment_type: "url",
+      display_label: "New link",
+    };
+
+    expect(upsertAttachmentRecords(current, [renamed, created])).toEqual([
+      created,
+      current[0],
+      renamed,
+    ]);
+  });
+
+  it("removes deleted attachment records", () => {
+    const current: AttachmentRecord[] = [
+      {
+        id: "file-1",
+        attachment_type: "file",
+        display_label: "invoice.pdf",
+      },
+      {
+        id: "url-1",
+        attachment_type: "url",
+        display_label: "Old link",
+      },
+    ];
+
+    expect(removeAttachmentRecord(current, "url-1")).toEqual([current[0]]);
   });
 });
