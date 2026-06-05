@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import * as React from "react";
 
-import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { TransactionHistoryTimeline } from "@/components/transactions/TransactionEditHistoryPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,12 +21,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useDaemonInfinite, useDaemonMutation } from "@/daemon/client";
+import { useDaemon, useDaemonInfinite, useDaemonMutation } from "@/daemon/client";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { cn } from "@/lib/utils";
 import type {
   HistoryRevertTarget,
   TransactionHistoryList,
+  TransactionHistoryStaleSummary,
 } from "@/lib/transactionHistory";
 import { useUiStore } from "@/store/ui";
 
@@ -58,7 +58,7 @@ export function Activity() {
     });
 
   const args = React.useMemo(() => {
-    const payload: Record<string, unknown> = { limit: 50 };
+    const payload: Record<string, unknown> = { limit: 50, include_stale: false };
     const start = startForDateFilter(dateFilter);
     if (start) payload.start = start;
     if (sourceFilter !== "all") payload.source = sourceFilter;
@@ -87,7 +87,12 @@ export function Activity() {
   );
   const pages = historyQuery.data?.pages ?? [];
   const events = pages.flatMap((page) => page.data?.events ?? []);
-  const latestStale = pages[0]?.data?.stale;
+  const staleQuery = useDaemon<TransactionHistoryStaleSummary>(
+    "ui.activity.stale",
+    undefined,
+    { enabled: !historyQuery.isLoading },
+  );
+  const latestStale = staleQuery.data?.data ?? pages[0]?.data?.stale;
   const staleCount = latestStale?.edit_count ?? 0;
 
   const onRevert = React.useCallback(
@@ -109,10 +114,6 @@ export function Activity() {
     },
     [addNotification, revertHistory],
   );
-
-  if (historyQuery.isLoading && events.length === 0) {
-    return <ScreenSkeleton titleWidth="w-32" />;
-  }
 
   return (
     <main className="min-h-full bg-background">
@@ -267,6 +268,7 @@ export function Activity() {
             showTransaction
             onRevert={onRevert}
             isReverting={revertHistory.isPending}
+            isLoading={historyQuery.isLoading}
           />
           {historyQuery.hasNextPage ? (
             <div className="flex justify-center">

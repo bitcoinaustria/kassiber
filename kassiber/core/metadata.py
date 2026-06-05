@@ -889,6 +889,7 @@ def list_transaction_history(
     end=None,
     cursor=None,
     limit=None,
+    include_stale=True,
 ):
     return transaction_history.list_history(
         conn,
@@ -906,6 +907,7 @@ def list_transaction_history(
         end=end,
         cursor=cursor,
         limit=limit,
+        include_stale=include_stale,
     )
 
 
@@ -927,6 +929,7 @@ def list_activity_history(
     end=None,
     cursor=None,
     limit=None,
+    include_stale=True,
 ):
     return transaction_history.list_history(
         conn,
@@ -945,6 +948,7 @@ def list_activity_history(
         end=end,
         cursor=cursor,
         limit=limit,
+        include_stale=include_stale,
     )
 
 
