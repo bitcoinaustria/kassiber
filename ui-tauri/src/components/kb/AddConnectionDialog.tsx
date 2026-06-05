@@ -89,6 +89,11 @@ interface SyncResult {
   coinfinity_rows?: number;
   twentyonebitcoin_rows?: number;
   strike_rows?: number;
+  wasabi_transactions?: number;
+  wasabi_coins_observed?: number;
+  wasabi_coins_active?: number;
+  wasabi_coins_marked_spent?: number;
+  wasabi_payments_in_coinjoin?: number;
   inserted_records?: ImportChangeRecord[];
   updated_records?: ImportChangeRecord[];
   reconciliation_records?: ImportChangeRecord[];
@@ -179,6 +184,11 @@ interface ImportFileResult {
   coinfinity_rows?: number;
   twentyonebitcoin_rows?: number;
   strike_rows?: number;
+  wasabi_transactions?: number;
+  wasabi_coins_observed?: number;
+  wasabi_coins_active?: number;
+  wasabi_coins_marked_spent?: number;
+  wasabi_payments_in_coinjoin?: number;
   inserted_records?: ImportChangeRecord[];
   updated_records?: ImportChangeRecord[];
   reconciliation_records?: ImportChangeRecord[];
@@ -219,6 +229,9 @@ function sourceFileFilters(source: ConnectionSource) {
   }
   if (source.sourceFormat === "strike_csv") {
     return [{ name: "Strike CSV", extensions: ["csv"] }];
+  }
+  if (source.sourceFormat === "wasabi_bundle") {
+    return [{ name: "Wasabi JSON bundle", extensions: ["json"] }];
   }
   if (source.id === "csv") {
     return [{ name: "CSV or JSON", extensions: ["csv", "json"] }];
@@ -2027,6 +2040,11 @@ export function AddConnectionDialog({
       coinfinity_rows: result.coinfinity_rows,
       twentyonebitcoin_rows: result.twentyonebitcoin_rows,
       strike_rows: result.strike_rows,
+      wasabi_transactions: result.wasabi_transactions,
+      wasabi_coins_observed: result.wasabi_coins_observed,
+      wasabi_coins_active: result.wasabi_coins_active,
+      wasabi_coins_marked_spent: result.wasabi_coins_marked_spent,
+      wasabi_payments_in_coinjoin: result.wasabi_payments_in_coinjoin,
       inserted_records: result.inserted_records,
       updated_records: result.updated_records,
       reconciliation_records: result.reconciliation_records,
@@ -2046,6 +2064,7 @@ export function AddConnectionDialog({
       lastImportResult.coinfinity_rows ??
       lastImportResult.twentyonebitcoin_rows ??
       lastImportResult.strike_rows ??
+      lastImportResult.wasabi_transactions ??
       lastImportResult.imported + lastImportResult.skipped;
     const isBookWide = lastImportResult.scope === "book";
     const changedCount =
@@ -2058,6 +2077,15 @@ export function AddConnectionDialog({
     ];
     if (lastImportResult.matched !== undefined) {
       metrics.push(["Matched", lastImportResult.matched]);
+    }
+    if (lastImportResult.wasabi_coins_observed !== undefined) {
+      metrics.push(["Coins observed", lastImportResult.wasabi_coins_observed]);
+    }
+    if (lastImportResult.wasabi_coins_active !== undefined) {
+      metrics.push(["Active coins", lastImportResult.wasabi_coins_active]);
+    }
+    if (lastImportResult.wasabi_payments_in_coinjoin !== undefined) {
+      metrics.push(["Payments in CoinJoin", lastImportResult.wasabi_payments_in_coinjoin]);
     }
     if (lastImportResult.skipped_unmatched !== undefined) {
       metrics.push(["Unmatched", lastImportResult.skipped_unmatched]);

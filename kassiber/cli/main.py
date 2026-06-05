@@ -674,7 +674,7 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_create.add_argument("--config")
     wallets_create.add_argument("--config-file")
     wallets_create.add_argument("--source-file")
-    wallets_create.add_argument("--source-format", choices=["json", "csv", "btcpay_json", "btcpay_csv", "phoenix_csv", "river_csv", "bullbitcoin_csv", "coinfinity_csv", "21bitcoin_csv", "pocketbitcoin_csv", "strike_csv"])
+    wallets_create.add_argument("--source-format", choices=["json", "csv", "btcpay_json", "btcpay_csv", "phoenix_csv", "river_csv", "bullbitcoin_csv", "coinfinity_csv", "21bitcoin_csv", "pocketbitcoin_csv", "strike_csv", "wasabi_bundle"])
 
     wallets_sub.add_parser("kinds")
 
@@ -734,6 +734,11 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_import_phoenix.add_argument("--profile")
     wallets_import_phoenix.add_argument("--wallet", required=True)
     wallets_import_phoenix.add_argument("--file", required=True)
+    wallets_import_wasabi = wallets_sub.add_parser("import-wasabi")
+    wallets_import_wasabi.add_argument("--workspace")
+    wallets_import_wasabi.add_argument("--profile")
+    wallets_import_wasabi.add_argument("--wallet", required=True)
+    wallets_import_wasabi.add_argument("--file", required=True)
 
     wallets_import_river = wallets_sub.add_parser("import-river")
     wallets_import_river.add_argument("--workspace")
@@ -2060,6 +2065,18 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.wallet,
                     args.file,
                     "phoenix_csv",
+                ),
+            )
+        if args.wallets_command == "import-wasabi":
+            return emit(
+                args,
+                import_into_wallet(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.wallet,
+                    args.file,
+                    "wasabi_bundle",
                 ),
             )
         if args.wallets_command == "import-river":

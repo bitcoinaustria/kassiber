@@ -57,6 +57,7 @@ import json
 import os
 from datetime import datetime, timezone
 from decimal import Decimal
+from typing import Any, Mapping
 
 from .envelope import json_ready
 from .errors import AppError
@@ -111,7 +112,488 @@ def load_import_records(file_path, input_format):
         return load_pocketbitcoin_csv_records(file_path)
     if input_format == "strike_csv":
         return load_strike_csv_records(file_path)
+    if input_format == "wasabi_bundle":
+        return load_wasabi_bundle_records(file_path)
     raise AppError(f"Unsupported input format '{input_format}'")
+
+
+# -- Wasabi Wallet -----------------------------------------------------------
+
+
+WASABI_BUNDLE_FORMAT = "wasabi_bundle"
+_WASABI_SENSITIVE_KEY_NAMES = {
+    "accountkeypath",
+    "chaincode",
+    "encryptedsecret",
+    "encryptedsecretdecryptioninfos",
+    "extpubkey",
+    "fullkeypath",
+    "keypath",
+    "masterkeyfingerprint",
+    "password",
+    "passphrase",
+    "privatekey",
+    "pubkey",
+    "publickey",
+    "walletfile",
+    "xpub",
+}
+
+
+def _wasabi_bundle_key(value: Any) -> str:
+    return str(value or "").replace("-", "").replace("_", "").replace(".", "").casefold()
+
+
+def _wasabi_result(value: Any) -> Any:
+    if isinstance(value, dict) and "result" in value:
+        return value.get("result")
+    return value
+
+
+def _wasabi_section(payload: Any, *names: str) -> Any:
+    if not isinstance(payload, dict):
+        return None
+    normalized_names = {_wasabi_bundle_key(name) for name in names}
+    for key, value in payload.items():
+        if _wasabi_bundle_key(key) in normalized_names:
+            return _wasabi_result(value)
+    for container_name in ("rpc", "responses", "exports", "wasabi"):
+        nested = payload.get(container_name)
+        if isinstance(nested, dict):
+            value = _wasabi_section(nested, *names)
+            if value is not None:
+                return value
+    return None
+
+
+def _wasabi_section_present(payload: Any, *names: str) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    normalized_names = {_wasabi_bundle_key(name) for name in names}
+    for key in payload:
+        if _wasabi_bundle_key(key) in normalized_names:
+            return True
+    for container_name in ("rpc", "responses", "exports", "wasabi"):
+        nested = payload.get(container_name)
+        if isinstance(nested, dict) and _wasabi_section_present(nested, *names):
+            return True
+    return False
+
+
+def _wasabi_list(payload: Any, *names: str) -> list[dict[str, Any]]:
+    value = _wasabi_section(payload, *names)
+    if value is None:
+        return []
+    if isinstance(value, dict):
+        for key in ("items", "records", "transactions", "history", "coins", "keys", "payments"):
+            nested = value.get(key)
+            if isinstance(nested, list):
+                value = nested
+                break
+    if not isinstance(value, list):
+        raise AppError(f"Wasabi bundle section '{names[0]}' must be a list", code="validation")
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _wasabi_dict(payload: Any, *names: str) -> dict[str, Any]:
+    value = _wasabi_section(payload, *names)
+    return value if isinstance(value, dict) else {}
+
+
+def _wasabi_pick(mapping: Mapping[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in mapping and mapping[key] not in (None, ""):
+            return mapping[key]
+    return None
+
+
+def _wasabi_bool(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None or value == "":
+        return default
+    text = str(value).strip().casefold()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _wasabi_int(value: Any, field: str, *, default: int | None = None) -> int | None:
+    if value is None or value == "":
+        return default
+    try:
+        if isinstance(value, Decimal):
+            return int(value)
+        if isinstance(value, float):
+            return int(value)
+        text = str(value).strip()
+        if "." in text:
+            return int(Decimal(text))
+        return int(text)
+    except (TypeError, ValueError, ArithmeticError) as exc:
+        raise AppError(f"Wasabi bundle has invalid {field}", code="validation") from exc
+
+
+def _wasabi_amount_sats(value: Any) -> int:
+    if value is None or value == "":
+        raise AppError("Wasabi transaction is missing amount", code="validation")
+    if isinstance(value, int):
+        return value
+    text = str(value).strip()
+    try:
+        if "." in text:
+            return int((dec(text) * Decimal("100000000")).to_integral_value())
+        return int(text)
+    except (ValueError, ArithmeticError) as exc:
+        raise AppError(f"Wasabi bundle has invalid amount '{value}'", code="validation") from exc
+
+
+def _wasabi_btc_from_sats(value: int) -> Decimal:
+    return Decimal(value) / Decimal("100000000")
+
+
+def _wasabi_safe_txid(value: Any) -> str | None:
+    text = str_or_none(value)
+    if text is None:
+        return None
+    text = text.strip().lower()
+    if len(text) != 64:
+        return text
+    try:
+        bytes.fromhex(text)
+    except ValueError:
+        return text
+    return text
+
+
+def _wasabi_path_parts(value: Any) -> list[str]:
+    text = str_or_none(value)
+    if text is None:
+        return []
+    parts = [part.strip() for part in text.split("/") if part.strip()]
+    if parts and parts[0].lower() == "m":
+        parts = parts[1:]
+    return parts
+
+
+def _wasabi_key_path_tail(value: Any) -> dict[str, Any]:
+    parts = _wasabi_path_parts(value)
+    if not parts:
+        return {"branch_label": None, "branch_index": None, "address_index": None, "has_key_path": False}
+    if len(parts) < 2:
+        return {"branch_label": None, "branch_index": None, "address_index": None, "has_key_path": True}
+    try:
+        branch = int(parts[-2].rstrip("'hH"))
+        index = int(parts[-1].rstrip("'hH"))
+    except ValueError:
+        return {"branch_label": None, "branch_index": None, "address_index": None, "has_key_path": True}
+    branch_label = "receive" if branch == 0 else "change" if branch == 1 else f"branch-{branch}"
+    return {
+        "branch_label": branch_label,
+        "branch_index": branch,
+        "address_index": index,
+        "has_key_path": True,
+    }
+
+
+def _wasabi_account_hint(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    name = str_or_none(value.get("name") or value.get("Name"))
+    path = str_or_none(value.get("keyPath") or value.get("KeyPath") or value.get("fullKeyPath"))
+    hint: dict[str, Any] = {"name": name or "account"}
+    if path:
+        parts = _wasabi_path_parts(path)
+        purpose = parts[0].rstrip("'hH") if len(parts) >= 1 else ""
+        coin_type = parts[1].rstrip("'hH") if len(parts) >= 2 else ""
+        if purpose.isdigit():
+            hint["purpose"] = int(purpose)
+        if coin_type.isdigit():
+            hint["coin_type"] = int(coin_type)
+        if len(parts) >= 3:
+            hint["account_path_hint"] = f"{parts[0]}/{parts[1]}/*'"
+    return hint
+
+
+def _wasabi_account_path_hint(value: Any) -> str | None:
+    parts = _wasabi_path_parts(value)
+    if not parts:
+        return None
+    if len(parts) < 2:
+        return "account_path_present"
+    return f"{parts[0]}/{parts[1]}/*'"
+
+
+def _wasabi_sanitize_mapping(value: Any) -> Any:
+    if isinstance(value, dict):
+        sanitized = {}
+        for key, item in value.items():
+            safe_key = str(key)
+            if _wasabi_bundle_key(safe_key) in _WASABI_SENSITIVE_KEY_NAMES:
+                continue
+            sanitized[safe_key] = _wasabi_sanitize_mapping(item)
+        return sanitized
+    if isinstance(value, list):
+        return [_wasabi_sanitize_mapping(item) for item in value]
+    return value
+
+
+def _wasabi_wallet_metadata(wallet_info: dict[str, Any], wallet_json: dict[str, Any]) -> dict[str, Any]:
+    merged = {**wallet_json, **wallet_info}
+    if not merged:
+        return {}
+
+    def pick(*keys: str) -> Any:
+        for key in keys:
+            if key in merged:
+                return merged[key]
+        folded = {_wasabi_bundle_key(key): value for key, value in merged.items()}
+        for key in keys:
+            lookup = _wasabi_bundle_key(key)
+            if lookup in folded:
+                return folded[lookup]
+        return None
+
+    accounts_raw = pick("accounts", "Accounts") or []
+    accounts = []
+    if isinstance(accounts_raw, list):
+        accounts = [hint for item in accounts_raw if (hint := _wasabi_account_hint(item))]
+    metadata = {
+        "walletName": str_or_none(pick("walletName", "Name")),
+        "state": str_or_none(pick("State", "state")),
+        "anonScoreTarget": _wasabi_int(pick("anonScoreTarget", "AnonScoreTarget"), "anonScoreTarget"),
+        "autoCoinJoin": _wasabi_bool(pick("isAutoCoinjoin", "AutoCoinJoin"), False),
+        "redCoinIsolation": _wasabi_bool(pick("RedCoinIsolation", "isNonPrivateCoinIsolation"), False),
+        "isWatchOnly": _wasabi_bool(pick("isWatchOnly", "IsWatchOnly"), False),
+        "isHardwareWallet": _wasabi_bool(pick("isHardwareWallet", "IsHardwareWallet"), False),
+        "minGapLimit": _wasabi_int(pick("MinGapLimit", "minGapLimit"), "MinGapLimit"),
+        "coinjoinStatus": str_or_none(pick("coinjoinStatus", "CoinjoinStatus")),
+        "segwitAccountPathHint": _wasabi_account_path_hint(
+            pick("SegWitAccountKeyPath", "segwitAccountKeyPath")
+        ),
+        "taprootAccountPathHint": _wasabi_account_path_hint(
+            pick("TaprootAccountKeyPath", "taprootAccountKeyPath")
+        ),
+        "silentPaymentAccountPathHint": _wasabi_account_path_hint(
+            pick("SilentPaymentAccountKeyPath", "silentPaymentAccountKeyPath")
+        ),
+        "accounts": accounts,
+        "walletJsonImported": bool(wallet_json),
+    }
+    return {key: value for key, value in metadata.items() if value not in (None, "", [])}
+
+
+def _normalize_wasabi_history_record(record: dict[str, Any]) -> dict[str, Any]:
+    sanitized = {str(key): value for key, value in record.items() if key is not None}
+    txid = _wasabi_safe_txid(
+        sanitized.get("tx")
+        or sanitized.get("txid")
+        or sanitized.get("transactionId")
+        or sanitized.get("transactionid")
+    )
+    amount_sats = _wasabi_amount_sats(_wasabi_pick(sanitized, "amount", "amountSats"))
+    is_coinjoin = _wasabi_bool(
+        sanitized.get("islikelycoinjoin")
+        if "islikelycoinjoin" in sanitized
+        else sanitized.get("isLikelyCoinJoin")
+        if "isLikelyCoinJoin" in sanitized
+        else sanitized.get("isLikelyCoinjoin"),
+        False,
+    )
+    label = str_or_none(sanitized.get("label") or sanitized.get("labels"))
+    height = _wasabi_int(sanitized.get("height") or sanitized.get("blockHeight"), "height")
+    direction = "outbound" if amount_sats < 0 or (amount_sats == 0 and is_coinjoin) else "inbound"
+    kind = "coinjoin" if is_coinjoin else "withdrawal" if direction == "outbound" else "deposit"
+    safe_raw = {
+        "source": "wasabi_gethistory",
+        "tx": txid,
+        "height": height,
+        "amount_sats": amount_sats,
+        "label": label,
+        "islikelycoinjoin": is_coinjoin,
+        "privacy_hop": "coinjoin" if is_coinjoin else None,
+    }
+    safe_raw = {key: value for key, value in safe_raw.items() if value not in (None, "")}
+    description = label or ("Wasabi CoinJoin privacy hop" if is_coinjoin else "Wasabi transaction")
+    return {
+        "txid": txid,
+        "occurred_at": sanitized.get("datetime") or sanitized.get("date") or sanitized.get("time"),
+        "confirmed_at": sanitized.get("datetime") if height else None,
+        "direction": direction,
+        "asset": "BTC",
+        "amount": _wasabi_btc_from_sats(abs(amount_sats)),
+        "fee": Decimal("0"),
+        "kind": kind,
+        "description": description,
+        "counterparty": None,
+        "_wasabi_label": label,
+        "_wasabi_islikelycoinjoin": is_coinjoin,
+        "raw_json": json.dumps(json_ready(safe_raw), sort_keys=True),
+    }
+
+
+def _normalize_wasabi_coin_record(record: dict[str, Any]) -> dict[str, Any]:
+    sanitized = {str(key): value for key, value in record.items() if key is not None}
+    txid = _wasabi_safe_txid(
+        sanitized.get("txid") or sanitized.get("tx") or sanitized.get("transactionId")
+    )
+    vout = _wasabi_int(
+        sanitized.get("vout")
+        if "vout" in sanitized
+        else sanitized.get("index")
+        if "index" in sanitized
+        else sanitized.get("outputIndex"),
+        "vout",
+    )
+    amount_sats = _wasabi_amount_sats(_wasabi_pick(sanitized, "amount", "amountSats"))
+    confirmed = _wasabi_bool(sanitized.get("confirmed"), False)
+    confirmations = _wasabi_int(sanitized.get("confirmations"), "confirmations", default=0)
+    key_tail = _wasabi_key_path_tail(
+        sanitized.get("keyPath") or sanitized.get("fullKeyPath") or sanitized.get("key_path")
+    )
+    spent_by = _wasabi_safe_txid(sanitized.get("spentBy") or sanitized.get("spent_by"))
+    anon_history = (
+        sanitized.get("anonHistory")
+        or sanitized.get("anonymityHistory")
+        or sanitized.get("anonScoreHistory")
+        or sanitized.get("clusterHistory")
+        or []
+    )
+    safe_raw = {
+        "source": "wasabi_coin",
+        "anonymityScore": sanitized.get("anonymityScore"),
+        "excludedFromCoinjoin": sanitized.get("excludedFromCoinjoin"),
+        "keyState": sanitized.get("keyState"),
+        "has_key_path": key_tail["has_key_path"],
+        "anon_history": _wasabi_sanitize_mapping(anon_history) if isinstance(anon_history, list) else [],
+    }
+    return {
+        "txid": txid,
+        "vout": vout,
+        "amount_sats": amount_sats,
+        "asset": "BTC",
+        "chain": "bitcoin",
+        "network": "mainnet",
+        "confirmation_status": "confirmed" if confirmed else "mempool",
+        "confirmations": confirmations,
+        "block_height": _wasabi_int(sanitized.get("height") or sanitized.get("blockHeight"), "height"),
+        "address": str_or_none(sanitized.get("address")),
+        "address_label": str_or_none(sanitized.get("label")),
+        "branch_label": key_tail["branch_label"],
+        "branch_index": key_tail["branch_index"],
+        "address_index": key_tail["address_index"],
+        "anonymity_score": _wasabi_int(sanitized.get("anonymityScore"), "anonymityScore"),
+        "spent_by": spent_by,
+        "spent": bool(spent_by),
+        "excluded_from_coinjoin": _wasabi_bool(sanitized.get("excludedFromCoinjoin"), False),
+        "key_state": str_or_none(sanitized.get("keyState")),
+        "anon_history": _wasabi_sanitize_mapping(anon_history) if isinstance(anon_history, list) else [],
+        "raw": safe_raw,
+    }
+
+
+def _sanitize_wasabi_payment_in_coinjoin(record: dict[str, Any]) -> dict[str, Any]:
+    states = record.get("state") or record.get("states") or []
+    if isinstance(states, dict):
+        states = [states]
+    safe_states = []
+    if isinstance(states, list):
+        for state in states:
+            if not isinstance(state, dict):
+                continue
+            safe_states.append(
+                {
+                    key: value
+                    for key, value in {
+                        "status": str_or_none(state.get("status")),
+                        "round_id": str_or_none(state.get("roundId") or state.get("round_id")),
+                        "payment_id": str_or_none(state.get("paymentId") or state.get("payment_id")),
+                    }.items()
+                    if value not in (None, "")
+                }
+            )
+    return {
+        key: value
+        for key, value in {
+            "id": str_or_none(record.get("id") or record.get("paymentId") or record.get("payment_id")),
+            "round_id": str_or_none(record.get("roundId") or record.get("round_id")),
+            "amount_sats": _wasabi_int(_wasabi_pick(record, "amount", "amountSats"), "payment amount"),
+            "states": safe_states,
+        }.items()
+        if value not in (None, "", [])
+    }
+
+
+def load_wasabi_bundle(file_path: str) -> dict[str, Any]:
+    """Load a sanitized Wasabi RPC/export bundle.
+
+    The accepted shape is a JSON object containing RPC response bodies such as
+    ``gethistory``, ``listcoins``/``listunspentcoins``, ``getwalletinfo``,
+    ``listkeys``, ``listpaymentsincoinjoin``, and optional ``wallet_json``.
+    Each section may be the raw ``result`` value or a JSON-RPC wrapper with a
+    top-level ``result`` key. A bare list is treated as ``gethistory`` for
+    backwards-compatible one-shot exports.
+    """
+    with open(file_path, "r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    if isinstance(payload, list):
+        history_rows = [item for item in payload if isinstance(item, dict)]
+        raw_payload: dict[str, Any] = {"gethistory": history_rows}
+    elif isinstance(payload, dict):
+        raw_payload = payload
+        history_rows = _wasabi_list(raw_payload, "gethistory", "history", "transactions")
+    else:
+        raise AppError("Wasabi bundle must be a JSON object", code="validation")
+
+    listcoins_present = _wasabi_section_present(raw_payload, "listcoins", "coins")
+    listunspent_present = _wasabi_section_present(
+        raw_payload, "listunspentcoins", "unspentcoins", "unspent"
+    )
+    listcoins = _wasabi_list(raw_payload, "listcoins", "coins")
+    listunspent = _wasabi_list(raw_payload, "listunspentcoins", "unspentcoins", "unspent")
+    coins_by_outpoint: dict[tuple[str | None, int | None], dict[str, Any]] = {}
+    for source in (listcoins, listunspent):
+        for coin in source:
+            normalized = _normalize_wasabi_coin_record(coin)
+            coins_by_outpoint[(normalized.get("txid"), normalized.get("vout"))] = normalized
+
+    wallet_info = _wasabi_dict(raw_payload, "getwalletinfo", "walletinfo")
+    wallet_json = _wasabi_dict(raw_payload, "wallet_json", "walletjson", "wallet")
+    payments = [
+        _sanitize_wasabi_payment_in_coinjoin(payment)
+        for payment in _wasabi_list(raw_payload, "listpaymentsincoinjoin", "paymentsincoinjoin")
+    ]
+    listkeys = _wasabi_list(raw_payload, "listkeys", "keys")
+    metadata = _wasabi_wallet_metadata(wallet_info, wallet_json)
+    if listkeys:
+        metadata["keyStateCounts"] = {}
+        for key in listkeys:
+            state = str_or_none(key.get("keyState"))
+            if state:
+                metadata["keyStateCounts"][state] = metadata["keyStateCounts"].get(state, 0) + 1
+    if payments:
+        metadata["paymentsInCoinJoin"] = payments
+
+    records = [_normalize_wasabi_history_record(row) for row in history_rows]
+    return {
+        "records": records,
+        "coins": list(coins_by_outpoint.values()),
+        "metadata": metadata,
+        "payments_in_coinjoin": payments,
+        "coin_sections_present": listcoins_present or listunspent_present,
+        "wallet_json_present": bool(wallet_json),
+        "listkeys_count": len(listkeys),
+    }
+
+
+def load_wasabi_bundle_records(file_path: str) -> list[dict[str, Any]]:
+    return load_wasabi_bundle(file_path)["records"]
+
+
+def is_wasabi_format(input_format):
+    return input_format == WASABI_BUNDLE_FORMAT
 
 
 # -- BTCPay ------------------------------------------------------------------

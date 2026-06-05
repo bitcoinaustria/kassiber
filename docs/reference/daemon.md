@@ -146,6 +146,10 @@ row. It does not create a browser-side search index.
 active local UTXO inventory for one wallet. Rows include outpoint, txid, vout,
 asset, amount, confirmation status, block/time when known, address or safe
 receive/change label, branch/index when known, and first/last-seen freshness.
+Wasabi-imported wallets also include privacy-accounting fields such as
+`anonymity_score`, `spent_by`, `excluded_from_coinjoin`, and `key_state`; the
+AI variant drops addresses, labels, branch/index values, and anonymity-history
+details.
 The row payload is capped and includes `summary.returned_count`,
 `summary.count`, `summary.truncated`, and `summary.row_limit`; asset totals and
 freshness counts are computed against the full active inventory, not just the
@@ -261,6 +265,14 @@ timestamp. `source_format="strike_csv"` imports active Strike platform ledger
 rows into the selected or default `Strike` wallet, including exchange buy/sell
 rows plus Lightning and on-chain wallet activity. It keeps Lightning payment
 hashes when exported, skips fiat-only platform rows, and returns `strike_rows`.
+`source_format="wasabi_bundle"` imports sanitized Wasabi RPC/export bundles
+into a wallet-scoped `wasabi` source, returns `wasabi_transactions`,
+`wasabi_coins_observed`, `wasabi_coins_active`,
+`wasabi_coins_marked_spent`, `wasabi_payments_in_coinjoin`,
+`wasabi_wallet_json_present`, and `wasabi_listkeys_count`, and stores only safe
+Wasabi wallet metadata plus durable UTXO anonymity evidence. Raw wallet JSON,
+full key paths, public keys, xpub/extpub material, encrypted secrets, and
+backend URLs remain outside daemon/UI/AI outputs.
 The result also includes `matched`, `skipped_unmatched`, and
 `skipped_ambiguous` in relevant mode, or `matched`, `unmatched`, `ambiguous`,
 `excluded`, and `reconciliation_records` in Bull Bitcoin/Coinfinity/Pocket full

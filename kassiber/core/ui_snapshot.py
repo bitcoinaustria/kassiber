@@ -389,6 +389,18 @@ def _wallet_utxo_source_filter(
     backend_summary: dict[str, str],
     backend: Any,
 ) -> dict[str, Any]:
+    if _string_or_empty(config.get("source_format")) == "wasabi_bundle":
+        chain_values = _wallet_utxo_chain_filter_values(config.get("chain") or "bitcoin")
+        network_values = _wallet_utxo_network_filter_values(
+            chain_values[0] if chain_values else "bitcoin",
+            config.get("network") or "mainnet",
+        )
+        return {
+            "backend_name": ["wasabi"],
+            "backend_kind": ["wasabi_bundle"],
+            "chain": chain_values,
+            "network": network_values,
+        }
     backend_chain = (
         backend_value(backend, "chain")
         if isinstance(backend, dict)
@@ -2893,6 +2905,13 @@ def _wallet_utxo_support(
     sync_mode = backend_summary["sync_mode"]
     has_descriptor = bool(config.get("descriptor"))
     has_addresses = bool(config.get("addresses"))
+    if _string_or_empty(config.get("source_format")) == "wasabi_bundle":
+        return {
+            "supported": True,
+            "status": "supported",
+            "reason": "wasabi_import",
+            "message": "",
+        }
     if sync_mode not in {"backend_descriptor", "backend_addresses"}:
         return {
             "supported": False,
@@ -3091,6 +3110,7 @@ def _wallet_utxo_row_for_ai(row: dict[str, Any]) -> dict[str, Any]:
     redacted.pop("address_label", None)
     redacted.pop("branch_index", None)
     redacted.pop("address_index", None)
+    redacted.pop("anon_history", None)
     return redacted
 
 

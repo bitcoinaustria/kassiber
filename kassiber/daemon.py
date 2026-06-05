@@ -4896,6 +4896,7 @@ _UI_WALLET_SOURCE_FORMATS = {
     "21bitcoin_csv",
     "pocketbitcoin_csv",
     "strike_csv",
+    "wasabi_bundle",
 }
 
 

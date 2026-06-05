@@ -193,7 +193,7 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
                     privacy_boundary="coinjoin",
                     raw_json=json.dumps(
                         {
-                            "source": "privacy_import",
+                            "source": "wasabi_gethistory",
                             "islikelycoinjoin": True,
                         }
                     ),
