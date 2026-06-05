@@ -82,7 +82,6 @@ from .cli.handlers import (
 from .core import audit_package as core_audit_package
 from .core import commercial as core_commercial
 from .core import attachments as core_attachments
-from .core import link_preview as core_link_preview
 from .core import lightning as core_lightning
 from .core.lightning import lnd as _core_lightning_lnd  # noqa: F401 — registers the LND adapter on import.
 from .core import reports as core_reports
@@ -212,7 +211,6 @@ SUPPORTED_KINDS = (
     "ui.activity.history",
     "ui.activity.stale",
     "ui.attachments.list",
-    "ui.attachments.preview_url",
     "ui.attachments.add",
     "ui.attachments.copy",
     "ui.attachments.rename",
@@ -6161,11 +6159,6 @@ def _ui_attachment_payload(
                 tx_ref=tx_ref,
             )
         }
-    if kind == "ui.attachments.preview_url":
-        url = args.get("url")
-        if not isinstance(url, str) or not url.strip():
-            raise AppError("ui.attachments.preview_url requires args.url", code="validation")
-        return core_link_preview.preview_url(url)
     if kind == "ui.attachments.add":
         transaction = args.get("transaction")
         if not isinstance(transaction, str) or not transaction.strip():
@@ -7188,7 +7181,6 @@ def handle_request(
 
     if kind in {
         "ui.attachments.list",
-        "ui.attachments.preview_url",
         "ui.attachments.add",
         "ui.attachments.copy",
         "ui.attachments.rename",

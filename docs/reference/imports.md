@@ -787,6 +787,6 @@ python3 -m kassiber attachments add --transaction <ID> --url https://example.com
 ```
 
 File attachments are copied into Kassiber's managed attachment store. URL
-attachments are stored literally; the desktop transaction detail view may store
-a fetched page title as the display label, but linked content is not copied or
-indexed. That display label can be edited without changing the URL target.
+attachments are stored literally and are not fetched. The desktop shows a
+display label derived from the URL, which you can edit without changing the URL
+target.

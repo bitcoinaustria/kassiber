@@ -20,10 +20,6 @@ import type {
   ProfileTaxCountry,
   Workspace,
 } from "@/mocks/profiles";
-import {
-  fallbackUrlAttachmentLabel,
-  urlAttachmentLabel,
-} from "@/lib/urlAttachmentPreview";
 import { MOCK_AI_CHAT_STREAM, fixtures } from "./fixtures";
 
 const SIMULATED_LATENCY_MS = 50;
@@ -1913,33 +1909,6 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
-    if (req.kind === "ui.attachments.preview_url") {
-      const args = (req.args ?? {}) as { url?: unknown };
-      const url = typeof args.url === "string" ? args.url : "";
-      const title =
-        url.includes("docs.google.com/spreadsheets")
-          ? "Treasury review sheet"
-          : url.includes("docs.google.com/document")
-            ? "Board memo"
-            : "";
-      return {
-        kind: "ui.attachments.preview_url",
-        schema_version: 1,
-        request_id: req.request_id,
-        data: {
-          url,
-          display_url: url.replace(/^https?:\/\//, "").replace(/\/$/, ""),
-          label: urlAttachmentLabel(url, title || fallbackUrlAttachmentLabel(url)),
-          title,
-          site_name: title ? "Google Workspace" : "",
-          content_type: title ? "text/html" : "",
-          available: Boolean(title),
-          error_code: title ? "" : "title_not_found",
-          truncated: false,
-        } as T,
-      };
-    }
-
     if (req.kind === "ui.attachments.add") {
       const args = (req.args ?? {}) as {
         transaction?: unknown;
@@ -1971,7 +1940,7 @@ export const mockDaemon: DaemonTransport = {
         typeof args.label === "string" && args.label.trim()
           ? args.label.trim()
           : isUrl
-            ? fallbackUrlAttachmentLabel(source)
+            ? source
             : source.split(/[\\/]/).pop() || "attachment.bin";
       const attachment: MockAttachment = {
         id: `att-mock-${(mockAttachmentCounter += 1)}`,

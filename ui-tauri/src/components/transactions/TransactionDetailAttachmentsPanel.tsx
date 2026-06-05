@@ -101,8 +101,9 @@ function AttachLinksDialog({
         <DialogHeader>
           <DialogTitle>Attach links</DialogTitle>
           <DialogDescription>
-            One URL per line. Links stay as references; Kassiber may save a
-            page title as link text.
+            One URL per line. Links are stored as references — Kassiber does
+            not fetch or index the content. You can edit the link text after
+            attaching.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-2">

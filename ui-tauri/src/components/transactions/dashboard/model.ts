@@ -256,18 +256,6 @@ type AttachmentsListData = {
   attachments: AttachmentRecord[];
 };
 
-type AttachmentPreviewData = {
-  url: string;
-  display_url?: string;
-  label?: string;
-  title?: string;
-  site_name?: string;
-  content_type?: string;
-  available?: boolean;
-  error_code?: string;
-  truncated?: boolean;
-};
-
 type AttachmentsCopyData = {
   copied: number;
   attachments: AttachmentRecord[];
@@ -1050,7 +1038,6 @@ export {
 export type {
   AttachmentsCopyData,
   AttachmentOpenData,
-  AttachmentPreviewData,
   AttachmentRecord,
   AttachmentsListData,
   BreakdownSelection,

@@ -189,9 +189,8 @@ top of the monolith.
 - [x] Add CLI commands for add/list/remove plus `attachments gc` and
   `attachments verify`
 - [x] Make backup/restore aware of attachment files
-- [x] Keep URL attachments reference-only; desktop may fetch a bounded page
-  title for the editable display label, but no linked content is copied or
-  indexed
+- [x] Keep URL attachments reference-only; no fetching or indexing. The
+  desktop derives an editable display label from the URL itself
 
 ### 0.5d - Austrian tax support
 

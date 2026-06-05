@@ -52,7 +52,6 @@ import { openAttachmentFile, openExternalUrl } from "@/daemon/transport";
 import { cn } from "@/lib/utils";
 import { type Currency } from "@/lib/currency";
 import { type ExplorerSettings } from "@/lib/explorer";
-import { urlAttachmentLabel } from "@/lib/urlAttachmentPreview";
 import { useUiStore } from "@/store/ui";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import type {
@@ -109,7 +108,6 @@ import {
   readTransactionDetailParams,
   updateTransactionDetailParams,
   type AttachmentOpenData,
-  type AttachmentPreviewData,
   type AttachmentRecord,
   type AttachmentsCopyData,
   type AttachmentsListData,
@@ -194,9 +192,6 @@ const TransactionsTable = ({
     useDaemonMutation<AttachmentRecord>("ui.attachments.rename");
   const attachmentRemove = useDaemonMutation<AttachmentRecord>(
     "ui.attachments.remove",
-  );
-  const attachmentPreview = useDaemonMutation<AttachmentPreviewData>(
-    "ui.attachments.preview_url",
   );
   const attachmentOpen =
     useDaemonMutation<AttachmentOpenData>("ui.attachments.open");
@@ -1482,17 +1477,9 @@ const TransactionsTable = ({
         onAddAttachmentLinks={async (urls) => {
           if (!detailTransaction) return;
           for (const url of urls) {
-            const preview = await attachmentPreview
-              .mutateAsync({ url })
-              .catch(() => null);
-            const label = urlAttachmentLabel(
-              url,
-              preview?.data?.title || preview?.data?.label,
-            );
             await attachmentAdd.mutateAsync({
               transaction: detailTransaction.id,
               url,
-              label,
             });
           }
           useUiStore.getState().addNotification({

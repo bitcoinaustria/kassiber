@@ -35,7 +35,6 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.transactions.list",
   "ui.transactions.metadata.update",
   "ui.attachments.list",
-  "ui.attachments.preview_url",
   "ui.attachments.add",
   "ui.attachments.copy",
   "ui.attachments.rename",
