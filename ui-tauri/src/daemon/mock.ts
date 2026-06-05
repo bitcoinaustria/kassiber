@@ -1741,6 +1741,7 @@ export const mockDaemon: DaemonTransport = {
       const pricingOnly = args.pricing_only === true;
       const aiOnly = args.ai_only === true;
       const staleOnly = args.stale_only === true;
+      const includeStale = args.include_stale !== false;
       const events = mockTransactionHistory.filter((event) => {
         if (transaction && event.transaction_id !== transaction && event.transaction_external_id !== transaction) {
           return false;
@@ -1762,22 +1763,26 @@ export const mockDaemon: DaemonTransport = {
           next_cursor: null,
           has_more: false,
           limit: typeof args.limit === "number" ? args.limit : 50,
-          stale: {
-            edit_count: mockTransactionHistory.filter(
-              (event) => event.report_anchor?.stale_for_reports,
-            ).length,
-            latest_changed_at: mockTransactionHistory[0]?.changed_at ?? null,
-            source_counts: { ai_tool: 1, gui: 1 },
-            family_counts: { metadata: 1, pricing: 1, tax: 2 },
-            field_counts: {
-              pricing_external_ref: 1,
-              review_status: 1,
-              tags: 1,
-              taxable: 1,
-            },
-            last_processed_at: "2026-04-17T22:00:00Z",
-            last_processed_input_version: 6,
-          },
+          ...(includeStale
+            ? {
+                stale: {
+                  edit_count: mockTransactionHistory.filter(
+                    (event) => event.report_anchor?.stale_for_reports,
+                  ).length,
+                  latest_changed_at: mockTransactionHistory[0]?.changed_at ?? null,
+                  source_counts: { ai_tool: 1, gui: 1 },
+                  family_counts: { metadata: 1, pricing: 1, tax: 2 },
+                  field_counts: {
+                    pricing_external_ref: 1,
+                    review_status: 1,
+                    tags: 1,
+                    taxable: 1,
+                  },
+                  last_processed_at: "2026-04-17T22:00:00Z",
+                  last_processed_input_version: 6,
+                },
+              }
+            : {}),
         } as T,
       };
     }

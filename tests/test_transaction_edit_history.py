@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from kassiber.cli.handlers import (
     _metadata_hooks,
@@ -221,6 +222,37 @@ class TransactionEditHistoryTest(unittest.TestCase):
         blockers = build_report_blockers_snapshot(conn)
         stale_blocker = next(item for item in blockers["blockers"] if item["id"] == "journals_stale")
         self.assertEqual(stale_blocker["edit_history"]["edit_count"], 2)
+
+    def test_activity_history_can_skip_stale_summary_for_fast_timeline_pages(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        hooks = _metadata_hooks()
+        edited = core_metadata.update_transaction_metadata(
+            conn,
+            None,
+            None,
+            "seed-inbound-1",
+            hooks,
+            note="Desktop review",
+            note_set=True,
+            source="gui",
+            reason="desktop detail save",
+        )
+        self.assertTrue(edited["updated"])
+
+        with patch("kassiber.core.transaction_history.stale_summary") as stale_summary:
+            activity = core_metadata.list_activity_history(
+                conn,
+                None,
+                None,
+                hooks,
+                limit=1,
+                include_stale=False,
+            )
+
+        stale_summary.assert_not_called()
+        self.assertEqual(len(activity["events"]), 1)
+        self.assertNotIn("stale", activity)
 
     def test_revert_creates_forward_edit_and_tag_diff_snapshot(self):
         conn = open_db(self.data_root)

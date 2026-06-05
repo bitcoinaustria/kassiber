@@ -158,6 +158,9 @@ unblind and account for outputs locally.
 
 `ui.transactions.history` and `ui.activity.history` read redacted,
 append-only metadata edit events from the same local database as transactions.
+They include stale-report summary metadata by default; callers that only need a
+timeline page can pass `include_stale=false` and use `ui.activity.stale`
+separately so the first page is not coupled to profile-wide stale aggregation.
 `ui.activity.stale` summarizes edit events that happened after the last journal
 processing run so report-readiness prompts can explain why reports are stale.
 `ui.transactions.history.revert` applies a selected field or event snapshot as a

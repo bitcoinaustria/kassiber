@@ -568,6 +568,7 @@ def list_history(
     end: str | None = None,
     cursor: str | None = None,
     limit: int | None = None,
+    include_stale: bool = True,
 ) -> dict[str, Any]:
     workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     effective_limit = _effective_limit(limit)
@@ -677,7 +678,7 @@ def list_history(
         )
         for row in page
     ]
-    return {
+    payload = {
         "events": events,
         "next_cursor": _encode_cursor(page[-1], cursor_filters) if has_more and page else None,
         "has_more": has_more,
@@ -694,12 +695,22 @@ def list_history(
             "start": start_ts,
             "end": end_ts,
         },
-        "stale": stale_summary(conn, profile),
     }
+    if include_stale:
+        payload["stale"] = stale_summary(conn, profile)
+    return payload
 
 
 def stale_summary(conn: sqlite3.Connection, profile: Mapping[str, Any]) -> dict[str, Any]:
     processed_version = int(_row_get(profile, "last_processed_input_version", 0) or 0)
+    summary_row = conn.execute(
+        """
+        SELECT COUNT(*) AS count, MAX(changed_at) AS latest
+        FROM transaction_edit_events
+        WHERE profile_id = ? AND journal_input_version_after > ?
+        """,
+        (profile["id"], processed_version),
+    ).fetchone()
     field_rows = conn.execute(
         """
         SELECT f.field, COUNT(*) AS count
@@ -722,28 +733,8 @@ def stale_summary(conn: sqlite3.Connection, profile: Mapping[str, Any]) -> dict[
     source_counts: dict[str, int] = {}
     family_counts: dict[str, int] = {}
     field_counts: dict[str, int] = {}
-    latest: str | None = None
-    event_count = int(
-        conn.execute(
-            """
-            SELECT COUNT(*) AS count, MAX(changed_at) AS latest
-            FROM transaction_edit_events
-            WHERE profile_id = ? AND journal_input_version_after > ?
-            """,
-            (profile["id"], processed_version),
-        ).fetchone()["count"]
-        or 0
-    )
-    latest_row = conn.execute(
-        """
-        SELECT MAX(changed_at) AS latest
-        FROM transaction_edit_events
-        WHERE profile_id = ? AND journal_input_version_after > ?
-        """,
-        (profile["id"], processed_version),
-    ).fetchone()
-    if latest_row and latest_row["latest"]:
-        latest = latest_row["latest"]
+    event_count = int(summary_row["count"] or 0) if summary_row else 0
+    latest = summary_row["latest"] if summary_row and summary_row["latest"] else None
     for row in source_rows:
         source_counts[row["source"]] = int(row["count"] or 0)
     for row in field_rows:

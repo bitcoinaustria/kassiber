@@ -5970,6 +5970,7 @@ def _handle_transaction_history(
         "end",
         "cursor",
         "limit",
+        "include_stale",
     }
     unknown = sorted(set(args) - allowed)
     if unknown:
@@ -5995,6 +5996,7 @@ def _handle_transaction_history(
         end=_optional_str_arg(args, "end"),
         cursor=_optional_str_arg(args, "cursor"),
         limit=args.get("limit"),
+        include_stale=_optional_bool_arg(args, "include_stale", True),
     )
 
 
@@ -6018,6 +6020,7 @@ def _handle_activity_history(
         "end",
         "cursor",
         "limit",
+        "include_stale",
     }
     unknown = sorted(set(args) - allowed)
     if unknown:
@@ -6044,6 +6047,7 @@ def _handle_activity_history(
         end=_optional_str_arg(args, "end"),
         cursor=_optional_str_arg(args, "cursor"),
         limit=args.get("limit"),
+        include_stale=_optional_bool_arg(args, "include_stale", True),
     )
 
 

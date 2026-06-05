@@ -187,7 +187,6 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Overview", icon: Gauge, href: "/overview" },
       { label: "Transactions", icon: ClipboardList, href: "/transactions" },
-      { label: "Activity", icon: History, href: "/activity" },
       { label: "Wallets", icon: WalletCards, href: "/connections" },
       { label: "Reports", icon: BarChart3, href: "/reports" },
       { label: "Assistant", icon: MessageSquareText, href: "/assistant" },
@@ -1273,6 +1272,18 @@ function SidebarActions({
 
   return (
     <SidebarMenu>
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          asChild
+          isActive={pathname === "/activity"}
+          tooltip="Activity"
+        >
+          <Link to="/activity">
+            <History className="size-4" aria-hidden="true" />
+            <span>Activity</span>
+          </Link>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
       {developerToolsEnabled ? (
         <SidebarMenuItem>
           <SidebarMenuButton
