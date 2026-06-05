@@ -68,6 +68,7 @@ export type PortfolioChartPoint = {
   balanceBtc: number;
   valueEur: number;
   costBasisEur: number;
+  priceEur?: number;
   unrealizedEur: number;
 };
 
@@ -165,6 +166,8 @@ export type TreasuryActivityEvent = {
   btc: number;
   signedBtc: number;
   feeBtc: number;
+  postBalanceBtc?: number;
+  postCostBasisEur?: number;
   occurredAt: Date;
   priceEur: number;
   valueEur: number;
@@ -896,7 +899,12 @@ export function isPointInPeriod(
 export function buildPortfolioChartPoint(
   point: Pick<
     PortfolioPoint,
-    "date" | "label" | "balanceBtc" | "valueEur" | "costBasisEur"
+    | "date"
+    | "label"
+    | "balanceBtc"
+    | "valueEur"
+    | "costBasisEur"
+    | "priceEur"
   >,
   month: string,
   detailLabel: string,
@@ -928,6 +936,7 @@ export function buildPortfolioChartPoint(
     balanceBtc: point.balanceBtc,
     valueEur: point.valueEur,
     costBasisEur: point.costBasisEur,
+    priceEur: point.priceEur,
     unrealizedEur,
   };
 }
@@ -954,10 +963,17 @@ export function parseOverviewTxDate(value: string | undefined) {
   return Number.isNaN(parsed.valueOf()) ? null : parsed;
 }
 
+export function endOfIsoDayDate(value: string | undefined) {
+  const parsed = parseIsoDayDate(value);
+  if (!parsed) return null;
+  parsed.setUTCHours(23, 59, 59, 999);
+  return parsed;
+}
+
 export function treasurySortTime(value: string | undefined) {
   if (!value) return null;
   const key = value.split("#")[0] ?? value;
-  const parsed = key.includes("T") ? new Date(key) : parseIsoDayDate(key);
+  const parsed = key.includes("T") ? new Date(key) : endOfIsoDayDate(key);
   return parsed && !Number.isNaN(parsed.valueOf()) ? parsed.valueOf() : null;
 }
 
@@ -1255,12 +1271,22 @@ export function activityTxs(snapshot: OverviewSnapshot): TreasuryActivityEvent[]
       const valueEur = Math.abs(tx.eur ?? 0);
       const priceEur =
         valueEur > 0 && btc > 0 ? valueEur / btc : tx.rate ?? fiatRate;
+      const postBalanceBtc =
+        typeof tx.balanceBtc === "number" && Number.isFinite(tx.balanceBtc)
+          ? tx.balanceBtc
+          : undefined;
+      const postCostBasisEur =
+        typeof tx.costBasisEur === "number" && Number.isFinite(tx.costBasisEur)
+          ? tx.costBasisEur
+          : undefined;
       return [
         {
           tx,
           btc,
           signedBtc,
           feeBtc,
+          postBalanceBtc,
+          postCostBasisEur,
           occurredAt,
           priceEur,
           valueEur,
@@ -1308,7 +1334,11 @@ export function buildTreasuryBasePoint(
 ): TreasuryChartPoint {
   const fiatRate = activeMarketFiatRate(snapshot);
   const bitcoinPriceEur =
-    point.balanceBtc > 0 ? point.valueEur / point.balanceBtc : fiatRate;
+    point.priceEur && point.priceEur > 0
+      ? point.priceEur
+      : point.balanceBtc > 0
+        ? point.valueEur / point.balanceBtc
+        : fiatRate;
   const avgCostEur =
     point.balanceBtc > 0 && point.costBasisEur > 0
       ? point.costBasisEur / point.balanceBtc
@@ -1350,8 +1380,10 @@ export function buildTreasuryActivityPoint(
   anchor: TreasuryChartPoint | null,
   snapshot: OverviewSnapshot,
 ): TreasuryChartPoint {
-  const balanceBtc = anchor?.balanceBtc ?? latestPortfolioBalanceBtc(snapshot);
-  const costBasisEur = anchor?.costBasisEur ?? snapshot.fiat.eurCostBasis;
+  const balanceBtc =
+    event.postBalanceBtc ?? anchor?.balanceBtc ?? latestPortfolioBalanceBtc(snapshot);
+  const costBasisEur =
+    event.postCostBasisEur ?? anchor?.costBasisEur ?? snapshot.fiat.eurCostBasis;
   const valueEur =
     balanceBtc > 0
       ? balanceBtc * event.priceEur
@@ -1372,7 +1404,7 @@ export function buildTreasuryActivityPoint(
     bitcoinPriceEur: event.priceEur,
     avgCostEur,
     lineBalanceBtc: balanceBtc,
-    lineBitcoinPriceEur: event.priceEur,
+    lineBitcoinPriceEur: undefined,
     lineAvgCostEur: avgCostEur,
     brushBalanceBtc: balanceBtc,
     reserveValueEur: valueEur,

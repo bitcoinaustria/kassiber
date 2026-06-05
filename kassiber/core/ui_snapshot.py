@@ -5,7 +5,7 @@ import binascii
 import json
 import sqlite3
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 from ..backends import backend_value, redact_backend_for_output
@@ -1283,6 +1283,60 @@ def _portfolio_cost_basis_by_date(
     return by_date
 
 
+def _parse_day(value: str | None) -> date | None:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
+
+
+def _daily_rate_rows(
+    conn: sqlite3.Connection,
+    pair: str | None,
+    start_day: date,
+) -> list[sqlite3.Row]:
+    if not pair:
+        return []
+    return conn.execute(
+        """
+        WITH ranked AS (
+            SELECT
+                substr(timestamp, 1, 10) AS rate_day,
+                timestamp,
+                rate,
+                source,
+                fetched_at,
+                granularity,
+                method,
+                ROW_NUMBER() OVER (
+                    PARTITION BY substr(timestamp, 1, 10)
+                    ORDER BY CASE
+                                 WHEN source = 'manual'
+                                      AND timestamp LIKE substr(timestamp, 1, 10) || 'T00:00:00%'
+                                      THEN 0
+                                 WHEN granularity = 'daily' THEN 1
+                                 ELSE 2
+                             END ASC,
+                             timestamp DESC,
+                             CASE WHEN source = 'manual' THEN 0 ELSE 1 END ASC,
+                             fetched_at DESC,
+                             source ASC
+                ) AS rn
+            FROM rates_cache
+            WHERE pair = ?
+              AND timestamp >= ?
+        )
+        SELECT rate_day, timestamp, rate, source, fetched_at, granularity, method
+        FROM ranked
+        WHERE rn = 1
+        ORDER BY rate_day ASC
+        """,
+        (pair, start_day.isoformat()),
+    ).fetchall()
+
+
 def _portfolio_cost_basis_by_transaction(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -1337,6 +1391,7 @@ def _current_portfolio_cost_basis(
 def _portfolio_series(
     conn: sqlite3.Connection,
     profile_id: str,
+    fiat_currency: str,
     fallback_rate: float,
     final_balance_btc: float,
     final_value_eur: float,
@@ -1354,6 +1409,92 @@ def _portfolio_series(
         return []
 
     cost_basis_by_date = _portfolio_cost_basis_by_date(conn, profile_id)
+    tx_deltas_by_day: dict[date, int] = defaultdict(int)
+    for row in rows:
+        day = _parse_day(row["occurred_at"])
+        if day is None:
+            continue
+        amount = int(row["amount"] or 0)
+        fee = int(row["fee"] or 0)
+        tx_deltas_by_day[day] += (
+            amount if row["direction"] == "inbound" else -amount - fee
+        )
+
+    sorted_tx_days = sorted(tx_deltas_by_day)
+    if not sorted_tx_days:
+        return []
+
+    pair = core_rates.transaction_rate_pair("BTC", fiat_currency)
+    daily_rates = _daily_rate_rows(conn, pair, sorted_tx_days[0])
+    if daily_rates:
+        cost_basis_items = sorted(
+            (day, value)
+            for raw_day, value in cost_basis_by_date.items()
+            if (day := _parse_day(raw_day)) is not None
+        )
+        quantity_msat = 0
+        tx_index = 0
+        cost_basis_index = 0
+        day_cost_basis = 0.0
+        output: list[dict[str, Any]] = []
+
+        for rate_row in daily_rates:
+            rate_day = _parse_day(rate_row["rate_day"])
+            if rate_day is None:
+                continue
+            while tx_index < len(sorted_tx_days) and sorted_tx_days[tx_index] <= rate_day:
+                quantity_msat += tx_deltas_by_day[sorted_tx_days[tx_index]]
+                tx_index += 1
+            while (
+                cost_basis_index < len(cost_basis_items)
+                and cost_basis_items[cost_basis_index][0] <= rate_day
+            ):
+                day_cost_basis = cost_basis_items[cost_basis_index][1]
+                cost_basis_index += 1
+
+            balance_btc = float(msat_to_btc(quantity_msat))
+            price_eur = float(rate_row["rate"] or 0)
+            day_key = rate_day.isoformat()
+            output.append(
+                {
+                    "date": day_key,
+                    "label": day_key,
+                    "balanceBtc": balance_btc,
+                    "valueEur": balance_btc * price_eur,
+                    "costBasisEur": day_cost_basis,
+                    "priceEur": price_eur,
+                    "priceTimestamp": rate_row["timestamp"],
+                    "priceSource": rate_row["source"],
+                }
+            )
+
+        last_tx_day = sorted_tx_days[-1]
+        last_output_day = _parse_day(output[-1]["date"]) if output else None
+        if last_output_day is not None and last_tx_day > last_output_day:
+            while tx_index < len(sorted_tx_days):
+                quantity_msat += tx_deltas_by_day[sorted_tx_days[tx_index]]
+                tx_index += 1
+            while cost_basis_index < len(cost_basis_items):
+                day_cost_basis = cost_basis_items[cost_basis_index][1]
+                cost_basis_index += 1
+            rate = fallback_rate or float(daily_rates[-1]["rate"] or 0)
+            output.append(
+                {
+                    "date": last_tx_day.isoformat(),
+                    "label": last_tx_day.isoformat(),
+                    "balanceBtc": final_balance_btc,
+                    "valueEur": (
+                        final_value_eur
+                        if fallback_rate
+                        else float(msat_to_btc(quantity_msat)) * rate
+                    ),
+                    "costBasisEur": day_cost_basis,
+                    "priceEur": rate,
+                }
+            )
+
+        return output
+
     quantity_msat = 0
     latest_rate = fallback_rate
     output: list[dict[str, Any]] = []
@@ -1393,6 +1534,7 @@ def _portfolio_series(
                 "balanceBtc": final_balance_btc,
                 "valueEur": final_value_eur,
                 "costBasisEur": day_cost_basis,
+                "priceEur": fallback_rate or latest_rate,
             }
         )
     return output
@@ -1495,6 +1637,7 @@ def build_overview_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         "portfolioSeries": _portfolio_series(
             conn,
             profile["id"],
+            profile["fiat_currency"],
             book_fiat_rate,
             sum(balances.values()),
             fiat["eurBalance"],

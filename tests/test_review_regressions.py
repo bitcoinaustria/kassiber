@@ -533,12 +533,15 @@ class ReviewRegressionTest(unittest.TestCase):
             """,
             ("tx-ui-in", "ws-ui", "pf-ui", "missing_spot_price", "{}", now),
         )
-        conn.execute(
+        conn.executemany(
             """
             INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at)
             VALUES(?, ?, ?, ?, ?)
             """,
-            ("BTC-EUR", "2026-02-01T00:00:00Z", 65_000, "manual", now),
+            [
+                ("BTC-EUR", "2026-01-10T00:00:00Z", 50_000, "manual", now),
+                ("BTC-EUR", "2026-02-01T00:00:00Z", 65_000, "manual", now),
+            ],
         )
         set_setting(conn, "context_workspace", "ws-ui")
         set_setting(conn, "context_profile", "pf-ui")
@@ -566,6 +569,12 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertAlmostEqual(overview["fiat"]["eurCostBasis"], 44_950)
         self.assertAlmostEqual(overview["fiat"]["eurUnrealized"], 13_485)
         self.assertGreaterEqual(len(overview["portfolioSeries"]), 2)
+        self.assertEqual(
+            [point["date"] for point in overview["portfolioSeries"]],
+            ["2026-01-10", "2026-02-01"],
+        )
+        self.assertAlmostEqual(overview["portfolioSeries"][0]["priceEur"], 50_000)
+        self.assertAlmostEqual(overview["portfolioSeries"][0]["valueEur"], 50_000)
         self.assertAlmostEqual(overview["portfolioSeries"][-1]["balanceBtc"], 0.899)
         self.assertAlmostEqual(overview["portfolioSeries"][-1]["valueEur"], 58_435)
         self.assertEqual(overview["txs"][0]["id"], "tx-ui-spend")
@@ -744,6 +753,126 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(overview["fiat"]["fiatCurrency"], "USD")
         self.assertEqual(overview["fiat"]["eurBalance"], 140_000)
         self.assertEqual(overview["portfolioSeries"][-1]["valueEur"], 140_000)
+
+    def test_overview_portfolio_series_tracks_cached_daily_market_rates(self):
+        self._bootstrap_wallet(label="Daily Rates")
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        profile = conn.execute(
+            "SELECT id, workspace_id FROM profiles WHERE label = 'Default'"
+        ).fetchone()
+        wallet = conn.execute(
+            "SELECT id, account_id FROM wallets WHERE label = 'Daily Rates'"
+        ).fetchone()
+        conn.execute(
+            "UPDATE profiles SET fiat_currency = 'EUR' WHERE id = ?",
+            (profile["id"],),
+        )
+        conn.executemany(
+            """
+            INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at, granularity, method)
+            VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                ("BTC-EUR", "2026-01-01T00:00:00Z", 50_000, "manual", now, "daily", "close"),
+                ("BTC-EUR", "2026-01-02T00:00:00Z", 60_000, "manual", now, "daily", "close"),
+                (
+                    "BTC-EUR",
+                    "2026-01-02T12:00:00Z",
+                    1,
+                    "coinbase-exchange",
+                    now,
+                    "minute",
+                    "close",
+                ),
+                ("BTC-EUR", "2026-01-03T00:00:00Z", 70_000, "manual", now, "daily", "close"),
+            ],
+        )
+        conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "tx-daily-in",
+                profile["workspace_id"],
+                profile["id"],
+                wallet["id"],
+                "daily-in",
+                "fp-daily-in",
+                "2026-01-01T10:00:00Z",
+                "2026-01-01T10:10:00Z",
+                "inbound",
+                "BTC",
+                btc_to_msat("1.0"),
+                0,
+                "EUR",
+                50_000,
+                50_000,
+                "import",
+                "transfer",
+                "Initial funding",
+                "Exchange",
+                None,
+                0,
+                "{}",
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO journal_entries(
+                id, workspace_id, profile_id, transaction_id, wallet_id, account_id,
+                occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
+                cost_basis, proceeds, gain_loss, description, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "je-daily-in",
+                profile["workspace_id"],
+                profile["id"],
+                "tx-daily-in",
+                wallet["id"],
+                wallet["account_id"],
+                "2026-01-01T10:00:00Z",
+                "acquisition",
+                "BTC",
+                btc_to_msat("1.0"),
+                50_000,
+                50_000,
+                None,
+                None,
+                None,
+                "Initial funding",
+                now,
+            ),
+        )
+        set_setting(conn, "context_workspace", profile["workspace_id"])
+        set_setting(conn, "context_profile", profile["id"])
+        conn.commit()
+
+        overview = build_overview_snapshot(conn)
+        self.assertEqual(
+            [point["date"] for point in overview["portfolioSeries"]],
+            ["2026-01-01", "2026-01-02", "2026-01-03"],
+        )
+        self.assertEqual(
+            [point["priceEur"] for point in overview["portfolioSeries"]],
+            [50_000, 60_000, 70_000],
+        )
+        self.assertEqual(
+            [point["valueEur"] for point in overview["portfolioSeries"]],
+            [50_000, 60_000, 70_000],
+        )
+        self.assertEqual(
+            [point["balanceBtc"] for point in overview["portfolioSeries"]],
+            [1.0, 1.0, 1.0],
+        )
 
     def test_overview_connection_balances_use_raw_wallet_transactions_when_journals_are_partial(self):
         conn = open_db(self.data_root)
