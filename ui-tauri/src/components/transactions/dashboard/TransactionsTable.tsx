@@ -1519,7 +1519,6 @@ const TransactionsTable = ({
             title: "Link text updated",
             body: "Attachment link label saved.",
             tone: "success",
-            dedupeKey: `attachment-rename-${item.id}`,
           });
         }}
         onRemoveAttachment={async (item) => {

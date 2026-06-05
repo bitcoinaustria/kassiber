@@ -11,10 +11,6 @@ import {
 } from "./model";
 import type { Tx } from "@/mocks/seed";
 import type { Transaction, TransactionFlow } from "@/components/transactions";
-import {
-  fallbackUrlAttachmentLabel,
-  urlAttachmentLabel,
-} from "@/lib/urlAttachmentPreview";
 
 function transaction(
   overrides: Partial<Transaction> = {},
@@ -136,12 +132,13 @@ describe("transaction dashboard chart selection", () => {
 });
 
 describe("transaction attachment URL labels", () => {
-  it("uses friendly workspace labels when a saved URL row has no title label yet", () => {
+  it("uses daemon display labels when a saved URL row has no stored label", () => {
     const url = "https://docs.google.com/spreadsheets/d/abc123/edit?usp=sharing";
     const record: AttachmentRecord = {
       id: "att-1",
       attachment_type: "url",
-      label: url,
+      label: null,
+      display_label: "Google Sheet",
       url,
       media_type: "text/uri-list",
       size_bytes: null,
@@ -154,18 +151,21 @@ describe("transaction attachment URL labels", () => {
     expect(item.detail).toBe(url);
   });
 
-  it("keeps explicit URL attachment labels", () => {
-    expect(
-      urlAttachmentLabel(
-        "https://docs.google.com/document/d/abc123/edit",
-        "April board memo",
-      ),
-    ).toBe("April board memo");
-  });
+  it("suppresses duplicate detail for daemon-derived host path labels", () => {
+    const record: AttachmentRecord = {
+      id: "att-2",
+      attachment_type: "url",
+      label: null,
+      display_label: "btcpay.example.com - abc123",
+      url: "https://btcpay.example.com/invoices/abc123",
+      media_type: "text/uri-list",
+      size_bytes: null,
+      exists: null,
+    };
 
-  it("falls back to host and path for ordinary links", () => {
-    expect(
-      fallbackUrlAttachmentLabel("https://btcpay.example.com/invoices/abc123"),
-    ).toBe("btcpay.example.com - abc123");
+    const item = attachmentRecordToItem(record);
+
+    expect(item.label).toBe("btcpay.example.com - abc123");
+    expect(item.detail).toBeUndefined();
   });
 });

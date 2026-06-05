@@ -4957,6 +4957,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(file_added["kind"], "ui.attachments.add")
             self.assertEqual(file_added["data"]["attachment_type"], "file")
             self.assertEqual(file_added["data"]["label"], "Receipt 42")
+            self.assertEqual(file_added["data"]["display_label"], "Receipt 42")
             self.assertTrue(file_added["data"]["exists"])
 
             _write_payload(
@@ -4966,14 +4967,34 @@ class DaemonSmokeTest(unittest.TestCase):
                     "kind": "ui.attachments.add",
                     "args": {
                         "transaction": "seed-inbound-1",
-                        "url": "https://example.test/invoice/42",
+                        "url": "https://docs.google.com/document/d/abc123/edit",
                     },
                 },
             )
             url_added = _read_payload_timeout(proc)
             self.assertEqual(url_added["kind"], "ui.attachments.add")
             self.assertEqual(url_added["data"]["attachment_type"], "url")
-            self.assertEqual(url_added["data"]["url"], "https://example.test/invoice/42")
+            self.assertIsNone(url_added["data"]["label"])
+            self.assertEqual(url_added["data"]["display_label"], "Google Doc")
+            self.assertEqual(
+                url_added["data"]["url"],
+                "https://docs.google.com/document/d/abc123/edit",
+            )
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "att-rename-file-1",
+                    "kind": "ui.attachments.rename",
+                    "args": {
+                        "attachment": file_added["data"]["id"],
+                        "label": "Receipt copy",
+                    },
+                },
+            )
+            file_rename = _read_payload_timeout(proc)
+            self.assertEqual(file_rename["kind"], "error")
+            self.assertEqual(file_rename["error"]["code"], "validation")
 
             _write_payload(
                 proc,
@@ -4989,7 +5010,11 @@ class DaemonSmokeTest(unittest.TestCase):
             renamed = _read_payload_timeout(proc)
             self.assertEqual(renamed["kind"], "ui.attachments.rename")
             self.assertEqual(renamed["data"]["label"], "Invoice approval link")
-            self.assertEqual(renamed["data"]["url"], "https://example.test/invoice/42")
+            self.assertEqual(renamed["data"]["display_label"], "Invoice approval link")
+            self.assertEqual(
+                renamed["data"]["url"],
+                "https://docs.google.com/document/d/abc123/edit",
+            )
 
             _write_payload(
                 proc,
@@ -5004,7 +5029,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(len(listed["data"]["attachments"]), 2)
             self.assertIn(
                 "Invoice approval link",
-                [item["label"] for item in listed["data"]["attachments"]],
+                [item["display_label"] for item in listed["data"]["attachments"]],
             )
 
             _write_payload(

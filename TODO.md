@@ -186,11 +186,11 @@ top of the monolith.
 ### 0.5c - Transaction attachments
 
 - [x] Add attachment storage and metadata table
-- [x] Add CLI commands for add/list/remove plus `attachments gc` and
+- [x] Add CLI commands for add/list/rename/remove plus `attachments gc` and
   `attachments verify`
 - [x] Make backup/restore aware of attachment files
-- [x] Keep URL attachments reference-only; no fetching or indexing. The
-  desktop derives an editable display label from the URL itself
+- [x] Keep URL attachments reference-only; no fetching or indexing. Kassiber
+  derives an editable display label from the URL itself
 
 ### 0.5d - Austrian tax support
 

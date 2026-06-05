@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import mimetypes
+import re
 import sqlite3
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from ..db import ensure_data_root, resolve_attachments_root
 from ..errors import AppError
@@ -15,6 +16,17 @@ from ..errors import AppError
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
 TransactionResolver = Callable[..., Mapping[str, Any]]
 NowIso = Callable[[], str]
+
+MAX_ATTACHMENT_LABEL_CHARS = 200
+_GOOGLE_WORKSPACE_ROUTES: tuple[tuple[str, str], ...] = (
+    ("/document/d/", "Google Doc"),
+    ("/spreadsheets/d/", "Google Sheet"),
+    ("/presentation/d/", "Google Slides deck"),
+    ("/forms/d/", "Google Form"),
+    ("/drawings/d/", "Google Drawing"),
+    ("/file/d/", "Google Drive file"),
+    ("/drive/folders/", "Google Drive folder"),
+)
 
 
 @dataclass(frozen=True)
@@ -76,6 +88,91 @@ def _hash_file(path: Path) -> tuple[int, str]:
     return size, digest.hexdigest()
 
 
+def _clean_label(value: str | None) -> str:
+    return re.sub(r"\s+", " ", value or "").strip()
+
+
+def _validate_label(value: str | None, *, empty_message: str) -> str:
+    label = _clean_label(value)
+    if not label:
+        raise AppError(empty_message, code="validation")
+    if len(label) > MAX_ATTACHMENT_LABEL_CHARS:
+        raise AppError(
+            f"Attachment label must be {MAX_ATTACHMENT_LABEL_CHARS} characters or fewer",
+            code="validation",
+            details={"max_length": MAX_ATTACHMENT_LABEL_CHARS},
+        )
+    return label
+
+
+def _optional_label(value: str | None) -> str | None:
+    label = _clean_label(value)
+    if not label:
+        return None
+    if len(label) > MAX_ATTACHMENT_LABEL_CHARS:
+        raise AppError(
+            f"Attachment label must be {MAX_ATTACHMENT_LABEL_CHARS} characters or fewer",
+            code="validation",
+            details={"max_length": MAX_ATTACHMENT_LABEL_CHARS},
+        )
+    return label
+
+
+def _url_host(parsed) -> str:
+    host = parsed.hostname or parsed.netloc or ""
+    return re.sub(r"^www\.", "", host, flags=re.IGNORECASE)
+
+
+def _path_title(pathname: str) -> str | None:
+    parts = [part.strip() for part in pathname.split("/") if part.strip()]
+    candidate = parts[-1] if parts else ""
+    if not candidate or re.fullmatch(r"[a-f0-9-]{16,}", candidate, re.IGNORECASE):
+        return None
+    title = unquote(candidate)
+    title = re.sub(r"\.[a-z0-9]{2,5}$", "", title, flags=re.IGNORECASE)
+    title = re.sub(r"[-_+]+", " ", title)
+    title = re.sub(r"\s+", " ", title).strip()
+    return title or None
+
+
+def _row_get(row: Mapping[str, Any], key: str, default: Any = None) -> Any:
+    if hasattr(row, "keys"):
+        return row[key] if key in row.keys() else default
+    return row.get(key, default)
+
+
+def derive_url_display_label(raw_url: str | None) -> str:
+    url = _clean_label(raw_url)
+    if not url:
+        return "Link attachment"
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        return "Link attachment"
+
+    host = _url_host(parsed)
+    if host in {"docs.google.com", "drive.google.com"}:
+        for prefix, label in _GOOGLE_WORKSPACE_ROUTES:
+            if parsed.path.startswith(prefix):
+                return label
+        return "Google Drive link" if host == "drive.google.com" else "Google Workspace link"
+
+    title = _path_title(parsed.path)
+    if title and title.lower() != host.lower():
+        return f"{host} - {title}"
+    return host or "Link attachment"
+
+
+def attachment_display_label(row: Mapping[str, Any]) -> str:
+    label = _clean_label(_row_get(row, "label"))
+    if label:
+        return label
+    if row["attachment_type"] == "url":
+        raw_url = _row_get(row, "source_url", _row_get(row, "url"))
+        return derive_url_display_label(raw_url)
+    original_filename = _row_get(row, "original_filename")
+    return _clean_label(original_filename) or "File attachment"
+
+
 def _resolve_stored_path(attachments_root: Path, stored_relpath: str | None) -> tuple[Path | None, bool]:
     raw = (stored_relpath or "").strip()
     if not raw:
@@ -105,6 +202,7 @@ def _attachment_row_to_dict(row: Mapping[str, Any], attachments_root: Path) -> d
         "asset": row["asset"] or "",
         "attachment_type": row["attachment_type"],
         "label": row["label"],
+        "display_label": attachment_display_label(row),
         "original_filename": row["original_filename"] or "",
         "url": row["source_url"] or "",
         "media_type": row["media_type"] or "",
@@ -180,13 +278,16 @@ def add_attachment(
         size_bytes, sha256 = _hash_and_copy_file(source, destination)
         inferred_media_type = mimetypes.guess_type(source.name)[0]
         media_type = media_type or inferred_media_type or "application/octet-stream"
-        label = label or original_filename
+        label = _validate_label(
+            label or original_filename,
+            empty_message="Attachment label cannot be empty",
+        )
     else:
-        parsed = urlparse(url or "")
+        source_url = _clean_label(url)
+        parsed = urlparse(source_url)
         if not parsed.scheme:
             raise AppError("--url must include a scheme such as https://", code="validation")
-        source_url = str(url)
-        label = label or source_url
+        label = _optional_label(label)
         media_type = media_type or "text/uri-list"
 
     try:
@@ -515,12 +616,18 @@ def rename_attachment(
     hooks: AttachmentHooks,
 ):
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
-    clean_label = (label or "").strip()
-    if not clean_label:
-        raise AppError("Attachment label cannot be empty", code="validation")
+    clean_label = _validate_label(
+        label,
+        empty_message="Attachment label cannot be empty",
+    )
     row = _select_attachment_row(conn, profile["id"], attachment_id)
     if not row:
         raise AppError(f"Attachment '{attachment_id}' not found", code="not_found")
+    if row["attachment_type"] != "url":
+        raise AppError(
+            "Only URL attachment link text can be renamed",
+            code="validation",
+        )
     conn.execute(
         "UPDATE attachments SET label = ? WHERE profile_id = ? AND id = ?",
         (clean_label, profile["id"], attachment_id),
@@ -617,8 +724,11 @@ def gc_attachments(conn, data_root: str, *, dry_run: bool = False):
 
 __all__ = [
     "AttachmentHooks",
+    "MAX_ATTACHMENT_LABEL_CHARS",
     "add_attachment",
+    "attachment_display_label",
     "copy_attachments",
+    "derive_url_display_label",
     "gc_attachments",
     "list_attachments",
     "rename_attachment",

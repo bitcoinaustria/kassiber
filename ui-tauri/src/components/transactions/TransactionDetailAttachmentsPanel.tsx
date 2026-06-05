@@ -28,6 +28,8 @@ import { cn } from "@/lib/utils";
 import { blurClass } from "./model";
 import type { AttachmentItem } from "./TransactionDetailSheetParts";
 
+const MAX_ATTACHMENT_LABEL_LENGTH = 200;
+
 function AttachLinksDialog({
   open,
   onOpenChange,
@@ -202,6 +204,7 @@ export function AttachmentsPanel({
   const [savingRenameId, setSavingRenameId] = React.useState<string | null>(
     null,
   );
+  const renameButtonRefs = React.useRef(new Map<string, HTMLButtonElement>());
   const wired = Boolean(onAddFiles || onAddLinks);
   const filePickerEnabled = Boolean(onAddFiles) && isFilePickerAvailable;
 
@@ -232,10 +235,18 @@ export function AttachmentsPanel({
     setRenameError(null);
   };
 
-  const cancelRename = () => {
+  const focusRenameTrigger = (itemId: string | null) => {
+    if (!itemId) return;
+    window.requestAnimationFrame(() => {
+      renameButtonRefs.current.get(itemId)?.focus();
+    });
+  };
+
+  const cancelRename = (itemId = editingId) => {
     setEditingId(null);
     setEditingLabel("");
     setRenameError(null);
+    focusRenameTrigger(itemId);
   };
 
   const saveRename = async (item: AttachmentItem) => {
@@ -245,15 +256,21 @@ export function AttachmentsPanel({
       setRenameError("Add link text.");
       return;
     }
+    if (label.length > MAX_ATTACHMENT_LABEL_LENGTH) {
+      setRenameError(
+        `Keep link text to ${MAX_ATTACHMENT_LABEL_LENGTH} characters or fewer.`,
+      );
+      return;
+    }
     if (label === item.label) {
-      cancelRename();
+      cancelRename(item.id);
       return;
     }
     setSavingRenameId(item.id);
     setRenameError(null);
     try {
       await onRename(item, label);
-      cancelRename();
+      cancelRename(item.id);
     } catch (err) {
       setRenameError(
         err instanceof Error ? err.message : "Could not rename link.",
@@ -315,9 +332,10 @@ export function AttachmentsPanel({
                         }
                         if (event.key === "Escape") {
                           event.preventDefault();
-                          cancelRename();
+                          cancelRename(item.id);
                         }
                       }}
+                      maxLength={MAX_ATTACHMENT_LABEL_LENGTH}
                       className="h-7 text-xs"
                       aria-label={`Link text for ${item.detail || item.label}`}
                       disabled={renameBusy}
@@ -412,7 +430,7 @@ export function AttachmentsPanel({
                       className="size-6 shrink-0 text-muted-foreground"
                       aria-label="Cancel link text edit"
                       disabled={renameBusy}
-                      onClick={cancelRename}
+                      onClick={() => cancelRename(item.id)}
                     >
                       <X className="size-3.5" aria-hidden="true" />
                     </Button>
@@ -424,6 +442,13 @@ export function AttachmentsPanel({
                     size="icon"
                     className="size-6 shrink-0 text-muted-foreground"
                     aria-label={`Edit link text for ${item.label}`}
+                    ref={(node) => {
+                      if (node) {
+                        renameButtonRefs.current.set(item.id, node);
+                      } else {
+                        renameButtonRefs.current.delete(item.id);
+                      }
+                    }}
                     onClick={() => startRename(item)}
                   >
                     <Pencil className="size-3.5" aria-hidden="true" />

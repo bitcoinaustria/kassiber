@@ -587,7 +587,7 @@ CREATE TABLE IF NOT EXISTS attachments (
     profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     transaction_id TEXT REFERENCES transactions(id) ON DELETE CASCADE,
     attachment_type TEXT NOT NULL,
-    label TEXT NOT NULL,
+    label TEXT,
     original_filename TEXT,
     stored_relpath TEXT,
     source_url TEXT,
@@ -1200,7 +1200,7 @@ def ensure_schema_compat(conn):
     _ensure_ai_provider_secret_refs_schema(conn)
     _drop_legacy_source_funds_recipients_unique(conn)
     _migrate_msat_columns(conn)
-    _migrate_nullable_attachment_transactions(conn)
+    _migrate_attachment_table_shape(conn)
     ensure_column(conn, "attachments", "copied_from_attachment_id", "TEXT")
     ensure_column(conn, "attachments", "copied_from_transaction_id", "TEXT")
     _backfill_liquid_asset_codes(conn)
@@ -1493,13 +1493,21 @@ def _ensure_commercial_reconciliation_schema(conn):
     conn.commit()
 
 
-def _migrate_nullable_attachment_transactions(conn):
+def _migrate_attachment_table_shape(conn):
     table_sql = conn.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='attachments'"
     ).fetchone()
+    legacy_table = "attachments_legacy_shape"
     legacy_sql = conn.execute(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='attachments_legacy_notnull_tx'"
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+        (legacy_table,),
     ).fetchone()
+    if not legacy_sql:
+        legacy_table = "attachments_legacy_notnull_tx"
+        legacy_sql = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+            (legacy_table,),
+        ).fetchone()
     current_sql = (table_sql[0] if table_sql else "") or ""
     copied_provenance_fk_columns = {
         row["from"] if hasattr(row, "keys") else row[3]
@@ -1510,6 +1518,7 @@ def _migrate_nullable_attachment_transactions(conn):
     if (
         not legacy_sql
         and "transaction_id TEXT NOT NULL" not in current_sql
+        and "label TEXT NOT NULL" not in current_sql
         and not copied_provenance_fk_columns
     ):
         _repair_attachment_child_fks(conn)
@@ -1522,16 +1531,18 @@ def _migrate_nullable_attachment_transactions(conn):
     conn.execute("BEGIN IMMEDIATE")
     try:
         if not legacy_sql:
-            conn.execute("ALTER TABLE attachments RENAME TO attachments_legacy_notnull_tx")
+            conn.execute(f"ALTER TABLE attachments RENAME TO {legacy_table}")
+        else:
+            conn.execute("DROP TABLE IF EXISTS attachments")
         conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS attachments (
+            CREATE TABLE attachments (
                 id TEXT PRIMARY KEY,
                 workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
                 profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
                 transaction_id TEXT REFERENCES transactions(id) ON DELETE CASCADE,
                 attachment_type TEXT NOT NULL,
-                label TEXT NOT NULL,
+                label TEXT,
                 original_filename TEXT,
                 stored_relpath TEXT,
                 source_url TEXT,
@@ -1558,7 +1569,7 @@ def _migrate_nullable_attachment_transactions(conn):
         )
         legacy_columns = {
             row["name"] if hasattr(row, "keys") else row[1]
-            for row in conn.execute("PRAGMA table_info(attachments_legacy_notnull_tx)").fetchall()
+            for row in conn.execute(f"PRAGMA table_info({legacy_table})").fetchall()
         }
         copied_from_attachment_expr = (
             "copied_from_attachment_id"
@@ -1578,14 +1589,18 @@ def _migrate_nullable_attachment_transactions(conn):
                 size_bytes, sha256, copied_from_attachment_id,
                 copied_from_transaction_id, created_at
             )
-            SELECT id, workspace_id, profile_id, transaction_id, attachment_type, label,
+            SELECT id, workspace_id, profile_id, transaction_id, attachment_type,
+                   CASE
+                       WHEN attachment_type = 'url' AND label = source_url THEN NULL
+                       ELSE label
+                   END AS label,
                    original_filename, stored_relpath, source_url, media_type,
                    size_bytes, sha256, {copied_from_attachment_expr},
                    {copied_from_transaction_expr}, created_at
-            FROM attachments_legacy_notnull_tx
+            FROM {legacy_table}
             """
         )
-        conn.execute("DROP TABLE attachments_legacy_notnull_tx")
+        conn.execute(f"DROP TABLE {legacy_table}")
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_attachments_profile_tx_created "
             "ON attachments(profile_id, transaction_id, created_at DESC)"
