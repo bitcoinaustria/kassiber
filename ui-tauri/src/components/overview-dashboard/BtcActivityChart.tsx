@@ -125,6 +125,8 @@ export const BtcActivityChart = ({
     React.useState<TreasuryBrushRange | null>(null);
   const [compactBrushRevision, setCompactBrushRevision] = React.useState(0);
   const [expandedBrushRevision, setExpandedBrushRevision] = React.useState(0);
+  const [hoveredActivityPoint, setHoveredActivityPoint] =
+    React.useState<TreasuryChartPoint | null>(null);
   const { active: activeSeries, handleHover } =
     useHoverHighlight<TreasuryChartSeriesKey>();
   const colorMode = useResolvedColorMode();
@@ -215,6 +217,7 @@ export const BtcActivityChart = ({
 
   React.useEffect(() => {
     setExpandedPointDate(null);
+    setHoveredActivityPoint(null);
   }, [currency, period]);
 
   const chartData = React.useMemo(
@@ -800,6 +803,7 @@ export const BtcActivityChart = ({
                     allowEscapeViewBox={{ x: false, y: true }}
                     content={
                       <TreasuryTooltip
+                        activityPointOverride={hoveredActivityPoint}
                         hideSensitive={hideSensitive}
                         priceEur={fiatRate}
                         fiatCurrency={fiatCurrency}
@@ -882,6 +886,7 @@ export const BtcActivityChart = ({
                         <ActivityScatterDot
                           {...props}
                           activeSeries={activeSeries}
+                          onHoverActivityPoint={setHoveredActivityPoint}
                           onOpenTransactionDetail={onOpenTransactionDetail}
                         />
                       )}
