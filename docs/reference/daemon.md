@@ -151,7 +151,8 @@ The row payload is capped and includes `summary.returned_count`,
 freshness counts are computed against the full active inventory, not just the
 returned rows. The response includes backend name/kind only; it never returns
 descriptors, xpubs, backend URLs/tokens, raw wallet config, wallet files, or raw
-backend payloads. Unsupported sources return
+backend payloads. AI-facing UTXO rows further redact address, label, branch,
+and index details. Unsupported sources return
 `support.status="unsupported_source"`. Liquid wallets return
 `support.status="liquid_unblind_blocked"` unless their descriptor material can
 unblind and account for outputs locally.

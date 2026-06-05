@@ -364,6 +364,103 @@ class SourceFundsCliTest(unittest.TestCase):
             args.append("--save-case")
         return self.cli(*args)["data"]
 
+    def test_source_funds_report_warns_on_privacy_boundary(self):
+        self._seed_single_target()
+        target_id = self._tx_id("Target", "target-basic")
+        with self._db() as conn:
+            conn.execute(
+                "UPDATE transactions SET privacy_boundary = ?, raw_json = ? WHERE id = ?",
+                (
+                    "payjoin",
+                    json.dumps({"privacy_hop": "payjoin", "source": "privacy_import"}),
+                    target_id,
+                ),
+            )
+            conn.commit()
+
+        report = self._source_funds_report_for_target(
+            target="target-basic",
+            amount="0.20000000",
+        )
+        codes = {finding["code"] for finding in report["findings"]}
+        self.assertIn("privacy_hop_unresolved", codes)
+
+    def test_privacy_boundary_import_skips_same_external_id_suggestion(self):
+        self._init_default_workspace()
+        self._write_csv(
+            "privacy-out.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description,privacyHop\n"
+            "2026-03-01T09:00:00Z,privacy-pair,outbound,BTC,0.10000000,0,50000,Privacy out,coinjoin\n",
+        )
+        self._write_csv(
+            "privacy-in.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            "2026-03-01T09:05:00Z,privacy-pair,inbound,BTC,0.10000000,0,50000,Privacy in\n",
+        )
+        self._create_wallet_and_import("Privacy Out", "privacy-out.csv")
+        self._create_wallet_and_import("Privacy In", "privacy-in.csv")
+
+        with self._db() as conn:
+            stored = conn.execute(
+                "SELECT privacy_boundary FROM transactions WHERE external_id = ? AND direction = ?",
+                ("privacy-pair", "outbound"),
+            ).fetchone()
+        self.assertEqual(stored["privacy_boundary"], "coinjoin")
+
+        target_id = self._tx_id("Privacy In", "privacy-pair")
+        suggested = self.cli(
+            "source-funds",
+            "suggest",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            target_id,
+        )["data"]["links"]
+        self.assertFalse(
+            [
+                link
+                for link in suggested
+                if link["method"] == "same_external_id"
+                and link["to_transaction_id"] == target_id
+            ]
+        )
+
+    def test_invalid_privacy_boundary_import_is_validation_error(self):
+        self._init_default_workspace()
+        self._write_csv(
+            "bad-privacy.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description,privacy_boundary\n"
+            "2026-03-01T09:00:00Z,bad-privacy,inbound,BTC,0.10000000,0,50000,Bad privacy,mixish\n",
+        )
+        self.cli(
+            "wallets",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--label",
+            "Bad Privacy",
+            "--kind",
+            "custom",
+        )
+
+        error = self.cli_error(
+            "wallets",
+            "import-csv",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--wallet",
+            "Bad Privacy",
+            "--file",
+            str(self.root / "bad-privacy.csv"),
+        )
+        self.assertEqual(error["error"]["code"], "validation")
+
     def test_source_funds_review_gates_snapshot_and_pdf(self):
         self._init_default_workspace()
         for label, csv_name in [

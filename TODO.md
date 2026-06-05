@@ -64,6 +64,11 @@ Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the 
   the redacted `ui.wallets.utxos` daemon surface, and renders a desktop
   wallet-detail UTXOs table with loading, empty, unsupported, stale, refresh,
   sorting, explorer-link, and Liquid-unblind-blocker states.
+- [x] Add the shared privacy-import substrate for future wallet importers:
+  typed transaction-level privacy-boundary markers, generic privacy-hop tax
+  quarantine, source-funds opaque-boundary warnings, and typed desktop
+  source-format plumbing. Protocol-specific Wasabi coin-anonymity fields and
+  Samourai/Whirlpool importers remain separate PRs.
 - [ ] Design an opt-in encrypted Lightning **evidence vault** for
   operators who need proof-of-payment for legal disputes, full invoice
   replay for corrupted-bookkeeper recovery, or chain-of-custody records

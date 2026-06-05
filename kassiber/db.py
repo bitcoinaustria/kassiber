@@ -138,6 +138,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     taxability_override INTEGER,
     at_regime_override TEXT,
     at_category_override TEXT,
+    privacy_boundary TEXT,
     kind TEXT,
     description TEXT,
     counterparty TEXT,
@@ -1157,6 +1158,7 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "transactions", "taxability_override", "INTEGER")
     ensure_column(conn, "transactions", "at_regime_override", "TEXT")
     ensure_column(conn, "transactions", "at_category_override", "TEXT")
+    ensure_column(conn, "transactions", "privacy_boundary", "TEXT")
     ensure_column(conn, "journal_entries", "fiat_value_exact", "TEXT")
     ensure_column(conn, "journal_entries", "unit_cost_exact", "TEXT")
     ensure_column(conn, "journal_entries", "cost_basis_exact", "TEXT")

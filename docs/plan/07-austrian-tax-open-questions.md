@@ -64,8 +64,11 @@ quarantine.
 
 ### AT-005 CoinJoin
 
-Treat as self-transfer only with explicit CoinJoin/user-owned provenance. Avoid
-automatic classification from shape alone.
+Treat as self-transfer only with explicit CoinJoin/user-owned provenance. A
+typed transaction privacy-boundary marker may identify an opaque privacy hop,
+but Kassiber must quarantine unresolved CoinJoin/PayJoin/mixing cases instead
+of inferring taxable proceeds, round membership, or self-transfer status from
+transaction shape alone.
 
 ### AT-006 RBF / CPFP
 

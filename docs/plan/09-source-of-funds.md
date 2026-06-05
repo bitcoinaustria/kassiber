@@ -65,7 +65,9 @@ Privacy techniques make this boundary more important:
   or a reviewed manual link.
 - A payjoin or coinjoin can be shown as a privacy-preserving hop, but the
   report must not claim exact upstream ownership unless the user adds reviewed
-  evidence.
+  evidence. Wallet-specific privacy importers may set the typed transaction
+  privacy-boundary marker when a transaction crossed an opaque boundary, but
+  that evidence alone must not be expanded into exact participant lineage.
 - If an exchange, broker, or old wallet export is missing, the report must show
   a missing-history node and tell the user what evidence is needed.
 
@@ -178,9 +180,11 @@ provider id that is no longer one-to-one remains `suggested` for manual review.
 
 Walkers must keep a visited set keyed by transaction and asset, enforce depth
 and node-count caps, and emit `path_truncated` instead of silently stopping.
-Coinjoin and payjoin nodes should collapse unrelated participant inputs into an
-opaque privacy-hop cluster. Kassiber must not list unrelated participant
-addresses or txids as if they were user-owned source parents.
+Coinjoin, payjoin, and wallet-specific privacy-boundary nodes should collapse
+unrelated participant inputs into an opaque privacy-hop cluster. Kassiber must
+not list unrelated participant addresses or txids as if they were user-owned
+source parents, and automatic same-transaction-id self-transfer suggestions
+must stop at the boundary.
 
 Every ambiguity becomes a data-quality item:
 
