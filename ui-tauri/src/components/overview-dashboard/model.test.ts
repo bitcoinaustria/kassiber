@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { MOCK_OVERVIEW, type OverviewSnapshot } from "@/mocks/seed";
 
 import {
+  activityMarkerView,
   activeMarketFiatCurrency,
   activeMarketFiatRate,
   buildBalanceRailItems,
@@ -214,8 +215,8 @@ describe("overview treasury chart", () => {
           rate: 50_000,
           tag: "Revenue",
           conf: 6,
-          balanceBtc: 1.1,
-          costBasisEur: 85_000,
+          balanceBtc: 1.05,
+          costBasisEur: 84_000,
         },
       ],
     };
@@ -249,8 +250,16 @@ describe("overview treasury chart", () => {
     expect(eventPoint?.lineBitcoinPriceEur).toBeUndefined();
     expect(eventPoint?.bitcoinPriceEur).toBe(50_000);
     expect(eventPoint?.eventPriceEur).toBe(50_000);
-    expect(eventPoint?.eventBalanceBtc).toBe(1.1);
+    expect(eventPoint?.eventBalanceBtc).toBe(1.05);
+    expect(eventPoint?.markerBalanceBtc).toBe(1.1);
     expect(eventPoint?.lineAvgCostEur).toBeUndefined();
+
+    const markerView = activityMarkerView(points, true, () => 0, false);
+
+    expect(markerView.chartDisplayData.some((point) => point.isActivityEvent)).toBe(
+      false,
+    );
+    expect(markerView.visibleActivityMarkers[0]?.markerBalanceBtc).toBe(1.1);
   });
 
   it("uses event balances for 30-day detail lines", () => {
@@ -314,6 +323,13 @@ describe("overview treasury chart", () => {
       1.1,
       1.1,
     ]);
+    expect(eventPoint?.markerBalanceBtc).toBe(1.1);
     expect(eventPoint?.lineAvgCostEur).toBeCloseTo(85_000 / 1.1);
+
+    const markerView = activityMarkerView(points, true, () => 0, true);
+
+    expect(markerView.chartDisplayData.some((point) => point.isActivityEvent)).toBe(
+      true,
+    );
   });
 });

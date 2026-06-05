@@ -270,8 +270,9 @@ export const BtcActivityChart = ({
         chartData,
         seriesVisible.events,
         activityMarkerMinimumForPoint,
+        period === "30days",
       ),
-    [activityMarkerMinimumForPoint, chartData, seriesVisible.events],
+    [activityMarkerMinimumForPoint, chartData, period, seriesVisible.events],
   );
   const expandedMarkerView = React.useMemo(
     () =>
@@ -279,8 +280,9 @@ export const BtcActivityChart = ({
         expandedChartData,
         seriesVisible.events,
         activityMarkerMinimumForPoint,
+        period === "30days",
       ),
-    [activityMarkerMinimumForPoint, expandedChartData, seriesVisible.events],
+    [activityMarkerMinimumForPoint, expandedChartData, period, seriesVisible.events],
   );
 
   React.useEffect(() => {
@@ -868,7 +870,8 @@ export const BtcActivityChart = ({
                   {seriesVisible.events && (
                     <Scatter
                       yAxisId="btc"
-                      dataKey="eventBalanceBtc"
+                      data={visibleActivityMarkers}
+                      dataKey="markerBalanceBtc"
                       name="Activity"
                       fill="transparent"
                       onClick={openActivityPointTransaction}
