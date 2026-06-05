@@ -269,6 +269,10 @@ def add_attachment(
         if not source.is_file():
             raise AppError(f"Attachment path '{file_path}' is not a file", code="validation")
         original_filename = source.name
+        label = _validate_label(
+            label or original_filename,
+            empty_message="Attachment label cannot be empty",
+        )
         destination, stored_relpath = _attachment_storage_path(
             attachments_root,
             profile["id"],
@@ -278,10 +282,6 @@ def add_attachment(
         size_bytes, sha256 = _hash_and_copy_file(source, destination)
         inferred_media_type = mimetypes.guess_type(source.name)[0]
         media_type = media_type or inferred_media_type or "application/octet-stream"
-        label = _validate_label(
-            label or original_filename,
-            empty_message="Attachment label cannot be empty",
-        )
     else:
         source_url = _clean_label(url)
         parsed = urlparse(source_url)
