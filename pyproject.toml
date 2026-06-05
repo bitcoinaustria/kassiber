@@ -13,6 +13,7 @@ authors = [
   { name = "Bitcoin Austria" }
 ]
 dependencies = [
+  "cryptography>=42,<47",
   "embit>=0.8.0",
   "rp2 @ git+https://github.com/bitcoinaustria/rp2.git@12ae085ee1eafab1b54596a65ba2f7760d9cb0be",
   "XlsxWriter>=3.2,<4",

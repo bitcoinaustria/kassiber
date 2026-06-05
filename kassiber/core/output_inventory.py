@@ -13,6 +13,71 @@ from ..util import str_or_none
 from ..wallet_descriptors import normalize_asset_code
 
 DEFAULT_WALLET_OUTPUT_INVENTORY_LIMIT = 500
+SAMOURAI_SAFE_METADATA_FIELDS = {
+    "role",
+    "group_id",
+    "group_label",
+    "parent_wallet_id",
+    "source",
+    "section",
+    "script_type",
+    "root_path",
+    "gap_limit",
+    "privacy_boundary",
+    "whirlpool",
+    "toxic_change",
+    "minimum_mix_count",
+    "mix_count",
+    "mix_count_confidence",
+    "target_mix_count",
+    "pool_denomination_sat",
+    "coordinator_fee_sat",
+    "miner_fee_sat",
+    "round_txid",
+    "round_txids",
+    "tx0_role",
+    "whirlpool_event",
+    "privacy_event",
+    "exit_kind",
+    "ricochet_hops",
+    "watch_only",
+    "bip47",
+    "paynym",
+    "scanned_without_explicit_descriptor",
+    "sections",
+}
+SAMOURAI_ENUM_VALUES = {
+    "mix_count_confidence": {"minimum", "exact", "estimated", "unknown"},
+    "tx0_role": {"deposit", "premix", "badbank", "fee"},
+    "whirlpool_event": {
+        "tx0",
+        "premix_pending",
+        "first_mix",
+        "remix",
+        "mix_to_wallet",
+        "external_spend",
+    },
+    "privacy_event": {
+        "coinjoin",
+        "payjoin",
+        "tx0",
+        "first_mix",
+        "remix",
+        "ricochet",
+        "exit",
+    },
+    "exit_kind": {"cold_storage", "external_spend", "ricochet", "toxic_change_spend"},
+}
+SAMOURAI_NON_NEGATIVE_INT_FIELDS = {
+    "gap_limit",
+    "minimum_mix_count",
+    "mix_count",
+    "target_mix_count",
+    "pool_denomination_sat",
+    "coordinator_fee_sat",
+    "miner_fee_sat",
+    "ricochet_hops",
+}
 
 
 def _stable_utxo_id(profile_id: str, wallet_id: str, txid: str, vout: int) -> str:
@@ -137,6 +202,89 @@ def _normalize_observed_output(
     }
 
 
+def _safe_samourai_metadata_from_config(config_json: Any) -> dict[str, Any] | None:
+    if not config_json:
+        return None
+    try:
+        config = json.loads(config_json) if isinstance(config_json, str) else dict(config_json)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    metadata = config.get("samourai") if isinstance(config, dict) else None
+    if not isinstance(metadata, dict):
+        return None
+    safe = _safe_samourai_metadata(metadata)
+    return safe or None
+
+
+def _safe_samourai_metadata(metadata: Any) -> dict[str, Any]:
+    if not isinstance(metadata, dict):
+        return {}
+    safe: dict[str, Any] = {}
+    for key, value in metadata.items():
+        if key not in SAMOURAI_SAFE_METADATA_FIELDS:
+            continue
+        normalized = _safe_samourai_metadata_value(key, value)
+        if normalized is not None:
+            safe[key] = normalized
+    return safe
+
+
+def _safe_samourai_metadata_value(key: str, value: Any) -> Any:
+    if key in SAMOURAI_NON_NEGATIVE_INT_FIELDS:
+        try:
+            normalized = int(value)
+        except (TypeError, ValueError):
+            return None
+        return normalized if normalized >= 0 else None
+    if key in {"privacy_boundary", "whirlpool", "toxic_change", "watch_only", "paynym"}:
+        return bool(value)
+    if key == "round_txids":
+        if not isinstance(value, list):
+            return None
+        txids = [_normalize_txid_or_none(item) for item in value]
+        return [txid for txid in txids if txid is not None] or None
+    if key == "round_txid":
+        return _normalize_txid_or_none(value)
+    if key == "sections":
+        if not isinstance(value, list):
+            return None
+        sections = [str(item).strip().lower() for item in value if str(item).strip()]
+        return sections or None
+    if key in SAMOURAI_ENUM_VALUES:
+        normalized = str(value or "").strip().lower()
+        return normalized if normalized in SAMOURAI_ENUM_VALUES[key] else None
+    if isinstance(value, str):
+        normalized = value.strip()
+        return normalized[:128] if normalized else None
+    return value if value is None or isinstance(value, (int, bool)) else None
+
+
+def _normalize_txid_or_none(value: Any) -> str | None:
+    normalized = str(value or "").strip().lower()
+    if len(normalized) != 64:
+        return None
+    try:
+        bytes.fromhex(normalized)
+    except ValueError:
+        return None
+    return normalized
+
+
+def _with_samourai_raw_json(raw_json: str, metadata: dict[str, Any] | None) -> str:
+    if not metadata:
+        return raw_json
+    try:
+        raw = json.loads(raw_json or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        raw = {}
+    if not isinstance(raw, dict):
+        raw = {}
+    merged = dict(metadata)
+    merged.update(_safe_samourai_metadata(raw.get("samourai")))
+    raw["samourai"] = merged
+    return json.dumps(json_ready(raw), sort_keys=True)
+
+
 def update_wallet_output_inventory(
     conn: sqlite3.Connection,
     profile: Mapping[str, Any],
@@ -154,6 +302,14 @@ def update_wallet_output_inventory(
     backend_kind = str(backend.get("kind") or "")
     chain = str(getattr(sync_state, "chain", "") or "")
     network = str(getattr(sync_state, "network", "") or "")
+    wallet_config_json = (
+        wallet.get("config_json")
+        if hasattr(wallet, "get")
+        else wallet["config_json"]
+        if hasattr(wallet, "keys") and "config_json" in wallet.keys()
+        else None
+    )
+    samourai_metadata = _safe_samourai_metadata_from_config(wallet_config_json)
     normalized = [
         _normalize_observed_output(
             output,
@@ -168,6 +324,9 @@ def update_wallet_output_inventory(
         for output in observed_outputs
     ]
     active_outpoints = {row["outpoint"] for row in normalized if row["spent_at"] is None}
+    if samourai_metadata:
+        for row in normalized:
+            row["raw_json"] = _with_samourai_raw_json(row["raw_json"], samourai_metadata)
     for row in normalized:
         conn.execute(
             """
@@ -599,6 +758,11 @@ def list_wallet_output_inventory(
         excluded_from_coinjoin = (
             row["excluded_from_coinjoin"] if "excluded_from_coinjoin" in row_keys else None
         )
+        try:
+            raw = json.loads(row["raw_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            raw = {}
+        samourai = raw.get("samourai") if isinstance(raw, dict) else None
         output.append(
             {
                 "id": row["id"],
@@ -639,6 +803,7 @@ def list_wallet_output_inventory(
                     "last_seen_at": row["last_seen_at"],
                     "spent_at": row["spent_at"],
                 },
+                "samourai": samourai if isinstance(samourai, dict) else None,
             }
         )
     return output

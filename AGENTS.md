@@ -32,6 +32,7 @@
   - [kassiber/core/htlc_parser.py](kassiber/core/htlc_parser.py) — pure parser for Boltz v1 P2WSH HTLC redeem scripts (submarine + reverse variants) and claim witnesses. Returns `payment_hash` when extractable; Boltz v2 Taproot cooperative spends fall through to heuristic by physics.
   - [kassiber/core/swap_rules.py](kassiber/core/swap_rules.py) — auto-pair rules engine with predicate matching, specificity sort, conflict-cluster skip, and a `detect_repeating_patterns` helper for "create rule from pattern" prompts.
   - [kassiber/core/saved_views.py](kassiber/core/saved_views.py) — generic saved-view CRUD (surface-discriminated). First consumer is the swap-candidate queue (`surface="swap_candidates"`).
+  - [kassiber/core/samourai.py](kassiber/core/samourai.py) — local-only Samourai/Whirlpool recovery importer: decrypts backup v1/v2 with Sparrow/Drongo-compatible AES-CBC/PBKDF2, derives watch-only descriptors for Deposit/Badbank/Premix/Postmix/Ricochet sources, creates a redacted logical wallet group, and discards seed/passphrase material after descriptor derivation.
   - [kassiber/tax_policy.py](kassiber/tax_policy.py) — profile tax-policy layer.
   - [kassiber/wallet_descriptors.py](kassiber/wallet_descriptors.py) — descriptor normalization, chain/network validation.
 - Packaging is defined in [pyproject.toml](pyproject.toml).
@@ -105,6 +106,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   compact in-app skill routing document; deeper references stay allowlisted.
   Desktop onboarding and connection setup use explicit mutating daemon kinds
   `ui.onboarding.complete`, `ui.wallets.create`, `ui.connections.btcpay.create`,
+  `ui.wallets.import_samourai`,
   `ui.connections.btcpay.discover`, and
   `ui.metadata.bip329.import`; transaction editor metadata saves use
   `ui.transactions.metadata.update` and append grouped transaction edit
@@ -164,7 +166,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `workspaces {list,create}`
 - `profiles {list,create,get,set}`
 - `accounts {list,create}`
-- `wallets {kinds,list,create,get,update,delete,reveal-descriptor,sync,sync-btcpay,derive,import-json,import-csv,import-btcpay,import-phoenix,import-river,import-bull,import-coinfinity,import-21bitcoin,import-strike}`
+- `wallets {kinds,list,create,get,update,delete,reveal-descriptor,sync,sync-btcpay,derive,import-json,import-csv,import-btcpay,import-phoenix,import-river,import-bull,import-coinfinity,import-21bitcoin,import-strike,import-samourai}`
 - `backends {kinds,list,get,create,update,delete,reveal-token,set-default,clear-default}`
 - `transactions {list}`
 - `attachments {add,list,remove,verify,gc}`

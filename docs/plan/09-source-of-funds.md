@@ -71,6 +71,9 @@ Privacy techniques make this boundary more important:
   Wasabi imports, for example, can mark likely CoinJoin transactions and current
   payment-in-CoinJoin state, but those markers are not a completed round ledger
   or participant ownership map.
+  Samourai/Whirlpool suggestions use this same boundary: Kassiber can show a
+  reviewed Deposit/Premix/Postmix transition, but it must not traverse or
+  disclose unrelated participant inputs.
 - If an exchange, broker, or old wallet export is missing, the report must show
   a missing-history node and tell the user what evidence is needed.
 

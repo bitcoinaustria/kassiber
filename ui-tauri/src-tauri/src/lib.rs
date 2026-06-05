@@ -209,6 +209,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.wallets.utxos",
     "ui.wallets.create",
     "ui.wallets.import_file",
+    "ui.wallets.import_samourai",
     "ui.wallets.preview_descriptor",
     "ui.connections.sources",
     "ui.connections.btcpay.create",

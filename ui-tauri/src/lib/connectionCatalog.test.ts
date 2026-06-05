@@ -25,6 +25,7 @@ describe("connection catalog", () => {
       "btcpay",
       "bip329",
       "backend-settings",
+      "samourai",
     ]);
 
     for (const source of CONNECTION_SOURCES.filter(
@@ -41,6 +42,7 @@ describe("connection catalog", () => {
         "electrum",
         "esplora",
         "btcpay",
+        "samourai",
         "phoenix",
         "river",
         "bullbitcoin",

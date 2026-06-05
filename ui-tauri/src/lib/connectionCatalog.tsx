@@ -38,6 +38,7 @@ export type SetupKind =
   | "descriptor"
   | "file-wallet"
   | "file-enrichment"
+  | "samourai"
   | "btcpay"
   | "bip329"
   | "backend-settings"
@@ -159,6 +160,25 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     details: [
       "Paste one common Liquid wallet export or descriptor",
       "Requires a configured Liquid backend",
+    ],
+  },
+  {
+    id: "samourai",
+    title: "Samourai Wallet",
+    description: "Watch-only Samourai and Whirlpool recovery import.",
+    category: "wallets",
+    image: sourceIcon("SW", "#111827", "#ffffff"),
+    status: "ready",
+    pathLabel: "Watch-only wallet group",
+    formatLabel: "backup / mnemonic / descriptors",
+    setupKind: "samourai",
+    walletKind: "samourai",
+    chain: "bitcoin",
+    network: "main",
+    details: [
+      "Creates Deposit, Badbank, Premix, Postmix, and Ricochet sources",
+      "Decrypts backup material locally and stores only watch-only sync targets",
+      "Postmix discovery starts with a widened gap limit",
     ],
   },
   {

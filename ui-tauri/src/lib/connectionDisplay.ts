@@ -4,6 +4,7 @@ export const connectionKindCategoryLabels: Record<ConnectionKind, string> = {
   xpub: "On-chain",
   address: "On-chain",
   descriptor: "On-chain",
+  samourai: "On-chain",
   "core-ln": "Lightning",
   lnd: "Lightning",
   nwc: "NWC",
@@ -27,6 +28,7 @@ export const connectionKindLabels: Record<ConnectionKind, string> = {
   xpub: "XPUB",
   address: "Address",
   descriptor: "Descriptor",
+  samourai: "Samourai",
   "core-ln": "Core Lightning",
   lnd: "LND",
   nwc: "NWC",
@@ -82,6 +84,7 @@ export function connectionKindTone(kind: ConnectionKind) {
     case "xpub":
     case "address":
     case "descriptor":
+    case "samourai":
       return "border-emerald-600/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
     default:
       return assertNeverConnectionKind(kind);

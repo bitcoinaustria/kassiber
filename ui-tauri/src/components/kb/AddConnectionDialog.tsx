@@ -57,6 +57,9 @@ interface SetupFormState {
   btcpayApiKey: string;
   walletMaterial: string;
   gapLimit: string;
+  samouraiSourceMode: "backup" | "mnemonic" | "source-set";
+  backupPassphrase: string;
+  mnemonicPassphrase: string;
   targetWallet: string;
   sourceFile: string;
   sourceFormat: ConnectionSourceFormat;
@@ -194,6 +197,12 @@ interface ImportFileResult {
   reconciliation_records?: ImportChangeRecord[];
 }
 
+interface SamouraiImportResult {
+  group: { label: string };
+  children: Array<{ label: string }>;
+  warnings?: Array<{ code: string; message: string }>;
+}
+
 type DialogStep = "source" | "setup";
 const DESCRIPTOR_BACKEND_KINDS = new Set(["esplora", "electrum"]);
 const DEFAULT_BTCPAY_PAYMENT_METHOD_ID = "BTC-CHAIN";
@@ -233,6 +242,9 @@ function sourceFileFilters(source: ConnectionSource) {
   if (source.sourceFormat === "wasabi_bundle") {
     return [{ name: "Wasabi JSON bundle", extensions: ["json"] }];
   }
+  if (source.id === "samourai") {
+    return [{ name: "Samourai import files", extensions: ["txt", "json"] }];
+  }
   if (source.id === "csv") {
     return [{ name: "CSV or JSON", extensions: ["csv", "json"] }];
   }
@@ -256,6 +268,9 @@ const formDefaultsFor = (source: ConnectionSource): SetupFormState => {
     btcpayApiKey: "",
     walletMaterial: "",
     gapLimit: "40",
+    samouraiSourceMode: "backup",
+    backupPassphrase: "",
+    mnemonicPassphrase: "",
     targetWallet: "",
     sourceFile: "",
     sourceFormat: "csv",
@@ -343,6 +358,8 @@ export function AddConnectionDialog({
     useDaemonMutation<{ wallet: { label: string } }>("ui.wallets.create");
   const importFile =
     useDaemonMutation<ImportFileResult>("ui.wallets.import_file");
+  const importSamourai =
+    useDaemonMutation<SamouraiImportResult>("ui.wallets.import_samourai");
   const createBtcpay = useDaemonMutation<{
     backend: { name: string };
     wallet: { label: string };
@@ -535,17 +552,20 @@ export function AddConnectionDialog({
   const isSubmitting =
     createWallet.isPending ||
     importFile.isPending ||
+    importSamourai.isPending ||
     createBtcpay.isPending ||
     discoverBtcpay.isPending ||
     importBip329.isPending ||
     syncWallet.isPending;
-  const requiresBackend = setupKind === "descriptor";
+  const requiresBackend = setupKind === "descriptor" || setupKind === "samourai";
   const missingBackend = requiresBackend && selectedBackendOptions.length === 0;
   const submitLabel =
     setupKind === "backend-settings"
       ? "Open backend settings"
       : syncWallet.isPending
         ? "Refreshing…"
+        : importSamourai.isPending
+          ? "Importing Samourai…"
         : importFile.isPending
           ? "Importing…"
         : importBip329.isPending
@@ -594,7 +614,7 @@ export function AddConnectionDialog({
 
   React.useEffect(() => {
     if (!defaultBackendName) return;
-    if (setupKind !== "descriptor") return;
+    if (setupKind !== "descriptor" && setupKind !== "samourai") return;
     setForm((current) =>
       current.backend ? current : { ...current, backend: defaultBackendName },
     );
@@ -677,6 +697,7 @@ export function AddConnectionDialog({
     if (
       setupKind === "descriptor" ||
       setupKind === "file-wallet" ||
+      setupKind === "samourai" ||
       setupKind === "btcpay"
     ) {
       if (!form.label.trim()) {
@@ -700,6 +721,31 @@ export function AddConnectionDialog({
       }
       if (descriptorBackendOptions.length > 0 && !form.backend.trim()) {
         errors.backend = "Choose a backend.";
+      }
+    }
+    if (setupKind === "samourai") {
+      const gapLimit = Number.parseInt(form.gapLimit, 10);
+      if (!Number.isFinite(gapLimit) || gapLimit <= 0) {
+        errors.gapLimit = "Gap limit must be a positive integer.";
+      } else if (gapLimit > MAX_DESCRIPTOR_GAP_LIMIT) {
+        errors.gapLimit = `Gap limit must be ${MAX_DESCRIPTOR_GAP_LIMIT.toLocaleString()} or lower.`;
+      }
+      if (descriptorBackendOptions.length > 0 && !form.backend.trim()) {
+        errors.backend = "Choose a backend.";
+      }
+      if (form.samouraiSourceMode === "backup") {
+        if (!form.sourceFile.trim()) {
+          errors.sourceFile = "Pick the Samourai backup file.";
+        }
+        if (!form.backupPassphrase.trim()) {
+          errors.backupPassphrase = "Backup passphrase is required.";
+        }
+      } else if (form.samouraiSourceMode === "mnemonic") {
+        if (!form.walletMaterial.trim()) {
+          errors.walletMaterial = "Enter the local recovery words.";
+        }
+      } else if (!form.sourceFile.trim()) {
+        errors.sourceFile = "Pick the descriptor/xpub set file.";
       }
     }
     if (setupKind === "file-wallet" && !form.sourceFile.trim()) {
@@ -806,6 +852,45 @@ export function AddConnectionDialog({
         addNotification({
           title: "Connection added",
           body: `${label} is configured.`,
+          tone: "success",
+        });
+      } else if (setupKind === "samourai") {
+        const gapLimit = Number.parseInt(form.gapLimit, 10);
+        const envelope = await importSamourai.mutateAsync({
+          label,
+          backend: form.backend.trim() || undefined,
+          network: selected.network,
+          gap_limit: Number.isFinite(gapLimit) ? gapLimit : undefined,
+          ...(form.samouraiSourceMode === "backup"
+            ? {
+                backup_file: form.sourceFile.trim(),
+                backup_passphrase: form.backupPassphrase,
+              }
+            : form.samouraiSourceMode === "mnemonic"
+              ? {
+                  mnemonic: form.walletMaterial.trim(),
+                  mnemonic_passphrase: form.mnemonicPassphrase,
+                }
+              : {
+                  source_set_file: form.sourceFile.trim(),
+                }),
+        });
+        const childLabels = envelope.data?.children.map((child) => child.label) ?? [];
+        if (form.syncAfterCreate && childLabels.length > 0) {
+          startSyncNotice(
+            `${label} is scanning Samourai watch-only sources. Postmix discovery may take longer on old wallets.`,
+          );
+          try {
+            for (const childLabel of childLabels) {
+              await syncWallet.mutateAsync({ wallet: childLabel });
+            }
+          } finally {
+            clearSyncNotice();
+          }
+        }
+        addNotification({
+          title: "Samourai import added",
+          body: `${label} created ${childLabels.length.toLocaleString("en-US")} watch-only sources${form.syncAfterCreate ? " and started scanning" : ""}.`,
           tone: "success",
         });
       } else if (setupKind === "file-wallet") {
@@ -1193,6 +1278,149 @@ export function AddConnectionDialog({
             </span>
           </div>
           {renderDescriptorPreview()}
+        </>
+      );
+    }
+
+    if (setupKind === "samourai") {
+      return (
+        <>
+          {renderConnectionLabelField()}
+          {renderBackendSelect(
+            "connection-backend",
+            "Backend",
+            descriptorBackendOptions,
+          )}
+          <SetupField id="connection-samourai-mode" label="Import source">
+            <div className="grid grid-cols-3 gap-2">
+              {(
+                [
+                  ["backup", "Backup"],
+                  ["mnemonic", "Words"],
+                  ["source-set", "Descriptors"],
+                ] as const
+              ).map(([value, text]) => (
+                <Button
+                  key={value}
+                  type="button"
+                  variant={form.samouraiSourceMode === value ? "secondary" : "outline"}
+                  onClick={() => {
+                    updateForm("samouraiSourceMode", value);
+                    setLastImportResult(null);
+                  }}
+                >
+                  {text}
+                </Button>
+              ))}
+            </div>
+          </SetupField>
+          {form.samouraiSourceMode === "mnemonic" ? (
+            <>
+              <SetupField
+                id="connection-samourai-mnemonic"
+                label="Recovery words"
+                error={fieldErrors.walletMaterial}
+              >
+                <Textarea
+                  id="connection-samourai-mnemonic"
+                  className="min-h-28 font-mono text-xs"
+                  value={form.walletMaterial}
+                  onChange={(event) =>
+                    updateForm("walletMaterial", event.target.value)
+                  }
+                  required
+                />
+              </SetupField>
+              <SetupField
+                id="connection-samourai-mnemonic-passphrase"
+                label="BIP39 passphrase"
+                helper="Leave blank if the wallet did not use one."
+              >
+                <Input
+                  id="connection-samourai-mnemonic-passphrase"
+                  type="password"
+                  value={form.mnemonicPassphrase}
+                  onChange={(event) =>
+                    updateForm("mnemonicPassphrase", event.target.value)
+                  }
+                />
+              </SetupField>
+            </>
+          ) : (
+            <>
+              <SetupField
+                id="connection-samourai-file"
+                label={
+                  form.samouraiSourceMode === "backup"
+                    ? "Backup file path"
+                    : "Descriptor/xpub set path"
+                }
+                error={fieldErrors.sourceFile}
+              >
+                <div className="flex gap-2">
+                  <Input
+                    id="connection-samourai-file"
+                    value={form.sourceFile}
+                    onChange={(event) =>
+                      updateForm("sourceFile", event.target.value)
+                    }
+                    required
+                  />
+                  {isFilePickerAvailable ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={async () => {
+                        const picked = await pickFile({
+                          title:
+                            form.samouraiSourceMode === "backup"
+                              ? "Select Samourai backup file"
+                              : "Select Samourai descriptor/xpub set",
+                          filters: sourceFileFilters(selected),
+                        });
+                        if (picked) updateForm("sourceFile", picked);
+                      }}
+                    >
+                      Browse…
+                    </Button>
+                  ) : null}
+                </div>
+              </SetupField>
+              {form.samouraiSourceMode === "backup" ? (
+                <SetupField
+                  id="connection-samourai-backup-passphrase"
+                  label="Backup passphrase"
+                  error={fieldErrors.backupPassphrase}
+                >
+                  <Input
+                    id="connection-samourai-backup-passphrase"
+                    type="password"
+                    value={form.backupPassphrase}
+                    onChange={(event) =>
+                      updateForm("backupPassphrase", event.target.value)
+                    }
+                    required
+                  />
+                </SetupField>
+              ) : null}
+            </>
+          )}
+          <SetupField
+            id="connection-samourai-gap-limit"
+            label="Gap limit"
+            error={fieldErrors.gapLimit}
+            helper="Postmix keeps at least 40 unused addresses per branch. Raise this for old wallets with long unused-address runs, up to 5,000."
+          >
+            <Input
+              id="connection-samourai-gap-limit"
+              type="number"
+              min={1}
+              max={MAX_DESCRIPTOR_GAP_LIMIT}
+              value={form.gapLimit}
+              onChange={(event) => updateForm("gapLimit", event.target.value)}
+            />
+          </SetupField>
+          {renderSyncAfterCreate("Scan imported sources after setup")}
         </>
       );
     }

@@ -4,6 +4,7 @@ const PROTOCOL_LABELS: Record<ConnectionKind, string> = {
   xpub: "ON-CHAIN",
   address: "ON-CHAIN",
   descriptor: "ON-CHAIN",
+  samourai: "ON-CHAIN",
   "core-ln": "LIGHTNING",
   lnd: "LIGHTNING",
   nwc: "NWC",
