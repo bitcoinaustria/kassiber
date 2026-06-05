@@ -144,8 +144,10 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.transactions.list",
     "ui.transactions.metadata.update",
     "ui.attachments.list",
+    "ui.attachments.preview_url",
     "ui.attachments.add",
     "ui.attachments.copy",
+    "ui.attachments.rename",
     "ui.attachments.remove",
     "ui.attachments.open",
     "ui.wallets.list",
@@ -2654,8 +2656,10 @@ mod tests {
         // daemon supervisor. Packaged desktop mode rejects any unlisted kind.
         let required: &[&str] = &[
             "ui.attachments.list",
+            "ui.attachments.preview_url",
             "ui.attachments.add",
             "ui.attachments.copy",
+            "ui.attachments.rename",
             "ui.attachments.remove",
             "ui.attachments.open",
         ];

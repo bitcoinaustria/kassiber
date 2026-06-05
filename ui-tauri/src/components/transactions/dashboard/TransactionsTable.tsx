@@ -52,6 +52,7 @@ import { openAttachmentFile, openExternalUrl } from "@/daemon/transport";
 import { cn } from "@/lib/utils";
 import { type Currency } from "@/lib/currency";
 import { type ExplorerSettings } from "@/lib/explorer";
+import { urlAttachmentLabel } from "@/lib/urlAttachmentPreview";
 import { useUiStore } from "@/store/ui";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import type {
@@ -108,6 +109,7 @@ import {
   readTransactionDetailParams,
   updateTransactionDetailParams,
   type AttachmentOpenData,
+  type AttachmentPreviewData,
   type AttachmentRecord,
   type AttachmentsCopyData,
   type AttachmentsListData,
@@ -188,8 +190,13 @@ const TransactionsTable = ({
   const attachmentCopy = useDaemonMutation<AttachmentsCopyData>(
     "ui.attachments.copy",
   );
+  const attachmentRename =
+    useDaemonMutation<AttachmentRecord>("ui.attachments.rename");
   const attachmentRemove = useDaemonMutation<AttachmentRecord>(
     "ui.attachments.remove",
+  );
+  const attachmentPreview = useDaemonMutation<AttachmentPreviewData>(
+    "ui.attachments.preview_url",
   );
   const attachmentOpen =
     useDaemonMutation<AttachmentOpenData>("ui.attachments.open");
@@ -1475,9 +1482,17 @@ const TransactionsTable = ({
         onAddAttachmentLinks={async (urls) => {
           if (!detailTransaction) return;
           for (const url of urls) {
+            const preview = await attachmentPreview
+              .mutateAsync({ url })
+              .catch(() => null);
+            const label = urlAttachmentLabel(
+              url,
+              preview?.data?.title || preview?.data?.label,
+            );
             await attachmentAdd.mutateAsync({
               transaction: detailTransaction.id,
               url,
+              label,
             });
           }
           useUiStore.getState().addNotification({
@@ -1507,6 +1522,18 @@ const TransactionsTable = ({
           if (data.target_type === "file" && data.path) {
             await openAttachmentFile(data.path);
           }
+        }}
+        onRenameAttachment={async (item, label) => {
+          await attachmentRename.mutateAsync({
+            attachment: item.id,
+            label,
+          });
+          useUiStore.getState().addNotification({
+            title: "Link text updated",
+            body: "Attachment link label saved.",
+            tone: "success",
+            dedupeKey: `attachment-rename-${item.id}`,
+          });
         }}
         onRemoveAttachment={async (item) => {
           await attachmentRemove.mutateAsync({ attachment: item.id });

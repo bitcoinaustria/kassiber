@@ -20,6 +20,10 @@ import type {
   ProfileTaxCountry,
   Workspace,
 } from "@/mocks/profiles";
+import {
+  fallbackUrlAttachmentLabel,
+  urlAttachmentLabel,
+} from "@/lib/urlAttachmentPreview";
 import { MOCK_AI_CHAT_STREAM, fixtures } from "./fixtures";
 
 const SIMULATED_LATENCY_MS = 50;
@@ -51,6 +55,37 @@ type MockAttachment = {
   copied_from_transaction_id?: string;
   exists?: boolean | null;
   created_at: string;
+};
+
+type MockTransactionHistoryField = {
+  id: string;
+  field: string;
+  label: string;
+  family: string;
+  before_value: unknown;
+  after_value: unknown;
+  before_label: string;
+  after_label: string;
+  diff: Record<string, unknown>;
+  redacted?: boolean;
+};
+
+type MockTransactionHistoryEvent = {
+  id: string;
+  transaction_id: string;
+  transaction_external_id: string;
+  transaction_occurred_at: string;
+  wallet_id: string;
+  wallet_label: string;
+  source: string;
+  source_label: string;
+  reason: string;
+  changed_at: string;
+  summary: string;
+  families: string[];
+  report_anchor: Record<string, unknown>;
+  transaction: Record<string, unknown>;
+  fields: MockTransactionHistoryField[];
 };
 
 let mockAttachments: MockAttachment[] = [
@@ -89,7 +124,7 @@ let mockAttachments: MockAttachment[] = [
   },
 ];
 
-let mockTransactionHistory: Array<Record<string, any>> = [
+let mockTransactionHistory: MockTransactionHistoryEvent[] = [
   {
     id: "edit-mock-2",
     transaction_id: "tx2",
@@ -1820,10 +1855,10 @@ export const mockDaemon: DaemonTransport = {
         mockTransactionHistory.find((event) => event.id === eventId) ??
         mockTransactionHistory.find((event) => event.transaction_id === transactionId);
       const sourceField = fieldName
-        ? sourceEvent?.fields.find((field: Record<string, any>) => field.field === fieldName)
+        ? sourceEvent?.fields.find((field) => field.field === fieldName)
         : undefined;
       const fields = sourceField ? [sourceField] : sourceEvent?.fields ?? [];
-      const revertedFields = fields.map((field: Record<string, any>) => field.field);
+      const revertedFields = fields.map((field) => field.field);
       const newEvent = {
         id: `edit-mock-revert-${Date.now()}`,
         transaction_id: transactionId,
@@ -1836,10 +1871,10 @@ export const mockDaemon: DaemonTransport = {
         reason: typeof args.reason === "string" ? args.reason : "Reverted edit history event",
         changed_at: new Date().toISOString(),
         summary: sourceField ? `Updated ${sourceField.label}` : "Reverted edit history event",
-        families: Array.from(new Set(fields.map((field: Record<string, any>) => field.family))),
+        families: Array.from(new Set(fields.map((field) => field.family))),
         report_anchor: { stale_for_reports: true, journal_input_version_after: 9 },
         transaction: sourceEvent?.transaction ?? { id: transactionId },
-        fields: fields.map((field: Record<string, any>) => ({
+        fields: fields.map((field) => ({
           ...field,
           id: `${field.id}-revert`,
           before_value: field.after_value,
@@ -1878,6 +1913,33 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.attachments.preview_url") {
+      const args = (req.args ?? {}) as { url?: unknown };
+      const url = typeof args.url === "string" ? args.url : "";
+      const title =
+        url.includes("docs.google.com/spreadsheets")
+          ? "Treasury review sheet"
+          : url.includes("docs.google.com/document")
+            ? "Board memo"
+            : "";
+      return {
+        kind: "ui.attachments.preview_url",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          url,
+          display_url: url.replace(/^https?:\/\//, "").replace(/\/$/, ""),
+          label: urlAttachmentLabel(url, title || fallbackUrlAttachmentLabel(url)),
+          title,
+          site_name: title ? "Google Workspace" : "",
+          content_type: title ? "text/html" : "",
+          available: Boolean(title),
+          error_code: title ? "" : "title_not_found",
+          truncated: false,
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.attachments.add") {
       const args = (req.args ?? {}) as {
         transaction?: unknown;
@@ -1909,7 +1971,7 @@ export const mockDaemon: DaemonTransport = {
         typeof args.label === "string" && args.label.trim()
           ? args.label.trim()
           : isUrl
-            ? source
+            ? fallbackUrlAttachmentLabel(source)
             : source.split(/[\\/]/).pop() || "attachment.bin";
       const attachment: MockAttachment = {
         id: `att-mock-${(mockAttachmentCounter += 1)}`,
@@ -1988,6 +2050,43 @@ export const mockDaemon: DaemonTransport = {
           source_transaction_id: sourceTransactionId,
           target_transaction_id: transactionId,
         } as T,
+      };
+    }
+
+    if (req.kind === "ui.attachments.rename") {
+      const args = (req.args ?? {}) as {
+        attachment?: unknown;
+        attachment_id?: unknown;
+        label?: unknown;
+      };
+      const attachmentId =
+        typeof args.attachment === "string"
+          ? args.attachment
+          : typeof args.attachment_id === "string"
+            ? args.attachment_id
+            : "";
+      const label = typeof args.label === "string" ? args.label.trim() : "";
+      const attachment = mockAttachments.find((item) => item.id === attachmentId);
+      if (!attachment || !label) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: attachment ? "validation" : "not_found",
+            message: attachment
+              ? "ui.attachments.rename requires label"
+              : `Attachment '${attachmentId}' not found`,
+            retryable: false,
+          },
+        };
+      }
+      attachment.label = label;
+      return {
+        kind: "ui.attachments.rename",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: attachment as T,
       };
     }
 

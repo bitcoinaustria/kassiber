@@ -82,6 +82,7 @@ from .cli.handlers import (
 from .core import audit_package as core_audit_package
 from .core import commercial as core_commercial
 from .core import attachments as core_attachments
+from .core import link_preview as core_link_preview
 from .core import lightning as core_lightning
 from .core.lightning import lnd as _core_lightning_lnd  # noqa: F401 — registers the LND adapter on import.
 from .core import reports as core_reports
@@ -211,8 +212,10 @@ SUPPORTED_KINDS = (
     "ui.activity.history",
     "ui.activity.stale",
     "ui.attachments.list",
+    "ui.attachments.preview_url",
     "ui.attachments.add",
     "ui.attachments.copy",
+    "ui.attachments.rename",
     "ui.attachments.remove",
     "ui.attachments.open",
     "ui.wallets.list",
@@ -6158,6 +6161,11 @@ def _ui_attachment_payload(
                 tx_ref=tx_ref,
             )
         }
+    if kind == "ui.attachments.preview_url":
+        url = args.get("url")
+        if not isinstance(url, str) or not url.strip():
+            raise AppError("ui.attachments.preview_url requires args.url", code="validation")
+        return core_link_preview.preview_url(url)
     if kind == "ui.attachments.add":
         transaction = args.get("transaction")
         if not isinstance(transaction, str) or not transaction.strip():
@@ -6193,6 +6201,22 @@ def _ui_attachment_payload(
             attachment_ids,
             hooks,
             source_tx_ref=source_transaction.strip(),
+        )
+    if kind == "ui.attachments.rename":
+        attachment_id = args.get("attachment") or args.get("attachment_id")
+        if not isinstance(attachment_id, str) or not attachment_id.strip():
+            raise AppError("ui.attachments.rename requires args.attachment", code="validation")
+        label = args.get("label")
+        if not isinstance(label, str) or not label.strip():
+            raise AppError("ui.attachments.rename requires args.label", code="validation")
+        return core_attachments.rename_attachment(
+            conn,
+            ctx.data_root,
+            None,
+            None,
+            attachment_id.strip(),
+            label,
+            hooks,
         )
     if kind == "ui.attachments.remove":
         attachment_id = args.get("attachment") or args.get("attachment_id")
@@ -7164,8 +7188,10 @@ def handle_request(
 
     if kind in {
         "ui.attachments.list",
+        "ui.attachments.preview_url",
         "ui.attachments.add",
         "ui.attachments.copy",
+        "ui.attachments.rename",
         "ui.attachments.remove",
         "ui.attachments.open",
     }:

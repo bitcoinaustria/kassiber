@@ -1,5 +1,6 @@
 import { type ChartConfig } from "@/components/ui/chart";
 import { type Currency } from "@/lib/currency";
+import { urlAttachmentLabel } from "@/lib/urlAttachmentPreview";
 import { transactionRecords } from "./demoRecords";
 import { type Tx } from "@/mocks/seed";
 import {
@@ -255,6 +256,18 @@ type AttachmentsListData = {
   attachments: AttachmentRecord[];
 };
 
+type AttachmentPreviewData = {
+  url: string;
+  display_url?: string;
+  label?: string;
+  title?: string;
+  site_name?: string;
+  content_type?: string;
+  available?: boolean;
+  error_code?: string;
+  truncated?: boolean;
+};
+
 type AttachmentsCopyData = {
   copied: number;
   attachments: AttachmentRecord[];
@@ -290,17 +303,19 @@ function attachmentRecordToItem(record: AttachmentRecord): AttachmentItem {
     hash,
     record.exists === false ? "missing file" : null,
   ].filter(Boolean);
+  const label =
+    kind === "url"
+      ? urlAttachmentLabel(record.url, record.label)
+      : record.label || record.original_filename || "File attachment";
   return {
     id: record.id,
     kind,
-    label:
-      record.label ||
-      record.original_filename ||
-      record.url ||
-      (kind === "url" ? "Link attachment" : "File attachment"),
+    label,
     detail:
       kind === "url"
-        ? record.url || record.media_type || undefined
+        ? record.url && record.url !== label
+          ? record.url
+          : record.media_type || undefined
         : fileBits.join(" · ") || record.original_filename || undefined,
     href: record.url || undefined,
     copiedFromAttachmentId: record.copied_from_attachment_id || undefined,
@@ -1035,6 +1050,7 @@ export {
 export type {
   AttachmentsCopyData,
   AttachmentOpenData,
+  AttachmentPreviewData,
   AttachmentRecord,
   AttachmentsListData,
   BreakdownSelection,

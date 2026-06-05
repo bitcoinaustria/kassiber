@@ -1,14 +1,20 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  attachmentRecordToItem,
   bucketTransactionDate,
   flowChartSelectionLabel,
   matchesFlowChartSelection,
   toDashboardTransaction,
+  type AttachmentRecord,
   type FlowChartSelection,
 } from "./model";
 import type { Tx } from "@/mocks/seed";
 import type { Transaction, TransactionFlow } from "@/components/transactions";
+import {
+  fallbackUrlAttachmentLabel,
+  urlAttachmentLabel,
+} from "@/lib/urlAttachmentPreview";
 
 function transaction(
   overrides: Partial<Transaction> = {},
@@ -126,5 +132,40 @@ describe("transaction dashboard chart selection", () => {
         (txn) => txn.flow as TransactionFlow,
       ),
     ).toBe(false);
+  });
+});
+
+describe("transaction attachment URL labels", () => {
+  it("uses friendly workspace labels when a saved URL row has no title label yet", () => {
+    const url = "https://docs.google.com/spreadsheets/d/abc123/edit?usp=sharing";
+    const record: AttachmentRecord = {
+      id: "att-1",
+      attachment_type: "url",
+      label: url,
+      url,
+      media_type: "text/uri-list",
+      size_bytes: null,
+      exists: null,
+    };
+
+    const item = attachmentRecordToItem(record);
+
+    expect(item.label).toBe("Google Sheet");
+    expect(item.detail).toBe(url);
+  });
+
+  it("keeps explicit URL attachment labels", () => {
+    expect(
+      urlAttachmentLabel(
+        "https://docs.google.com/document/d/abc123/edit",
+        "April board memo",
+      ),
+    ).toBe("April board memo");
+  });
+
+  it("falls back to host and path for ordinary links", () => {
+    expect(
+      fallbackUrlAttachmentLabel("https://btcpay.example.com/invoices/abc123"),
+    ).toBe("btcpay.example.com - abc123");
   });
 });

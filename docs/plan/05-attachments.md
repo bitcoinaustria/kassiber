@@ -12,14 +12,17 @@ Kassiber already supports transaction attachments:
 - URL attachments stored as literal strings
 - add/list/remove/verify/gc CLI commands
 - transaction-detail desktop controls for adding files, adding URL references,
-  opening managed files/URLs, removing attachment rows, and manually reusing
-  selected evidence from another transaction
+  opening managed files/URLs, renaming URL attachment display labels, removing
+  attachment rows, and manually reusing selected evidence from another
+  transaction
 - daemon/export evidence readiness summaries that combine direct attachments
   with reviewed source-funds link/root evidence and persisted journal/pricing
   warnings
 - Reports audit package export that can include selected copied attachment
   files plus URL references in a manifest
-- no URL fetching, indexing, OCR, preview generation, or health checking
+- no URL content mirroring, indexing, OCR, or health checking. The desktop
+  transaction detail flow may fetch a bounded page-title preview when a user
+  attaches an HTTP(S) link, then store only that title as the attachment label.
 
 ## Product Boundary
 
@@ -34,7 +37,9 @@ workflow needs it.
 ## Rules
 
 - A transaction can have zero or more attachments.
-- URL attachments are references only; Kassiber does not fetch or mirror them.
+- URL attachments are references only; Kassiber does not mirror linked content.
+  Desktop title previews are bounded metadata lookups and should not index body
+  content. Users can edit the display label without changing the stored URL.
 - File attachments are copied into managed local storage and tracked by hash.
 - Deleting a transaction deletes attachment rows via FK behavior.
 - Backup must account for the DB plus any managed copied files.

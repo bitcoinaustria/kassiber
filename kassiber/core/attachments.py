@@ -505,6 +505,31 @@ def remove_attachment(
     return attachment
 
 
+def rename_attachment(
+    conn,
+    data_root: str,
+    workspace_ref: str | None,
+    profile_ref: str | None,
+    attachment_id: str,
+    label: str,
+    hooks: AttachmentHooks,
+):
+    _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    clean_label = (label or "").strip()
+    if not clean_label:
+        raise AppError("Attachment label cannot be empty", code="validation")
+    row = _select_attachment_row(conn, profile["id"], attachment_id)
+    if not row:
+        raise AppError(f"Attachment '{attachment_id}' not found", code="not_found")
+    conn.execute(
+        "UPDATE attachments SET label = ? WHERE profile_id = ? AND id = ?",
+        (clean_label, profile["id"], attachment_id),
+    )
+    conn.commit()
+    updated = _select_attachment_row(conn, profile["id"], attachment_id)
+    return _attachment_row_to_dict(updated, _attachments_root(data_root))
+
+
 def verify_attachments(
     conn,
     data_root: str,
@@ -596,6 +621,7 @@ __all__ = [
     "copy_attachments",
     "gc_attachments",
     "list_attachments",
+    "rename_attachment",
     "remove_attachment",
     "verify_attachments",
 ]

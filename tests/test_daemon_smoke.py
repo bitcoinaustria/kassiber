@@ -4978,6 +4978,22 @@ class DaemonSmokeTest(unittest.TestCase):
             _write_payload(
                 proc,
                 {
+                    "request_id": "att-rename-1",
+                    "kind": "ui.attachments.rename",
+                    "args": {
+                        "attachment": url_added["data"]["id"],
+                        "label": "Invoice approval link",
+                    },
+                },
+            )
+            renamed = _read_payload_timeout(proc)
+            self.assertEqual(renamed["kind"], "ui.attachments.rename")
+            self.assertEqual(renamed["data"]["label"], "Invoice approval link")
+            self.assertEqual(renamed["data"]["url"], "https://example.test/invoice/42")
+
+            _write_payload(
+                proc,
+                {
                     "request_id": "att-list-1",
                     "kind": "ui.attachments.list",
                     "args": {"transaction": "seed-inbound-1"},
@@ -4986,6 +5002,10 @@ class DaemonSmokeTest(unittest.TestCase):
             listed = _read_payload_timeout(proc)
             self.assertEqual(listed["kind"], "ui.attachments.list")
             self.assertEqual(len(listed["data"]["attachments"]), 2)
+            self.assertIn(
+                "Invoice approval link",
+                [item["label"] for item in listed["data"]["attachments"]],
+            )
 
             _write_payload(
                 proc,
