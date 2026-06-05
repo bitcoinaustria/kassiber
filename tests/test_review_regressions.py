@@ -929,6 +929,7 @@ class ReviewRegressionTest(unittest.TestCase):
             [
                 ("BTC-EUR", "2026-01-01T00:00:00Z", 62_000, "manual", now, "daily", "close"),
                 ("BTC-EUR", "2026-01-02T00:00:00Z", 62_000, "manual", now, "daily", "close"),
+                ("BTC-EUR", "2026-01-03T00:00:00Z", 62_000, "manual", now, "daily", "close"),
             ],
         )
         conn.executemany(
@@ -1016,6 +1017,31 @@ class ReviewRegressionTest(unittest.TestCase):
                     "{}",
                     now,
                 ),
+                (
+                    "swap-payment-out",
+                    profile["workspace_id"],
+                    profile["id"],
+                    btc_wallet["id"],
+                    "swap-payment-out",
+                    "fp-swap-payment-out",
+                    "2026-01-03T10:00:00Z",
+                    "2026-01-03T10:10:00Z",
+                    "outbound",
+                    "BTC",
+                    btc_to_msat("0.01000000"),
+                    0,
+                    "EUR",
+                    62_000,
+                    -620,
+                    "import",
+                    "swap",
+                    "Swap payment out",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
             ],
         )
         conn.execute(
@@ -1047,7 +1073,7 @@ class ReviewRegressionTest(unittest.TestCase):
 
         self.assertEqual(
             [point["date"] for point in overview["portfolioSeries"]],
-            ["2026-01-01", "2026-01-02"],
+            ["2026-01-01", "2026-01-02", "2026-01-03"],
         )
         self.assertAlmostEqual(
             overview["portfolioSeries"][0]["balanceBtc"],
@@ -1059,11 +1085,27 @@ class ReviewRegressionTest(unittest.TestCase):
             0.12413298,
             places=8,
         )
+        self.assertAlmostEqual(
+            overview["portfolioSeries"][2]["balanceBtc"],
+            0.11413298,
+            places=8,
+        )
         self.assertLess(
             overview["portfolioSeries"][1]["balanceBtc"],
             overview["portfolioSeries"][0]["balanceBtc"],
         )
-        self.assertAlmostEqual(overview["fiat"]["eurBalance"], 7696.24476, places=4)
+        self.assertLess(
+            overview["portfolioSeries"][2]["balanceBtc"],
+            overview["portfolioSeries"][1]["balanceBtc"],
+        )
+        payment_activity = [
+            row for row in overview["activityTxs"] if row["id"] == "swap-payment-out"
+        ]
+        self.assertEqual(len(payment_activity), 1)
+        self.assertEqual(payment_activity[0]["type"], "Swap")
+        self.assertNotIn("pair", payment_activity[0])
+        self.assertAlmostEqual(payment_activity[0]["balanceBtc"], 0.11413298)
+        self.assertAlmostEqual(overview["fiat"]["eurBalance"], 7076.24476, places=4)
 
     def test_overview_connection_balances_use_raw_wallet_transactions_when_journals_are_partial(self):
         conn = open_db(self.data_root)
