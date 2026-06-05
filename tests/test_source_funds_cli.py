@@ -364,6 +364,26 @@ class SourceFundsCliTest(unittest.TestCase):
             args.append("--save-case")
         return self.cli(*args)["data"]
 
+    def test_source_funds_report_warns_on_raw_privacy_hop_evidence(self):
+        self._seed_single_target()
+        target_id = self._tx_id("Target", "target-basic")
+        with self._db() as conn:
+            conn.execute(
+                "UPDATE transactions SET raw_json = ? WHERE id = ?",
+                (
+                    json.dumps({"privacy_hop": "payjoin", "source": "privacy_import"}),
+                    target_id,
+                ),
+            )
+            conn.commit()
+
+        report = self._source_funds_report_for_target(
+            target="target-basic",
+            amount="0.20000000",
+        )
+        codes = {finding["code"] for finding in report["findings"]}
+        self.assertIn("privacy_hop_unresolved", codes)
+
     def test_source_funds_review_gates_snapshot_and_pdf(self):
         self._init_default_workspace()
         for label, csv_name in [

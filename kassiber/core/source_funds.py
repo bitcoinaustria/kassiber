@@ -15,6 +15,7 @@ from ..msat import btc_to_msat, dec, msat_to_btc
 from ..source_funds_pdf_report import write_source_funds_pdf
 from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
 from ..wallet_descriptors import normalize_asset_code, normalize_chain, normalize_network
+from .privacy_hops import privacy_hop_type_from_raw
 from .source_funds_hints import enrich_findings_with_next_steps
 
 
@@ -1307,6 +1308,10 @@ def _raw_evidence_values(row: Mapping[str, Any]) -> list[tuple[str, str]]:
     return values
 
 
+def _raw_privacy_hop(row: Mapping[str, Any]) -> str | None:
+    return privacy_hop_type_from_raw(row["raw_json"])
+
+
 def _target_scoped_transaction_ids(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -2074,6 +2079,19 @@ def build_report(
         node_id = f"tx:{tx_id}"
         is_target_tx = tx_id == target["id"]
         nodes[node_id] = _tx_node(tx, mode, required_msat, is_target=is_target_tx)
+        raw_privacy_hop = _raw_privacy_hop(tx)
+        if raw_privacy_hop:
+            _add_finding(
+                findings,
+                "privacy_hop_unresolved",
+                "warning",
+                (
+                    f"{raw_privacy_hop.replace('_', ' ').title()} evidence marks this "
+                    "transaction as an opaque privacy boundary; explicit supporting "
+                    "evidence is needed before treating upstream ownership as proven."
+                ),
+                ref=tx_id,
+            )
         disclosed_txid = _public_tx_id(tx, mode, is_target=is_target_tx)
         if disclosed_txid:
             disclosure_txids.add(disclosed_txid)

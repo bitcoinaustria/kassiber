@@ -8,6 +8,7 @@ from typing import Any, Literal, Mapping, Optional, Sequence
 from ..msat import msat_to_btc
 from . import pricing
 from .austrian import infer_outbound_regimes, infer_regime_from_timestamp, resolve_pool_id
+from .privacy_hops import privacy_hop_evidence_from_raw
 
 # Austrian tax-semantic markers carried on NormalizedTaxEvent / NormalizedTaxTransfer.
 # The rp2 AT plugin reads these through the `notes` channel of InTransaction /
@@ -145,6 +146,10 @@ def _pricing_review_detail(row: Mapping[str, Any], wallet_label: str, asset: str
     }
 
 
+def _privacy_hop_evidence(row: Mapping[str, Any]) -> dict[str, Any] | None:
+    return privacy_hop_evidence_from_raw(_row_get(row, "raw_json"))
+
+
 def normalize_tax_asset_inputs(
     profile: Mapping[str, Any],
     asset: str,
@@ -278,6 +283,22 @@ def normalize_tax_asset_inputs(
         fee = msat_to_btc(row["fee"])
         description = row["note"] or row["description"] or row["kind"] or row["id"]
         direction = row["direction"]
+        privacy_hop = _privacy_hop_evidence(row)
+        if privacy_hop:
+            quarantines.append(
+                build_tax_quarantine(
+                    profile,
+                    row,
+                    "privacy_hop_unresolved",
+                    {
+                        "wallet": wallet["label"],
+                        "asset": asset,
+                        "direction": direction,
+                        **privacy_hop,
+                    },
+                )
+            )
+            continue
         if direction == "inbound":
             if _pricing_needs_review(row):
                 quarantines.append(

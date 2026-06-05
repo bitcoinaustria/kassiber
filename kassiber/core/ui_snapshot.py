@@ -3091,6 +3091,7 @@ def _wallet_utxo_row_for_ai(row: dict[str, Any]) -> dict[str, Any]:
     redacted.pop("address_label", None)
     redacted.pop("branch_index", None)
     redacted.pop("address_index", None)
+    redacted.pop("anon_history", None)
     return redacted
 
 

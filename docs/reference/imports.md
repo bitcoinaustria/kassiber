@@ -69,6 +69,19 @@ For inbound transactions, explicit earn-like `kind` values such as `income`,
 RP2 earn-like receipts during journal processing. Unlabeled inbound rows stay
 conservative and process as acquisitions.
 
+## Privacy-hop evidence
+
+Privacy-aware importers may mark a transaction with sanitized raw evidence such
+as `privacy_hop=coinjoin`, `privacy_hop=payjoin`,
+`privacy_hop=payment_in_coinjoin`, `privacy_hop=sweep`, or
+`islikelycoinjoin=true`. Kassiber treats these markers as evidence of an opaque
+privacy boundary, not as proof of exact upstream ownership, round membership,
+participant mapping, or fee allocation. Journal normalization therefore emits
+`privacy_hop_unresolved` until explicit user-owned provenance, reviewed links,
+or protocol-specific same-owner recovery evidence resolves the boundary.
+Source-of-funds reports surface the same marker as a warning instead of walking
+through unrelated participant inputs.
+
 ## BTCPay
 
 Import directly into an existing wallet:

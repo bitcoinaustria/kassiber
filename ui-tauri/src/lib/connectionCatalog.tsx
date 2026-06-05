@@ -43,6 +43,16 @@ export type SetupKind =
   | "backend-settings"
   | "planned";
 
+export type ConnectionSourceFormat =
+  | "csv"
+  | "json"
+  | "phoenix_csv"
+  | "river_csv"
+  | "bullbitcoin_csv"
+  | "coinfinity_csv"
+  | "21bitcoin_csv"
+  | "strike_csv";
+
 export interface ConnectionSource {
   id: string;
   title: string;
@@ -58,7 +68,7 @@ export interface ConnectionSource {
   docsHref?: string;
   setupKind?: SetupKind;
   walletKind?: string;
-  sourceFormat?: "csv" | "json" | "phoenix_csv" | "river_csv" | "bullbitcoin_csv" | "coinfinity_csv" | "21bitcoin_csv" | "strike_csv";
+  sourceFormat?: ConnectionSourceFormat;
   chain?: "bitcoin" | "liquid";
   network?: string;
   details: string[];

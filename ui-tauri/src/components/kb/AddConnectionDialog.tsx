@@ -30,6 +30,7 @@ import {
   CONNECTION_SOURCES,
   type ConnectionCategory,
   type ConnectionSource,
+  type ConnectionSourceFormat,
 } from "@/lib/connectionCatalog";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 import { detectWalletMaterial } from "@/lib/walletMaterialFormat";
@@ -58,7 +59,7 @@ interface SetupFormState {
   gapLimit: string;
   targetWallet: string;
   sourceFile: string;
-  sourceFormat: "csv" | "json" | "phoenix_csv" | "river_csv" | "bullbitcoin_csv" | "coinfinity_csv" | "21bitcoin_csv" | "strike_csv";
+  sourceFormat: ConnectionSourceFormat;
   bullImportMode: "relevant" | "full";
   btcpayStoreId: string;
   btcpayPaymentMethodId: string;
