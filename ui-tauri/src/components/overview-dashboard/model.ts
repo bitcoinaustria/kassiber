@@ -1541,6 +1541,16 @@ export function activityMarkerView(
   };
 }
 
+export function brushedActivityMarkers(
+  activityMarkers: TreasuryChartPoint[],
+  selectedChartDisplayData: TreasuryChartPoint[],
+) {
+  const selectedDates = new Set(
+    selectedChartDisplayData.map((point) => String(point.date)),
+  );
+  return activityMarkers.filter((point) => selectedDates.has(String(point.date)));
+}
+
 export function expandFallbackYearData(
   data: Array<{ month: string; thisYear: number; prevYear: number }>,
   priceEur: number,

@@ -39,6 +39,7 @@ import {
   activeMarketFiatCurrency,
   activeMarketFiatRate,
   activityMarkerView,
+  brushedActivityMarkers,
   buildTreasuryChartStats,
   blurClass,
   defaultTreasurySeriesVisibility,
@@ -343,6 +344,10 @@ export const BtcActivityChart = ({
             effectiveBrushRange.endIndex + 1,
           )
         : chartDisplayData;
+    const selectedActivityMarkers = brushedActivityMarkers(
+      visibleActivityMarkers,
+      selectedChartDisplayData,
+    );
     const handleBrushChange = (range: TreasuryBrushChange) => {
       const normalizedRange = normalizeTreasuryBrushRange(
         chartDisplayData,
@@ -877,7 +882,7 @@ export const BtcActivityChart = ({
                   {seriesVisible.events && (
                     <Scatter
                       yAxisId="btc"
-                      data={visibleActivityMarkers}
+                      data={selectedActivityMarkers}
                       dataKey="markerBalanceBtc"
                       name="Activity"
                       fill="transparent"
