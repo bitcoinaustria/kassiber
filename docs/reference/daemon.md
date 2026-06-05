@@ -249,6 +249,9 @@ Badbank/Toxic Change, Premix, Postmix, and Ricochet. The response returns a
 redacted logical group plus child wallet summaries and safe warnings; it does
 not return backup contents, recovery words, passphrases, descriptors, xpubs,
 PayNym secrets, backend URLs, tokens, or raw file payloads.
+Explicit Samourai descriptor source sets must include both receive and change
+coverage for scanned sections, either via `descriptor` plus `change_descriptor`
+or a descriptor expression that expands to branches `0` and `1`.
 
 `ui.wallets.preview_descriptor` is a read-only helper for the connection
 setup form. It accepts `wallet_material` (or explicit `descriptor` /

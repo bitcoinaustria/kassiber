@@ -59,6 +59,7 @@ from kassiber.ai.tools import (
 from kassiber.ai.providers import list_with_default
 from kassiber.db import open_db
 from kassiber.errors import AppError
+from kassiber.redaction import redact_secret_text, redact_secret_value
 
 
 class SseParserTest(unittest.TestCase):
@@ -136,6 +137,25 @@ class SseParserTest(unittest.TestCase):
 
 
 class ToolCatalogPromptTest(unittest.TestCase):
+    def test_shared_redaction_treats_recovery_material_as_secret(self):
+        text = redact_secret_text(
+            "mnemonic=abandon abandon abandon recovery_phrase=legal winner thank seed=letter"
+        )
+        self.assertNotIn("abandon", text)
+        self.assertNotIn("legal", text)
+        self.assertNotIn("winner", text)
+        self.assertNotIn("letter", text)
+        self.assertEqual(
+            redact_secret_value(
+                {
+                    "mnemonic": "abandon abandon abandon",
+                    "seed_words": "legal winner thank",
+                    "safe": "ok",
+                }
+            ),
+            {"mnemonic": "[redacted]", "seed_words": "[redacted]", "safe": "ok"},
+        )
+
     def test_tool_catalog_stability(self):
         expected_tool_names = {
             "status",

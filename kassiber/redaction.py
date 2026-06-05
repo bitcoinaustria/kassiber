@@ -14,10 +14,13 @@ SENSITIVE_KEY_PARTS = (
     "auth_response",
     "cookie",
     "descriptor",
+    "mnemonic",
     "password",
     "passphrase",
     "private",
+    "recovery",
     "secret",
+    "seed",
     "token",
     "xprv",
 )
@@ -28,15 +31,26 @@ _DESCRIPTOR_RE = re.compile(r"\b(?:wpkh|sh|wsh|tr|pkh|combo)\([^)\n]{16,}\)", re
 _BEARER_RE = re.compile(r"\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*")
 _SK_SECRET_RE = re.compile(r"\bsk-[A-Za-z0-9._~+/-]{6,}\b")
 _ASSIGNED_SECRET_RE = re.compile(
-    r"(?P<key>\b(?:api[_-]?key|auth[_-]?header|cookie|descriptor|passphrase|password|secret|token)\b)"
+    r"(?P<key>\b(?:api[_-]?key|auth[_-]?header|cookie|descriptor|mnemonic|"
+    r"passphrase|password|recovery[_-]?phrase|secret|seed(?:[_-]?(?:phrase|words))?|token)\b)"
     r"(?P<sep>\s*[:=]\s*)"
     r"(?P<quote>['\"]?)"
     r"(?P<value>[^'\"\s,;}{]+)",
     re.IGNORECASE,
 )
 _JSON_SECRET_RE = re.compile(
-    r"(?P<prefix>['\"](?:api[_-]?key|auth[_-]?header|cookie|descriptor|passphrase|password|secret|token)['\"]\s*:\s*['\"])"
+    r"(?P<prefix>['\"](?:api[_-]?key|auth[_-]?header|cookie|descriptor|mnemonic|"
+    r"passphrase|password|recovery[_-]?phrase|secret|seed(?:[_-]?(?:phrase|words))?|token)"
+    r"['\"]\s*:\s*['\"])"
     r"(?P<value>[^'\"]+)",
+    re.IGNORECASE,
+)
+_RECOVERY_ASSIGNMENT_RE = re.compile(
+    r"(?P<key>\b(?:mnemonic|recovery[_-]?phrase|seed(?:[_-]?(?:phrase|words))?)\b)"
+    r"(?P<sep>\s*[:=]\s*)"
+    r"(?P<quote>['\"]?)"
+    r"(?P<value>[^,;}{]*?)"
+    r"(?=(?:\s+[A-Za-z0-9_.-]+\s*[:=])|[,;}'\"]|$)",
     re.IGNORECASE,
 )
 
@@ -49,7 +63,8 @@ def is_sensitive_key(key: str) -> bool:
 def redact_secret_text(value: str) -> str:
     """Redact secret-shaped material from text that may cross a trust boundary."""
 
-    text = _PRIVATE_KEY_RE.sub("[redacted-private-key]", value)
+    text = _RECOVERY_ASSIGNMENT_RE.sub(r"\g<key>\g<sep>\g<quote>[redacted]", value)
+    text = _PRIVATE_KEY_RE.sub("[redacted-private-key]", text)
     text = _EXTENDED_KEY_RE.sub("[redacted-extended-key]", text)
     text = _DESCRIPTOR_RE.sub("[redacted-descriptor]", text)
     text = _BEARER_RE.sub("Bearer [redacted]", text)

@@ -169,6 +169,11 @@ privacy boundary, minimum mix count, exact mix-count confidence when known, and
 safe warning state. Descriptor and xpub material remain behind the existing
 wallet redaction boundary and can only be revealed through the explicit
 `wallets reveal-descriptor` owner command.
+Explicit descriptor source-set imports must cover both Samourai descriptor
+branches for each scanned section: branch `0` receive and branch `1` change.
+Provide a separate `change_descriptor` or a descriptor expression that expands
+to both branches; single-branch descriptors are rejected because they can miss
+change history and understate balances, reports, and source-of-funds evidence.
 
 Accounting behavior is intentionally conservative:
 

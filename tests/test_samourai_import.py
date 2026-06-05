@@ -453,6 +453,35 @@ class SamouraiImportTest(unittest.TestCase):
             self.assertEqual(raised.exception.code, "validation")
             self.assertIn("origin", str(raised.exception).lower())
 
+            single_branch_path = Path(tmp) / "single-branch-samourai-sources.json"
+            single_branch_path.write_text(
+                json.dumps(
+                    {
+                        "network": "main",
+                        "children": [
+                            {
+                                "section": "postmix",
+                                "script_type": "p2wpkh",
+                                "root_path": "m/84'/0'/2147483646'",
+                                "descriptor": postmix_source["config"]["descriptor"],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaises(AppError) as raised:
+                core_samourai.import_samourai_wallet_group(
+                    conn,
+                    "Main",
+                    "Default",
+                    label="Single Branch Samourai",
+                    source_set_file=str(single_branch_path),
+                    network="main",
+                )
+            self.assertEqual(raised.exception.code, "validation")
+            self.assertEqual(raised.exception.details["missing_branches"], [1])
+
             duplicate_path = Path(tmp) / "duplicate-samourai-sources.json"
             duplicate_path.write_text(
                 json.dumps(

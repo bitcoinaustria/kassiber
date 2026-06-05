@@ -1157,16 +1157,18 @@ function ConnectionDetailView({
                 value={`${samouraiMetadata.pool_denomination_sat.toLocaleString("en-US")} sats`}
               />
             ) : null}
-            <DetailRow
-              label="Coins"
-              value={
-                samouraiInventory?.freshness.active_count?.toLocaleString(
-                  "en-US",
-                ) ??
-                samouraiInventory?.summary?.count?.toLocaleString("en-US") ??
-                "—"
-              }
-            />
+            {samouraiMetadata.role !== "parent" ? (
+              <DetailRow
+                label="Coins"
+                value={
+                  samouraiInventory?.freshness.active_count?.toLocaleString(
+                    "en-US",
+                  ) ??
+                  samouraiInventory?.summary?.count?.toLocaleString("en-US") ??
+                  "—"
+                }
+              />
+            ) : null}
           </CardContent>
           <div className="space-y-2 border-t px-4 py-3 text-sm">
             {samouraiMetadata.toxic_change ? (

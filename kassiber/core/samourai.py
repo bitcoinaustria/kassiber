@@ -635,12 +635,31 @@ def _validate_descriptor_config(config: dict[str, Any]) -> None:
 def _validate_descriptor_origin_matches_template(
     config: dict[str, Any],
     *,
+    template: SamouraiAccountTemplate,
     root_path: str,
 ) -> None:
     try:
         plan = load_descriptor_plan(config)
         if plan is None:
             raise ValueError("missing descriptor")
+        expected_branches = {0, 1} if template.receive_change else {0}
+        actual_branches = {branch.branch_index for branch in plan.branches}
+        missing_branches = sorted(expected_branches - actual_branches)
+        if missing_branches:
+            raise AppError(
+                "Samourai descriptor source is missing a required receive/change branch",
+                code="validation",
+                hint=(
+                    "Include both descriptor and change_descriptor, or a ranged descriptor "
+                    "covering branches 0 and 1."
+                ),
+                details={
+                    "section": template.section,
+                    "root_path": root_path,
+                    "missing_branches": missing_branches,
+                },
+                retryable=False,
+            )
         for branch in plan.branches:
             target = derive_descriptor_target(plan, branch.branch_index, 0)
             expected = f"{root_path}/{branch.branch_index}/0"
@@ -649,6 +668,8 @@ def _validate_descriptor_origin_matches_template(
                 raise ValueError(
                     f"expected descriptor origin {expected}, got {sorted(derivation_paths)}"
                 )
+    except AppError:
+        raise
     except ValueError as exc:
         raise AppError(
             "Samourai descriptor origin does not match the declared account path",
@@ -813,7 +834,7 @@ def _explicit_descriptor_source(
     if change_descriptor:
         config["change_descriptor"] = change_descriptor
     _validate_descriptor_config(config)
-    _validate_descriptor_origin_matches_template(config, root_path=root_path)
+    _validate_descriptor_origin_matches_template(config, template=template, root_path=root_path)
     return {
         "section": template.section,
         "label": str_or_none(raw_source.get("label")) or template.label,
