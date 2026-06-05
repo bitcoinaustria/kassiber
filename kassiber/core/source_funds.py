@@ -15,7 +15,7 @@ from ..msat import btc_to_msat, dec, msat_to_btc
 from ..source_funds_pdf_report import write_source_funds_pdf
 from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
 from ..wallet_descriptors import normalize_asset_code, normalize_chain, normalize_network
-from .privacy_hops import privacy_hop_type_from_raw
+from .privacy_hops import privacy_hop_type_from_row
 from .source_funds_hints import enrich_findings_with_next_steps
 
 
@@ -1309,7 +1309,7 @@ def _raw_evidence_values(row: Mapping[str, Any]) -> list[tuple[str, str]]:
 
 
 def _raw_privacy_hop(row: Mapping[str, Any]) -> str | None:
-    return privacy_hop_type_from_raw(row["raw_json"])
+    return privacy_hop_type_from_row(row)
 
 
 def _target_scoped_transaction_ids(
@@ -1402,6 +1402,8 @@ def suggest_links(
         if out_tx["wallet_id"] == in_tx["wallet_id"]:
             continue
         if not in_scope(out_tx, in_tx):
+            continue
+        if _raw_privacy_hop(out_tx) or _raw_privacy_hop(in_tx):
             continue
         link = _insert_suggestion(
             conn,

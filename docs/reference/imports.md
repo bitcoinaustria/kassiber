@@ -71,16 +71,21 @@ conservative and process as acquisitions.
 
 ## Privacy-hop evidence
 
-Privacy-aware importers may mark a transaction with sanitized raw evidence such
-as `privacy_hop=coinjoin`, `privacy_hop=payjoin`,
-`privacy_hop=payment_in_coinjoin`, `privacy_hop=sweep`, or
-`islikelycoinjoin=true`. Kassiber treats these markers as evidence of an opaque
-privacy boundary, not as proof of exact upstream ownership, round membership,
-participant mapping, or fee allocation. Journal normalization therefore emits
-`privacy_hop_unresolved` until explicit user-owned provenance, reviewed links,
-or protocol-specific same-owner recovery evidence resolves the boundary.
-Source-of-funds reports surface the same marker as a warning instead of walking
-through unrelated participant inputs.
+Privacy-aware importers may mark a transaction with the typed
+`privacy_boundary` field. Supported values are `coinjoin`, `payjoin`,
+`payment_in_coinjoin`, and `sweep`. Generic imports also accept source spellings
+such as `privacy_hop`, `privacyHop`, `privacyBoundary`, and
+`islikelycoinjoin=true`; the import boundary normalizes those spellings into the
+stored `privacy_boundary` column so tax and source-funds logic do not depend on
+ad hoc `raw_json` parsing.
+
+Kassiber treats this marker as evidence of an opaque privacy boundary, not as
+proof of exact upstream ownership, round membership, participant mapping, or fee
+allocation. Journal normalization therefore emits `privacy_hop_unresolved` until
+explicit user-owned provenance, reviewed links, or protocol-specific same-owner
+recovery evidence resolves the boundary. Source-of-funds reports surface the
+same marker as a warning instead of walking through unrelated participant inputs
+or suggesting automatic same-transaction-id self-transfer links across it.
 
 ## BTCPay
 

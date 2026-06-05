@@ -33,6 +33,7 @@ from ..msat import btc_to_msat, dec
 from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
 from ..util import str_or_none
 from ..wallet_descriptors import normalize_asset_code
+from .privacy_hops import privacy_boundary_from_import_record
 
 INBOUND_DIRECTIONS = {"in", "inbound", "receive", "received", "deposit", "credit", "buy"}
 OUTBOUND_DIRECTIONS = {"out", "outbound", "send", "sent", "withdrawal", "withdraw", "debit", "sell"}
@@ -108,8 +109,8 @@ _EXISTING_TRANSACTION_COLUMNS = """
        confirmed_at, fiat_rate, fiat_value, fiat_price_source, fiat_rate_exact,
        fiat_value_exact, pricing_source_kind, pricing_provider, pricing_pair,
        pricing_timestamp, pricing_fetched_at, pricing_granularity, pricing_method,
-       pricing_external_ref, pricing_quality, kind, description, counterparty,
-       raw_json, payment_hash, payment_hash_source
+       pricing_external_ref, pricing_quality, kind, privacy_boundary, description,
+       counterparty, raw_json, payment_hash, payment_hash_source
 """
 
 
@@ -458,6 +459,8 @@ def _transaction_merge_updates(existing: Mapping[str, Any], normalized: Mapping[
         or not existing["kind"]
     ) and normalized["kind"]:
         updates["kind"] = normalized["kind"]
+    if not existing["privacy_boundary"] and normalized["privacy_boundary"]:
+        updates["privacy_boundary"] = normalized["privacy_boundary"]
     if (
         (exchange_execution_overrides and _metadata_field_is_import_authored(existing, "description"))
         or not existing["description"]
@@ -803,6 +806,7 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
         "fiat_currency": _import_price_currency(record),
         **payload,
         "kind": record.get("kind"),
+        "privacy_boundary": privacy_boundary_from_import_record(record),
         "description": record.get("description"),
         "counterparty": record.get("counterparty"),
         "payment_hash": payment_hash,
@@ -915,9 +919,10 @@ def insert_wallet_records(
                 fiat_rate, fiat_value, fiat_price_source, fiat_rate_exact,
                 fiat_value_exact, pricing_source_kind, pricing_provider, pricing_pair,
                 pricing_timestamp, pricing_fetched_at, pricing_granularity,
-                pricing_method, pricing_external_ref, pricing_quality, kind, description,
-                counterparty, raw_json, payment_hash, payment_hash_source, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                pricing_method, pricing_external_ref, pricing_quality, kind,
+                privacy_boundary, description, counterparty, raw_json,
+                payment_hash, payment_hash_source, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 tx_id,
@@ -948,6 +953,7 @@ def insert_wallet_records(
                 normalized["pricing_external_ref"],
                 normalized["pricing_quality"],
                 normalized["kind"],
+                normalized["privacy_boundary"],
                 normalized["description"],
                 normalized["counterparty"],
                 normalized["raw_json"],

@@ -46,19 +46,6 @@ def _normalize_int(value: Any, field: str, *, minimum: int | None = None) -> int
     return normalized
 
 
-def _normalize_bool(value: Any) -> bool | None:
-    if value is None or value == "":
-        return None
-    if isinstance(value, bool):
-        return value
-    text = str(value).strip().lower()
-    if text in {"1", "true", "yes", "on"}:
-        return True
-    if text in {"0", "false", "no", "off"}:
-        return False
-    return None
-
-
 def _normalize_observed_output(
     output: Mapping[str, Any],
     *,
@@ -81,22 +68,6 @@ def _normalize_observed_output(
     confirmations = _normalize_int(output.get("confirmations"), "confirmations", minimum=0)
     branch_index = _normalize_int(output.get("branch_index"), "branch_index")
     address_index = _normalize_int(output.get("address_index"), "address_index")
-    anonymity_score = _normalize_int(
-        output.get("anonymity_score", output.get("anonymityScore")),
-        "anonymity_score",
-        minimum=0,
-    )
-    excluded_from_coinjoin = _normalize_bool(
-        output.get("excluded_from_coinjoin", output.get("excludedFromCoinjoin"))
-    )
-    spent_by = str_or_none(output.get("spent_by", output.get("spentBy")))
-    spent_flag = _normalize_bool(output.get("spent"))
-    spent_at = str_or_none(output.get("spent_at"))
-    if spent_at is None and (spent_by or spent_flag):
-        spent_at = seen_at
-    anon_history = output.get("anon_history", output.get("anonHistory", []))
-    if not isinstance(anon_history, list):
-        anon_history = []
     status = str_or_none(output.get("confirmation_status")) or (
         "confirmed" if block_height and block_height > 0 else "mempool"
     )
@@ -124,15 +95,7 @@ def _normalize_observed_output(
         "branch_label": str_or_none(output.get("branch_label")),
         "branch_index": branch_index,
         "address_index": address_index,
-        "anonymity_score": anonymity_score,
-        "spent_by": spent_by,
-        "excluded_from_coinjoin": (
-            1 if excluded_from_coinjoin is True else 0 if excluded_from_coinjoin is False else None
-        ),
-        "key_state": str_or_none(output.get("key_state", output.get("keyState"))),
-        "anon_history_json": json.dumps(json_ready(anon_history), sort_keys=True),
         "seen_at": seen_at,
-        "spent_at": spent_at,
         "raw_json": json.dumps(json_ready(output.get("raw") or {}), sort_keys=True),
     }
 
@@ -167,7 +130,7 @@ def update_wallet_output_inventory(
         )
         for output in observed_outputs
     ]
-    active_outpoints = {row["outpoint"] for row in normalized if row["spent_at"] is None}
+    seen_outpoints = {row["outpoint"] for row in normalized}
     for row in normalized:
         conn.execute(
             """
@@ -176,15 +139,13 @@ def update_wallet_output_inventory(
                 chain, network, asset, amount, txid, vout, outpoint,
                 confirmation_status, confirmations, block_height, block_time,
                 address, address_label, branch_label, branch_index, address_index,
-                anonymity_score, spent_by, excluded_from_coinjoin, key_state,
-                anon_history_json, first_seen_at, last_seen_at, spent_at, raw_json
+                first_seen_at, last_seen_at, spent_at, raw_json
             ) VALUES(
                 ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?,
-                ?, ?, ?, ?
+                ?, ?, NULL, ?
             )
             ON CONFLICT(wallet_id, txid, vout) DO UPDATE SET
                 backend_name = excluded.backend_name,
@@ -203,13 +164,8 @@ def update_wallet_output_inventory(
                 branch_label = excluded.branch_label,
                 branch_index = excluded.branch_index,
                 address_index = excluded.address_index,
-                anonymity_score = excluded.anonymity_score,
-                spent_by = excluded.spent_by,
-                excluded_from_coinjoin = excluded.excluded_from_coinjoin,
-                key_state = excluded.key_state,
-                anon_history_json = excluded.anon_history_json,
                 last_seen_at = excluded.last_seen_at,
-                spent_at = excluded.spent_at,
+                spent_at = NULL,
                 raw_json = excluded.raw_json
             """,
             (
@@ -235,19 +191,13 @@ def update_wallet_output_inventory(
                 row["branch_label"],
                 row["branch_index"],
                 row["address_index"],
-                row["anonymity_score"],
-                row["spent_by"],
-                row["excluded_from_coinjoin"],
-                row["key_state"],
-                row["anon_history_json"],
                 timestamp,
                 timestamp,
-                row["spent_at"],
                 row["raw_json"],
             ),
         )
-    if active_outpoints:
-        placeholders = ", ".join("?" for _ in active_outpoints)
+    if seen_outpoints:
+        placeholders = ", ".join("?" for _ in seen_outpoints)
         spent_cursor = conn.execute(
             f"""
             UPDATE wallet_utxos
@@ -256,7 +206,7 @@ def update_wallet_output_inventory(
               AND spent_at IS NULL
               AND outpoint NOT IN ({placeholders})
             """,
-            (timestamp, wallet["id"], *sorted(active_outpoints)),
+            (timestamp, wallet["id"], *sorted(seen_outpoints)),
         )
     else:
         spent_cursor = conn.execute(
@@ -294,7 +244,7 @@ def update_wallet_output_inventory(
             chain,
             network,
             len(normalized),
-            len(active_outpoints),
+            len(seen_outpoints),
             timestamp,
         ),
     )
@@ -302,7 +252,7 @@ def update_wallet_output_inventory(
         conn.commit()
     return {
         "observed": len(normalized),
-        "active": len(active_outpoints),
+        "active": len(seen_outpoints),
         "spent": int(spent_cursor.rowcount or 0),
         "last_seen_at": timestamp,
     }
@@ -587,18 +537,7 @@ def list_wallet_output_inventory(
     ).fetchall()
     output = []
     for row in rows:
-        row_keys = set(row.keys()) if hasattr(row, "keys") else set()
         amount_msat = int(row["amount"])
-        try:
-            anon_history_json = row["anon_history_json"] if "anon_history_json" in row_keys else "[]"
-            anon_history = json.loads(anon_history_json or "[]")
-        except (TypeError, ValueError, json.JSONDecodeError):
-            anon_history = []
-        if not isinstance(anon_history, list):
-            anon_history = []
-        excluded_from_coinjoin = (
-            row["excluded_from_coinjoin"] if "excluded_from_coinjoin" in row_keys else None
-        )
         output.append(
             {
                 "id": row["id"],
@@ -619,17 +558,6 @@ def list_wallet_output_inventory(
                 "branch_label": row["branch_label"] or "",
                 "branch_index": row["branch_index"],
                 "address_index": row["address_index"],
-                "anonymity_score": (
-                    row["anonymity_score"] if "anonymity_score" in row_keys else None
-                ),
-                "spent_by": row["spent_by"] if "spent_by" in row_keys and row["spent_by"] else "",
-                "excluded_from_coinjoin": (
-                    None
-                    if excluded_from_coinjoin is None
-                    else bool(excluded_from_coinjoin)
-                ),
-                "key_state": row["key_state"] if "key_state" in row_keys and row["key_state"] else "",
-                "anon_history": anon_history,
                 "source": {
                     "backend": row["backend_name"] or "",
                     "backend_kind": row["backend_kind"] or "",

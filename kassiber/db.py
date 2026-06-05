@@ -138,6 +138,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     taxability_override INTEGER,
     at_regime_override TEXT,
     at_category_override TEXT,
+    privacy_boundary TEXT,
     kind TEXT,
     description TEXT,
     counterparty TEXT,
@@ -191,11 +192,6 @@ CREATE TABLE IF NOT EXISTS wallet_utxos (
     branch_label TEXT,
     branch_index INTEGER,
     address_index INTEGER,
-    anonymity_score INTEGER,
-    spent_by TEXT,
-    excluded_from_coinjoin INTEGER,
-    key_state TEXT,
-    anon_history_json TEXT NOT NULL DEFAULT '[]',
     first_seen_at TEXT NOT NULL,
     last_seen_at TEXT NOT NULL,
     spent_at TEXT,
@@ -1162,6 +1158,7 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "transactions", "taxability_override", "INTEGER")
     ensure_column(conn, "transactions", "at_regime_override", "TEXT")
     ensure_column(conn, "transactions", "at_category_override", "TEXT")
+    ensure_column(conn, "transactions", "privacy_boundary", "TEXT")
     ensure_column(conn, "journal_entries", "fiat_value_exact", "TEXT")
     ensure_column(conn, "journal_entries", "unit_cost_exact", "TEXT")
     ensure_column(conn, "journal_entries", "cost_basis_exact", "TEXT")
@@ -1189,11 +1186,6 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "source_funds_cases", "recipient_reveal_mode_snapshot", "TEXT")
     ensure_column(conn, "source_funds_cases", "target_external_id", "TEXT")
     _backfill_source_funds_target_external_id(conn)
-    ensure_column(conn, "wallet_utxos", "anonymity_score", "INTEGER")
-    ensure_column(conn, "wallet_utxos", "spent_by", "TEXT")
-    ensure_column(conn, "wallet_utxos", "excluded_from_coinjoin", "INTEGER")
-    ensure_column(conn, "wallet_utxos", "key_state", "TEXT")
-    ensure_column(conn, "wallet_utxos", "anon_history_json", "TEXT NOT NULL DEFAULT '[]'")
     ensure_column(conn, "source_funds_recipients", "active", "INTEGER NOT NULL DEFAULT 1")
     _ensure_ai_provider_secret_refs_schema(conn)
     _drop_legacy_source_funds_recipients_unique(conn)

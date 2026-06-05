@@ -8,7 +8,7 @@ from typing import Any, Literal, Mapping, Optional, Sequence
 from ..msat import msat_to_btc
 from . import pricing
 from .austrian import infer_outbound_regimes, infer_regime_from_timestamp, resolve_pool_id
-from .privacy_hops import privacy_hop_evidence_from_raw
+from .privacy_hops import privacy_hop_evidence_from_row
 
 # Austrian tax-semantic markers carried on NormalizedTaxEvent / NormalizedTaxTransfer.
 # The rp2 AT plugin reads these through the `notes` channel of InTransaction /
@@ -147,7 +147,31 @@ def _pricing_review_detail(row: Mapping[str, Any], wallet_label: str, asset: str
 
 
 def _privacy_hop_evidence(row: Mapping[str, Any]) -> dict[str, Any] | None:
-    return privacy_hop_evidence_from_raw(_row_get(row, "raw_json"))
+    return privacy_hop_evidence_from_row(row)
+
+
+def _append_privacy_hop_quarantine(
+    quarantines: list[dict[str, Any]],
+    profile: Mapping[str, Any],
+    row: Mapping[str, Any],
+    wallet: Mapping[str, Any],
+    asset: str,
+    direction: str,
+    evidence: Mapping[str, Any],
+) -> None:
+    quarantines.append(
+        build_tax_quarantine(
+            profile,
+            row,
+            "privacy_hop_unresolved",
+            {
+                "wallet": wallet["label"],
+                "asset": asset,
+                "direction": direction,
+                **evidence,
+            },
+        )
+    )
 
 
 def normalize_tax_asset_inputs(
@@ -190,6 +214,30 @@ def normalize_tax_asset_inputs(
             in_row = pair["in"]
             from_wallet = wallet_refs_by_id[out_row["wallet_id"]]
             to_wallet = wallet_refs_by_id[in_row["wallet_id"]]
+            out_privacy_hop = _privacy_hop_evidence(out_row)
+            in_privacy_hop = _privacy_hop_evidence(in_row)
+            if out_privacy_hop or in_privacy_hop:
+                if out_privacy_hop:
+                    _append_privacy_hop_quarantine(
+                        quarantines,
+                        profile,
+                        out_row,
+                        from_wallet,
+                        asset,
+                        "transfer",
+                        out_privacy_hop,
+                    )
+                if in_privacy_hop:
+                    _append_privacy_hop_quarantine(
+                        quarantines,
+                        profile,
+                        in_row,
+                        to_wallet,
+                        asset,
+                        "transfer",
+                        in_privacy_hop,
+                    )
+                continue
             sent = msat_to_btc(out_row["amount"]) + msat_to_btc(out_row["fee"])
             received = msat_to_btc(in_row["amount"])
             if sent < received:
@@ -285,18 +333,14 @@ def normalize_tax_asset_inputs(
         direction = row["direction"]
         privacy_hop = _privacy_hop_evidence(row)
         if privacy_hop:
-            quarantines.append(
-                build_tax_quarantine(
-                    profile,
-                    row,
-                    "privacy_hop_unresolved",
-                    {
-                        "wallet": wallet["label"],
-                        "asset": asset,
-                        "direction": direction,
-                        **privacy_hop,
-                    },
-                )
+            _append_privacy_hop_quarantine(
+                quarantines,
+                profile,
+                row,
+                wallet,
+                asset,
+                direction,
+                privacy_hop,
             )
             continue
         if direction == "inbound":
