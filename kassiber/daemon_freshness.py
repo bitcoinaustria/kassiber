@@ -446,6 +446,7 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
             None,
             wallet_with_checkpoint,
             checkpoint=checkpoint,
+            progress_observer=progress,
         )
         check_cancelled()
         progress({"phase": core_freshness.PHASE_IMPORT, "wallet": wallet["label"]})

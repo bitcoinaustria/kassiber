@@ -62,6 +62,7 @@ class SyncBackendsTest(unittest.TestCase):
 
     def test_esplora_sync_adapter_returns_record_shape(self):
         target = {"address": "bc1qesplora", "script_pubkey": "0014" + "11" * 20}
+        progress = []
         sync_state = WalletSyncState(
             chain="bitcoin",
             network="bitcoin",
@@ -70,6 +71,7 @@ class SyncBackendsTest(unittest.TestCase):
             targets=[target],
             tracked_scripts={target["script_pubkey"]: target},
             history_cache={},
+            progress_observer=lambda payload: progress.append(dict(payload)),
         )
         tx = {
             "txid": "11" * 32,
@@ -106,6 +108,22 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertAlmostEqual(float(records[0]["amount"]), 0.00012345, places=12)
         self.assertEqual(records[0]["occurred_at"], timestamp_to_iso(1_700_000_000))
         self.assertEqual(records[0]["confirmed_at"], timestamp_to_iso(1_700_000_000))
+        self.assertIn(
+            {"phase": "backend_fetch", "step": "script_stats", "processed": 1, "total": 1},
+            progress,
+        )
+        self.assertIn(
+            {"phase": "backend_fetch", "step": "script_history", "processed": 1, "total": 1},
+            progress,
+        )
+        self.assertIn(
+            {"phase": "decode_enrich", "step": "transaction_decode", "processed": 1, "total": 1},
+            progress,
+        )
+        self.assertIn(
+            {"phase": "backend_fetch", "step": "utxo_fetch", "processed": 1, "total": 1},
+            progress,
+        )
 
     def test_esplora_checkpoint_skips_unchanged_script_pages(self):
         target = {"address": "bc1qesplora", "script_pubkey": "0014" + "11" * 20}

@@ -1,10 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  getTransport,
   normalizeExternalBrowserUrl,
   readBridgeNdjsonStream,
   type DaemonStreamRecord,
 } from "./transport";
+
+const originalFetch = globalThis.fetch;
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+  vi.restoreAllMocks();
+});
 
 function ndjsonResponse(chunks: string[]): Response {
   const encoder = new TextEncoder();
@@ -75,6 +83,31 @@ describe("bridge NDJSON stream reader", () => {
     expect(records).toEqual([]);
     expect(terminal.kind).toBe("auth_required");
     expect(terminal.data).toEqual({ scope: "unlock_database" });
+  });
+});
+
+describe("bridge daemon invoke transport", () => {
+  it("allocates a request id for regular invokes", async () => {
+    const requests: unknown[] = [];
+    globalThis.fetch = vi.fn(async (_input, init) => {
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      requests.push(body);
+      return new Response(
+        JSON.stringify({
+          kind: "status",
+          schema_version: 1,
+          request_id: body.request_id,
+          data: {},
+        }),
+      );
+    }) as typeof fetch;
+
+    const envelope = await getTransport("real").invoke({ kind: "status" });
+    const request = requests[0] as { request_id?: unknown };
+
+    expect(typeof request.request_id).toBe("string");
+    expect(String(request.request_id)).not.toHaveLength(0);
+    expect(envelope.request_id).toBe(request.request_id);
   });
 });
 

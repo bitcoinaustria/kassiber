@@ -19,6 +19,7 @@ BackendRecord = Mapping[str, Any]
 SyncTarget = Mapping[str, Any]
 HistoryEntry = Mapping[str, Any]
 HistoryCache = MutableMapping[str, Sequence[HistoryEntry]]
+ProgressObserver = Callable[[Mapping[str, Any]], None]
 ImportFile = Callable[[sqlite3.Connection, ProfileRow, WalletRow, str, str], SyncOutcome]
 InsertRecords = Callable[[sqlite3.Connection, ProfileRow, WalletRow, Sequence[BackendRecord], str], SyncOutcome]
 ResolveBackend = Callable[[RuntimeConfig, str | None], Mapping[str, Any]]
@@ -63,6 +64,7 @@ class WalletSyncState:
     tracked_scripts: Mapping[str, SyncTarget]
     history_cache: HistoryCache
     checkpoint: MutableMapping[str, Any] | None = None
+    progress_observer: ProgressObserver | None = None
 
 
 @dataclass(frozen=True)
@@ -119,6 +121,7 @@ def sync_wallet_from_backend(
     wallet: WalletRow,
     hooks: WalletSyncHooks,
     checkpoint: Mapping[str, Any] | None = None,
+    progress_observer: ProgressObserver | None = None,
 ) -> SyncOutcome:
     config = json.loads(wallet["config_json"] or "{}")
     backend = hooks.resolve_backend(runtime_config, config.get("backend"))
@@ -127,9 +130,16 @@ def sync_wallet_from_backend(
         if checkpoint is not None
         else wallet
     )
+    if progress_observer is not None:
+        resolver_wallet = {
+            **dict(resolver_wallet),
+            "_sync_progress_observer": progress_observer,
+        }
     sync_state = hooks.resolve_sync_state(backend, resolver_wallet)
     if checkpoint is not None:
         sync_state = replace(sync_state, checkpoint=dict(checkpoint))
+    if progress_observer is not None:
+        sync_state = replace(sync_state, progress_observer=progress_observer)
     if not sync_state.targets:
         return {
             "wallet": wallet["label"],

@@ -1934,6 +1934,7 @@ def sync_wallet_from_backend(
     wallet,
     *,
     checkpoint=None,
+    progress_observer=None,
 ):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     return core_sync.sync_wallet_from_backend(
@@ -1943,6 +1944,7 @@ def sync_wallet_from_backend(
         wallet,
         _wallet_sync_hooks(),
         checkpoint=checkpoint,
+        progress_observer=progress_observer,
     )
 
 

@@ -601,6 +601,81 @@ class FreshnessTest(unittest.TestCase):
         self.assertIn(freshness.journal_source_key(profile_id), active_keys)
         self.assertEqual(active_keys.count(cold_key), 1)
 
+    def test_onchain_wallet_handler_forwards_backend_progress(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        now = now_iso()
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, account_id, label, kind, config_json, created_at
+            )
+            VALUES('wallet-cold', 'ws', ?, NULL, 'Cold', 'address', ?, ?)
+            """,
+            (
+                profile_id,
+                json.dumps({"addresses": ["bc1qcold"], "chain": "bitcoin", "network": "mainnet"}),
+                now,
+            ),
+        )
+        job = freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            job_type=freshness.JOB_ONCHAIN_WALLET,
+            source_key=freshness.source_key(freshness.SOURCE_ONCHAIN, "wallet-cold"),
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Cold",
+            payload={"wallet_id": "wallet-cold"},
+        )
+        conn.commit()
+        progress = []
+
+        def fake_sync_wallet_from_backend(
+            conn_arg,
+            runtime_config,
+            workspace_ref,
+            profile_ref,
+            wallet,
+            *,
+            checkpoint=None,
+            progress_observer=None,
+        ):
+            del conn_arg, runtime_config, workspace_ref, profile_ref, wallet, checkpoint
+            self.assertIsNotNone(progress_observer)
+            progress_observer(
+                {
+                    "phase": freshness.PHASE_BACKEND_FETCH,
+                    "step": "script_stats",
+                    "processed": 7,
+                    "total": 10,
+                }
+            )
+            return {"target_count": 10}
+
+        handler = daemon_freshness._freshness_handlers({})[freshness.JOB_ONCHAIN_WALLET]
+        with patch(
+            "kassiber.daemon_freshness.sync_wallet_from_backend",
+            side_effect=fake_sync_wallet_from_backend,
+        ):
+            result = handler(
+                conn,
+                job,
+                lambda payload: progress.append(dict(payload)),
+                lambda: None,
+            )
+
+        self.assertEqual(result["wallet"], "Cold")
+        self.assertEqual(result["status"], "synced")
+        self.assertIn(
+            {
+                "phase": freshness.PHASE_BACKEND_FETCH,
+                "step": "script_stats",
+                "processed": 7,
+                "total": 10,
+            },
+            progress,
+        )
+
     def test_background_worker_uses_remembered_unlock_passphrase(self):
         conn = self._db()
         profile_id = _seed_profile(conn)

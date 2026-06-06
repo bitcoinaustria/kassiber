@@ -659,7 +659,10 @@ const tauriDaemon: DaemonTransport = {
     req: DaemonRequest,
   ): Promise<DaemonEnvelope<T>> {
     const { invoke } = await import("@tauri-apps/api/core");
-    return invoke<DaemonEnvelope<T>>("daemon_invoke", { request: req });
+    const requestId = req.request_id ?? makeDaemonRequestId();
+    return invoke<DaemonEnvelope<T>>("daemon_invoke", {
+      request: { ...req, request_id: requestId },
+    });
   },
   async stream<T = unknown, R = unknown>(
     req: DaemonRequest,
@@ -698,10 +701,11 @@ const bridgeDaemon: DaemonTransport = {
   async invoke<T = unknown>(
     req: DaemonRequest,
   ): Promise<DaemonEnvelope<T>> {
+    const requestId = req.request_id ?? makeDaemonRequestId();
     const response = await fetch("/__kassiber__/daemon", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(req),
+      body: JSON.stringify({ ...req, request_id: requestId }),
     });
     return response.json() as Promise<DaemonEnvelope<T>>;
   },
