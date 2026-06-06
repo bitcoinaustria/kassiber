@@ -30,11 +30,12 @@ unless you explicitly create the backend through the CLI.
 
 Without any user configuration, Kassiber currently ships these built-in names:
 
-- `mempool` -> `esplora` -> `https://mempool.bitcoin-austria.at/api`
 - `fulcrum` -> `electrum` -> `ssl://index.bitcoin-austria.at:50002`
-- `liquid` -> `electrum` -> `ssl://les.bullbitcoin.com:995`
+- `mempool` -> `esplora` -> `https://mempool.bitcoin-austria.at/api`
+- `liquid` -> `liquid-esplora` -> `https://liquid.network/api`
 
-`mempool` is the default for Bitcoin wallets.
+`fulcrum` is the default for Bitcoin wallet sync. `mempool` remains the
+built-in Esplora backend and the public explorer-link fallback.
 
 ## Useful commands
 
@@ -71,7 +72,7 @@ Point a wallet at a named backend:
 python3 -m kassiber wallets create \
   --label donations \
   --kind address \
-  --backend mempool \
+  --backend fulcrum \
   --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq
 ```
 
@@ -85,7 +86,12 @@ The key pattern is:
 Example:
 
 ```dotenv
-KASSIBER_DEFAULT_BACKEND=mempool
+KASSIBER_DEFAULT_BACKEND=fulcrum
+
+KASSIBER_BACKEND_FULCRUM_KIND=electrum
+KASSIBER_BACKEND_FULCRUM_CHAIN=bitcoin
+KASSIBER_BACKEND_FULCRUM_NETWORK=main
+KASSIBER_BACKEND_FULCRUM_URL=ssl://index.bitcoin-austria.at:50002
 
 KASSIBER_BACKEND_MEMPOOL_KIND=esplora
 KASSIBER_BACKEND_MEMPOOL_CHAIN=bitcoin

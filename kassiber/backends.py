@@ -305,8 +305,8 @@ def load_runtime_config(env_file):
     bootstrap_default_backend = (
         file_env.get("KASSIBER_DEFAULT_BACKEND")
         or file_env.get("SATBOOKS_DEFAULT_BACKEND")
-        or "mempool"
-    ).strip().lower() or "mempool"
+        or "fulcrum"
+    ).strip().lower() or "fulcrum"
     default_backend = bootstrap_default_backend
     default_backend_source = "built-in default"
     if "KASSIBER_DEFAULT_BACKEND" in file_env or "SATBOOKS_DEFAULT_BACKEND" in file_env:

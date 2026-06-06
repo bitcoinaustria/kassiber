@@ -146,6 +146,21 @@ def reset_current_profile_data(
             "journal_quarantines",
             profile_id,
         ),
+        "journal_tax_summary": _count_profile_rows(
+            conn,
+            "journal_tax_summary",
+            profile_id,
+        ),
+        "journal_account_holdings": _count_profile_rows(
+            conn,
+            "journal_account_holdings",
+            profile_id,
+        ),
+        "journal_wallet_holdings": _count_profile_rows(
+            conn,
+            "journal_wallet_holdings",
+            profile_id,
+        ),
         "transaction_pairs": _count_profile_rows(
             conn,
             "transaction_pairs",
@@ -270,6 +285,9 @@ def reset_current_profile_data(
             "direct_swap_payouts",
             "transaction_pairs",
             "bip329_labels",
+            "journal_wallet_holdings",
+            "journal_account_holdings",
+            "journal_tax_summary",
             "journal_quarantines",
             "journal_entries",
             "attachments",

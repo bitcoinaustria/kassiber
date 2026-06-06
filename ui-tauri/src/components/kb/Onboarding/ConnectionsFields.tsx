@@ -125,10 +125,10 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
         <ChoiceCard
           active={form.backendSetupMode === "default"}
           title="Use built-in public backends"
-          description="Start quickly with the bundled Esplora, Electrum, and Liquid endpoints. You can replace them later."
+          description="Start quickly with the bundled Fulcrum, Esplora, and Liquid endpoints. You can replace them later."
           onClick={() => {
             update("backendSetupMode", "default");
-            update("backendKind", "esplora");
+            update("backendKind", "electrum");
             update("backendName", DEFAULT_BACKEND_NAME);
             update("backendUrl", DEFAULT_BACKEND_URL);
             resetTest();

@@ -173,9 +173,9 @@ class SyncBackendsTest(unittest.TestCase):
         usage_checks = []
 
         def fake_scan(plan, target_used=None, target_used_batch=None, scan_batch_size=None):
-            del plan, target_used_batch, scan_batch_size
-            self.assertIsNotNone(target_used)
-            usage_checks.append(target_used(target))
+            del plan, target_used, scan_batch_size
+            self.assertIsNotNone(target_used_batch)
+            usage_checks.extend(target_used_batch([target]))
             return [target]
 
         with patch("kassiber.core.sync_backends.scan_descriptor_targets", side_effect=fake_scan), patch(

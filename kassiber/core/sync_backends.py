@@ -9,6 +9,7 @@ import json
 import socket
 import ssl
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from pathlib import Path
 from types import MappingProxyType
@@ -499,6 +500,20 @@ def batched(items, batch_size):
         yield items[start : start + batch_size]
 
 
+def _bounded_http_workers(backend):
+    return max(1, min(8, backend_batch_size(backend)))
+
+
+def _map_bounded(items, worker, max_workers):
+    items = list(items)
+    if not items:
+        return []
+    if max_workers <= 1 or len(items) == 1:
+        return [worker(item) for item in items]
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        return list(executor.map(worker, items))
+
+
 def electrum_call_many(client, requests, batch_size):
     if not requests:
         return []
@@ -672,9 +687,10 @@ def discover_descriptor_targets(backend, plan, kind, checkpoint=None):
     timeout = backend_timeout(backend)
     checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
     if kind == "esplora":
+        scan_batch_size = _bounded_http_workers(backend)
         cached_stats = checkpoint.get("esplora_scripthashes") or {}
 
-        def target_used(target):
+        def target_used_single(target):
             scripthash = scriptpubkey_scripthash(target["script_pubkey"])
             cached = cached_stats.get(scripthash)
             if isinstance(cached, dict) and "tx_count" in cached:
@@ -686,10 +702,14 @@ def discover_descriptor_targets(backend, plan, kind, checkpoint=None):
                 timeout=timeout,
             )
 
+        def target_used_batch(targets):
+            return _map_bounded(targets, target_used_single, scan_batch_size)
+
         return {
             "targets": scan_descriptor_targets(
                 plan,
-                target_used,
+                target_used_batch=target_used_batch,
+                scan_batch_size=scan_batch_size,
             ),
             "history_cache": {},
         }
@@ -1291,19 +1311,20 @@ def record_components_from_liquid_tx(
 def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
     max_pages = parse_int(backend_value(backend, "maxpages"), default=0) or None
     timeout = backend_timeout(backend)
+    worker_count = _bounded_http_workers(backend)
     checkpoint = _checkpoint_mapping(sync_state)
     previous_stats = checkpoint.get("esplora_scripthashes") or {}
     next_stats = {}
     highest_used = dict(checkpoint.get("highest_used") or {})
     changed_targets = []
     unchanged_scripts = 0
-    for target in sync_state.targets:
+
+    def fetch_stats(target):
         scripthash = scriptpubkey_scripthash(target["script_pubkey"])
-        stats = esplora_scripthash_stats(
-            backend["url"],
-            target["script_pubkey"],
-            timeout=timeout,
-        )
+        stats = esplora_scripthash_stats(backend["url"], target["script_pubkey"], timeout=timeout)
+        return target, scripthash, stats
+
+    for target, scripthash, stats in _map_bounded(sync_state.targets, fetch_stats, worker_count):
         chain_stats = stats.get("chain_stats") or {}
         mempool_stats = stats.get("mempool_stats") or {}
         tx_count = int(chain_stats.get("tx_count") or 0) + int(mempool_stats.get("tx_count") or 0)
@@ -1333,16 +1354,27 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
             continue
         changed_targets.append((target, scripthash))
     transactions_by_txid = {}
-    for target, scripthash in changed_targets:
+    def fetch_target_transactions(item):
+        target, scripthash = item
         known_txids = set()
+        target_txs = []
         for tx in fetch_esplora_scripthash_transactions(
             backend["url"],
             target["script_pubkey"],
             max_pages=max_pages,
             timeout=timeout,
         ):
-            transactions_by_txid[tx["txid"]] = tx
+            target_txs.append(tx)
             known_txids.add(tx["txid"])
+        return scripthash, sorted(known_txids), target_txs
+
+    for scripthash, known_txids, target_txs in _map_bounded(
+        changed_targets,
+        fetch_target_transactions,
+        worker_count,
+    ):
+        for tx in target_txs:
+            transactions_by_txid[tx["txid"]] = tx
         next_stats[scripthash]["known_txids"] = sorted(known_txids)
     records = []
     raw_tx_cache = {}

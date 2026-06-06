@@ -2734,6 +2734,63 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(neutral["proceedsEur"], neutral["costEur"])
         self.assertAlmostEqual(neutral["marketDeltaEur"], 121.16, places=2)
 
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS journal_tax_summary (
+                id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL,
+                profile_id TEXT NOT NULL,
+                year INTEGER NOT NULL,
+                asset TEXT NOT NULL,
+                transaction_type TEXT NOT NULL,
+                capital_gains_type TEXT,
+                quantity INTEGER NOT NULL,
+                proceeds REAL NOT NULL DEFAULT 0,
+                cost_basis REAL NOT NULL DEFAULT 0,
+                gain_loss REAL NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            );
+            """
+        )
+        conn.executemany(
+            """
+            INSERT INTO journal_tax_summary(
+                id, workspace_id, profile_id, year, asset, transaction_type,
+                capital_gains_type, quantity, proceeds, cost_basis, gain_loss, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "jts-taxable-btc",
+                    "ws-neutral-swap",
+                    "pf-neutral-swap",
+                    2026,
+                    "BTC",
+                    "sell",
+                    "short",
+                    btc_to_msat("0.06812704"),
+                    4_284.09,
+                    4_965.50,
+                    -681.41,
+                    now,
+                ),
+                (
+                    "jts-neutral-lbtc",
+                    "ws-neutral-swap",
+                    "pf-neutral-swap",
+                    2026,
+                    "LBTC",
+                    "sell",
+                    "short",
+                    btc_to_msat("0.12426784"),
+                    7_689.18,
+                    7_568.02,
+                    121.16,
+                    now,
+                ),
+            ],
+        )
+
         hooks = ReportHooks(
             resolve_scope=lambda _conn, _workspace, _profile: (
                 conn.execute(
@@ -2748,32 +2805,9 @@ class ReviewRegressionTest(unittest.TestCase):
             resolve_account=lambda *_args, **_kwargs: None,
             resolve_wallet=lambda *_args, **_kwargs: None,
             require_processed_journals=lambda *_args, **_kwargs: None,
-            build_ledger_state=lambda *_args, **_kwargs: {
-                "tax_summary": [
-                    {
-                        "year": 2026,
-                        "asset": "BTC",
-                        "transaction_type": "sell",
-                        "capital_gains_type": "short",
-                        "quantity": 0.06812704,
-                        "quantity_msat": btc_to_msat("0.06812704"),
-                        "proceeds": 4_284.09,
-                        "cost_basis": 4_965.50,
-                        "gain_loss": -681.41,
-                    },
-                    {
-                        "year": 2026,
-                        "asset": "LBTC",
-                        "transaction_type": "sell",
-                        "capital_gains_type": "short",
-                        "quantity": 0.12426784,
-                        "quantity_msat": btc_to_msat("0.12426784"),
-                        "proceeds": 7_689.18,
-                        "cost_basis": 7_568.02,
-                        "gain_loss": 121.16,
-                    },
-                ],
-            },
+            build_ledger_state=lambda *_args, **_kwargs: self.fail(
+                "tax summary reports should read the processed journal snapshot"
+            ),
             list_journal_entries=lambda *_args, **_kwargs: [],
             list_wallets=lambda *_args, **_kwargs: [],
             parse_iso_datetime=lambda *_args, **_kwargs: None,
@@ -4120,19 +4154,19 @@ class ReviewRegressionTest(unittest.TestCase):
         payload, result = self._run_json("init")
         self._assert_ok(payload, result, "init")
 
-        payload, result = self._run_json("backends", "delete", "fulcrum")
+        payload, result = self._run_json("backends", "delete", "mempool")
         self._assert_ok(payload, result, "backends.delete")
         self.assertTrue(payload["data"]["deleted"])
 
         payload, result = self._run_json("backends", "list")
         self._assert_ok(payload, result, "backends.list")
         rows = {row["name"]: row for row in payload["data"]}
-        self.assertNotIn("fulcrum", rows)
+        self.assertNotIn("mempool", rows)
 
         runtime = self._bootstrap_runtime_state()
-        self.assertNotIn("fulcrum", runtime.runtime_config["backends"])
+        self.assertNotIn("mempool", runtime.runtime_config["backends"])
 
-        payload, result = self._run_json("backends", "get", "fulcrum")
+        payload, result = self._run_json("backends", "get", "mempool")
         self.assertEqual(result.returncode, 1, msg=payload)
         self.assertEqual(payload.get("kind"), "error")
         self.assertEqual(payload["error"]["code"], "not_found")
@@ -9213,7 +9247,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["exports_root"], str(expected_root / "exports"))
         self.assertEqual(payload["data"]["attachments_root"], str(expected_root / "attachments"))
         self.assertEqual(payload["data"]["env_file"], str(expected_root / "config" / "backends.env"))
-        self.assertEqual(payload["data"]["default_backend"], "mempool")
+        self.assertEqual(payload["data"]["default_backend"], "fulcrum")
 
     def test_profiles_create_accepts_austrian_tax_country(self):
         payload, result = self._run_json("init")

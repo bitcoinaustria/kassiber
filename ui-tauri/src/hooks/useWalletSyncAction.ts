@@ -131,9 +131,6 @@ export function useWalletSyncAction() {
               dedupeKey: "book-refresh",
             });
           },
-          onSettled: () => {
-            void queryClient.invalidateQueries({ queryKey: ["daemon"] });
-          },
         },
       );
     },

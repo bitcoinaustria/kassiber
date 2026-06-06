@@ -215,24 +215,98 @@ def _resolve_report_scope(conn, workspace_ref, profile_ref, hooks: ReportHooks):
     return workspace, profile
 
 
+def _latest_transaction_rates_for_profile(conn, profile_id):
+    try:
+        rows = conn.execute(
+            """
+            SELECT asset, fiat_rate, fiat_value, fiat_rate_exact, fiat_value_exact, amount
+            FROM transactions
+            WHERE profile_id = ? AND excluded = 0
+            ORDER BY occurred_at DESC, created_at DESC
+            """,
+            (profile_id,),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        rows = conn.execute(
+            """
+            SELECT asset, fiat_rate, fiat_value, amount
+            FROM transactions
+            WHERE profile_id = ? AND excluded = 0
+            ORDER BY occurred_at DESC, created_at DESC
+            """,
+            (profile_id,),
+        ).fetchall()
+    rates = {}
+    for row in rows:
+        asset = row["asset"]
+        if asset in rates:
+            continue
+        rate = row["fiat_rate_exact"] if "fiat_rate_exact" in row.keys() else None
+        value = row["fiat_value_exact"] if "fiat_value_exact" in row.keys() else None
+        rate_dec = dec(rate) if rate is not None else None
+        value_dec = dec(value) if value is not None else None
+        if rate_dec is None and row["fiat_rate"] is not None:
+            rate_dec = dec(row["fiat_rate"])
+        if value_dec is None and row["fiat_value"] is not None:
+            value_dec = dec(row["fiat_value"])
+        if rate_dec is not None:
+            rates[asset] = rate_dec
+        elif value_dec is not None and row["amount"]:
+            rates[asset] = value_dec / msat_to_btc(row["amount"])
+    return rates
+
+
+def _profile_has_journal_entries(conn, profile_id):
+    row = conn.execute(
+        "SELECT 1 FROM journal_entries WHERE profile_id = ? LIMIT 1",
+        (profile_id,),
+    ).fetchone()
+    return row is not None
+
+
 def report_balance_sheet(conn, workspace_ref, profile_ref, hooks: ReportHooks):
     _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     hooks.require_processed_journals(conn, profile)
-    state = hooks.build_ledger_state(conn, profile)
+    latest_rates = _latest_transaction_rates_for_profile(conn, profile["id"])
     rows = []
-    for (account_id, account_code, account_label, asset), value in sorted(
-        state["account_holdings"].items(),
-        key=lambda item: (item[0][1], item[0][3]),
-    ):
-        quantity = value["quantity"]
+    try:
+        holding_rows = conn.execute(
+            """
+            SELECT account_code, account_label, asset, quantity, cost_basis
+            FROM journal_account_holdings
+            WHERE profile_id = ?
+            ORDER BY account_code ASC, asset ASC, id ASC
+            """,
+            (profile["id"],),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        holding_rows = None
+    if holding_rows is None or (not holding_rows and _profile_has_journal_entries(conn, profile["id"])):
+        state = hooks.build_ledger_state(conn, profile)
+        holding_rows = [
+            {
+                "account_code": account_code,
+                "account_label": account_label,
+                "asset": asset,
+                "quantity": btc_to_msat(value["quantity"]),
+                "cost_basis": value["cost_basis"],
+            }
+            for (_account_id, account_code, account_label, asset), value in state[
+                "account_holdings"
+            ].items()
+        ]
+        latest_rates = state["latest_rates"]
+    for value in holding_rows:
+        quantity = msat_to_btc(value["quantity"])
         if quantity <= 0:
             continue
-        cost_basis = value["cost_basis"]
-        latest_rate = state["latest_rates"].get(asset, Decimal("0"))
+        asset = value["asset"]
+        cost_basis = dec(value["cost_basis"])
+        latest_rate = latest_rates.get(asset, Decimal("0"))
         market_value = quantity * latest_rate
         rows.append(
             {
-                "account": account_code or account_label,
+                "account": value["account_code"] or value["account_label"],
                 "asset": asset,
                 "quantity": float(quantity),
                 "quantity_sat": _msat_to_sat(btc_to_msat(quantity)),
@@ -339,22 +413,48 @@ def report_portfolio_summary(conn, workspace_ref, profile_ref, hooks: ReportHook
     if as_of is not None:
         as_of_dt = hooks.parse_iso_datetime(as_of, "as_of") if not isinstance(as_of, datetime) else as_of
         return _historical_portfolio_summary(conn, profile, hooks, as_of_dt, include_wallet_id=include_wallet_id)
-    state = hooks.build_ledger_state(conn, profile)
+    latest_rates = _latest_transaction_rates_for_profile(conn, profile["id"])
     rows = []
-    for (wallet_id, wallet_label, account_code, asset), value in sorted(
-        state["wallet_holdings"].items(),
-        key=lambda item: (item[0][1], item[0][3]),
-    ):
-        quantity = value["quantity"]
+    try:
+        holding_rows = conn.execute(
+            """
+            SELECT wallet_id, wallet_label, account_code, asset, quantity, cost_basis
+            FROM journal_wallet_holdings
+            WHERE profile_id = ?
+            ORDER BY wallet_label ASC, asset ASC, id ASC
+            """,
+            (profile["id"],),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        holding_rows = None
+    if holding_rows is None or (not holding_rows and _profile_has_journal_entries(conn, profile["id"])):
+        state = hooks.build_ledger_state(conn, profile)
+        holding_rows = [
+            {
+                "wallet_id": wallet_id,
+                "wallet_label": wallet_label,
+                "account_code": account_code,
+                "asset": asset,
+                "quantity": btc_to_msat(value["quantity"]),
+                "cost_basis": value["cost_basis"],
+            }
+            for (wallet_id, wallet_label, account_code, asset), value in state[
+                "wallet_holdings"
+            ].items()
+        ]
+        latest_rates = state["latest_rates"]
+    for value in holding_rows:
+        quantity = msat_to_btc(value["quantity"])
         if quantity <= 0:
             continue
-        cost_basis = value["cost_basis"]
-        latest_rate = state["latest_rates"].get(asset, Decimal("0"))
+        asset = value["asset"]
+        cost_basis = dec(value["cost_basis"])
+        latest_rate = latest_rates.get(asset, Decimal("0"))
         market_value = quantity * latest_rate
         avg_cost = cost_basis / quantity if quantity else Decimal("0")
         row = {
-            "wallet": wallet_label,
-            "account": account_code,
+            "wallet": value["wallet_label"],
+            "account": value["account_code"],
             "asset": asset,
             "quantity": float(quantity),
             "quantity_sat": _msat_to_sat(btc_to_msat(quantity)),
@@ -365,7 +465,7 @@ def report_portfolio_summary(conn, workspace_ref, profile_ref, hooks: ReportHook
             "unrealized_pnl": float(market_value - cost_basis),
         }
         if include_wallet_id:
-            row["wallet_id"] = wallet_id
+            row["wallet_id"] = value["wallet_id"]
         rows.append(row)
     return rows
 
@@ -1988,11 +2088,38 @@ def _exclude_non_reportable_tax_summary_rows(conn, profile_id, rows):
 def report_tax_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks):
     _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     hooks.require_processed_journals(conn, profile)
-    state = hooks.build_ledger_state(conn, profile)
+    try:
+        stored_rows = conn.execute(
+            """
+            SELECT year, asset, transaction_type, capital_gains_type, quantity,
+                   proceeds, cost_basis, gain_loss
+            FROM journal_tax_summary
+            WHERE profile_id = ?
+            """,
+            (profile["id"],),
+        ).fetchall()
+        tax_summary_rows = [
+            {
+                "year": int(row["year"]),
+                "asset": row["asset"],
+                "transaction_type": row["transaction_type"],
+                "capital_gains_type": row["capital_gains_type"],
+                "quantity": float(msat_to_btc(row["quantity"])),
+                "quantity_msat": int(row["quantity"]),
+                "proceeds": row["proceeds"],
+                "cost_basis": row["cost_basis"],
+                "gain_loss": row["gain_loss"],
+            }
+            for row in stored_rows
+        ]
+    except sqlite3.OperationalError:
+        tax_summary_rows = None
+    if tax_summary_rows is None or (not tax_summary_rows and _profile_has_journal_entries(conn, profile["id"])):
+        tax_summary_rows = hooks.build_ledger_state(conn, profile)["tax_summary"]
     taxable_summary_rows = _exclude_non_reportable_tax_summary_rows(
         conn,
         profile["id"],
-        state["tax_summary"],
+        tax_summary_rows,
     )
     detail_rows = sorted(
         taxable_summary_rows,
