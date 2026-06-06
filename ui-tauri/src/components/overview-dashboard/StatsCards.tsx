@@ -1,8 +1,10 @@
 import { Link } from "@tanstack/react-router";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import { ActiveMaintenanceProgressCard } from "@/components/kb/ActiveMaintenanceProgress";
 import { formatBtc, type Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
+import type { ActiveMaintenanceProgress } from "@/store/ui";
 import type { OverviewSnapshot } from "@/mocks/seed";
 
 import {
@@ -39,6 +41,7 @@ export const StatsCards = ({
   isRefreshing,
   isMarketRateRefreshing,
   onRefreshMarketRate,
+  activeProgress,
 }: {
   snapshot: OverviewSnapshot;
   hideSensitive: boolean;
@@ -46,8 +49,12 @@ export const StatsCards = ({
   isRefreshing?: boolean;
   isMarketRateRefreshing?: boolean;
   onRefreshMarketRate?: () => void;
+  activeProgress?: ActiveMaintenanceProgress | null;
 }) => {
   const stats = buildStatsData(snapshot, currency);
+  const showRefreshSkeleton = Boolean(isRefreshing && !activeProgress);
+  const showMarketRateSkeleton =
+    showRefreshSkeleton || Boolean(isMarketRateRefreshing && !activeProgress);
   const fiatCurrency = activeMarketFiatCurrency(snapshot);
   const fiatRate = activeMarketFiatRate(snapshot);
   const marketRateIsSynced = Boolean(
@@ -57,9 +64,15 @@ export const StatsCards = ({
   return (
     <div
       className="rounded-xl border bg-card"
-      role={isRefreshing ? "status" : undefined}
-      aria-live={isRefreshing ? "polite" : undefined}
+      role={showRefreshSkeleton ? "status" : undefined}
+      aria-live={showRefreshSkeleton ? "polite" : undefined}
     >
+      {activeProgress ? (
+        <ActiveMaintenanceProgressCard
+          progress={activeProgress}
+          className="border-b"
+        />
+      ) : null}
       <div className="grid grid-cols-1 divide-x-0 divide-y divide-border sm:grid-cols-2 sm:divide-y-0 xl:grid-cols-5 xl:divide-x">
         <button
           type="button"
@@ -67,11 +80,13 @@ export const StatsCards = ({
             event.preventDefault();
             onRefreshMarketRate?.();
           }}
-          disabled={!onRefreshMarketRate || isRefreshing || isMarketRateRefreshing}
+          disabled={
+            !onRefreshMarketRate || isRefreshing || isMarketRateRefreshing
+          }
           className="group relative isolate w-full overflow-hidden p-3 text-left transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/60 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-within:before:scale-x-100 disabled:cursor-default enabled:cursor-pointer sm:p-4"
           aria-label="Refresh BTC price"
         >
-          {isRefreshing || isMarketRateRefreshing ? (
+          {showMarketRateSkeleton ? (
             <div className="pointer-events-none relative z-20 space-y-2">
               <Skeleton className="h-3 w-20" />
               <Skeleton className="h-6 w-28" />
@@ -115,7 +130,7 @@ export const StatsCards = ({
               key={stat.title}
               className="group relative isolate overflow-hidden p-3 transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/60 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-within:before:scale-x-100 sm:p-4"
             >
-              {isRefreshing ? (
+              {showRefreshSkeleton ? (
                 <div className="pointer-events-none relative z-20 space-y-2">
                   <Skeleton className="h-3 w-28" />
                   <Skeleton className="h-6 w-24" />

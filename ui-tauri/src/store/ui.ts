@@ -33,6 +33,18 @@ export interface AppNotification {
   createdAt: string;
 }
 
+export interface ActiveMaintenanceProgress {
+  id: string;
+  title: string;
+  body: string;
+  tone: NotificationTone;
+  progress: NotificationProgress;
+  details?: string[];
+  active: boolean;
+  startedAt: string;
+  updatedAt: string;
+}
+
 export interface AppLockPolicy {
   autoLockWhenIdle: boolean;
   idleMinutes: number;
@@ -149,6 +161,7 @@ export interface UiState {
   assistantModelSelection: AiModelSelection | null;
   daemonSession: number;
   notifications: AppNotification[];
+  activeMaintenanceProgress: ActiveMaintenanceProgress | null;
   sourceFundsDrafts: Record<string, SourceFundsDraft>;
   deferredConnectionSetup: DeferredConnectionSetup | null;
   setLang: (lang: Lang) => void;
@@ -175,6 +188,10 @@ export interface UiState {
     id: string,
     patch: Partial<Omit<AppNotification, "id" | "createdAt">>,
   ) => void;
+  setActiveMaintenanceProgress: (
+    progress: ActiveMaintenanceProgress | null,
+  ) => void;
+  clearActiveMaintenanceProgress: (id?: string) => void;
   clearNotification: (id: string) => void;
   clearNotifications: () => void;
   setSourceFundsDraft: (profileKey: string, draft: SourceFundsDraft) => void;
@@ -266,6 +283,7 @@ export const useUiStore = create<UiState>()(
       assistantModelSelection: null,
       daemonSession: 0,
       notifications: [],
+      activeMaintenanceProgress: null,
       sourceFundsDrafts: {},
       setLang: (lang) => set({ lang }),
       setCurrency: (currency) => set({ currency }),
@@ -350,6 +368,15 @@ export const useUiStore = create<UiState>()(
             notification.id === id ? { ...notification, ...patch } : notification,
           ),
         })),
+      setActiveMaintenanceProgress: (activeMaintenanceProgress) =>
+        set({ activeMaintenanceProgress }),
+      clearActiveMaintenanceProgress: (id) =>
+        set((state) => {
+          const current = state.activeMaintenanceProgress;
+          if (!current) return state;
+          if (id && current.id !== id) return state;
+          return { activeMaintenanceProgress: null };
+        }),
       clearNotification: (id) =>
         set((state) => ({
           notifications: state.notifications.filter(

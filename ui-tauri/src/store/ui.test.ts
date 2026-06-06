@@ -60,6 +60,33 @@ describe("UI persistence", () => {
     expect(encoded).toContain('"clearClipboard":false');
   });
 
+  it("keeps active maintenance progress transient and clears by id", () => {
+    const startedAt = "2026-06-06T10:00:00Z";
+    useUiStore.getState().setActiveMaintenanceProgress({
+      id: "book-refresh",
+      title: "Refreshing book",
+      body: "token=secret-progress",
+      tone: "warning",
+      progress: { value: 40, label: "token=secret-progress" },
+      active: true,
+      startedAt,
+      updatedAt: startedAt,
+    });
+
+    useUiStore.getState().clearActiveMaintenanceProgress("other-progress");
+    expect(useUiStore.getState().activeMaintenanceProgress?.id).toBe(
+      "book-refresh",
+    );
+
+    const encoded = JSON.stringify(
+      uiStatePartialForStorage(useUiStore.getState()),
+    );
+    expect(encoded).not.toContain("secret-progress");
+
+    useUiStore.getState().clearActiveMaintenanceProgress("book-refresh");
+    expect(useUiStore.getState().activeMaintenanceProgress).toBeNull();
+  });
+
   it("normalizes persisted UI scale to the supported menu range", () => {
     expect(normalizeAppScale(0.93)).toBe(0.95);
     expect(normalizeAppScale(0.1)).toBe(MIN_APP_SCALE);

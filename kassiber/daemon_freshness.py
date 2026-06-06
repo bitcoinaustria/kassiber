@@ -1008,12 +1008,43 @@ def _freshness_run_payload(
     enqueued = _enqueue_freshness_jobs(conn, profile["id"], specs)
     completed: list[dict[str, Any]] = []
     if args.get("run", True):
+        run_limit = int(args.get("limit") or max(1, len(enqueued)))
+        run_total = max(1, min(run_limit, max(1, len(enqueued))))
+        seen_job_ids: list[str] = []
+
+        def _progress_with_run_context(payload: Mapping[str, Any]) -> None:
+            if progress_observer is None:
+                return
+            job_id = str(payload.get("job_id") or "")
+            if job_id and job_id not in seen_job_ids:
+                seen_job_ids.append(job_id)
+            job_index = (
+                seen_job_ids.index(job_id) + 1
+                if job_id in seen_job_ids
+                else None
+            )
+            progress_observer(
+                {
+                    **dict(payload),
+                    **(
+                        {"job_index": job_index}
+                        if job_index is not None
+                        else {}
+                    ),
+                    "job_total": max(run_total, len(seen_job_ids)),
+                }
+            )
+
         completed = core_freshness.run_due_jobs(
             conn,
             _freshness_handlers(runtime_config),
             profile_id=profile["id"],
-            limit=int(args.get("limit") or max(1, len(enqueued))),
-            progress_observer=progress_observer,
+            limit=run_limit,
+            progress_observer=(
+                _progress_with_run_context
+                if progress_observer is not None
+                else None
+            ),
         )
     snapshot = core_freshness.build_snapshot(conn, profile["id"])
     return {
