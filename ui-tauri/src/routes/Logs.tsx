@@ -147,7 +147,7 @@ export function Logs() {
   );
   const hasTableFilters = Boolean(query.trim()) || levelFilter !== "all" || Boolean(moduleFilter);
   const isEmptyBecauseFilters = records.length > 0 && filteredRecords.length === 0;
-  const settingsActive = captureLevel !== "info" || !redacted || maskAmounts;
+  const settingsActive = captureLevel !== "info" || regex || !redacted || maskAmounts;
 
   const clearTableFilters = () => {
     setQuery("");

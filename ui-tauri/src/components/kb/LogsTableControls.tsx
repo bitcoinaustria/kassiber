@@ -132,16 +132,6 @@ export function LogsTableControls({
           placeholder="Search logs ( / )"
           className="h-8 w-44 font-mono text-xs"
         />
-        <Button
-          type="button"
-          size="icon"
-          variant={regex ? "default" : "outline"}
-          className="size-8"
-          onClick={() => onRegexChange(!regex)}
-          title="Regex search"
-        >
-          <Regex className="size-4" aria-hidden="true" />
-        </Button>
         <LogFilterMenu
           hasTableFilters={hasTableFilters}
           levelCounts={levelCounts}
@@ -157,10 +147,12 @@ export function LogsTableControls({
           captureLevel={captureLevel}
           maskAmounts={maskAmounts}
           redacted={redacted}
+          regex={regex}
           settingsActive={settingsActive}
           onCaptureLevelChange={onCaptureLevelChange}
           onMaskAmountsChange={onMaskAmountsChange}
           onRedactedChange={onRedactedChange}
+          onRegexChange={onRegexChange}
         />
       </div>
     </div>
@@ -263,18 +255,22 @@ function LogSettingsMenu({
   captureLevel,
   maskAmounts,
   redacted,
+  regex,
   settingsActive,
   onCaptureLevelChange,
   onMaskAmountsChange,
   onRedactedChange,
+  onRegexChange,
 }: {
   captureLevel: AppLogLevel;
   maskAmounts: boolean;
   redacted: boolean;
+  regex: boolean;
   settingsActive: boolean;
   onCaptureLevelChange: (level: AppLogLevel) => void;
   onMaskAmountsChange: (maskAmounts: boolean) => void;
   onRedactedChange: (redacted: boolean) => void;
+  onRegexChange: (regex: boolean) => void;
 }) {
   return (
     <DropdownMenu>
@@ -306,6 +302,17 @@ function LogSettingsMenu({
             {item.toUpperCase()}
           </DropdownMenuCheckboxItem>
         ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="font-mono text-xs text-muted-foreground">
+          Search
+        </DropdownMenuLabel>
+        <DropdownMenuCheckboxItem
+          checked={regex}
+          onCheckedChange={(checked) => onRegexChange(Boolean(checked))}
+        >
+          <Regex className="size-4" aria-hidden="true" />
+          Regex search
+        </DropdownMenuCheckboxItem>
         <DropdownMenuSeparator />
         <DropdownMenuCheckboxItem
           checked={redacted}
