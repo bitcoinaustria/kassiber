@@ -891,6 +891,49 @@ class KrakenCsvRatesTest(unittest.TestCase):
         self.assertEqual(payload["source"], core_rates.RATE_SOURCE_COINGECKO)
         self.assertEqual(payload["sync"][0]["source"], core_rates.RATE_SOURCE_COINGECKO)
 
+    def test_desktop_latest_only_uses_configured_market_rate_provider(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+        core_rates.set_market_rate_provider(
+            conn,
+            core_rates.RATE_SOURCE_COINGECKO,
+            commit=True,
+        )
+
+        with patch.object(
+            core_rates,
+            "sync_latest_rates",
+            return_value=[
+                {
+                    "pair": "BTC-EUR",
+                    "source": core_rates.RATE_SOURCE_COINGECKO,
+                    "samples": 1,
+                }
+            ],
+        ) as latest, patch.object(core_rates, "rebuild_rates_cache") as rebuild:
+            payload = _rates_rebuild_payload(
+                conn,
+                {
+                    "latest_only": True,
+                    "pair": "BTC-EUR",
+                    "reprice_transactions": True,
+                },
+            )
+
+        latest.assert_called_once_with(
+            conn,
+            pair="BTC-EUR",
+            source=core_rates.RATE_SOURCE_COINGECKO,
+            commit=True,
+        )
+        rebuild.assert_not_called()
+        self.assertEqual(payload["source"], core_rates.RATE_SOURCE_COINGECKO)
+        self.assertEqual(payload["sync"][0]["source"], core_rates.RATE_SOURCE_COINGECKO)
+        self.assertTrue(payload["latest_only"])
+        self.assertFalse(payload["reprice_transactions"])
+        self.assertEqual(payload["deleted"]["rates"], 0)
+        self.assertEqual(payload["deleted"]["transaction_prices"], 0)
+
     def test_coinbase_background_sync_skips_warm_cache_when_idle(self):
         conn = open_db(str(self.data_root))
         self.addCleanup(conn.close)

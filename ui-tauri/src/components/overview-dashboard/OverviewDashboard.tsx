@@ -20,6 +20,7 @@ import { StatsCards } from "./StatsCards";
 import {
   activeMarketFiatCurrency,
   activeMarketFiatRate,
+  marketRateRefreshArgs,
   toDashboardTransaction as toOverviewTransaction,
   transactionRecords,
 } from "./model";
@@ -36,9 +37,6 @@ export const OverviewDashboard = ({
   isSnapshotRefreshing?: boolean;
 }) => {
   const [addConnectionOpen, setAddConnectionOpen] = React.useState(false);
-  const [marketRateRefreshedAt, setMarketRateRefreshedAt] = React.useState<
-    string | null
-  >(null);
   const queryClient = useQueryClient();
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const explorerSettings = useUiStore((s) => s.explorerSettings);
@@ -73,23 +71,8 @@ export const OverviewDashboard = ({
         : transactionRecords,
     [snapshot.txs],
   );
-  React.useEffect(() => {
-    setMarketRateRefreshedAt(null);
-  }, [snapshot.marketRate?.pair]);
-  const displayedSnapshot = React.useMemo(() => {
-    if (!marketRateRefreshedAt || !snapshot.marketRate) return snapshot;
-    return {
-      ...snapshot,
-      marketRate: {
-        ...snapshot.marketRate,
-        timestamp: marketRateRefreshedAt,
-        fetchedAt: marketRateRefreshedAt,
-        source: snapshot.marketRate.source ?? "coinbase-exchange",
-      },
-    };
-  }, [marketRateRefreshedAt, snapshot]);
-  const fiatCurrency = activeMarketFiatCurrency(displayedSnapshot);
-  const fiatRate = activeMarketFiatRate(displayedSnapshot);
+  const fiatCurrency = activeMarketFiatCurrency(snapshot);
+  const fiatRate = activeMarketFiatRate(snapshot);
   const refreshOverviewState = React.useCallback(() => {
     if (isSyncing || isProcessingJournals) return;
     syncAll();
@@ -97,7 +80,6 @@ export const OverviewDashboard = ({
   const refreshMarketRateState = React.useCallback(() => {
     if (marketRateRefreshInFlightRef.current) return;
     marketRateRefreshInFlightRef.current = true;
-    setMarketRateRefreshedAt(new Date().toISOString());
     const pair = snapshot.marketRate?.pair ?? undefined;
     const startedAt = new Date().toISOString();
     setActiveMaintenanceProgress({
@@ -106,7 +88,7 @@ export const OverviewDashboard = ({
       body: pair ? `Fetching ${pair}.` : "Fetching BTC market rate.",
       tone: "warning",
       progress: { indeterminate: true, label: "Refreshing BTC price" },
-      details: ["Repricing transaction values"],
+      details: ["Latest quote only"],
       active: true,
       startedAt,
       updatedAt: startedAt,
@@ -119,14 +101,9 @@ export const OverviewDashboard = ({
       progress: { indeterminate: true, label: "Refreshing" },
     });
     refreshMarketRate.mutate(
-      {
-        source: "coinbase-exchange",
-        reprice_transactions: true,
-        ...(pair ? { pair } : {}),
-      },
+      marketRateRefreshArgs(snapshot),
       {
         onSuccess: (envelope) => {
-          setMarketRateRefreshedAt(new Date().toISOString());
           const rows =
             envelope.data?.sync.reduce(
               (total, row) => total + Number(row.samples ?? 0),
@@ -149,7 +126,6 @@ export const OverviewDashboard = ({
           clearActiveMaintenanceProgress("market-rate-refresh");
         },
         onError: (error) => {
-          setMarketRateRefreshedAt(null);
           const body =
             error instanceof Error ? error.message : "Could not refresh BTC price.";
           const notification = {
@@ -180,7 +156,7 @@ export const OverviewDashboard = ({
     queryClient,
     refreshMarketRate,
     setActiveMaintenanceProgress,
-    snapshot.marketRate?.pair,
+    snapshot,
     updateNotification,
   ]);
   const isRefreshingOverview = isSyncing || isProcessingJournals;
@@ -211,7 +187,7 @@ export const OverviewDashboard = ({
           onOpenChange={setAddConnectionOpen}
         />
         <StatsCards
-          snapshot={displayedSnapshot}
+          snapshot={snapshot}
           hideSensitive={hideSensitive}
           currency={currency}
           isRefreshing={showRefreshSkeleton}

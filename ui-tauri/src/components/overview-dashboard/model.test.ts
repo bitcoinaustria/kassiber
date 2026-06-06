@@ -15,6 +15,7 @@ import {
   formatMarketRateValue,
   formatRelativeMarketRateTime,
   getDataForPeriod,
+  marketRateRefreshArgs,
   marketRateCompactLabel,
   marketRateDetailLabel,
   marketRateSyncLabel,
@@ -54,6 +55,11 @@ describe("overview market rate display", () => {
     expect(formatCompactDisplayMoney(140_000, 70_000, "btc", "USD")).toBe(
       "₿ 2.000",
     );
+    expect(marketRateRefreshArgs(snapshot)).toEqual({
+      latest_only: true,
+      reprice_transactions: false,
+      pair: "BTC-USD",
+    });
 
     vi.useRealTimers();
   });
