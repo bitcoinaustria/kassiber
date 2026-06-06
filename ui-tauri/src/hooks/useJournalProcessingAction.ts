@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useIsMutating, useQueryClient } from "@tanstack/react-query";
+import { useIsMutating } from "@tanstack/react-query";
 
 import { daemonMutationKey, useDaemonMutation } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
@@ -51,7 +51,6 @@ export function useJournalProcessingAction(
   } = options;
   const dataMode = useUiStore((s) => s.dataMode);
   const addNotification = useUiStore((s) => s.addNotification);
-  const queryClient = useQueryClient();
   const processJournals =
     useDaemonMutation<JournalProcessResult>("ui.journals.process");
   const mutationKey = daemonMutationKey(dataMode, "ui.journals.process");
@@ -101,9 +100,6 @@ export function useJournalProcessingAction(
           dedupeKey: "journal-processing",
         });
       },
-      onSettled: () => {
-        void queryClient.invalidateQueries({ queryKey: ["daemon"] });
-      },
     });
   }, [
     activeJournalRuns,
@@ -113,7 +109,6 @@ export function useJournalProcessingAction(
     notifyAlreadyRunning,
     notifyStart,
     processJournals,
-    queryClient,
   ]);
 
   return {
