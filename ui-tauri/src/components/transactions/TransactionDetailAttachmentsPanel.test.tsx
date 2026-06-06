@@ -29,4 +29,15 @@ describe("AttachmentsPanel", () => {
     expect(html).toContain("Edit link text for Treasury sheet");
     expect(html).not.toContain("Edit link text for invoice.pdf");
   });
+
+  it("renders evidence reuse as an icon-only action", () => {
+    const html = renderToStaticMarkup(
+      <AttachmentsPanel hideSensitive={false} onReuseEvidence={() => undefined} />,
+    );
+
+    expect(html).toContain('aria-label="Reuse evidence"');
+    expect(html).toContain("size-7 shrink-0");
+    expect(html).toContain("grid-cols-2");
+    expect(html).not.toContain(">Reuse</button>");
+  });
 });

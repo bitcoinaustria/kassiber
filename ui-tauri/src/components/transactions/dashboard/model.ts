@@ -332,6 +332,60 @@ function attachmentRecordToItem(record: AttachmentRecord): AttachmentItem {
   };
 }
 
+function replaceAttachmentRecord(
+  attachments: AttachmentRecord[],
+  updated: AttachmentRecord,
+) {
+  let replaced = false;
+  const next = attachments.map((attachment) => {
+    if (attachment.id !== updated.id) return attachment;
+    replaced = true;
+    return updated;
+  });
+  return replaced ? next : attachments;
+}
+
+function upsertAttachmentRecords(
+  attachments: AttachmentRecord[],
+  updates: AttachmentRecord[],
+) {
+  if (!updates.length) return attachments;
+  const updateById = new Map(
+    updates.map((attachment) => [attachment.id, attachment]),
+  );
+  const seen = new Set<string>();
+  const next = attachments.map((attachment) => {
+    const updated = updateById.get(attachment.id);
+    if (!updated) return attachment;
+    seen.add(attachment.id);
+    return updated;
+  });
+  const created = updates.filter((attachment) => !seen.has(attachment.id));
+  return created.length ? [...created, ...next] : next;
+}
+
+function removeAttachmentRecord(
+  attachments: AttachmentRecord[],
+  attachmentId: string,
+) {
+  return attachments.filter((attachment) => attachment.id !== attachmentId);
+}
+
+function isAttachmentListQueryKeyForTransaction(
+  queryKey: readonly unknown[],
+  transactionId: string,
+) {
+  return (
+    queryKey.includes("ui.attachments.list") &&
+    queryKey.some((part) => {
+      if (!part || typeof part !== "object" || Array.isArray(part)) {
+        return false;
+      }
+      return (part as { transaction?: unknown }).transaction === transactionId;
+    })
+  );
+}
+
 const periodLabels: Record<PeriodKey, string> = {
   ytd: "YTD",
   "1year": "1 Year",
@@ -1040,6 +1094,7 @@ export {
   formatCountBarLabel,
   formatFlowTooltipValue,
   initialPeriodFromUrl,
+  isAttachmentListQueryKeyForTransaction,
   isRedundantTransactionLabel,
   matchesFlowChartSelection,
   matchesTransactionDeepLink,
@@ -1049,9 +1104,12 @@ export {
   quickFilterLabel,
   readTransactionDetailParams,
   recordsForPeriod,
+  removeAttachmentRecord,
+  replaceAttachmentRecord,
   sortTransactionsByDateDesc,
   sumByFlow,
   toDashboardTransaction,
+  upsertAttachmentRecords,
   transactionRecords,
   updateTransactionDetailParams,
 };

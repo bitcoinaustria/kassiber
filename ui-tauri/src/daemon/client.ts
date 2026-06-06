@@ -6,6 +6,7 @@
  */
 
 import {
+  type QueryClient,
   useInfiniteQuery,
   useMutation,
   useQuery,
@@ -242,6 +243,65 @@ export function daemonMutationKey(dataMode: DataMode, kind: string) {
   return ["daemon-mutation", dataMode, kind] as const;
 }
 
+const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
+  "ui.attachments.add": [
+    "ui.attachments.list",
+    "ui.audit.evidence.summary",
+    "ui.report.blockers",
+    "ui.source_funds.coverage",
+    "ui.source_funds.evidence.list",
+    "ui.source_funds.preview",
+  ],
+  "ui.attachments.copy": [
+    "ui.attachments.list",
+    "ui.audit.evidence.summary",
+    "ui.report.blockers",
+    "ui.source_funds.coverage",
+    "ui.source_funds.evidence.list",
+    "ui.source_funds.preview",
+  ],
+  "ui.attachments.remove": [
+    "ui.attachments.list",
+    "ui.audit.evidence.summary",
+    "ui.report.blockers",
+    "ui.source_funds.coverage",
+    "ui.source_funds.evidence.list",
+    "ui.source_funds.preview",
+  ],
+  "ui.attachments.rename": [
+    "ui.attachments.list",
+    "ui.audit.evidence.summary",
+    "ui.source_funds.evidence.list",
+    "ui.source_funds.preview",
+  ],
+};
+
+export function invalidatedDaemonQueryKindsForMutation(kind: string) {
+  return TARGETED_DAEMON_QUERY_INVALIDATIONS[kind] ?? null;
+}
+
+function invalidateDaemonQueriesForMutation(
+  queryClient: QueryClient,
+  dataMode: DataMode,
+  kind: string,
+) {
+  const queryKinds = invalidatedDaemonQueryKindsForMutation(kind);
+  if (!queryKinds) {
+    void queryClient.invalidateQueries({
+      queryKey: ["daemon", dataMode],
+    });
+    return;
+  }
+  const affectedKinds = new Set(queryKinds);
+  void queryClient.invalidateQueries({
+    queryKey: ["daemon", dataMode],
+    predicate: (query) =>
+      query.queryKey.some(
+        (part) => typeof part === "string" && affectedKinds.has(part),
+      ),
+  });
+}
+
 export function mutationAdvancesDaemonSession(kind: string) {
   return kind === "ui.profiles.switch";
 }
@@ -274,9 +334,7 @@ export function useDaemonMutation<T = unknown>(
       if (mutationAdvancesDaemonSession(kind)) {
         useUiStore.getState().bumpDaemonSession();
       }
-      return queryClient.invalidateQueries({
-        queryKey: ["daemon", dataMode],
-      });
+      invalidateDaemonQueriesForMutation(queryClient, dataMode, kind);
     },
   });
 }
@@ -322,8 +380,6 @@ export function useDaemonStreamMutation<T = unknown, R = unknown>(
       return envelope;
     },
     onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: ["daemon", dataMode],
-      }),
+      invalidateDaemonQueriesForMutation(queryClient, dataMode, kind),
   });
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   daemonMutationKey,
+  invalidatedDaemonQueryKindsForMutation,
   mutationAdvancesDaemonSession,
   parseDaemonAuthRequiredEventDetail,
   shouldHandleDaemonAuthRequiredEvent,
@@ -72,6 +73,25 @@ describe("daemon mutation key", () => {
     expect(daemonMutationKey("real", "ui.journals.process")).not.toEqual(
       daemonMutationKey("real", "ui.wallets.sync"),
     );
+  });
+});
+
+describe("daemon mutation invalidation scope", () => {
+  it("limits attachment renames to attachment and evidence reads", () => {
+    expect(
+      invalidatedDaemonQueryKindsForMutation("ui.attachments.rename"),
+    ).toEqual([
+      "ui.attachments.list",
+      "ui.audit.evidence.summary",
+      "ui.source_funds.evidence.list",
+      "ui.source_funds.preview",
+    ]);
+  });
+
+  it("keeps unaudited mutations on broad daemon invalidation", () => {
+    expect(
+      invalidatedDaemonQueryKindsForMutation("ui.transactions.metadata.update"),
+    ).toBeNull();
   });
 });
 

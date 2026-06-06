@@ -1,10 +1,10 @@
 import {
   Check,
+  Copy,
   FileText,
   Link2,
   Paperclip,
   Pencil,
-  Repeat2,
   X,
 } from "lucide-react";
 import * as React from "react";
@@ -290,9 +290,24 @@ export function AttachmentsPanel({
           />
           Attachments
         </div>
-        <span className="text-xs tabular-nums text-muted-foreground">
-          {items.length}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {items.length}
+          </span>
+          {onReuseEvidence ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="size-7 shrink-0"
+              aria-label="Reuse evidence"
+              title="Reuse evidence"
+              onClick={onReuseEvidence}
+            >
+              <Copy className="size-3.5" aria-hidden="true" />
+            </Button>
+          ) : null}
+        </div>
       </div>
       {items.length ? (
         <ul className="mb-2 space-y-1.5">
@@ -487,7 +502,7 @@ export function AttachmentsPanel({
           {pickerError}
         </p>
       ) : null}
-      <div className="grid gap-1.5 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-1.5">
         <Button
           type="button"
           variant="outline"
@@ -514,17 +529,6 @@ export function AttachmentsPanel({
         >
           <Link2 className="size-3.5" aria-hidden="true" />
           Attach links
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-          disabled={!onReuseEvidence}
-          onClick={onReuseEvidence}
-        >
-          <Repeat2 className="size-3.5" aria-hidden="true" />
-          Reuse
         </Button>
       </div>
       {onAddLinks ? (
