@@ -120,6 +120,7 @@ from .core.ui_snapshot import (
     build_wallet_utxos_snapshot,
     build_wallets_list_snapshot,
     build_workspace_health_snapshot,
+    build_workspace_overview_snapshot,
 )
 from .core.sync_backends import ElectrumClient
 from .backends import (
@@ -165,6 +166,7 @@ from .daemon_freshness import (
     _stop_freshness_background_worker,
     _sync_payload_has_errors,
     _wallets_sync_payload,
+    _workspace_freshness_run_payload,
 )
 from .secrets.credentials import migrate_dotenv_credentials
 from .secrets.migration import create_empty_encrypted_database, migrate_plaintext_to_encrypted
@@ -201,6 +203,7 @@ _AI_PROVIDER_SECRET_STORE_IDS = {
 SUPPORTED_KINDS = (
     "status",
     "ui.overview.snapshot",
+    "ui.workspace.overview.snapshot",
     "ui.transactions.list",
     "ui.transactions.extremes",
     "ui.transactions.resolve",
@@ -312,6 +315,7 @@ SUPPORTED_KINDS = (
     "ui.freshness.pause",
     "ui.freshness.resume",
     "ui.workspace.health",
+    "ui.workspace.freshness.run",
     "ui.workspace.create",
     "ui.workspace.rename",
     "ui.workspace.delete",
@@ -7071,6 +7075,18 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.workspace.overview.snapshot":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.workspace.overview.snapshot",
+                    build_workspace_overview_snapshot(ctx.conn, request.get("args")),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.transactions.list":
         return (
             _with_request_id(
@@ -7861,6 +7877,31 @@ def handle_request(
                         ctx.runtime_config,
                         _coerce_args_dict(request_id, request.get("args")),
                         progress_observer=_emit_freshness_progress,
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.workspace.freshness.run":
+        def _emit_workspace_freshness_progress(payload: Mapping[str, Any]) -> None:
+            out.write(
+                _with_request_id(
+                    build_envelope("ui.workspace.freshness.run.progress", dict(payload)),
+                    request_id,
+                )
+            )
+
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.workspace.freshness.run",
+                    _workspace_freshness_run_payload(
+                        ctx.conn,
+                        ctx.runtime_config,
+                        _coerce_args_dict(request_id, request.get("args")),
+                        progress_observer=_emit_workspace_freshness_progress,
                     ),
                 ),
                 request_id,

@@ -232,6 +232,15 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
     },
   ],
   [
+    "/books/",
+    {
+      title: "Bird's Eye",
+      icon: Users,
+      searchLabel: "Search books",
+      searchPlaceholder: "Search books, wallets, reports...",
+    },
+  ],
+  [
     "/books",
     {
       title: "Books",
@@ -418,7 +427,7 @@ function assistantReturnPathFor(pathname: string): AssistantReturnPath {
   if (pathname === "/transactions") return "/transactions";
   if (pathname === "/reports") return "/reports";
   if (pathname === "/source-of-funds") return "/source-of-funds";
-  if (pathname === "/books" || pathname === "/profiles") return "/books";
+  if (pathname === "/books" || pathname.startsWith("/books/") || pathname === "/profiles") return "/books";
   if (pathname === "/journals") return "/journals";
   if (pathname === "/quarantine") return "/quarantine";
   if (pathname === "/logs" || pathname === "/diagnostics") return "/logs";

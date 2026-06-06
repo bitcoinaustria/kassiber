@@ -13,6 +13,7 @@ import {
   ArrowRight,
   BriefcaseBusiness,
   CheckCircle2,
+  Eye,
   FolderPlus,
   Landmark,
   Pencil,
@@ -353,6 +354,12 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
             workspace={workspace}
             activeId={activeId}
             onCreateProfile={() => requestCreateProfile(workspace)}
+            onOpenBirdsEye={() =>
+              void navigate({
+                to: "/books/$workspaceId/birds-eye",
+                params: { workspaceId: workspace.id },
+              })
+            }
             onPick={(profile) => requestSwitch(workspace, profile)}
             onRename={(profile) => requestRenameProfile(workspace, profile)}
             onRenameWorkspace={() => requestRenameWorkspace(workspace)}
@@ -524,15 +531,17 @@ interface WorkspaceSectionProps {
   workspace: Workspace;
   activeId: string;
   onCreateProfile: () => void;
+  onOpenBirdsEye: () => void;
   onPick: (profile: Profile) => void;
   onRename: (profile: Profile) => void;
   onRenameWorkspace: () => void;
 }
 
-function WorkspaceSection({
+export function WorkspaceSection({
   workspace,
   activeId,
   onCreateProfile,
+  onOpenBirdsEye,
   onPick,
   onRename,
   onRenameWorkspace,
@@ -550,6 +559,16 @@ function WorkspaceSection({
           </CardDescription>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            data-testid={`birds-eye-${workspace.id}`}
+            onClick={onOpenBirdsEye}
+          >
+            <Eye className="size-4" aria-hidden="true" />
+            Bird&apos;s Eye
+          </Button>
           <Button
             type="button"
             variant="ghost"

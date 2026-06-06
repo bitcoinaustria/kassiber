@@ -32,6 +32,7 @@ const NODE_MODULES_REALPATH = (() => {
 const ALLOWED_BRIDGE_KINDS = new Set([
   "status",
   "ui.overview.snapshot",
+  "ui.workspace.overview.snapshot",
   "ui.transactions.list",
   "ui.transactions.metadata.update",
   "ui.attachments.list",
@@ -91,6 +92,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.rates.kraken_csv.import",
   "ui.rates.rebuild",
   "ui.workspace.health",
+  "ui.workspace.freshness.run",
   "ui.workspace.create",
   "ui.workspace.rename",
   "ui.workspace.delete",
@@ -179,6 +181,7 @@ const STREAM_CAPABLE_BRIDGE_KINDS = new Set([
   "ai.chat",
   "ui.wallets.sync",
   "ui.freshness.run",
+  "ui.workspace.freshness.run",
 ]);
 const STREAM_ONLY_BRIDGE_KINDS = new Set(["ai.chat"]);
 

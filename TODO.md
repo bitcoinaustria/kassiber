@@ -400,7 +400,11 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   primitives, wider dashboard layout, daemon-backed lock controls, SQLCipher
   passphrase rotation, and passphrase plus workspace-name confirmation before
   deleting encrypted local books set data
-- [ ] Books screen
+- [x] Books screen now uses daemon-backed book sets/books, create/rename/switch
+  actions, and a book-set Bird's Eye route for workspace-level treasury and
+  readiness overview without switching the active book.
+- [ ] Continue hardening book-management edges: destructive book/book-set
+  deletion UX, backup/restore path, and remaining Settings fixture replacement.
 - [x] Welcome/onboarding screen refreshed with a shadcn-style, SQLCipher-aware
   setup flow that captures books/tax defaults and database
   protection by initializing the local SQLCipher database through the daemon,

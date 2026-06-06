@@ -141,6 +141,7 @@ const DEEP_LINK_SETTINGS_SECTIONS: &[&str] = &[
 const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "status",
     "ui.overview.snapshot",
+    "ui.workspace.overview.snapshot",
     "ui.transactions.list",
     "ui.transactions.metadata.update",
     "ui.attachments.list",
@@ -200,6 +201,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.rates.kraken_csv.import",
     "ui.rates.rebuild",
     "ui.workspace.health",
+    "ui.workspace.freshness.run",
     "ui.audit.evidence.summary",
     "ui.workspace.create",
     "ui.workspace.rename",
@@ -284,6 +286,7 @@ const STREAMING_DAEMON_KINDS: &[&str] = &[
     "ai.chat",
     "ui.wallets.sync",
     "ui.freshness.run",
+    "ui.workspace.freshness.run",
 ];
 
 // Daemon kinds that exercise the AI runtime (model calls, chat sessions, tool

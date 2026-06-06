@@ -1026,6 +1026,151 @@ def _freshness_run_payload(
     }
 
 
+def _workspace_freshness_run_payload(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object],
+    raw_args: dict[str, Any] | None = None,
+    *,
+    progress_observer: Callable[[Mapping[str, Any]], None] | None = None,
+) -> dict[str, Any]:
+    args = raw_args or {}
+    unknown = sorted(set(args) - {"workspace_id", "rates", "journals", "run", "limit"})
+    if unknown:
+        raise AppError(
+            "ui.workspace.freshness.run received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    workspace_id = args.get("workspace_id")
+    if not isinstance(workspace_id, str) or not workspace_id.strip():
+        raise AppError(
+            "ui.workspace.freshness.run requires args.workspace_id",
+            code="validation",
+            retryable=False,
+        )
+    workspace = conn.execute(
+        "SELECT * FROM workspaces WHERE id = ?",
+        (workspace_id.strip(),),
+    ).fetchone()
+    if workspace is None:
+        raise AppError(
+            f"Book set '{workspace_id}' was not found",
+            code="not_found",
+            retryable=False,
+        )
+    profile_rows = conn.execute(
+        """
+        SELECT *
+        FROM profiles
+        WHERE workspace_id = ?
+        ORDER BY created_at ASC, label ASC
+        """,
+        (workspace["id"],),
+    ).fetchall()
+    include_rates = bool(args.get("rates", True))
+    include_journals = bool(args.get("journals", True))
+    run_now = bool(args.get("run", True))
+    requested_limit = args.get("limit")
+    books: list[dict[str, Any]] = []
+    totals = {
+        "books": len(profile_rows),
+        "enqueued": 0,
+        "completed": 0,
+        "errors": 0,
+        "rate_limited": 0,
+        "blocked_books": 0,
+        "synced_books": 0,
+    }
+    handlers = _freshness_handlers(runtime_config)
+    for profile in profile_rows:
+        recovered = core_freshness.recover_interrupted_jobs(
+            conn,
+            profile_id=profile["id"],
+        )
+        if recovered:
+            conn.commit()
+        specs = _freshness_wallet_source_specs(
+            conn,
+            profile["id"],
+            include_rates=include_rates,
+            include_journals=include_journals,
+        )
+        enqueued = _enqueue_freshness_jobs(conn, profile["id"], specs)
+
+        def _book_progress(
+            payload: Mapping[str, Any],
+            *,
+            profile_id: str = profile["id"],
+            profile_label: str = profile["label"],
+        ) -> None:
+            if progress_observer is None:
+                return
+            progress_observer(
+                {
+                    "workspace": {"id": workspace["id"], "label": workspace["label"]},
+                    "profile": {"id": profile_id, "label": profile_label},
+                    **dict(payload),
+                }
+            )
+
+        completed: list[dict[str, Any]] = []
+        if run_now:
+            limit = int(requested_limit or max(1, len(enqueued)))
+            completed = core_freshness.run_due_jobs(
+                conn,
+                handlers,
+                profile_id=profile["id"],
+                limit=limit,
+                progress_observer=_book_progress,
+            )
+        snapshot = core_freshness.build_snapshot(conn, profile["id"])
+        result_errors = [
+            job
+            for job in completed
+            if job.get("status")
+            not in {
+                core_freshness.JOB_DONE,
+                core_freshness.JOB_CANCELLED,
+                core_freshness.JOB_RATE_LIMITED,
+            }
+        ]
+        rate_limited = int(snapshot.get("summary", {}).get("rate_limited") or 0)
+        blocked = int(snapshot.get("summary", {}).get("blocking_reports") or 0)
+        totals["enqueued"] += len(enqueued)
+        totals["completed"] += len(completed)
+        totals["errors"] += len(result_errors)
+        totals["rate_limited"] += rate_limited
+        if blocked:
+            totals["blocked_books"] += 1
+        else:
+            totals["synced_books"] += 1
+        books.append(
+            {
+                "profile": {"id": profile["id"], "label": profile["label"]},
+                "results": _sync_results_from_freshness_jobs(completed),
+                "recovered": recovered,
+                "enqueued": enqueued,
+                "completed": completed,
+                "attention": {
+                    "blockedReports": blocked > 0,
+                    "rateLimited": rate_limited > 0,
+                    "errors": len(result_errors),
+                },
+                **snapshot,
+            }
+        )
+    return {
+        "workspace": {"id": workspace["id"], "label": workspace["label"]},
+        "books": books,
+        "summary": {
+            **totals,
+            "ok": totals["errors"] == 0 and totals["blocked_books"] == 0,
+            "reports_blocked": totals["blocked_books"],
+        },
+    }
+
+
 def _freshness_control_payload(
     conn: sqlite3.Connection,
     raw_args: dict[str, Any],
