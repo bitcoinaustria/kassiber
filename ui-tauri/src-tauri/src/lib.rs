@@ -142,7 +142,12 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "status",
     "ui.overview.snapshot",
     "ui.transactions.list",
+    "ui.transactions.extremes",
+    "ui.transactions.search",
+    "ui.transactions.resolve",
     "ui.transactions.metadata.update",
+    "ui.transactions.history",
+    "ui.transactions.history.revert",
     "ui.attachments.list",
     "ui.attachments.add",
     "ui.attachments.copy",
@@ -176,12 +181,19 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.reports.export_austrian_e1kv_xlsx",
     "ui.reports.export_austrian_e1kv_csv",
     "ui.reports.export_audit_package",
+    "ui.reports.summary",
+    "ui.reports.balance_sheet",
+    "ui.reports.portfolio_summary",
+    "ui.reports.balance_history",
     "ui.journals.snapshot",
     "ui.journals.events.list",
     "ui.journals.quarantine",
     "ui.journals.transfers.list",
     "ui.journals.process",
+    "ui.activity.history",
+    "ui.activity.stale",
     "ui.transfers.suggest",
+    "ui.transfers.review_context",
     "ui.transfers.list",
     "ui.transfers.pair",
     "ui.transfers.unpair",
@@ -199,7 +211,12 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.rates.coverage",
     "ui.rates.kraken_csv.import",
     "ui.rates.rebuild",
+    "ui.report.blockers",
     "ui.workspace.health",
+    "ui.maintenance.settings",
+    "ui.maintenance.configure",
+    "ui.maintenance.run",
+    "ui.audit.changes_since_last_answer",
     "ui.audit.evidence.summary",
     "ui.workspace.create",
     "ui.workspace.rename",
@@ -280,11 +297,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
 /// forwards intermediate records to the webview as Tauri events
 /// `daemon://stream` and switches to a per-record inactivity
 /// timeout. Other kinds keep the existing total-budget behavior.
-const STREAMING_DAEMON_KINDS: &[&str] = &[
-    "ai.chat",
-    "ui.wallets.sync",
-    "ui.freshness.run",
-];
+const STREAMING_DAEMON_KINDS: &[&str] = &["ai.chat", "ui.wallets.sync", "ui.freshness.run"];
 
 // Daemon kinds that exercise the AI runtime (model calls, chat sessions, tool
 // consent prompts). Gated server-side by the global AI features toggle so the
@@ -723,7 +736,8 @@ fn copy_report_export_directory(source: &Path, destination: &Path) -> Result<(),
     for entry in std::fs::read_dir(source)
         .map_err(|error| format!("Could not read managed report export: {error}"))?
     {
-        let entry = entry.map_err(|error| format!("Could not read report export entry: {error}"))?;
+        let entry =
+            entry.map_err(|error| format!("Could not read report export entry: {error}"))?;
         let source_path = entry.path();
         let destination_path = destination.join(entry.file_name());
         let entry_metadata = entry
@@ -2372,8 +2386,8 @@ mod tests {
     use super::{
         copy_report_export_directory, database_is_encrypted,
         ensure_export_destination_outside_managed_root, inspect_import_project_directory,
-        inspect_terminal_command, is_managed_report_export_path,
-        is_supported_audit_package_dir, is_supported_austrian_csv_bundle_dir, is_supported_export_file,
+        inspect_terminal_command, is_managed_report_export_path, is_supported_audit_package_dir,
+        is_supported_austrian_csv_bundle_dir, is_supported_export_file,
         is_supported_report_export_target, menu_action, menu_action_for_deep_link,
         menu_action_for_id, navigate_action, open_settings_action, path_is_on_path,
         terminal_command_contents, terminal_command_path_hint, validated_attachment_file_path,
@@ -2386,6 +2400,7 @@ mod tests {
         MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
         MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL, TERMINAL_COMMAND_MARKER,
     };
+    use std::collections::BTreeSet;
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -2581,6 +2596,42 @@ mod tests {
         assert_eq!(
             inspect_terminal_command(&paths).expect("inspect symlink command"),
             TerminalCommandFileState::ManagedStale
+        );
+    }
+
+    #[test]
+    fn daemon_ui_handler_kinds_are_in_tauri_allowlist() {
+        const DAEMON_SOURCE: &str = include_str!("../../../kassiber/daemon.py");
+
+        fn quoted_ui_kind(line: &str) -> Option<String> {
+            let start = line.find("\"ui.")? + 1;
+            let rest = &line[start..];
+            let end = rest.find('"')?;
+            Some(rest[..end].to_string())
+        }
+
+        let daemon_kinds: BTreeSet<String> = DAEMON_SOURCE
+            .lines()
+            .filter_map(|line| {
+                let trimmed = line.trim_start();
+                if trimmed.starts_with("if kind == \"ui.")
+                    || trimmed.starts_with("elif kind == \"ui.")
+                {
+                    quoted_ui_kind(trimmed)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let allowed_kinds: BTreeSet<&str> = ALLOWED_DAEMON_KINDS.iter().copied().collect();
+        let missing: Vec<String> = daemon_kinds
+            .into_iter()
+            .filter(|kind| !allowed_kinds.contains(kind.as_str()))
+            .collect();
+
+        assert!(
+            missing.is_empty(),
+            "daemon UI kinds missing from Tauri allowlist: {missing:?}"
         );
     }
 
