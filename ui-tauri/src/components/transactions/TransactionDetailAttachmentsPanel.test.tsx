@@ -36,6 +36,7 @@ describe("AttachmentsPanel", () => {
     );
 
     expect(html).toContain('aria-label="Reuse evidence"');
+    expect(html).toContain("size-8 shrink-0");
     expect(html).not.toContain(">Reuse</button>");
   });
 });

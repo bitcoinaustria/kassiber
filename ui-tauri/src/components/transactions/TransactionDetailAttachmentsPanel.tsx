@@ -487,7 +487,7 @@ export function AttachmentsPanel({
           {pickerError}
         </p>
       ) : null}
-      <div className="grid gap-1.5 sm:grid-cols-3">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1.5">
         <Button
           type="button"
           variant="outline"
@@ -518,8 +518,8 @@ export function AttachmentsPanel({
         <Button
           type="button"
           variant="outline"
-          size="sm"
-          className="px-2"
+          size="icon"
+          className="size-8 shrink-0"
           disabled={!onReuseEvidence}
           aria-label="Reuse evidence"
           title="Reuse evidence"
