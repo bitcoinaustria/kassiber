@@ -1818,9 +1818,10 @@ function AppDashboardHeader({
     ...appNotifications.map((item) => ({
       ...item,
       to:
-        item.tone === "error"
+        item.to ??
+        (item.tone === "error"
           ? (developerToolsEnabled ? ("/logs" as const) : ("/settings" as const))
-          : notificationRouteFor(item.title),
+          : notificationRouteFor(item.title)),
     })),
     ...systemNotificationItems,
   ];

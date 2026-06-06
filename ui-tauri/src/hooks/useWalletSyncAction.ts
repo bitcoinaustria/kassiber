@@ -108,6 +108,7 @@ export function useWalletSyncAction() {
         body: "Kassiber is refreshing sources, market rates, and journals.",
         tone: "warning",
         dedupeKey: "book-refresh",
+        to: "/overview",
         progress: startingSyncProgress(),
       });
       refreshBook.mutate(
@@ -124,6 +125,7 @@ export function useWalletSyncAction() {
                 body,
                 tone: needsAttention ? "warning" : "success",
                 dedupeKey: "book-refresh",
+                to: needsAttention ? "/logs" : "/overview",
                 progress: undefined,
               });
               noticeIdRef.current = null;
@@ -135,6 +137,7 @@ export function useWalletSyncAction() {
                 body,
                 tone: needsAttention ? "warning" : "success",
                 dedupeKey: "book-refresh",
+                to: needsAttention ? "/logs" : "/overview",
               });
             }
             if (!needsAttention) options?.onTrustedSuccess?.();
@@ -152,6 +155,7 @@ export function useWalletSyncAction() {
                 body,
                 tone: "error",
                 dedupeKey: "book-refresh",
+                to: "/logs",
                 progress: undefined,
               });
               noticeIdRef.current = null;
@@ -164,6 +168,7 @@ export function useWalletSyncAction() {
               body,
               tone: "error",
               dedupeKey: "book-refresh",
+              to: "/logs",
             });
             clearActiveMaintenanceProgress(BOOK_REFRESH_PROGRESS_ID);
             startedAtRef.current = null;

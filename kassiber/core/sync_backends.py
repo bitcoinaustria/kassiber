@@ -979,6 +979,18 @@ def _confirmations_from_heights(block_height, tip_height):
     return normalized_tip_height - normalized_block_height + 1
 
 
+def _positive_int_or_none(value):
+    if value in (None, "", 0, "0"):
+        return None
+    try:
+        normalized = int(value)
+    except (TypeError, ValueError):
+        return None
+    if normalized <= 0:
+        return None
+    return normalized
+
+
 def _esplora_tip_height(base_url, timeout=30):
     try:
         return int(
@@ -994,10 +1006,7 @@ def _esplora_tip_height(base_url, timeout=30):
 def _block_height_from_status(status):
     if not isinstance(status, dict):
         return None
-    block_height = status.get("block_height")
-    if block_height in (None, "", 0, "0"):
-        return None
-    return int(block_height)
+    return _positive_int_or_none(status.get("block_height"))
 
 
 def _esplora_bitcoin_utxo_record(raw_utxo, target, sync_state, tip_height=None):
@@ -1944,14 +1953,13 @@ def electrum_output_at_index(tx, index):
 
 
 def _electrum_utxo_status(raw_utxo, header_timestamps):
-    height = raw_utxo.get("height")
-    if height in (None, "", 0, "0") or int(height) <= 0:
+    block_height = _positive_int_or_none(raw_utxo.get("height"))
+    if block_height is None:
         return {
             "confirmed": False,
             "block_height": None,
             "block_time": None,
         }
-    block_height = int(height)
     return {
         "confirmed": True,
         "block_height": block_height,
@@ -2020,9 +2028,9 @@ def electrum_utxos_for_wallet(backend, sync_state: WalletSyncState):
             target = target_by_scripthash[scripthash]
             for raw_utxo in raw_utxos or []:
                 raw_by_target.append((target, raw_utxo))
-                height = raw_utxo.get("height")
-                if height not in (None, "", 0, "0") and int(height) > 0:
-                    heights.add(int(height))
+                height = _positive_int_or_none(raw_utxo.get("height"))
+                if height is not None:
+                    heights.add(height)
         if heights:
             header_hexes = electrum_call_many(
                 client,
@@ -2241,7 +2249,11 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
                         if isinstance(item, dict) and item.get("tx_hash")
                     }
                 )
-                if any(int(item.get("height") or 0) <= 0 for item in normalized_history):
+                if any(
+                    not isinstance(item, dict)
+                    or _positive_int_or_none(item.get("height")) is None
+                    for item in normalized_history
+                ):
                     dirty_scripthashes.add(scripthash)
 
         def lookup(txid):
@@ -2257,9 +2269,9 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
             return transactions[txid]
 
         def height_to_timestamp(height):
-            if height in (None, 0) or int(height) <= 0:
+            normalized_height = _positive_int_or_none(height)
+            if normalized_height is None:
                 return None
-            normalized_height = int(height)
             if normalized_height not in header_timestamps:
                 header_hex = client.call("blockchain.block.header", [normalized_height])
                 header_timestamps[normalized_height] = block_header_timestamp(header_hex)
@@ -2268,7 +2280,10 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
         txids = {}
         for history in histories:
             txids[history["tx_hash"]] = history
-        ordered_histories = sorted(txids.items(), key=lambda item: (item[1].get("height", 0), item[0]))
+        ordered_histories = sorted(
+            txids.items(),
+            key=lambda item: (_positive_int_or_none(item[1].get("height")) or 0, item[0]),
+        )
         ordered_txids = [txid for txid, _ in ordered_histories]
         if ordered_txids:
             raw_transactions = electrum_call_many(
@@ -2325,9 +2340,10 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
                     transactions[txid] = decode_raw_transaction(raw_tx)
         heights = sorted(
             {
-                int(history.get("height"))
+                height
                 for history in txids.values()
-                if history.get("height") is not None and int(history.get("height")) > 0
+                for height in [_positive_int_or_none(history.get("height"))]
+                if height is not None
             }
         )
         if heights:

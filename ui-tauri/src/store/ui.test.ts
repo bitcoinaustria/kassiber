@@ -17,6 +17,7 @@ describe("UI persistence", () => {
       body: "Scanning",
       tone: "warning",
       dedupeKey: "wallet-sync",
+      to: "/overview",
       progress: { label: "Preparing wallet scan" },
     });
     const second = useUiStore.getState().addNotification({
@@ -24,6 +25,7 @@ describe("UI persistence", () => {
       body: "2 sources current",
       tone: "success",
       dedupeKey: "wallet-sync",
+      to: "/logs",
     });
 
     expect(second).toBe(first);
@@ -33,6 +35,7 @@ describe("UI persistence", () => {
       title: "Connection refresh finished",
       body: "2 sources current",
       dedupeKey: "wallet-sync",
+      to: "/logs",
     });
     expect(useUiStore.getState().notifications[0].progress).toBeUndefined();
   });

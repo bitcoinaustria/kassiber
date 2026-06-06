@@ -11,6 +11,21 @@ type Currency = "btc" | "eur";
 export type DataMode = "mock" | "real";
 export type ThemePreference = "system" | "light" | "dark";
 export type NotificationTone = "info" | "success" | "warning" | "error";
+export type NotificationRoute =
+  | "/overview"
+  | "/transactions"
+  | "/activity"
+  | "/reports"
+  | "/source-of-funds"
+  | "/connections"
+  | "/books"
+  | "/journals"
+  | "/transfers"
+  | "/swaps"
+  | "/quarantine"
+  | "/logs"
+  | "/settings"
+  | "/assistant";
 
 export const DEFAULT_APP_SCALE = 0.9;
 export const MIN_APP_SCALE = 0.8;
@@ -29,6 +44,7 @@ export interface AppNotification {
   body: string;
   tone: NotificationTone;
   dedupeKey?: string;
+  to?: NotificationRoute;
   progress?: NotificationProgress;
   createdAt: string;
 }
