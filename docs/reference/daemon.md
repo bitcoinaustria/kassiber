@@ -400,7 +400,9 @@ directory and return the written path plus metadata. UI kinds not yet wired
 return `daemon_unavailable` instead.
 
 `ui.overview.snapshot` remains scoped to the active book/profile.
-`ui.workspace.overview.snapshot` is the book-set Bird's Eye read model. It
+`ui.workspace.health` is also active-context health despite the historical
+workspace name; use `ui.workspace.overview.snapshot` for whole book-set reads.
+`ui.workspace.overview.snapshot` is the book-set overview read model. It
 requires `args.workspace_id`, does not switch the active book, and returns an
 operational rollup across all profiles in that workspace: connection tiles,
 recent transactions/activity, BTC balance series, portfolio series, fiat rows,
@@ -412,6 +414,8 @@ treasury/readiness summaries only. If all books share one fiat currency, fiat
 totals use the same latest-rate semantics as each book overview. Mixed fiat
 sets return BTC-native totals plus per-book fiat rows and mark the fiat rollup
 as `mode="mixed"` / `partial=true` instead of converting between currencies.
+Desktop drilldowns from the book-set overview are book-scoped routes; they
+must make the active-book switch visible before navigating.
 
 ## Freshness jobs
 

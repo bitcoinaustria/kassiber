@@ -1642,6 +1642,10 @@ def _profile_readiness(
     return {"ready": ready, "hints": hints}
 
 
+def _readiness_ready(readiness: dict[str, Any]) -> bool:
+    return bool(readiness.get("ready"))
+
+
 def _build_profile_overview_snapshot(
     conn: sqlite3.Connection,
     *,
@@ -1869,39 +1873,76 @@ def _workspace_portfolio_series(
     *,
     same_fiat: bool,
 ) -> list[dict[str, Any]]:
-    by_date: dict[str, dict[str, Any]] = {}
+    book_points: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
     for book in books:
-        profile = book["profile"]
-        for point in book.get("portfolioSeries") or []:
-            date_key = str(point.get("date") or "")
-            if not date_key:
+        points = sorted(
+            [
+                dict(point)
+                for point in (book.get("portfolioSeries") or [])
+                if str(point.get("date") or "")
+            ],
+            key=lambda point: str(point.get("date") or ""),
+        )
+        if points:
+            book_points.append((book, points))
+    date_keys = sorted(
+        {
+            str(point.get("date") or "")
+            for _, points in book_points
+            for point in points
+            if point.get("date")
+        }
+    )
+    if not date_keys:
+        return []
+
+    indexes = {book["profile"]["id"]: 0 for book, _ in book_points}
+    last_points: dict[str, dict[str, Any]] = {}
+    output: list[dict[str, Any]] = []
+    for date_key in date_keys:
+        aggregate: dict[str, Any] = {
+            "date": date_key,
+            "label": date_key,
+            "balanceBtc": 0.0,
+            "books": [],
+        }
+        if same_fiat:
+            aggregate["valueEur"] = 0.0
+            aggregate["costBasisEur"] = 0.0
+        carried_books: list[dict[str, Any]] = []
+        for book, points in book_points:
+            profile = book["profile"]
+            profile_id = profile["id"]
+            index = indexes[profile_id]
+            while index < len(points) and str(points[index].get("date") or "") <= date_key:
+                last_points[profile_id] = points[index]
+                index += 1
+            indexes[profile_id] = index
+            point = last_points.get(profile_id)
+            if point is None:
                 continue
-            aggregate = by_date.setdefault(
-                date_key,
-                {
-                    "date": date_key,
-                    "label": str(point.get("label") or date_key),
-                    "balanceBtc": 0.0,
-                    "valueEur": 0.0 if same_fiat else None,
-                    "costBasisEur": 0.0 if same_fiat else None,
-                    "books": [],
-                },
-            )
-            aggregate["balanceBtc"] += float(point.get("balanceBtc") or 0)
+            balance_btc = float(point.get("balanceBtc") or 0)
+            value = float(point.get("valueEur") or 0)
+            cost_basis = float(point.get("costBasisEur") or 0)
+            aggregate["balanceBtc"] += balance_btc
             if same_fiat:
-                aggregate["valueEur"] += float(point.get("valueEur") or 0)
-                aggregate["costBasisEur"] += float(point.get("costBasisEur") or 0)
-            aggregate["books"].append(
+                aggregate["valueEur"] += value
+                aggregate["costBasisEur"] += cost_basis
+            carried_books.append(
                 {
-                    "profileId": profile["id"],
+                    "profileId": profile_id,
                     "profileLabel": profile["label"],
                     "fiatCurrency": profile["fiatCurrency"],
-                    "balanceBtc": float(point.get("balanceBtc") or 0),
-                    "value": float(point.get("valueEur") or 0),
-                    "costBasis": float(point.get("costBasisEur") or 0),
+                    "balanceBtc": balance_btc,
+                    "value": value,
+                    "costBasis": cost_basis,
                 }
             )
-    return [by_date[key] for key in sorted(by_date)]
+        aggregate["books"] = carried_books
+        if same_fiat and aggregate["balanceBtc"]:
+            aggregate["priceEur"] = aggregate["valueEur"] / aggregate["balanceBtc"]
+        output.append(aggregate)
+    return output
 
 
 def _workspace_fiat_rollup(
@@ -2019,7 +2060,7 @@ def build_workspace_overview_snapshot(
         int(book["journals"].get("quarantine_count") or 0) for book in books
     )
     needs_journals = any(bool(book["journals"].get("needs_processing")) for book in books)
-    ready_books = sum(1 for book in books if book["readiness"]["ready"])
+    ready_books = sum(1 for book in books if _readiness_ready(book["readiness"]))
     blocked_books = len(books) - ready_books
     return {
         "workspace": {
@@ -4210,25 +4251,11 @@ def build_workspace_health_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     rate_pairs = conn.execute(
         "SELECT COUNT(DISTINCT pair) AS count FROM rates_cache",
     ).fetchone()["count"]
-    hints: list[str] = []
-    if int(wallet_count or 0) == 0:
-        hints.append(
-            "Add a watch-only source before refreshing or importing transactions."
-        )
-    elif int(transaction_count or 0) == 0:
-        hints.append("Refresh sources or import files before journal processing.")
-    if freshness["needs_processing"]:
-        hints.append("Run journal processing before trusting reports.")
-    if freshness["quarantine_count"]:
-        hints.append("Review quarantined transactions before tax export.")
-    reports_ready = (
-        int(wallet_count or 0) > 0
-        and int(transaction_count or 0) > 0
-        and freshness["status"] == "current"
-        and freshness["quarantine_count"] == 0
+    readiness = _profile_readiness(
+        wallet_count=int(wallet_count or 0),
+        transaction_count=int(transaction_count or 0),
+        freshness=freshness,
     )
-    if reports_ready:
-        hints.append("Reports are ready from the current processed journal state.")
     return {
         "workspace": {
             "id": context["workspace_id"],
@@ -4252,8 +4279,8 @@ def build_workspace_health_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         },
         "journals": freshness,
         "reports": {
-            "ready": reports_ready,
-            "hints": hints,
+            "ready": _readiness_ready(readiness),
+            "hints": readiness["hints"],
         },
     }
 

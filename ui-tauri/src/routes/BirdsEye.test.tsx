@@ -6,13 +6,14 @@ import {
   MOCK_WORKSPACE_OVERVIEW,
   mockWorkspaceOverviewSnapshot,
 } from "@/mocks/workspaceOverview";
+import { RecentTransactionsTable } from "@/components/overview-dashboard/RecentTransactionsTable";
 import { router } from "@/routeTree";
 import { WorkspaceSection } from "@/routes/Books";
 
 import { BookRow } from "./BirdsEye";
 
-describe("Bird's Eye route and model", () => {
-  it("registers the workspace Bird's Eye route", () => {
+describe("Book Set Overview route and model", () => {
+  it("registers the workspace overview route", () => {
     expect(router.routesByPath["/books/$workspaceId/birds-eye"]).toBeTruthy();
   });
 
@@ -43,7 +44,7 @@ describe("Bird's Eye route and model", () => {
   });
 });
 
-describe("Bird's Eye rendering", () => {
+describe("Book Set Overview rendering", () => {
   it("renders all per-book drilldown buttons", () => {
     const html = renderToStaticMarkup(
       <BookRow
@@ -62,7 +63,7 @@ describe("Bird's Eye rendering", () => {
     expect(html).toContain("Reports");
   });
 
-  it("places the Bird's Eye action in each Books workspace header", () => {
+  it("places the book-set overview action in each Books workspace header", () => {
     const workspace = MOCK_PROFILES.workspaces[0];
     const html = renderToStaticMarkup(
       <WorkspaceSection
@@ -76,7 +77,42 @@ describe("Bird's Eye rendering", () => {
       />,
     );
 
-    expect(html).toContain("Bird&#x27;s Eye");
+    expect(html).toContain("Book Set Overview");
     expect(html).toContain(`data-testid="birds-eye-${workspace.id}"`);
+  });
+
+  it("uses the shared transactions table with book labels", () => {
+    const html = renderToStaticMarkup(
+      <RecentTransactionsTable
+        title="Recent activity by book"
+        transactions={[
+          {
+            id: "tx-workspace",
+            txid: "external-workspace",
+            profileId: "pf-a",
+            scopeLabel: "Operating",
+            counterparty: "Operating Wallet",
+            counterpartyInitials: "OW",
+            tags: ["Income"],
+            status: "confirmed",
+            flow: "incoming",
+            amount: 120,
+            amountBtc: 0.001,
+            fiatCurrency: "EUR",
+            date: "2026-06-06 10:00",
+          },
+        ]}
+        hideSensitive={false}
+        currency="btc"
+        priceEur={60_000}
+        fiatCurrency="EUR"
+        showAllTo={null}
+        onOpenTransaction={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain("Recent activity by book");
+    expect(html).toContain("Operating");
+    expect(html).not.toContain("Show all");
   });
 });

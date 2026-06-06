@@ -2,11 +2,11 @@ import * as React from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import {
   AlertTriangle,
-  ArrowRight,
   BarChart3,
   BookOpen,
   CheckCircle2,
   Gauge,
+  Info,
   Loader2,
   RefreshCw,
   ShieldAlert,
@@ -14,7 +14,10 @@ import {
   WalletCards,
 } from "lucide-react";
 
+import { MetricCard } from "@/components/kb/MetricCard";
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
+import { BtcActivityChart } from "@/components/overview-dashboard/BtcActivityChart";
+import { RecentTransactionsTable } from "@/components/overview-dashboard/RecentTransactionsTable";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,15 +34,24 @@ import {
 import {
   formatBtc,
   formatFiatAmount,
+  type Currency,
+  useCurrency,
 } from "@/lib/currency";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
+import type { OverviewSnapshot } from "@/mocks/seed";
 import type {
   WorkspaceBookOverview,
   WorkspaceOverviewSnapshot,
   WorkspaceTx,
 } from "@/mocks/workspaceOverview";
 import { useUiStore } from "@/store/ui";
+import {
+  activeMarketFiatCurrency,
+  activeMarketFiatRate,
+  toDashboardTransaction,
+  type Transaction,
+} from "@/components/overview-dashboard/model";
 
 type BookRoute = "/overview" | "/transactions" | "/journals" | "/quarantine" | "/connections" | "/reports";
 
@@ -92,6 +104,75 @@ const BOOK_ROUTES: Array<{
   { label: "Reports", to: "/reports", icon: BarChart3 },
 ];
 
+function workspaceChartSnapshot(
+  snapshot: WorkspaceOverviewSnapshot,
+): OverviewSnapshot {
+  const firstMarketRate = snapshot.books.find((book) => book.marketRate)?.marketRate;
+  const fiatCurrency =
+    snapshot.fiat.fiatCurrency ?? firstMarketRate?.fiatCurrency ?? "EUR";
+  const fallbackRate =
+    firstMarketRate?.rate ??
+    snapshot.portfolioSeries
+      .map((point) => point.priceEur)
+      .find((rate): rate is number => typeof rate === "number" && rate > 0) ??
+    0;
+  const portfolioSeries = snapshot.portfolioSeries.map((point) => ({
+    date: point.date,
+    label: point.label,
+    balanceBtc: point.balanceBtc,
+    valueEur: typeof point.valueEur === "number" ? point.valueEur : 0,
+    costBasisEur:
+      typeof point.costBasisEur === "number" ? point.costBasisEur : 0,
+    priceEur: point.priceEur,
+    priceTimestamp: point.priceTimestamp,
+    priceSource: point.priceSource,
+  }));
+  return {
+    priceEur: fiatCurrency === "EUR" ? fallbackRate : 0,
+    priceUsd: 0,
+    marketRate: snapshot.fiat.mixed
+      ? undefined
+      : {
+          asset: "BTC",
+          fiatCurrency,
+          pair: firstMarketRate?.pair ?? `BTC-${fiatCurrency}`,
+          rate: fallbackRate || null,
+          timestamp: firstMarketRate?.timestamp ?? null,
+          source: firstMarketRate?.source ?? null,
+          fetchedAt: firstMarketRate?.fetchedAt ?? null,
+          granularity: firstMarketRate?.granularity ?? null,
+          method: firstMarketRate?.method ?? null,
+        },
+    connections: snapshot.connections,
+    txs: snapshot.txs,
+    activityTxs: snapshot.activityTxs,
+    balanceSeries: snapshot.balanceSeries,
+    portfolioSeries,
+    fiat: {
+      fiatCurrency,
+      eurBalance: snapshot.fiat.eurBalance ?? 0,
+      eurCostBasis: snapshot.fiat.eurCostBasis ?? 0,
+      eurUnrealized: snapshot.fiat.eurUnrealized ?? 0,
+      eurRealizedYTD: snapshot.fiat.eurRealizedYTD ?? 0,
+    },
+    status: {
+      workspace: snapshot.workspace?.label ?? null,
+      profile: "Book set",
+      transactionCount: snapshot.status.transactionCount,
+      needsJournals: snapshot.status.needsJournals,
+      quarantines: snapshot.status.quarantines,
+    },
+  };
+}
+
+function workspaceTransactionRows(txs: WorkspaceTx[]): Transaction[] {
+  return txs.map((tx, index) => ({
+    ...toDashboardTransaction(tx, index),
+    profileId: tx.profileId,
+    scopeLabel: tx.book.label,
+  }));
+}
+
 export function BirdsEye() {
   const params = useParams({ strict: false }) as { workspaceId?: string };
   const workspaceId = params.workspaceId ?? "";
@@ -115,7 +196,7 @@ export function BirdsEye() {
           <CardContent className="py-4 text-sm text-destructive">
             {error instanceof Error
               ? error.message
-              : "Could not load Bird's Eye."}
+              : "Could not load Book Set Overview."}
           </CardContent>
         </Card>
       </div>
@@ -147,6 +228,7 @@ export function BirdsEyeView({
   const addNotification = useUiStore((state) => state.addNotification);
   const updateNotification = useUiStore((state) => state.updateNotification);
   const hideSensitive = useUiStore((state) => state.hideSensitive);
+  const currency = useCurrency();
   const [progress, setProgress] = React.useState<WorkspaceFreshnessProgress[]>([]);
   const [refreshSummary, setRefreshSummary] =
     React.useState<WorkspaceFreshnessRun["summary"] | null>(null);
@@ -172,6 +254,26 @@ export function BirdsEyeView({
   const books = snapshot?.books ?? [];
   const readyBooks = snapshot?.status.readyBooks ?? books.filter((book) => book.readiness.ready).length;
   const blockedBooks = snapshot?.status.blockedBooks ?? books.length - readyBooks;
+  const chartSnapshot = React.useMemo(
+    () => (snapshot ? workspaceChartSnapshot(snapshot) : null),
+    [snapshot],
+  );
+  const workspaceTransactions = React.useMemo(
+    () =>
+      workspaceTransactionRows(
+        snapshot?.activityTxs?.length ? snapshot.activityTxs : snapshot?.txs ?? [],
+      ),
+    [snapshot?.activityTxs, snapshot?.txs],
+  );
+  const transactionProfiles = React.useMemo(() => {
+    const pairs = [
+      ...(snapshot?.activityTxs ?? []),
+      ...(snapshot?.txs ?? []),
+    ].map((tx) => [tx.id, tx] as const);
+    return new Map(pairs);
+  }, [snapshot?.activityTxs, snapshot?.txs]);
+  const chartCurrency: Currency = fiat?.mixed ? "btc" : currency;
+  const fiatSeriesEnabled = !fiat?.mixed;
 
   const handleRefresh = React.useCallback(() => {
     if (!workspaceId || refreshWorkspace.isPending) return;
@@ -240,9 +342,19 @@ export function BirdsEyeView({
 
   const openBookRoute = React.useCallback(
     (profileId: string, route: BookRoute) => {
+      const book = books.find((candidate) => candidate.profile.id === profileId);
+      const routeLabel = BOOK_ROUTES.find((candidate) => candidate.to === route)?.label ?? "page";
       void switchProfile
         .mutateAsync({ profile_id: profileId })
-        .then(() => navigate({ to: route }))
+        .then(() => {
+          addNotification({
+            title: "Active book changed",
+            body: `${book?.profile.label ?? "Selected book"} is now active. Opening ${routeLabel}.`,
+            tone: "info",
+            dedupeKey: `birds-eye-active-book-${profileId}`,
+          });
+          return navigate({ to: route });
+        })
         .catch((switchError: unknown) => {
           addNotification({
             title: "Could not open book",
@@ -255,7 +367,52 @@ export function BirdsEyeView({
           });
         });
     },
+    [addNotification, books, navigate, switchProfile],
+  );
+
+  const openWorkspaceTransaction = React.useCallback(
+    (transaction: Transaction) => {
+      if (!transaction.profileId) return;
+      void switchProfile
+        .mutateAsync({ profile_id: transaction.profileId })
+        .then(() => {
+          addNotification({
+            title: "Active book changed",
+            body: `${transaction.scopeLabel ?? "Selected book"} is now active. Opening transaction detail.`,
+            tone: "info",
+            dedupeKey: `birds-eye-active-transaction-${transaction.profileId}`,
+          });
+          return navigate({
+            to: "/transactions",
+            search: { tx: transaction.id },
+          });
+        })
+        .catch((switchError: unknown) => {
+          addNotification({
+            title: "Could not open transaction",
+            body:
+              switchError instanceof Error
+                ? switchError.message
+                : "Kassiber could not switch to that transaction's book.",
+            tone: "error",
+            dedupeKey: `birds-eye-open-transaction-${transaction.id}`,
+          });
+        });
+    },
     [addNotification, navigate, switchProfile],
+  );
+
+  const openChartTransaction = React.useCallback(
+    (transactionId: string) => {
+      const tx = transactionProfiles.get(transactionId);
+      if (!tx) return;
+      openWorkspaceTransaction({
+        ...toDashboardTransaction(tx, 0),
+        profileId: tx.profileId,
+        scopeLabel: tx.book.label,
+      });
+    },
+    [openWorkspaceTransaction, transactionProfiles],
   );
 
   return (
@@ -267,7 +424,7 @@ export function BirdsEyeView({
         <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-2xl font-semibold tracking-tight">
-              Bird&apos;s Eye
+              Book Set Overview
             </h2>
             <Badge variant="secondary">Book set</Badge>
             {fiat?.mixed ? <Badge variant="outline">Mixed fiat</Badge> : null}
@@ -300,6 +457,7 @@ export function BirdsEyeView({
           label="BTC total"
           value={hideSensitive ? "Hidden" : formatBtc(fiat?.btcBalance ?? 0)}
           detail={`${books.length} books`}
+          icon={<Gauge className="size-4" aria-hidden="true" />}
         />
         <MetricCard
           label={fiat?.mixed ? "Fiat rollup" : "Fiat total"}
@@ -315,11 +473,13 @@ export function BirdsEyeView({
               ? fiat.label ?? "Per-book fiat rows only"
               : fiat?.fiatCurrency ?? "No fiat currency"
           }
+          icon={<BarChart3 className="size-4" aria-hidden="true" />}
         />
         <MetricCard
           label="Readiness"
           value={`${readyBooks}/${books.length}`}
           detail={blockedBooks ? `${blockedBooks} books need attention` : "All books ready"}
+          icon={<CheckCircle2 className="size-4" aria-hidden="true" />}
         />
         <MetricCard
           label="Quarantine"
@@ -329,6 +489,7 @@ export function BirdsEyeView({
               ? "Journals need processing"
               : "No stale journals"
           }
+          icon={<ShieldAlert className="size-4" aria-hidden="true" />}
         />
       </div>
 
@@ -337,6 +498,21 @@ export function BirdsEyeView({
           progress={progress}
           summary={refreshSummary}
           isRunning={refreshWorkspace.isPending}
+        />
+      ) : null}
+
+      <div className="rounded-lg border bg-muted/25 px-3 py-2 text-xs text-muted-foreground">
+        <Info className="mr-1.5 inline size-3.5 align-[-2px]" aria-hidden="true" />
+        This read-only rollup keeps book boundaries intact. Opening a book or transaction makes that book active before navigating.
+      </div>
+
+      {chartSnapshot ? (
+        <BtcActivityChart
+          snapshot={chartSnapshot}
+          hideSensitive={hideSensitive}
+          currency={chartCurrency}
+          fiatSeriesEnabled={fiatSeriesEnabled}
+          onOpenTransactionDetail={openChartTransaction}
         />
       ) : null}
 
@@ -405,33 +581,19 @@ export function BirdsEyeView({
         </Card>
       </div>
 
-      <RecentWorkspaceActivity
-        txs={snapshot?.activityTxs?.length ? snapshot.activityTxs : snapshot?.txs ?? []}
-        hideSensitive={hideSensitive}
-      />
+      {chartSnapshot ? (
+        <RecentTransactionsTable
+          title="Recent activity by book"
+          transactions={workspaceTransactions}
+          hideSensitive={hideSensitive}
+          currency={chartCurrency}
+          priceEur={activeMarketFiatRate(chartSnapshot)}
+          fiatCurrency={activeMarketFiatCurrency(chartSnapshot)}
+          showAllTo={null}
+          onOpenTransaction={openWorkspaceTransaction}
+        />
+      ) : null}
     </div>
-  );
-}
-
-function MetricCard({
-  label,
-  value,
-  detail,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-}) {
-  return (
-    <Card className="py-4">
-      <CardContent className="space-y-1 px-4">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="text-2xl font-semibold tracking-tight">{value}</p>
-        <p className="line-clamp-2 min-h-8 text-xs text-muted-foreground">
-          {detail}
-        </p>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -528,67 +690,6 @@ function BookRouteButton({
       <Icon className="size-3.5" aria-hidden="true" />
       {route.label}
     </Button>
-  );
-}
-
-function RecentWorkspaceActivity({
-  txs,
-  hideSensitive,
-}: {
-  txs: WorkspaceTx[];
-  hideSensitive: boolean;
-}) {
-  return (
-    <Card>
-      <CardHeader className="border-b pb-3">
-        <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-base">Recent Activity</CardTitle>
-          <Button variant="ghost" size="sm" asChild>
-            <Link to="/transactions">
-              Active book
-              <ArrowRight className="size-4" aria-hidden="true" />
-            </Link>
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="pt-0">
-        {txs.length ? (
-          <div className="divide-y">
-            {txs.slice(0, 10).map((tx) => (
-              <div
-                key={`${tx.profileId}-${tx.id}`}
-                className="grid gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_auto]"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">
-                    {tx.counter || tx.type}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {tx.book.label} · {tx.date}
-                  </p>
-                </div>
-                <p
-                  className={cn(
-                    "text-sm font-medium",
-                    tx.amountSat >= 0
-                      ? "text-emerald-700 dark:text-emerald-300"
-                      : "text-red-700 dark:text-red-300",
-                  )}
-                >
-                  {hideSensitive
-                    ? "Hidden"
-                    : formatBtc(tx.amountSat / 100_000_000, { sign: true })}
-                </p>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="py-6 text-sm text-muted-foreground">
-            No recent activity across this book set.
-          </div>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 

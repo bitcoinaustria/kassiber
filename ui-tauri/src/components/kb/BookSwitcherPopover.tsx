@@ -179,7 +179,7 @@ function WorkspaceBlock({
               onClick={onClose}
             >
               <Eye className="size-3.5" aria-hidden="true" />
-              Bird&apos;s Eye
+              Book Set Overview
             </Link>
           </Button>
         </div>

@@ -192,6 +192,8 @@ export type Transaction = {
   id: string;
   txid: string;
   explorerId?: string;
+  profileId?: string;
+  scopeLabel?: string;
   counterparty: string;
   counterpartyInitials: string;
   paymentMethod?: "On-chain" | "Lightning" | "Liquid" | "Other";
@@ -200,6 +202,7 @@ export type Transaction = {
   flow?: OverviewTransactionFlow;
   amount: number | null;
   amountBtc?: number;
+  fiatCurrency?: string | null;
   date: string;
 };
 
@@ -2213,6 +2216,7 @@ export function toDashboardTransaction(tx: OverviewTx, index: number): Transacti
     flow: flowForOverviewTx(tx),
     amount,
     amountBtc: displayAmountSat / 100_000_000,
+    fiatCurrency: tx.fiatCurrency,
     date: tx.date,
   };
 }

@@ -251,6 +251,14 @@ class WorkspaceOverviewSnapshotTest(unittest.TestCase):
         self.assertTrue(by_book["Operating"]["readiness"]["ready"])
         self.assertFalse(by_book["Personal"]["readiness"]["ready"])
         self.assertIn("Run journal processing", by_book["Personal"]["readiness"]["hints"][0])
+        series_by_date = {point["date"]: point for point in snapshot["portfolioSeries"]}
+        self.assertAlmostEqual(series_by_date["2026-06-01"]["balanceBtc"], 1.0)
+        self.assertAlmostEqual(series_by_date["2026-06-02"]["balanceBtc"], 1.5)
+        self.assertEqual(series_by_date["2026-06-02"]["valueEur"], 80_000)
+        self.assertEqual(
+            {row["profileLabel"] for row in series_by_date["2026-06-02"]["books"]},
+            {"Operating", "Personal"},
+        )
 
     def test_mixed_currency_rollup_is_partial_and_keeps_per_book_rows(self):
         conn = self._db()
@@ -268,6 +276,13 @@ class WorkspaceOverviewSnapshotTest(unittest.TestCase):
             [("Operating", "EUR"), ("Personal", "CHF")],
         )
         self.assertAlmostEqual(snapshot["fiat"]["btcBalance"], 1.5)
+        latest = snapshot["portfolioSeries"][-1]
+        self.assertAlmostEqual(latest["balanceBtc"], 1.5)
+        self.assertNotIn("valueEur", latest)
+        self.assertEqual(
+            [(row["profileLabel"], row["fiatCurrency"]) for row in latest["books"]],
+            [("Operating", "EUR"), ("Personal", "CHF")],
+        )
 
     def test_empty_workspace_returns_empty_snapshot(self):
         conn = self._db()

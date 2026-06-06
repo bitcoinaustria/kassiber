@@ -234,7 +234,7 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
   [
     "/books/",
     {
-      title: "Bird's Eye",
+      title: "Book Set Overview",
       icon: Users,
       searchLabel: "Search books",
       searchPlaceholder: "Search books, wallets, reports...",

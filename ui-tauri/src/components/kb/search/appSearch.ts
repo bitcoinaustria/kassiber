@@ -62,7 +62,7 @@ const PAGE_RESULTS: SearchResult[] = [
     id: "page:books",
     category: "page",
     title: "Books",
-    subtitle: "Books, book sets, Bird's Eye, and tax settings",
+    subtitle: "Books, book-set overview, and tax settings",
     keywords: ["book", "books", "book set", "bird's eye", "overview", "tax", "country"],
     iconKey: "book",
     route: { to: "/books" },

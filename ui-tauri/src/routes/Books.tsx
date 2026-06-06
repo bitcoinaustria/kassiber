@@ -567,7 +567,7 @@ export function WorkspaceSection({
             onClick={onOpenBirdsEye}
           >
             <Eye className="size-4" aria-hidden="true" />
-            Bird&apos;s Eye
+            Book Set Overview
           </Button>
           <Button
             type="button"

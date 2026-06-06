@@ -88,11 +88,13 @@ export const BtcActivityChart = ({
   hideSensitive,
   currency,
   onOpenTransactionDetail,
+  fiatSeriesEnabled = true,
 }: {
   snapshot: OverviewSnapshot;
   hideSensitive: boolean;
   currency: Currency;
   onOpenTransactionDetail?: (transactionId: string) => void;
+  fiatSeriesEnabled?: boolean;
 }) => {
   const [period, setPeriod] =
     React.useState<TimePeriod>(initialTimePeriodFromUrl);
@@ -100,7 +102,11 @@ export const BtcActivityChart = ({
     null,
   );
   const [seriesVisible, setSeriesVisible] =
-    React.useState<TreasurySeriesVisibility>(defaultTreasurySeriesVisibility);
+    React.useState<TreasurySeriesVisibility>(() => ({
+      ...defaultTreasurySeriesVisibility,
+      basis: fiatSeriesEnabled,
+      price: fiatSeriesEnabled,
+    }));
   const [incomingMarkerMinimumBtc, setIncomingMarkerMinimumBtc] =
     React.useState(() =>
       initialActivityMarkerMinimumFromUrl(
@@ -128,6 +134,7 @@ export const BtcActivityChart = ({
   const [expandedBrushRevision, setExpandedBrushRevision] = React.useState(0);
   const [hoveredActivityPoint, setHoveredActivityPoint] =
     React.useState<TreasuryChartPoint | null>(null);
+  const previousFiatSeriesEnabled = React.useRef(fiatSeriesEnabled);
   const { active: activeSeries, handleHover } =
     useHoverHighlight<TreasuryChartSeriesKey>();
   const colorMode = useResolvedColorMode();
@@ -182,7 +189,27 @@ export const BtcActivityChart = ({
       color: "#94a3b8",
       dashed: true,
     },
-  ];
+  ].filter(
+    (item) =>
+      fiatSeriesEnabled || item.key === "primary" || item.key === "events",
+  );
+
+  React.useEffect(() => {
+    setSeriesVisible((current) => ({
+      ...current,
+      basis: fiatSeriesEnabled
+        ? previousFiatSeriesEnabled.current
+          ? current.basis
+          : true
+        : false,
+      price: fiatSeriesEnabled
+        ? previousFiatSeriesEnabled.current
+          ? current.price
+          : true
+        : false,
+    }));
+    previousFiatSeriesEnabled.current = fiatSeriesEnabled;
+  }, [fiatSeriesEnabled]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -477,7 +504,9 @@ export const BtcActivityChart = ({
       : "Current snapshot";
     const priceSyncedAt =
       snapshot.marketRate?.fetchedAt ?? snapshot.marketRate?.timestamp;
-    const priceSyncLabel = formatRelativeMarketRateTime(priceSyncedAt);
+    const priceSyncLabel = fiatSeriesEnabled
+      ? formatRelativeMarketRateTime(priceSyncedAt)
+      : null;
     const priceSyncDetail = marketRateDetailLabel(snapshot);
     return (
       <div className="relative z-10 flex min-w-0 flex-1 flex-col gap-4 overflow-visible rounded-xl border bg-card p-3 sm:p-4">
@@ -780,20 +809,22 @@ export const BtcActivityChart = ({
                     }
                     width={2}
                   />
-                  <YAxis
-                    yAxisId="price"
-                    orientation="right"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 10 }}
-                    tickMargin={4}
-                    tickFormatter={(value) =>
-                      hideSensitive
-                        ? ""
-                        : formatFiatPrice(Number(value), fiatCurrency)
-                    }
-                    width={64}
-                  />
+                  {fiatSeriesEnabled ? (
+                    <YAxis
+                      yAxisId="price"
+                      orientation="right"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10 }}
+                      tickMargin={4}
+                      tickFormatter={(value) =>
+                        hideSensitive
+                          ? ""
+                          : formatFiatPrice(Number(value), fiatCurrency)
+                      }
+                      width={64}
+                    />
+                  ) : null}
                   <ZAxis
                     dataKey="eventSize"
                     range={[80, expanded ? 620 : 480]}
@@ -816,6 +847,7 @@ export const BtcActivityChart = ({
                         hideSensitive={hideSensitive}
                         priceEur={fiatRate}
                         fiatCurrency={fiatCurrency}
+                        fiatSeriesEnabled={fiatSeriesEnabled}
                       />
                     }
                     cursor={{ strokeOpacity: 0.2 }}
@@ -845,12 +877,12 @@ export const BtcActivityChart = ({
                       isAnimationActive={false}
                     />
                   )}
-                  {seriesVisible.price && (
+                  {fiatSeriesEnabled && seriesVisible.price && (
                     <Line
                       yAxisId="price"
                       type="linear"
                       dataKey="lineBitcoinPriceEur"
-                      name={legendItems[3]?.label}
+                      name="BTC Price"
                       stroke="#94a3b8"
                       strokeWidth={activeSeries === "price" ? 2.4 : 1.6}
                       strokeDasharray="3 5"
@@ -863,12 +895,12 @@ export const BtcActivityChart = ({
                       isAnimationActive={false}
                     />
                   )}
-                  {seriesVisible.basis && (
+                  {fiatSeriesEnabled && seriesVisible.basis && (
                     <Line
                       yAxisId="price"
                       type="stepAfter"
                       dataKey="lineAvgCostEur"
-                      name={legendItems[2]?.label}
+                      name="Avg Basis"
                       connectNulls
                       stroke={secondaryColor}
                       strokeWidth={activeSeries === "basis" ? 3 : 2}
@@ -982,9 +1014,11 @@ export const BtcActivityChart = ({
                 )}
               </div>
               <div className="pointer-events-none flex items-center justify-center">
-                <span className="rotate-90 whitespace-nowrap text-[10px] font-semibold text-muted-foreground">
-                  BTC Price ({fiatCurrency})
-                </span>
+                {fiatSeriesEnabled ? (
+                  <span className="rotate-90 whitespace-nowrap text-[10px] font-semibold text-muted-foreground">
+                    BTC Price ({fiatCurrency})
+                  </span>
+                ) : null}
               </div>
             </div>
             {plottedData.length > 3 && (
