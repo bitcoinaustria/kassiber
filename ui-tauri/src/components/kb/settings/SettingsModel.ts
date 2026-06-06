@@ -131,6 +131,7 @@ export interface KrakenRatesImportData {
 export interface RateRebuildData {
   source: string;
   pair: string | null;
+  latest_only?: boolean;
   reprice_transactions: boolean;
   deleted: {
     rates: number;

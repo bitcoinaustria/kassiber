@@ -387,8 +387,9 @@ restricted to files under `skills/kassiber/references/`: `command-templates`,
 
 Mutating provider tools currently include `ui_wallets_sync`, which maps to
 daemon kind `ui.wallets.sync`, `ui_journals_process`, which maps to
-`ui.journals.process`, `ui_rates_rebuild`, which refreshes provider spot prices
-and reprocesses journals, `ui_maintenance_configure`, which changes
+`ui.journals.process`, `ui_rates_rebuild`, which can either refresh the latest
+provider spot price or rebuild provider-derived pricing and reprocess journals,
+`ui_maintenance_configure`, which changes
 active-profile AI maintenance settings, and `ui_maintenance_run`, which runs
 optional sync plus journal maintenance and returns report blockers. The same
 consent path also

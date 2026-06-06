@@ -331,6 +331,15 @@ export function formatMarketRateValue(snapshot: OverviewSnapshot) {
   return `${formatFiatAmount(rate, fiatCurrency)} / BTC`;
 }
 
+export function marketRateRefreshArgs(snapshot: OverviewSnapshot) {
+  const pair = snapshot.marketRate?.pair;
+  return {
+    latest_only: true,
+    reprice_transactions: false,
+    ...(pair ? { pair } : {}),
+  };
+}
+
 const MARKET_RATE_SOURCE_LABELS: Record<string, string> = {
   "coinbase-exchange": "Coinbase Exchange",
   "kraken-csv": "Kraken CSV",

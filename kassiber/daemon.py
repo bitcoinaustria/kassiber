@@ -2378,6 +2378,14 @@ def _rates_rebuild_payload(
     source = str(
         args.get("source") or core_rates.get_market_rate_provider(conn)
     ).strip().lower()
+    latest_only_arg = args.get("latest_only", False)
+    if not isinstance(latest_only_arg, bool):
+        raise AppError(
+            "ui.rates.rebuild latest_only must be a boolean",
+            code="validation",
+            retryable=False,
+        )
+    latest_only = latest_only_arg
     pair_arg = args.get("pair")
     if pair_arg is not None and not isinstance(pair_arg, str):
         raise AppError(
@@ -2393,6 +2401,36 @@ def _rates_rebuild_payload(
             code="validation",
             retryable=False,
         )
+    if latest_only:
+        source = core_rates.normalize_market_rate_provider(source)
+        if path_arg:
+            raise AppError(
+                "ui.rates.rebuild latest_only does not support path",
+                code="validation",
+                retryable=False,
+                hint="Use the full rebuild/import flow for local archive sources.",
+            )
+        sync_summary = core_rates.sync_latest_rates(
+            conn,
+            pair=pair,
+            source=source,
+            commit=True,
+        )
+        return {
+            "source": source,
+            "pair": pair,
+            "latest_only": True,
+            "reprice_transactions": False,
+            "deleted": {
+                "rates": 0,
+                "checked_minutes": 0,
+                "transaction_prices": 0,
+                "profiles_invalidated": 0,
+            },
+            "sync": sync_summary,
+            "reprice": None,
+            "journals": None,
+        }
     try:
         days = int(args.get("days") or 30)
     except (TypeError, ValueError) as exc:

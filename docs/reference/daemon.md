@@ -423,6 +423,10 @@ minute-coverage pass for exact transaction timestamps. Background jobs skip the
 manual 30-day warm-cache fallback when no transaction minute is missing, so
 hourly price refresh stays provider-light. Kraken CSV remains an offline
 archive/import path because it needs a local file or bundled archive.
+Desktop clients that only need the current BTC card quote call
+`ui.rates.rebuild` with `latest_only: true`; that path fetches the configured
+live provider's latest quote without clearing cached provider history or
+repricing transactions.
 
 Source states are `fresh`, `queued`, `syncing`, `paused`, `rate_limited`,
 `partially_stale`, `failed`, and `blocking_reports`. Report reads are blocked
