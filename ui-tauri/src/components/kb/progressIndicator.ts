@@ -1,4 +1,4 @@
-import type { AppNotification } from "@/store/ui";
+import type { ActiveMaintenanceProgress, AppNotification } from "@/store/ui";
 
 export interface RouteProgressState {
   indeterminate: boolean;
@@ -32,6 +32,25 @@ export function routeProgressFromNotifications(
     indeterminate: Boolean(notification.progress.indeterminate),
     label: displayLabel,
     value: notification.progress.value,
+  };
+}
+
+export function routeProgressFromActiveMaintenance(
+  progress: ActiveMaintenanceProgress | null,
+): RouteProgressState | null {
+  if (!progress?.active) return null;
+  const title = compactProgressTitle(progress.title);
+  const label = progress.progress.label?.trim();
+  const detail = label || progress.body.trim() || "In progress";
+  const displayLabel =
+    title && title.toLowerCase() !== detail.toLowerCase()
+      ? `${title}: ${detail}`
+      : detail || title || "In progress";
+
+  return {
+    indeterminate: Boolean(progress.progress.indeterminate),
+    label: displayLabel,
+    value: progress.progress.value,
   };
 }
 

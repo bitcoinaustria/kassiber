@@ -1,4 +1,8 @@
-import { useIsFetching, useQueryClient } from "@tanstack/react-query";
+import {
+  useIsFetching,
+  useIsMutating,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   Link,
   Outlet,
@@ -127,6 +131,7 @@ import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { BookSwitcherPopover } from "./BookSwitcherPopover";
 import {
+  routeProgressFromActiveMaintenance,
   routeProgressFromNotifications,
   type RouteProgressState,
 } from "./progressIndicator";
@@ -175,6 +180,7 @@ type NotificationItem = Omit<AppNotification, "createdAt"> & {
 
 const APP_COMMIT_SHORT = APP_COMMIT ? APP_COMMIT.slice(0, 7) : "unknown";
 const NATIVE_MENU_EVENT = "kassiber:intent";
+const ACTIVE_PROGRESS_CLEAR_GRACE_MS = 750;
 const topNavIconButtonClassName =
   "size-8 text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground";
 
@@ -454,8 +460,26 @@ export function AppShell() {
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const bumpDaemonSession = useUiStore((s) => s.bumpDaemonSession);
+  const activeMaintenanceProgress = useUiStore(
+    (s) => s.activeMaintenanceProgress,
+  );
+  const clearActiveMaintenanceProgress = useUiStore(
+    (s) => s.clearActiveMaintenanceProgress,
+  );
   const { syncAll, isSyncing } = useWalletSyncAction();
   const dataMode = useUiStore((s) => s.dataMode);
+  const freshnessRunsInFlight = useIsMutating({
+    mutationKey: daemonMutationKey(dataMode, "ui.freshness.run"),
+  });
+  const walletSyncsInFlight = useIsMutating({
+    mutationKey: daemonMutationKey(dataMode, "ui.wallets.sync"),
+  });
+  const journalRunsInFlight = useIsMutating({
+    mutationKey: daemonMutationKey(dataMode, "ui.journals.process"),
+  });
+  const marketRateRunsInFlight = useIsMutating({
+    mutationKey: daemonMutationKey(dataMode, "ui.rates.latest"),
+  });
   const encryptedWorkspace =
     Boolean(identity?.encrypted) || identity?.databaseMode === "sqlcipher";
   const lockEncryptedWorkspaceOnLaunch = shouldLockEncryptedWorkspaceOnLaunch({
@@ -504,7 +528,9 @@ export function AppShell() {
     : true;
   const importRootBlocked = !importRootReady || !importedProjectActive;
   const daemonEnabled = !locked && !importRootBlocked;
-  const shellProgress = routeProgressFromNotifications(appNotifications);
+  const shellProgress =
+    routeProgressFromActiveMaintenance(activeMaintenanceProgress) ??
+    routeProgressFromNotifications(appNotifications);
   const shellBusy =
     routerBusy || daemonFetchCount > 0 || Boolean(shellProgress);
   const isAssistantRoute = pathname === "/assistant";
@@ -742,6 +768,52 @@ export function AppShell() {
       0,
     [dataMode, queryClient],
   );
+  const activeProgressHasMatchingMutation = React.useCallback(
+    (id: string) => {
+      switch (id) {
+        case "book-refresh":
+          return (
+            isDaemonKindMutating("ui.freshness.run") ||
+            isDaemonKindMutating("ui.wallets.sync")
+          );
+        case "journal-processing":
+          return isDaemonKindMutating("ui.journals.process");
+        case "market-rate-refresh":
+          return isDaemonKindMutating("ui.rates.latest");
+        default:
+          return true;
+      }
+    },
+    [isDaemonKindMutating],
+  );
+
+  React.useEffect(() => {
+    if (!activeMaintenanceProgress?.active) return;
+    if (activeProgressHasMatchingMutation(activeMaintenanceProgress.id)) return;
+
+    const updatedAt = Date.parse(activeMaintenanceProgress.updatedAt);
+    const ageMs = Number.isFinite(updatedAt) ? Date.now() - updatedAt : 0;
+    const delayMs = Math.max(0, ACTIVE_PROGRESS_CLEAR_GRACE_MS - ageMs);
+    const timeout = window.setTimeout(() => {
+      const current = useUiStore.getState().activeMaintenanceProgress;
+      if (!current?.active) return;
+      if (current.id !== activeMaintenanceProgress.id) return;
+      if (activeProgressHasMatchingMutation(current.id)) return;
+      clearActiveMaintenanceProgress(current.id);
+    }, delayMs);
+
+    return () => window.clearTimeout(timeout);
+  }, [
+    activeMaintenanceProgress?.active,
+    activeMaintenanceProgress?.id,
+    activeMaintenanceProgress?.updatedAt,
+    activeProgressHasMatchingMutation,
+    clearActiveMaintenanceProgress,
+    freshnessRunsInFlight,
+    journalRunsInFlight,
+    marketRateRunsInFlight,
+    walletSyncsInFlight,
+  ]);
   const { runJournalProcessing: runMenuJournalProcessing } =
     useJournalProcessingAction({
       beforeRun: ensureWorkspaceForMenuAction,
