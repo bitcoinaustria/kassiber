@@ -2692,27 +2692,7 @@ def consume_lots(lots, quantity, algorithm):
 
 
 def latest_rates_for_profile(conn, profile_id):
-    rows = conn.execute(
-        """
-        SELECT asset, fiat_rate, fiat_value, fiat_rate_exact, fiat_value_exact, amount
-        FROM transactions
-        WHERE profile_id = ? AND excluded = 0
-        ORDER BY occurred_at DESC, created_at DESC
-        """,
-        (profile_id,),
-    ).fetchall()
-    rates = {}
-    for row in rows:
-        asset = row["asset"]
-        if asset in rates:
-            continue
-        rate = pricing.decimal_from_exact(row["fiat_rate_exact"], row["fiat_rate"])
-        value = pricing.decimal_from_exact(row["fiat_value_exact"], row["fiat_value"])
-        if rate is not None:
-            rates[asset] = rate
-        elif value is not None and row["amount"]:
-            rates[asset] = value / msat_to_btc(row["amount"])
-    return rates
+    return core_reports.latest_transaction_rates_for_profile(conn, profile_id)
 
 
 def auto_price_transactions_from_rates_cache(conn, profile):

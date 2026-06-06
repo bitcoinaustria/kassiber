@@ -280,6 +280,7 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.journals.snapshot",
     "ui.next_actions",
     "ui.overview.snapshot",
+    "ui.rates.coverage",
     "ui.report.blockers",
     "ui.reports.balance_history",
     "ui.reports.balance_sheet",

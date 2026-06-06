@@ -215,7 +215,7 @@ def _resolve_report_scope(conn, workspace_ref, profile_ref, hooks: ReportHooks):
     return workspace, profile
 
 
-def _latest_transaction_rates_for_profile(conn, profile_id):
+def latest_transaction_rates_for_profile(conn, profile_id):
     try:
         rows = conn.execute(
             """
@@ -267,7 +267,7 @@ def _profile_has_journal_entries(conn, profile_id):
 def report_balance_sheet(conn, workspace_ref, profile_ref, hooks: ReportHooks):
     _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     hooks.require_processed_journals(conn, profile)
-    latest_rates = _latest_transaction_rates_for_profile(conn, profile["id"])
+    latest_rates = latest_transaction_rates_for_profile(conn, profile["id"])
     rows = []
     try:
         holding_rows = conn.execute(
@@ -413,7 +413,7 @@ def report_portfolio_summary(conn, workspace_ref, profile_ref, hooks: ReportHook
     if as_of is not None:
         as_of_dt = hooks.parse_iso_datetime(as_of, "as_of") if not isinstance(as_of, datetime) else as_of
         return _historical_portfolio_summary(conn, profile, hooks, as_of_dt, include_wallet_id=include_wallet_id)
-    latest_rates = _latest_transaction_rates_for_profile(conn, profile["id"])
+    latest_rates = latest_transaction_rates_for_profile(conn, profile["id"])
     rows = []
     try:
         holding_rows = conn.execute(
@@ -4755,6 +4755,7 @@ __all__ = [
     "export_pdf_report",
     "export_summary_pdf_report",
     "export_xlsx_report",
+    "latest_transaction_rates_for_profile",
     "report_austrian_e1kv",
     "report_balance_history",
     "report_balance_sheet",

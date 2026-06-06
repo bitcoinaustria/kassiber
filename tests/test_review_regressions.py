@@ -21,6 +21,7 @@ from kassiber.cli.handlers import (
     _audit_transaction_refs,
     create_direct_swap_payout,
     create_transaction_pair,
+    latest_rates_for_profile,
     process_journals,
 )
 from kassiber.core import attachments as core_attachments
@@ -31,6 +32,7 @@ from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
 from kassiber.core.reports import (
     ReportHooks,
     _generic_report_transfer_pair_rows,
+    latest_transaction_rates_for_profile,
     report_austrian_e1kv,
     report_tax_summary,
 )
@@ -352,6 +354,104 @@ class ReviewRegressionTest(unittest.TestCase):
     def _assert_ok(self, payload, result, kind):
         self.assertEqual(result.returncode, 0, msg=f"{payload!r}")
         self.assertEqual(payload.get("kind"), kind)
+
+    def test_latest_transaction_rates_are_shared_between_reports_and_ledger_rebuild(self):
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            """
+            CREATE TABLE transactions(
+                profile_id TEXT NOT NULL,
+                excluded INTEGER NOT NULL DEFAULT 0,
+                occurred_at TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                asset TEXT NOT NULL,
+                fiat_rate REAL,
+                fiat_value REAL,
+                fiat_rate_exact TEXT,
+                fiat_value_exact TEXT,
+                amount INTEGER NOT NULL
+            )
+            """
+        )
+        conn.executemany(
+            """
+            INSERT INTO transactions(
+                profile_id, excluded, occurred_at, created_at, asset,
+                fiat_rate, fiat_value, fiat_rate_exact, fiat_value_exact, amount
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "pf-rate",
+                    0,
+                    "2026-01-01T00:00:00Z",
+                    "2026-01-01T00:00:00Z",
+                    "BTC",
+                    50000.0,
+                    None,
+                    None,
+                    None,
+                    btc_to_msat("0.1"),
+                ),
+                (
+                    "pf-rate",
+                    0,
+                    "2026-02-01T00:00:00Z",
+                    "2026-02-01T00:00:00Z",
+                    "BTC",
+                    1.0,
+                    None,
+                    "62000.123456789",
+                    None,
+                    btc_to_msat("0.1"),
+                ),
+                (
+                    "pf-rate",
+                    0,
+                    "2026-02-02T00:00:00Z",
+                    "2026-02-02T00:00:00Z",
+                    "LBTC",
+                    None,
+                    None,
+                    None,
+                    "310.00",
+                    btc_to_msat("0.005"),
+                ),
+                (
+                    "pf-rate",
+                    1,
+                    "2026-03-01T00:00:00Z",
+                    "2026-03-01T00:00:00Z",
+                    "BTC",
+                    99999.0,
+                    None,
+                    None,
+                    None,
+                    btc_to_msat("0.1"),
+                ),
+                (
+                    "pf-other",
+                    0,
+                    "2026-04-01T00:00:00Z",
+                    "2026-04-01T00:00:00Z",
+                    "BTC",
+                    12345.0,
+                    None,
+                    None,
+                    None,
+                    btc_to_msat("0.1"),
+                ),
+            ],
+        )
+
+        report_rates = latest_transaction_rates_for_profile(conn, "pf-rate")
+        ledger_rates = latest_rates_for_profile(conn, "pf-rate")
+
+        self.assertEqual(report_rates, ledger_rates)
+        self.assertEqual(report_rates["BTC"], Decimal("62000.123456789"))
+        self.assertEqual(report_rates["LBTC"], Decimal("62000"))
 
     def test_ui_snapshots_use_populated_profile_rows(self):
         conn = open_db(self.data_root)
