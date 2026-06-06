@@ -107,6 +107,7 @@ describe("daemon mutation invalidation scope", () => {
         expect.arrayContaining([
           "ui.connections.node.snapshot",
           "ui.journals.events.list",
+          "ui.rates.coverage",
           "ui.reports.lightning_profitability",
           "ui.transactions.resolve",
         ]),
