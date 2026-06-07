@@ -126,6 +126,7 @@ import { PreAlphaBanner } from "./PreAlphaBanner";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { BookSwitcherPopover } from "./BookSwitcherPopover";
+import { routeProgressLabelFromNotifications } from "./progressIndicator";
 import {
   buildAppSearchResults,
   isLikelyTransactionLookupQuery,
@@ -178,6 +179,7 @@ function notificationProgressValue(value: number | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(100, value));
 }
+
 const appMainClassName =
   "relative min-h-0 w-full flex-1 overflow-auto overscroll-contain bg-background text-zinc-950 dark:text-zinc-50";
 
@@ -445,6 +447,7 @@ export function AppShell() {
   const setIdentity = useUiStore((s) => s.setIdentity);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const addNotification = useUiStore((s) => s.addNotification);
+  const appNotifications = useUiStore((s) => s.notifications);
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const bumpDaemonSession = useUiStore((s) => s.bumpDaemonSession);
@@ -498,7 +501,10 @@ export function AppShell() {
     : true;
   const importRootBlocked = !importRootReady || !importedProjectActive;
   const daemonEnabled = !locked && !importRootBlocked;
-  const shellBusy = routerBusy || daemonFetchCount > 0;
+  const shellProgressLabel =
+    routeProgressLabelFromNotifications(appNotifications);
+  const shellBusy =
+    routerBusy || daemonFetchCount > 0 || Boolean(shellProgressLabel);
   const isAssistantRoute = pathname === "/assistant";
   const routeMeta =
     ROUTE_META.find(([prefix]) => pathname.startsWith(prefix))?.[1] ?? {
@@ -1165,7 +1171,10 @@ export function AppShell() {
                             : "pb-[240px]",
                         )}
                       >
-                        <RouteTransitionIndicator active={shellBusy} />
+                        <RouteTransitionIndicator
+                          active={shellBusy}
+                          label={shellProgressLabel}
+                        />
                         <Outlet />
                       </main>
                       {isAssistantRoute ? null : (
@@ -1182,7 +1191,10 @@ export function AppShell() {
                       tabIndex={-1}
                       className={appMainClassName}
                     >
-                      <RouteTransitionIndicator active={shellBusy} />
+                      <RouteTransitionIndicator
+                        active={shellBusy}
+                        label={shellProgressLabel}
+                      />
                       <Outlet />
                     </main>
                   )
@@ -1196,16 +1208,34 @@ export function AppShell() {
   );
 }
 
-function RouteTransitionIndicator({ active }: { active: boolean }) {
+function RouteTransitionIndicator({
+  active,
+  label,
+}: {
+  active: boolean;
+  label?: string | null;
+}) {
   return (
     <div
-      aria-hidden="true"
+      aria-hidden={label ? undefined : "true"}
+      role={label && active ? "status" : undefined}
+      aria-live={label && active ? "polite" : undefined}
       className={cn(
-        "pointer-events-none sticky top-0 z-10 h-px w-full overflow-hidden transition-opacity duration-150",
+        "pointer-events-none sticky top-0 z-10 w-full overflow-hidden transition-[height,opacity] duration-150",
+        label ? "h-6" : "h-px",
         active ? "opacity-100" : "opacity-0",
       )}
     >
-      <div className="h-full w-1/2 bg-primary/70 will-change-transform motion-safe:animate-[route-progress_0.9s_ease-in-out_infinite] motion-reduce:w-full motion-reduce:will-change-auto" />
+      <div className="absolute inset-x-0 top-0 h-px overflow-hidden">
+        <div className="h-full w-1/2 bg-primary/70 will-change-transform motion-safe:animate-[route-progress_0.9s_ease-in-out_infinite] motion-reduce:w-full motion-reduce:will-change-auto" />
+      </div>
+      {label ? (
+        <div className="flex h-full items-start justify-center px-3 pt-1">
+          <span className="max-w-full truncate rounded-b-md border-x border-b bg-background/95 px-2 py-0.5 text-[11px] font-medium leading-none text-primary shadow-sm backdrop-blur">
+            {label}
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }
