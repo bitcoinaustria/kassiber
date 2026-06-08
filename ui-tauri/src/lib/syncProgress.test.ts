@@ -92,7 +92,7 @@ describe("sync progress notifications", () => {
     expect(progress.progress).toEqual({
       value: 36.5,
       indeterminate: false,
-      label: "Fetching source history: Cold",
+      label: "Cold: Fetching source history",
     });
   });
 
