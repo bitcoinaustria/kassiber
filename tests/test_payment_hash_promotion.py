@@ -287,6 +287,7 @@ class InsertPersistsPaymentHashTests(unittest.TestCase):
                     hooks=_HOOKS,
                 )
                 self.assertEqual(first["imported"], 1)
+                self.assertTrue(first["journal_invalidated"])
                 profile_row = conn.execute(
                     "SELECT journal_input_version FROM profiles WHERE id = ?",
                     (profile_id,),
@@ -304,6 +305,7 @@ class InsertPersistsPaymentHashTests(unittest.TestCase):
                 self.assertEqual(second["imported"], 0)
                 self.assertEqual(second["updated_records"], [])
                 self.assertEqual(second["unchanged"], 1)
+                self.assertFalse(second["journal_invalidated"])
                 profile_row = conn.execute(
                     "SELECT journal_input_version FROM profiles WHERE id = ?",
                     (profile_id,),

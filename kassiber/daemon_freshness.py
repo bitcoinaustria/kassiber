@@ -69,7 +69,7 @@ def _clear_unlocked_passphrase(ctx: FreshnessDaemonContext) -> None:
 
 def _coerce_wallets_sync_args(raw_args: dict[str, Any], *, strict: bool) -> dict[str, Any]:
     if strict:
-        unknown = sorted(set(raw_args) - {"wallet", "all"})
+        unknown = sorted(set(raw_args) - {"wallet", "all", "force_full"})
         if unknown:
             raise AppError(
                 "ui.wallets.sync received unsupported arguments",
@@ -102,7 +102,15 @@ def _coerce_wallets_sync_args(raw_args: dict[str, Any], *, strict: bool) -> dict
             code="validation",
             retryable=False,
         )
-    return {"wallet": wallet, "all": sync_all}
+    force_full = raw_args.get("force_full")
+    if force_full is not None and not isinstance(force_full, bool):
+        raise AppError(
+            "ui.wallets.sync force_full must be a boolean",
+            code="validation",
+            details={"type": type(force_full).__name__},
+            retryable=False,
+        )
+    return {"wallet": wallet, "all": sync_all, "force_full": bool(force_full)}
 
 
 def _wallets_sync_payload(
@@ -126,6 +134,7 @@ def _wallets_sync_payload(
             "rates": False,
             "journals": False,
             "run": True,
+            "force_full": args["force_full"],
         },
         progress_observer=progress_observer,
     )
@@ -138,6 +147,7 @@ def _wallets_sync_payload(
             None,
             wallet_ref=args["wallet"],
             sync_all=args["all"],
+            force_full=args["force_full"],
         )
     return _redact_sync_payload_for_ui(payload)
 
@@ -308,8 +318,16 @@ def _freshness_wallet_source_specs(
     wallet_ref: str | None = None,
     include_rates: bool = True,
     include_journals: bool = True,
+    force_full: bool = False,
 ) -> list[dict[str, Any]]:
     specs: list[dict[str, Any]] = []
+
+    def wallet_payload(wallet: Mapping[str, Any]) -> dict[str, Any]:
+        payload = {"wallet_id": wallet["id"], "wallet_label": wallet["label"]}
+        if force_full:
+            payload["force_full"] = True
+        return payload
+
     for wallet in _load_wallets_for_freshness(conn, profile_id, wallet_ref):
         config = json.loads(wallet["config_json"] or "{}")
         if core_wallets.wallet_btcpay_sync_config(config):
@@ -322,8 +340,9 @@ def _freshness_wallet_source_specs(
                         wallet["id"],
                     ),
                     "source_label": f"{wallet['label']} BTCPay wallet source",
-                    "payload": {"wallet_id": wallet["id"]},
+                    "payload": wallet_payload(wallet),
                     "priority": 20,
+                    "single_flight": not force_full,
                 }
             )
         if _wallet_has_onchain_source(wallet, config):
@@ -336,8 +355,9 @@ def _freshness_wallet_source_specs(
                         wallet["id"],
                     ),
                     "source_label": f"{wallet['label']} on-chain history",
-                    "payload": {"wallet_id": wallet["id"]},
+                    "payload": wallet_payload(wallet),
                     "priority": 30,
+                    "single_flight": not force_full,
                 }
             )
         if core_wallets.wallet_btcpay_provenance_config(config):
@@ -350,8 +370,9 @@ def _freshness_wallet_source_specs(
                         wallet["id"],
                     ),
                     "source_label": f"{wallet['label']} BTCPay provenance",
-                    "payload": {"wallet_id": wallet["id"]},
+                    "payload": wallet_payload(wallet),
                     "priority": 40,
+                    "single_flight": not force_full,
                 }
             )
     if include_rates:
@@ -387,6 +408,20 @@ def _source_checkpoint(
     state = core_freshness.get_source_state(conn, profile_id, source_key)
     checkpoint = (state or {}).get("checkpoint") if isinstance(state, dict) else None
     return dict(checkpoint) if isinstance(checkpoint, dict) else {}
+
+
+def _job_force_full(job: Mapping[str, Any]) -> bool:
+    payload = job.get("payload") if isinstance(job.get("payload"), dict) else {}
+    return bool(payload.get("force_full"))
+
+
+def _source_checkpoint_for_job(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    source_key: str,
+    job: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {} if _job_force_full(job) else _source_checkpoint(conn, profile_id, source_key)
 
 
 def _wallet_with_freshness_checkpoint(
@@ -434,7 +469,8 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
         check_cancelled: Callable[[], None],
     ) -> Mapping[str, Any]:
         profile, wallet = _load_freshness_profile_wallet(conn, job)
-        checkpoint = _source_checkpoint(conn, profile["id"], job["source_key"])
+        force_full = _job_force_full(job)
+        checkpoint = _source_checkpoint_for_job(conn, profile["id"], job["source_key"], job)
         wallet_with_checkpoint = _wallet_with_freshness_checkpoint(wallet, checkpoint)
         progress({"phase": core_freshness.PHASE_DISCOVERY, "wallet": wallet["label"]})
         check_cancelled()
@@ -446,6 +482,7 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
             None,
             wallet_with_checkpoint,
             checkpoint=checkpoint,
+            force_full=force_full,
         )
         check_cancelled()
         progress({"phase": core_freshness.PHASE_IMPORT, "wallet": wallet["label"]})
@@ -460,7 +497,8 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
         check_cancelled: Callable[[], None],
     ) -> Mapping[str, Any]:
         profile, wallet = _load_freshness_profile_wallet(conn, job)
-        checkpoint = _source_checkpoint(conn, profile["id"], job["source_key"])
+        force_full = _job_force_full(job)
+        checkpoint = _source_checkpoint_for_job(conn, profile["id"], job["source_key"], job)
         wallet_with_checkpoint = _wallet_with_freshness_checkpoint(wallet, checkpoint)
         progress({"phase": core_freshness.PHASE_DISCOVERY, "wallet": wallet["label"]})
         check_cancelled()
@@ -475,6 +513,8 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
         progress({"phase": core_freshness.PHASE_IMPORT, "wallet": wallet["label"]})
         _mark_daemon_wallet_synced(conn, wallet)
         conn.commit()
+        if force_full:
+            outcome = {"force_full": True, **dict(outcome)}
         return {"wallet": wallet["label"], "status": "synced", **outcome}
 
     def btcpay_provenance(
@@ -484,7 +524,8 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
         check_cancelled: Callable[[], None],
     ) -> Mapping[str, Any]:
         profile, wallet = _load_freshness_profile_wallet(conn, job)
-        checkpoint = _source_checkpoint(conn, profile["id"], job["source_key"])
+        force_full = _job_force_full(job)
+        checkpoint = _source_checkpoint_for_job(conn, profile["id"], job["source_key"], job)
         wallet_with_checkpoint = _wallet_with_freshness_checkpoint(wallet, checkpoint)
         progress({"phase": core_freshness.PHASE_BACKEND_FETCH, "wallet": wallet["label"]})
         outcome = enrich_wallet_from_btcpay_provenance(
@@ -496,6 +537,8 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
         check_cancelled()
         progress({"phase": core_freshness.PHASE_DECODE_ENRICH, "wallet": wallet["label"]})
         conn.commit()
+        if force_full:
+            outcome = {"force_full": True, **dict(outcome)}
         return {"wallet": wallet["label"], "status": "synced", **outcome}
 
     def market_rates(
@@ -573,10 +616,24 @@ def _freshness_status_payload(conn: sqlite3.Connection) -> dict[str, Any]:
     }
 
 
-def _market_rate_provider_settings(conn: sqlite3.Connection) -> dict[str, Any]:
+def _active_market_rate_pair(profile: Mapping[str, Any] | None) -> str | None:
+    if profile is None:
+        return None
+    try:
+        fiat_currency = profile["fiat_currency"]
+    except (KeyError, IndexError):
+        fiat_currency = None
+    return core_rates.transaction_rate_pair("BTC", fiat_currency)
+
+
+def _market_rate_provider_settings(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     return {
         "market_rate_provider": core_rates.get_market_rate_provider(conn),
         "market_rate_providers": list(core_rates.LIVE_MARKET_RATE_SOURCES),
+        "active_rate_pair": _active_market_rate_pair(profile),
     }
 
 
@@ -654,7 +711,7 @@ def _freshness_configure_payload(
         "profile": {"id": profile["id"], "label": profile["label"]},
         "settings": {
             **policy.to_payload(),
-            **_market_rate_provider_settings(conn),
+            **_market_rate_provider_settings(conn, profile),
             "auto_sync_before_report_reads": policy.report_read_sync,
             "setting_key": core_freshness.policy_setting_key(profile["id"]),
         },
@@ -677,6 +734,7 @@ def _enqueue_freshness_jobs(
             source_label=spec["source_label"],
             payload=spec.get("payload") or {},
             priority=int(spec.get("priority") or 100),
+            single_flight=bool(spec.get("single_flight", True)),
         )
         if job.get("job_type"):
             jobs.append(job)
@@ -957,10 +1015,11 @@ def _sync_results_from_freshness_jobs(jobs: list[dict[str, Any]]) -> list[dict[s
             if isinstance(result, dict):
                 results.append(result)
             continue
+        payload = job.get("payload") if isinstance(job.get("payload"), dict) else {}
         error = job.get("error") if isinstance(job.get("error"), dict) else {}
         results.append(
             {
-                "wallet": job.get("source_label") or "Source",
+                "wallet": payload.get("wallet_label") or job.get("source_label") or "Source",
                 "status": "error",
                 "code": error.get("code") or job.get("status"),
                 "message": error.get("message") or "Refresh did not finish.",
@@ -978,7 +1037,7 @@ def _freshness_run_payload(
     progress_observer: Callable[[Mapping[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     args = raw_args or {}
-    unknown = sorted(set(args) - {"wallet", "all", "rates", "journals", "run", "limit"})
+    unknown = sorted(set(args) - {"wallet", "all", "rates", "journals", "run", "limit", "force_full"})
     if unknown:
         raise AppError(
             "ui.freshness.run received unsupported arguments",
@@ -995,6 +1054,10 @@ def _freshness_run_payload(
     sync_all = bool(args.get("all", wallet is None))
     include_rates = bool(args.get("rates", True))
     include_journals = bool(args.get("journals", True))
+    force_full = args.get("force_full")
+    if force_full is not None and not isinstance(force_full, bool):
+        raise AppError("ui.freshness.run force_full must be a boolean", code="validation", retryable=False)
+    force_full = bool(force_full)
     recovered = core_freshness.recover_interrupted_jobs(conn, profile_id=profile["id"])
     if recovered:
         conn.commit()
@@ -1004,6 +1067,7 @@ def _freshness_run_payload(
         wallet_ref=None if sync_all else wallet.strip(),
         include_rates=include_rates,
         include_journals=include_journals,
+        force_full=force_full,
     )
     enqueued = _enqueue_freshness_jobs(conn, profile["id"], specs)
     completed: list[dict[str, Any]] = []
@@ -1050,6 +1114,7 @@ def _freshness_run_payload(
     return {
         "profile": {"id": profile["id"], "label": profile["label"]},
         "results": _sync_results_from_freshness_jobs(completed),
+        "force_full": force_full,
         "recovered": recovered,
         "enqueued": enqueued,
         "completed": completed,
@@ -1240,6 +1305,7 @@ def _maintenance_settings_payload(conn: sqlite3.Connection) -> dict[str, Any]:
             "settings": {
                 **core_freshness.default_policy().to_payload(),
                 **_market_rate_provider_settings(conn),
+                "active_rate_pair": None,
                 "auto_sync_before_report_reads": False,
             },
             "freshness": {"sources": [], "jobs": []},
@@ -1254,7 +1320,7 @@ def _maintenance_settings_payload(conn: sqlite3.Connection) -> dict[str, Any]:
         },
         "settings": {
             **policy.to_payload(),
-            **_market_rate_provider_settings(conn),
+            **_market_rate_provider_settings(conn, profile),
             "auto_sync_before_report_reads": policy.report_read_sync,
             "setting_key": core_freshness.policy_setting_key(profile["id"]),
         },

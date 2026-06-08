@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import time
 from dataclasses import dataclass, replace
 from typing import Any, Callable, Mapping, MutableMapping, Sequence
 
@@ -119,22 +120,28 @@ def sync_wallet_from_backend(
     wallet: WalletRow,
     hooks: WalletSyncHooks,
     checkpoint: Mapping[str, Any] | None = None,
+    *,
+    force_full: bool = False,
 ) -> SyncOutcome:
+    started = time.monotonic()
     config = json.loads(wallet["config_json"] or "{}")
     backend = hooks.resolve_backend(runtime_config, config.get("backend"))
+    effective_checkpoint = {} if force_full else checkpoint
     resolver_wallet: WalletRow = (
-        {**dict(wallet), "_freshness_checkpoint": dict(checkpoint)}
-        if checkpoint is not None
+        {**dict(wallet), "_freshness_checkpoint": dict(effective_checkpoint)}
+        if effective_checkpoint is not None
         else wallet
     )
     sync_state = hooks.resolve_sync_state(backend, resolver_wallet)
-    if checkpoint is not None:
-        sync_state = replace(sync_state, checkpoint=dict(checkpoint))
+    if effective_checkpoint is not None:
+        sync_state = replace(sync_state, checkpoint=dict(effective_checkpoint))
     if not sync_state.targets:
         return {
             "wallet": wallet["label"],
             "status": "skipped",
             "reason": "no addresses or descriptors configured for backend sync",
+            "elapsed_ms": int((time.monotonic() - started) * 1000),
+            **({"force_full": True} if force_full else {}),
         }
     kind = normalize_backend_kind(backend["kind"])
     adapter = hooks.backend_adapters.get(kind)
@@ -171,6 +178,11 @@ def sync_wallet_from_backend(
     outcome["network"] = sync_state.network
     outcome["sync_mode"] = "descriptor" if sync_state.descriptor_plan else "addresses"
     outcome["target_count"] = len(sync_state.targets)
+    outcome["records_fetched"] = len(normalized_records)
+    if "updated" not in outcome and isinstance(outcome.get("updated_records"), list):
+        outcome["updated"] = len(outcome["updated_records"])
+    if force_full:
+        outcome["force_full"] = True
     if sync_state.descriptor_plan:
         outcome["gap_limit"] = sync_state.descriptor_plan.gap_limit
     else:
@@ -180,6 +192,12 @@ def sync_wallet_from_backend(
     if sync_state.policy_asset_id:
         outcome["policy_asset"] = sync_state.policy_asset_id
     outcome.update(dict(adapter_meta or {}))
+    scripts_changed = int(outcome.get("scripts_changed") or 0)
+    scripts_unchanged = int(outcome.get("scripts_unchanged") or 0)
+    if scripts_changed or scripts_unchanged:
+        outcome["scripts_checked"] = scripts_changed + scripts_unchanged
+    outcome["utxos_refreshed"] = observed_utxos is not None
+    outcome["elapsed_ms"] = int((time.monotonic() - started) * 1000)
     return outcome
 
 
@@ -190,10 +208,12 @@ def sync_wallets(
     wallets: Sequence[WalletRow],
     hooks: WalletSyncHooks,
     checkpoints: Mapping[str, Mapping[str, Any]] | None = None,
+    *,
+    force_full: bool = False,
 ) -> list[SyncOutcome]:
     results = []
     for wallet in wallets:
-        wallet_checkpoint = (checkpoints or {}).get(str(wallet["id"]))
+        wallet_checkpoint = {} if force_full else (checkpoints or {}).get(str(wallet["id"]))
         sync_wallet: WalletRow = (
             {**dict(wallet), "_freshness_checkpoint": dict(wallet_checkpoint)}
             if wallet_checkpoint is not None
@@ -230,7 +250,7 @@ def sync_wallets(
             results.append({"wallet": sync_wallet["label"], "status": "synced", **outcome})
             continue
         if addresses or has_descriptor:
-            checkpoint = (checkpoints or {}).get(str(wallet["id"]))
+            checkpoint = {} if force_full else (checkpoints or {}).get(str(wallet["id"]))
             outcome = sync_wallet_from_backend(
                 conn,
                 runtime_config,
@@ -238,6 +258,7 @@ def sync_wallets(
                 sync_wallet,
                 hooks,
                 checkpoint=checkpoint,
+                force_full=force_full,
             )
             if outcome.get("status") == "skipped":
                 results.append(outcome)

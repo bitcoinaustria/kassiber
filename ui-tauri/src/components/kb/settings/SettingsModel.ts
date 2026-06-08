@@ -209,6 +209,7 @@ export interface MaintenanceFreshnessSettings {
   source_classes: Partial<Record<FreshnessSourceClass, boolean>>;
   market_rate_provider: MarketRateProvider;
   market_rate_providers?: MarketRateProvider[];
+  active_rate_pair?: string | null;
   auto_sync_before_report_reads?: boolean;
   setting_key?: string;
 }

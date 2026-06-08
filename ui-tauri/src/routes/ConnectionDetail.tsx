@@ -18,6 +18,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  RotateCcw,
   Trash2,
   Wallet,
 } from "lucide-react";
@@ -644,7 +645,7 @@ function ConnectionDetailView({
     connection.status === "syncing";
   const refreshButtonLabel = isWalletSyncRunning ? "Refreshing" : "Refresh";
 
-  const onSync = () => {
+  const onSync = (options?: { forceFull?: boolean }) => {
     if (
       syncWallet.isPending ||
       queryClient.isMutating({ mutationKey: walletSyncMutationKey }) > 0
@@ -661,8 +662,12 @@ function ConnectionDetailView({
     setSyncProgress(null);
     progressValueRef.current = startingSyncProgress().value ?? 5;
     syncNoticeIdRef.current = addNotification({
-      title: "Connection refresh started",
-      body: `${connection.label} is scanning in watch-only mode.`,
+      title: options?.forceFull
+        ? "Connection rescan started"
+        : "Connection refresh started",
+      body: options?.forceFull
+        ? `${connection.label} is rescanning in watch-only mode.`
+        : `${connection.label} is scanning in watch-only mode.`,
       tone: "warning",
       dedupeKey: "wallet-sync",
       progress: startingSyncProgress(),
@@ -671,7 +676,7 @@ function ConnectionDetailView({
       `${connection.label} is still scanning. Large descriptors or slow backends can take a bit; Kassiber will update when the daemon returns.`,
     );
     syncWallet.mutate(
-      { wallet: connection.label },
+      { wallet: connection.label, force_full: Boolean(options?.forceFull) },
       {
         onSuccess: (envelope) => {
           const result = envelope.data?.results?.find(
@@ -962,6 +967,13 @@ function ConnectionDetailView({
                 <DropdownMenuItem onClick={openEditDialog}>
                   <Pencil className="size-4" aria-hidden="true" />
                   Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={isWalletSyncRunning}
+                  onClick={() => onSync({ forceFull: true })}
+                >
+                  <RotateCcw className="size-4" aria-hidden="true" />
+                  Full rescan
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem

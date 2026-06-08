@@ -1,8 +1,14 @@
 import io
+import json
 import unittest
 from unittest.mock import patch
 
-from kassiber.core.sync import WalletSyncHooks, WalletSyncState, sync_wallet_from_backend
+from kassiber.core.sync import (
+    WalletSyncHooks,
+    WalletSyncState,
+    sync_wallet_from_backend,
+    sync_wallets,
+)
 from kassiber.core.sync_backends import (
     ElectrumClient,
     _connect_via_socks5,
@@ -55,12 +61,140 @@ class SyncBackendsTest(unittest.TestCase):
                 tracked_scripts={target["script_pubkey"]: target},
                 history_cache={},
             ),
-            normalize_addresses=lambda values: [],
+            normalize_addresses=lambda values: list(values or []),
             backend_adapters={},
         )
         with self.assertRaises(AppError) as exc:
             sync_wallet_from_backend(None, {}, {}, wallet, hooks)
         self.assertIn("not implemented", str(exc.exception))
+
+    def test_sync_wallet_from_backend_keeps_inventory_when_utxos_skipped(self):
+        wallet = {
+            "id": "wallet-1",
+            "label": "Watch",
+            "kind": "descriptor",
+            "config_json": '{"backend": "esplora", "addresses": ["bc1qwatch"]}',
+        }
+        profile = {"id": "profile-1"}
+        target = {"address": "bc1qwatch", "script_pubkey": "0014watch"}
+        inventory_calls = []
+
+        def update_inventory(*args):
+            inventory_calls.append(args)
+            return {"updated": 1}
+
+        hooks = WalletSyncHooks(
+            import_file=lambda *args, **kwargs: {},
+            insert_records=lambda *args, **kwargs: {
+                "imported": 0,
+                "skipped": 0,
+                "unchanged": 0,
+                "journal_invalidated": False,
+            },
+            resolve_backend=lambda runtime_config, backend_name: {
+                "name": backend_name,
+                "kind": "esplora",
+                "url": "https://example.invalid",
+            },
+            resolve_sync_state=lambda backend, wallet: WalletSyncState(
+                chain="bitcoin",
+                network="bitcoin",
+                descriptor_plan=None,
+                policy_asset_id="",
+                targets=[target],
+                tracked_scripts={target["script_pubkey"]: target},
+                history_cache={},
+                checkpoint=wallet.get("_freshness_checkpoint"),
+            ),
+            normalize_addresses=lambda values: list(values or []),
+            backend_adapters={
+                "esplora": lambda backend, wallet, sync_state: (
+                    [],
+                    {
+                        "scripts_changed": 0,
+                        "scripts_unchanged": 1,
+                        "utxos_skipped_unchanged": True,
+                    },
+                )
+            },
+            update_output_inventory=update_inventory,
+        )
+
+        outcome = sync_wallet_from_backend(
+            None,
+            {},
+            profile,
+            wallet,
+            hooks,
+            checkpoint={"esplora_scripthashes": {}},
+        )
+
+        self.assertEqual(inventory_calls, [])
+        self.assertFalse(outcome["utxos_refreshed"])
+        self.assertTrue(outcome["utxos_skipped_unchanged"])
+        self.assertEqual(outcome["scripts_checked"], 1)
+        self.assertEqual(outcome["records_fetched"], 0)
+        self.assertFalse(outcome["journal_invalidated"])
+        self.assertIn("elapsed_ms", outcome)
+
+    def test_sync_wallets_force_full_ignores_stored_checkpoint(self):
+        wallet = {
+            "id": "wallet-1",
+            "kind": "descriptor",
+            "label": "Watch",
+            "config_json": json.dumps(
+                {"backend": "esplora", "addresses": ["bc1qwatch"]}
+            ),
+        }
+        profile = {"id": "profile-1"}
+        target = {"address": "bc1qwatch", "script_pubkey": "0014watch"}
+        checkpoints_seen = []
+
+        hooks = WalletSyncHooks(
+            import_file=lambda *args, **kwargs: {},
+            insert_records=lambda *args, **kwargs: {
+                "imported": 0,
+                "skipped": 0,
+                "unchanged": 0,
+                "journal_invalidated": False,
+            },
+            resolve_backend=lambda runtime_config, backend_name: {
+                "name": backend_name,
+                "kind": "esplora",
+                "url": "https://example.invalid",
+            },
+            resolve_sync_state=lambda backend, wallet: WalletSyncState(
+                chain="bitcoin",
+                network="bitcoin",
+                descriptor_plan=None,
+                policy_asset_id="",
+                targets=[target],
+                tracked_scripts={target["script_pubkey"]: target},
+                history_cache={},
+                checkpoint=wallet.get("_freshness_checkpoint"),
+            ),
+            normalize_addresses=lambda values: list(values or []),
+            backend_adapters={
+                "esplora": lambda backend, wallet, sync_state: (
+                    checkpoints_seen.append(sync_state.checkpoint) or [],
+                    {"freshness_checkpoint": {"fresh": True}, "utxos": []},
+                )
+            },
+        )
+
+        results = sync_wallets(
+            None,
+            {},
+            profile,
+            [wallet],
+            hooks,
+            checkpoints={"wallet-1": {"highest_used": {"0": 42}}},
+            force_full=True,
+        )
+
+        self.assertEqual(checkpoints_seen, [{}])
+        self.assertTrue(results[0]["force_full"])
+        self.assertTrue(results[0]["utxos_refreshed"])
 
     def test_esplora_sync_adapter_returns_record_shape(self):
         target = {"address": "bc1qesplora", "script_pubkey": "0014" + "11" * 20}
