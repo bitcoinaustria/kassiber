@@ -538,6 +538,11 @@ def load_wasabi_bundle(file_path: str) -> dict[str, Any]:
     """
     with open(file_path, "r", encoding="utf-8") as handle:
         payload = json.load(handle)
+    return load_wasabi_bundle_payload(payload)
+
+
+def load_wasabi_bundle_payload(payload: Any) -> dict[str, Any]:
+    """Normalize a sanitized Wasabi RPC/export bundle payload."""
     if isinstance(payload, list):
         history_rows = [item for item in payload if isinstance(item, dict)]
         raw_payload: dict[str, Any] = {"gethistory": history_rows}

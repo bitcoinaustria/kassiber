@@ -21,10 +21,12 @@ import liquidIcon from "@/assets/integrations/liquid.svg";
 import mempoolIcon from "@/assets/integrations/mempool-space.svg";
 import nunchukIcon from "@/assets/integrations/nunchuk.svg";
 import relaiIcon from "@/assets/integrations/relai.svg";
+import samouraiIcon from "@/assets/integrations/samourai.png";
 import sparrowIcon from "@/assets/integrations/sparrow.png";
 import strikeIcon from "@/assets/integrations/strike.jpg";
 import trezorIcon from "@/assets/integrations/trezor.svg";
 import twentyOneBitcoinIcon from "@/assets/integrations/21bitcoin.png";
+import wasabiIcon from "@/assets/integrations/wasabi.png";
 
 export type ConnectionCategory =
   | "wallets"
@@ -165,20 +167,44 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "samourai",
     title: "Samourai Wallet",
-    description: "Watch-only Samourai and Whirlpool recovery import.",
+    description: "Watch-only Samourai and Whirlpool account descriptor/xpub import.",
     category: "wallets",
-    image: sourceIcon("SW", "#111827", "#ffffff"),
+    image: samouraiIcon,
+    imageClassName: "size-9",
     status: "ready",
     pathLabel: "Watch-only wallet group",
-    formatLabel: "backup / mnemonic / descriptors",
+    formatLabel: "Samourai/Whirlpool descriptors",
     setupKind: "samourai",
     walletKind: "samourai",
     chain: "bitcoin",
     network: "main",
     details: [
-      "Creates Deposit, Badbank, Premix, Postmix, and Ricochet sources",
-      "Decrypts backup material locally and stores only watch-only sync targets",
+      "Creates child sources for pasted Deposit, Badbank, Premix, and Postmix accounts",
+      "Use Sparrow or another descriptor tool to export public account descriptors/xpubs",
+      "Stores only watch-only sync targets",
       "Postmix discovery starts with a widened gap limit",
+    ],
+  },
+  {
+    id: "wasabi",
+    title: "Wasabi Wallet",
+    description: "Paste Wasabi RPC outputs with CoinJoin and anonymity evidence.",
+    category: "wallets",
+    image: wasabiIcon,
+    imageClassName: "size-9",
+    status: "ready",
+    pathLabel: "Wallet export",
+    formatLabel: "wasabi_bundle",
+    setupKind: "file-wallet",
+    walletKind: "wasabi",
+    sourceFormat: "wasabi_bundle",
+    chain: "bitcoin",
+    docsHref: "https://docs.wasabiwallet.io/using-wasabi/RPC.html",
+    details: [
+      "Load the wallet in Wasabi, then copy local RPC JSON from port 37128",
+      "Use Basic Auth in curl when JsonRpcUser and JsonRpcPassword are set",
+      "Paste gethistory plus listcoins/listunspentcoins for Coins anonymity state",
+      "CoinJoin evidence becomes review warnings, not fabricated provenance",
     ],
   },
   {
@@ -423,25 +449,6 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     details: [
       "Signed msat amounts drive direction",
       "Phoenix type is preserved as a tag",
-    ],
-  },
-  {
-    id: "wasabi",
-    title: "Wasabi Wallet",
-    description: "Sanitized RPC/export bundle import with CoinJoin and anonymity evidence.",
-    category: "wallets",
-    image: sourceIcon("WSB", "#111827", "#ffffff"),
-    status: "ready",
-    pathLabel: "Wallet export",
-    formatLabel: "wasabi_bundle",
-    setupKind: "file-wallet",
-    walletKind: "wasabi",
-    sourceFormat: "wasabi_bundle",
-    chain: "bitcoin",
-    details: [
-      "gethistory imports signed wallet activity",
-      "listcoins/listunspentcoins updates Coins anonymity state",
-      "CoinJoin evidence becomes review warnings, not fabricated provenance",
     ],
   },
   {

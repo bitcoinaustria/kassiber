@@ -9,7 +9,7 @@ import uuid
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -758,6 +758,16 @@ def load_samourai_source_set(
             hint="Choose a JSON file with children, sources, or xpubs entries.",
             retryable=False,
         ) from exc
+    return load_samourai_source_set_payload(data, network=network, gap_limit=gap_limit)
+
+
+def load_samourai_source_set_payload(
+    data: Any,
+    *,
+    network: str,
+    gap_limit: int | None = None,
+) -> list[dict[str, Any]]:
+    """Normalize an inline Samourai descriptor/xpub source-set payload."""
     if not isinstance(data, dict):
         raise AppError(
             "Samourai descriptor/xpub set must be a JSON object",
@@ -990,6 +1000,7 @@ def import_samourai_wallet_group(
     mnemonic: str | None = None,
     mnemonic_passphrase: str | None = None,
     source_set_file: str | None = None,
+    source_set: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     sources, normalized_network, import_source = _resolve_import_sources(
         backup_file=backup_file,
@@ -997,6 +1008,7 @@ def import_samourai_wallet_group(
         mnemonic=mnemonic,
         mnemonic_passphrase=mnemonic_passphrase,
         source_set_file=source_set_file,
+        source_set=source_set,
         network=network,
         gap_limit=gap_limit,
     )
@@ -1099,6 +1111,7 @@ def _resolve_import_sources(
     mnemonic: str | None,
     mnemonic_passphrase: str | None,
     source_set_file: str | None,
+    source_set: Mapping[str, Any] | None,
     network: str | None,
     gap_limit: int | None,
 ) -> tuple[list[dict[str, Any]], str, str]:
@@ -1106,12 +1119,13 @@ def _resolve_import_sources(
         bool(backup_file),
         bool(str_or_none(mnemonic)),
         bool(source_set_file),
+        source_set is not None,
     ]
     if sum(1 for value in selected if value) != 1:
         raise AppError(
             "Choose exactly one Samourai import source",
             code="validation",
-            hint="Use one of --backup-file, --mnemonic-stdin/--mnemonic-file, or --source-set-file.",
+            hint="Use a backup file, mnemonic input, source-set file, or inline source_set payload.",
             retryable=False,
         )
     if backup_file:
@@ -1132,6 +1146,16 @@ def _resolve_import_sources(
         )
         return sources, normalized_network, "mnemonic"
     normalized_network = _normalize_import_network(network, None)
+    if source_set is not None:
+        return (
+            load_samourai_source_set_payload(
+                source_set,
+                network=normalized_network,
+                gap_limit=gap_limit,
+            ),
+            normalized_network,
+            "source_set",
+        )
     return (
         load_samourai_source_set(
             source_set_file or "",

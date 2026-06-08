@@ -169,6 +169,10 @@ privacy boundary, minimum mix count, exact mix-count confidence when known, and
 safe warning state. Descriptor and xpub material remain behind the existing
 wallet redaction boundary and can only be revealed through the explicit
 `wallets reveal-descriptor` owner command.
+The desktop Add Connection flow asks for the four primary public account inputs
+directly: Deposit, Badbank / Toxic Change, Premix, and Postmix descriptors or
+account xpub-family keys. Internally those fields are converted into the same
+source-set structure accepted by the CLI and daemon.
 Explicit descriptor source-set imports must cover both Samourai descriptor
 branches for each scanned section: branch `0` receive and branch `1` change.
 Provide a separate `change_descriptor` or a descriptor expression that expands
@@ -378,6 +382,18 @@ not control the wallet, does not persist raw `wallet.json`, and does not expose
 seeds, encrypted secrets, chain code, xpub/extpub/public keys, full key paths,
 backend URLs, or raw wallet blobs through UI, AI, diagnostics, or public report
 surfaces.
+
+The desktop Add Connection flow asks for the real Wasabi RPC outputs directly:
+paste `gethistory` JSON, optionally paste `listcoins` / `listunspentcoins` and
+`getwalletinfo`, and use the advanced additional-sections box for `listkeys`,
+`listpaymentsincoinjoin`, or `wallet_json`. The UI converts those pasted
+responses into the same sanitized bundle shape internally. A prebuilt local
+bundle file is still accepted for advanced/import-script workflows.
+Wasabi RPC is disabled by default, listens locally on `127.0.0.1:37128` when
+enabled, and may be anonymous or protected with `JsonRpcUser` /
+`JsonRpcPassword` Basic Auth in Wasabi's `Config.json`. If Basic Auth is
+enabled, pass `-u user:password` to the local `curl` command before pasting the
+result into Kassiber.
 
 Import directly:
 

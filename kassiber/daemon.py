@@ -96,7 +96,7 @@ from .core import maintenance as core_maintenance
 from .core import metadata as core_metadata
 from .core import rates as core_rates
 from .core import wallets as core_wallets
-from .core.repo import current_context_snapshot
+from .core.repo import current_context_snapshot, resolve_wallet as core_resolve_wallet
 from .core.runtime import build_status_payload
 from .core.ui_snapshot import (
     build_audit_changes_since_last_answer_snapshot,
@@ -5499,6 +5499,36 @@ def _import_wallet_file_payload(
     conn: sqlite3.Connection,
     args: dict[str, Any],
 ) -> dict[str, Any]:
+    source_format = _required_str_arg(args, "source_format", "Source format")
+    source_bundle = args.get("source_bundle")
+    if source_bundle is not None:
+        if source_format != "wasabi_bundle":
+            raise AppError(
+                "Inline source_bundle is only supported for Wasabi imports",
+                code="validation",
+                retryable=False,
+            )
+        wallet_ref = _required_str_arg(args, "wallet", "Wallet")
+        _, profile = resolve_scope(conn, None, None)
+        wallet = core_resolve_wallet(conn, profile["id"], wallet_ref)
+        return core_imports.import_wasabi_bundle_payload_into_wallet(
+            conn,
+            profile,
+            wallet,
+            source_bundle,
+            core_imports.ImportCoordinatorHooks(
+                ensure_tag_row=lambda conn, workspace_id, profile_id, code, label: core_metadata.ensure_tag_row(
+                    conn,
+                    workspace_id,
+                    profile_id,
+                    code,
+                    label,
+                    _metadata_hooks(),
+                ),
+                invalidate_journals=invalidate_journals,
+            ),
+            source_label="inline:wasabi_bundle",
+        )
     source_file = _source_file_arg(args)
     if not source_file:
         raise AppError(
@@ -5507,7 +5537,6 @@ def _import_wallet_file_payload(
             hint="Choose the local export file to import.",
             retryable=False,
         )
-    source_format = _required_str_arg(args, "source_format", "Source format")
     if source_format not in _UI_WALLET_SOURCE_FORMATS:
         raise AppError(
             f"Unsupported source format '{source_format}'",
@@ -5579,7 +5608,14 @@ def _import_samourai_payload(
     backup_file = _optional_str_arg(args, "backup_file")
     source_file = _optional_str_arg(args, "source_file")
     source_set_file = _optional_str_arg(args, "source_set_file")
-    if not backup_file and source_file and not source_set_file:
+    source_set = args.get("source_set")
+    if source_set is not None and not isinstance(source_set, dict):
+        raise AppError(
+            "source_set must be a JSON object",
+            code="validation",
+            retryable=False,
+        )
+    if not backup_file and source_file and not source_set_file and source_set is None:
         backup_file = source_file
     gap_limit = None
     if args.get("gap_limit") not in (None, ""):
@@ -5605,6 +5641,7 @@ def _import_samourai_payload(
         mnemonic=_optional_str_arg(args, "mnemonic"),
         mnemonic_passphrase=_optional_str_arg(args, "mnemonic_passphrase"),
         source_set_file=source_set_file,
+        source_set=source_set,
     )
 
 

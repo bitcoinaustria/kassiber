@@ -30,6 +30,7 @@ from ..importers import (
     is_twentyonebitcoin_format,
     is_wasabi_format,
     load_wasabi_bundle,
+    load_wasabi_bundle_payload,
     load_import_records,
 )
 from ..msat import btc_to_msat, dec
@@ -1706,59 +1707,16 @@ def import_file_into_wallet(
     commit: bool = True,
 ) -> dict[str, Any]:
     if is_wasabi_format(input_format):
-        bundle = load_wasabi_bundle(file_path)
-        records = bundle["records"]
-        outcome = import_records_into_wallet(
+        outcome = import_wasabi_bundle_into_wallet(
             conn,
             profile,
             wallet,
-            records,
-            f"file:{input_format}",
+            load_wasabi_bundle(file_path),
             hooks,
+            source_label=f"file:{input_format}",
             commit=False,
         )
-        outcome.update(
-            apply_wasabi_metadata(
-                conn,
-                profile,
-                wallet,
-                records,
-                bundle.get("metadata") or {},
-                hooks,
-                commit=False,
-            )
-        )
-        coins = bundle.get("coins") or []
-        if bundle.get("coin_sections_present"):
-            config = json.loads(wallet["config_json"] or "{}")
-            chain = str(config.get("chain") or "bitcoin")
-            network = str(config.get("network") or "mainnet")
-            inventory = core_output_inventory.update_wallet_output_inventory(
-                conn,
-                profile,
-                wallet,
-                {"name": "wasabi", "kind": "wasabi_bundle"},
-                SimpleNamespace(chain=chain, network=network),
-                coins,
-                commit=False,
-            )
-            outcome.update(
-                {
-                    "wasabi_coins_observed": inventory["observed"],
-                    "wasabi_coins_active": inventory["active"],
-                    "wasabi_coins_marked_spent": inventory["spent"],
-                }
-            )
-        outcome.update(
-            {
-                "wasabi_transactions": len(records),
-                "wasabi_payments_in_coinjoin": len(bundle.get("payments_in_coinjoin") or []),
-                "wasabi_wallet_json_present": bool(bundle.get("wallet_json_present")),
-                "wasabi_listkeys_count": int(bundle.get("listkeys_count") or 0),
-                "input_format": input_format,
-                "file": os.path.abspath(file_path),
-            }
-        )
+        outcome["file"] = os.path.abspath(file_path)
         if commit:
             conn.commit()
         return outcome
@@ -1802,6 +1760,93 @@ def import_file_into_wallet(
     return outcome
 
 
+def import_wasabi_bundle_payload_into_wallet(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+    wallet: Mapping[str, Any],
+    payload: Any,
+    hooks: ImportCoordinatorHooks,
+    *,
+    source_label: str = "inline:wasabi_bundle",
+    commit: bool = True,
+) -> dict[str, Any]:
+    return import_wasabi_bundle_into_wallet(
+        conn,
+        profile,
+        wallet,
+        load_wasabi_bundle_payload(payload),
+        hooks,
+        source_label=source_label,
+        commit=commit,
+    )
+
+
+def import_wasabi_bundle_into_wallet(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+    wallet: Mapping[str, Any],
+    bundle: Mapping[str, Any],
+    hooks: ImportCoordinatorHooks,
+    *,
+    source_label: str,
+    commit: bool = True,
+) -> dict[str, Any]:
+    records = list(bundle.get("records") or [])
+    outcome = import_records_into_wallet(
+        conn,
+        profile,
+        wallet,
+        records,
+        source_label,
+        hooks,
+        commit=False,
+    )
+    outcome.update(
+        apply_wasabi_metadata(
+            conn,
+            profile,
+            wallet,
+            records,
+            bundle.get("metadata") or {},
+            hooks,
+            commit=False,
+        )
+    )
+    coins = bundle.get("coins") or []
+    if bundle.get("coin_sections_present"):
+        config = json.loads(wallet["config_json"] or "{}")
+        chain = str(config.get("chain") or "bitcoin")
+        network = str(config.get("network") or "mainnet")
+        inventory = core_output_inventory.update_wallet_output_inventory(
+            conn,
+            profile,
+            wallet,
+            {"name": "wasabi", "kind": "wasabi_bundle"},
+            SimpleNamespace(chain=chain, network=network),
+            coins,
+            commit=False,
+        )
+        outcome.update(
+            {
+                "wasabi_coins_observed": inventory["observed"],
+                "wasabi_coins_active": inventory["active"],
+                "wasabi_coins_marked_spent": inventory["spent"],
+            }
+        )
+    outcome.update(
+        {
+            "wasabi_transactions": len(records),
+            "wasabi_payments_in_coinjoin": len(bundle.get("payments_in_coinjoin") or []),
+            "wasabi_wallet_json_present": bool(bundle.get("wallet_json_present")),
+            "wasabi_listkeys_count": int(bundle.get("listkeys_count") or 0),
+            "input_format": "wasabi_bundle",
+        }
+    )
+    if commit:
+        conn.commit()
+    return outcome
+
+
 __all__ = [
     "ImportCoordinatorHooks",
     "apply_btcpay_metadata",
@@ -1811,6 +1856,7 @@ __all__ = [
     "import_file_into_profile",
     "normalize_bullbitcoin_import_mode",
     "import_file_into_wallet",
+    "import_wasabi_bundle_payload_into_wallet",
     "import_records_into_wallet",
     "insert_wallet_records",
     "make_transaction_fingerprint",
