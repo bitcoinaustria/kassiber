@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { AppNotification } from "@/store/ui";
 
-import { routeProgressLabelFromNotifications } from "./progressIndicator";
+import {
+  routeProgressFromNotifications,
+  routeProgressLabelFromNotifications,
+} from "./progressIndicator";
 
 function notification(
   title: string,
@@ -36,6 +39,21 @@ describe("route progress indicator label", () => {
         }),
       ]),
     ).toBe("Book refresh: Fetching source history");
+  });
+
+  it("returns progress rail state for the active progress notification", () => {
+    expect(
+      routeProgressFromNotifications([
+        notification("Book refresh started", {
+          value: 40,
+          label: "Fetching source history",
+        }),
+      ]),
+    ).toEqual({
+      indeterminate: false,
+      label: "Book refresh: Fetching source history",
+      value: 40,
+    });
   });
 
   it("uses the newest active progress notification", () => {

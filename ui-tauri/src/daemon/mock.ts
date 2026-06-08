@@ -2909,6 +2909,7 @@ export const mockDaemon: DaemonTransport = {
       const args = (req.args ?? {}) as { pair?: unknown };
       const overview = fixtures["ui.overview.snapshot"] as {
         marketRate?: {
+          rate?: number | null;
           pair?: string | null;
           timestamp?: string | null;
           fetchedAt?: string | null;
@@ -2998,6 +2999,82 @@ export const mockDaemon: DaemonTransport = {
                 ? "ok"
                 : "missing",
           },
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.rates.latest") {
+      const args = (req.args ?? {}) as { pair?: unknown };
+      const overview = fixtures["ui.overview.snapshot"] as {
+        marketRate?: {
+          asset?: "BTC";
+          fiatCurrency?: string;
+          pair?: string | null;
+          rate?: number | null;
+          timestamp?: string | null;
+          fetchedAt?: string | null;
+          source?: string | null;
+          granularity?: string | null;
+          method?: string | null;
+        };
+        priceEur?: number;
+        priceUsd?: number;
+        fiat?: {
+          eurBalance?: number;
+          eurUnrealized?: number;
+        };
+      };
+      const pair =
+        typeof args.pair === "string" && args.pair.trim()
+          ? args.pair.trim().toUpperCase()
+          : overview.marketRate?.pair ?? "BTC-EUR";
+      const now = new Date().toISOString();
+      const previousRate = Number(overview.marketRate?.rate ?? 71_420.18);
+      const nextRate = Number((previousRate + 125.25).toFixed(2));
+      if (overview.marketRate) {
+        overview.marketRate.asset = "BTC";
+        overview.marketRate.pair = pair;
+        overview.marketRate.fiatCurrency = pair.includes("-")
+          ? pair.split("-")[1] ?? overview.marketRate.fiatCurrency ?? "EUR"
+          : overview.marketRate.fiatCurrency ?? "EUR";
+        overview.marketRate.rate = nextRate;
+        overview.marketRate.timestamp = now;
+        overview.marketRate.fetchedAt = now;
+        overview.marketRate.source = "coinbase-exchange";
+        overview.marketRate.granularity = "minute";
+        overview.marketRate.method = "product_candles";
+      }
+      if (pair === "BTC-EUR") overview.priceEur = nextRate;
+      if (pair === "BTC-USD") overview.priceUsd = nextRate;
+      if (overview.fiat?.eurBalance != null) {
+        const btcBalance =
+          previousRate > 0 ? overview.fiat.eurBalance / previousRate : 0;
+        const nextBalance = btcBalance * nextRate;
+        const delta = nextBalance - overview.fiat.eurBalance;
+        overview.fiat.eurBalance = nextBalance;
+        overview.fiat.eurUnrealized = (overview.fiat.eurUnrealized ?? 0) + delta;
+      }
+      return {
+        kind: "ui.rates.latest",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          source: "coinbase-exchange",
+          pair,
+          latest: [
+            {
+              pair,
+              source: "coinbase-exchange",
+              samples: 1,
+              granularity: "minute",
+              method: "product_candles",
+              mode: "latest_quote",
+              lookback_minutes: 5,
+              timestamp: now,
+              fetched_at: now,
+            },
+          ],
+          marketRate: overview.marketRate ?? null,
         } as T,
       };
     }

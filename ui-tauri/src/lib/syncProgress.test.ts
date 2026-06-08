@@ -27,7 +27,7 @@ describe("sync progress notifications", () => {
     expect(progress.progress).toEqual({
       value: 50,
       indeterminate: false,
-      label: "Fetching source history: 12 / 24",
+      label: "Cold · Fetching source history · 12 / 24",
     });
   });
 
@@ -36,8 +36,8 @@ describe("sync progress notifications", () => {
 
     expect(progress.value).toBe(85);
     expect(progress.progress).toEqual({
-      value: 85,
-      indeterminate: false,
+      value: undefined,
+      indeterminate: true,
       label: "Refreshing configured sources",
     });
   });
@@ -54,7 +54,7 @@ describe("sync progress notifications", () => {
     expect(progress.progress).toEqual({
       value: 100,
       indeterminate: false,
-      label: "Importing transactions: 30 / 24",
+      label: "Cold · Importing transactions · 30 / 24",
     });
   });
 
@@ -65,5 +65,16 @@ describe("sync progress notifications", () => {
         phase: "rate_coverage",
       }),
     ).toBe("Market-rate coverage: Checking market-rate coverage.");
+
+    expect(
+      syncProgressNotification({
+        source_label: "Market-rate coverage",
+        phase: "rate_coverage",
+      }).progress,
+    ).toEqual({
+      value: undefined,
+      indeterminate: true,
+      label: "Market-rate coverage · Checking market-rate coverage",
+    });
   });
 });

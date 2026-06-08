@@ -52,6 +52,7 @@ import {
   toDashboardTransaction,
   type Transaction,
 } from "@/components/overview-dashboard/model";
+import { syncProgressPhaseLabel } from "@/lib/syncProgress";
 
 type BookRoute = "/overview" | "/transactions" | "/journals" | "/quarantine" | "/connections" | "/reports";
 
@@ -244,7 +245,11 @@ export function BirdsEyeView({
       const phase = formatPhase(record.phase);
       updateNotification(noticeRef.current, {
         body: `${book}: ${phase}`,
-        progress: { indeterminate: true, label: phase },
+        progress: {
+          indeterminate: !hasProgressCounter(record),
+          label: formatWorkspaceProgressLabel(record),
+          value: workspaceProgressValue(record),
+        },
       });
     },
   });
@@ -759,9 +764,41 @@ function RefreshPanel({
   );
 }
 
+function hasProgressCounter(progress: WorkspaceFreshnessProgress) {
+  return (
+    typeof progress.processed === "number" &&
+    typeof progress.total === "number" &&
+    progress.total > 0
+  );
+}
+
+function workspaceProgressValue(progress: WorkspaceFreshnessProgress) {
+  if (!hasProgressCounter(progress)) return undefined;
+  return Math.max(
+    0,
+    Math.min(100, ((progress.processed ?? 0) / (progress.total ?? 1)) * 100),
+  );
+}
+
+function formatWorkspaceProgressLabel(progress: WorkspaceFreshnessProgress) {
+  const book = progress.profile?.label;
+  const source = progress.source_label;
+  const phase = formatPhase(progress.phase);
+  const parts = [book, source && source !== book ? source : null, phase].filter(
+    (part): part is string => Boolean(part),
+  );
+
+  if (hasProgressCounter(progress)) {
+    parts.push(
+      `${progress.processed?.toLocaleString()} / ${progress.total?.toLocaleString()}`,
+    );
+  } else if (typeof progress.processed === "number") {
+    parts.push(`${progress.processed.toLocaleString()} scanned`);
+  }
+
+  return parts.join(" · ");
+}
+
 function formatPhase(phase: string | undefined) {
-  if (!phase) return "Working";
-  return phase
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return syncProgressPhaseLabel(phase, "In progress");
 }

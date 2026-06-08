@@ -161,6 +161,33 @@ export interface RateRebuildData {
     | null;
 }
 
+export interface RateLatestData {
+  source: MarketRateProvider;
+  pair: string;
+  latest: Array<{
+    pair: string;
+    source: MarketRateProvider;
+    samples?: number;
+    granularity?: string;
+    method?: string;
+    mode?: string;
+    lookback_minutes?: number;
+    timestamp?: string | null;
+    fetched_at?: string | null;
+  }>;
+  marketRate?: {
+    asset: "BTC";
+    fiatCurrency: string;
+    pair: string | null;
+    rate: number | null;
+    timestamp: string | null;
+    source: string | null;
+    fetchedAt: string | null;
+    granularity: string | null;
+    method: string | null;
+  } | null;
+}
+
 export interface RateRebuildJournalResult {
   entries_created?: number;
   quarantined?: number;

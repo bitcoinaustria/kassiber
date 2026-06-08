@@ -90,6 +90,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.rates.summary",
   "ui.rates.coverage",
   "ui.rates.kraken_csv.import",
+  "ui.rates.latest",
   "ui.rates.rebuild",
   "ui.workspace.health",
   "ui.workspace.freshness.run",

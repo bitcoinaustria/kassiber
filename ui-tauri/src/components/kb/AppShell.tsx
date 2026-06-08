@@ -126,7 +126,10 @@ import { PreAlphaBanner } from "./PreAlphaBanner";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { BookSwitcherPopover } from "./BookSwitcherPopover";
-import { routeProgressLabelFromNotifications } from "./progressIndicator";
+import {
+  routeProgressFromNotifications,
+  type RouteProgressState,
+} from "./progressIndicator";
 import {
   buildAppSearchResults,
   isLikelyTransactionLookupQuery,
@@ -501,10 +504,9 @@ export function AppShell() {
     : true;
   const importRootBlocked = !importRootReady || !importedProjectActive;
   const daemonEnabled = !locked && !importRootBlocked;
-  const shellProgressLabel =
-    routeProgressLabelFromNotifications(appNotifications);
+  const shellProgress = routeProgressFromNotifications(appNotifications);
   const shellBusy =
-    routerBusy || daemonFetchCount > 0 || Boolean(shellProgressLabel);
+    routerBusy || daemonFetchCount > 0 || Boolean(shellProgress);
   const isAssistantRoute = pathname === "/assistant";
   const routeMeta =
     ROUTE_META.find(([prefix]) => pathname.startsWith(prefix))?.[1] ?? {
@@ -1173,7 +1175,7 @@ export function AppShell() {
                       >
                         <RouteTransitionIndicator
                           active={shellBusy}
-                          label={shellProgressLabel}
+                          progress={shellProgress}
                         />
                         <Outlet />
                       </main>
@@ -1193,7 +1195,7 @@ export function AppShell() {
                     >
                       <RouteTransitionIndicator
                         active={shellBusy}
-                        label={shellProgressLabel}
+                        progress={shellProgress}
                       />
                       <Outlet />
                     </main>
@@ -1210,32 +1212,65 @@ export function AppShell() {
 
 function RouteTransitionIndicator({
   active,
-  label,
+  progress,
 }: {
   active: boolean;
-  label?: string | null;
+  progress?: RouteProgressState | null;
 }) {
+  const value = notificationProgressValue(progress?.value);
+  const isDeterminate =
+    progress && !progress.indeterminate && typeof progress.value === "number";
+  const hasProgressLabel = Boolean(progress?.label);
+  const statusLabel = isDeterminate
+    ? `${Math.round(value)}%`
+    : progress
+      ? "In progress"
+      : null;
+
   return (
     <div
-      aria-hidden={label ? undefined : "true"}
-      role={label && active ? "status" : undefined}
-      aria-live={label && active ? "polite" : undefined}
+      aria-hidden={hasProgressLabel ? undefined : "true"}
+      role={hasProgressLabel && active ? "status" : undefined}
+      aria-live={hasProgressLabel && active ? "polite" : undefined}
       className={cn(
-        "pointer-events-none sticky top-0 z-10 w-full overflow-hidden transition-[height,opacity] duration-150",
-        label ? "h-6" : "h-px",
+        "pointer-events-none sticky top-0 z-10 w-full overflow-hidden bg-background/95 px-3 transition-[height,opacity] duration-150 backdrop-blur sm:px-4 md:px-5",
+        active ? (hasProgressLabel ? "h-9" : "h-2") : "h-0",
         active ? "opacity-100" : "opacity-0",
       )}
     >
-      <div className="absolute inset-x-0 top-0 h-px overflow-hidden">
-        <div className="h-full w-1/2 bg-primary/70 will-change-transform motion-safe:animate-[route-progress_0.9s_ease-in-out_infinite] motion-reduce:w-full motion-reduce:will-change-auto" />
-      </div>
-      {label ? (
-        <div className="flex h-full items-start justify-center px-3 pt-1">
-          <span className="max-w-full truncate rounded-b-md border-x border-b bg-background/95 px-2 py-0.5 text-[11px] font-medium leading-none text-primary shadow-sm backdrop-blur">
-            {label}
-          </span>
+      <div
+        className={cn(
+          "mx-auto flex h-full w-full flex-col justify-center gap-1",
+          hasProgressLabel ? "pt-1 pb-1.5" : "py-0.5",
+        )}
+      >
+        {progress ? (
+          <div className="flex min-w-0 items-center justify-between gap-3 text-[11px] font-medium leading-none">
+            <span className="min-w-0 truncate text-primary">
+              {progress.label}
+            </span>
+            <span className="shrink-0 text-muted-foreground tabular-nums">
+              {statusLabel}
+            </span>
+          </div>
+        ) : null}
+        <div
+          className={cn(
+            "h-1.5 w-full overflow-hidden rounded-full bg-primary/15",
+            !hasProgressLabel && "h-1",
+          )}
+        >
+          <div
+            className={cn(
+              "h-full rounded-full bg-primary/80",
+              isDeterminate
+                ? "transition-[width] duration-200 ease-out"
+                : "w-1/3 will-change-transform motion-safe:animate-[route-progress_0.9s_ease-in-out_infinite] motion-reduce:w-full motion-reduce:will-change-auto",
+            )}
+            style={isDeterminate ? { width: `${value}%` } : undefined}
+          />
         </div>
-      ) : null}
+      </div>
     </div>
   );
 }
