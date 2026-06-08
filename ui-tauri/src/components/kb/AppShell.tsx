@@ -127,6 +127,10 @@ import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { BookSwitcherPopover } from "./BookSwitcherPopover";
 import {
+  routeProgressFromNotifications,
+  type RouteProgressState,
+} from "./progressIndicator";
+import {
   buildAppSearchResults,
   isLikelyTransactionLookupQuery,
   isSearchResultActivatable,
@@ -178,6 +182,7 @@ function notificationProgressValue(value: number | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(100, value));
 }
+
 const appMainClassName =
   "relative min-h-0 w-full flex-1 overflow-auto overscroll-contain bg-background text-zinc-950 dark:text-zinc-50";
 
@@ -229,6 +234,15 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       icon: Wallet,
       searchLabel: "Search wallets",
       searchPlaceholder: "Search wallets, imports, backends...",
+    },
+  ],
+  [
+    "/books/",
+    {
+      title: "Book Set Overview",
+      icon: Users,
+      searchLabel: "Search books",
+      searchPlaceholder: "Search books, wallets, reports...",
     },
   ],
   [
@@ -418,7 +432,7 @@ function assistantReturnPathFor(pathname: string): AssistantReturnPath {
   if (pathname === "/transactions") return "/transactions";
   if (pathname === "/reports") return "/reports";
   if (pathname === "/source-of-funds") return "/source-of-funds";
-  if (pathname === "/books" || pathname === "/profiles") return "/books";
+  if (pathname === "/books" || pathname.startsWith("/books/") || pathname === "/profiles") return "/books";
   if (pathname === "/journals") return "/journals";
   if (pathname === "/quarantine") return "/quarantine";
   if (pathname === "/logs" || pathname === "/diagnostics") return "/logs";
@@ -436,6 +450,7 @@ export function AppShell() {
   const setIdentity = useUiStore((s) => s.setIdentity);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const addNotification = useUiStore((s) => s.addNotification);
+  const appNotifications = useUiStore((s) => s.notifications);
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const bumpDaemonSession = useUiStore((s) => s.bumpDaemonSession);
@@ -489,7 +504,9 @@ export function AppShell() {
     : true;
   const importRootBlocked = !importRootReady || !importedProjectActive;
   const daemonEnabled = !locked && !importRootBlocked;
-  const shellBusy = routerBusy || daemonFetchCount > 0;
+  const shellProgress = routeProgressFromNotifications(appNotifications);
+  const shellBusy =
+    routerBusy || daemonFetchCount > 0 || Boolean(shellProgress);
   const isAssistantRoute = pathname === "/assistant";
   const routeMeta =
     ROUTE_META.find(([prefix]) => pathname.startsWith(prefix))?.[1] ?? {
@@ -1156,7 +1173,10 @@ export function AppShell() {
                             : "pb-[240px]",
                         )}
                       >
-                        <RouteTransitionIndicator active={shellBusy} />
+                        <RouteTransitionIndicator
+                          active={shellBusy}
+                          progress={shellProgress}
+                        />
                         <Outlet />
                       </main>
                       {isAssistantRoute ? null : (
@@ -1173,7 +1193,10 @@ export function AppShell() {
                       tabIndex={-1}
                       className={appMainClassName}
                     >
-                      <RouteTransitionIndicator active={shellBusy} />
+                      <RouteTransitionIndicator
+                        active={shellBusy}
+                        progress={shellProgress}
+                      />
                       <Outlet />
                     </main>
                   )
@@ -1187,16 +1210,67 @@ export function AppShell() {
   );
 }
 
-function RouteTransitionIndicator({ active }: { active: boolean }) {
+function RouteTransitionIndicator({
+  active,
+  progress,
+}: {
+  active: boolean;
+  progress?: RouteProgressState | null;
+}) {
+  const value = notificationProgressValue(progress?.value);
+  const isDeterminate =
+    progress && !progress.indeterminate && typeof progress.value === "number";
+  const hasProgressLabel = Boolean(progress?.label);
+  const statusLabel = isDeterminate
+    ? `${Math.round(value)}%`
+    : progress
+      ? "In progress"
+      : null;
+
   return (
     <div
-      aria-hidden="true"
+      aria-hidden={hasProgressLabel ? undefined : "true"}
+      role={hasProgressLabel && active ? "status" : undefined}
+      aria-live={hasProgressLabel && active ? "polite" : undefined}
       className={cn(
-        "pointer-events-none sticky top-0 z-10 h-px w-full overflow-hidden transition-opacity duration-150",
+        "pointer-events-none sticky top-0 z-10 w-full overflow-hidden bg-background/95 px-3 transition-[height,opacity] duration-150 backdrop-blur sm:px-4 md:px-5",
+        active ? (hasProgressLabel ? "h-9" : "h-2") : "h-0",
         active ? "opacity-100" : "opacity-0",
       )}
     >
-      <div className="h-full w-1/2 bg-primary/70 will-change-transform motion-safe:animate-[route-progress_0.9s_ease-in-out_infinite] motion-reduce:w-full motion-reduce:will-change-auto" />
+      <div
+        className={cn(
+          "mx-auto flex h-full w-full flex-col justify-center gap-1",
+          hasProgressLabel ? "pt-1 pb-1.5" : "py-0.5",
+        )}
+      >
+        {progress ? (
+          <div className="flex min-w-0 items-center justify-between gap-3 text-[11px] font-medium leading-none">
+            <span className="min-w-0 truncate text-primary">
+              {progress.label}
+            </span>
+            <span className="shrink-0 text-muted-foreground tabular-nums">
+              {statusLabel}
+            </span>
+          </div>
+        ) : null}
+        <div
+          className={cn(
+            "h-1.5 w-full overflow-hidden rounded-full bg-primary/15",
+            !hasProgressLabel && "h-1",
+          )}
+        >
+          <div
+            className={cn(
+              "h-full rounded-full bg-primary/80",
+              isDeterminate
+                ? "transition-[width] duration-200 ease-out"
+                : "w-1/3 will-change-transform motion-safe:animate-[route-progress_0.9s_ease-in-out_infinite] motion-reduce:w-full motion-reduce:will-change-auto",
+            )}
+            style={isDeterminate ? { width: `${value}%` } : undefined}
+          />
+        </div>
+      </div>
     </div>
   );
 }

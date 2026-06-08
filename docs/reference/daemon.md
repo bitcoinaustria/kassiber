@@ -38,6 +38,7 @@ daemon for the exact current allowlist:
     "supported_kinds": [
       "status",
       "ui.overview.snapshot",
+      "ui.workspace.overview.snapshot",
       "ui.transactions.list",
       "ui.transactions.resolve",
       "ui.transactions.metadata.update",
@@ -76,6 +77,7 @@ daemon for the exact current allowlist:
       "ui.freshness.pause",
       "ui.freshness.resume",
       "ui.workspace.health",
+      "ui.workspace.freshness.run",
       "ui.workspace.create",
       "ui.workspace.delete",
       "ui.profiles.reset_data",
@@ -397,6 +399,24 @@ Report export kinds write files under the managed `exports/reports/` state
 directory and return the written path plus metadata. UI kinds not yet wired
 return `daemon_unavailable` instead.
 
+`ui.overview.snapshot` remains scoped to the active book/profile.
+`ui.workspace.health` is also active-context health despite the historical
+workspace name; use `ui.workspace.overview.snapshot` for whole book-set reads.
+`ui.workspace.overview.snapshot` is the book-set overview read model. It
+requires `args.workspace_id`, does not switch the active book, and returns an
+operational rollup across all profiles in that workspace: connection tiles,
+recent transactions/activity, BTC balance series, portfolio series, fiat rows,
+journal freshness, quarantines, and report readiness. Every aggregate also
+keeps `profileId`/book labels or a `books[]` boundary so journal and report
+warnings point back to the exact book. The payload must never merge tax lots,
+transfer semantics, or journal state across books; cross-book values are
+treasury/readiness summaries only. If all books share one fiat currency, fiat
+totals use the same latest-rate semantics as each book overview. Mixed fiat
+sets return BTC-native totals plus per-book fiat rows and mark the fiat rollup
+as `mode="mixed"` / `partial=true` instead of converting between currencies.
+Desktop drilldowns from the book-set overview are book-scoped routes; they
+must make the active-book switch visible before navigating.
+
 ## Freshness jobs
 
 Kassiber's daemon owns source freshness. The desktop configures, observes,
@@ -443,6 +463,15 @@ supplied it is source-scoped to that wallet, while a book/global refresh can
 enqueue the remaining wallet, rate, and journal jobs without duplicating the
 already queued source. `ui.freshness.cancel`, `ui.freshness.pause`, and
 `ui.freshness.resume` mutate the job/source state.
+
+`ui.workspace.freshness.run` is the explicit book-set refresh path. It requires
+`args.workspace_id`, loops through every profile in that workspace, recovers
+interrupted jobs, enqueues wallet/rate/journal freshness work for each book,
+and drains each book's due jobs without changing active context. Streaming
+records use `ui.workspace.freshness.run.progress` and include the workspace and
+profile/book currently being processed. The terminal payload groups per-book
+results, rate-limit/backoff state, blocking-source counts, and a summary of
+which books refreshed and which remain blocked.
 
 When `background_enabled` is true, the daemon starts an opt-in freshness worker
 while the app is running. The worker opens its own SQLite connection, enqueues

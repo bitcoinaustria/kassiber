@@ -20,6 +20,7 @@ import type {
   ProfileTaxCountry,
   Workspace,
 } from "@/mocks/profiles";
+import { mockWorkspaceOverviewSnapshot } from "@/mocks/workspaceOverview";
 import { MOCK_AI_CHAT_STREAM, fixtures } from "./fixtures";
 
 const SIMULATED_LATENCY_MS = 50;
@@ -779,6 +780,81 @@ export const mockDaemon: DaemonTransport = {
         schema_version: 1,
         request_id: req.request_id,
         data: mockProfilesSnapshot as T,
+      };
+    }
+
+    if (req.kind === "ui.workspace.overview.snapshot") {
+      const args = (req.args ?? {}) as { workspace_id?: unknown };
+      const workspaceId =
+        typeof args.workspace_id === "string" && args.workspace_id.trim()
+          ? args.workspace_id.trim()
+          : mockProfilesSnapshot.activeWorkspaceId;
+      return {
+        kind: "ui.workspace.overview.snapshot",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: mockWorkspaceOverviewSnapshot(workspaceId) as T,
+      };
+    }
+
+    if (req.kind === "ui.workspace.freshness.run") {
+      const args = (req.args ?? {}) as { workspace_id?: unknown };
+      const workspaceId =
+        typeof args.workspace_id === "string" && args.workspace_id.trim()
+          ? args.workspace_id.trim()
+          : mockProfilesSnapshot.activeWorkspaceId;
+      const overview = mockWorkspaceOverviewSnapshot(workspaceId);
+      const books = overview.books.map((book) => ({
+        profile: { id: book.profile.id, label: book.profile.label },
+        results: book.connections.map((connection) => ({
+          wallet: connection.label,
+          status: "synced",
+          inserted: 0,
+          updated: 0,
+        })),
+        recovered: [],
+        enqueued: [],
+        completed: [
+          {
+            job_type: "journal_refresh",
+            source_label: "Journals",
+            source_type: "journals",
+            status: book.readiness.ready ? "done" : "rate_limited",
+          },
+        ],
+        attention: {
+          blockedReports: !book.readiness.ready,
+          rateLimited: !book.readiness.ready,
+          errors: 0,
+        },
+        sources: [],
+        jobs: [],
+        summary: {
+          sources: book.connections.length,
+          active_jobs: 0,
+          blocking_reports: book.readiness.ready ? 0 : 1,
+          rate_limited: book.readiness.ready ? 0 : 1,
+        },
+      }));
+      return {
+        kind: "ui.workspace.freshness.run",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          workspace: overview.workspace,
+          books,
+          summary: {
+            books: books.length,
+            enqueued: 0,
+            completed: books.length,
+            errors: 0,
+            rate_limited: books.filter((book) => book.attention.rateLimited).length,
+            blocked_books: books.filter((book) => book.attention.blockedReports).length,
+            synced_books: books.filter((book) => !book.attention.blockedReports).length,
+            ok: books.every((book) => !book.attention.blockedReports),
+            reports_blocked: books.filter((book) => book.attention.blockedReports).length,
+          },
+        } as T,
       };
     }
 
@@ -2833,6 +2909,7 @@ export const mockDaemon: DaemonTransport = {
       const args = (req.args ?? {}) as { pair?: unknown };
       const overview = fixtures["ui.overview.snapshot"] as {
         marketRate?: {
+          rate?: number | null;
           pair?: string | null;
           timestamp?: string | null;
           fetchedAt?: string | null;
@@ -2922,6 +2999,82 @@ export const mockDaemon: DaemonTransport = {
                 ? "ok"
                 : "missing",
           },
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.rates.latest") {
+      const args = (req.args ?? {}) as { pair?: unknown };
+      const overview = fixtures["ui.overview.snapshot"] as {
+        marketRate?: {
+          asset?: "BTC";
+          fiatCurrency?: string;
+          pair?: string | null;
+          rate?: number | null;
+          timestamp?: string | null;
+          fetchedAt?: string | null;
+          source?: string | null;
+          granularity?: string | null;
+          method?: string | null;
+        };
+        priceEur?: number;
+        priceUsd?: number;
+        fiat?: {
+          eurBalance?: number;
+          eurUnrealized?: number;
+        };
+      };
+      const pair =
+        typeof args.pair === "string" && args.pair.trim()
+          ? args.pair.trim().toUpperCase()
+          : overview.marketRate?.pair ?? "BTC-EUR";
+      const now = new Date().toISOString();
+      const previousRate = Number(overview.marketRate?.rate ?? 71_420.18);
+      const nextRate = Number((previousRate + 125.25).toFixed(2));
+      if (overview.marketRate) {
+        overview.marketRate.asset = "BTC";
+        overview.marketRate.pair = pair;
+        overview.marketRate.fiatCurrency = pair.includes("-")
+          ? pair.split("-")[1] ?? overview.marketRate.fiatCurrency ?? "EUR"
+          : overview.marketRate.fiatCurrency ?? "EUR";
+        overview.marketRate.rate = nextRate;
+        overview.marketRate.timestamp = now;
+        overview.marketRate.fetchedAt = now;
+        overview.marketRate.source = "coinbase-exchange";
+        overview.marketRate.granularity = "minute";
+        overview.marketRate.method = "product_candles";
+      }
+      if (pair === "BTC-EUR") overview.priceEur = nextRate;
+      if (pair === "BTC-USD") overview.priceUsd = nextRate;
+      if (overview.fiat?.eurBalance != null) {
+        const btcBalance =
+          previousRate > 0 ? overview.fiat.eurBalance / previousRate : 0;
+        const nextBalance = btcBalance * nextRate;
+        const delta = nextBalance - overview.fiat.eurBalance;
+        overview.fiat.eurBalance = nextBalance;
+        overview.fiat.eurUnrealized = (overview.fiat.eurUnrealized ?? 0) + delta;
+      }
+      return {
+        kind: "ui.rates.latest",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          source: "coinbase-exchange",
+          pair,
+          latest: [
+            {
+              pair,
+              source: "coinbase-exchange",
+              samples: 1,
+              granularity: "minute",
+              method: "product_candles",
+              mode: "latest_quote",
+              lookback_minutes: 5,
+              timestamp: now,
+              fetched_at: now,
+            },
+          ],
+          marketRate: overview.marketRate ?? null,
         } as T,
       };
     }
@@ -3016,6 +3169,9 @@ export const mockDaemon: DaemonTransport = {
     if (req.kind === "ui.freshness.run") {
       return mockFreshnessRunStream<T, R>(req, options);
     }
+    if (req.kind === "ui.workspace.freshness.run") {
+      return mockWorkspaceFreshnessRunStream<T, R>(req, options);
+    }
     // Non-streaming kinds resolve straight through to invoke.
     return mockDaemon.invoke<T>(req);
   },
@@ -3092,6 +3248,50 @@ async function mockFreshnessRunStream<T, R>(
       request_id: requestId,
       data: data as R,
     });
+  }
+  return mockDaemon.invoke<T>({ ...req, request_id: requestId });
+}
+
+async function mockWorkspaceFreshnessRunStream<T, R>(
+  req: DaemonRequest,
+  options?: DaemonStreamOptions<R>,
+): Promise<DaemonEnvelope<T>> {
+  const requestId =
+    req.request_id ??
+    `mock-workspace-freshness-${Math.random().toString(36).slice(2)}`;
+  const args = (req.args ?? {}) as { workspace_id?: unknown };
+  const workspaceId =
+    typeof args.workspace_id === "string" && args.workspace_id.trim()
+      ? args.workspace_id.trim()
+      : mockProfilesSnapshot.activeWorkspaceId;
+  const overview = mockWorkspaceOverviewSnapshot(workspaceId);
+  for (const book of overview.books) {
+    const steps = [
+      {
+        workspace: overview.workspace,
+        profile: { id: book.profile.id, label: book.profile.label },
+        phase: "discovery",
+        source_label: `${book.profile.label} sources`,
+        source_type: "workspace_book",
+      },
+      {
+        workspace: overview.workspace,
+        profile: { id: book.profile.id, label: book.profile.label },
+        phase: "journal_refresh",
+        source_label: "Journals",
+        source_type: "journals",
+      },
+    ];
+    for (const data of steps) {
+      if (options?.signal?.aborted) break;
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      options?.onRecord?.({
+        kind: "ui.workspace.freshness.run.progress",
+        schema_version: 1,
+        request_id: requestId,
+        data: data as R,
+      });
+    }
   }
   return mockDaemon.invoke<T>({ ...req, request_id: requestId });
 }

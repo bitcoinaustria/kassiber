@@ -65,6 +65,10 @@ const Quarantine = lazyRouteComponent(
 );
 const Logs = lazyRouteComponent(() => import("./routes/Logs"), "Logs");
 const Books = lazyRouteComponent(() => import("./routes/Books"), "Books");
+const BirdsEye = lazyRouteComponent(
+  () => import("./routes/BirdsEye"),
+  "BirdsEye",
+);
 const Connections = lazyRouteComponent(
   () => import("./routes/Connections"),
   "Connections",
@@ -220,6 +224,12 @@ const booksRoute = createRoute({
   component: Books,
 });
 
+const birdsEyeRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/books/$workspaceId/birds-eye",
+  component: BirdsEye,
+});
+
 const profilesRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/profiles",
@@ -309,6 +319,7 @@ const routeTree = rootRoute.addChildren([
     logsRoute,
     diagnosticsRoute,
     booksRoute,
+    birdsEyeRoute,
     profilesRoute,
     connectionsRoute,
     connectionDetailRoute,

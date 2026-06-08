@@ -311,7 +311,8 @@ def get_latest_rate(conn, pair):
         WHERE pair = ?
         ORDER BY timestamp DESC,
                  CASE WHEN source = 'manual' THEN 0 ELSE 1 END ASC,
-                 fetched_at DESC
+                 fetched_at DESC,
+                 source ASC
         LIMIT 1
         """,
         (normalized,),

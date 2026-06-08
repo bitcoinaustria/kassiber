@@ -9,6 +9,7 @@
 import { MOCK_OVERVIEW } from "@/mocks/seed";
 import { MOCK_TRANSACTIONS } from "@/mocks/transactions";
 import { MOCK_PROFILES } from "@/mocks/profiles";
+import { MOCK_WORKSPACE_OVERVIEW } from "@/mocks/workspaceOverview";
 import { MOCK_CAPITAL_GAINS } from "@/mocks/reports";
 
 const SOURCE_FUNDS_FIXTURE_TARGET_TXID =
@@ -40,6 +41,7 @@ export const fixtures: Record<string, unknown> = {
     profile: null,
   },
   "ui.overview.snapshot": MOCK_OVERVIEW,
+  "ui.workspace.overview.snapshot": MOCK_WORKSPACE_OVERVIEW,
   "ui.connections.node.snapshot": {
     error: "Pass `connection` to ui.connections.node.snapshot (handled in mock.ts).",
   },

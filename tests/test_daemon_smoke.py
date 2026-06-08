@@ -748,6 +748,7 @@ class DaemonSmokeTest(unittest.TestCase):
                 "ui.rates.kraken_csv.import",
                 ready["data"]["supported_kinds"],
             )
+            self.assertIn("ui.rates.latest", ready["data"]["supported_kinds"])
             self.assertIn("ui.report.blockers", ready["data"]["supported_kinds"])
             self.assertIn(
                 "ui.audit.changes_since_last_answer",

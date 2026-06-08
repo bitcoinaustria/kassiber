@@ -120,6 +120,7 @@ from .core.ui_snapshot import (
     build_wallet_utxos_snapshot,
     build_wallets_list_snapshot,
     build_workspace_health_snapshot,
+    build_workspace_overview_snapshot,
 )
 from .core.sync_backends import ElectrumClient
 from .backends import (
@@ -165,6 +166,7 @@ from .daemon_freshness import (
     _stop_freshness_background_worker,
     _sync_payload_has_errors,
     _wallets_sync_payload,
+    _workspace_freshness_run_payload,
 )
 from .secrets.credentials import migrate_dotenv_credentials
 from .secrets.migration import create_empty_encrypted_database, migrate_plaintext_to_encrypted
@@ -201,6 +203,7 @@ _AI_PROVIDER_SECRET_STORE_IDS = {
 SUPPORTED_KINDS = (
     "status",
     "ui.overview.snapshot",
+    "ui.workspace.overview.snapshot",
     "ui.transactions.list",
     "ui.transactions.extremes",
     "ui.transactions.resolve",
@@ -298,6 +301,7 @@ SUPPORTED_KINDS = (
     "ui.rates.summary",
     "ui.rates.coverage",
     "ui.rates.kraken_csv.import",
+    "ui.rates.latest",
     "ui.rates.rebuild",
     "ui.report.blockers",
     "ui.audit.changes_since_last_answer",
@@ -312,6 +316,7 @@ SUPPORTED_KINDS = (
     "ui.freshness.pause",
     "ui.freshness.resume",
     "ui.workspace.health",
+    "ui.workspace.freshness.run",
     "ui.workspace.create",
     "ui.workspace.rename",
     "ui.workspace.delete",
@@ -2449,6 +2454,87 @@ def _rates_rebuild_payload(
         **rebuilt,
         "reprice": reprice,
         "journals": journals,
+    }
+
+
+def _market_rate_payload_from_rate(rate: dict[str, Any] | None) -> dict[str, Any] | None:
+    if rate is None:
+        return None
+    pair = str(rate.get("pair") or "")
+    asset, fiat_currency = core_rates.rate_pair_parts(pair)
+    return {
+        "asset": asset,
+        "fiatCurrency": fiat_currency,
+        "pair": pair,
+        "rate": float(rate["rate"]) if rate.get("rate") is not None else None,
+        "timestamp": rate.get("timestamp"),
+        "source": rate.get("source"),
+        "fetchedAt": rate.get("fetched_at"),
+        "granularity": rate.get("granularity"),
+        "method": rate.get("method"),
+    }
+
+
+def _rates_latest_payload(
+    conn: sqlite3.Connection,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    unknown = sorted(set(args) - {"pair", "source"})
+    if unknown:
+        raise AppError(
+            "ui.rates.latest received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    source_arg = args.get("source")
+    if source_arg is not None and not isinstance(source_arg, str):
+        raise AppError(
+            "ui.rates.latest source must be a string",
+            code="validation",
+            retryable=False,
+        )
+    source = (
+        core_rates.normalize_market_rate_provider(source_arg)
+        if isinstance(source_arg, str) and source_arg.strip()
+        else core_rates.get_market_rate_provider(conn)
+    )
+    pair_arg = args.get("pair")
+    if pair_arg is not None and not isinstance(pair_arg, str):
+        raise AppError(
+            "ui.rates.latest pair must be a string",
+            code="validation",
+            retryable=False,
+        )
+    if isinstance(pair_arg, str) and pair_arg.strip():
+        pair = core_rates.require_supported_pair(pair_arg)
+    else:
+        _, profile = resolve_scope(conn, None, None)
+        pair = core_rates.transaction_rate_pair("BTC", profile["fiat_currency"])
+        if pair is None:
+            raise AppError(
+                f"BTC market rates are not supported for {profile['fiat_currency']}",
+                code="validation",
+                retryable=False,
+            )
+
+    latest = core_rates.sync_latest_rates(
+        conn,
+        pair=pair,
+        source=source,
+        commit=True,
+    )
+    try:
+        rate = core_rates.get_latest_rate(conn, pair)
+    except AppError as exc:
+        if exc.code != "not_found":
+            raise
+        rate = None
+    return {
+        "source": source,
+        "pair": pair,
+        "latest": latest,
+        "marketRate": _market_rate_payload_from_rate(rate),
     }
 
 
@@ -7071,6 +7157,18 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.workspace.overview.snapshot":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.workspace.overview.snapshot",
+                    build_workspace_overview_snapshot(ctx.conn, request.get("args")),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.transactions.list":
         return (
             _with_request_id(
@@ -7704,6 +7802,21 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.rates.latest":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.rates.latest",
+                    _rates_latest_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.report.blockers":
         auto_sync_envelope = direct_maintenance_metadata.get("auto_sync")
         auto_sync_data = (
@@ -7861,6 +7974,31 @@ def handle_request(
                         ctx.runtime_config,
                         _coerce_args_dict(request_id, request.get("args")),
                         progress_observer=_emit_freshness_progress,
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.workspace.freshness.run":
+        def _emit_workspace_freshness_progress(payload: Mapping[str, Any]) -> None:
+            out.write(
+                _with_request_id(
+                    build_envelope("ui.workspace.freshness.run.progress", dict(payload)),
+                    request_id,
+                )
+            )
+
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.workspace.freshness.run",
+                    _workspace_freshness_run_payload(
+                        ctx.conn,
+                        ctx.runtime_config,
+                        _coerce_args_dict(request_id, request.get("args")),
+                        progress_observer=_emit_workspace_freshness_progress,
                     ),
                 ),
                 request_id,

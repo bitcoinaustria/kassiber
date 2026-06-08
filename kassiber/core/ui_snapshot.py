@@ -101,6 +101,54 @@ def _empty_overview_snapshot() -> dict[str, Any]:
     }
 
 
+def _empty_workspace_overview_snapshot(
+    workspace: sqlite3.Row | None = None,
+) -> dict[str, Any]:
+    return {
+        "workspace": (
+            {
+                "id": workspace["id"],
+                "label": workspace["label"],
+            }
+            if workspace is not None
+            else None
+        ),
+        "scope": {
+            "kind": "workspace",
+            "label": "Book set",
+        },
+        "books": [],
+        "connections": [],
+        "txs": [],
+        "activityTxs": [],
+        "balanceSeries": [0.0] * 12,
+        "portfolioSeries": [],
+        "fiat": {
+            "mode": "empty",
+            "fiatCurrency": None,
+            "currencies": [],
+            "mixed": False,
+            "partial": False,
+            "eurBalance": 0.0,
+            "eurCostBasis": 0.0,
+            "eurUnrealized": 0.0,
+            "eurRealizedYTD": 0.0,
+            "btcBalance": 0.0,
+            "books": [],
+        },
+        "status": {
+            "workspace": workspace["label"] if workspace is not None else None,
+            "workspaceId": workspace["id"] if workspace is not None else None,
+            "bookCount": 0,
+            "transactionCount": 0,
+            "needsJournals": False,
+            "quarantines": 0,
+            "ready": False,
+            "mixedFiat": False,
+        },
+    }
+
+
 def _latest_rate(conn: sqlite3.Connection, pair: str) -> float:
     row = _latest_rate_row(conn, pair)
     return float(row["rate"]) if row else 0.0
@@ -1568,17 +1616,43 @@ def _fiat_snapshot(
     }
 
 
-def build_overview_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
-    context = current_context_snapshot(conn)
-    if not context["workspace_id"] or not context["profile_id"]:
-        return _empty_overview_snapshot()
+def _profile_readiness(
+    *,
+    wallet_count: int,
+    transaction_count: int,
+    freshness: dict[str, Any],
+) -> dict[str, Any]:
+    hints: list[str] = []
+    if wallet_count == 0:
+        hints.append("Add a watch-only source before refreshing or importing transactions.")
+    elif transaction_count == 0:
+        hints.append("Refresh sources or import files before journal processing.")
+    if freshness["needs_processing"]:
+        hints.append("Run journal processing before trusting reports.")
+    if freshness["quarantine_count"]:
+        hints.append("Review quarantined transactions before tax export.")
+    ready = (
+        wallet_count > 0
+        and transaction_count > 0
+        and freshness["status"] == "current"
+        and freshness["quarantine_count"] == 0
+    )
+    if ready:
+        hints.append("Reports are ready from the current processed journal state.")
+    return {"ready": ready, "hints": hints}
 
-    profile = conn.execute(
-        "SELECT * FROM profiles WHERE id = ?",
-        (context["profile_id"],),
-    ).fetchone()
-    if profile is None:
-        return _empty_overview_snapshot()
+
+def _readiness_ready(readiness: dict[str, Any]) -> bool:
+    return bool(readiness.get("ready"))
+
+
+def _build_profile_overview_snapshot(
+    conn: sqlite3.Connection,
+    *,
+    workspace: sqlite3.Row,
+    profile: sqlite3.Row,
+) -> dict[str, Any]:
+    freshness = _journal_freshness(conn, profile)
 
     active_transactions = conn.execute(
         """
@@ -1588,12 +1662,6 @@ def build_overview_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         """,
         (profile["id"],),
     ).fetchone()["count"]
-    needs_journals = _journal_freshness(conn, profile)["needs_processing"]
-    quarantines = conn.execute(
-        "SELECT COUNT(*) AS count FROM journal_quarantines WHERE profile_id = ?",
-        (profile["id"],),
-    ).fetchone()["count"]
-
     price_eur = _latest_rate(conn, "BTC-EUR") or _latest_transaction_rate(
         conn,
         profile["id"],
@@ -1644,14 +1712,385 @@ def build_overview_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         ),
         "fiat": fiat,
         "status": {
-            "workspace": context["workspace_label"] or None,
-            "profile": context["profile_label"] or None,
+            "workspace": workspace["label"],
+            "profile": profile["label"],
             "transactionCount": int(active_transactions or 0),
-            "needsJournals": needs_journals,
-            "quarantines": int(quarantines or 0),
+            "needsJournals": freshness["needs_processing"],
+            "quarantines": freshness["quarantine_count"],
         },
     }
     return snapshot
+
+
+def _profile_overview_for_status(
+    conn: sqlite3.Connection,
+    *,
+    workspace: sqlite3.Row,
+    profile: sqlite3.Row,
+) -> dict[str, Any]:
+    snapshot = _build_profile_overview_snapshot(
+        conn,
+        workspace=workspace,
+        profile=profile,
+    )
+    wallet_count = len(snapshot["connections"])
+    transaction_count = int(snapshot["status"].get("transactionCount") or 0)
+    freshness = _journal_freshness(conn, profile)
+    readiness = _profile_readiness(
+        wallet_count=wallet_count,
+        transaction_count=transaction_count,
+        freshness=freshness,
+    )
+    return {
+        "profile": {
+            "id": profile["id"],
+            "label": profile["label"],
+            "fiatCurrency": str(profile["fiat_currency"] or "EUR").upper(),
+            "taxCountry": profile["tax_country"],
+            "taxLongTermDays": int(profile["tax_long_term_days"] or 0),
+            "gainsAlgorithm": profile["gains_algorithm"],
+        },
+        "workspace": {
+            "id": workspace["id"],
+            "label": workspace["label"],
+        },
+        "connections": snapshot["connections"],
+        "txs": snapshot["txs"],
+        "activityTxs": snapshot.get("activityTxs", []),
+        "balanceSeries": snapshot["balanceSeries"],
+        "portfolioSeries": snapshot.get("portfolioSeries", []),
+        "fiat": snapshot["fiat"],
+        "marketRate": snapshot.get("marketRate"),
+        "status": {
+            **snapshot["status"],
+            "workspaceId": workspace["id"],
+            "profileId": profile["id"],
+            "workspace": workspace["label"],
+            "profile": profile["label"],
+            "journalEntryCount": freshness["journal_entry_count"],
+            "freshnessStatus": freshness["status"],
+            "freshnessReason": freshness["reason"],
+        },
+        "journals": freshness,
+        "readiness": readiness,
+    }
+
+
+def build_overview_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
+    context = current_context_snapshot(conn)
+    if not context["workspace_id"] or not context["profile_id"]:
+        return _empty_overview_snapshot()
+
+    workspace = conn.execute(
+        "SELECT * FROM workspaces WHERE id = ?",
+        (context["workspace_id"],),
+    ).fetchone()
+    profile = conn.execute(
+        "SELECT * FROM profiles WHERE id = ?",
+        (context["profile_id"],),
+    ).fetchone()
+    if workspace is None or profile is None:
+        return _empty_overview_snapshot()
+    return _build_profile_overview_snapshot(
+        conn,
+        workspace=workspace,
+        profile=profile,
+    )
+
+
+def _workspace_overview_args(args: dict[str, Any] | None) -> str:
+    raw_args = _coerce_args(args)
+    unknown = sorted(set(raw_args) - {"workspace_id"})
+    if unknown:
+        raise AppError(
+            "ui.workspace.overview.snapshot received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    workspace_id = raw_args.get("workspace_id")
+    if not isinstance(workspace_id, str) or not workspace_id.strip():
+        raise AppError(
+            "ui.workspace.overview.snapshot requires args.workspace_id",
+            code="validation",
+            retryable=False,
+        )
+    return workspace_id.strip()
+
+
+def _workspace_overview_row(
+    conn: sqlite3.Connection,
+    workspace_id: str,
+) -> sqlite3.Row:
+    row = conn.execute(
+        "SELECT * FROM workspaces WHERE id = ?",
+        (workspace_id,),
+    ).fetchone()
+    if row is None:
+        raise AppError(
+            f"Book set '{workspace_id}' was not found",
+            code="not_found",
+            retryable=False,
+        )
+    return row
+
+
+def _with_book_boundary(
+    items: list[dict[str, Any]],
+    *,
+    workspace: sqlite3.Row,
+    profile: sqlite3.Row,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            **dict(item),
+            "workspaceId": workspace["id"],
+            "workspaceLabel": workspace["label"],
+            "profileId": profile["id"],
+            "profileLabel": profile["label"],
+            "book": {
+                "id": profile["id"],
+                "label": profile["label"],
+            },
+        }
+        for item in items
+    ]
+
+
+def _sum_balance_series(books: list[dict[str, Any]]) -> list[float]:
+    totals = [0.0] * 12
+    for book in books:
+        series = list(book.get("balanceSeries") or [])
+        if len(series) < 12:
+            series = [series[0] if series else 0.0] * (12 - len(series)) + series
+        for index, value in enumerate(series[-12:]):
+            totals[index] += float(value or 0)
+    return totals
+
+
+def _workspace_portfolio_series(
+    books: list[dict[str, Any]],
+    *,
+    same_fiat: bool,
+) -> list[dict[str, Any]]:
+    book_points: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
+    for book in books:
+        points = sorted(
+            [
+                dict(point)
+                for point in (book.get("portfolioSeries") or [])
+                if str(point.get("date") or "")
+            ],
+            key=lambda point: str(point.get("date") or ""),
+        )
+        if points:
+            book_points.append((book, points))
+    date_keys = sorted(
+        {
+            str(point.get("date") or "")
+            for _, points in book_points
+            for point in points
+            if point.get("date")
+        }
+    )
+    if not date_keys:
+        return []
+
+    indexes = {book["profile"]["id"]: 0 for book, _ in book_points}
+    last_points: dict[str, dict[str, Any]] = {}
+    output: list[dict[str, Any]] = []
+    for date_key in date_keys:
+        aggregate: dict[str, Any] = {
+            "date": date_key,
+            "label": date_key,
+            "balanceBtc": 0.0,
+            "books": [],
+        }
+        if same_fiat:
+            aggregate["valueEur"] = 0.0
+            aggregate["costBasisEur"] = 0.0
+        carried_books: list[dict[str, Any]] = []
+        for book, points in book_points:
+            profile = book["profile"]
+            profile_id = profile["id"]
+            index = indexes[profile_id]
+            while index < len(points) and str(points[index].get("date") or "") <= date_key:
+                last_points[profile_id] = points[index]
+                index += 1
+            indexes[profile_id] = index
+            point = last_points.get(profile_id)
+            if point is None:
+                continue
+            balance_btc = float(point.get("balanceBtc") or 0)
+            value = float(point.get("valueEur") or 0)
+            cost_basis = float(point.get("costBasisEur") or 0)
+            aggregate["balanceBtc"] += balance_btc
+            if same_fiat:
+                aggregate["valueEur"] += value
+                aggregate["costBasisEur"] += cost_basis
+            carried_books.append(
+                {
+                    "profileId": profile_id,
+                    "profileLabel": profile["label"],
+                    "fiatCurrency": profile["fiatCurrency"],
+                    "balanceBtc": balance_btc,
+                    "value": value,
+                    "costBasis": cost_basis,
+                }
+            )
+        aggregate["books"] = carried_books
+        if same_fiat and aggregate["balanceBtc"]:
+            aggregate["priceEur"] = aggregate["valueEur"] / aggregate["balanceBtc"]
+        output.append(aggregate)
+    return output
+
+
+def _workspace_fiat_rollup(
+    books: list[dict[str, Any]],
+    *,
+    currencies: list[str],
+) -> dict[str, Any]:
+    btc_balance = sum(
+        sum(float(connection.get("balance") or 0) for connection in book["connections"])
+        for book in books
+    )
+    book_rows = [
+        {
+            "profileId": book["profile"]["id"],
+            "profileLabel": book["profile"]["label"],
+            "fiatCurrency": book["profile"]["fiatCurrency"],
+            "balance": float(book["fiat"].get("eurBalance") or 0),
+            "costBasis": float(book["fiat"].get("eurCostBasis") or 0),
+            "unrealized": float(book["fiat"].get("eurUnrealized") or 0),
+            "realizedYTD": float(book["fiat"].get("eurRealizedYTD") or 0),
+        }
+        for book in books
+    ]
+    if not books:
+        return _empty_workspace_overview_snapshot()["fiat"]
+    if len(currencies) == 1:
+        return {
+            "mode": "single",
+            "fiatCurrency": currencies[0],
+            "currencies": currencies,
+            "mixed": False,
+            "partial": False,
+            "eurBalance": sum(row["balance"] for row in book_rows),
+            "eurCostBasis": sum(row["costBasis"] for row in book_rows),
+            "eurUnrealized": sum(row["unrealized"] for row in book_rows),
+            "eurRealizedYTD": sum(row["realizedYTD"] for row in book_rows),
+            "btcBalance": btc_balance,
+            "books": book_rows,
+        }
+    return {
+        "mode": "mixed",
+        "fiatCurrency": None,
+        "currencies": currencies,
+        "mixed": True,
+        "partial": True,
+        "eurBalance": None,
+        "eurCostBasis": None,
+        "eurUnrealized": None,
+        "eurRealizedYTD": None,
+        "btcBalance": btc_balance,
+        "books": book_rows,
+        "label": "Mixed fiat currencies; per-book fiat rows are shown without conversion.",
+    }
+
+
+def build_workspace_overview_snapshot(
+    conn: sqlite3.Connection,
+    args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    workspace_id = _workspace_overview_args(args)
+    workspace = _workspace_overview_row(conn, workspace_id)
+    profile_rows = conn.execute(
+        """
+        SELECT *
+        FROM profiles
+        WHERE workspace_id = ?
+        ORDER BY created_at ASC, label ASC
+        """,
+        (workspace["id"],),
+    ).fetchall()
+    if not profile_rows:
+        return _empty_workspace_overview_snapshot(workspace)
+
+    books = [
+        _profile_overview_for_status(conn, workspace=workspace, profile=profile)
+        for profile in profile_rows
+    ]
+    currencies = sorted(
+        {
+            str(book["profile"]["fiatCurrency"] or "").upper()
+            for book in books
+            if book["profile"].get("fiatCurrency")
+        }
+    )
+    same_fiat = len(currencies) == 1
+    connections: list[dict[str, Any]] = []
+    txs: list[dict[str, Any]] = []
+    activity_txs: list[dict[str, Any]] = []
+    for book in books:
+        profile = next(row for row in profile_rows if row["id"] == book["profile"]["id"])
+        connections.extend(
+            _with_book_boundary(book["connections"], workspace=workspace, profile=profile)
+        )
+        txs.extend(_with_book_boundary(book["txs"], workspace=workspace, profile=profile))
+        activity_txs.extend(
+            _with_book_boundary(
+                book.get("activityTxs") or [],
+                workspace=workspace,
+                profile=profile,
+            )
+        )
+
+    def recent_key(item: dict[str, Any]) -> tuple[str, str]:
+        return (
+            str(item.get("occurredAt") or item.get("date") or ""),
+            str(item.get("id") or ""),
+        )
+
+    txs = sorted(txs, key=recent_key, reverse=True)[:20]
+    activity_txs = sorted(activity_txs, key=recent_key, reverse=True)[:20]
+    total_transactions = sum(
+        int(book["status"].get("transactionCount") or 0) for book in books
+    )
+    quarantine_count = sum(
+        int(book["journals"].get("quarantine_count") or 0) for book in books
+    )
+    needs_journals = any(bool(book["journals"].get("needs_processing")) for book in books)
+    ready_books = sum(1 for book in books if _readiness_ready(book["readiness"]))
+    blocked_books = len(books) - ready_books
+    return {
+        "workspace": {
+            "id": workspace["id"],
+            "label": workspace["label"],
+        },
+        "scope": {
+            "kind": "workspace",
+            "label": "Book set",
+        },
+        "books": books,
+        "connections": connections,
+        "txs": txs,
+        "activityTxs": activity_txs,
+        "balanceSeries": _sum_balance_series(books),
+        "portfolioSeries": _workspace_portfolio_series(books, same_fiat=same_fiat),
+        "fiat": _workspace_fiat_rollup(books, currencies=currencies),
+        "status": {
+            "workspace": workspace["label"],
+            "workspaceId": workspace["id"],
+            "bookCount": len(books),
+            "transactionCount": total_transactions,
+            "needsJournals": needs_journals,
+            "quarantines": quarantine_count,
+            "ready": blocked_books == 0,
+            "readyBooks": ready_books,
+            "blockedBooks": blocked_books,
+            "mixedFiat": not same_fiat,
+        },
+    }
 
 
 def _build_transactions_page_snapshot(
@@ -3812,25 +4251,11 @@ def build_workspace_health_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     rate_pairs = conn.execute(
         "SELECT COUNT(DISTINCT pair) AS count FROM rates_cache",
     ).fetchone()["count"]
-    hints: list[str] = []
-    if int(wallet_count or 0) == 0:
-        hints.append(
-            "Add a watch-only source before refreshing or importing transactions."
-        )
-    elif int(transaction_count or 0) == 0:
-        hints.append("Refresh sources or import files before journal processing.")
-    if freshness["needs_processing"]:
-        hints.append("Run journal processing before trusting reports.")
-    if freshness["quarantine_count"]:
-        hints.append("Review quarantined transactions before tax export.")
-    reports_ready = (
-        int(wallet_count or 0) > 0
-        and int(transaction_count or 0) > 0
-        and freshness["status"] == "current"
-        and freshness["quarantine_count"] == 0
+    readiness = _profile_readiness(
+        wallet_count=int(wallet_count or 0),
+        transaction_count=int(transaction_count or 0),
+        freshness=freshness,
     )
-    if reports_ready:
-        hints.append("Reports are ready from the current processed journal state.")
     return {
         "workspace": {
             "id": context["workspace_id"],
@@ -3854,8 +4279,8 @@ def build_workspace_health_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         },
         "journals": freshness,
         "reports": {
-            "ready": reports_ready,
-            "hints": hints,
+            "ready": _readiness_ready(readiness),
+            "hints": readiness["hints"],
         },
     }
 

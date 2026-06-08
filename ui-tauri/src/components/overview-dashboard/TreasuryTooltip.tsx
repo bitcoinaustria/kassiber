@@ -26,6 +26,7 @@ export interface TreasuryTooltipProps {
   hideSensitive: boolean;
   priceEur: number;
   fiatCurrency: string;
+  fiatSeriesEnabled?: boolean;
 }
 
 export function TreasuryTooltip({
@@ -36,6 +37,7 @@ export function TreasuryTooltip({
   hideSensitive,
   priceEur,
   fiatCurrency,
+  fiatSeriesEnabled = true,
 }: TreasuryTooltipProps) {
   if ((!active || !payload?.length) && !activityPointOverride) return null;
 
@@ -121,21 +123,25 @@ export function TreasuryTooltip({
               hidden={false}
             />
           )}
-          <TooltipMetricRow
-            label="Fiat value"
-            value={formatPortfolioMoney(
-              point.eventFiatValueEur ?? 0,
-              priceEur,
-              "eur",
-              fiatCurrency,
-            )}
-            hidden={hideSensitive}
-          />
-          <TooltipMetricRow
-            label="BTC price"
-            value={formatFiatPrice(point.bitcoinPriceEur, fiatCurrency)}
-            hidden={hideSensitive}
-          />
+          {fiatSeriesEnabled ? (
+            <>
+              <TooltipMetricRow
+                label="Fiat value"
+                value={formatPortfolioMoney(
+                  point.eventFiatValueEur ?? 0,
+                  priceEur,
+                  "eur",
+                  fiatCurrency,
+                )}
+                hidden={hideSensitive}
+              />
+              <TooltipMetricRow
+                label="BTC price"
+                value={formatFiatPrice(point.bitcoinPriceEur, fiatCurrency)}
+                hidden={hideSensitive}
+              />
+            </>
+          ) : null}
           {(point.eventFeeBtc ?? 0) > 0 && (
             <TooltipMetricRow
               label="Fee"
@@ -148,15 +154,17 @@ export function TreasuryTooltip({
             value={formatBtc(point.balanceBtc, { precision: 8 })}
             hidden={hideSensitive}
           />
-          <TooltipMetricRow
-            label="Avg basis after"
-            value={
-              point.avgCostEur === null
-                ? "—"
-                : formatFiatPrice(point.avgCostEur, fiatCurrency)
-            }
-            hidden={hideSensitive}
-          />
+          {fiatSeriesEnabled ? (
+            <TooltipMetricRow
+              label="Avg basis after"
+              value={
+                point.avgCostEur === null
+                  ? "—"
+                  : formatFiatPrice(point.avgCostEur, fiatCurrency)
+              }
+              hidden={hideSensitive}
+            />
+          ) : null}
           <TooltipMetricRow
             label="Status"
             value={
@@ -198,33 +206,37 @@ export function TreasuryTooltip({
           value={formatBtc(point.balanceBtc, { precision: 8 })}
           hidden={hideSensitive}
         />
-        <TooltipMetricRow
-          label="BTC price"
-          value={formatFiatPrice(point.bitcoinPriceEur, fiatCurrency)}
-          hidden={hideSensitive}
-        />
-        <TooltipMetricRow
-          label="Avg basis"
-          value={
-            point.avgCostEur === null
-              ? "—"
-              : formatFiatPrice(point.avgCostEur, fiatCurrency)
-          }
-          hidden={hideSensitive}
-        />
-        <TooltipMetricRow
-          label="Unrealized"
-          value={`${point.unrealizedEur >= 0 ? "+ " : "− "}${formatPortfolioMoney(
-            Math.abs(point.unrealizedEur),
-            priceEur,
-            "eur",
-            fiatCurrency,
-          )} (${unrealizedPct >= 0 ? "+" : "−"}${Math.abs(unrealizedPct).toFixed(
-            1,
-          )}%)`}
-          tone={point.unrealizedEur >= 0 ? "good" : "bad"}
-          hidden={hideSensitive}
-        />
+        {fiatSeriesEnabled ? (
+          <>
+            <TooltipMetricRow
+              label="BTC price"
+              value={formatFiatPrice(point.bitcoinPriceEur, fiatCurrency)}
+              hidden={hideSensitive}
+            />
+            <TooltipMetricRow
+              label="Avg basis"
+              value={
+                point.avgCostEur === null
+                  ? "—"
+                  : formatFiatPrice(point.avgCostEur, fiatCurrency)
+              }
+              hidden={hideSensitive}
+            />
+            <TooltipMetricRow
+              label="Unrealized"
+              value={`${point.unrealizedEur >= 0 ? "+ " : "− "}${formatPortfolioMoney(
+                Math.abs(point.unrealizedEur),
+                priceEur,
+                "eur",
+                fiatCurrency,
+              )} (${unrealizedPct >= 0 ? "+" : "−"}${Math.abs(unrealizedPct).toFixed(
+                1,
+              )}%)`}
+              tone={point.unrealizedEur >= 0 ? "good" : "bad"}
+              hidden={hideSensitive}
+            />
+          </>
+        ) : null}
       </div>
     </div>
   );

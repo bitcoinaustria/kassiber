@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { fixtures } from "./fixtures";
 import { mockDaemon } from "./mock";
 import type { DaemonStreamRecord } from "./transport";
 
@@ -49,6 +50,73 @@ describe("mock daemon backend settings", () => {
 });
 
 describe("mock daemon rate refresh", () => {
+  it("updates the overview market rate from the latest quote path", async () => {
+    const overview = fixtures["ui.overview.snapshot"] as {
+      marketRate?: {
+        rate?: number | null;
+        fetchedAt?: string | null;
+      };
+      fiat?: {
+        eurBalance?: number;
+        eurUnrealized?: number;
+      };
+    };
+    const previousMarketRate = overview.marketRate
+      ? { ...overview.marketRate }
+      : null;
+    const previousFiat = overview.fiat ? { ...overview.fiat } : null;
+    try {
+      const before = await mockDaemon.invoke<{
+        marketRate?: {
+          rate?: number | null;
+          fetchedAt?: string | null;
+        };
+      }>({ kind: "ui.overview.snapshot" });
+      const previousRate = before.data?.marketRate?.rate ?? null;
+
+      const refreshed = await mockDaemon.invoke<{
+        pair: string;
+        latest: Array<{ pair: string; mode?: string; samples?: number }>;
+        marketRate?: {
+          pair?: string | null;
+          rate?: number | null;
+          fetchedAt?: string | null;
+          source?: string | null;
+        } | null;
+      }>({
+        kind: "ui.rates.latest",
+        args: { pair: "BTC-EUR" },
+      });
+      expect(refreshed.error).toBeUndefined();
+      expect(refreshed.data?.pair).toBe("BTC-EUR");
+      expect(refreshed.data?.latest[0]?.mode).toBe("latest_quote");
+      expect(refreshed.data?.marketRate?.rate).not.toBe(previousRate);
+
+      const after = await mockDaemon.invoke<{
+        marketRate?: {
+          pair?: string | null;
+          rate?: number | null;
+          fetchedAt?: string | null;
+          source?: string | null;
+        };
+      }>({ kind: "ui.overview.snapshot" });
+
+      expect(after.data?.marketRate?.pair).toBe("BTC-EUR");
+      expect(after.data?.marketRate?.source).toBe("coinbase-exchange");
+      expect(after.data?.marketRate?.rate).toBe(
+        refreshed.data?.marketRate?.rate,
+      );
+      expect(Date.parse(after.data?.marketRate?.fetchedAt ?? "")).not.toBeNaN();
+    } finally {
+      if (overview.marketRate && previousMarketRate) {
+        Object.assign(overview.marketRate, previousMarketRate);
+      }
+      if (overview.fiat && previousFiat) {
+        Object.assign(overview.fiat, previousFiat);
+      }
+    }
+  });
+
   it("updates the overview market rate sync timestamp when rates rebuild", async () => {
     try {
       const refreshed = await mockDaemon.invoke<{
