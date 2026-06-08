@@ -239,8 +239,6 @@ function samouraiSectionLabel(value?: string) {
 
 function samouraiSourceLabel(value?: string) {
   const labels: Record<string, string> = {
-    backup: "Backup",
-    mnemonic: "Recovery words",
     source_set: "Descriptor/xpub set",
   };
   return labels[value ?? ""] ?? value ?? "Imported";

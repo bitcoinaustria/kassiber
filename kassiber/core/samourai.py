@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import base64
-import binascii
 import json
 import re
 import sqlite3
@@ -10,10 +8,6 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
-
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from ..errors import AppError
 from ..time_utils import now_iso
@@ -31,8 +25,6 @@ from .repo import fetch_wallet_with_account, resolve_account, resolve_scope
 SAMOURAI_CONFIG_KEY = "samourai"
 SAMOURAI_PARENT_KIND = "samourai"
 SAMOURAI_CHILD_KIND = "descriptor"
-SAMOURAI_BACKUP_V1_ITERATIONS = 5_000
-SAMOURAI_BACKUP_V2_ITERATIONS = 15_000
 SAMOURAI_POSTMIX_MIN_GAP_LIMIT = DEFAULT_DESCRIPTOR_GAP_LIMIT
 SAMOURAI_GROUP_SECTIONS = (
     "deposit",
@@ -137,7 +129,6 @@ class SamouraiAccountTemplate:
     whirlpool: bool = False
     toxic_change: bool = False
     paynym: bool = False
-    derive_from_seed: bool = True
     minimum_mix_count: int | None = None
     mix_count_confidence: str | None = None
 
@@ -157,7 +148,6 @@ SAMOURAI_ACCOUNT_TEMPLATES: tuple[SamouraiAccountTemplate, ...] = (
         0,
         "p2pkh",
         paynym=True,
-        derive_from_seed=False,
     ),
     SamouraiAccountTemplate(
         "badbank",
@@ -205,203 +195,25 @@ SAMOURAI_ACCOUNT_TEMPLATES: tuple[SamouraiAccountTemplate, ...] = (
 )
 
 
-def _import_embit_modules() -> dict[str, Any]:
+def _normalize_import_network(network: str | None, declared_network: str | None = None) -> str:
     try:
-        from embit import bip32, bip39
-    except ModuleNotFoundError as exc:
-        raise AppError(
-            "Samourai import requires the 'embit' package, but it is not available.",
-            code="dependency_missing",
-            hint="Use a Kassiber build that bundles embit, or reinstall with project dependencies.",
-            details={"missing_package": "embit"},
-            retryable=False,
-        ) from exc
-    return {"bip32": bip32, "bip39": bip39}
-
-
-def _derive_pbkdf2(
-    passphrase: str,
-    salt: bytes,
-    iterations: int,
-    algorithm: hashes.HashAlgorithm,
-    length: int,
-) -> bytes:
-    return PBKDF2HMAC(
-        algorithm=algorithm,
-        length=length,
-        salt=salt,
-        iterations=iterations,
-    ).derive(passphrase.encode("utf-8"))
-
-
-def _decrypt_aes_cbc(key: bytes, iv: bytes, ciphertext: bytes) -> bytes:
-    decryptor = Cipher(algorithms.AES(key), modes.CBC(iv)).decryptor()
-    return decryptor.update(ciphertext) + decryptor.finalize()
-
-
-def _strip_block_padding(plaintext: bytes) -> bytes:
-    if not plaintext:
-        raise ValueError("empty plaintext")
-    pad_len = plaintext[-1]
-    if pad_len < 1 or pad_len > 16 or pad_len > len(plaintext):
-        raise ValueError("invalid padding")
-    return plaintext[:-pad_len]
-
-
-def _decode_backup_payload(text: str) -> tuple[str, int]:
-    raw = str(text or "").strip()
-    if not raw:
-        raise AppError(
-            "Samourai backup file is empty",
-            code="validation",
-            hint="Choose the local samourai.txt backup file.",
-            retryable=False,
+        normalized_declared = (
+            normalize_network_value("bitcoin", declared_network)
+            if declared_network
+            else None
         )
-    if raw.startswith("{"):
-        try:
-            decoded, _ = json.JSONDecoder().raw_decode(raw)
-        except json.JSONDecodeError:
-            decoded = None
-        if isinstance(decoded, dict):
-            payload = str_or_none(decoded.get("payload"))
-            if payload is not None:
-                try:
-                    version = int(
-                        decoded.get("version") or decoded.get("payload_version") or 1
-                    )
-                except (TypeError, ValueError) as exc:
-                    raise AppError(
-                        "Samourai backup version is malformed",
-                        code="validation",
-                        hint="Choose a valid local Samourai backup file.",
-                        retryable=False,
-                    ) from exc
-                return payload, version
-    return raw, 1
-
-
-def _decode_b64_payload(payload: str) -> bytes:
-    normalized = re.sub(r"\s+", "", str(payload or ""))
-    try:
-        return base64.b64decode(normalized, validate=False)
-    except (binascii.Error, ValueError) as exc:
-        raise ValueError("invalid base64") from exc
-
-
-def decrypt_samourai_backup_text(text: str, passphrase: str) -> dict[str, Any]:
-    """Decrypt a local Samourai backup and return its decoded JSON payload.
-
-    The caller must not log or persist the returned object. It contains recovery
-    material until the importer derives watch-only descriptors from it.
-    """
-
-    if not passphrase:
-        raise AppError(
-            "Samourai backup passphrase is required",
-            code="validation",
-            hint="Provide the local backup passphrase through stdin, fd, or the desktop password field.",
-            retryable=False,
+        normalized = normalize_network_value(
+            "bitcoin",
+            network or normalized_declared or "main",
         )
-    payload, version = _decode_backup_payload(text)
-    try:
-        raw = _decode_b64_payload(payload)
-        if version == 2:
-            plaintext = _decrypt_backup_v2(raw, passphrase)
-        else:
-            plaintext = _decrypt_backup_v1(raw, passphrase)
-        decoded = json.loads(plaintext.decode("utf-8").strip())
-    except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise AppError(
-            "Failed to decrypt Samourai backup",
-            code="validation",
-            hint="Check the backup version, backup file, and passphrase.",
-            details={"backup_version": version},
-            retryable=False,
-        ) from exc
-    if not isinstance(decoded, dict):
-        raise AppError(
-            "Samourai backup did not decode to an object",
-            code="validation",
-            hint="Choose a full Samourai wallet backup, not a transaction export.",
-            retryable=False,
-        )
-    decoded["_kassiber_backup_version"] = version
-    return decoded
-
-
-def _decrypt_backup_v1(raw: bytes, passphrase: str) -> bytes:
-    if len(raw) <= 16 or len(raw) % 16 != 0:
-        raise ValueError("invalid v1 payload length")
-    iv = raw[:16]
-    ciphertext = raw[16:]
-    key = _derive_pbkdf2(
-        passphrase,
-        iv,
-        SAMOURAI_BACKUP_V1_ITERATIONS,
-        hashes.SHA1(),
-        32,
-    )
-    return _strip_block_padding(_decrypt_aes_cbc(key, iv, ciphertext))
-
-
-def _decrypt_backup_v2(raw: bytes, passphrase: str) -> bytes:
-    if len(raw) <= 16 or len(raw) % 16 != 0:
-        raise ValueError("invalid v2 payload length")
-    salt = raw[8:16]
-    ciphertext = raw[16:]
-    derived = _derive_pbkdf2(
-        passphrase,
-        salt,
-        SAMOURAI_BACKUP_V2_ITERATIONS,
-        hashes.SHA256(),
-        48,
-    )
-    return _strip_block_padding(_decrypt_aes_cbc(derived[:32], derived[32:], ciphertext))
-
-
-def mnemonic_from_samourai_backup_payload(payload: dict[str, Any]) -> tuple[str, str | None]:
-    wallet = payload.get("wallet")
-    if not isinstance(wallet, dict):
-        raise AppError(
-            "Samourai backup is missing wallet recovery material",
-            code="validation",
-            hint="Choose a full Samourai wallet backup.",
-            retryable=False,
-        )
-    seed_hex = str_or_none(wallet.get("seed"))
-    if seed_hex is None:
-        raise AppError(
-            "Samourai backup is missing the encrypted seed field",
-            code="validation",
-            hint="Choose a full Samourai wallet backup.",
-            retryable=False,
-        )
-    try:
-        entropy = bytes.fromhex(seed_hex)
-    except ValueError as exc:
-        raise AppError(
-            "Samourai backup seed field is malformed",
-            code="validation",
-            hint="Choose a valid local Samourai backup.",
-            retryable=False,
-        ) from exc
-    modules = _import_embit_modules()
-    mnemonic = modules["bip39"].mnemonic_from_bytes(entropy)
-    backup_network = "test" if bool(wallet.get("testnet")) else "main"
-    return mnemonic, backup_network
-
-
-def _normalize_import_network(network: str | None, backup_network: str | None = None) -> str:
-    try:
-        normalized = normalize_network_value("bitcoin", network or backup_network or "main")
     except AppError:
         raise
-    if backup_network and normalized != backup_network:
+    if normalized_declared and normalized != normalized_declared:
         raise AppError(
-            "Samourai backup network does not match --network",
+            "Samourai source-set network does not match --network",
             code="validation",
-            hint=f"Use --network {backup_network} for this backup or choose matching recovery material.",
-            details={"backup_network": backup_network, "requested_network": normalized},
+            hint=f"Use --network {normalized_declared} or choose a matching descriptor/xpub source set.",
+            details={"source_set_network": normalized_declared, "requested_network": normalized},
             retryable=False,
         )
     return normalized
@@ -447,47 +259,6 @@ def _gap_limit_for(template: SamouraiAccountTemplate, requested_gap_limit: int |
             code="validation",
         )
     return max(gap_limit, template.minimum_gap_limit)
-
-
-def derive_samourai_wallet_sources(
-    mnemonic: str,
-    passphrase: str,
-    *,
-    network: str,
-    gap_limit: int | None = None,
-) -> list[dict[str, Any]]:
-    normalized_network = _normalize_import_network(network, None)
-    modules = _import_embit_modules()
-    bip39 = modules["bip39"]
-    bip32 = modules["bip32"]
-    normalized_mnemonic = " ".join(str(mnemonic or "").strip().split())
-    if not bip39.mnemonic_is_valid(normalized_mnemonic):
-        raise AppError(
-            "Samourai mnemonic is not valid BIP39 recovery material",
-            code="validation",
-            hint="Check the local recovery words and retry.",
-            retryable=False,
-        )
-    seed = bip39.mnemonic_to_seed(normalized_mnemonic, passphrase or "")
-    root = bip32.HDKey.from_seed(seed)
-    fingerprint = root.my_fingerprint.hex()
-    children = []
-    for template in SAMOURAI_ACCOUNT_TEMPLATES:
-        if not template.derive_from_seed:
-            continue
-        path = _template_path(template, normalized_network)
-        account_xpub = root.derive(path).to_public().to_base58()
-        children.append(
-            _source_from_account_xpub(
-                template,
-                network=normalized_network,
-                account_xpub=account_xpub,
-                fingerprint=fingerprint,
-                root_path=path,
-                gap_limit=_gap_limit_for(template, gap_limit),
-            )
-        )
-    return children
 
 
 def _source_from_account_xpub(
@@ -698,10 +469,7 @@ def _template_for(
             if _root_matches_template(root, template):
                 return template
     if candidates:
-        return next(
-            (template for template in candidates if template.derive_from_seed),
-            candidates[0],
-        )
+        return candidates[0]
     raise AppError(
         "Explicit Samourai source has an unsupported section/script type",
         code="validation",
@@ -919,57 +687,6 @@ def _script_type_from_descriptor(descriptor: str) -> str:
     )
 
 
-def build_samourai_sources_from_backup(
-    backup_file: str,
-    backup_passphrase: str,
-    *,
-    mnemonic_passphrase: str | None = None,
-    network: str | None,
-    gap_limit: int | None,
-) -> tuple[list[dict[str, Any]], str]:
-    try:
-        backup_text = Path(backup_file).expanduser().read_text(encoding="utf-8")
-    except OSError as exc:
-        raise AppError(
-            "Could not read Samourai backup file",
-            code="not_found",
-            hint="Choose a readable local samourai.txt backup file.",
-            details={"path": backup_file},
-            retryable=False,
-        ) from exc
-    payload = decrypt_samourai_backup_text(backup_text, backup_passphrase)
-    mnemonic, backup_network = mnemonic_from_samourai_backup_payload(payload)
-    normalized_network = _normalize_import_network(network, backup_network)
-    return (
-        derive_samourai_wallet_sources(
-            mnemonic,
-            backup_passphrase if mnemonic_passphrase is None else mnemonic_passphrase,
-            network=normalized_network,
-            gap_limit=gap_limit,
-        ),
-        normalized_network,
-    )
-
-
-def build_samourai_sources_from_mnemonic(
-    mnemonic: str,
-    passphrase: str,
-    *,
-    network: str | None,
-    gap_limit: int | None,
-) -> tuple[list[dict[str, Any]], str]:
-    normalized_network = _normalize_import_network(network, None)
-    return (
-        derive_samourai_wallet_sources(
-            mnemonic,
-            passphrase or "",
-            network=normalized_network,
-            gap_limit=gap_limit,
-        ),
-        normalized_network,
-    )
-
-
 def _existing_wallet_labels(conn: sqlite3.Connection, profile_id: str, labels: list[str]) -> set[str]:
     if not labels:
         return set()
@@ -995,18 +712,10 @@ def import_samourai_wallet_group(
     backend: str | None = None,
     network: str | None = None,
     gap_limit: int | None = None,
-    backup_file: str | None = None,
-    backup_passphrase: str | None = None,
-    mnemonic: str | None = None,
-    mnemonic_passphrase: str | None = None,
     source_set_file: str | None = None,
     source_set: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     sources, normalized_network, import_source = _resolve_import_sources(
-        backup_file=backup_file,
-        backup_passphrase=backup_passphrase,
-        mnemonic=mnemonic,
-        mnemonic_passphrase=mnemonic_passphrase,
         source_set_file=source_set_file,
         source_set=source_set,
         network=network,
@@ -1106,18 +815,12 @@ def import_samourai_wallet_group(
 
 def _resolve_import_sources(
     *,
-    backup_file: str | None,
-    backup_passphrase: str | None,
-    mnemonic: str | None,
-    mnemonic_passphrase: str | None,
     source_set_file: str | None,
     source_set: Mapping[str, Any] | None,
     network: str | None,
     gap_limit: int | None,
 ) -> tuple[list[dict[str, Any]], str, str]:
     selected = [
-        bool(backup_file),
-        bool(str_or_none(mnemonic)),
         bool(source_set_file),
         source_set is not None,
     ]
@@ -1125,26 +828,9 @@ def _resolve_import_sources(
         raise AppError(
             "Choose exactly one Samourai import source",
             code="validation",
-            hint="Use a backup file, mnemonic input, source-set file, or inline source_set payload.",
+            hint="Use a descriptor/xpub source-set file or inline source_set payload.",
             retryable=False,
         )
-    if backup_file:
-        sources, normalized_network = build_samourai_sources_from_backup(
-            backup_file,
-            backup_passphrase or "",
-            mnemonic_passphrase=mnemonic_passphrase,
-            network=network,
-            gap_limit=gap_limit,
-        )
-        return sources, normalized_network, "backup"
-    if str_or_none(mnemonic):
-        sources, normalized_network = build_samourai_sources_from_mnemonic(
-            mnemonic or "",
-            mnemonic_passphrase or "",
-            network=network,
-            gap_limit=gap_limit,
-        )
-        return sources, normalized_network, "mnemonic"
     normalized_network = _normalize_import_network(network, None)
     if source_set is not None:
         return (

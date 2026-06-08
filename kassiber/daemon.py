@@ -5605,18 +5605,33 @@ def _import_samourai_payload(
     args: dict[str, Any],
 ) -> dict[str, Any]:
     label = _required_str_arg(args, "label", "Connection label")
-    backup_file = _optional_str_arg(args, "backup_file")
-    source_file = _optional_str_arg(args, "source_file")
     source_set_file = _optional_str_arg(args, "source_set_file")
     source_set = args.get("source_set")
+    forbidden = sorted(
+        key
+        for key in (
+            "backup_file",
+            "backup_passphrase",
+            "mnemonic",
+            "mnemonic_passphrase",
+            "source_file",
+        )
+        if args.get(key) not in (None, "")
+    )
+    if forbidden:
+        raise AppError(
+            "Samourai imports accept only watch-only descriptor/xpub source sets",
+            code="validation",
+            hint="Paste public Deposit, Badbank, Premix, and Postmix descriptors or xpubs instead of backup or recovery material.",
+            details={"unsupported_fields": forbidden},
+            retryable=False,
+        )
     if source_set is not None and not isinstance(source_set, dict):
         raise AppError(
             "source_set must be a JSON object",
             code="validation",
             retryable=False,
         )
-    if not backup_file and source_file and not source_set_file and source_set is None:
-        backup_file = source_file
     gap_limit = None
     if args.get("gap_limit") not in (None, ""):
         if not isinstance(args.get("gap_limit"), int):
@@ -5636,10 +5651,6 @@ def _import_samourai_payload(
         backend=_optional_str_arg(args, "backend"),
         network=_optional_str_arg(args, "network"),
         gap_limit=gap_limit,
-        backup_file=backup_file,
-        backup_passphrase=_optional_str_arg(args, "backup_passphrase"),
-        mnemonic=_optional_str_arg(args, "mnemonic"),
-        mnemonic_passphrase=_optional_str_arg(args, "mnemonic_passphrase"),
         source_set_file=source_set_file,
         source_set=source_set,
     )

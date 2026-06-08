@@ -815,25 +815,9 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_import_samourai.add_argument("--backend")
     wallets_import_samourai.add_argument("--network")
     wallets_import_samourai.add_argument("--gap-limit", type=int)
-    wallets_import_samourai.add_argument("--backup-file")
-    add_secret_stdin_options(
-        wallets_import_samourai,
-        "backup-passphrase",
-        label="Samourai backup passphrase",
-    )
-    wallets_import_samourai.add_argument("--mnemonic-file")
-    add_secret_stdin_options(
-        wallets_import_samourai,
-        "mnemonic",
-        label="Samourai mnemonic",
-    )
-    add_secret_stdin_options(
-        wallets_import_samourai,
-        "mnemonic-passphrase",
-        label="Samourai mnemonic passphrase",
-    )
     wallets_import_samourai.add_argument(
         "--source-set-file",
+        required=True,
         help="Local JSON file containing explicit Samourai descriptor/xpub sources",
     )
     wallets_sync_btcpay = wallets_sub.add_parser("sync-btcpay")
@@ -2225,26 +2209,6 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 ),
             )
         if args.wallets_command == "import-samourai":
-            enforce_single_stdin_consumer(
-                args,
-                ("backup_passphrase", "mnemonic", "mnemonic_passphrase"),
-            )
-            mnemonic = read_secret_from_args(
-                args,
-                "mnemonic",
-                label="Samourai mnemonic",
-            )
-            mnemonic_file_value = _read_optional_text_file(
-                args.mnemonic_file,
-                "Samourai mnemonic",
-            )
-            if mnemonic and mnemonic_file_value:
-                raise AppError(
-                    "Use only one mnemonic input",
-                    code="invalid_secret_input",
-                    hint="Choose --mnemonic-file, --mnemonic-stdin, or --mnemonic-fd.",
-                    retryable=False,
-                )
             return emit(
                 args,
                 core_samourai.import_samourai_wallet_group(
@@ -2256,18 +2220,6 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     backend=args.backend,
                     network=args.network,
                     gap_limit=args.gap_limit,
-                    backup_file=args.backup_file,
-                    backup_passphrase=read_secret_from_args(
-                        args,
-                        "backup-passphrase",
-                        label="Samourai backup passphrase",
-                    ),
-                    mnemonic=mnemonic or mnemonic_file_value,
-                    mnemonic_passphrase=read_secret_from_args(
-                        args,
-                        "mnemonic-passphrase",
-                        label="Samourai mnemonic passphrase",
-                    ),
                     source_set_file=args.source_set_file,
                 ),
             )

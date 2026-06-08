@@ -15,7 +15,7 @@ Kassiber can ingest transactions and metadata from several sources. Imported dat
 - 21bitcoin transaction CSV exports
 - Pocket Bitcoin account CSV exports
 - Strike CSV exports
-- Samourai Wallet recovery material for watch-only Whirlpool history
+- Samourai/Whirlpool descriptor and account-xpub source sets
 - BIP329 JSONL labels
 
 Format references used by the dedicated importers:
@@ -28,11 +28,9 @@ Format references used by the dedicated importers:
 - 21bitcoin transaction CSV export from the 21bitcoin app
 - Pocket Bitcoin account CSV export
 - Strike CSV export from Strike transaction history
-- Samourai backup and recovery docs: <https://samourai.kayako.com/section/5-samourai-backup>
 - Samourai Whirlpool account docs: <https://samourai.kayako.com/article/82-understanding-deposit-premix-and-postmix-accounts>
 - Samourai Whirlpool pool-fee docs: <https://samourai.kayako.com/article/81-understanding-pools-and-pool-fees>
 - Samourai BIP44/BIP49/BIP84 docs: <https://samourai.kayako.com/article/65-bip-44-bip-49-and-bip84>
-- Sparrow Samourai backup importer: <https://raw.githubusercontent.com/sparrowwallet/sparrow/master/src/main/java/com/sparrowwallet/sparrow/io/Samourai.java>
 - Drongo Samourai crypto/account helpers:
   <https://raw.githubusercontent.com/sparrowwallet/drongo/master/src/main/java/com/sparrowwallet/drongo/crypto/SamouraiUtil.java>
   and
@@ -105,34 +103,24 @@ or suggesting automatic same-transaction-id self-transfer links across it.
 
 ## Samourai Wallet and Whirlpool
 
-`wallets import-samourai` is a local recovery importer for historical
-Samourai Wallet activity. It is deliberately watch-only: Kassiber can decrypt a
-local `samourai.txt` backup or consume mnemonic / descriptor material only long
-enough to derive public watch descriptors, then persists the redacted wallet
-configuration needed for ordinary descriptor sync. It does not connect to a
+`wallets import-samourai` is a local watch-only importer for historical
+Samourai Wallet activity. Kassiber accepts explicit public descriptors and
+account xpub-family keys for the relevant Samourai/Whirlpool accounts, then
+persists the redacted wallet configuration needed for ordinary descriptor sync.
+It does not accept encrypted backups, recovery words, BIP39 passphrases, private
+keys, or other secret-bearing wallet material. It does not connect to a
 Whirlpool coordinator, does not run an active mixing client, does not create or
-broadcast transactions, and does not expose seed words, passphrases, descriptors,
-xpubs, PayNym secrets, backup payloads, backend URLs/tokens, or raw wallet files
-through daemon results, AI tools, diagnostics, docs, or tests.
+broadcast transactions, and does not expose descriptors, xpubs, PayNym secrets,
+backend URLs/tokens, or raw source-set files through daemon results, AI tools,
+diagnostics, docs, or tests.
 
 Source findings that shape the import:
 
-- Samourai's backup docs describe an encrypted full-wallet backup restored with
-  the exact wallet passphrase, and its mnemonic docs treat secret words plus the
-  BIP39 passphrase as the last-resort recovery path.
-- Sparrow's Samourai importer accepts the local `samourai.txt` payload, decrypts
-  backup version `1` with Samourai's legacy PBKDF2/AES-CBC routine, decrypts
-  version `2` with the SHA256 PBKDF2/AES-CBC routine, reads `wallet.seed`, and
-  turns that seed into a normal single-sig keystore.
-- Kassiber's backup import treats the backup passphrase as the Samourai wallet
-  / BIP39 passphrase by default, matching standard Samourai recovery. If local
-  evidence shows the backup encryption passphrase and BIP39 passphrase differ,
-  provide the BIP39 value through the mnemonic-passphrase input as an override.
 - Drongo's `StandardAccount` defines Whirlpool accounts as native segwit
   account roots: Badbank `2147483644'`, Premix `2147483645'`, and Postmix
   `2147483646'`; Postmix uses a minimum lookahead twice the normal default.
 - Samourai's Whirlpool docs define Deposit, Premix, and Postmix as segregated
-  address spaces covered by the same recovery words/passphrase. Deposit contains
+  address spaces in the same wallet. Deposit contains
   unmixed bech32 UTXOs; Premix contains UTXOs prepared by Tx0 and pending their
   first cycle; Postmix contains UTXOs that completed at least one cycle and may
   remix for free.
@@ -208,20 +196,10 @@ Example CLI flows:
 
 ```bash
 python3 -m kassiber wallets import-samourai \
-  --label "Samourai Recovery" \
-  --backup-file /path/to/samourai.txt \
-  --backup-passphrase-stdin \
+  --label "Samourai Watch-Only" \
+  --source-set-file /path/to/samourai-public-sources.json \
   --backend mempool \
   --gap-limit 80
-
-# Add --mnemonic-passphrase-fd 3 only when the BIP39 passphrase differs from
-# the backup passphrase.
-
-python3 -m kassiber wallets import-samourai \
-  --label "Samourai Recovery" \
-  --mnemonic-stdin \
-  --mnemonic-passphrase-fd 3 \
-  --backend mempool
 ```
 
 After import, run wallet sync, review any warnings or source-funds privacy

@@ -68,7 +68,7 @@ workflow almost nobody else covers.
   Greenfield, Liquid Electrum, plus watch-only UTXO inventory for
   chain-backed wallet sources.
 - **Imports** — BTCPay CSV/JSON, Phoenix, River, Bull Bitcoin, Coinfinity,
-  21bitcoin, Pocket Bitcoin, Strike, Samourai/Whirlpool watch-only recovery,
+  21bitcoin, Pocket Bitcoin, Strike, Samourai/Whirlpool public descriptor/xpub,
   generic CSV/JSON, BIP329 labels.
 - **Review workflows** — notes, tags, exclusions, attachments; append-only
   transaction edit history with Activity review and safe revert; reviewed
@@ -108,9 +108,6 @@ SmartScreen first-launch handling lives in
 ```bash
 uv sync                       # or: python3 -m venv .venv && pip install -e .
 ```
-
-Source installs include `cryptography` so Samourai backup v1/v2 decryption can
-run locally with Drongo-compatible AES-CBC/PBKDF2 behavior.
 
 ## Quick start
 

@@ -1,15 +1,9 @@
 from __future__ import annotations
 
-import base64
-import hashlib
 import json
 import tempfile
 import unittest
 from pathlib import Path
-
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from kassiber.core import samourai as core_samourai
 from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
@@ -25,68 +19,25 @@ from kassiber.errors import AppError
 
 
 NOW = "2026-06-05T00:00:00Z"
+SAMOURAI_FIXTURE_FINGERPRINT = "5a3469b6"
+SAMOURAI_FIXTURE_XPUBS = {
+    "m/47'/0'/0'": "xpub6DT7zz1QcpwVA2eiCibFCYZUKGYU84h8BpLV7fPbV8gtxWocwx4TRQaLZds4xBw5g1THnWvycLBYgTXPnPLD3zKFqLEXGBxvmamio6Md7Ns",
+    "m/84'/0'/0'": "xpub6DEHh42YXj7gdKbP1zxehEzQt47iW2AuUHYsqGaRxtkEGrK3bCYh2bsw1H6WUW26k9TBdQoe6gZ8ydoAP5eGAC2fDJGmFkwXcgv5feY9N7p",
+    "m/84'/0'/2147483644'": "xpub6DEHh42gsPeefAtjfCSnFzxgQ5BoRfUgML1qUDGFazD4CK5u7tpQdeyu7ERMBEZnJzNvJMQFzBgukyvEgYsApLeZNCcaVhqVHjqRaHRoCfm",
+    "m/84'/0'/2147483645'": "xpub6DEHh42gsPeegDmb1v3wdjj9SdJic2JKwH8FwnTCjBp4CpBmmrwPaeo9ahHZKfMBvDd68WqGjpH4guTQSrYfRomKdgKXJkpjBU5gcgC2sHY",
+    "m/84'/0'/2147483646'": "xpub6DEHh42gsPeekNJnrepkqGHTzxLYdBTmYXSDoXViqMApDuyfXcHhLV7ikXGisTysVMdRTXdNbVySgXmdbWYrQ1CestiSt49WWKwqM7GDbAD",
+}
 
 
-def _mnemonic() -> str:
-    from embit import bip39
-
-    return bip39.mnemonic_from_bytes(bytes.fromhex("000102030405060708090a0b0c0d0e0f"))
+def _fixture_xpub(path: str) -> str:
+    return SAMOURAI_FIXTURE_XPUBS[path]
 
 
-def _passphrase() -> str:
-    return hashlib.sha256(b"kassiber-samourai-backup-test-key").hexdigest()[:24]
-
-
-def _pad(payload: bytes) -> bytes:
-    pad_len = 16 - (len(payload) % 16)
-    return payload + (b"\x00" * (pad_len - 1)) + bytes([pad_len])
-
-
-def _derive(passphrase: str, salt: bytes, iterations: int, algorithm, length: int) -> bytes:
-    return PBKDF2HMAC(
-        algorithm=algorithm,
-        length=length,
-        salt=salt,
-        iterations=iterations,
-    ).derive(passphrase.encode("utf-8"))
-
-
-def _aes_encrypt(key: bytes, iv: bytes, payload: bytes) -> bytes:
-    encryptor = Cipher(algorithms.AES(key), modes.CBC(iv)).encryptor()
-    return encryptor.update(_pad(payload)) + encryptor.finalize()
-
-
-def _backup_payload() -> bytes:
-    from embit import bip39
-
-    entropy = bip39.mnemonic_to_bytes(_mnemonic())
-    return json.dumps({"wallet": {"seed": entropy.hex(), "testnet": False}}).encode(
-        "utf-8"
+def _fixture_descriptor(path: str, branch: int) -> str:
+    return (
+        f"wpkh([{SAMOURAI_FIXTURE_FINGERPRINT}/{path[2:]}]"
+        f"{_fixture_xpub(path)}/{branch}/*)"
     )
-
-
-def _account_xpub(path: str) -> tuple[str, str]:
-    from embit import bip32, bip39
-
-    root = bip32.HDKey.from_seed(bip39.mnemonic_to_seed(_mnemonic(), ""))
-    return root.derive(path).to_public().to_base58(), root.my_fingerprint.hex()
-
-
-def _encrypted_backup_v1() -> str:
-    iv = b"\x01" * 16
-    key = _derive(_passphrase(), iv, 5_000, hashes.SHA1(), 32)
-    payload = base64.b64encode(iv + _aes_encrypt(key, iv, _backup_payload())).decode(
-        "ascii"
-    )
-    return json.dumps({"version": 1, "payload": payload})
-
-
-def _encrypted_backup_v2() -> str:
-    salt = b"\x02" * 8
-    derived = _derive(_passphrase(), salt, 15_000, hashes.SHA256(), 48)
-    ciphertext = _aes_encrypt(derived[:32], derived[32:], _backup_payload())
-    payload = base64.b64encode(b"Salted__" + salt + ciphertext).decode("ascii")
-    return json.dumps({"version": 2, "payload": payload})
 
 
 def _seed_book(conn):
@@ -162,130 +113,13 @@ def _tax_row(
 
 
 class SamouraiImportTest(unittest.TestCase):
-    def test_backup_v1_and_v2_decrypt_to_recovery_words(self):
-        for encrypted in (_encrypted_backup_v1(), _encrypted_backup_v2()):
-            payload = core_samourai.decrypt_samourai_backup_text(
-                encrypted,
-                _passphrase(),
-            )
-            mnemonic, network = core_samourai.mnemonic_from_samourai_backup_payload(
-                payload
-            )
-            self.assertEqual(mnemonic, _mnemonic())
-            self.assertEqual(network, "main")
-
-        with self.assertRaises(AppError) as raised:
-            core_samourai.decrypt_samourai_backup_text(
-                _encrypted_backup_v2(),
-                _passphrase() + "wrong",
-            )
-        self.assertEqual(raised.exception.code, "validation")
-
-    def test_backup_import_supports_distinct_bip39_passphrase(self):
-        with tempfile.TemporaryDirectory(prefix="kassiber-samourai-backup-") as tmp:
-            backup_path = Path(tmp) / "samourai.txt"
-            backup_path.write_text(_encrypted_backup_v2(), encoding="utf-8")
-
-            backup_sources, _ = core_samourai.build_samourai_sources_from_backup(
-                str(backup_path),
-                _passphrase(),
-                mnemonic_passphrase="",
-                network="main",
-                gap_limit=40,
-            )
-            mnemonic_sources = core_samourai.derive_samourai_wallet_sources(
-                _mnemonic(),
-                "",
-                network="main",
-                gap_limit=40,
-            )
-            self.assertEqual(
-                backup_sources[0]["config"]["descriptor"],
-                mnemonic_sources[0]["config"]["descriptor"],
-            )
-
-            default_backup_sources, _ = core_samourai.build_samourai_sources_from_backup(
-                str(backup_path),
-                _passphrase(),
-                network="main",
-                gap_limit=40,
-            )
-            passphrase_sources = core_samourai.derive_samourai_wallet_sources(
-                _mnemonic(),
-                _passphrase(),
-                network="main",
-                gap_limit=40,
-            )
-            self.assertEqual(
-                default_backup_sources[0]["config"]["descriptor"],
-                passphrase_sources[0]["config"]["descriptor"],
-            )
-
-    def test_import_from_mnemonic_creates_redacted_group_and_all_paths(self):
-        with tempfile.TemporaryDirectory(prefix="kassiber-samourai-") as tmp:
-            conn = open_db(Path(tmp) / "data")
-            _seed_book(conn)
-            result = core_samourai.import_samourai_wallet_group(
-                conn,
-                "Main",
-                "Default",
-                label="Samourai",
-                mnemonic=_mnemonic(),
-                mnemonic_passphrase="",
-                network="main",
-                gap_limit=80,
-            )
-            self.assertEqual(result["group"]["kind"], "samourai")
-            self.assertEqual(len(result["children"]), 9)
-            redacted = json.dumps(result, sort_keys=True)
-            self.assertNotIn(_mnemonic().split()[0], redacted)
-            self.assertNotIn("xpub", redacted)
-            self.assertIn('"descriptor": "[redacted]"', redacted)
-            root_paths = {
-                child["config"]["samourai"]["root_path"]
-                for child in result["children"]
-            }
-            recognized_roots = {
-                template.path.format(coin_type=0)
-                for template in core_samourai.SAMOURAI_ACCOUNT_TEMPLATES
-            }
-            self.assertIn("m/47'/0'/0'", recognized_roots)
-            self.assertNotIn("m/47'/0'/0'", root_paths)
-            self.assertIn("m/84'/0'/2147483644'", root_paths)
-            self.assertIn("m/84'/0'/2147483645'", root_paths)
-            self.assertIn("m/84'/0'/2147483646'", root_paths)
-            self.assertIn("m/84'/0'/2147483647'", root_paths)
-            postmix = next(
-                child
-                for child in result["children"]
-                if child["config"]["samourai"]["section"] == "postmix"
-            )
-            self.assertEqual(postmix["gap_limit"], 80)
-            self.assertEqual(postmix["config"]["samourai"]["minimum_mix_count"], 1)
-
     def test_source_set_import_and_inventory_metadata_stay_watch_only(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-samourai-source-set-") as tmp:
             data_root = Path(tmp) / "data"
             conn = open_db(data_root)
             _seed_book(conn)
-            sources = core_samourai.derive_samourai_wallet_sources(
-                _mnemonic(),
-                "",
-                network="main",
-                gap_limit=40,
-            )
-            postmix_source = next(
-                source
-                for source in sources
-                if source["config"]["samourai"]["section"] == "postmix"
-            )
-            deposit_native_source = next(
-                source
-                for source in sources
-                if source["config"]["samourai"]["section"] == "deposit"
-                and source["config"]["samourai"]["root_path"] == "m/84'/0'/0'"
-            )
-            paynym_xpub, fingerprint = _account_xpub("m/47'/0'/0'")
+            postmix_path = "m/84'/0'/2147483646'"
+            deposit_native_path = "m/84'/0'/0'"
             source_set_path = Path(tmp) / "samourai-sources.json"
             source_set_path.write_text(
                 json.dumps(
@@ -295,11 +129,9 @@ class SamouraiImportTest(unittest.TestCase):
                             {
                                 "section": "postmix",
                                 "script_type": "p2wpkh",
-                                "root_path": "m/84'/0'/2147483646'",
-                                "descriptor": postmix_source["config"]["descriptor"],
-                                "change_descriptor": postmix_source["config"][
-                                    "change_descriptor"
-                                ],
+                                "root_path": postmix_path,
+                                "descriptor": _fixture_descriptor(postmix_path, 0),
+                                "change_descriptor": _fixture_descriptor(postmix_path, 1),
                                 "samourai": {
                                     "target_mix_count": 5,
                                     "pool_denomination_sat": 5_000_000,
@@ -312,8 +144,8 @@ class SamouraiImportTest(unittest.TestCase):
                                 "section": "deposit",
                                 "script_type": "p2pkh",
                                 "root_path": "m/47'/0'/0'",
-                                "xpub": paynym_xpub,
-                                "fingerprint": fingerprint,
+                                "xpub": _fixture_xpub("m/47'/0'/0'"),
+                                "fingerprint": SAMOURAI_FIXTURE_FINGERPRINT,
                             }
                         ],
                     }
@@ -391,7 +223,7 @@ class SamouraiImportTest(unittest.TestCase):
                 "SELECT config_json FROM wallets WHERE id = ?",
                 (child_id,),
             ).fetchone()["config_json"]
-            self.assertNotIn(_mnemonic().split()[0], raw_config)
+            self.assertNotIn("payment_code_secret", raw_config)
 
             bad_source_set_path = Path(tmp) / "bad-samourai-sources.json"
             bad_source_set_path.write_text(
@@ -403,7 +235,7 @@ class SamouraiImportTest(unittest.TestCase):
                                 "section": "postmix",
                                 "script_type": "p2wpkh",
                                 "root_path": "m/84'/1'/2147483646'",
-                                "descriptor": postmix_source["config"]["descriptor"],
+                                "descriptor": _fixture_descriptor(postmix_path, 0),
                             }
                         ],
                     }
@@ -431,10 +263,11 @@ class SamouraiImportTest(unittest.TestCase):
                                 "section": "postmix",
                                 "script_type": "p2wpkh",
                                 "root_path": "m/84'/0'/2147483646'",
-                                "descriptor": deposit_native_source["config"]["descriptor"],
-                                "change_descriptor": deposit_native_source["config"][
-                                    "change_descriptor"
-                                ],
+                                "descriptor": _fixture_descriptor(deposit_native_path, 0),
+                                "change_descriptor": _fixture_descriptor(
+                                    deposit_native_path,
+                                    1,
+                                ),
                             }
                         ],
                     }
@@ -463,7 +296,7 @@ class SamouraiImportTest(unittest.TestCase):
                                 "section": "postmix",
                                 "script_type": "p2wpkh",
                                 "root_path": "m/84'/0'/2147483646'",
-                                "descriptor": postmix_source["config"]["descriptor"],
+                                "descriptor": _fixture_descriptor(postmix_path, 0),
                             }
                         ],
                     }
@@ -492,19 +325,15 @@ class SamouraiImportTest(unittest.TestCase):
                                 "section": "postmix",
                                 "script_type": "p2wpkh",
                                 "root_path": "m/84'/0'/2147483646'",
-                                "descriptor": postmix_source["config"]["descriptor"],
-                                "change_descriptor": postmix_source["config"][
-                                    "change_descriptor"
-                                ],
+                                "descriptor": _fixture_descriptor(postmix_path, 0),
+                                "change_descriptor": _fixture_descriptor(postmix_path, 1),
                             },
                             {
                                 "section": "postmix",
                                 "script_type": "p2wpkh",
                                 "root_path": "m/84'/0'/2147483646'",
-                                "descriptor": postmix_source["config"]["descriptor"],
-                                "change_descriptor": postmix_source["config"][
-                                    "change_descriptor"
-                                ],
+                                "descriptor": _fixture_descriptor(postmix_path, 0),
+                                "change_descriptor": _fixture_descriptor(postmix_path, 1),
                             },
                         ],
                     }
@@ -538,13 +367,13 @@ class SamouraiImportTest(unittest.TestCase):
                         "section": "badbank",
                         "script_type": "p2wpkh",
                         "root_path": "m/84'/0'/2147483644'",
-                        "xpub": _account_xpub("m/84'/0'/2147483644'")[0],
+                        "xpub": _fixture_xpub("m/84'/0'/2147483644'"),
                     },
                     {
                         "section": "premix",
                         "script_type": "p2wpkh",
                         "root_path": "m/84'/0'/2147483645'",
-                        "xpub": _account_xpub("m/84'/0'/2147483645'")[0],
+                        "xpub": _fixture_xpub("m/84'/0'/2147483645'"),
                     },
                 ],
             }
