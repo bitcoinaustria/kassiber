@@ -526,6 +526,48 @@ class SamouraiImportTest(unittest.TestCase):
                 ["Duplicate Samourai - Postmix"],
             )
 
+    def test_inline_source_set_imports_public_account_material(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-samourai-inline-source-set-") as tmp:
+            data_root = Path(tmp) / "data"
+            conn = open_db(data_root)
+            _seed_book(conn)
+            source_set = {
+                "network": "main",
+                "xpubs": [
+                    {
+                        "section": "badbank",
+                        "script_type": "p2wpkh",
+                        "root_path": "m/84'/0'/2147483644'",
+                        "xpub": _account_xpub("m/84'/0'/2147483644'")[0],
+                    },
+                    {
+                        "section": "premix",
+                        "script_type": "p2wpkh",
+                        "root_path": "m/84'/0'/2147483645'",
+                        "xpub": _account_xpub("m/84'/0'/2147483645'")[0],
+                    },
+                ],
+            }
+
+            result = core_samourai.import_samourai_wallet_group(
+                conn,
+                "Main",
+                "Default",
+                label="Samourai Inline",
+                source_set=source_set,
+                network="main",
+            )
+
+            self.assertEqual(len(result["children"]), 2)
+            sections = {
+                child["config"]["samourai"]["section"]
+                for child in result["children"]
+            }
+            self.assertEqual(sections, {"badbank", "premix"})
+            redacted = json.dumps(result, sort_keys=True)
+            self.assertNotIn("xpub", redacted)
+            self.assertIn('"descriptor": "[redacted]"', redacted)
+
     def test_tax_events_skip_internal_whirlpool_rows_but_quarantine_external_spend(self):
         wallet_refs = {
             "wallet-deposit": {"id": "wallet-deposit", "label": "Deposit"},

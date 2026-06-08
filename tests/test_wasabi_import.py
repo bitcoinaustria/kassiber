@@ -415,6 +415,31 @@ class WasabiImportFlowTest(unittest.TestCase):
             finally:
                 _stop_daemon(daemon)
 
+            daemon = _start_daemon(data_root)
+            try:
+                _write_daemon(
+                    daemon,
+                    {
+                        "kind": "ui.wallets.import_file",
+                        "request_id": "inline-import",
+                        "args": {
+                            "wallet": "Wasabi",
+                            "source_format": "wasabi_bundle",
+                            "source_bundle": _wasabi_bundle_payload(),
+                        },
+                    },
+                )
+                inline_import = _read_daemon_until(
+                    daemon,
+                    "ui.wallets.import_file",
+                )
+                self.assertEqual(inline_import["kind"], "ui.wallets.import_file")
+                self.assertEqual(inline_import["data"]["wasabi_transactions"], 3)
+                self.assertEqual(inline_import["data"]["wasabi_coins_observed"], 2)
+                self.assertEqual(inline_import["data"]["input_format"], "wasabi_bundle")
+            finally:
+                _stop_daemon(daemon)
+
     def test_empty_wasabi_coin_snapshot_marks_previous_inventory_spent(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-wasabi-empty-coins-") as tmp:
             data_root = Path(tmp) / "state"

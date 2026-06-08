@@ -33,6 +33,14 @@ import {
   type ConnectionSourceFormat,
 } from "@/lib/connectionCatalog";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
+import {
+  buildSamouraiSourceSet,
+  type SamouraiSection,
+} from "@/lib/samouraiSourceSet";
+import {
+  buildWasabiBundle,
+  type WasabiImportMode,
+} from "@/lib/wasabiBundle";
 import { detectWalletMaterial } from "@/lib/walletMaterialFormat";
 
 const WalletMaterialScannerDialog = React.lazy(() =>
@@ -57,11 +65,17 @@ interface SetupFormState {
   btcpayApiKey: string;
   walletMaterial: string;
   gapLimit: string;
-  samouraiSourceMode: "backup" | "mnemonic" | "source-set";
-  backupPassphrase: string;
-  mnemonicPassphrase: string;
   targetWallet: string;
   sourceFile: string;
+  samouraiDeposit: string;
+  samouraiBadbank: string;
+  samouraiPremix: string;
+  samouraiPostmix: string;
+  wasabiImportMode: WasabiImportMode;
+  wasabiHistory: string;
+  wasabiCoins: string;
+  wasabiWalletInfo: string;
+  wasabiAdditional: string;
   sourceFormat: ConnectionSourceFormat;
   bullImportMode: "relevant" | "full";
   btcpayStoreId: string;
@@ -207,6 +221,51 @@ type DialogStep = "source" | "setup";
 const DESCRIPTOR_BACKEND_KINDS = new Set(["esplora", "electrum"]);
 const DEFAULT_BTCPAY_PAYMENT_METHOD_ID = "BTC-CHAIN";
 const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
+type SamouraiFormKey =
+  | "samouraiDeposit"
+  | "samouraiBadbank"
+  | "samouraiPremix"
+  | "samouraiPostmix";
+
+const SAMOURAI_SOURCE_FIELDS: Array<{
+  section: SamouraiSection;
+  key: SamouraiFormKey;
+  id: string;
+  label: string;
+  helper: string;
+}> = [
+  {
+    section: "deposit",
+    key: "samouraiDeposit",
+    id: "connection-samourai-deposit",
+    label: "Deposit descriptor or xpub",
+    helper:
+      "Paste the Deposit account descriptor, ypub, or zpub. Bare xpub is ambiguous for Deposit; use a descriptor when unsure.",
+  },
+  {
+    section: "badbank",
+    key: "samouraiBadbank",
+    id: "connection-samourai-badbank",
+    label: "Badbank descriptor or xpub",
+    helper:
+      "Paste the Badbank / Toxic Change account descriptor or account xpub.",
+  },
+  {
+    section: "premix",
+    key: "samouraiPremix",
+    id: "connection-samourai-premix",
+    label: "Premix descriptor or xpub",
+    helper: "Paste the Premix account descriptor or account xpub.",
+  },
+  {
+    section: "postmix",
+    key: "samouraiPostmix",
+    id: "connection-samourai-postmix",
+    label: "Postmix descriptor or xpub",
+    helper:
+      "Paste the Postmix account descriptor or account xpub; Postmix scans may need a higher gap limit.",
+  },
+];
 
 function supportsDescriptorSync(backend: BackendOption) {
   return DESCRIPTOR_BACKEND_KINDS.has(backend.kind);
@@ -218,6 +277,34 @@ function isExchangeEvidenceFormat(sourceFormat?: string) {
     sourceFormat === "coinfinity_csv" ||
     sourceFormat === "21bitcoin_csv"
   );
+}
+
+function samouraiFieldKey(section: SamouraiSection) {
+  return SAMOURAI_SOURCE_FIELDS.find((field) => field.section === section)
+    ?.key;
+}
+
+function samouraiSourceFields(form: SetupFormState) {
+  return {
+    deposit: form.samouraiDeposit,
+    badbank: form.samouraiBadbank,
+    premix: form.samouraiPremix,
+    postmix: form.samouraiPostmix,
+  };
+}
+
+function fileWalletSourceField(source: ConnectionSource) {
+  if (source.sourceFormat === "wasabi_bundle") {
+    return {
+      label: "Wasabi JSON bundle path",
+      helper:
+        "Choose a sanitized local bundle with Wasabi gethistory plus listcoins/listunspentcoins data. Kassiber imports it as watch-only accounting evidence.",
+    };
+  }
+  return {
+    label: "Export file path",
+    helper: undefined,
+  };
 }
 
 function sourceFileFilters(source: ConnectionSource) {
@@ -242,8 +329,8 @@ function sourceFileFilters(source: ConnectionSource) {
   if (source.sourceFormat === "wasabi_bundle") {
     return [{ name: "Wasabi JSON bundle", extensions: ["json"] }];
   }
-  if (source.id === "samourai") {
-    return [{ name: "Samourai import files", extensions: ["txt", "json"] }];
+  if (source.setupKind === "samourai") {
+    return [{ name: "Samourai descriptor source set", extensions: ["json"] }];
   }
   if (source.id === "csv") {
     return [{ name: "CSV or JSON", extensions: ["csv", "json"] }];
@@ -268,11 +355,17 @@ const formDefaultsFor = (source: ConnectionSource): SetupFormState => {
     btcpayApiKey: "",
     walletMaterial: "",
     gapLimit: "40",
-    samouraiSourceMode: "backup",
-    backupPassphrase: "",
-    mnemonicPassphrase: "",
     targetWallet: "",
     sourceFile: "",
+    samouraiDeposit: "",
+    samouraiBadbank: "",
+    samouraiPremix: "",
+    samouraiPostmix: "",
+    wasabiImportMode: source.sourceFormat === "wasabi_bundle" ? "rpc" : "bundle-file",
+    wasabiHistory: "",
+    wasabiCoins: "",
+    wasabiWalletInfo: "",
+    wasabiAdditional: "",
     sourceFormat: "csv",
     bullImportMode: "relevant",
     btcpayStoreId: "",
@@ -302,11 +395,32 @@ function SetupField({
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
       {children}
-      {helper && !error ? (
-        <p className="text-xs text-muted-foreground">{helper}</p>
-      ) : null}
+      {helper && !error ? renderSetupHelper(helper) : null}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>
+  );
+}
+
+function renderSetupHelper(helper: React.ReactNode) {
+  if (typeof helper === "string") {
+    return <p className="text-xs text-muted-foreground">{helper}</p>;
+  }
+  return <div className="text-xs text-muted-foreground">{helper}</div>;
+}
+
+function InlineCode({ children }: { children: React.ReactNode }) {
+  return (
+    <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
+      {children}
+    </code>
+  );
+}
+
+function CommandSnippet({ children }: { children: React.ReactNode }) {
+  return (
+    <code className="block overflow-x-auto rounded border bg-background px-2 py-1.5 font-mono text-[11px] leading-relaxed text-foreground">
+      {children}
+    </code>
   );
 }
 
@@ -663,6 +777,14 @@ export function AddConnectionDialog({
     setForm((current) => ({ ...current, [key]: value }));
     if (
       key === "sourceFile" ||
+      key === "samouraiDeposit" ||
+      key === "samouraiBadbank" ||
+      key === "samouraiPremix" ||
+      key === "samouraiPostmix" ||
+      key === "wasabiHistory" ||
+      key === "wasabiCoins" ||
+      key === "wasabiWalletInfo" ||
+      key === "wasabiAdditional" ||
       key === "targetWallet" ||
       key === "sourceFormat" ||
       key === "bullImportMode"
@@ -740,23 +862,47 @@ export function AddConnectionDialog({
       if (descriptorBackendOptions.length > 0 && !form.backend.trim()) {
         errors.backend = "Choose a backend.";
       }
-      if (form.samouraiSourceMode === "backup") {
-        if (!form.sourceFile.trim()) {
-          errors.sourceFile = "Pick the Samourai backup file.";
-        }
-        if (!form.backupPassphrase.trim()) {
-          errors.backupPassphrase = "Backup passphrase is required.";
-        }
-      } else if (form.samouraiSourceMode === "mnemonic") {
-        if (!form.walletMaterial.trim()) {
-          errors.walletMaterial = "Enter the local recovery words.";
-        }
-      } else if (!form.sourceFile.trim()) {
-        errors.sourceFile = "Pick the descriptor/xpub set file.";
+      const sourceSetResult = buildSamouraiSourceSet(
+        samouraiSourceFields(form),
+        selected.network,
+      );
+      for (const [section, message] of Object.entries(
+        sourceSetResult.errors,
+      )) {
+        const fieldKey = samouraiFieldKey(section as SamouraiSection);
+        if (fieldKey) errors[fieldKey] = message;
+      }
+      if (
+        sourceSetResult.sourceSet.children.length === 0 &&
+        sourceSetResult.sourceSet.xpubs.length === 0 &&
+        Object.keys(sourceSetResult.errors).length === 0
+      ) {
+        errors.samouraiDeposit =
+          "Paste at least one Samourai descriptor or xpub.";
       }
     }
-    if (setupKind === "file-wallet" && !form.sourceFile.trim()) {
-      errors.sourceFile = "Pick the export file.";
+    if (setupKind === "file-wallet") {
+      if (
+        selected.sourceFormat === "wasabi_bundle" &&
+        form.wasabiImportMode === "rpc"
+      ) {
+        const { errors: wasabiErrors } = buildWasabiBundle({
+          history: form.wasabiHistory,
+          coins: form.wasabiCoins,
+          walletInfo: form.wasabiWalletInfo,
+          additional: form.wasabiAdditional,
+        });
+        if (wasabiErrors.history) errors.wasabiHistory = wasabiErrors.history;
+        if (wasabiErrors.coins) errors.wasabiCoins = wasabiErrors.coins;
+        if (wasabiErrors.walletInfo) {
+          errors.wasabiWalletInfo = wasabiErrors.walletInfo;
+        }
+        if (wasabiErrors.additional) {
+          errors.wasabiAdditional = wasabiErrors.additional;
+        }
+      } else if (!form.sourceFile.trim()) {
+        errors.sourceFile = "Pick the export file.";
+      }
     }
     if (setupKind === "file-enrichment") {
       if (!isExchangeEvidenceFormat(selected.sourceFormat) && !form.targetWallet.trim()) {
@@ -863,25 +1009,16 @@ export function AddConnectionDialog({
         });
       } else if (setupKind === "samourai") {
         const gapLimit = Number.parseInt(form.gapLimit, 10);
+        const { sourceSet } = buildSamouraiSourceSet(
+          samouraiSourceFields(form),
+          selected.network,
+        );
         const envelope = await importSamourai.mutateAsync({
           label,
           backend: form.backend.trim() || undefined,
           network: selected.network,
           gap_limit: Number.isFinite(gapLimit) ? gapLimit : undefined,
-          ...(form.samouraiSourceMode === "backup"
-            ? {
-                backup_file: form.sourceFile.trim(),
-                backup_passphrase: form.backupPassphrase,
-                mnemonic_passphrase: form.mnemonicPassphrase || undefined,
-              }
-            : form.samouraiSourceMode === "mnemonic"
-              ? {
-                  mnemonic: form.walletMaterial.trim(),
-                  mnemonic_passphrase: form.mnemonicPassphrase,
-                }
-              : {
-                  source_set_file: form.sourceFile.trim(),
-                }),
+          source_set: sourceSet,
         });
         const childLabels = envelope.data?.children.map((child) => child.label) ?? [];
         if (form.syncAfterCreate && childLabels.length > 0) {
@@ -903,10 +1040,10 @@ export function AddConnectionDialog({
         });
         setForm((current) => ({
           ...current,
-          backupPassphrase: "",
-          mnemonicPassphrase: "",
-          sourceFile: "",
-          walletMaterial: "",
+          samouraiDeposit: "",
+          samouraiBadbank: "",
+          samouraiPremix: "",
+          samouraiPostmix: "",
         }));
       } else if (setupKind === "file-wallet") {
         const sourceFormat =
@@ -914,10 +1051,34 @@ export function AddConnectionDialog({
         await createWallet.mutateAsync({
           label,
           kind: selected.walletKind ?? "custom",
-          source_file: form.sourceFile.trim(),
+          ...(selected.sourceFormat === "wasabi_bundle" &&
+          form.wasabiImportMode === "rpc"
+            ? {}
+            : { source_file: form.sourceFile.trim() }),
           source_format: sourceFormat,
         });
-        if (form.syncAfterCreate) {
+        if (
+          selected.sourceFormat === "wasabi_bundle" &&
+          form.wasabiImportMode === "rpc"
+        ) {
+          const { bundle } = buildWasabiBundle({
+            history: form.wasabiHistory,
+            coins: form.wasabiCoins,
+            walletInfo: form.wasabiWalletInfo,
+            additional: form.wasabiAdditional,
+          });
+          startSyncNotice(`${label} is importing pasted Wasabi RPC output.`);
+          try {
+            const envelope = await importFile.mutateAsync({
+              wallet: label,
+              source_format: "wasabi_bundle",
+              source_bundle: bundle,
+            });
+            setLastImportResult(envelope.data ?? null);
+          } finally {
+            clearSyncNotice();
+          }
+        } else if (form.syncAfterCreate) {
           startSyncNotice(
             `${label} is still importing from the selected file. Large exports can take a bit; Kassiber will update when the daemon finishes.`,
           );
@@ -1198,6 +1359,43 @@ export function AddConnectionDialog({
   };
 
   const renderSetupFields = () => {
+    const sourceFileField = fileWalletSourceField(selected);
+    const renderSourceFileSetup = (syncLabel?: string) => (
+      <>
+        <SetupField
+          id="connection-source-file"
+          label={sourceFileField.label}
+          error={fieldErrors.sourceFile}
+          helper={sourceFileField.helper}
+        >
+          <div className="flex gap-2">
+            <Input
+              id="connection-source-file"
+              value={form.sourceFile}
+              onChange={(event) => updateForm("sourceFile", event.target.value)}
+              required
+            />
+            {isFilePickerAvailable ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={async () => {
+                  const picked = await pickFile({
+                    title: `Select ${selected.title} export file`,
+                    filters: sourceFileFilters(selected),
+                  });
+                  if (picked) updateForm("sourceFile", picked);
+                }}
+              >
+                Browse…
+              </Button>
+            ) : null}
+          </div>
+        </SetupField>
+        {syncLabel ? renderSyncAfterCreate(syncLabel) : null}
+      </>
+    );
+
     if (setupKind === "descriptor") {
       return (
         <>
@@ -1306,143 +1504,33 @@ export function AddConnectionDialog({
             "Backend",
             descriptorBackendOptions,
           )}
-          <SetupField id="connection-samourai-mode" label="Import source">
-            <div className="grid grid-cols-3 gap-2">
-              {(
-                [
-                  ["backup", "Backup"],
-                  ["mnemonic", "Words"],
-                  ["source-set", "Descriptors"],
-                ] as const
-              ).map(([value, text]) => (
-                <Button
-                  key={value}
-                  type="button"
-                  variant={form.samouraiSourceMode === value ? "secondary" : "outline"}
-                  onClick={() => {
-                    setForm((current) => ({
-                      ...current,
-                      samouraiSourceMode: value,
-                      backupPassphrase: "",
-                      mnemonicPassphrase: "",
-                      sourceFile: "",
-                      walletMaterial: "",
-                    }));
-                    setLastImportResult(null);
-                  }}
-                >
-                  {text}
-                </Button>
-              ))}
+          <div className="space-y-3">
+            <div className="rounded-md border bg-muted/25 p-3 text-xs text-muted-foreground">
+              Import public Samourai account material only. Empty accounts are
+              skipped; use all four when available so Kassiber can scan the full
+              Whirlpool history. Get these from Sparrow or another descriptor
+              tool after it has recovered the Samourai accounts; paste only the
+              public descriptors or account xpub-family keys.
             </div>
-          </SetupField>
-          {form.samouraiSourceMode === "mnemonic" ? (
-            <>
+            {SAMOURAI_SOURCE_FIELDS.map((field) => (
               <SetupField
-                id="connection-samourai-mnemonic"
-                label="Recovery words"
-                error={fieldErrors.walletMaterial}
+                key={field.key}
+                id={field.id}
+                label={field.label}
+                error={fieldErrors[field.key]}
+                helper={field.helper}
               >
                 <Textarea
-                  id="connection-samourai-mnemonic"
-                  className="min-h-28 font-mono text-xs"
-                  value={form.walletMaterial}
+                  id={field.id}
+                  className="min-h-20 font-mono text-xs"
+                  value={form[field.key]}
                   onChange={(event) =>
-                    updateForm("walletMaterial", event.target.value)
-                  }
-                  required
-                />
-              </SetupField>
-              <SetupField
-                id="connection-samourai-mnemonic-passphrase"
-                label="BIP39 passphrase"
-                helper="Leave blank if the wallet did not use one."
-              >
-                <Input
-                  id="connection-samourai-mnemonic-passphrase"
-                  type="password"
-                  value={form.mnemonicPassphrase}
-                  onChange={(event) =>
-                    updateForm("mnemonicPassphrase", event.target.value)
+                    updateForm(field.key, event.target.value)
                   }
                 />
               </SetupField>
-            </>
-          ) : (
-            <>
-              <SetupField
-                id="connection-samourai-file"
-                label={
-                  form.samouraiSourceMode === "backup"
-                    ? "Backup file path"
-                    : "Descriptor/xpub set path"
-                }
-                error={fieldErrors.sourceFile}
-              >
-                <div className="flex gap-2">
-                  <Input
-                    id="connection-samourai-file"
-                    value={form.sourceFile}
-                    onChange={(event) =>
-                      updateForm("sourceFile", event.target.value)
-                    }
-                    required
-                  />
-                  {isFilePickerAvailable ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={async () => {
-                        const picked = await pickFile({
-                          title:
-                            form.samouraiSourceMode === "backup"
-                              ? "Select Samourai backup file"
-                              : "Select Samourai descriptor/xpub set",
-                          filters: sourceFileFilters(selected),
-                        });
-                        if (picked) updateForm("sourceFile", picked);
-                      }}
-                    >
-                      Browse…
-                    </Button>
-                  ) : null}
-                </div>
-              </SetupField>
-              {form.samouraiSourceMode === "backup" ? (
-                <>
-                  <SetupField
-                    id="connection-samourai-backup-passphrase"
-                    label="Backup passphrase"
-                    error={fieldErrors.backupPassphrase}
-                  >
-                    <Input
-                      id="connection-samourai-backup-passphrase"
-                      type="password"
-                      value={form.backupPassphrase}
-                      onChange={(event) =>
-                        updateForm("backupPassphrase", event.target.value)
-                      }
-                      required
-                    />
-                  </SetupField>
-                  <SetupField
-                    id="connection-samourai-backup-mnemonic-passphrase"
-                    label="BIP39 passphrase override"
-                    helper="Leave blank to use the Samourai backup passphrase."
-                  >
-                    <Input
-                      id="connection-samourai-backup-mnemonic-passphrase"
-                      type="password"
-                      value={form.mnemonicPassphrase}
-                      onChange={(event) =>
-                        updateForm("mnemonicPassphrase", event.target.value)
-                      }
-                    />
-                  </SetupField>
-                </>
-              ) : null}
-            </>
-          )}
+            ))}
+          </div>
           <SetupField
             id="connection-samourai-gap-limit"
             label="Gap limit"
@@ -1464,6 +1552,159 @@ export function AddConnectionDialog({
     }
 
     if (setupKind === "file-wallet") {
+      if (selected.sourceFormat === "wasabi_bundle") {
+        return (
+          <>
+            {renderConnectionLabelField()}
+            <SetupField id="connection-wasabi-mode" label="Import source">
+              <div className="grid grid-cols-2 gap-2">
+                {(
+                  [
+                    ["rpc", "Paste RPC outputs"],
+                    ["bundle-file", "Bundle file"],
+                  ] as const
+                ).map(([value, text]) => (
+                  <Button
+                    key={value}
+                    type="button"
+                    variant={
+                      form.wasabiImportMode === value ? "secondary" : "outline"
+                    }
+                    onClick={() => {
+                      updateForm("wasabiImportMode", value);
+                      setLastImportResult(null);
+                    }}
+                  >
+                    {text}
+                  </Button>
+                ))}
+              </div>
+            </SetupField>
+            {form.wasabiImportMode === "rpc" ? (
+              <div className="space-y-3">
+                <div className="space-y-2 rounded-md border bg-muted/25 p-3 text-xs text-muted-foreground">
+                  <p>
+                    Start Wasabi, load the wallet, then copy JSON from the local
+                    RPC endpoint. Default RPC is{" "}
+                    <InlineCode>http://127.0.0.1:37128/WalletName</InlineCode>;
+                    replace <InlineCode>WalletName</InlineCode> with the loaded
+                    Wasabi wallet name.
+                  </p>
+                  <p>
+                    If <InlineCode>JsonRpcUser</InlineCode> and{" "}
+                    <InlineCode>JsonRpcPassword</InlineCode> are set in Wasabi,
+                    add <InlineCode>-u user:password</InlineCode> to the curl
+                    command. Kassiber stores the pasted snapshot, not a live
+                    Wasabi RPC connection.
+                  </p>
+                </div>
+                <SetupField
+                  id="connection-wasabi-history"
+                  label="gethistory JSON"
+                  error={fieldErrors.wasabiHistory}
+                  helper={
+                    <div className="space-y-1.5">
+                      <p>
+                        Required. Accepts the raw result array or a JSON-RPC
+                        response object with result.
+                      </p>
+                      <CommandSnippet>
+                        curl -s --data-binary
+                        {' \'{"jsonrpc":"2.0","id":"1","method":"gethistory","params":[]}\''}{" "}
+                        http://127.0.0.1:37128/WalletName | jq
+                      </CommandSnippet>
+                    </div>
+                  }
+                >
+                  <Textarea
+                    id="connection-wasabi-history"
+                    className="min-h-28 font-mono text-xs"
+                    value={form.wasabiHistory}
+                    onChange={(event) =>
+                      updateForm("wasabiHistory", event.target.value)
+                    }
+                    required
+                  />
+                </SetupField>
+                <SetupField
+                  id="connection-wasabi-coins"
+                  label="listcoins or listunspentcoins JSON"
+                  error={fieldErrors.wasabiCoins}
+                  helper={
+                    <div className="space-y-1.5">
+                      <p>Recommended for Coins/UTXO anonymity state.</p>
+                      <CommandSnippet>
+                        curl -s --data-binary
+                        {' \'{"jsonrpc":"2.0","id":"1","method":"listcoins","params":[]}\''}{" "}
+                        http://127.0.0.1:37128/WalletName | jq
+                      </CommandSnippet>
+                    </div>
+                  }
+                >
+                  <Textarea
+                    id="connection-wasabi-coins"
+                    className="min-h-24 font-mono text-xs"
+                    value={form.wasabiCoins}
+                    onChange={(event) =>
+                      updateForm("wasabiCoins", event.target.value)
+                    }
+                  />
+                </SetupField>
+                <SetupField
+                  id="connection-wasabi-wallet-info"
+                  label="getwalletinfo JSON"
+                  error={fieldErrors.wasabiWalletInfo}
+                  helper={
+                    <div className="space-y-1.5">
+                      <p>Optional safe wallet metadata.</p>
+                      <CommandSnippet>
+                        curl -s --data-binary
+                        {' \'{"jsonrpc":"2.0","id":"1","method":"getwalletinfo","params":[]}\''}{" "}
+                        http://127.0.0.1:37128/WalletName | jq
+                      </CommandSnippet>
+                    </div>
+                  }
+                >
+                  <Textarea
+                    id="connection-wasabi-wallet-info"
+                    className="min-h-20 font-mono text-xs"
+                    value={form.wasabiWalletInfo}
+                    onChange={(event) =>
+                      updateForm("wasabiWalletInfo", event.target.value)
+                    }
+                  />
+                </SetupField>
+                <SetupField
+                  id="connection-wasabi-additional"
+                  label="Additional Wasabi sections"
+                  error={fieldErrors.wasabiAdditional}
+                  helper={
+                    <span>
+                      Optional JSON object with{" "}
+                      <InlineCode>listkeys</InlineCode>,{" "}
+                      <InlineCode>listpaymentsincoinjoin</InlineCode>, or{" "}
+                      <InlineCode>wallet_json</InlineCode> sections. Run those
+                      Wasabi RPC methods the same way and paste the responses
+                      under matching keys.
+                    </span>
+                  }
+                >
+                  <Textarea
+                    id="connection-wasabi-additional"
+                    className="min-h-20 font-mono text-xs"
+                    value={form.wasabiAdditional}
+                    onChange={(event) =>
+                      updateForm("wasabiAdditional", event.target.value)
+                    }
+                  />
+                </SetupField>
+              </div>
+            ) : (
+              renderSourceFileSetup("Import after setup")
+            )}
+          </>
+        );
+      }
       return (
         <>
           {renderConnectionLabelField()}
@@ -1482,36 +1723,7 @@ export function AddConnectionDialog({
               </select>
             </SetupField>
           ) : null}
-          <SetupField
-            id="connection-source-file"
-            label="Export file path"
-            error={fieldErrors.sourceFile}
-          >
-            <div className="flex gap-2">
-              <Input
-                id="connection-source-file"
-                value={form.sourceFile}
-                onChange={(event) => updateForm("sourceFile", event.target.value)}
-                required
-              />
-              {isFilePickerAvailable ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={async () => {
-                    const picked = await pickFile({
-                      title: `Select ${selected.title} export file`,
-                      filters: sourceFileFilters(selected),
-                    });
-                    if (picked) updateForm("sourceFile", picked);
-                  }}
-                >
-                  Browse…
-                </Button>
-              ) : null}
-            </div>
-          </SetupField>
-          {renderSyncAfterCreate("Import after setup")}
+          {renderSourceFileSetup("Import after setup")}
         </>
       );
     }
