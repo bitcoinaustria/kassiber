@@ -66,7 +66,9 @@ export const StatsCards = ({
             event.preventDefault();
             onRefreshMarketRate?.();
           }}
-          disabled={!onRefreshMarketRate || isRefreshing || isMarketRateRefreshing}
+          disabled={
+            !onRefreshMarketRate || isRefreshing || isMarketRateRefreshing
+          }
           className="group relative isolate w-full overflow-hidden p-3 text-left transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/60 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-within:before:scale-x-100 disabled:cursor-default enabled:cursor-pointer sm:p-4"
           aria-label="Refresh BTC price"
         >

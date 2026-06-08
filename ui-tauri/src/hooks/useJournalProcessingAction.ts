@@ -1,8 +1,10 @@
 import * as React from "react";
-import { useIsMutating, useQueryClient } from "@tanstack/react-query";
+import { useIsMutating } from "@tanstack/react-query";
 
 import { daemonMutationKey, useDaemonMutation } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
+
+const JOURNAL_PROCESSING_PROGRESS_ID = "journal-processing";
 
 export type JournalProcessResult = {
   profile?: string;
@@ -51,7 +53,12 @@ export function useJournalProcessingAction(
   } = options;
   const dataMode = useUiStore((s) => s.dataMode);
   const addNotification = useUiStore((s) => s.addNotification);
-  const queryClient = useQueryClient();
+  const setActiveMaintenanceProgress = useUiStore(
+    (s) => s.setActiveMaintenanceProgress,
+  );
+  const clearActiveMaintenanceProgress = useUiStore(
+    (s) => s.clearActiveMaintenanceProgress,
+  );
   const processJournals =
     useDaemonMutation<JournalProcessResult>("ui.journals.process");
   const mutationKey = daemonMutationKey(dataMode, "ui.journals.process");
@@ -80,6 +87,21 @@ export function useJournalProcessingAction(
         dedupeKey: "journal-processing",
       });
     }
+    const startedAt = new Date().toISOString();
+    setActiveMaintenanceProgress({
+      id: JOURNAL_PROCESSING_PROGRESS_ID,
+      title: "Refreshing journals",
+      body: "Kassiber is rebuilding report-ready journal state.",
+      tone: "warning",
+      progress: {
+        indeterminate: true,
+        label: "Processing journals",
+      },
+      details: ["Reports update when processing finishes"],
+      active: true,
+      startedAt,
+      updatedAt: startedAt,
+    });
     processJournals.mutate(undefined, {
       onSuccess: (envelope) => {
         const payload = envelope.data;
@@ -89,6 +111,7 @@ export function useJournalProcessingAction(
           tone: payload?.quarantined ? "warning" : "success",
           dedupeKey: "journal-processing",
         });
+        clearActiveMaintenanceProgress(JOURNAL_PROCESSING_PROGRESS_ID);
       },
       onError: (error) => {
         addNotification({
@@ -100,20 +123,19 @@ export function useJournalProcessingAction(
           tone: "error",
           dedupeKey: "journal-processing",
         });
-      },
-      onSettled: () => {
-        void queryClient.invalidateQueries({ queryKey: ["daemon"] });
+        clearActiveMaintenanceProgress(JOURNAL_PROCESSING_PROGRESS_ID);
       },
     });
   }, [
     activeJournalRuns,
     addNotification,
     beforeRun,
+    clearActiveMaintenanceProgress,
     entryLabel,
     notifyAlreadyRunning,
     notifyStart,
     processJournals,
-    queryClient,
+    setActiveMaintenanceProgress,
   ]);
 
   return {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  activeSyncMaintenanceProgress,
   formatSyncProgressBody,
   syncProgressNotification,
 } from "./syncProgress";
@@ -27,7 +28,7 @@ describe("sync progress notifications", () => {
     expect(progress.progress).toEqual({
       value: 50,
       indeterminate: false,
-      label: "Cold · Fetching source history · 12 / 24",
+      label: "Cold: Fetching source history · 12 / 24",
     });
   });
 
@@ -36,8 +37,8 @@ describe("sync progress notifications", () => {
 
     expect(progress.value).toBe(85);
     expect(progress.progress).toEqual({
-      value: undefined,
-      indeterminate: true,
+      value: 85,
+      indeterminate: false,
       label: "Refreshing configured sources",
     });
   });
@@ -54,7 +55,7 @@ describe("sync progress notifications", () => {
     expect(progress.progress).toEqual({
       value: 100,
       indeterminate: false,
-      label: "Cold · Importing transactions · 30 / 24",
+      label: "Cold: Importing transactions · 30 / 24",
     });
   });
 
@@ -72,9 +73,65 @@ describe("sync progress notifications", () => {
         phase: "rate_coverage",
       }).progress,
     ).toEqual({
-      value: undefined,
-      indeterminate: true,
-      label: "Market-rate coverage · Checking market-rate coverage",
+      value: 86,
+      indeterminate: false,
+      label: "Market-rate coverage: Checking market-rate coverage",
+    });
+  });
+
+  it("weights daemon-owned phases across freshness sources", () => {
+    const progress = syncProgressNotification({
+      source_label: "Cold",
+      source_type: "onchain_wallet",
+      phase: "backend_fetch",
+      job_index: 2,
+      job_total: 4,
+    });
+
+    expect(progress.value).toBe(36.5);
+    expect(progress.progress).toEqual({
+      value: 36.5,
+      indeterminate: false,
+      label: "Cold: Fetching source history",
+    });
+  });
+
+  it("builds active maintenance card details from sync progress", () => {
+    const progress = activeSyncMaintenanceProgress(
+      {
+        source_label: "Cold",
+        source_type: "onchain_wallet",
+        phase: "backend_fetch",
+        job_index: 2,
+        job_total: 4,
+        processed: 300,
+        total: 600,
+        imported: 42,
+        skipped: 258,
+      },
+      5,
+      {
+        startedAt: "2026-06-06T10:00:00.000Z",
+        updatedAt: "2026-06-06T10:01:00.000Z",
+      },
+    );
+
+    expect(progress).toMatchObject({
+      id: "book-refresh",
+      title: "Refreshing book",
+      body: "Cold: Fetching source history.",
+      progress: {
+        value: 37.5,
+        indeterminate: false,
+        label: "Cold: Fetching source history · 300 / 600",
+      },
+      details: [
+        "Source 2 of 4",
+        "Cold",
+        "300 / 600 rows scanned",
+        "42 imported · 258 unchanged",
+      ],
+      active: true,
     });
   });
 });

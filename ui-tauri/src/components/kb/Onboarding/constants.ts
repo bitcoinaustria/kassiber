@@ -9,8 +9,8 @@ import type {
   TaxCountry,
 } from "./types";
 
-export const DEFAULT_BACKEND_NAME = "mempool";
-export const DEFAULT_BACKEND_URL = "https://mempool.bitcoin-austria.at/api";
+export const DEFAULT_BACKEND_NAME = "fulcrum";
+export const DEFAULT_BACKEND_URL = "ssl://index.bitcoin-austria.at:50002";
 export const DEFAULT_ELECTRUM_HOST = "index.bitcoin-austria.at";
 export const DEFAULT_ELECTRUM_SSL_PORT = "50002";
 export const DEFAULT_ELECTRUM_TCP_PORT = "50001";
@@ -33,7 +33,7 @@ export const DEFAULT_FORM: OnboardingForm = {
   plaintextAcknowledged: false,
   migrateCredentials: true,
   backendSetupMode: "default",
-  backendKind: "esplora",
+  backendKind: "electrum",
   backendName: DEFAULT_BACKEND_NAME,
   backendUrl: DEFAULT_BACKEND_URL,
   backendHost: DEFAULT_ELECTRUM_HOST,

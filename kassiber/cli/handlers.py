@@ -2692,27 +2692,7 @@ def consume_lots(lots, quantity, algorithm):
 
 
 def latest_rates_for_profile(conn, profile_id):
-    rows = conn.execute(
-        """
-        SELECT asset, fiat_rate, fiat_value, fiat_rate_exact, fiat_value_exact, amount
-        FROM transactions
-        WHERE profile_id = ? AND excluded = 0
-        ORDER BY occurred_at DESC, created_at DESC
-        """,
-        (profile_id,),
-    ).fetchall()
-    rates = {}
-    for row in rows:
-        asset = row["asset"]
-        if asset in rates:
-            continue
-        rate = pricing.decimal_from_exact(row["fiat_rate_exact"], row["fiat_rate"])
-        value = pricing.decimal_from_exact(row["fiat_value_exact"], row["fiat_value"])
-        if rate is not None:
-            rates[asset] = rate
-        elif value is not None and row["amount"]:
-            rates[asset] = value / msat_to_btc(row["amount"])
-    return rates
+    return core_reports.latest_transaction_rates_for_profile(conn, profile_id)
 
 
 def auto_price_transactions_from_rates_cache(conn, profile):
@@ -2887,6 +2867,9 @@ def process_journals(conn, workspace_ref, profile_ref):
         state = build_ledger_state(conn, profile)
         conn.execute("DELETE FROM journal_entries WHERE profile_id = ?", (profile["id"],))
         conn.execute("DELETE FROM journal_quarantines WHERE profile_id = ?", (profile["id"],))
+        conn.execute("DELETE FROM journal_tax_summary WHERE profile_id = ?", (profile["id"],))
+        conn.execute("DELETE FROM journal_account_holdings WHERE profile_id = ?", (profile["id"],))
+        conn.execute("DELETE FROM journal_wallet_holdings WHERE profile_id = ?", (profile["id"],))
         created_at = now_iso()
         pricing_by_tx = {
             row["id"]: row
@@ -2899,20 +2882,11 @@ def process_journals(conn, workspace_ref, profile_ref):
                 (profile["id"],),
             ).fetchall()
         }
+        journal_entry_rows = []
         for entry in state["entries"]:
             exact_payload = pricing.journal_exact_payload(entry)
             tx_pricing = pricing_by_tx.get(entry["transaction_id"])
-            conn.execute(
-                """
-                INSERT INTO journal_entries(
-                    id, workspace_id, profile_id, transaction_id, wallet_id, account_id,
-                    occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
-                    cost_basis, proceeds, gain_loss, fiat_value_exact, unit_cost_exact,
-                    cost_basis_exact, proceeds_exact, gain_loss_exact, pricing_source_kind,
-                    pricing_quality, description, at_category, at_kennzahl, capital_gains_type,
-                    created_at
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+            journal_entry_rows.append(
                 (
                     entry["id"],
                     entry["workspace_id"],
@@ -2941,15 +2915,28 @@ def process_journals(conn, workspace_ref, profile_ref):
                     entry.get("at_kennzahl"),
                     entry.get("capital_gains_type"),
                     created_at,
-                ),
+                )
             )
-        for quarantine in state["quarantines"]:
-            conn.execute(
-                """
-                INSERT INTO journal_quarantines(
-                    transaction_id, workspace_id, profile_id, reason, detail_json, created_at
-                ) VALUES(?, ?, ?, ?, ?, ?)
-                """,
+        conn.executemany(
+            """
+            INSERT INTO journal_entries(
+                id, workspace_id, profile_id, transaction_id, wallet_id, account_id,
+                occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
+                cost_basis, proceeds, gain_loss, fiat_value_exact, unit_cost_exact,
+                cost_basis_exact, proceeds_exact, gain_loss_exact, pricing_source_kind,
+                pricing_quality, description, at_category, at_kennzahl, capital_gains_type,
+                created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            journal_entry_rows,
+        )
+        conn.executemany(
+            """
+            INSERT INTO journal_quarantines(
+                transaction_id, workspace_id, profile_id, reason, detail_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?)
+            """,
+            [
                 (
                     quarantine["transaction_id"],
                     quarantine["workspace_id"],
@@ -2957,8 +2944,85 @@ def process_journals(conn, workspace_ref, profile_ref):
                     quarantine["reason"],
                     quarantine["detail_json"],
                     created_at,
-                ),
-            )
+                )
+                for quarantine in state["quarantines"]
+            ],
+        )
+        conn.executemany(
+            """
+            INSERT INTO journal_tax_summary(
+                id, workspace_id, profile_id, year, asset, transaction_type,
+                capital_gains_type, quantity, proceeds, cost_basis, gain_loss, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    str(uuid.uuid4()),
+                    profile["workspace_id"],
+                    profile["id"],
+                    int(row["year"]),
+                    row["asset"],
+                    row["transaction_type"],
+                    row.get("capital_gains_type"),
+                    int(row.get("quantity_msat") or btc_to_msat(row["quantity"])),
+                    float(row["proceeds"]),
+                    float(row["cost_basis"]),
+                    float(row["gain_loss"]),
+                    created_at,
+                )
+                for row in state["tax_summary"]
+            ],
+        )
+        conn.executemany(
+            """
+            INSERT INTO journal_account_holdings(
+                id, workspace_id, profile_id, account_id, account_code, account_label,
+                asset, quantity, cost_basis, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    str(uuid.uuid4()),
+                    profile["workspace_id"],
+                    profile["id"],
+                    account_id,
+                    account_code,
+                    account_label,
+                    asset,
+                    btc_to_msat(value["quantity"]),
+                    float(value["cost_basis"]),
+                    created_at,
+                )
+                for (account_id, account_code, account_label, asset), value in state[
+                    "account_holdings"
+                ].items()
+            ],
+        )
+        conn.executemany(
+            """
+            INSERT INTO journal_wallet_holdings(
+                id, workspace_id, profile_id, wallet_id, wallet_label, account_code,
+                asset, quantity, cost_basis, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    str(uuid.uuid4()),
+                    profile["workspace_id"],
+                    profile["id"],
+                    wallet_id,
+                    wallet_label,
+                    account_code,
+                    asset,
+                    btc_to_msat(value["quantity"]),
+                    float(value["cost_basis"]),
+                    created_at,
+                )
+                for (wallet_id, wallet_label, account_code, asset), value in state[
+                    "wallet_holdings"
+                ].items()
+            ],
+        )
         tx_count = conn.execute(
             """
             SELECT COUNT(*) AS count

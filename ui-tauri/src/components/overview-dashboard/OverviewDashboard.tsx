@@ -41,6 +41,12 @@ export const OverviewDashboard = ({
   const explorerSettings = useUiStore((s) => s.explorerSettings);
   const addNotification = useUiStore((s) => s.addNotification);
   const updateNotification = useUiStore((s) => s.updateNotification);
+  const setActiveMaintenanceProgress = useUiStore(
+    (s) => s.setActiveMaintenanceProgress,
+  );
+  const clearActiveMaintenanceProgress = useUiStore(
+    (s) => s.clearActiveMaintenanceProgress,
+  );
   const currency = useCurrency();
   const { syncAll, isSyncing } = useWalletSyncAction();
   const { runJournalProcessing, isProcessingJournals } =
@@ -71,6 +77,18 @@ export const OverviewDashboard = ({
     if (marketRateRefreshInFlightRef.current) return;
     marketRateRefreshInFlightRef.current = true;
     const pair = snapshot.marketRate?.pair ?? undefined;
+    const startedAt = new Date().toISOString();
+    setActiveMaintenanceProgress({
+      id: "market-rate-refresh",
+      title: "Checking market rates",
+      body: pair ? `Fetching ${pair}.` : "Fetching BTC market rate.",
+      tone: "warning",
+      progress: { indeterminate: true, label: "Refreshing BTC price" },
+      details: ["Repricing transaction values"],
+      active: true,
+      startedAt,
+      updatedAt: startedAt,
+    });
     marketRateNoticeRef.current = addNotification({
       title: "BTC price refresh started",
       body: pair
@@ -105,9 +123,11 @@ export const OverviewDashboard = ({
           if (marketRateNoticeRef.current) {
             updateNotification(marketRateNoticeRef.current, notification);
             marketRateNoticeRef.current = null;
+            clearActiveMaintenanceProgress("market-rate-refresh");
             return;
           }
           addNotification(notification);
+          clearActiveMaintenanceProgress("market-rate-refresh");
         },
         onError: (error) => {
           const body =
@@ -122,9 +142,11 @@ export const OverviewDashboard = ({
           if (marketRateNoticeRef.current) {
             updateNotification(marketRateNoticeRef.current, notification);
             marketRateNoticeRef.current = null;
+            clearActiveMaintenanceProgress("market-rate-refresh");
             return;
           }
           addNotification(notification);
+          clearActiveMaintenanceProgress("market-rate-refresh");
         },
         onSettled: () => {
           marketRateRefreshInFlightRef.current = false;
@@ -134,19 +156,22 @@ export const OverviewDashboard = ({
     );
   }, [
     addNotification,
+    clearActiveMaintenanceProgress,
     queryClient,
     refreshMarketRate,
+    setActiveMaintenanceProgress,
     snapshot.marketRate?.pair,
     updateNotification,
   ]);
   const isRefreshingOverview = isSyncing || isProcessingJournals;
-  const showRefreshSkeleton = isRefreshingOverview || isSnapshotRefreshing;
+  const overviewBusy =
+    isSnapshotRefreshing || isRefreshingOverview || refreshMarketRate.isPending;
 
   return (
     <>
       <div
         className={cn(screenShellClassName, "relative", className)}
-        aria-busy={showRefreshSkeleton}
+        aria-busy={overviewBusy}
       >
         <WelcomeSection
           snapshot={snapshot}
@@ -164,7 +189,7 @@ export const OverviewDashboard = ({
           snapshot={snapshot}
           hideSensitive={hideSensitive}
           currency={currency}
-          isRefreshing={showRefreshSkeleton}
+          isRefreshing={isSnapshotRefreshing || isRefreshingOverview}
           isMarketRateRefreshing={refreshMarketRate.isPending}
           onRefreshMarketRate={refreshMarketRateState}
         />

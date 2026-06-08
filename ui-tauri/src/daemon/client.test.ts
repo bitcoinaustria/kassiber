@@ -88,6 +88,33 @@ describe("daemon mutation invalidation scope", () => {
     ]);
   });
 
+  it("refreshes journal-derived reads after journal processing", () => {
+    expect(
+      invalidatedDaemonQueryKindsForMutation("ui.journals.process"),
+    ).toEqual(
+      expect.arrayContaining([
+        "ui.journals.events.list",
+        "ui.transactions.extremes",
+        "ui.transactions.list",
+        "ui.transactions.resolve",
+      ]),
+    );
+  });
+
+  it("refreshes node and lightning reads after sync and maintenance refreshes", () => {
+    for (const kind of ["ui.freshness.run", "ui.wallets.sync"]) {
+      expect(invalidatedDaemonQueryKindsForMutation(kind)).toEqual(
+        expect.arrayContaining([
+          "ui.connections.node.snapshot",
+          "ui.journals.events.list",
+          "ui.rates.coverage",
+          "ui.reports.lightning_profitability",
+          "ui.transactions.resolve",
+        ]),
+      );
+    }
+  });
+
   it("keeps unaudited mutations on broad daemon invalidation", () => {
     expect(
       invalidatedDaemonQueryKindsForMutation("ui.transactions.metadata.update"),

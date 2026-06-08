@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { AppNotification } from "@/store/ui";
 
 import {
+  routeProgressFromActiveMaintenance,
   routeProgressFromNotifications,
   routeProgressLabelFromNotifications,
 } from "./progressIndicator";
@@ -69,5 +70,28 @@ describe("route progress indicator label", () => {
         }),
       ]),
     ).toBe("BTC price: Refreshing");
+  });
+
+  it("maps active maintenance progress to the route progress rail", () => {
+    expect(
+      routeProgressFromActiveMaintenance({
+        id: "book-refresh",
+        title: "Refreshing book",
+        body: "Cold: Fetching source history.",
+        tone: "warning",
+        progress: {
+          value: 37.5,
+          indeterminate: false,
+          label: "Cold: Fetching source history · 300 / 600",
+        },
+        active: true,
+        startedAt: "2026-06-07T00:00:00Z",
+        updatedAt: "2026-06-07T00:01:00Z",
+      }),
+    ).toEqual({
+      indeterminate: false,
+      label: "Refreshing book: Cold: Fetching source history · 300 / 600",
+      value: 37.5,
+    });
   });
 });

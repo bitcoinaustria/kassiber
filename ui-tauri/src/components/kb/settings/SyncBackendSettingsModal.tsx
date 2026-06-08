@@ -201,20 +201,20 @@ export const SYNC_BACKEND_NETWORKS: SyncBackendNetwork[] = [
     subtitle: "Bitcoin",
     presets: [
       {
-        id: "mempool",
-        name: DEFAULT_BACKEND_NAME,
-        url: DEFAULT_BACKEND_URL,
-        protocol: "esplora",
-        label: "Explorer API",
-        providerLabel: "mempool.bitcoin-austria.at",
-      },
-      {
         id: "electrum",
         name: "Bitcoin Austria Fulcrum",
         url: "ssl://index.bitcoin-austria.at:50002",
         protocol: "electrum",
         label: "Electrum / Fulcrum",
         providerLabel: "Bitcoin Austria",
+      },
+      {
+        id: "mempool",
+        name: "mempool",
+        url: "https://mempool.bitcoin-austria.at/api",
+        protocol: "esplora",
+        label: "Explorer API",
+        providerLabel: "mempool.bitcoin-austria.at",
       },
       {
         id: "core",
@@ -444,16 +444,10 @@ export function applyCustomEndpointDefaults(
   setUrl("");
 }
 
-export function randomPreset(type: SyncBackendNetwork): SyncBackendPreset | null {
+export function preferredPreset(type: SyncBackendNetwork): SyncBackendPreset | null {
   const candidates = publicBackendPresets(type);
   if (candidates.length === 0) return null;
-  const cryptoApi = globalThis.crypto;
-  if (cryptoApi?.getRandomValues) {
-    const values = new Uint32Array(1);
-    cryptoApi.getRandomValues(values);
-    return candidates[values[0] % candidates.length];
-  }
-  return candidates[Math.floor(Math.random() * candidates.length)];
+  return candidates[0];
 }
 
 export function publicBackendPresets(type: SyncBackendNetwork): SyncBackendPreset[] {
@@ -491,7 +485,7 @@ export function SyncBackendSettingsModal({
   const [typeId, setTypeId] = React.useState<SyncBackendNetwork["id"]>("bitcoin");
   const [backendSource, setBackendSource] =
     React.useState<BackendSourceMode>("preset");
-  const [presetId, setPresetId] = React.useState("mempool");
+  const [presetId, setPresetId] = React.useState("electrum");
   const [name, setName] = React.useState("");
   const [url, setUrl] = React.useState(DEFAULT_BACKEND_URL);
   const [auth, setAuth] = React.useState("none");
@@ -640,7 +634,7 @@ export function SyncBackendSettingsModal({
       scopedTypes.find((candidate) => candidate.id === initialTypeId) ??
       scopedTypes[0] ??
       SYNC_BACKEND_NETWORKS[0];
-    const nextPreset = randomPreset(nextType);
+    const nextPreset = preferredPreset(nextType);
     setTypeId(nextType.id);
     setBackendSource(nextType.net === "LN" ? "custom" : "preset");
     setPresetId(nextPreset?.id ?? "custom");
@@ -715,7 +709,7 @@ export function SyncBackendSettingsModal({
     }
     const nextType = SYNC_BACKEND_NETWORKS.find((candidate) => candidate.id === id);
     setBackendSource(nextType?.net === "LN" ? "custom" : "preset");
-    setPresetId(nextType ? randomPreset(nextType)?.id ?? "custom" : "custom");
+    setPresetId(nextType ? preferredPreset(nextType)?.id ?? "custom" : "custom");
   };
 
   const testConnection = async () => {

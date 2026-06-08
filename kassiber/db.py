@@ -169,6 +169,16 @@ CREATE TABLE IF NOT EXISTS transaction_tags (
 CREATE INDEX IF NOT EXISTS idx_transactions_profile_external_id
     ON transactions(profile_id, external_id) WHERE external_id IS NOT NULL;
 
+CREATE INDEX IF NOT EXISTS idx_transactions_profile_active_time
+    ON transactions(profile_id, excluded, occurred_at, created_at, id);
+
+CREATE INDEX IF NOT EXISTS idx_transactions_wallet_external_match
+    ON transactions(wallet_id, external_id, direction, asset, amount, fee, created_at)
+    WHERE external_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_transactions_profile_economic_match
+    ON transactions(profile_id, direction, asset, amount, occurred_at, created_at);
+
 CREATE TABLE IF NOT EXISTS wallet_utxos (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -309,6 +319,74 @@ CREATE TABLE IF NOT EXISTS journal_quarantines (
     detail_json TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS journal_tax_summary (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    year INTEGER NOT NULL,
+    asset TEXT NOT NULL,
+    transaction_type TEXT NOT NULL,
+    capital_gains_type TEXT,
+    quantity INTEGER NOT NULL,
+    proceeds REAL NOT NULL DEFAULT 0,
+    cost_basis REAL NOT NULL DEFAULT 0,
+    gain_loss REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS journal_account_holdings (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL,
+    account_code TEXT,
+    account_label TEXT,
+    asset TEXT NOT NULL,
+    quantity INTEGER NOT NULL,
+    cost_basis REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS journal_wallet_holdings (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    wallet_id TEXT REFERENCES wallets(id) ON DELETE CASCADE,
+    wallet_label TEXT,
+    account_code TEXT,
+    asset TEXT NOT NULL,
+    quantity INTEGER NOT NULL,
+    cost_basis REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_journal_entries_profile_time
+    ON journal_entries(profile_id, occurred_at, created_at, id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_entries_profile_type_time
+    ON journal_entries(profile_id, entry_type, occurred_at, created_at, id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_entries_profile_wallet_time
+    ON journal_entries(profile_id, wallet_id, occurred_at, created_at, id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_entries_profile_account_time
+    ON journal_entries(profile_id, account_id, occurred_at, created_at, id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_entries_transaction
+    ON journal_entries(transaction_id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_quarantines_profile
+    ON journal_quarantines(profile_id, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_journal_tax_summary_profile_year
+    ON journal_tax_summary(profile_id, year, asset, transaction_type, capital_gains_type);
+
+CREATE INDEX IF NOT EXISTS idx_journal_account_holdings_profile_asset
+    ON journal_account_holdings(profile_id, asset, account_code, id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_wallet_holdings_profile_asset
+    ON journal_wallet_holdings(profile_id, asset, wallet_label, id);
 
 CREATE TABLE IF NOT EXISTS transaction_pairs (
     id TEXT PRIMARY KEY,
@@ -1158,6 +1236,13 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "transactions", "pricing_method", "TEXT")
     ensure_column(conn, "transactions", "pricing_external_ref", "TEXT")
     ensure_column(conn, "transactions", "pricing_quality", "TEXT")
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_transactions_wallet_pricing_ref
+            ON transactions(wallet_id, pricing_external_ref, direction, asset, amount, created_at)
+            WHERE pricing_external_ref IS NOT NULL
+        """
+    )
     ensure_column(conn, "transactions", "commercial_applied_link_id", "TEXT")
     ensure_column(conn, "transactions", "review_status", "TEXT")
     ensure_column(conn, "transactions", "taxability_override", "INTEGER")
