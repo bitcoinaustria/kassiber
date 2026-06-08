@@ -14,10 +14,12 @@ from kassiber.core.sync_backends import (
     esplora_sync_adapter,
     record_from_bitcoin_esplora_tx,
     record_from_bitcoinrpc_details,
+    scan_descriptor_targets,
     scriptpubkey_scripthash,
 )
 from kassiber.errors import AppError
 from kassiber.time_utils import timestamp_to_iso
+from kassiber.wallet_descriptors import DescriptorBranch, DescriptorPlan, DerivedTarget
 
 
 def _header_hex(timestamp):
@@ -131,7 +133,7 @@ class SyncBackendsTest(unittest.TestCase):
         ), patch(
             "kassiber.core.sync_backends.fetch_esplora_scripthash_utxos",
             return_value=[],
-        ):
+        ) as fetch_utxos:
             sync_state = WalletSyncState(
                 chain="bitcoin",
                 network="bitcoin",
@@ -165,15 +167,24 @@ class SyncBackendsTest(unittest.TestCase):
 
         self.assertEqual(records, [])
         self.assertEqual(second_meta["scripts_unchanged"], 1)
+        self.assertTrue(second_meta["utxos_skipped_unchanged"])
+        self.assertNotIn("utxos", second_meta)
         self.assertEqual(len(fetch_calls), 1)
+        self.assertEqual(fetch_utxos.call_count, 1)
 
     def test_esplora_descriptor_discovery_rechecks_previously_unused_scripts(self):
         target = {"address": "bc1qgap", "script_pubkey": "0014" + "22" * 20}
         scripthash = scriptpubkey_scripthash(target["script_pubkey"])
         usage_checks = []
 
-        def fake_scan(plan, target_used=None, target_used_batch=None, scan_batch_size=None):
-            del plan, target_used, scan_batch_size
+        def fake_scan(
+            plan,
+            target_used=None,
+            target_used_batch=None,
+            scan_batch_size=None,
+            highest_used=None,
+        ):
+            del plan, target_used, scan_batch_size, highest_used
             self.assertIsNotNone(target_used_batch)
             usage_checks.extend(target_used_batch([target]))
             return [target]
@@ -335,7 +346,7 @@ class SyncBackendsTest(unittest.TestCase):
         ), patch(
             "kassiber.core.sync_backends.electrum_utxos_for_wallet",
             return_value=[],
-        ):
+        ) as fetch_utxos:
             sync_state = WalletSyncState(
                 chain="bitcoin",
                 network="bitcoin",
@@ -371,6 +382,9 @@ class SyncBackendsTest(unittest.TestCase):
         second_calls = calls[first_call_count:]
         self.assertEqual(records, [])
         self.assertEqual(second_meta["scripts_unchanged"], 1)
+        self.assertTrue(second_meta["utxos_skipped_unchanged"])
+        self.assertNotIn("utxos", second_meta)
+        self.assertEqual(fetch_utxos.call_count, 1)
         self.assertEqual(
             second_calls,
             [("blockchain.scripthash.subscribe", (scripthash,))],
@@ -402,8 +416,14 @@ class SyncBackendsTest(unittest.TestCase):
                         raise AssertionError(f"Unexpected Electrum call: {key!r}")
                 return responses
 
-        def fake_scan(plan, target_used=None, target_used_batch=None, scan_batch_size=None):
-            del plan, target_used, scan_batch_size
+        def fake_scan(
+            plan,
+            target_used=None,
+            target_used_batch=None,
+            scan_batch_size=None,
+            highest_used=None,
+        ):
+            del plan, target_used, scan_batch_size, highest_used
             self.assertIsNotNone(target_used_batch)
             self.assertEqual(target_used_batch([target]), [True])
             return [target]
@@ -429,6 +449,56 @@ class SyncBackendsTest(unittest.TestCase):
             batch_calls,
             [("blockchain.scripthash.subscribe", [scripthash])],
         )
+
+    def test_descriptor_scan_reuses_highest_used_targets_and_checks_trailing_gap(self):
+        class FakeDescriptor:
+            is_wildcard = True
+
+        plan = DescriptorPlan(
+            chain="bitcoin",
+            network="bitcoin",
+            gap_limit=2,
+            descriptor_fingerprint="fp",
+            branches=(DescriptorBranch(0, "receive", FakeDescriptor()),),
+        )
+        checked = []
+
+        def fake_derive(plan, branch_index=None, start=0, end=0):
+            del plan
+            return [
+                DerivedTarget(
+                    chain="bitcoin",
+                    network="bitcoin",
+                    branch_index=branch_index,
+                    branch_label="receive",
+                    address_index=index,
+                    address=f"bc1q{index}",
+                    unconfidential_address=None,
+                    script_pubkey=f"{index:064x}",
+                    derivation_path=f"m/0/{index}",
+                    derivation_paths=(f"m/0/{index}",),
+                    key_origins=(),
+                )
+                for index in range(start, end)
+            ]
+
+        def target_used_batch(targets):
+            checked.extend(target["address_index"] for target in targets)
+            return [False for _ in targets]
+
+        with patch(
+            "kassiber.core.sync_backends.derive_descriptor_targets",
+            side_effect=fake_derive,
+        ):
+            targets = scan_descriptor_targets(
+                plan,
+                target_used_batch=target_used_batch,
+                scan_batch_size=1,
+                highest_used={"0": 2},
+            )
+
+        self.assertEqual([target["address_index"] for target in targets], [0, 1, 2, 3, 4])
+        self.assertEqual(checked, [3, 4])
 
     def test_electrum_call_raises_app_error_for_non_json_response(self):
         client = ElectrumClient({"name": "electrum", "url": "tcp://electrum.example:50001"})
@@ -513,6 +583,8 @@ class SyncBackendsTest(unittest.TestCase):
                         "blocktime": 1_700_000_000,
                     }
                 ]
+            if key == ("getbestblockhash", (), None):
+                return "aa" * 32
             if key == (
                 "listunspent",
                 (0, 9999999, ["bc1qcore"], True),
@@ -529,6 +601,8 @@ class SyncBackendsTest(unittest.TestCase):
             )
         self.assertEqual(meta["core_wallet"], "kassiber-wallet-1")
         self.assertEqual(meta["imported_addresses"], 1)
+        self.assertEqual(meta["bitcoinrpc_sync_mode"], "full_scan")
+        self.assertEqual(meta["freshness_checkpoint"]["bitcoinrpc_last_block"], "aa" * 32)
         self.assertEqual(meta["utxos"], [])
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["txid"], "33" * 32)
@@ -537,6 +611,65 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertAlmostEqual(float(records[0]["amount"]), 0.001, places=12)
         self.assertEqual(records[0]["occurred_at"], timestamp_to_iso(1_700_000_000))
         self.assertEqual(records[0]["confirmed_at"], timestamp_to_iso(1_700_000_000))
+
+    def test_bitcoinrpc_checkpoint_uses_listsinceblock(self):
+        target = {"address": "bc1qcore", "script_pubkey": "0014core"}
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+            checkpoint={"bitcoinrpc_last_block": "aa" * 32},
+        )
+        wallet = {"id": "wallet-1"}
+        calls = []
+
+        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None):
+            del backend
+            key = (method, tuple(params or ()), wallet_name)
+            calls.append(method)
+            if key == ("listwallets", (), None):
+                return ["kassiber-wallet-1"]
+            if key == ("getaddressinfo", ("bc1qcore",), "kassiber-wallet-1"):
+                return {"iswatchonly": True, "ismine": False}
+            if key == ("listsinceblock", ("aa" * 32, 1, True, True), "kassiber-wallet-1"):
+                return {
+                    "transactions": [
+                        {
+                            "txid": "44" * 32,
+                            "category": "receive",
+                            "amount": 0.002,
+                            "fee": 0,
+                            "blocktime": 1_700_000_100,
+                        }
+                    ],
+                    "lastblock": "bb" * 32,
+                    "removed": [],
+                }
+            if key == (
+                "listunspent",
+                (0, 9999999, ["bc1qcore"], True),
+                "kassiber-wallet-1",
+            ):
+                return []
+            raise AssertionError(f"Unexpected RPC call: {key!r}")
+
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call):
+            records, meta = bitcoinrpc_sync_adapter(
+                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                wallet,
+                sync_state,
+            )
+
+        self.assertNotIn("listtransactions", calls)
+        self.assertEqual(meta["imported_addresses"], 0)
+        self.assertEqual(meta["bitcoinrpc_sync_mode"], "sinceblock")
+        self.assertEqual(meta["freshness_checkpoint"]["bitcoinrpc_last_block"], "bb" * 32)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["txid"], "44" * 32)
 
     def test_esplora_mempool_record_leaves_confirmed_at_empty(self):
         tracked_script = "0014watch"

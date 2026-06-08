@@ -1053,7 +1053,8 @@ def insert_wallet_records(
                 imported=imported,
                 skipped=skipped,
             )
-    hooks.invalidate_journals(conn, profile["id"])
+    if imported or updated:
+        hooks.invalidate_journals(conn, profile["id"])
     if commit:
         conn.commit()
     outcome = {
@@ -1164,7 +1165,8 @@ def enrich_profile_records(
                 imported=0,
                 skipped=skipped,
             )
-    hooks.invalidate_journals(conn, profile["id"])
+    if updated:
+        hooks.invalidate_journals(conn, profile["id"])
     if commit:
         conn.commit()
     outcome = {

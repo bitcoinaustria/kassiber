@@ -975,6 +975,35 @@ class KrakenCsvRatesTest(unittest.TestCase):
         self.assertEqual(payload["source"], core_rates.RATE_SOURCE_COINGECKO)
         self.assertEqual(payload["sync"][0]["source"], core_rates.RATE_SOURCE_COINGECKO)
 
+    def test_desktop_rebuild_without_pair_defaults_to_active_profile_btc_pair(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+        self._seed_transaction_needing_rate(conn, profile_fiat="EUR")
+        set_setting(conn, "context_workspace", "workspace-1")
+        set_setting(conn, "context_profile", "profile-1")
+        core_rates.set_market_rate_provider(
+            conn,
+            core_rates.RATE_SOURCE_COINGECKO,
+            commit=True,
+        )
+
+        with patch.object(
+            core_rates,
+            "fetch_rates_coingecko",
+            return_value=[("2024-05-01T12:35:00Z", 60010.5)],
+        ) as fetch:
+            payload = _rates_rebuild_payload(
+                conn,
+                {
+                    "days": 1,
+                    "reprice_transactions": False,
+                },
+            )
+
+        fetch.assert_called_once_with("BTC-EUR", days=1)
+        self.assertEqual(payload["pair"], "BTC-EUR")
+        self.assertEqual(payload["source"], core_rates.RATE_SOURCE_COINGECKO)
+
     def test_coinbase_background_sync_skips_warm_cache_when_idle(self):
         conn = open_db(str(self.data_root))
         self.addCleanup(conn.close)

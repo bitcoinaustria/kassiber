@@ -599,7 +599,24 @@ def validate_backend_for_wallet(backend, chain, network, has_descriptor=False):
     return kind
 
 
-def scan_descriptor_targets(plan, target_used=None, target_used_batch=None, scan_batch_size=100):
+def _highest_used_branch_index(highest_used, branch_index):
+    if not isinstance(highest_used, dict):
+        return None
+    value = highest_used.get(str(branch_index), highest_used.get(branch_index))
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def scan_descriptor_targets(
+    plan,
+    target_used=None,
+    target_used_batch=None,
+    scan_batch_size=100,
+    highest_used=None,
+):
     limits = branch_limits(plan)
     targets = []
     for branch in plan.branches:
@@ -609,6 +626,18 @@ def scan_descriptor_targets(plan, target_used=None, target_used_batch=None, scan
             continue
         consecutive_unused = 0
         address_index = 0
+        known_highest = _highest_used_branch_index(highest_used, branch.branch_index)
+        if known_highest is not None:
+            targets.extend(
+                sync_target_from_derived(target)
+                for target in derive_descriptor_targets(
+                    plan,
+                    branch_index=branch.branch_index,
+                    start=0,
+                    end=known_highest + 1,
+                )
+            )
+            address_index = known_highest + 1
         while consecutive_unused < branch_gap_limit:
             if target_used_batch is not None:
                 batch_targets = [
@@ -710,6 +739,7 @@ def discover_descriptor_targets(backend, plan, kind, checkpoint=None):
                 plan,
                 target_used_batch=target_used_batch,
                 scan_batch_size=scan_batch_size,
+                highest_used=checkpoint.get("highest_used"),
             ),
             "history_cache": {},
         }
@@ -745,6 +775,7 @@ def discover_descriptor_targets(backend, plan, kind, checkpoint=None):
                     plan,
                     target_used_batch=target_used_batch,
                     scan_batch_size=electrum_batch_size,
+                    highest_used=checkpoint.get("highest_used"),
                 ),
                 "history_cache": history_cache,
             }
@@ -1039,6 +1070,15 @@ def _backend_identity(backend, sync_state: WalletSyncState):
         "network": sync_state.network,
         "batch_size": backend_batch_size(backend),
     }
+
+
+def _skip_unchanged_utxo_refresh(meta, sync_state: WalletSyncState):
+    if not sync_state.checkpoint:
+        return False
+    return (
+        int(meta.get("scripts_changed") or 0) == 0
+        and int(meta.get("scripts_unchanged") or 0) > 0
+    )
 
 
 def _merge_highest_used(previous, target, used):
@@ -1437,7 +1477,10 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
 def esplora_sync_adapter(backend, wallet, sync_state):
     del wallet
     records, meta = esplora_records_for_wallet(backend, sync_state)
-    meta["utxos"] = esplora_utxos_for_wallet(backend, sync_state)
+    if _skip_unchanged_utxo_refresh(meta, sync_state):
+        meta["utxos_skipped_unchanged"] = True
+    else:
+        meta["utxos"] = esplora_utxos_for_wallet(backend, sync_state)
     return records, meta
 
 
@@ -1555,7 +1598,47 @@ def bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses):
     return len(missing_addresses)
 
 
-def fetch_bitcoinrpc_wallet_transactions(backend, wallet_name, page_size=1000):
+def _bitcoinrpc_checkpoint_block(checkpoint):
+    if not isinstance(checkpoint, dict):
+        return None
+    value = checkpoint.get("bitcoinrpc_last_block")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def fetch_bitcoinrpc_wallet_transactions(backend, wallet_name, page_size=1000, checkpoint=None):
+    last_block = _bitcoinrpc_checkpoint_block(checkpoint)
+    fallback_reason = None
+    if last_block:
+        try:
+            payload = bitcoinrpc_call(
+                backend,
+                "listsinceblock",
+                [last_block, 1, True, True],
+                wallet_name=wallet_name,
+            )
+        except AppError as exc:
+            if "Bitcoin Core RPC listsinceblock failed" not in str(exc):
+                raise
+            fallback_reason = str(exc)
+        else:
+            if not isinstance(payload, dict):
+                fallback_reason = "Bitcoin Core RPC listsinceblock returned an unexpected payload"
+            else:
+                transactions = payload.get("transactions") or []
+                removed = payload.get("removed") or []
+                if not isinstance(transactions, list):
+                    fallback_reason = "Bitcoin Core RPC listsinceblock returned unexpected transactions"
+                elif removed:
+                    fallback_reason = "Bitcoin Core RPC listsinceblock reported removed transactions"
+                else:
+                    return list(transactions), {
+                        "bitcoinrpc_sync_mode": "sinceblock",
+                        "bitcoinrpc_last_block": payload.get("lastblock") or last_block,
+                        "bitcoinrpc_removed": 0,
+                    }
+
     transactions = []
     skip = 0
     while True:
@@ -1566,7 +1649,16 @@ def fetch_bitcoinrpc_wallet_transactions(backend, wallet_name, page_size=1000):
         if len(page) < page_size:
             break
         skip += page_size
-    return transactions
+    meta = {"bitcoinrpc_sync_mode": "full_scan"}
+    if fallback_reason:
+        meta["bitcoinrpc_sinceblock_fallback"] = fallback_reason
+    try:
+        last_block = bitcoinrpc_call(backend, "getbestblockhash")
+    except AppError:
+        last_block = None
+    if last_block:
+        meta["bitcoinrpc_last_block"] = last_block
+    return transactions, meta
 
 
 def record_from_bitcoinrpc_details(txid, details, backend_name):
@@ -1615,11 +1707,23 @@ def record_from_bitcoinrpc_details(txid, details, backend_name):
     }
 
 
-def bitcoinrpc_records_for_wallet(backend, wallet, addresses, wallet_name=None, imported_count=None):
+def bitcoinrpc_records_for_wallet(
+    backend,
+    wallet,
+    addresses,
+    wallet_name=None,
+    imported_count=None,
+    checkpoint=None,
+):
     wallet_name = wallet_name or bitcoinrpc_ensure_watchonly_wallet(backend, wallet)
     if imported_count is None:
         imported_count = bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses)
-    details = fetch_bitcoinrpc_wallet_transactions(backend, wallet_name)
+    transaction_checkpoint = checkpoint if not imported_count else None
+    details, fetch_meta = fetch_bitcoinrpc_wallet_transactions(
+        backend,
+        wallet_name,
+        checkpoint=transaction_checkpoint,
+    )
     grouped = defaultdict(list)
     for detail in details:
         txid = detail.get("txid")
@@ -1636,7 +1740,11 @@ def bitcoinrpc_records_for_wallet(backend, wallet, addresses, wallet_name=None, 
         normalized = record_from_bitcoinrpc_details(txid, tx_details, backend["name"])
         if normalized:
             records.append(normalized)
-    return records, {"core_wallet": wallet_name, "imported_addresses": imported_count}
+    return records, {
+        "core_wallet": wallet_name,
+        "imported_addresses": imported_count,
+        **fetch_meta,
+    }
 
 
 def _bitcoinrpc_transaction_metadata(backend, wallet_name, txid):
@@ -1714,13 +1822,24 @@ def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
     addresses = [target["address"] for target in sync_state.targets if target.get("address")]
     wallet_name = bitcoinrpc_ensure_watchonly_wallet(backend, wallet)
     imported_count = bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses)
+    checkpoint = _checkpoint_mapping(sync_state)
     records, meta = bitcoinrpc_records_for_wallet(
         backend,
         wallet,
         addresses,
         wallet_name=wallet_name,
         imported_count=imported_count,
+        checkpoint=checkpoint,
     )
+    if meta.get("bitcoinrpc_last_block"):
+        next_checkpoint = dict(checkpoint)
+        next_checkpoint.update(
+            {
+                "backend": _backend_identity(backend, sync_state),
+                "bitcoinrpc_last_block": meta["bitcoinrpc_last_block"],
+            }
+        )
+        meta["freshness_checkpoint"] = next_checkpoint
     meta["utxos"] = bitcoinrpc_utxos_for_wallet_name(
         backend,
         wallet_name,
@@ -2208,7 +2327,10 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
 def electrum_sync_adapter(backend, wallet, sync_state):
     del wallet
     records, meta = electrum_records_for_wallet(backend, sync_state)
-    meta["utxos"] = electrum_utxos_for_wallet(backend, sync_state)
+    if _skip_unchanged_utxo_refresh(meta, sync_state):
+        meta["utxos_skipped_unchanged"] = True
+    else:
+        meta["utxos"] = electrum_utxos_for_wallet(backend, sync_state)
     return records, meta
 
 

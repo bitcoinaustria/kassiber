@@ -264,6 +264,54 @@ class InsertPersistsPaymentHashTests(unittest.TestCase):
             finally:
                 conn.close()
 
+    def test_unchanged_repeat_import_does_not_invalidate_journals(self):
+        with tempfile.TemporaryDirectory() as data_root:
+            conn = open_db(data_root)
+            try:
+                _, profile_id, wallet_id = _seed_minimal_scope(conn)
+                profile, wallet = _fetch_profile_and_wallet(conn, profile_id, wallet_id)
+                row = {
+                    "txid": "repeat-noop",
+                    "occurred_at": "2026-03-14T17:30:00Z",
+                    "direction": "inbound",
+                    "asset": "BTC",
+                    "amount": "0.0001",
+                    "fee": "0",
+                }
+                first = insert_wallet_records(
+                    conn,
+                    profile,
+                    wallet,
+                    [row],
+                    source_label="manual_csv",
+                    hooks=_HOOKS,
+                )
+                self.assertEqual(first["imported"], 1)
+                profile_row = conn.execute(
+                    "SELECT journal_input_version FROM profiles WHERE id = ?",
+                    (profile_id,),
+                ).fetchone()
+                self.assertEqual(profile_row["journal_input_version"], 1)
+
+                second = insert_wallet_records(
+                    conn,
+                    profile,
+                    wallet,
+                    [row],
+                    source_label="manual_csv",
+                    hooks=_HOOKS,
+                )
+                self.assertEqual(second["imported"], 0)
+                self.assertEqual(second["updated_records"], [])
+                self.assertEqual(second["unchanged"], 1)
+                profile_row = conn.execute(
+                    "SELECT journal_input_version FROM profiles WHERE id = ?",
+                    (profile_id,),
+                ).fetchone()
+                self.assertEqual(profile_row["journal_input_version"], 1)
+            finally:
+                conn.close()
+
 
 class BackfillFromRawJsonTests(unittest.TestCase):
     """Pre-feature rows that still carry the original CSV payload should
