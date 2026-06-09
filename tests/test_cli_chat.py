@@ -101,9 +101,12 @@ def _stop_server(server):
     server.server_close()
 
 
-def _run(data_root, *args):
+def _run(data_root, *args, input_text=None):
     # stdin must not inherit the test runner's terminal: the non-TTY consent
     # policy is part of what these tests pin down.
+    stdin_kwargs = (
+        {"stdin": subprocess.DEVNULL} if input_text is None else {"input": input_text}
+    )
     return subprocess.run(
         [
             sys.executable,
@@ -118,7 +121,7 @@ def _run(data_root, *args):
         text=True,
         check=False,
         timeout=15,
-        stdin=subprocess.DEVNULL,
+        **stdin_kwargs,
     )
 
 
@@ -437,6 +440,84 @@ class CliChatTest(unittest.TestCase):
         first = server.requests[0]["messages"][0]  # type: ignore[attr-defined]
         self.assertEqual(first["role"], "system")
         self.assertEqual(first["content"], "You are terse.")
+
+    def test_chat_dash_reads_prompt_from_stdin(self):
+        server = _start_tool_chat_server(
+            [
+                _chat_completion_response(
+                    {"role": "assistant", "content": "ok"},
+                ),
+            ]
+        )
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+                data_root = Path(tmp) / "data"
+                _seed_provider(data_root, f"http://127.0.0.1:{server.server_port}/v1")
+                result = _run(
+                    data_root,
+                    "--machine",
+                    "chat",
+                    "-",
+                    "--provider",
+                    "tool-local",
+                    input_text="What is my status?\n",
+                )
+        finally:
+            _stop_server(server)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["data"]["message"]["content"], "ok")
+        last = server.requests[0]["messages"][-1]  # type: ignore[attr-defined]
+        self.assertEqual(last["role"], "user")
+        self.assertEqual(last["content"], "What is my status?")
+
+    def test_chat_transcript_records_full_session(self):
+        server = _start_tool_chat_server(
+            [
+                _chat_completion_response(
+                    {"role": "assistant", "content": "ok"},
+                ),
+            ]
+        )
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+                data_root = Path(tmp) / "data"
+                transcript = Path(tmp) / "chat.ndjson"
+                _seed_provider(data_root, f"http://127.0.0.1:{server.server_port}/v1")
+                result = _run(
+                    data_root,
+                    "--machine",
+                    "chat",
+                    "--transcript",
+                    str(transcript),
+                    "--provider",
+                    "tool-local",
+                    "hello",
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                records = [
+                    json.loads(line)
+                    for line in transcript.read_text().splitlines()
+                    if line
+                ]
+        finally:
+            _stop_server(server)
+
+        kinds = [record.get("kind") for record in records]
+        self.assertIn("daemon.ready", kinds)
+        # Outbound ai.chat request (has args) and the terminal record (has data).
+        self.assertTrue(
+            any(r.get("kind") == "ai.chat" and "args" in r for r in records)
+        )
+        self.assertTrue(
+            any(
+                r.get("kind") == "ai.chat"
+                and isinstance(r.get("data"), dict)
+                and r["data"].get("finish_reason") == "stop"
+                for r in records
+            )
+        )
 
     def test_chat_non_tty_denies_mutating_consent_without_allow_policy(self):
         server = _start_tool_chat_server(

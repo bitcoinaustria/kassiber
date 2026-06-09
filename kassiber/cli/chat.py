@@ -63,7 +63,8 @@ class ChatSessionResult:
 
 
 class _DaemonChatClient:
-    def __init__(self, args: Any) -> None:
+    def __init__(self, args: Any, *, transcript: TextIO | None = None) -> None:
+        self._transcript = transcript
         self._pass_fds: tuple[int, ...] = ()
         self._duplicated_fd: int | None = None
         command = self._daemon_command(args)
@@ -119,7 +120,10 @@ class _DaemonChatClient:
                 code="daemon_closed",
                 retryable=False,
             )
-        self._proc.stdin.write(json.dumps(payload, separators=(",", ":")) + "\n")
+        line = json.dumps(payload, separators=(",", ":")) + "\n"
+        if self._transcript is not None:
+            self._transcript.write(line)
+        self._proc.stdin.write(line)
         self._proc.stdin.flush()
 
     def read(self) -> dict[str, Any]:
@@ -138,6 +142,8 @@ class _DaemonChatClient:
                 details={"stderr": stderr[-2000:]},
                 retryable=False,
             )
+        if self._transcript is not None:
+            self._transcript.write(line if line.endswith("\n") else line + "\n")
         try:
             payload = json.loads(line)
         except json.JSONDecodeError as exc:
@@ -631,8 +637,28 @@ def run_chat_command(
             hint="Use `kassiber chat \"...\"` or `kassiber chat --prompt \"...\"`.",
             retryable=False,
         )
+    if one_shot_prompt == "-":
+        one_shot_prompt = input_stream.read().strip()
+        if not one_shot_prompt:
+            raise AppError(
+                "stdin prompt is empty",
+                code="validation",
+                hint="Pipe or type the prompt when using `kassiber chat -`.",
+                retryable=False,
+            )
 
-    client = _DaemonChatClient(args)
+    transcript_path = getattr(args, "transcript", None)
+    transcript = (
+        open(transcript_path, "a", buffering=1, encoding="utf-8")
+        if transcript_path
+        else None
+    )
+    try:
+        client = _DaemonChatClient(args, transcript=transcript)
+    except BaseException:
+        if transcript is not None:
+            transcript.close()
+        raise
     try:
         _resolve_default_model(client, args)
         session = ChatSessionResult(
@@ -715,3 +741,5 @@ def run_chat_command(
         return session
     finally:
         client.close()
+        if transcript is not None:
+            transcript.close()

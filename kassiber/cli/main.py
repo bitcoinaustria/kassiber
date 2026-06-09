@@ -469,7 +469,11 @@ def build_parser() -> argparse.ArgumentParser:
             "cancel protocol as the desktop Assistant."
         ),
     )
-    chat.add_argument("prompt", nargs="?", help="One-shot prompt. Omit for REPL mode.")
+    chat.add_argument(
+        "prompt",
+        nargs="?",
+        help="One-shot prompt; pass '-' to read it from stdin. Omit for REPL mode.",
+    )
     chat.add_argument("--prompt", dest="prompt_text", help="One-shot prompt text.")
     chat.add_argument("--provider", help="Provider name (defaults to the stored default)")
     chat.add_argument("--model", help="Model id (defaults to the provider's default_model)")
@@ -517,6 +521,15 @@ def build_parser() -> argparse.ArgumentParser:
             "One-shot scripting mode: emit the raw daemon stream records "
             "(ai.chat.status/delta/tool_call/tool_result and the terminal "
             "ai.chat) as NDJSON instead of rendered text."
+        ),
+    )
+    chat.add_argument(
+        "--transcript",
+        metavar="PATH",
+        help=(
+            "Append every daemon request and stream record for this chat "
+            "session to PATH as NDJSON. The file is plaintext and includes "
+            "prompts and redacted tool results."
         ),
     )
 
