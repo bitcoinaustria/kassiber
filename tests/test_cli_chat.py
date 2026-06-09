@@ -267,6 +267,36 @@ class CliChatTest(unittest.TestCase):
             )
         )
 
+    def test_chat_rendered_pipe_keeps_stdout_clean(self):
+        server = _start_tool_chat_server(
+            [
+                _tool_call_message("status"),
+                _chat_completion_response(
+                    {"role": "assistant", "content": "Kassiber is ready."},
+                ),
+            ]
+        )
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+                data_root = Path(tmp) / "data"
+                _seed_provider(data_root, f"http://127.0.0.1:{server.server_port}/v1")
+                result = _run(
+                    data_root,
+                    "chat",
+                    "--provider",
+                    "tool-local",
+                    "Check local status",
+                )
+        finally:
+            _stop_server(server)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # Piped stdout carries only the answer; progress, tool announcements,
+        # and the provenance footer go to stderr.
+        self.assertEqual(result.stdout, "Kassiber is ready.\n")
+        self.assertIn("Tool: status", result.stderr)
+        self.assertIn("tools: status", result.stderr)
+
     def test_chat_stream_json_emits_daemon_records(self):
         server = _start_tool_chat_server(
             [

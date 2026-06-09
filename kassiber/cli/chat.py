@@ -405,13 +405,11 @@ def _drain_until_terminal(client: _DaemonChatClient, request_id: str) -> dict[st
             return record
 
 
-def _render_turn_footer(terminal: dict[str, Any], out: TextIO) -> None:
+def _render_turn_footer(terminal: dict[str, Any], chrome: TextIO) -> None:
     data = terminal.get("data") if isinstance(terminal.get("data"), dict) else {}
     notice = _FINISH_NOTICES.get(data.get("finish_reason") or "")
     if notice:
         _write(notice + "\n", sys.stderr)
-    if not out.isatty():
-        return
     provenance = (
         data.get("provenance") if isinstance(data.get("provenance"), dict) else {}
     )
@@ -428,7 +426,7 @@ def _render_turn_footer(terminal: dict[str, Any], out: TextIO) -> None:
     if provenance.get("auto_sync_attempted"):
         parts.append("synced" if provenance.get("auto_sync_ok") else "sync attempted")
     if parts:
-        _write_dim("— " + " · ".join(parts) + "\n", out)
+        _write_dim("— " + " · ".join(parts) + "\n", chrome)
 
 
 def _render_tool_listing(out: TextIO) -> None:
@@ -449,6 +447,7 @@ def _run_turn(
     *,
     stdin: TextIO,
     out: TextIO,
+    chrome: TextIO,
     render: bool,
     stream_out: TextIO | None = None,
     session_allowed: set[str] | None = None,
@@ -484,7 +483,7 @@ def _run_turn(
             data = record.get("data") if isinstance(record.get("data"), dict) else {}
             if kind == "ai.chat.status":
                 if render and data.get("label"):
-                    _write_dim(f"{data['label']}...\n", out)
+                    _write_dim(f"{data['label']}...\n", chrome)
             elif kind == "ai.chat.delta":
                 delta = data.get("delta") if isinstance(data.get("delta"), dict) else {}
                 reasoning = delta.get("reasoning")
@@ -510,7 +509,7 @@ def _run_turn(
                     }
                     if render:
                         suffix = " (needs consent)" if data.get("needs_consent") else ""
-                        _write(f"\nTool: {data.get('name', 'unknown')}{suffix}\n", out)
+                        _write(f"\nTool: {data.get('name', 'unknown')}{suffix}\n", chrome)
             elif kind == "ai.chat.tool_consent_required":
                 call_id = data.get("call_id")
                 name = data.get("name")
@@ -527,7 +526,7 @@ def _run_turn(
                         summary=str(data.get("summary") or name),
                         arguments_preview=data.get("arguments_preview") or {},
                         stdin=stdin,
-                        out=out,
+                        out=chrome,
                     )
                     if decision == "allow_session" and session_allowed is not None:
                         session_allowed.add(name)
@@ -572,9 +571,9 @@ def _run_turn(
                     existing["reason"] = reason
                     existing["ok"] = bool(data.get("ok"))
                     if render and not data.get("ok") and data.get("reason"):
-                        _write(f"\nTool result: {data['reason']}\n", out)
+                        _write(f"\nTool result: {data['reason']}\n", chrome)
             elif kind == "ai.chat":
-                if render:
+                if render and (content_parts or out.isatty()):
                     _write("\n", out)
                 return ChatTurnResult(
                     content="".join(content_parts),
@@ -593,7 +592,7 @@ def _run_turn(
             raise _error_from_envelope(terminal, message="chat failed", code="chat_failed")
         if stream_out is not None:
             _write(json.dumps(terminal, separators=(",", ":")) + "\n", stream_out)
-        if render:
+        if render and (content_parts or out.isatty()):
             _write("\n", out)
         return ChatTurnResult(
             content="".join(content_parts),
@@ -643,6 +642,9 @@ def run_chat_command(
         messages: list[dict[str, str]] = []
         render = not machine and not stream_json
         if one_shot_prompt is not None:
+            # Piped stdout gets only the answer text; progress, tool
+            # announcements, consent UI, and provenance move to stderr.
+            chrome = output_stream if output_stream.isatty() else sys.stderr
             messages.append({"role": "user", "content": one_shot_prompt})
             result = _run_turn(
                 client,
@@ -650,12 +652,13 @@ def run_chat_command(
                 messages,
                 stdin=input_stream,
                 out=output_stream,
+                chrome=chrome,
                 render=render,
                 stream_out=output_stream if stream_json else None,
             )
             session.turns.append(result)
             if render:
-                _render_turn_footer(result.terminal, output_stream)
+                _render_turn_footer(result.terminal, chrome)
             return session
 
         _write("Kassiber chat. /help for commands, /exit to quit.\n", output_stream)
@@ -691,6 +694,7 @@ def run_chat_command(
                     messages,
                     stdin=input_stream,
                     out=output_stream,
+                    chrome=output_stream,
                     render=True,
                     session_allowed=session_allowed,
                 )
