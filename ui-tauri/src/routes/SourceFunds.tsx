@@ -270,19 +270,34 @@ type SourceFundsPreview = {
     role: string;
     transaction_count: number;
     source_count: number;
+    assets?: string[];
+    fiat_currency?: string;
+    fiat_value_total?: number | null;
     nodes: {
       id: string;
       node_type: string;
       label: string;
       wallet?: string;
       source_type?: string;
+      direction?: string;
       asset?: string;
       required_amount?: number | null;
       amount?: number | null;
+      fee?: number | null;
+      fee_msat?: number | null;
+      fiat_currency?: string;
+      fiat_value?: number | null;
       occurred_at?: string;
       acquired_at?: string;
       external_id?: string;
+      data_provenance?: string;
     }[];
+  }[];
+  data_provenance_summary?: {
+    provenance: string;
+    label: string;
+    count: number;
+    percent: number;
   }[];
   diagrams?: {
     flow_svg?: string;
@@ -311,6 +326,8 @@ type SourceFundsPreview = {
       url: string;
     }[];
     attachments: { id: string; label: string; attachment_type?: string }[];
+    wallets_named?: string[];
+    ownership_note?: string;
     privacy_note: string;
     excluded: string[];
   };
@@ -2371,6 +2388,10 @@ export function SourceFunds() {
                   label="Data sources"
                 />
               </div>
+              <FlowLevelDetailPreview
+                report={report}
+                omitted={omitSections.includes("transaction_details")}
+              />
             </CardContent>
           </Card>
           )}
@@ -3536,6 +3557,94 @@ function DisclosureNodeOverrides({
   );
 }
 
+const PROVENANCE_SHORT_LABELS: Record<string, string> = {
+  chain_sync: "chain",
+  platform_export: "platform",
+  manual_import: "manual",
+};
+
+function FlowLevelDetailPreview({
+  report,
+  omitted,
+}: {
+  report?: SourceFundsPreview;
+  omitted: boolean;
+}) {
+  const levels = report?.flow_levels ?? [];
+  if (levels.length === 0) return null;
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">Transaction details by level</h3>
+        {omitted && (
+          <span className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
+            omitted from PDF
+          </span>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Level 1 is the report target; each further level moves one reviewed hop
+        backwards towards the root sources. This is the granular table the
+        exported PDF renders.
+      </p>
+      <div className={omitted ? "space-y-3 opacity-50" : "space-y-3"}>
+        {levels.map((level) => (
+          <div key={level.level} className="overflow-hidden rounded-md border">
+            <div className="flex items-center justify-between border-b bg-muted/40 px-3 py-1.5 text-xs font-medium">
+              <span>
+                Level {level.level} · {level.transaction_count} tx ·{" "}
+                {level.source_count} source{level.source_count === 1 ? "" : "s"}
+              </span>
+              {level.fiat_value_total != null && (
+                <span className="font-mono tabular-nums">
+                  {level.fiat_value_total.toLocaleString("de-AT", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}{" "}
+                  {level.fiat_currency}
+                </span>
+              )}
+            </div>
+            {level.nodes.map((node) => {
+              const isSource = node.node_type === "source";
+              const amount = node.required_amount ?? node.amount ?? null;
+              const inbound = isSource || node.direction === "inbound";
+              const provenance = isSource
+                ? "attested"
+                : PROVENANCE_SHORT_LABELS[node.data_provenance ?? ""] ?? "";
+              return (
+                <div
+                  key={node.id}
+                  className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-0.5 border-b px-3 py-1.5 text-xs last:border-b-0 sm:grid-cols-[110px_1fr_90px_120px_70px]"
+                >
+                  <span className="text-muted-foreground">
+                    {formatDateTime(node.occurred_at || node.acquired_at)}
+                  </span>
+                  <span className="min-w-0 truncate font-medium">
+                    {isSource ? node.label : node.wallet || node.label}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {isSource
+                      ? pretty(node.source_type ?? "source")
+                      : pretty(node.direction ?? "")}
+                  </span>
+                  <span className="text-right font-mono tabular-nums">
+                    {inbound ? "+" : "−"}
+                    {formatBtc(amount, node.asset || "BTC")}
+                  </span>
+                  <span className="text-right text-muted-foreground">
+                    {provenance}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function DisclosureNarrative({ report }: { report?: SourceFundsPreview }) {
   const { t } = useTranslation("sourceFunds");
   const txidCount = report?.disclosure_preview.txids.length ?? 0;
@@ -3543,11 +3652,13 @@ function DisclosureNarrative({ report }: { report?: SourceFundsPreview }) {
   const hiddenCount = report?.disclosure_preview.excluded.length ?? 0;
   const sourceCount = report?.source_mix.length ?? 0;
   const reviewedLinkCount = report?.graph.edges.length ?? 0;
-  const walletLabels = uniqueSorted(
-    (report?.graph.nodes ?? [])
-      .map((node) => stringValue(node.wallet))
-      .filter(Boolean),
-  );
+  const walletLabels =
+    report?.disclosure_preview.wallets_named ??
+    uniqueSorted(
+      (report?.graph.nodes ?? [])
+        .map((node) => stringValue(node.wallet))
+        .filter(Boolean),
+    );
   const targetLabel = report?.target.label || t("disclosure.narrativeTarget");
   const purposeLabel = report?.purpose?.label || t("disclosure.narrativePurpose");
   const revealMode = enumLabel(t, "reveal", report?.reveal_mode || "standard");
@@ -3595,6 +3706,11 @@ function DisclosureNarrative({ report }: { report?: SourceFundsPreview }) {
               ? walletLabels.join(", ")
               : t("disclosure.walletLabelsNone")}
           </div>
+          {report?.disclosure_preview.ownership_note && (
+            <p className="mt-1 text-xs text-amber-600 dark:text-amber-500">
+              {report.disclosure_preview.ownership_note}
+            </p>
+          )}
           <p className="mt-1 text-xs text-muted-foreground">
             {t("disclosure.walletPrivacyNote")}
           </p>
