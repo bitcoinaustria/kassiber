@@ -169,6 +169,7 @@ export interface SyncBackendPreset {
     | "esplora"
     | "electrum"
     | "bitcoinrpc"
+    | "btcpay"
     | "liquid-esplora"
     | "lnd"
     | "coreln";
@@ -222,6 +223,14 @@ export const SYNC_BACKEND_NETWORKS: SyncBackendNetwork[] = [
         url: "http://127.0.0.1:8332",
         protocol: "bitcoinrpc",
         label: "Bitcoin Core RPC",
+        publicPreset: false,
+      },
+      {
+        id: "btcpay",
+        name: "BTCPay Server",
+        url: "https://btcpay.example.com",
+        protocol: "btcpay",
+        label: "BTCPay",
         publicPreset: false,
       },
     ],
@@ -546,7 +555,8 @@ export function SyncBackendSettingsModal({
     preset?.protocol === "coreln" || initial?.kind === "coreln";
   const isElectrum = preset?.protocol === "electrum";
   const isLnd = preset?.protocol === "lnd" || initial?.kind === "lnd";
-  const showAuth = preset?.protocol === "bitcoinrpc" || isLnd;
+  const isBtcpay = preset?.protocol === "btcpay" || initial?.kind === "btcpay";
+  const showAuth = preset?.protocol === "bitcoinrpc" || isLnd || isBtcpay;
   const showElectrumEndpointParts = isElectrum;
   const effectiveUrl = showElectrumEndpointParts
     ? buildElectrumUrl({
@@ -693,7 +703,11 @@ export function SyncBackendSettingsModal({
         });
         setInfrastructureOwner(inferredInfrastructureOwnership(preset.url));
       }
-      setAuth(preset.protocol === "lnd" ? "apikey" : "none");
+      setAuth(
+        preset.protocol === "lnd" || preset.protocol === "btcpay"
+          ? "apikey"
+          : "none",
+      );
       if (backendSource === "preset" && preset.protocol === "electrum") {
         const parsed = parseElectrumEndpoint(preset.url);
         setElectrumHost(parsed.host);
@@ -1427,13 +1441,35 @@ export function SyncBackendSettingsModal({
                   ))}
                 </div>
                 {auth === "apikey" && (
-                  <SecretField
-                    id="backend-api-key"
-                    label={isLnd ? "Read-only macaroon hex" : "API key"}
-                    value={authVal}
-                    onChange={setAuthVal}
-                    placeholder={isLnd ? "0201036c6e64..." : "sk_live_..."}
-                  />
+                  <div className="space-y-1.5">
+                    <SecretField
+                      id="backend-api-key"
+                      label={
+                        isLnd
+                          ? "Read-only macaroon hex"
+                          : isBtcpay
+                            ? "BTCPay API key"
+                            : "API key"
+                      }
+                      value={authVal}
+                      onChange={setAuthVal}
+                      placeholder={
+                        isEditing && initial?.auth === "apikey"
+                          ? "Leave blank to keep current key"
+                          : isLnd
+                            ? "0201036c6e64..."
+                            : isBtcpay
+                              ? "Paste BTCPay API key"
+                              : "sk_live_..."
+                      }
+                    />
+                    {isEditing && initial?.auth === "apikey" ? (
+                      <p className="text-xs text-muted-foreground">
+                        Leave blank to keep the stored key; enter a new value
+                        to overwrite it.
+                      </p>
+                    ) : null}
+                  </div>
                 )}
                 {auth === "bearer" && (
                   <SecretField

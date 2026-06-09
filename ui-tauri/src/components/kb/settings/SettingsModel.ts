@@ -609,6 +609,8 @@ export function backendProtocolLabel(backend: Backend): string {
       return "Electrum / Fulcrum";
     case "bitcoinrpc":
       return "Bitcoin Core RPC";
+    case "btcpay":
+      return "BTCPay";
     case "liquid-esplora":
       return "Explorer API";
     case "lnd":
