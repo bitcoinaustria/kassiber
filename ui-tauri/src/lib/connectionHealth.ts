@@ -74,7 +74,12 @@ export function connectionProbeKind(connection: ConnectionHealthInput): Connecti
   if (kind === "electrum" || url.startsWith("ssl://") || url.startsWith("tcp://")) {
     return "electrum";
   }
-  if (url.startsWith("http://") || url.startsWith("https://")) {
+  if (
+    ["coingecko", "coinbase-exchange", "esplora", "liquid-esplora"].includes(
+      kind,
+    ) &&
+    (url.startsWith("http://") || url.startsWith("https://"))
+  ) {
     return "http";
   }
   return "unsupported";

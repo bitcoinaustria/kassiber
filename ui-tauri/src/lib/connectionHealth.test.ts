@@ -51,11 +51,55 @@ describe("connection health model", () => {
     ).toBe("http");
     expect(
       connectionProbeKind({
+        id: "coinbase",
+        name: "Coinbase",
+        url: "https://api.exchange.coinbase.com",
+        kind: "coinbase-exchange",
+        net: "FX",
+      }),
+    ).toBe("http");
+    expect(
+      connectionProbeKind({
         id: "cln",
         name: "Core Lightning",
         url: "cln://commando",
         kind: "coreln",
         net: "LN",
+      }),
+    ).toBe("unsupported");
+    expect(
+      connectionProbeKind({
+        id: "rpc",
+        name: "Bitcoin Core",
+        url: "http://127.0.0.1:8332",
+        kind: "bitcoinrpc",
+        net: "BTC",
+      }),
+    ).toBe("unsupported");
+    expect(
+      connectionProbeKind({
+        id: "lnd",
+        name: "LND",
+        url: "https://127.0.0.1:8080",
+        kind: "lnd",
+        net: "LN",
+      }),
+    ).toBe("unsupported");
+    expect(
+      connectionProbeKind({
+        id: "btcpay",
+        name: "BTCPay",
+        url: "https://btcpay.example.com",
+        kind: "btcpay",
+        net: "BTC",
+      }),
+    ).toBe("unsupported");
+    expect(
+      connectionProbeKind({
+        id: "unknown",
+        name: "Unknown HTTP",
+        url: "https://example.com",
+        net: "BTC",
       }),
     ).toBe("unsupported");
   });
