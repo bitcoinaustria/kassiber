@@ -255,12 +255,20 @@ export const SYNC_BACKEND_NETWORKS: SyncBackendNetwork[] = [
     subtitle: "Liquid",
     presets: [
       {
-        id: "liquid-electrum",
-        name: "Liquid Electrum",
-        url: "ssl://liquid.example:50002",
+        id: "liquid-bullbitcoin",
+        name: "BullBitcoin Liquid Electrum",
+        url: "ssl://les.bullbitcoin.com:995",
         protocol: "electrum",
         label: "Electrum / Fulcrum",
-        publicPreset: false,
+        providerLabel: "BullBitcoin",
+      },
+      {
+        id: "liquid-blockstream",
+        name: "Blockstream Liquid Electrum",
+        url: "ssl://blockstream.info:995",
+        protocol: "electrum",
+        label: "Electrum / Fulcrum",
+        providerLabel: "Blockstream",
       },
       {
         id: "liquid-network",
@@ -269,6 +277,7 @@ export const SYNC_BACKEND_NETWORKS: SyncBackendNetwork[] = [
         protocol: "liquid-esplora",
         label: "Explorer API",
         providerLabel: "Liquid Network",
+        publicPreset: false,
       },
     ],
   },
@@ -552,7 +561,7 @@ export function SyncBackendSettingsModal({
     preset?.protocol ??
     initial?.kind ??
     (type.net === "LIQUID"
-      ? "liquid-esplora"
+      ? "electrum"
       : type.net === "LN"
         ? "lnd"
         : "esplora");
@@ -643,9 +652,16 @@ export function SyncBackendSettingsModal({
     setAuth("none");
     setAuthVal("");
     setAuthVal2("");
-    setElectrumHost("index.bitcoin-austria.at");
-    setElectrumPort("50002");
-    setElectrumUseSsl(true);
+    if (nextPreset?.protocol === "electrum") {
+      const parsed = parseElectrumEndpoint(nextPreset.url);
+      setElectrumHost(parsed.host);
+      setElectrumPort(parsed.port);
+      setElectrumUseSsl(parsed.useSsl);
+    } else {
+      setElectrumHost("index.bitcoin-austria.at");
+      setElectrumPort("50002");
+      setElectrumUseSsl(true);
+    }
     setTrustSsl(false);
     setInfrastructureOwner(
       inferredInfrastructureOwnership(nextPreset?.url ?? DEFAULT_BACKEND_URL),

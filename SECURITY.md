@@ -10,7 +10,7 @@ current behavior, not a long-term contract.
 
 ## The big gotcha: not running your own node
 
-Out of the box, Kassiber ships three built-in named backends:
+Out of the box, Kassiber ships four built-in named backends:
 
 - `mempool` → `esplora` → `https://mempool.bitcoin-austria.at/api` — the
   default for Bitcoin wallets, operated by Bitcoin Austria.
@@ -18,13 +18,16 @@ Out of the box, Kassiber ships three built-in named backends:
   Bitcoin-Austria-operated Electrum/Fulcrum indexer.
 - `liquid` → `electrum` → `ssl://les.bullbitcoin.com:995` — a
   third-party Liquid Electrum endpoint operated by BullBitcoin.
+- `liquid-blockstream` → `electrum` → `ssl://blockstream.info:995` —
+  a third-party Liquid Electrum endpoint operated by Blockstream.
 
 Every `wallets sync` against any of these sends your addresses (or
 scripthashes, or gap-limit-scanned descriptor scripts) to whoever
 operates that endpoint. They can link the queries to your IP and the
 identifying `User-Agent: kassiber/<version>` header. "Bitcoin Austria
 operates it" is still third-party from *your* machine's point of view;
-"BullBitcoin operates it" for Liquid especially so.
+"BullBitcoin operates it" and "Blockstream operates it" for Liquid
+especially so.
 
 Descriptor wallets are worse than address wallets here: gap-limit
 discovery leaks a contiguous run of receive + change scripts, so the
@@ -52,6 +55,7 @@ configurable.
 | `wallets sync` against the built-in `mempool` default | `https://mempool.bitcoin-austria.at/api` (Bitcoin Austria) | Esplora over HTTPS | IP, User-Agent, scripthashes, query timing, descriptor scan shape |
 | `wallets sync` against the built-in `fulcrum` default | `ssl://index.bitcoin-austria.at:50002` (Bitcoin Austria) | Electrum JSON-RPC over TLS | IP, queried scripthashes, query timing |
 | `wallets sync` against the built-in `liquid` default | `ssl://les.bullbitcoin.com:995` (BullBitcoin) | Electrum JSON-RPC over TLS | IP, queried Liquid scripthashes, query timing |
+| `wallets sync` against the built-in `liquid-blockstream` default | `ssl://blockstream.info:995` (Blockstream) | Electrum JSON-RPC over TLS | IP, queried Liquid scripthashes, query timing |
 | `wallets sync` against a user-configured Esplora backend | your configured URL | Esplora over HTTP(S) | same categories as `mempool` above |
 | `wallets sync` against a user-configured Electrum backend | your configured `ssl://` or `tcp://` URL | Electrum JSON-RPC over raw TCP/TLS | IP, queried scripthashes, query timing |
 | `wallets sync` against a `bitcoinrpc` backend | your configured URL | HTTP(S) POST with Basic auth | nothing leaves your machine if the node is local |

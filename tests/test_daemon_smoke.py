@@ -2405,6 +2405,12 @@ class DaemonSmokeTest(unittest.TestCase):
                 names = {backend["name"] for backend in options["data"]["backends"]}
                 self.assertIn("mempool", names)
                 self.assertNotIn("url", options["data"]["backends"][0])
+                suggestion_names = {
+                    suggestion["name"]
+                    for suggestion in options["data"]["suggestions"]
+                }
+                self.assertIn("liquid", suggestion_names)
+                self.assertIn("liquid-blockstream", suggestion_names)
 
                 _write_payload(
                     proc,
@@ -2432,7 +2438,11 @@ class DaemonSmokeTest(unittest.TestCase):
                 )
                 self.assertEqual(
                     public_backend_by_name["liquid"]["url"],
-                    "https://liquid.network/api",
+                    "ssl://les.bullbitcoin.com:995",
+                )
+                self.assertEqual(
+                    public_backend_by_name["liquid-blockstream"]["url"],
+                    "ssl://blockstream.info:995",
                 )
 
                 _write_payload(

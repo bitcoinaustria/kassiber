@@ -425,13 +425,23 @@ let mockBackendSettingsRows: MockBackendSettingsRow[] = [
   },
   {
     name: "liquid",
-    kind: "liquid-esplora",
+    kind: "electrum",
     chain: "liquid",
     network: "liquidv1",
-    url: "https://liquid.network/api",
+    url: "ssl://les.bullbitcoin.com:995",
     source: "mock",
     has_url: true,
-    display_name: "Liquid Network",
+    display_name: "BullBitcoin Liquid Electrum",
+  },
+  {
+    name: "liquid-blockstream",
+    kind: "electrum",
+    chain: "liquid",
+    network: "liquidv1",
+    url: "ssl://blockstream.info:995",
+    source: "mock",
+    has_url: true,
+    display_name: "Blockstream Liquid Electrum",
   },
 ];
 

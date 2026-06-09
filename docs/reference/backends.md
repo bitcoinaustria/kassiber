@@ -32,10 +32,13 @@ Without any user configuration, Kassiber currently ships these built-in names:
 
 - `fulcrum` -> `electrum` -> `ssl://index.bitcoin-austria.at:50002`
 - `mempool` -> `esplora` -> `https://mempool.bitcoin-austria.at/api`
-- `liquid` -> `liquid-esplora` -> `https://liquid.network/api`
+- `liquid` -> `electrum` -> `ssl://les.bullbitcoin.com:995`
+- `liquid-blockstream` -> `electrum` -> `ssl://blockstream.info:995`
 
 `fulcrum` is the default for Bitcoin wallet sync. `mempool` remains the
-built-in Esplora backend and the public explorer-link fallback.
+built-in Esplora backend and the public explorer-link fallback. `liquid`
+is the preferred built-in Liquid sync backend, while `liquid-blockstream`
+is available as an alternate public Liquid Electrum endpoint.
 
 ## Useful commands
 
@@ -98,6 +101,11 @@ KASSIBER_BACKEND_MEMPOOL_CHAIN=bitcoin
 KASSIBER_BACKEND_MEMPOOL_NETWORK=main
 KASSIBER_BACKEND_MEMPOOL_URL=https://mempool.bitcoin-austria.at/api
 
+KASSIBER_BACKEND_LIQUID_KIND=electrum
+KASSIBER_BACKEND_LIQUID_CHAIN=liquid
+KASSIBER_BACKEND_LIQUID_NETWORK=liquidv1
+KASSIBER_BACKEND_LIQUID_URL=ssl://les.bullbitcoin.com:995
+
 KASSIBER_BACKEND_CORE_KIND=bitcoinrpc
 KASSIBER_BACKEND_CORE_CHAIN=bitcoin
 KASSIBER_BACKEND_CORE_NETWORK=main
@@ -131,6 +139,10 @@ Current backend kinds:
 - `coreln`
 - `liquid-esplora`
 - `custom`
+
+`liquid-esplora` remains supported for explicit Explorer API backends, but
+the bundled Liquid defaults use Electrum because Liquid history refresh is
+faster through those servers.
 
 Common fields:
 

@@ -376,6 +376,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(rows["bench"]["batch_size"], 40)
         self.assertEqual(rows["fulcrum"]["batch_size"], 100)
         self.assertEqual(rows["liquid"]["batch_size"], 100)
+        self.assertEqual(rows["liquid-blockstream"]["batch_size"], 100)
 
     def test_01b_ai_providers_roundtrip(self):
         # Seeded local Ollama row should be present with the local-default

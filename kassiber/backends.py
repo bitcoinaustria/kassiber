@@ -1,10 +1,10 @@
 """Backend (chain-indexer endpoint) discovery, storage, and bootstrap.
 
 A "backend" in kassiber is a pointer to an external blockchain indexer
-(esplora, a mempool-compatible API, an Electrum server, a liquid-esplora
-instance, etc.) that wallets use to sync transactions. The SQLite
-`backends` table is the canonical storage path. Environment / dotenv
-configuration now plays a narrower role:
+(esplora, a mempool-compatible API, an Electrum/Fulcrum server, a
+Liquid-compatible indexer, etc.) that wallets use to sync transactions.
+The SQLite `backends` table is the canonical storage path. Environment /
+dotenv configuration now plays a narrower role:
 
 1. **Bootstrap / compatibility seed** — built-in defaults plus any
    `KASSIBER_BACKEND_<NAME>_<FIELD>` variables loaded by
@@ -68,10 +68,19 @@ DEFAULT_BACKENDS = {
     },
     "liquid": {
         "name": "liquid",
-        "kind": "liquid-esplora",
+        "kind": "electrum",
         "chain": "liquid",
         "network": "liquidv1",
-        "url": "https://liquid.network/api",
+        "url": "ssl://les.bullbitcoin.com:995",
+        "batch_size": 100,
+        "source": "built-in default",
+    },
+    "liquid-blockstream": {
+        "name": "liquid-blockstream",
+        "kind": "electrum",
+        "chain": "liquid",
+        "network": "liquidv1",
+        "url": "ssl://blockstream.info:995",
         "batch_size": 100,
         "source": "built-in default",
     },

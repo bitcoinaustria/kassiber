@@ -5082,7 +5082,21 @@ def _backend_options_payload(ctx: "DaemonContext") -> dict[str, Any]:
                 "label": "Built-in mempool.space Bitcoin backend",
                 "chain": "bitcoin",
                 "network": "mainnet",
-            }
+            },
+            {
+                "kind": "electrum",
+                "name": "liquid",
+                "label": "Built-in BullBitcoin Liquid Electrum backend",
+                "chain": "liquid",
+                "network": "liquidv1",
+            },
+            {
+                "kind": "electrum",
+                "name": "liquid-blockstream",
+                "label": "Built-in Blockstream Liquid Electrum backend",
+                "chain": "liquid",
+                "network": "liquidv1",
+            },
         ],
     }
 

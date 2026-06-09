@@ -420,6 +420,22 @@ export const fixtures: Record<string, unknown> = {
         is_default: true,
       },
       {
+        name: "liquid",
+        kind: "electrum",
+        chain: "liquid",
+        network: "liquidv1",
+        has_url: true,
+        is_default: false,
+      },
+      {
+        name: "liquid-blockstream",
+        kind: "electrum",
+        chain: "liquid",
+        network: "liquidv1",
+        has_url: true,
+        is_default: false,
+      },
+      {
         name: "btcpay-demo",
         kind: "btcpay",
         chain: "bitcoin",
@@ -430,7 +446,7 @@ export const fixtures: Record<string, unknown> = {
       },
     ],
     summary: {
-      count: 2,
+      count: 4,
       default_backend: "mempool",
     },
     suggestions: [
@@ -439,6 +455,18 @@ export const fixtures: Record<string, unknown> = {
         label: "Built-in mempool.space Bitcoin backend",
         chain: "bitcoin",
         network: "mainnet",
+      },
+      {
+        name: "liquid",
+        label: "Built-in BullBitcoin Liquid Electrum backend",
+        chain: "liquid",
+        network: "liquidv1",
+      },
+      {
+        name: "liquid-blockstream",
+        label: "Built-in Blockstream Liquid Electrum backend",
+        chain: "liquid",
+        network: "liquidv1",
       },
     ],
   },
