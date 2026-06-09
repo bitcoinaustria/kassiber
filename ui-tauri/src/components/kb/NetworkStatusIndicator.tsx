@@ -108,7 +108,10 @@ function connectionRowFromBackend(
     ].join("|"),
     rawUrl: backend.url,
     protocol: backendProtocolLabel(backend),
-    probeKind: connectionProbeKind(backend),
+    probeKind: connectionProbeKind({
+      ...backend,
+      allowDisplayHttpProbe: backendId === undefined,
+    }),
     settingsHash: settingsHashForConnection(backend),
     proxy: backend.proxy
       ? `${backend.proxy.host}:${backend.proxy.port}`

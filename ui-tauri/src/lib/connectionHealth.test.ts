@@ -60,6 +60,16 @@ describe("connection health model", () => {
     ).toBe("http");
     expect(
       connectionProbeKind({
+        id: "saved-esplora",
+        name: "Saved Esplora",
+        url: "https://mempool.example.com/api",
+        kind: "esplora",
+        net: "BTC",
+        allowDisplayHttpProbe: false,
+      }),
+    ).toBe("unsupported");
+    expect(
+      connectionProbeKind({
         id: "cln",
         name: "Core Lightning",
         url: "cln://commando",

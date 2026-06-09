@@ -19,6 +19,7 @@ export interface ConnectionHealthInput {
   url: string;
   kind?: string | null;
   net: Net;
+  allowDisplayHttpProbe?: boolean;
 }
 
 export interface ConnectionHealthSnapshot {
@@ -71,10 +72,12 @@ export function endpointWithPort(raw: string): string {
 export function connectionProbeKind(connection: ConnectionHealthInput): ConnectionProbeKind {
   const kind = (connection.kind ?? "").toLowerCase();
   const url = connection.url.trim().toLowerCase();
+  const allowDisplayHttpProbe = connection.allowDisplayHttpProbe !== false;
   if (kind === "electrum" || url.startsWith("ssl://") || url.startsWith("tcp://")) {
     return "electrum";
   }
   if (
+    allowDisplayHttpProbe &&
     ["coingecko", "coinbase-exchange", "esplora", "liquid-esplora"].includes(
       kind,
     ) &&
