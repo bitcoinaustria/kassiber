@@ -26,9 +26,14 @@ _FINISH_NOTICES = {
 }
 _REPL_HELP = (
     "Commands:\n"
-    "  /help   show this help\n"
-    "  /tools  list daemon AI tools and their consent class\n"
-    "  /exit   leave the chat (also /quit or Ctrl-D)\n"
+    "  /help             show this help\n"
+    "  /tools            list daemon AI tools and their consent class\n"
+    "  /model [id]       show or switch the model for following turns\n"
+    "  /provider [name]  show or switch the provider (model re-resolves)\n"
+    "  /allow <tool>     allow a mutating tool for this session\n"
+    "  /allowed          show which mutating tools are pre-allowed\n"
+    "  /new              start a fresh conversation (history cleared)\n"
+    "  /exit             leave the chat (also /quit or Ctrl-D)\n"
     "Press Ctrl-C while the assistant is replying to cancel that turn.\n"
 )
 
@@ -446,6 +451,83 @@ def _render_tool_listing(out: TextIO) -> None:
         _write(f"  {entry.name.ljust(width)}  {consent}\n", out)
 
 
+def _read_repl_line(input_stream: TextIO, out: TextIO) -> str:
+    if input_stream is sys.stdin and input_stream.isatty():
+        try:
+            import readline  # noqa: F401  # line editing + in-session history
+        except ImportError:
+            pass
+        try:
+            return input("> ") + "\n"
+        except EOFError:
+            return ""
+    _write("> ", out)
+    return input_stream.readline()
+
+
+def _mutating_tool_names() -> set[str]:
+    return {entry.name for entry in TOOL_CATALOG if entry.kind_class == "mutating"}
+
+
+def _handle_model_command(args: Any, arg: str, out: TextIO) -> None:
+    if not arg:
+        _write(f"model: {args.model}\n", out)
+        return
+    args.model = arg
+    _write(f"Switched to model {arg}.\n", out)
+
+
+def _handle_provider_command(
+    client: _DaemonChatClient, args: Any, arg: str, out: TextIO
+) -> None:
+    if not arg:
+        current = getattr(args, "provider", None) or "(stored default)"
+        _write(f"provider: {current}\n", out)
+        return
+    previous = (getattr(args, "provider", None), args.model)
+    args.provider = arg
+    args.model = None
+    try:
+        _resolve_default_model(client, args)
+    except AppError as exc:
+        args.provider, args.model = previous
+        _write(f"Error: {exc}\n", out)
+        if exc.hint:
+            _write(f"Hint: {exc.hint}\n", out)
+        return
+    _write(f"Switched to provider {arg}, model {args.model}.\n", out)
+
+
+def _handle_allow_command(arg: str, session_allowed: set[str], out: TextIO) -> None:
+    if not arg:
+        _write("Usage: /allow <tool-name>\n", out)
+        return
+    matched = sorted(_split_tool_names([arg]) & _mutating_tool_names())
+    if not matched:
+        _write(f"{arg} is not a known mutating tool; /tools lists them.\n", out)
+        return
+    session_allowed.update(matched)
+    _write("Allowed for this session: " + ", ".join(matched) + "\n", out)
+
+
+def _render_allowed(args: Any, session_allowed: set[str], out: TextIO) -> None:
+    if getattr(args, "yes", False):
+        _write("All mutating tools are allowed for this session (--yes).\n", out)
+        return
+    flag_allowed = sorted(
+        _split_tool_names(getattr(args, "allow_tool", None)) & _mutating_tool_names()
+    )
+    lines = [f"  {name}  (--allow-tool)" for name in flag_allowed]
+    lines.extend(
+        f"  {name}  (this session)"
+        for name in sorted(session_allowed - set(flag_allowed))
+    )
+    if not lines:
+        _write("No mutating tools are pre-allowed; each will ask for consent.\n", out)
+        return
+    _write("\n".join(lines) + "\n", out)
+
+
 def _run_turn(
     client: _DaemonChatClient,
     args: Any,
@@ -687,59 +769,93 @@ def run_chat_command(
                 _render_turn_footer(result.terminal, chrome)
             return session
 
-        _write("Kassiber chat. /help for commands, /exit to quit.\n", output_stream)
-        session_allowed: set[str] = set()
-        while True:
-            try:
-                _write("> ", output_stream)
-                prompt = input_stream.readline()
-            except KeyboardInterrupt:
-                _write("\n", output_stream)
-                break
-            if prompt == "":
-                break
-            prompt = prompt.strip()
-            if not prompt:
-                continue
-            if prompt in {"/exit", "/quit"}:
-                break
-            if prompt == "/help":
-                _write(_REPL_HELP, output_stream)
-                continue
-            if prompt == "/tools":
-                _render_tool_listing(output_stream)
-                continue
-            if prompt.startswith("/"):
-                _write(f"Unknown command {prompt}. /help lists commands.\n", output_stream)
-                continue
-            messages.append({"role": "user", "content": prompt})
-            try:
-                result = _run_turn(
-                    client,
-                    args,
-                    messages,
-                    stdin=input_stream,
-                    out=output_stream,
-                    chrome=output_stream,
-                    render=True,
-                    session_allowed=session_allowed,
-                )
-            except AppError as exc:
-                # Keep the REPL session (and its history) alive across
-                # transient provider or daemon-request failures.
-                if exc.code in {"daemon_closed", "daemon_protocol_error"}:
-                    raise
-                messages.pop()
-                _write(f"Error: {exc}\n", sys.stderr)
-                if exc.hint:
-                    _write(f"Hint: {exc.hint}\n", sys.stderr)
-                continue
-            session.turns.append(result)
-            _render_turn_footer(result.terminal, output_stream)
-            if result.content:
-                messages.append({"role": "assistant", "content": result.content})
+        _run_repl(
+            client,
+            args,
+            session,
+            messages,
+            input_stream=input_stream,
+            output_stream=output_stream,
+        )
         return session
     finally:
         client.close()
         if transcript is not None:
             transcript.close()
+
+
+def _run_repl(
+    client: _DaemonChatClient,
+    args: Any,
+    session: ChatSessionResult,
+    messages: list[dict[str, str]],
+    *,
+    input_stream: TextIO,
+    output_stream: TextIO,
+) -> None:
+    _write("Kassiber chat. /help for commands, /exit to quit.\n", output_stream)
+    session_allowed: set[str] = set()
+    while True:
+        try:
+            line = _read_repl_line(input_stream, output_stream)
+        except KeyboardInterrupt:
+            _write("\n", output_stream)
+            break
+        if line == "":
+            break
+        prompt = line.strip()
+        if not prompt:
+            continue
+        if prompt.startswith("/"):
+            parts = prompt.split(None, 1)
+            command = parts[0]
+            arg = parts[1].strip() if len(parts) > 1 else ""
+            if command in {"/exit", "/quit"}:
+                break
+            if command == "/help":
+                _write(_REPL_HELP, output_stream)
+            elif command == "/tools":
+                _render_tool_listing(output_stream)
+            elif command == "/model":
+                _handle_model_command(args, arg, output_stream)
+            elif command == "/provider":
+                _handle_provider_command(client, args, arg, output_stream)
+            elif command == "/allow":
+                _handle_allow_command(arg, session_allowed, output_stream)
+            elif command == "/allowed":
+                _render_allowed(args, session_allowed, output_stream)
+            elif command == "/new":
+                messages.clear()
+                _write("Started a new conversation.\n", output_stream)
+            else:
+                _write(
+                    f"Unknown command {command}. /help lists commands.\n",
+                    output_stream,
+                )
+            continue
+        messages.append({"role": "user", "content": prompt})
+        try:
+            result = _run_turn(
+                client,
+                args,
+                messages,
+                stdin=input_stream,
+                out=output_stream,
+                chrome=output_stream,
+                render=True,
+                session_allowed=session_allowed,
+            )
+        except AppError as exc:
+            # Keep the REPL session (and its history) alive across
+            # transient provider or daemon-request failures.
+            if exc.code in {"daemon_closed", "daemon_protocol_error"}:
+                raise
+            messages.pop()
+            _write(f"Error: {exc}\n", sys.stderr)
+            if exc.hint:
+                _write(f"Hint: {exc.hint}\n", sys.stderr)
+            continue
+        session.turns.append(result)
+        _render_turn_footer(result.terminal, output_stream)
+        if result.content:
+            messages.append({"role": "assistant", "content": result.content})

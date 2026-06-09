@@ -1,3 +1,5 @@
+import argparse
+import io
 import json
 import subprocess
 import sys
@@ -556,6 +558,70 @@ class CliChatTest(unittest.TestCase):
                 for message in server.requests[1]["messages"]  # type: ignore[attr-defined]
             )
         )
+
+
+class _FakeTtyInput(io.StringIO):
+    def isatty(self):
+        return True
+
+
+class CliChatReplTest(unittest.TestCase):
+    def test_repl_commands_and_turn(self):
+        from kassiber.cli.chat import run_chat_command
+
+        server = _start_tool_chat_server(
+            [
+                _chat_completion_response(
+                    {"role": "assistant", "content": "Kassiber is ready."},
+                ),
+            ]
+        )
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+                data_root = Path(tmp) / "data"
+                _seed_provider(data_root, f"http://127.0.0.1:{server.server_port}/v1")
+                args = argparse.Namespace(
+                    data_root=str(data_root),
+                    env_file=None,
+                    db_passphrase_fd=None,
+                    format=None,
+                    prompt=None,
+                    prompt_text=None,
+                    provider="tool-local",
+                    model=None,
+                    system=None,
+                    temperature=None,
+                    max_tokens=None,
+                    reasoning_effort="auto",
+                    tool_loop_max_iterations=8,
+                    no_tools=False,
+                    yes=False,
+                    allow_tool=None,
+                    stream_json=False,
+                    transcript=None,
+                )
+                stdin = _FakeTtyInput(
+                    "/help\n"
+                    "/model\n"
+                    "/allow ui_journals_process\n"
+                    "/allowed\n"
+                    "/bogus\n"
+                    "hello\n"
+                    "/exit\n"
+                )
+                stdout = io.StringIO()
+                session = run_chat_command(args, stdin=stdin, stdout=stdout)
+        finally:
+            _stop_server(server)
+
+        output = stdout.getvalue()
+        self.assertIn("/provider [name]", output)
+        self.assertIn("model: test-model", output)
+        self.assertIn("Allowed for this session: ui.journals.process", output)
+        self.assertIn("ui.journals.process  (this session)", output)
+        self.assertIn("Unknown command /bogus", output)
+        self.assertIn("Kassiber is ready.", output)
+        self.assertEqual(len(session.turns), 1)
 
 
 if __name__ == "__main__":
