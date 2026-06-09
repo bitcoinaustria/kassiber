@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   attachmentRecordToItem,
   bucketTransactionDate,
+  dashboardRecordsFromTxs,
   flowChartSelectionLabel,
   isAttachmentListQueryKeyForTransaction,
   matchesFlowChartSelection,
@@ -35,6 +36,10 @@ function transaction(
 }
 
 describe("transaction dashboard chart selection", () => {
+  it("does not substitute demo rows for an empty live transaction list", () => {
+    expect(dashboardRecordsFromTxs([])).toEqual([]);
+  });
+
   it("classifies consolidation rows as transfers even when only the fee is negative", () => {
     const tx: Tx = {
       id: "tx12",

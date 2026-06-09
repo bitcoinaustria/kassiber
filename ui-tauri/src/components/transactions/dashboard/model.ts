@@ -198,6 +198,10 @@ function toDashboardTransaction(tx: Tx, index: number): Transaction {
   };
 }
 
+function dashboardRecordsFromTxs(txs: Tx[]) {
+  return txs.map(toDashboardTransaction);
+}
+
 function isRedundantTransactionLabel(label: string, flow: TransactionFlow) {
   const normalized = label.trim().toLowerCase();
   if (!normalized || normalized === "unlabeled") return true;
@@ -1076,6 +1080,7 @@ export {
   buildBreakdown,
   buildFlowChartRows,
   buildSwapCandidates,
+  dashboardRecordsFromTxs,
   dateFilterOptions,
   filterChipClassName,
   flowAxisDomain,

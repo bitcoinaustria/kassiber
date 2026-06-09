@@ -22,6 +22,7 @@ from .core import freshness as core_freshness
 from .core import rates as core_rates
 from .core import wallets as core_wallets
 from .core.repo import current_context_snapshot
+from .core.sync import sync_progress_emitter
 from .core.ui_snapshot import build_report_blockers_snapshot
 from .db import open_db
 from .envelope import build_envelope
@@ -475,15 +476,19 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
         progress({"phase": core_freshness.PHASE_DISCOVERY, "wallet": wallet["label"]})
         check_cancelled()
         progress({"phase": core_freshness.PHASE_BACKEND_FETCH, "wallet": wallet["label"]})
-        outcome = sync_wallet_from_backend(
-            conn,
-            runtime_config,
-            None,
-            None,
-            wallet_with_checkpoint,
-            checkpoint=checkpoint,
-            force_full=force_full,
-        )
+        token = sync_progress_emitter.set(progress)
+        try:
+            outcome = sync_wallet_from_backend(
+                conn,
+                runtime_config,
+                None,
+                None,
+                wallet_with_checkpoint,
+                checkpoint=checkpoint,
+                force_full=force_full,
+            )
+        finally:
+            sync_progress_emitter.reset(token)
         check_cancelled()
         progress({"phase": core_freshness.PHASE_IMPORT, "wallet": wallet["label"]})
         _mark_daemon_wallet_synced(conn, wallet)
@@ -503,12 +508,16 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
         progress({"phase": core_freshness.PHASE_DISCOVERY, "wallet": wallet["label"]})
         check_cancelled()
         progress({"phase": core_freshness.PHASE_BACKEND_FETCH, "wallet": wallet["label"]})
-        outcome = sync_configured_btcpay_wallet(
-            conn,
-            runtime_config,
-            profile,
-            wallet_with_checkpoint,
-        )
+        token = sync_progress_emitter.set(progress)
+        try:
+            outcome = sync_configured_btcpay_wallet(
+                conn,
+                runtime_config,
+                profile,
+                wallet_with_checkpoint,
+            )
+        finally:
+            sync_progress_emitter.reset(token)
         check_cancelled()
         progress({"phase": core_freshness.PHASE_IMPORT, "wallet": wallet["label"]})
         _mark_daemon_wallet_synced(conn, wallet)
@@ -528,12 +537,16 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
         checkpoint = _source_checkpoint_for_job(conn, profile["id"], job["source_key"], job)
         wallet_with_checkpoint = _wallet_with_freshness_checkpoint(wallet, checkpoint)
         progress({"phase": core_freshness.PHASE_BACKEND_FETCH, "wallet": wallet["label"]})
-        outcome = enrich_wallet_from_btcpay_provenance(
-            conn,
-            runtime_config,
-            profile,
-            wallet_with_checkpoint,
-        )
+        token = sync_progress_emitter.set(progress)
+        try:
+            outcome = enrich_wallet_from_btcpay_provenance(
+                conn,
+                runtime_config,
+                profile,
+                wallet_with_checkpoint,
+            )
+        finally:
+            sync_progress_emitter.reset(token)
         check_cancelled()
         progress({"phase": core_freshness.PHASE_DECODE_ENRICH, "wallet": wallet["label"]})
         conn.commit()

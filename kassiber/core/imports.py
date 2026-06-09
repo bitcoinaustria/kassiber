@@ -2,7 +2,6 @@ from __future__ import annotations
 
 """Import orchestration helpers above the parser-only `kassiber.importers` boundary."""
 
-import contextvars
 import json
 import os
 import sqlite3
@@ -39,6 +38,7 @@ from ..util import str_or_none
 from ..wallet_descriptors import normalize_asset_code
 from . import output_inventory as core_output_inventory
 from .privacy_hops import privacy_boundary_from_import_record
+from .sync import sync_progress_emitter
 
 INBOUND_DIRECTIONS = {"in", "inbound", "receive", "received", "deposit", "credit", "buy"}
 OUTBOUND_DIRECTIONS = {"out", "outbound", "send", "sent", "withdrawal", "withdraw", "debit", "sell"}
@@ -83,14 +83,6 @@ EXCHANGE_EVIDENCE_RECONCILIATION_TAGS = {
 
 
 ProgressCallback = Callable[[Mapping[str, Any]], None]
-
-# Contextvar threaded by the daemon when it wants long-running imports to
-# emit row-count progress over the JSONL stream. The CLI leaves this empty
-# so no behavior change for `kassiber wallets sync` from a terminal.
-sync_progress_emitter: contextvars.ContextVar[ProgressCallback | None] = (
-    contextvars.ContextVar("kassiber.sync_progress_emitter", default=None)
-)
-
 
 @dataclass(frozen=True)
 class ImportCoordinatorHooks:

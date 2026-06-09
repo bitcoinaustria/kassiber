@@ -18,6 +18,7 @@ from urllib import parse as urlparse
 from urllib import request as urlrequest
 
 from .backends import backend_timeout, backend_value
+from .core.sync import emit_sync_progress
 from .errors import AppError
 from .importers import normalize_btcpay_record, parse_btcpay_labels
 from .retry import retry_after_seconds_from_http_error
@@ -432,9 +433,17 @@ def _fetch_incremental_pages(
         nonlocal pages_fetched
         if pages_fetched >= MAX_PAGES:
             raise AppError(max_pages_message, code="config_error")
+        emit_sync_progress({"phase": "backend_fetch"})
         page = fetch_page(page_skip)
         pages_fetched += 1
         fetched_skips.add(page_skip)
+        emit_sync_progress(
+            {
+                "phase": "backend_fetch",
+                "pages_fetched": pages_fetched,
+                "page_size": page_size,
+            }
+        )
         return page
 
     def process_page(page_skip, page):

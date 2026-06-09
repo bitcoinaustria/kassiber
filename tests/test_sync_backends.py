@@ -6,12 +6,15 @@ from unittest.mock import patch
 from kassiber.core.sync import (
     WalletSyncHooks,
     WalletSyncState,
+    emit_sync_progress,
+    sync_progress_emitter,
     sync_wallet_from_backend,
     sync_wallets,
 )
 from kassiber.core.sync_backends import (
     ElectrumClient,
     _connect_via_socks5,
+    _emit_backend_progress,
     _read_exact,
     _socks5_address,
     bitcoinrpc_sync_adapter,
@@ -67,6 +70,70 @@ class SyncBackendsTest(unittest.TestCase):
         with self.assertRaises(AppError) as exc:
             sync_wallet_from_backend(None, {}, {}, wallet, hooks)
         self.assertIn("not implemented", str(exc.exception))
+
+    def test_sync_wallet_from_backend_attaches_wallet_to_backend_progress(self):
+        wallet = {"label": "Cold", "config_json": "{}"}
+        target = {"address": "bc1qwatch", "script_pubkey": "0014watch"}
+        progress = []
+
+        def adapter(backend, wallet, sync_state):
+            emit_sync_progress({"phase": "backend_fetch", "known_txids": 2})
+            return [], {"freshness_checkpoint": {"ok": True}}
+
+        hooks = WalletSyncHooks(
+            import_file=lambda *args, **kwargs: {},
+            insert_records=lambda *args, **kwargs: {"imported": 0, "skipped": 0},
+            resolve_backend=lambda runtime_config, backend_name: {
+                "name": "default",
+                "kind": "esplora",
+                "url": "https://example.invalid",
+            },
+            resolve_sync_state=lambda backend, wallet: WalletSyncState(
+                chain="bitcoin",
+                network="bitcoin",
+                descriptor_plan=None,
+                policy_asset_id="",
+                targets=[target],
+                tracked_scripts={target["script_pubkey"]: target},
+                history_cache={},
+            ),
+            normalize_addresses=lambda values: list(values or []),
+            backend_adapters={"esplora": adapter},
+        )
+
+        token = sync_progress_emitter.set(lambda payload: progress.append(dict(payload)))
+        try:
+            sync_wallet_from_backend(None, {}, {}, wallet, hooks)
+        finally:
+            sync_progress_emitter.reset(token)
+
+        self.assertTrue(progress)
+        self.assertIn("discovery", [item.get("phase") for item in progress])
+        self.assertIn("backend_fetch", [item.get("phase") for item in progress])
+        self.assertEqual({item.get("wallet") for item in progress}, {"Cold"})
+        self.assertEqual(progress[-1]["known_txids"], 2)
+
+    def test_backend_progress_reuses_known_counters_for_ui_progress(self):
+        progress = []
+        token = sync_progress_emitter.set(lambda payload: progress.append(dict(payload)))
+        try:
+            _emit_backend_progress(
+                "backend_fetch",
+                target_count=10,
+                targets_checked=3,
+            )
+            _emit_backend_progress(
+                "decode_enrich",
+                transactions_seen=40,
+                transactions_total=100,
+            )
+        finally:
+            sync_progress_emitter.reset(token)
+
+        self.assertEqual(progress[0]["processed"], 3)
+        self.assertEqual(progress[0]["total"], 10)
+        self.assertEqual(progress[1]["processed"], 40)
+        self.assertEqual(progress[1]["total"], 100)
 
     def test_sync_wallet_from_backend_keeps_inventory_when_utxos_skipped(self):
         wallet = {

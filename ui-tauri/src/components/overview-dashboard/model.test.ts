@@ -18,6 +18,7 @@ import {
   marketRateCompactLabel,
   marketRateDetailLabel,
   marketRateSyncLabel,
+  overviewTransactions,
 } from "./model";
 
 describe("overview market rate display", () => {
@@ -145,6 +146,17 @@ describe("overview market rate display", () => {
     expect(formatRelativeMarketRateTime("2026-02-27T12:00:00Z", now)).toBe(
       "2d ago",
     );
+  });
+});
+
+describe("overview transaction rows", () => {
+  it("does not substitute demo rows for an empty live snapshot", () => {
+    const snapshot: OverviewSnapshot = {
+      ...MOCK_OVERVIEW,
+      txs: [],
+    };
+
+    expect(overviewTransactions(snapshot)).toEqual([]);
   });
 });
 
