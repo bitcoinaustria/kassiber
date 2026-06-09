@@ -81,6 +81,32 @@ PROVIDER_BROAD_KEYS = ("provider_id",)
 PROVIDER_EVIDENCE_KEYS = PROVIDER_UNIQUE_KEYS + PROVIDER_BROAD_KEYS
 RAW_PRIVACY_HOP_TYPES = PRIVACY_LINK_TYPES | {"payment_in_coinjoin", "sweep"}
 SUGGESTION_WRITE_CAP = 500
+# How a transaction row entered Kassiber, derived from its wallet's kind.
+# This is the "data source" column a strict reviewer wants next to every
+# traced row: chain-verified watch-only sync vs a platform/CSV export vs a
+# manual/custom import. Wallet-level derivation is a documented
+# simplification (a descriptor wallet enriched by BTCPay comments still
+# counts as chain_sync because the balance source is the chain).
+DATA_PROVENANCE_KINDS = ("chain_sync", "platform_export", "manual_import")
+DATA_PROVENANCE_LABELS = {
+    "chain_sync": "Blockchain (watch-only sync)",
+    "platform_export": "Platform export / API",
+    "manual_import": "Manual / custom import",
+}
+_CHAIN_SYNC_WALLET_KINDS = {"descriptor", "xpub", "samourai"}
+_PLATFORM_EXPORT_WALLET_KINDS = {
+    "coreln",
+    "lnd",
+    "nwc",
+    "phoenix",
+    "river",
+    "bullbitcoin",
+    "coinfinity",
+    "21bitcoin",
+    "pocketbitcoin",
+    "strike",
+    "wasabi",
+}
 _PUBLIC_TXID_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 _PUBLIC_EXPLORER_BASES = {
     ("bitcoin", "main"): ("mempool.space", "https://mempool.space"),
@@ -305,6 +331,21 @@ def _wallet_chain_network(config_json: Any, asset: Any) -> tuple[str, str]:
     except ValueError:
         return "", ""
     return chain, network
+
+
+def _wallet_data_provenance(wallet_kind: Any, config_json: Any) -> str:
+    kind = str(wallet_kind or "").strip().lower()
+    if kind in _CHAIN_SYNC_WALLET_KINDS:
+        return "chain_sync"
+    if kind == "address":
+        config = _safe_json_loads(config_json)
+        has_import_source = isinstance(config, dict) and bool(
+            config.get("source_file") or config.get("source_format")
+        )
+        return "platform_export" if has_import_source else "chain_sync"
+    if kind in _PLATFORM_EXPORT_WALLET_KINDS:
+        return "platform_export"
+    return "manual_import"
 
 
 def _samourai_metadata_from_wallet_config(config_json: Any) -> dict[str, str] | None:
@@ -573,7 +614,8 @@ def _link_row_to_dict(conn: sqlite3.Connection, row: Mapping[str, Any]) -> dict[
 def _transaction_by_id(conn: sqlite3.Connection, profile_id: str, tx_id: str):
     return conn.execute(
         """
-        SELECT t.*, w.label AS wallet_label, w.config_json AS wallet_config_json
+        SELECT t.*, w.label AS wallet_label, w.kind AS wallet_kind,
+               w.config_json AS wallet_config_json
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         WHERE t.profile_id = ? AND t.id = ?
@@ -1326,7 +1368,8 @@ def bulk_review_suggestions(
 def _active_transaction_rows(conn: sqlite3.Connection, profile_id: str):
     return conn.execute(
         """
-        SELECT t.*, w.label AS wallet_label, w.config_json AS wallet_config_json
+        SELECT t.*, w.label AS wallet_label, w.kind AS wallet_kind,
+               w.config_json AS wallet_config_json
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         WHERE t.profile_id = ? AND t.excluded = 0
@@ -1734,12 +1777,18 @@ def _tx_node(
         "asset": row["asset"],
         "amount": _btc_value(row["amount"]),
         "amount_msat": int(row["amount"]),
+        "fee": _btc_value(int(_row_value(row, "fee") or 0)),
+        "fee_msat": int(_row_value(row, "fee") or 0),
         "required_amount": _btc_value(required_msat),
         "required_amount_msat": required_msat,
         "external_id": _public_tx_id(row, reveal_mode, is_target=is_target, overrides=overrides),
         "fiat_currency": row["fiat_currency"] or "",
         "fiat_value": row["fiat_value"],
         "pricing_source_kind": row["pricing_source_kind"] or row["fiat_price_source"] or "",
+        "data_provenance": _wallet_data_provenance(
+            _row_value(row, "wallet_kind"),
+            _row_value(row, "wallet_config_json"),
+        ),
         "description": row["description"] or "" if free_text_visible else "",
         "counterparty": row["counterparty"] or "" if free_text_visible else "",
     }
@@ -1770,12 +1819,34 @@ def _source_node(source: Mapping[str, Any], reveal_mode: str, required_msat: int
     }
 
 
-def _finding(code: str, severity: str, message: str, *, ref: str | None = None) -> dict[str, Any]:
-    return {"code": code, "severity": severity, "message": message, "ref": ref or ""}
+def _finding(
+    code: str,
+    severity: str,
+    message: str,
+    *,
+    ref: str | None = None,
+    amount_msat: int | None = None,
+    asset: str | None = None,
+) -> dict[str, Any]:
+    item: dict[str, Any] = {"code": code, "severity": severity, "message": message, "ref": ref or ""}
+    if amount_msat is not None:
+        item["amount"] = _btc_value(amount_msat)
+        item["amount_msat"] = int(amount_msat)
+        item["asset"] = asset or ""
+    return item
 
 
-def _add_finding(findings: list[dict[str, Any]], code: str, severity: str, message: str, *, ref: str | None = None):
-    item = _finding(code, severity, message, ref=ref)
+def _add_finding(
+    findings: list[dict[str, Any]],
+    code: str,
+    severity: str,
+    message: str,
+    *,
+    ref: str | None = None,
+    amount_msat: int | None = None,
+    asset: str | None = None,
+):
+    item = _finding(code, severity, message, ref=ref, amount_msat=amount_msat, asset=asset)
     if item not in findings:
         findings.append(item)
 
@@ -1784,17 +1855,27 @@ def _node_event_time(node: Mapping[str, Any]) -> str:
     return str(node.get("occurred_at") or node.get("acquired_at") or "")
 
 
+def _row_value(row: Any, key: str, default: Any = None) -> Any:
+    """Key access that works for sqlite3.Row and plain dict rows alike."""
+    try:
+        return row[key]
+    except (KeyError, IndexError):
+        return default
+
+
 def _summarize_report_data_sources(nodes: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     grouped: dict[tuple[str, str], dict[str, Any]] = {}
     for node in nodes:
         if node.get("node_type") == "transaction":
             label = str(node.get("wallet") or "Unlabeled wallet")
             kind = "wallet"
+            provenance = str(node.get("data_provenance") or "")
             transaction_count = 1
             source_count = 0
         else:
             label = str(node.get("label") or _label(node.get("source_type")) or "Reviewed source")
             kind = str(node.get("source_type") or "source")
+            provenance = "attested_source"
             transaction_count = 0
             source_count = 1
         key = (kind, label)
@@ -1803,6 +1884,7 @@ def _summarize_report_data_sources(nodes: Sequence[Mapping[str, Any]]) -> list[d
             {
                 "label": label,
                 "kind": kind,
+                "provenance": provenance,
                 "transaction_count": 0,
                 "source_count": 0,
                 "assets": set(),
@@ -1830,19 +1912,24 @@ def _compact_flow_node(node: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "id": node.get("id", ""),
         "node_type": node.get("node_type", ""),
+        "transaction_id": node.get("transaction_id", ""),
         "label": node.get("label", ""),
         "wallet": node.get("wallet", ""),
         "source_type": node.get("source_type", ""),
+        "direction": node.get("direction", ""),
         "asset": node.get("asset", ""),
         "required_amount": node.get("required_amount"),
         "required_amount_msat": node.get("required_amount_msat"),
         "amount": node.get("amount"),
         "amount_msat": node.get("amount_msat"),
+        "fee": node.get("fee"),
+        "fee_msat": node.get("fee_msat"),
         "occurred_at": node.get("occurred_at", ""),
         "acquired_at": node.get("acquired_at", ""),
         "external_id": node.get("external_id", ""),
         "fiat_currency": node.get("fiat_currency", ""),
         "fiat_value": node.get("fiat_value"),
+        "data_provenance": node.get("data_provenance", ""),
         "review_state": node.get("review_state", ""),
     }
 
@@ -1893,6 +1980,16 @@ def _build_flow_levels(report: Mapping[str, Any]) -> list[dict[str, Any]]:
                 str(node.get("label") or ""),
             ),
         )
+        fiat_currencies = {
+            str(node.get("fiat_currency") or "")
+            for node in level_nodes
+            if node.get("fiat_value") is not None
+        }
+        fiat_total = (
+            round(sum(float(node.get("fiat_value") or 0) for node in level_nodes if node.get("fiat_value") is not None), 2)
+            if len(fiat_currencies) == 1
+            else None
+        )
         rows.append(
             {
                 "level": depth + 1,
@@ -1900,6 +1997,37 @@ def _build_flow_levels(report: Mapping[str, Any]) -> list[dict[str, Any]]:
                 "nodes": [_compact_flow_node(node) for node in level_nodes],
                 "transaction_count": sum(1 for node in level_nodes if node.get("node_type") == "transaction"),
                 "source_count": sum(1 for node in level_nodes if node.get("node_type") == "source"),
+                "assets": sorted({str(node.get("asset") or "") for node in level_nodes if node.get("asset")}),
+                "fiat_currency": next(iter(fiat_currencies)) if fiat_total is not None else "",
+                "fiat_value_total": fiat_total,
+            }
+        )
+    return rows
+
+
+def _summarize_data_provenance(nodes: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Roll up disclosed transactions by how their rows entered Kassiber.
+
+    This powers the data-sources ring and table column a strict reviewer
+    wants: how much of the trace is chain-verified watch-only sync versus
+    platform exports versus manual imports. Reviewed root sources are user
+    attestations, not imported rows, so they are not counted here.
+    """
+    counts: dict[str, int] = defaultdict(int)
+    for node in nodes:
+        if node.get("node_type") == "transaction":
+            counts[str(node.get("data_provenance") or "manual_import")] += 1
+    total = sum(counts.values())
+    rows = []
+    for key in DATA_PROVENANCE_KINDS:
+        if key not in counts:
+            continue
+        rows.append(
+            {
+                "provenance": key,
+                "label": DATA_PROVENANCE_LABELS.get(key, _label(key)),
+                "count": counts[key],
+                "percent": round((counts[key] / total) * 100, 2) if total else 0,
             }
         )
     return rows
@@ -2122,6 +2250,7 @@ def _add_report_shape(envelope: dict[str, Any]) -> None:
         "warning_count": warning_count,
     }
     envelope["data_sources"] = data_sources
+    envelope["data_provenance_summary"] = _summarize_data_provenance(nodes)
     envelope["flow_levels"] = _build_flow_levels(envelope)
     envelope["simplified_flow"] = _build_simplified_flow(envelope)
     envelope["narrative"] = {
@@ -2392,6 +2521,8 @@ def build_report(
                 "blocker",
                 "The path stops at a transaction without a reviewed root source or missing-history attestation.",
                 ref=tx_id,
+                amount_msat=required_msat,
+                asset=required_asset,
             )
             continue
         for link in reviewed:
@@ -2648,6 +2779,13 @@ def build_report(
         }
         for source_type, values in sorted(source_mix.items())
     ]
+    wallets_named = sorted(
+        {
+            str(node.get("wallet"))
+            for node in nodes.values()
+            if node.get("node_type") == "transaction" and node.get("wallet")
+        }
+    )
     envelope = {
         "workspace": workspace["label"],
         "profile": profile["label"],
@@ -2669,10 +2807,16 @@ def build_report(
         "target": _tx_node(
             {
                 **_row_dict(target),
-                "wallet_label": conn.execute(
-                    "SELECT label FROM wallets WHERE id = ?",
-                    (target["wallet_id"],),
-                ).fetchone()["label"],
+                **dict(
+                    conn.execute(
+                        """
+                        SELECT label AS wallet_label, kind AS wallet_kind,
+                               config_json AS wallet_config_json
+                        FROM wallets WHERE id = ?
+                        """,
+                        (target["wallet_id"],),
+                    ).fetchone()
+                ),
             },
             mode,
             target_amount_msat,
@@ -2705,8 +2849,16 @@ def build_report(
                 for txid in sorted(explorer_links_by_txid)
             ],
             "attachments": sorted(disclosure_attachments.values(), key=lambda item: item["id"]),
+            "wallets_named": wallets_named,
             "privacy_note": (
                 "Txids disclose on-chain neighbors to the recipient. Chain observations are context, not proof of ownership."
+            ),
+            "ownership_note": (
+                "Sharing this report demonstrates to the recipient that the wallets named above "
+                "are under common ownership or control, and links their disclosed transactions "
+                "to your identity."
+                if len(wallets_named) > 1
+                else ""
             ),
             "excluded": [
                 "descriptors",
@@ -3040,13 +3192,10 @@ def export_pdf(
     hooks: SourceFundsHooks,
     *,
     case_ref: str | None = None,
-    target_transaction_ref: str | None = None,
-    target_amount: Any = None,
-    report_purpose: str = "existing_transaction",
-    planned_destination: str | None = None,
-    planned_note: str | None = None,
-    reveal_mode: str | None = None,
 ) -> dict[str, Any]:
+    # Export renders only saved immutable case snapshots: target, reveal
+    # mode, and report options are frozen at preview/save time, so this
+    # surface deliberately takes no report-shaping parameters.
     if not case_ref:
         raise AppError(
             "export-source-funds-pdf requires --case from a saved source-funds preview",
