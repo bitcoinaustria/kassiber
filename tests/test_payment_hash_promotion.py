@@ -20,6 +20,7 @@ import uuid
 
 from kassiber.core.imports import (
     ImportCoordinatorHooks,
+    import_records_into_wallet,
     insert_wallet_records,
     normalize_import_record,
 )
@@ -311,6 +312,88 @@ class InsertPersistsPaymentHashTests(unittest.TestCase):
                     (profile_id,),
                 ).fetchone()
                 self.assertEqual(profile_row["journal_input_version"], 1)
+            finally:
+                conn.close()
+
+    def test_metadata_only_repeat_import_invalidates_journals(self):
+        with tempfile.TemporaryDirectory() as data_root:
+            conn = open_db(data_root)
+            try:
+                _, profile_id, wallet_id = _seed_minimal_scope(conn)
+                profile, wallet = _fetch_profile_and_wallet(conn, profile_id, wallet_id)
+                raw_payload = {
+                    "txid": "metadata-only",
+                    "occurred_at": "2026-03-14T17:30:00Z",
+                    "direction": "inbound",
+                    "asset": "BTC",
+                    "amount": "0.0001",
+                    "fee": "0",
+                }
+                first = import_records_into_wallet(
+                    conn,
+                    profile,
+                    wallet,
+                    [{**raw_payload, "raw_json": raw_payload}],
+                    source_label="btcpay_csv",
+                    hooks=_HOOKS,
+                    apply_btcpay=True,
+                )
+                self.assertEqual(first["imported"], 1)
+                self.assertTrue(first["journal_invalidated"])
+
+                second = import_records_into_wallet(
+                    conn,
+                    profile,
+                    wallet,
+                    [
+                        {
+                            **raw_payload,
+                            "raw_json": raw_payload,
+                            "_btcpay_comment": "Remote note",
+                            "_btcpay_labels": ["merchant"],
+                        }
+                    ],
+                    source_label="btcpay_csv",
+                    hooks=_HOOKS,
+                    apply_btcpay=True,
+                )
+                self.assertEqual(second["imported"], 0)
+                self.assertEqual(second["updated_records"], [])
+                self.assertEqual(second["unchanged"], 1)
+                self.assertEqual(second["btcpay_notes_set"], 1)
+                self.assertEqual(second["btcpay_tags_added"], 1)
+                self.assertTrue(second["journal_invalidated"])
+                profile_row = conn.execute(
+                    "SELECT journal_input_version FROM profiles WHERE id = ?",
+                    (profile_id,),
+                ).fetchone()
+                self.assertEqual(profile_row["journal_input_version"], 2)
+
+                third = import_records_into_wallet(
+                    conn,
+                    profile,
+                    wallet,
+                    [
+                        {
+                            **raw_payload,
+                            "raw_json": raw_payload,
+                            "_btcpay_comment": "Remote note",
+                            "_btcpay_labels": ["merchant"],
+                        }
+                    ],
+                    source_label="btcpay_csv",
+                    hooks=_HOOKS,
+                    apply_btcpay=True,
+                )
+                self.assertEqual(third["unchanged"], 1)
+                self.assertEqual(third["btcpay_notes_set"], 0)
+                self.assertEqual(third["btcpay_tags_added"], 0)
+                self.assertFalse(third["journal_invalidated"])
+                profile_row = conn.execute(
+                    "SELECT journal_input_version FROM profiles WHERE id = ?",
+                    (profile_id,),
+                ).fetchone()
+                self.assertEqual(profile_row["journal_input_version"], 2)
             finally:
                 conn.close()
 

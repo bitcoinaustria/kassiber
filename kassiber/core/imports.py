@@ -90,6 +90,43 @@ class ImportCoordinatorHooks:
     invalidate_journals: InvalidateJournals
 
 
+TRANSACTION_METADATA_CHANGE_KEYS = (
+    "btcpay_notes_set",
+    "btcpay_tags_added",
+    "phoenix_notes_set",
+    "phoenix_tags_added",
+    "river_notes_set",
+    "river_tags_added",
+    "wasabi_notes_set",
+    "wasabi_tags_added",
+    "wasabi_review_marked",
+    "wasabi_review_cleared",
+)
+
+
+def _metadata_changed(outcome: Mapping[str, Any]) -> bool:
+    for key in TRANSACTION_METADATA_CHANGE_KEYS:
+        value = outcome.get(key)
+        try:
+            if int(value or 0) > 0:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def _invalidate_journals_for_metadata_changes(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+    outcome: dict[str, Any],
+    hooks: ImportCoordinatorHooks,
+) -> None:
+    if outcome.get("journal_invalidated") or not _metadata_changed(outcome):
+        return
+    hooks.invalidate_journals(conn, profile["id"])
+    outcome["journal_invalidated"] = True
+
+
 def normalize_import_direction(direction: Any, amount: Any) -> str:
     if direction:
         value = str(direction).strip().lower()
@@ -1321,6 +1358,7 @@ def import_records_into_wallet(
         outcome.update(apply_phoenix_metadata(conn, profile, wallet, records, hooks, commit=False))
     if apply_river:
         outcome.update(apply_river_metadata(conn, profile, wallet, records, hooks, commit=False))
+    _invalidate_journals_for_metadata_changes(conn, profile, outcome, hooks)
     if commit:
         conn.commit()
     return outcome
@@ -1840,6 +1878,7 @@ def import_wasabi_bundle_into_wallet(
             "input_format": "wasabi_bundle",
         }
     )
+    _invalidate_journals_for_metadata_changes(conn, profile, outcome, hooks)
     if commit:
         conn.commit()
     return outcome
