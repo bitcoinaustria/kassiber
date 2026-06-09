@@ -192,11 +192,14 @@ tiers, and the incomplete Tor story.
 For public bug reports, run `kassiber diagnostics collect` (or
 `--diagnostics-out auto` on a failing command) — the output is safe to
 paste publicly. In the desktop app, enable Developer tools, open Logs, and
-choose **Export → Support bundle** to create a public-safe `.support.jsonl`
-file with a short issue description, redacted log events, last-failure
-context, and redacted AI provenance for local troubleshooting. Report
-security-impacting issues to the maintainer privately, not in the public
-tracker.
+choose **Export → Support bundle** to create a `.support.jsonl` file with a
+short issue description, redacted log events, last-failure context, and
+redacted AI provenance for local troubleshooting. Support bundles default to
+High-signal for trusted maintainer debugging and offer Public-safe mode for
+public posting; both modes always strip wallet and credential material such as
+descriptors, private keys, recovery phrases, API keys, passwords, and bearer
+tokens. Report security-impacting issues to the maintainer privately, not in
+the public tracker.
 
 ## Contributing & license
 

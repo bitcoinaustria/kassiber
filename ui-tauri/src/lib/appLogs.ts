@@ -19,6 +19,8 @@ export type AppLogFieldType =
   | "ip"
   | "amount";
 
+export type AppLogRedactionMode = "high_signal" | "public_safe";
+
 export interface AppLogField {
   type: AppLogFieldType;
   value: unknown;
@@ -41,13 +43,18 @@ export interface AppLogExportHeader {
   os: string;
   timeRange: string;
   activeFilter: string;
-  redaction: "redacted" | "raw" | "redacted-amounts";
+  redaction:
+    | "redacted"
+    | "raw"
+    | "redacted-amounts"
+    | AppLogRedactionMode;
   generatedAt?: string;
 }
 
 export interface AppLogRenderOptions {
   redacted: boolean;
   maskAmounts?: boolean;
+  mode?: AppLogRedactionMode;
 }
 
 export interface AppSupportBundleOptions {
@@ -56,6 +63,7 @@ export interface AppSupportBundleOptions {
   maxEvents?: number;
   contextRadius?: number;
   includeAiProvenance?: boolean;
+  mode?: AppLogRedactionMode;
 }
 
 export const APP_LOG_MAX_RECORDS = 5_000;
@@ -69,19 +77,22 @@ const LEVEL_WEIGHT: Record<AppLogLevel, number> = {
   error: 50,
 };
 
-const SENSITIVE_FIELD_TYPES = new Set<AppLogFieldType>([
-  "address",
-  "url",
-  "xpub",
-  "xpriv",
-  "descriptor",
-  "txid",
-  "path",
-  "label",
-  "onion",
+const SECRET_FLOOR_FIELD_TYPES = new Set<AppLogFieldType>([
   "api_key",
+  "descriptor",
+  "xpriv",
+  "xpub",
+]);
+
+const OPERATIONAL_FIELD_TYPES = new Set<AppLogFieldType>([
+  "address",
   "email",
   "ip",
+  "label",
+  "onion",
+  "path",
+  "txid",
+  "url",
 ]);
 
 let subscriptionLevel: AppLogLevel = "info";
@@ -89,9 +100,47 @@ let memoryRing: AppLogRecord[] = [];
 let memoryRingBytes = 2;
 const subscribers = new Set<() => void>();
 
-type TextBackstopReplacement = string | ((match: string) => string);
+type TextBackstopReplacement = string | ((...matches: string[]) => string);
 
-const TEXT_BACKSTOP_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
+const BARE_BIP39_WORD_RUN_PATTERNS: Array<[RegExp, TextBackstopReplacement]> =
+  [24, 21, 18, 15, 12].map((wordCount) => [
+    new RegExp(
+      `\\b(?:[a-z]{3,8}\\s+){${wordCount - 1}}[a-z]{3,8}\\b`,
+      "g",
+    ),
+    "[redacted-seed-phrase]",
+  ]);
+
+const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
+  [
+    /\b(mnemonic|recovery[_-]?phrase|seed(?:[_-]?phrase)?)\b(\s*[:=]\s*)(.+)$/gim,
+    "$1$2[redacted]",
+  ],
+  [
+    /\b((?:https?|tcp|ssl):\/\/)([^/\s:@]+):([^@\s/]+)@/gi,
+    "$1[redacted-credentials]@",
+  ],
+  ...BARE_BIP39_WORD_RUN_PATTERNS,
+  [
+    /\b(?:xprv|tprv|yprv|zprv|uprv|vprv)[1-9A-HJ-NP-Za-km-z]{20,}\b/g,
+    "[redacted-private-key]",
+  ],
+  [
+    /\b(?:xpub|tpub|ypub|zpub|upub|vpub)[1-9A-HJ-NP-Za-km-z]{20,}\b/g,
+    "[redacted-extended-key]",
+  ],
+  [
+    /\b(wpkh|sh|wsh|tr|pkh|combo)\([^\n]{16,400}\)(?:#[a-z0-9]{8})?/gi,
+    (match) => maskDescriptor(match),
+  ],
+  [/\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*/g, "Bearer [redacted]"],
+  [
+    /\b(api[_-]?key|auth[_-]?header|cookie|descriptor|passphrase|password|secret|token)\b(\s*[:=]\s*)([^\s,;"']+)/gi,
+    "$1$2[redacted]",
+  ],
+];
+
+const PUBLIC_SAFE_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
   [
     /\b(?:https?|tcp|ssl):\/\/[^\s,;"')\]}]+/gi,
     "[redacted-url]",
@@ -101,7 +150,11 @@ const TEXT_BACKSTOP_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
     "[redacted-email]",
   ],
   [
-    /\b(?:bc1|tb1|bcrt1)[023456789acdefghjklmnpqrstuvwxyz]{20,90}\b/gi,
+    /\b(?:bc1|tb1|bcrt1|lq1|ex1)[023456789acdefghjklmnpqrstuvwxyz]{20,90}\b/gi,
+    "[redacted-address]",
+  ],
+  [
+    /\b[13][1-9A-HJ-NP-Za-km-z]{25,34}\b/g,
     "[redacted-address]",
   ],
   [
@@ -115,23 +168,6 @@ const TEXT_BACKSTOP_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
   [
     /(?:^|[\s"'(])(?:\/Users|\/home|\/var|\/private|\/tmp)\/[^\s,;"')\]}]+/g,
     (match) => `${match[0] === "/" ? "" : match[0]}[redacted-path]`,
-  ],
-  [
-    /\b(?:xprv|tprv|yprv|zprv|uprv|vprv)[1-9A-HJ-NP-Za-km-z]{20,}\b/g,
-    "[redacted-private-key]",
-  ],
-  [
-    /\b(?:xpub|tpub|ypub|zpub|upub|vpub)[1-9A-HJ-NP-Za-km-z]{20,}\b/g,
-    "[redacted-extended-key]",
-  ],
-  [
-    /\b(?:wpkh|sh|wsh|tr|pkh|combo)\([^)\n]{16,}\)/gi,
-    "[redacted-wallet-material]",
-  ],
-  [/\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*/g, "Bearer [redacted]"],
-  [
-    /\b(api[_-]?key|auth[_-]?header|cookie|descriptor|mnemonic|passphrase|password|recovery[_-]?phrase|secret|seed|token)\b(\s*[:=]\s*)([^\s,;"']+)/gi,
-    "$1$2[redacted]",
   ],
 ];
 
@@ -208,7 +244,7 @@ export function redactLogRecord(
   if (!options.redacted) return record;
   return {
     ...record,
-    msg: redactTextBackstop(record.msg),
+    msg: redactTextForMode(record.msg, options.mode ?? "public_safe"),
     fields: redactFields(record.fields, options),
     spantrace: record.spantrace?.map((child) => redactLogRecord(child, options)),
   };
@@ -295,13 +331,15 @@ export function exportSupportBundleRecords(
   options: AppSupportBundleOptions,
 ): string {
   const generatedAt = options.header.generatedAt ?? new Date().toISOString();
+  const mode = options.mode ?? "high_signal";
   const maxEvents = options.maxEvents ?? 1000;
   const contextRadius = options.contextRadius ?? 12;
   const includeAiProvenance = options.includeAiProvenance ?? true;
   const exportedRecords = records.slice(-maxEvents);
   const renderOptions: AppLogRenderOptions = {
     redacted: true,
-    maskAmounts: true,
+    maskAmounts: mode === "public_safe",
+    mode,
   };
   const events = exportedRecords.map((record) =>
     redactLogRecord(record, renderOptions),
@@ -328,10 +366,9 @@ export function exportSupportBundleRecords(
       os: options.header.os,
       time_range: options.header.timeRange,
       active_filter: options.header.activeFilter,
-      redaction: "public-safe",
-      public_safe: true,
-      format_note:
-        "Each following JSONL row is independently redacted and safe for public support unless the user adds private text to the issue description.",
+      redaction: mode,
+      public_safe: mode === "public_safe",
+      format_note: supportBundleFormatNote(mode),
       sections: {
         issue: 1,
         redaction_report: 1,
@@ -344,12 +381,12 @@ export function exportSupportBundleRecords(
     {
       kind: "kassiber.support_bundle.issue",
       schema_version: 1,
-      description: redactTextBackstop(options.issueDescription.trim()),
+      description: redactTextForMode(options.issueDescription.trim(), mode),
     },
     {
       kind: "kassiber.support_bundle.redaction_report",
       schema_version: 1,
-      ...redactionReportForRecords(exportedRecords, omittedEvents),
+      ...redactionReportForRecords(exportedRecords, omittedEvents, mode),
     },
     {
       kind: "kassiber.support_bundle.diagnostics",
@@ -387,6 +424,13 @@ export function exportSupportBundleRecords(
   return `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`;
 }
 
+function supportBundleFormatNote(mode: AppLogRedactionMode): string {
+  if (mode === "public_safe") {
+    return "Each following JSONL row is independently redacted for public support: wallet/credential material is stripped and operational fields such as amounts, addresses, txids, paths, URLs, emails, IPs, labels, and onion hosts are masked.";
+  }
+  return "High-signal support bundles keep operational debugging data readable, including amounts, addresses, txids, paths, URLs, labels, emails, IPs, onion hosts, and error text. They still strip wallet/credential material and are intended for the maintainer or a trusted debugging session, not public posting.";
+}
+
 export function stableMaskedValue(field: AppLogField): string {
   const value = String(field.value ?? "");
   if (!value) return "";
@@ -396,10 +440,11 @@ export function stableMaskedValue(field: AppLogField): string {
     case "url":
       return `url#${stableHash(value)}`;
     case "xpub":
+      return `xpub#${stableHash(value)}`;
     case "xpriv":
-      return keepShort(value, 6, 4);
+      return "[redacted-private-key]";
     case "descriptor":
-      return `wallet#${stableHash(value)}`;
+      return maskDescriptor(value);
     case "txid":
       return `txid#${stableHash(value)}`;
     case "path":
@@ -409,7 +454,7 @@ export function stableMaskedValue(field: AppLogField): string {
     case "onion":
       return `onion#${stableHash(value)}`;
     case "api_key":
-      return `key#${stableHash(value)}`;
+      return "[redacted-api-key]";
     case "email":
       return `email#${stableHash(value)}`;
     case "ip":
@@ -425,14 +470,30 @@ function redactField(
   field: AppLogField,
   options: AppLogRenderOptions,
 ): AppLogField {
-  if (field.type === "amount" && !options.maskAmounts) return field;
-  if (field.type === "text" && typeof field.value === "string") {
-    return { ...field, value: redactTextBackstop(field.value) };
+  const mode = options.mode ?? "public_safe";
+  if (SECRET_FLOOR_FIELD_TYPES.has(field.type)) {
+    return { type: "text", value: stableMaskedValue(field) };
   }
-  if (!SENSITIVE_FIELD_TYPES.has(field.type) && field.type !== "amount") {
+  if (field.type === "text") {
+    const value = stringifyLogValue(field.value);
+    return { ...field, value: redactTextForMode(value, mode) };
+  }
+  if (field.type === "amount") {
+    return mode === "public_safe" && options.maskAmounts
+      ? { type: "text", value: stableMaskedValue(field) }
+      : field;
+  }
+  if (OPERATIONAL_FIELD_TYPES.has(field.type)) {
+    if (mode === "public_safe") {
+      return { type: "text", value: stableMaskedValue(field) };
+    }
+    return { ...field, value: redactSecretFloorText(stringifyLogValue(field.value)) };
+  }
+  if (mode === "high_signal") {
     return field;
   }
-  return { type: "text", value: stableMaskedValue(field) };
+  const value = stringifyLogValue(field.value);
+  return { ...field, value: redactTextForMode(value, mode) };
 }
 
 function redactFields(
@@ -452,7 +513,12 @@ function redactFields(
 
 function redactedFieldName(name: string, field: AppLogField): string {
   if (field.type === "amount") return name;
-  if (!SENSITIVE_FIELD_TYPES.has(field.type)) return name;
+  if (
+    !SECRET_FLOOR_FIELD_TYPES.has(field.type) &&
+    !OPERATIONAL_FIELD_TYPES.has(field.type)
+  ) {
+    return name;
+  }
   if (
     field.type === "xpub" ||
     field.type === "xpriv" ||
@@ -463,14 +529,56 @@ function redactedFieldName(name: string, field: AppLogField): string {
   return field.type;
 }
 
-function redactTextBackstop(value: string): string {
-  return TEXT_BACKSTOP_PATTERNS.reduce(
+function redactTextForMode(value: string, mode: AppLogRedactionMode): string {
+  return mode === "public_safe"
+    ? redactPublicSafeText(value)
+    : redactSecretFloorText(value);
+}
+
+function redactSecretFloorText(value: string): string {
+  return applyTextBackstop(value, SECRET_FLOOR_TEXT_PATTERNS);
+}
+
+function redactPublicSafeText(value: string): string {
+  return applyTextBackstop(
+    redactSecretFloorText(value),
+    PUBLIC_SAFE_TEXT_PATTERNS,
+  );
+}
+
+function applyTextBackstop(
+  value: string,
+  patterns: Array<[RegExp, TextBackstopReplacement]>,
+): string {
+  return patterns.reduce(
     (current, [pattern, replacement]) =>
       typeof replacement === "string"
         ? current.replace(pattern, replacement)
         : current.replace(pattern, replacement),
     value,
   );
+}
+
+function stringifyLogValue(value: unknown): string {
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return String(value);
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function maskDescriptor(value: string): string {
+  const scriptType = value.match(/\b(wpkh|sh|wsh|tr|pkh|combo)\(/i)?.[1];
+  if (!scriptType) return "[redacted-descriptor]";
+  const origin = value.match(/\[[^\]\n]{1,120}\]/)?.[0] ?? "";
+  return `${scriptType}(${origin}[redacted-key])`;
 }
 
 function indexesForFailures(records: AppLogRecord[]): number[] {
@@ -544,32 +652,45 @@ function stringFieldValue(record: AppLogRecord, name: string): string {
 function redactionReportForRecords(
   records: AppLogRecord[],
   omittedEvents: number,
+  mode: AppLogRedactionMode = "public_safe",
 ): Record<string, unknown> {
-  const sensitiveFieldCounts: Record<string, number> = {};
-  let textBackstopHits = 0;
+  const secretFloorFieldCounts: Record<string, number> = {};
+  const operationalFieldCounts: Record<string, number> = {};
+  let secretFloorTextHits = 0;
+  let publicSafeTextHits = 0;
   for (const record of records) {
-    if (redactTextBackstop(record.msg) !== record.msg) {
-      textBackstopHits += 1;
+    if (redactSecretFloorText(record.msg) !== record.msg) {
+      secretFloorTextHits += 1;
+    }
+    if (mode === "public_safe" && redactPublicSafeText(record.msg) !== record.msg) {
+      publicSafeTextHits += 1;
     }
     for (const field of Object.values(record.fields)) {
-      if (SENSITIVE_FIELD_TYPES.has(field.type) || field.type === "amount") {
-        sensitiveFieldCounts[field.type] =
-          (sensitiveFieldCounts[field.type] ?? 0) + 1;
+      if (SECRET_FLOOR_FIELD_TYPES.has(field.type)) {
+        secretFloorFieldCounts[field.type] =
+          (secretFloorFieldCounts[field.type] ?? 0) + 1;
       }
-      if (
-        typeof field.value === "string" &&
-        redactTextBackstop(field.value) !== field.value
-      ) {
-        textBackstopHits += 1;
+      if (OPERATIONAL_FIELD_TYPES.has(field.type) || field.type === "amount") {
+        operationalFieldCounts[field.type] =
+          (operationalFieldCounts[field.type] ?? 0) + 1;
+      }
+      const value = stringifyLogValue(field.value);
+      if (redactSecretFloorText(value) !== value) {
+        secretFloorTextHits += 1;
+      }
+      if (mode === "public_safe" && redactPublicSafeText(value) !== value) {
+        publicSafeTextHits += 1;
       }
     }
   }
   return {
-    mode: "public-safe",
-    exact_amounts: "masked",
+    mode,
+    exact_amounts: mode === "public_safe" ? "masked" : "readable",
     omitted_events_from_start: omittedEvents,
-    sensitive_field_counts: sensitiveFieldCounts,
-    text_backstop_hits: textBackstopHits,
+    secret_floor_field_counts: secretFloorFieldCounts,
+    operational_field_counts: operationalFieldCounts,
+    secret_floor_text_hits: secretFloorTextHits,
+    public_safe_text_hits: publicSafeTextHits,
     excluded_material: [
       "raw daemon arguments",
       "raw imported rows",

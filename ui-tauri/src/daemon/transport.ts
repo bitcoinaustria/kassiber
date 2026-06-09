@@ -271,13 +271,10 @@ function summarizeEnvelopeFields(
   };
   if (envelope.error) {
     summary.error_code = textField(envelope.error.code);
-    summary.error_message = {
-      type: "label",
-      value: envelope.error.message,
-    };
+    summary.error_message = textField(envelope.error.message);
     summary.retryable = booleanField(envelope.error.retryable);
     if (envelope.error.hint) {
-      summary.error_hint = { type: "label", value: envelope.error.hint };
+      summary.error_hint = textField(envelope.error.hint);
     }
   } else if (envelope.data && typeof envelope.data === "object") {
     addDataSummaryFields(summary, envelope.data as Record<string, unknown>);
@@ -354,10 +351,9 @@ function withDaemonLogging(
           "Daemon invoke threw",
           {
             ...summarizeRequestFields(request),
-            error_message: {
-              type: "label",
-              value: error instanceof Error ? error.message : String(error),
-            },
+            error_message: textField(
+              error instanceof Error ? error.message : String(error),
+            ),
           },
         );
         throw error;
@@ -401,10 +397,9 @@ function withDaemonLogging(
           "Daemon stream threw",
           {
             ...summarizeRequestFields(request),
-            error_message: {
-              type: "label",
-              value: error instanceof Error ? error.message : String(error),
-            },
+            error_message: textField(
+              error instanceof Error ? error.message : String(error),
+            ),
           },
         );
         throw error;

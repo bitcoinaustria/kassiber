@@ -64,7 +64,7 @@ describe("typed app logs", () => {
     });
     expect(redacted).toContain("Daemon invoke finished");
     expect(redacted).toContain("address=bc1qe...f3xy");
-    expect(redacted).toContain("wallet_material=wallet#");
+    expect(redacted).toContain("wallet_material=wpkh([abcd1234/84h/0h/0h][redacted-key])");
     expect(redacted).toContain("label=wallet#");
     expect(redacted).toContain("path=~/.../data");
     expect(redacted).toContain("bc1qe...f3xy");
@@ -153,9 +153,85 @@ describe("typed app logs", () => {
     );
   });
 
+  it("exports high-signal support bundles while enforcing the secret floor", () => {
+    const txid = "a".repeat(64);
+    const address = "bc1qexample000000000000000000000000000000f3xy";
+    const xprv = "xprv9s21ZrQH143K2secretsecretsecretsecretsecret";
+    const xpub = "xpub661MyMwAqRbcFsecretsecretsecretsecretsecret";
+    const descriptor = `wpkh([abcd1234/84h/0h/0h]${xpub}/0/*)#deadbeef`;
+    const mnemonic =
+      "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    const url = "https://user:password@example.test/wallet?api_key=sk-url-secret";
+    const localPath = "/Users/dev/.kassiber/data/kassiber.sqlite";
+    const records: AppLogRecord[] = [
+      {
+        ...record({
+          request_id: { type: "text", value: "req-1" },
+          trace_id: { type: "text", value: "req-1" },
+          backend_url: { type: "url", value: url },
+          email: { type: "email", value: "dev@example.test" },
+          data_root: { type: "path", value: localPath },
+          amount: { type: "amount", value: "1.234 BTC" },
+          txid: { type: "txid", value: txid },
+          address: { type: "address", value: address },
+          wallet_xpub: { type: "xpub", value: xpub },
+          wallet_xpriv: { type: "xpriv", value: xprv },
+          wallet_descriptor: { type: "descriptor", value: descriptor },
+          error_message: {
+            type: "text",
+            value: `Could not price ${txid} for ${address}`,
+          },
+          detail: {
+            type: "text",
+            value: `mnemonic=${mnemonic} raw_private=${xprv}`,
+          },
+        }),
+        id: "log-1",
+        ts: "2026-05-17T18:00:00.000Z",
+        msg: `Could not price ${txid} for ${address} in ${localPath}`,
+      },
+    ];
+
+    const exported = exportSupportBundleRecords(records, {
+      issueDescription: `Tax summary fails for ${txid} and ${url}`,
+      header: {
+        appVersion: "0.22.0 (abc1234)",
+        os: "macOS",
+        timeRange: "2026-05-17T18:00:00Z to 2026-05-17T18:01:00Z",
+        activeFilter: "capture>=trace",
+        redaction: "high_signal",
+        generatedAt: "2026-05-17T18:08:00Z",
+      },
+    });
+
+    expect(exported).toContain('"redaction":"high_signal"');
+    expect(exported).toContain("1.234 BTC");
+    expect(exported).toContain(address);
+    expect(exported).toContain(txid);
+    expect(exported).toContain(localPath);
+    expect(exported).toContain("dev@example.test");
+    expect(exported).toContain("Could not price");
+    expect(exported).toContain(`Could not price ${txid} for ${address} in ${localPath}`);
+    expect(exported).toContain("https://[redacted-credentials]@example.test/wallet?api_key=[redacted]");
+    expect(exported).toContain("xpub#");
+    expect(exported).toContain("wpkh([abcd1234/84h/0h/0h][redacted-key])");
+    expect(exported).toContain("[redacted-private-key]");
+    expect(exported).not.toContain("sk-url-secret");
+    expect(exported).not.toContain("user:password");
+    expect(exported).not.toContain(xpub);
+    expect(exported).not.toContain(xprv);
+    expect(exported).not.toContain("deadbeef");
+    for (const word of mnemonic.split(" ")) {
+      expect(exported).not.toContain(word);
+    }
+  });
+
   it("exports public-safe support bundles with failure context and AI provenance", () => {
     const txid = "a".repeat(64);
     const address = "bc1qexample000000000000000000000000000000f3xy";
+    const legacyAddress = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT";
+    const scriptHashAddress = "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy";
+    const liquidAddress = "lq1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
     const descriptor = "wpkh([abcd1234/84h/0h/0h]xpub661MyMwAqRbcFsecret/0/*)";
     const url = "https://user:secret@example.test/wallet?api_key=sk-url-secret";
     const localPath = "/Users/dev/.kassiber/data/kassiber.sqlite";
@@ -188,7 +264,7 @@ describe("typed app logs", () => {
           tool_name: { type: "text", value: "ui.transactions.search" },
           result_hint: {
             type: "text",
-            value: `matched ${txid} at ${address}`,
+            value: `matched ${txid} at ${address} ${legacyAddress} ${scriptHashAddress} ${liquidAddress}`,
           },
         },
       },
@@ -221,11 +297,13 @@ describe("typed app logs", () => {
         redaction: "redacted-amounts",
         generatedAt: "2026-05-17T18:08:00Z",
       },
+      mode: "public_safe",
     });
 
     expect(exported).toContain("kassiber.support_bundle.manifest");
     expect(exported).toContain("kassiber.support_bundle.last_failure");
     expect(exported).toContain("kassiber.support_bundle.ai_provenance");
+    expect(exported).toContain('"redaction":"public_safe"');
     expect(exported).toContain("missing_price");
     expect(exported).toContain("amount#");
     expect(exported).toContain("[redacted-url]");
@@ -238,6 +316,9 @@ describe("typed app logs", () => {
     expect(exported).not.toContain(localPath);
     expect(exported).not.toContain(txid);
     expect(exported).not.toContain(address);
+    expect(exported).not.toContain(legacyAddress);
+    expect(exported).not.toContain(scriptHashAddress);
+    expect(exported).not.toContain(liquidAddress);
     expect(exported).not.toContain("mnemonic=abandon");
   });
 

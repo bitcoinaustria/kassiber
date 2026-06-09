@@ -64,13 +64,17 @@ daemon invoke gets a client request id and matching `trace_id`, so support
 exports can group start, stream, terminal, and failure records.
 
 For user-shareable troubleshooting, Logs offers **Export → Support bundle**.
-The bundle is a public-safe `.support.jsonl` file containing the user's short
-issue description, a manifest, a redaction report, recent redacted events,
-last-failure context, and redacted AI provenance records. Support bundles
-always mask exact amounts and sensitive typed fields, redact secret-shaped text
-as a backstop, and never include raw daemon arguments, descriptors, xpubs,
-backend URLs, local paths, raw AI prompts, imported rows, database files, or
-stack locals.
+The bundle is a `.support.jsonl` file containing the user's short issue
+description, a manifest, a redaction report, recent redacted events,
+last-failure context, and redacted AI provenance records. High-signal mode is
+the default for trusted maintainer debugging and keeps operational values such
+as amounts, txids, addresses, labels, paths, URLs, and daemon error messages
+readable. Public-safe mode masks those operational values for public posting.
+Both modes apply the secret floor: descriptors are reduced to script
+shape/derivation hints, xpubs are stable-hashed, and private keys, recovery
+phrases, API keys, passwords, bearer tokens, cookies, raw daemon arguments,
+raw AI prompts, imported rows, database files, and stack locals are excluded or
+redacted.
 
 The Connections detail page includes a read-only UTXOs table for chain-backed
 wallet sources. Refreshing a descriptor/xpub/address wallet updates the local
