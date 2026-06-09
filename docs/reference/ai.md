@@ -139,6 +139,7 @@ kassiber ai providers create claude-cli --base-url claude-cli://default --kind r
 kassiber ai providers set-default openai
 kassiber ai models
 kassiber chat "Summarise the last week of imports."
+git log --oneline -20 | kassiber chat -
 kassiber chat
 ```
 
@@ -146,29 +147,48 @@ kassiber chat
 the desktop UI — there is exactly one chat surface and one protocol. It starts
 a local daemon transport, sends `ai.chat` requests with `tools_enabled=true`,
 renders streaming deltas in the terminal, and sends `ai.tool_call.consent`
-decisions when mutating tools ask for approval. Omit the prompt for REPL mode
-(`/help` lists commands, `/tools` lists the daemon tool catalog with consent
-classes, Ctrl-C cancels the current turn without ending the session); pass a
-prompt positionally or with `--prompt` for one turn. Daemon-side
-`allow_session` consent spans a single `ai.chat` request, so the REPL carries
-an interactive "[s] session" answer across turns client-side and re-sends it
-for that tool. After each rendered turn
-a dim provenance footer shows provider/model, the tools that actually ran, and
-whether journals were auto-refreshed — the same provenance the desktop
-Assistant records. `--no-tools` disables the tool loop for a provider-only
-exchange, and `--system "..."` replaces the built-in Kassiber system prompt
-with a raw one (`system_prompt_kind="raw"`).
+decisions when mutating tools ask for approval. Pass a prompt positionally or
+with `--prompt` for one turn; `kassiber chat -` reads the one-shot prompt from
+stdin for pipelines and heredocs. After each rendered turn a dim provenance
+footer shows provider/model, the tools that actually ran, and whether journals
+were auto-refreshed — the same provenance the desktop Assistant records.
+`--no-tools` disables the tool loop for a provider-only exchange, and
+`--system "..."` replaces the built-in Kassiber system prompt with a raw one
+(`system_prompt_kind="raw"`).
 
-Three output modes cover scripting:
+Omit the prompt for REPL mode, which has line editing and in-session history
+on real terminals, and these commands:
 
-- default rendered text for humans;
+- `/help` — command help; `/exit`, `/quit`, or Ctrl-D leaves.
+- `/tools` — the daemon tool catalog with consent classes.
+- `/model [id]`, `/provider [name]` — show or switch mid-session; a provider
+  switch re-resolves that provider's default model and rolls back on error.
+- `/allow <tool>`, `/allowed` — manage which mutating tools are pre-approved
+  for this session.
+- `/new` — start a fresh conversation without restarting the daemon.
+
+Ctrl-C during a reply cancels that turn cooperatively and keeps the session.
+Daemon-side `allow_session` consent spans a single `ai.chat` request, so the
+REPL carries an interactive "[s] session" answer across turns client-side and
+re-sends it for that tool.
+
+Output modes cover scripting:
+
+- default rendered text for humans. With piped stdout, the answer text is the
+  only thing on stdout — progress labels, tool announcements, consent UI, and
+  the provenance footer move to stderr;
 - `--machine` / `--format json` (one-shot only) emits a single `chat` envelope
   with the final message, `finish_reason`, provenance, and tool-call summary;
 - `--stream-json` (one-shot only, mutually exclusive with `--machine`) emits
   the raw daemon stream records — `ai.chat.status`, `ai.chat.delta`,
   `ai.chat.tool_call`, `ai.chat.tool_consent_required`, `ai.chat.tool_result`,
   then the terminal `ai.chat` — as NDJSON, mirroring what the desktop bridge
-  streams.
+  streams;
+- `--transcript PATH` (any mode, REPL included) appends every daemon request
+  and stream record for the session to PATH as NDJSON — a local audit trail
+  for debugging model answers and tool behavior. The file is plaintext and
+  contains prompts and redacted tool results; treat it like notes, not like
+  the encrypted database.
 
 For automation, `kassiber chat --yes "..."` approves mutating tool requests for
 that chat session without prompting. Prefer the narrower

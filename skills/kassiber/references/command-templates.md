@@ -28,18 +28,26 @@ kassiber chat --allow-tool ui.journals.process "Refresh journals, then summarize
 kassiber chat --yes "Sync allowed wallets and summarize what changed."
 kassiber chat --stream-json "List my largest outbound transactions."
 kassiber --machine chat "How many transactions are missing prices?"
+printf 'Explain these journal blockers:\n%s\n' "$BLOCKERS" | kassiber chat -
+kassiber chat --transcript /tmp/chat-audit.ndjson "Why is my tax summary stale?"
 ```
 
 `kassiber chat` is the only chat command. It mirrors the desktop Assistant and
 drives daemon `ai.chat`, `ai.tool_call.consent`, and `ai.chat.cancel`.
 Mutating tools prompt on a TTY in rendered mode; in the REPL, `/tools` lists
-the tool catalog with consent classes and Ctrl-C cancels the current turn.
-For scripts, `--allow-tool <daemon-tool-name>` approves only that tool;
-`--yes` approves all mutating tools for the chat session. `--machine` emits a
-single final `chat` envelope; `--stream-json` emits the raw daemon stream
-records as NDJSON (both one-shot only). Neither machine mode ever prompts for
-consent; unapproved mutating tool requests are denied and fed back to the
-model. Use `--no-tools` for a provider-only exchange without the tool loop.
+the tool catalog with consent classes, `/model` and `/provider` switch
+mid-session, `/allow` pre-approves a mutating tool, `/new` clears history,
+and Ctrl-C cancels the current turn. For scripts, `--allow-tool
+<daemon-tool-name>` approves only that tool; `--yes` approves all mutating
+tools for the chat session. `--machine` emits a single final `chat` envelope;
+`--stream-json` emits the raw daemon stream records as NDJSON (both one-shot
+only); `chat -` reads the one-shot prompt from stdin. Neither machine mode
+ever prompts for consent; unapproved mutating tool requests are denied and
+fed back to the model. With piped stdout the answer is the only thing on
+stdout (chrome moves to stderr), so `kassiber chat "..." > answer.txt` is
+clean. Use `--no-tools` for a provider-only exchange without the tool loop,
+and `--transcript <path>` to keep a plaintext NDJSON audit log of the
+session's daemon records.
 
 ## Fast paths
 
