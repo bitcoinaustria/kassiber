@@ -231,9 +231,15 @@ Per-transaction granularity matches strict exchange-facing reviews: every
 transaction node carries `fee`/`fee_msat` and a `data_provenance` value
 (`chain_sync` for descriptor/xpub watch-only sync, `platform_export` for
 exchange/node CSV and API imports, `manual_import` for custom/manual rows),
-derived from the owning wallet's kind. `flow_levels` nodes additionally carry
-`direction`, and each level row carries `assets` plus a `fiat_value_total`
-subtotal when the level's priced nodes share one fiat currency. The PDF
+derived from the owning wallet's kind (descriptor/xpub/address wallets built
+around a file-based source count as `platform_export`, not chain-verified).
+`flow_levels` nodes additionally carry `direction` and a
+`fiat_value_allocated` pro-rata slice (node `fiat_value` prices the full
+transaction; the allocated slice scales it to the traced `required_amount`).
+Each level row carries `assets` plus a `fiat_value_total` subtotal — the sum
+of allocated slices, emitted only when every node in the level has a priced
+allocated value in one shared fiat currency, so partial pricing can never
+silently understate or overstate a level. The PDF
 renders this as one "Transaction Details by Level" sub-table per level (Date,
 Source, Type, In, Out, Fee, Fiat, ID/hash, Data source), with root sources
 included as attested rows. `data_provenance_summary` rolls disclosed
