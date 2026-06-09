@@ -124,6 +124,18 @@ describe("daemon mutation invalidation scope", () => {
     ).toEqual([]);
   });
 
+  it("refreshes backend default reads after changing the default backend", () => {
+    expect(
+      invalidatedDaemonQueryKindsForMutation("ui.backends.set_default"),
+    ).toEqual([
+      "status",
+      "ui.backends.list",
+      "ui.backends.options",
+      "ui.backends.public_defaults",
+      "ui.backends.settings.list",
+    ]);
+  });
+
   it("keeps unaudited mutations on broad daemon invalidation", () => {
     expect(
       invalidatedDaemonQueryKindsForMutation("ui.transactions.metadata.update"),

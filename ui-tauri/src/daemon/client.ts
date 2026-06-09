@@ -244,6 +244,13 @@ export function daemonMutationKey(dataMode: DataMode, kind: string) {
 }
 
 const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
+  "ui.backends.set_default": [
+    "status",
+    "ui.backends.list",
+    "ui.backends.options",
+    "ui.backends.public_defaults",
+    "ui.backends.settings.list",
+  ],
   "ui.backends.electrum.test": [],
   "ui.backends.http.test": [],
   "ui.freshness.run": [

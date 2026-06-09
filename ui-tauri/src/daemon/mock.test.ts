@@ -41,11 +41,33 @@ describe("mock daemon backend settings", () => {
     expect(updated.data?.has_auth_header).toBe(false);
     expect(updated.data?.has_username).toBe(true);
 
+    const setDefault = await mockDaemon.invoke<{ default_backend: string }>({
+      kind: "ui.backends.set_default",
+      args: { name: "mock-extra" },
+    });
+    expect(setDefault.error).toBeUndefined();
+    expect(setDefault.data?.default_backend).toBe("mock-extra");
+
+    const relisted = await mockDaemon.invoke<{
+      backends: Array<{ name: string; is_default?: boolean }>;
+      summary: { default_backend: string | null };
+    }>({ kind: "ui.backends.settings.list" });
+    expect(relisted.data?.summary.default_backend).toBe("mock-extra");
+    expect(
+      relisted.data?.backends.find((row) => row.name === "mock-extra")
+        ?.is_default,
+    ).toBe(true);
+
     const deleted = await mockDaemon.invoke<{ deleted: boolean }>({
       kind: "ui.backends.delete",
       args: { name: "mock-extra" },
     });
     expect(deleted.data?.deleted).toBe(true);
+
+    await mockDaemon.invoke({
+      kind: "ui.backends.set_default",
+      args: { name: "mempool" },
+    });
   });
 });
 
