@@ -951,6 +951,10 @@ function resolveAppCommit(): string {
 }
 
 function resolveAppVersion(): string {
+  if (process.env.KASSIBER_BUILD_VERSION) {
+    return process.env.KASSIBER_BUILD_VERSION;
+  }
+
   try {
     const pkg = JSON.parse(
       readFileSync(path.resolve(UI_ROOT, "package.json"), "utf8"),

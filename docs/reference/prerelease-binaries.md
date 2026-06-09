@@ -135,6 +135,11 @@ unsigned desktop app and DMG under
 `ui-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle`.
 The helper defaults to Python 3.11 to match the GitHub Actions prerelease
 workflow; set `PYTHON_VERSION=<version>` only for intentional local debugging.
+The Tauri package version is injected from `[project].version` in
+`pyproject.toml`, so local app builds follow the Python package version instead
+of the placeholder value in `tauri.conf.json`. The local helper also sets the
+desktop display label to `dev` and injects the current Git commit, so the app
+footer reads like `Kassiber dev · abc1234`.
 
 #### First launch on macOS
 

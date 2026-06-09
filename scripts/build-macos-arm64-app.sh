@@ -39,12 +39,24 @@ require_command pnpm
 require_command rustup
 require_command uv
 
+run uv sync --frozen --python "$PYTHON_VERSION"
+
+APP_VERSION="$(
+  uv run --python "$PYTHON_VERSION" python -c \
+    'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])'
+)"
+APP_COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || printf unknown)"
+APP_DISPLAY_VERSION="dev"
+TAURI_VERSION_CONFIG="$(mktemp "${TMPDIR:-/tmp}/kassiber-tauri-version.XXXXXX.json")"
+trap 'rm -f "$TAURI_VERSION_CONFIG"' EXIT
+printf '{ "version": "%s" }\n' "$APP_VERSION" > "$TAURI_VERSION_CONFIG"
+
 echo "Building Kassiber desktop for macOS arm64 only."
+echo "Package version: $APP_VERSION"
+echo "Displayed build: $APP_DISPLAY_VERSION ($APP_COMMIT)"
 echo "Bundled sidecar: $SIDECAR_NAME"
 echo "Bundles: $BUNDLES"
 echo "Python: $PYTHON_VERSION"
-
-run uv sync --frozen --python "$PYTHON_VERSION"
 
 skill_refs_add_data="$(ROOT="$ROOT" python3 -c 'import os; print(os.environ["ROOT"] + "/skills/kassiber/references" + os.pathsep + "skills/kassiber/references")')"
 
@@ -95,7 +107,8 @@ run chmod 755 "$BINARIES_DIR/$SIDECAR_NAME"
 
 run rustup target add "$TARGET_TRIPLE"
 run pnpm --dir ui-tauri install --frozen-lockfile
-run pnpm --dir ui-tauri tauri build --target "$TARGET_TRIPLE" --bundles "$BUNDLES" --ci
+run env KASSIBER_BUILD_VERSION="$APP_DISPLAY_VERSION" KASSIBER_BUILD_COMMIT="$APP_COMMIT" \
+  pnpm --dir ui-tauri tauri build --target "$TARGET_TRIPLE" --bundles "$BUNDLES" --ci --config "$TAURI_VERSION_CONFIG"
 
 cat <<EOF
 

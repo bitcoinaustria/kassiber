@@ -179,6 +179,7 @@ type NotificationItem = Omit<AppNotification, "createdAt"> & {
 };
 
 const APP_COMMIT_SHORT = APP_COMMIT ? APP_COMMIT.slice(0, 7) : "unknown";
+const APP_IS_DEV_BUILD = APP_VERSION === "dev";
 const NATIVE_MENU_EVENT = "kassiber:intent";
 const ACTIVE_PROGRESS_CLEAR_GRACE_MS = 750;
 const topNavIconButtonClassName =
@@ -1681,10 +1682,16 @@ function AppVersion() {
       href="https://github.com/bitcoinaustria/kassiber"
       target="_blank"
       rel="noreferrer"
-      title={`Kassiber v${APP_VERSION} (${APP_COMMIT})`}
+      title={
+        APP_IS_DEV_BUILD
+          ? `Kassiber local dev build (${APP_COMMIT})`
+          : `Kassiber v${APP_VERSION} (${APP_COMMIT})`
+      }
       className="inline-flex items-center justify-center gap-1 px-2 pb-1 text-center text-[11px] leading-none text-muted-foreground underline-offset-4 hover:text-foreground hover:underline group-data-[collapsible=icon]:hidden"
     >
-      <span>Kassiber v{APP_VERSION}</span>
+      <span>
+        {APP_IS_DEV_BUILD ? "Kassiber dev" : `Kassiber v${APP_VERSION}`}
+      </span>
       <span aria-hidden="true">·</span>
       <span className="font-mono text-[11px] leading-none">
         {APP_COMMIT_SHORT}
