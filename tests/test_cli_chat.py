@@ -349,6 +349,36 @@ class CliChatTest(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["error"]["code"], "validation")
 
+    def test_chat_no_tools_sends_no_system_prompt_or_tools(self):
+        server = _start_tool_chat_server(
+            [
+                _chat_completion_response(
+                    {"role": "assistant", "content": "ok"},
+                ),
+            ]
+        )
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+                data_root = Path(tmp) / "data"
+                _seed_provider(data_root, f"http://127.0.0.1:{server.server_port}/v1")
+                payload = _run_json(
+                    data_root,
+                    "chat",
+                    "--provider",
+                    "tool-local",
+                    "--no-tools",
+                    "hello",
+                )
+        finally:
+            _stop_server(server)
+
+        self.assertEqual(payload["data"]["message"]["content"], "ok")
+        request = server.requests[0]  # type: ignore[attr-defined]
+        self.assertNotIn("tools", request)
+        self.assertTrue(
+            all(message["role"] != "system" for message in request["messages"])
+        )
+
     def test_chat_system_flag_replaces_kassiber_prompt(self):
         server = _start_tool_chat_server(
             [

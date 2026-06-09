@@ -80,7 +80,11 @@ class _DaemonChatClient:
         if self._duplicated_fd is not None:
             os.close(self._duplicated_fd)
             self._duplicated_fd = None
-        ready = self.read()
+        try:
+            ready = self.read()
+        except AppError:
+            self.close()
+            raise
         if ready.get("kind") != "daemon.ready":
             self.close()
             raise AppError(
@@ -210,18 +214,21 @@ def _resolve_prompt(args: Any) -> str | None:
 
 
 def _build_chat_args(args: Any, messages: list[dict[str, str]]) -> dict[str, Any]:
+    tools_enabled = not getattr(args, "no_tools", False)
     payload: dict[str, Any] = {
         "provider": getattr(args, "provider", None),
         "model": args.model,
         "messages": messages,
-        "tools_enabled": not getattr(args, "no_tools", False),
+        "tools_enabled": tools_enabled,
         "tool_loop_max_iterations": getattr(args, "tool_loop_max_iterations", 8),
     }
     system = getattr(args, "system", None)
     if system:
         payload["system_prompt_kind"] = "raw"
         payload["system_prompt"] = system
-    else:
+    elif tools_enabled:
+        # With tools disabled the daemon default (no system prompt) is right;
+        # the Kassiber prompt instructs tool use the provider would not have.
         payload["system_prompt_kind"] = "kassiber"
     options = _chat_options(args)
     if options:
@@ -444,6 +451,7 @@ def _run_turn(
     out: TextIO,
     render: bool,
     stream_out: TextIO | None = None,
+    session_allowed: set[str] | None = None,
 ) -> ChatTurnResult:
     request_id = f"chat-{uuid.uuid4().hex}"
     client.send(
@@ -509,6 +517,10 @@ def _run_turn(
                 if not isinstance(call_id, str) or not isinstance(name, str):
                     continue
                 decision = _policy_decision(args, name, stdin)
+                if decision is None and session_allowed is not None and name in session_allowed:
+                    # Daemon-side allow_session only spans one ai.chat request;
+                    # carry the user's "session" answer across REPL turns here.
+                    decision = "allow_session"
                 if decision is None:
                     decision = _interactive_consent(
                         name=name,
@@ -517,6 +529,8 @@ def _run_turn(
                         stdin=stdin,
                         out=out,
                     )
+                    if decision == "allow_session" and session_allowed is not None:
+                        session_allowed.add(name)
                 if decision == "cancel":
                     control_requests.add(_send_cancel(client, request_id))
                 elif decision in _CONSENT_DECISIONS:
@@ -548,8 +562,14 @@ def _run_turn(
                             "needs_consent": False,
                         },
                     )
-                    existing["status"] = "done" if data.get("ok") else "denied"
-                    existing["reason"] = data.get("reason")
+                    reason = data.get("reason")
+                    if data.get("ok"):
+                        existing["status"] = "done"
+                    elif reason in {"user_denied", "consent_timeout"}:
+                        existing["status"] = "denied"
+                    else:
+                        existing["status"] = "failed"
+                    existing["reason"] = reason
                     existing["ok"] = bool(data.get("ok"))
                     if render and not data.get("ok") and data.get("reason"):
                         _write(f"\nTool result: {data['reason']}\n", out)
@@ -639,6 +659,7 @@ def run_chat_command(
             return session
 
         _write("Kassiber chat. /help for commands, /exit to quit.\n", output_stream)
+        session_allowed: set[str] = set()
         while True:
             try:
                 _write("> ", output_stream)
@@ -663,14 +684,26 @@ def run_chat_command(
                 _write(f"Unknown command {prompt}. /help lists commands.\n", output_stream)
                 continue
             messages.append({"role": "user", "content": prompt})
-            result = _run_turn(
-                client,
-                args,
-                messages,
-                stdin=input_stream,
-                out=output_stream,
-                render=True,
-            )
+            try:
+                result = _run_turn(
+                    client,
+                    args,
+                    messages,
+                    stdin=input_stream,
+                    out=output_stream,
+                    render=True,
+                    session_allowed=session_allowed,
+                )
+            except AppError as exc:
+                # Keep the REPL session (and its history) alive across
+                # transient provider or daemon-request failures.
+                if exc.code in {"daemon_closed", "daemon_protocol_error"}:
+                    raise
+                messages.pop()
+                _write(f"Error: {exc}\n", sys.stderr)
+                if exc.hint:
+                    _write(f"Hint: {exc.hint}\n", sys.stderr)
+                continue
             session.turns.append(result)
             _render_turn_footer(result.terminal, output_stream)
             if result.content:

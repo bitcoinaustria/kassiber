@@ -149,7 +149,10 @@ renders streaming deltas in the terminal, and sends `ai.tool_call.consent`
 decisions when mutating tools ask for approval. Omit the prompt for REPL mode
 (`/help` lists commands, `/tools` lists the daemon tool catalog with consent
 classes, Ctrl-C cancels the current turn without ending the session); pass a
-prompt positionally or with `--prompt` for one turn. After each rendered turn
+prompt positionally or with `--prompt` for one turn. Daemon-side
+`allow_session` consent spans a single `ai.chat` request, so the REPL carries
+an interactive "[s] session" answer across turns client-side and re-sends it
+for that tool. After each rendered turn
 a dim provenance footer shows provider/model, the tools that actually ran, and
 whether journals were auto-refreshed — the same provenance the desktop
 Assistant records. `--no-tools` disables the tool loop for a provider-only
@@ -163,8 +166,9 @@ Three output modes cover scripting:
   with the final message, `finish_reason`, provenance, and tool-call summary;
 - `--stream-json` (one-shot only, mutually exclusive with `--machine`) emits
   the raw daemon stream records — `ai.chat.status`, `ai.chat.delta`,
-  `ai.chat.tool_call`, `ai.chat.tool_result`, then the terminal `ai.chat` — as
-  NDJSON, mirroring what the desktop bridge streams.
+  `ai.chat.tool_call`, `ai.chat.tool_consent_required`, `ai.chat.tool_result`,
+  then the terminal `ai.chat` — as NDJSON, mirroring what the desktop bridge
+  streams.
 
 For automation, `kassiber chat --yes "..."` approves mutating tool requests for
 that chat session without prompting. Prefer the narrower

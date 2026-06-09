@@ -61,6 +61,7 @@ configurable.
 | `wallets sync` against a `bitcoinrpc` backend | your configured URL | HTTP(S) POST with Basic auth | nothing leaves your machine if the node is local |
 | `rates sync` (only) | `https://api.coingecko.com/api/v3/coins/bitcoin/market_chart` | unauthenticated HTTPS GET | IP, User-Agent, which fiat pair and window |
 | `ai models`, `chat`, `ai.test_connection` against a configured remote/TEE provider | your configured provider URL or CLI provider | OpenAI-compatible HTTP(S) or the configured local CLI's own transport | prompt/tool context, model request metadata, IP/provider account context according to that provider |
+| consented mutating AI tools inside `chat` or the desktop Assistant (`ui.wallets.sync`, `ui.rates.rebuild`, `ui.maintenance.run`) | the backends/rate sources of the rows above | as in those rows | as in those rows — tool consent is also network consent for that row |
 
 Nothing else makes network calls. `rates set`, `rates latest`,
 `rates range`, `rates pairs`, journal processing, metadata CRUD, and all
