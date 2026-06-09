@@ -56,10 +56,21 @@ and ad-hoc signed; first-launch Gatekeeper handling is documented in
 [prerelease-binaries.md → Local Apple Silicon build](prerelease-binaries.md#local-apple-silicon-build).
 
 The authenticated shell includes a Diagnostics screen with a redacted
-daemon/transport activity log and a downloadable JSON export. It is meant for
+daemon/transport activity log and downloadable exports. It is meant for
 prerelease and development troubleshooting: request logs include argument keys,
 not argument values, while terminal daemon errors keep their structured
-message, hint, and redacted details when the daemon exposes them.
+message, hint, and redacted details when the daemon exposes them. Every logged
+daemon invoke gets a client request id and matching `trace_id`, so support
+exports can group start, stream, terminal, and failure records.
+
+For user-shareable troubleshooting, Logs offers **Export → Support bundle**.
+The bundle is a public-safe `.support.jsonl` file containing the user's short
+issue description, a manifest, a redaction report, recent redacted events,
+last-failure context, and redacted AI provenance records. Support bundles
+always mask exact amounts and sensitive typed fields, redact secret-shaped text
+as a backstop, and never include raw daemon arguments, descriptors, xpubs,
+backend URLs, local paths, raw AI prompts, imported rows, database files, or
+stack locals.
 
 The Connections detail page includes a read-only UTXOs table for chain-backed
 wallet sources. Refreshing a descriptor/xpub/address wallet updates the local

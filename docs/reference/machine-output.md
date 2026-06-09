@@ -78,6 +78,16 @@ not include raw txids, addresses, descriptors, xpubs, labels, notes, exact
 amounts, exact rates, backend hostnames, local paths, raw config, raw API
 payloads, imported rows, or stack locals. `--debug` remains private.
 
+Desktop Logs also provides a public-safe support bundle for cases where a short
+issue description plus correlated daemon and AI records is more useful than a
+CLI diagnostics report. Support bundles are explicit exports from the
+Developer tools-gated Logs page. They are `.support.jsonl` files with a
+manifest, redaction report, recent redacted events, last-failure context, and
+redacted AI provenance. They use the same public-support boundary: raw daemon
+arguments, raw AI prompts, descriptors, xpubs, backend URLs, local paths,
+database files, imported rows, stack locals, and exact amounts are excluded or
+masked.
+
 ## Safe-To-Record Contract
 
 Normal success envelopes now follow a narrow safe-to-record contract for

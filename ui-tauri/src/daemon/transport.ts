@@ -244,11 +244,17 @@ function booleanField(value: unknown): AppLogField {
   return { type: "boolean", value: Boolean(value) };
 }
 
+function requestWithId(req: DaemonRequest): DaemonRequest {
+  return req.request_id ? req : { ...req, request_id: makeDaemonRequestId() };
+}
+
 function summarizeRequestFields(req: DaemonRequest): Record<string, AppLogField> {
   const args = req.args ?? {};
+  const requestId = req.request_id ?? "";
   return {
     kind: textField(req.kind),
-    request_id: textField(req.request_id ?? ""),
+    request_id: textField(requestId),
+    trace_id: textField(requestId),
     arg_keys: textField(Object.keys(args).sort().join(",")),
   };
 }
@@ -256,10 +262,12 @@ function summarizeRequestFields(req: DaemonRequest): Record<string, AppLogField>
 function summarizeEnvelopeFields(
   envelope: DaemonEnvelope,
 ): Record<string, AppLogField> {
+  const requestId = envelope.request_id ?? "";
   const summary: Record<string, AppLogField> = {
     kind: textField(envelope.kind),
     schema_version: numberField(envelope.schema_version),
-    request_id: textField(envelope.request_id ?? ""),
+    request_id: textField(requestId),
+    trace_id: textField(requestId),
   };
   if (envelope.error) {
     summary.error_code = textField(envelope.error.code);
@@ -272,13 +280,47 @@ function summarizeEnvelopeFields(
       summary.error_hint = { type: "label", value: envelope.error.hint };
     }
   } else if (envelope.data && typeof envelope.data === "object") {
-    summary.data_keys = textField(
-      Object.keys(envelope.data as Record<string, unknown>).sort().join(","),
-    );
+    addDataSummaryFields(summary, envelope.data as Record<string, unknown>);
   } else if (envelope.data !== undefined) {
     summary.data_type = textField(typeof envelope.data);
   }
   return summary;
+}
+
+function addDataSummaryFields(
+  summary: Record<string, AppLogField>,
+  data: Record<string, unknown>,
+): void {
+  const keys = Object.keys(data).sort();
+  summary.data_keys = textField(keys.join(","));
+  const phase = data.phase;
+  if (typeof phase === "string") summary.phase = textField(phase);
+  const label = data.label;
+  if (typeof label === "string") summary.label = { type: "label", value: label };
+  const callId = data.call_id;
+  if (typeof callId === "string") summary.call_id = textField(callId);
+  const name = data.name;
+  if (typeof name === "string") summary.tool_name = textField(name);
+  const kindClass = data.kind_class;
+  if (typeof kindClass === "string") summary.kind_class = textField(kindClass);
+  if (typeof data.needs_consent === "boolean") {
+    summary.needs_consent = booleanField(data.needs_consent);
+  }
+  const finishReason = data.finish_reason;
+  if (typeof finishReason === "string") {
+    summary.finish_reason = textField(finishReason);
+  }
+  const model = data.model;
+  if (typeof model === "string") summary.model = textField(model);
+  const args = data.arguments;
+  if (args && typeof args === "object" && !Array.isArray(args)) {
+    summary.argument_keys = textField(
+      Object.keys(args as Record<string, unknown>).sort().join(","),
+    );
+  }
+  if (data.provenance && typeof data.provenance === "object") {
+    summary.has_provenance = booleanField(true);
+  }
 }
 
 function withDaemonLogging(
@@ -289,14 +331,15 @@ function withDaemonLogging(
     async invoke<T = unknown>(
       req: DaemonRequest,
     ): Promise<DaemonEnvelope<T>> {
+      const request = requestWithId(req);
       recordDaemonLog(
         "debug",
         source,
         "Daemon invoke started",
-        summarizeRequestFields(req),
+        summarizeRequestFields(request),
       );
       try {
-        const envelope = await transport.invoke<T>(req);
+        const envelope = await transport.invoke<T>(request);
         recordDaemonLog(
           envelopeLogLevel(envelope),
           source,
@@ -310,7 +353,7 @@ function withDaemonLogging(
           source,
           "Daemon invoke threw",
           {
-            kind: textField(req.kind),
+            ...summarizeRequestFields(request),
             error_message: {
               type: "label",
               value: error instanceof Error ? error.message : String(error),
@@ -324,14 +367,15 @@ function withDaemonLogging(
       req: DaemonRequest,
       options?: DaemonStreamOptions<R>,
     ): Promise<DaemonEnvelope<T>> {
+      const request = requestWithId(req);
       recordDaemonLog(
         "debug",
         source,
         "Daemon stream started",
-        summarizeRequestFields(req),
+        summarizeRequestFields(request),
       );
       try {
-        const envelope = await transport.stream<T, R>(req, {
+        const envelope = await transport.stream<T, R>(request, {
           ...options,
           onRecord: (record) => {
             recordDaemonLog(
@@ -356,7 +400,7 @@ function withDaemonLogging(
           source,
           "Daemon stream threw",
           {
-            kind: textField(req.kind),
+            ...summarizeRequestFields(request),
             error_message: {
               type: "label",
               value: error instanceof Error ? error.message : String(error),

@@ -282,6 +282,9 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   - [x] Promote the desktop screen into a Developer tools-gated typed Logs view
     with subscription-level control, a bounded RAM-only local ring buffer,
     field-type redaction, copy-last-200, and Markdown/JSONL/log exports
+  - [x] Add a public-safe support bundle export from Logs with an issue
+    description, request-correlated redacted events, last-failure context,
+    redaction report, and AI provenance for Codex-assisted debugging
 
 ### 1.1 Daemon mode (no UI yet)
 

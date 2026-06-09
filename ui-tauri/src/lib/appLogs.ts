@@ -6,6 +6,7 @@ export type AppLogFieldType =
   | "number"
   | "duration_ms"
   | "address"
+  | "url"
   | "xpub"
   | "xpriv"
   | "descriptor"
@@ -49,6 +50,14 @@ export interface AppLogRenderOptions {
   maskAmounts?: boolean;
 }
 
+export interface AppSupportBundleOptions {
+  issueDescription: string;
+  header: AppLogExportHeader;
+  maxEvents?: number;
+  contextRadius?: number;
+  includeAiProvenance?: boolean;
+}
+
 export const APP_LOG_MAX_RECORDS = 5_000;
 export const APP_LOG_MAX_BYTES = 2 * 1024 * 1024;
 
@@ -62,6 +71,7 @@ const LEVEL_WEIGHT: Record<AppLogLevel, number> = {
 
 const SENSITIVE_FIELD_TYPES = new Set<AppLogFieldType>([
   "address",
+  "url",
   "xpub",
   "xpriv",
   "descriptor",
@@ -79,7 +89,33 @@ let memoryRing: AppLogRecord[] = [];
 let memoryRingBytes = 2;
 const subscribers = new Set<() => void>();
 
-const TEXT_BACKSTOP_PATTERNS: Array<[RegExp, string]> = [
+type TextBackstopReplacement = string | ((match: string) => string);
+
+const TEXT_BACKSTOP_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
+  [
+    /\b(?:https?|tcp|ssl):\/\/[^\s,;"')\]}]+/gi,
+    "[redacted-url]",
+  ],
+  [
+    /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi,
+    "[redacted-email]",
+  ],
+  [
+    /\b(?:bc1|tb1|bcrt1)[023456789acdefghjklmnpqrstuvwxyz]{20,90}\b/gi,
+    "[redacted-address]",
+  ],
+  [
+    /\b[0-9a-f]{64}\b/gi,
+    "[redacted-txid]",
+  ],
+  [
+    /\b[A-Za-z0-9.-]{16,}\.onion\b/gi,
+    "[redacted-onion]",
+  ],
+  [
+    /(?:^|[\s"'(])(?:\/Users|\/home|\/var|\/private|\/tmp)\/[^\s,;"')\]}]+/g,
+    (match) => `${match[0] === "/" ? "" : match[0]}[redacted-path]`,
+  ],
   [
     /\b(?:xprv|tprv|yprv|zprv|uprv|vprv)[1-9A-HJ-NP-Za-km-z]{20,}\b/g,
     "[redacted-private-key]",
@@ -94,7 +130,7 @@ const TEXT_BACKSTOP_PATTERNS: Array<[RegExp, string]> = [
   ],
   [/\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*/g, "Bearer [redacted]"],
   [
-    /\b(api[_-]?key|auth[_-]?header|cookie|descriptor|passphrase|password|secret|token)\b(\s*[:=]\s*)([^\s,;"']+)/gi,
+    /\b(api[_-]?key|auth[_-]?header|cookie|descriptor|mnemonic|passphrase|password|recovery[_-]?phrase|secret|seed|token)\b(\s*[:=]\s*)([^\s,;"']+)/gi,
     "$1$2[redacted]",
   ],
 ];
@@ -249,12 +285,116 @@ export function logFilename(
   return `kassiber-${stamp}Z-${redaction}.${format}`;
 }
 
+export function supportBundleFilename(date = new Date()): string {
+  const stamp = date.toISOString().slice(0, 16).replace(/:/g, "-");
+  return `kassiber-support-${stamp}Z.support.jsonl`;
+}
+
+export function exportSupportBundleRecords(
+  records: AppLogRecord[],
+  options: AppSupportBundleOptions,
+): string {
+  const generatedAt = options.header.generatedAt ?? new Date().toISOString();
+  const maxEvents = options.maxEvents ?? 1000;
+  const contextRadius = options.contextRadius ?? 12;
+  const includeAiProvenance = options.includeAiProvenance ?? true;
+  const exportedRecords = records.slice(-maxEvents);
+  const renderOptions: AppLogRenderOptions = {
+    redacted: true,
+    maskAmounts: true,
+  };
+  const events = exportedRecords.map((record) =>
+    redactLogRecord(record, renderOptions),
+  );
+  const failureIndexes = indexesForFailures(events);
+  const failureContextIndexes = contextIndexesForFailures(
+    events,
+    failureIndexes,
+    contextRadius,
+  );
+  const aiIndexes = includeAiProvenance
+    ? events
+        .map((record, index) => (isAiProvenanceRecord(record) ? index : -1))
+        .filter((index) => index >= 0)
+    : [];
+  const omittedEvents = Math.max(0, records.length - exportedRecords.length);
+
+  const lines = [
+    {
+      kind: "kassiber.support_bundle.manifest",
+      schema_version: 1,
+      generated_at: generatedAt,
+      app_version: options.header.appVersion,
+      os: options.header.os,
+      time_range: options.header.timeRange,
+      active_filter: options.header.activeFilter,
+      redaction: "public-safe",
+      public_safe: true,
+      format_note:
+        "Each following JSONL row is independently redacted and safe for public support unless the user adds private text to the issue description.",
+      sections: {
+        issue: 1,
+        redaction_report: 1,
+        events: events.length,
+        last_failures: failureContextIndexes.size,
+        ai_provenance: aiIndexes.length,
+        diagnostics: 1,
+      },
+    },
+    {
+      kind: "kassiber.support_bundle.issue",
+      schema_version: 1,
+      description: redactTextBackstop(options.issueDescription.trim()),
+    },
+    {
+      kind: "kassiber.support_bundle.redaction_report",
+      schema_version: 1,
+      ...redactionReportForRecords(exportedRecords, omittedEvents),
+    },
+    {
+      kind: "kassiber.support_bundle.diagnostics",
+      schema_version: 1,
+      summary: {
+        events_included: events.length,
+        events_omitted_from_start: omittedEvents,
+        failures_detected: failureIndexes.length,
+        ai_provenance_records: aiIndexes.length,
+        buffer_time_range: options.header.timeRange,
+      },
+    },
+    ...events.map((record, index) => ({
+      kind: "kassiber.support_bundle.event",
+      schema_version: 1,
+      index,
+      record,
+    })),
+    ...Array.from(failureContextIndexes)
+      .sort((a, b) => a - b)
+      .map((index) => ({
+        kind: "kassiber.support_bundle.last_failure",
+        schema_version: 1,
+        index,
+        record: events[index],
+      })),
+    ...aiIndexes.map((index) => ({
+      kind: "kassiber.support_bundle.ai_provenance",
+      schema_version: 1,
+      index,
+      record: events[index],
+    })),
+  ];
+
+  return `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`;
+}
+
 export function stableMaskedValue(field: AppLogField): string {
   const value = String(field.value ?? "");
   if (!value) return "";
   switch (field.type) {
     case "address":
       return keepShort(value, 5, 4);
+    case "url":
+      return `url#${stableHash(value)}`;
     case "xpub":
     case "xpriv":
       return keepShort(value, 6, 4);
@@ -325,9 +465,126 @@ function redactedFieldName(name: string, field: AppLogField): string {
 
 function redactTextBackstop(value: string): string {
   return TEXT_BACKSTOP_PATTERNS.reduce(
-    (current, [pattern, replacement]) => current.replace(pattern, replacement),
+    (current, [pattern, replacement]) =>
+      typeof replacement === "string"
+        ? current.replace(pattern, replacement)
+        : current.replace(pattern, replacement),
     value,
   );
+}
+
+function indexesForFailures(records: AppLogRecord[]): number[] {
+  return records
+    .map((record, index) => (isFailureRecord(record) ? index : -1))
+    .filter((index) => index >= 0);
+}
+
+function isFailureRecord(record: AppLogRecord): boolean {
+  if (record.level === "error") return true;
+  if (record.fields.error_code) return true;
+  return /(?:failed|threw|error)/i.test(record.msg);
+}
+
+function contextIndexesForFailures(
+  records: AppLogRecord[],
+  failureIndexes: number[],
+  radius: number,
+): Set<number> {
+  const indexes = new Set<number>();
+  for (const failureIndex of failureIndexes) {
+    const traceId = stringFieldValue(records[failureIndex], "trace_id");
+    const requestId = stringFieldValue(records[failureIndex], "request_id");
+    records.forEach((record, index) => {
+      if (
+        traceId &&
+        stringFieldValue(record, "trace_id") === traceId
+      ) {
+        indexes.add(index);
+      }
+      if (
+        requestId &&
+        stringFieldValue(record, "request_id") === requestId
+      ) {
+        indexes.add(index);
+      }
+    });
+    for (
+      let index = Math.max(0, failureIndex - radius);
+      index <= Math.min(records.length - 1, failureIndex + radius);
+      index += 1
+    ) {
+      indexes.add(index);
+    }
+  }
+  return indexes;
+}
+
+function isAiProvenanceRecord(record: AppLogRecord): boolean {
+  const kind = stringFieldValue(record, "kind");
+  return (
+    kind.startsWith("ai.chat") ||
+    record.module.includes("ai") ||
+    record.msg.includes("AI chat")
+  );
+}
+
+function stringFieldValue(record: AppLogRecord, name: string): string {
+  const field = record.fields[name];
+  if (!field) return "";
+  if (
+    typeof field.value === "string" ||
+    typeof field.value === "number" ||
+    typeof field.value === "boolean"
+  ) {
+    return String(field.value);
+  }
+  return "";
+}
+
+function redactionReportForRecords(
+  records: AppLogRecord[],
+  omittedEvents: number,
+): Record<string, unknown> {
+  const sensitiveFieldCounts: Record<string, number> = {};
+  let textBackstopHits = 0;
+  for (const record of records) {
+    if (redactTextBackstop(record.msg) !== record.msg) {
+      textBackstopHits += 1;
+    }
+    for (const field of Object.values(record.fields)) {
+      if (SENSITIVE_FIELD_TYPES.has(field.type) || field.type === "amount") {
+        sensitiveFieldCounts[field.type] =
+          (sensitiveFieldCounts[field.type] ?? 0) + 1;
+      }
+      if (
+        typeof field.value === "string" &&
+        redactTextBackstop(field.value) !== field.value
+      ) {
+        textBackstopHits += 1;
+      }
+    }
+  }
+  return {
+    mode: "public-safe",
+    exact_amounts: "masked",
+    omitted_events_from_start: omittedEvents,
+    sensitive_field_counts: sensitiveFieldCounts,
+    text_backstop_hits: textBackstopHits,
+    excluded_material: [
+      "raw daemon arguments",
+      "raw imported rows",
+      "raw AI prompts",
+      "database files",
+      "descriptors",
+      "xpubs",
+      "private keys",
+      "mnemonics",
+      "backend URLs",
+      "API keys",
+      "local filesystem paths",
+      "stack locals",
+    ],
+  };
 }
 
 function formatFields(fields: Record<string, AppLogField>): string {

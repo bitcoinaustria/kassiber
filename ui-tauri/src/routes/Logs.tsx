@@ -2,6 +2,7 @@ import {
   ChevronRight,
   Copy,
   Download,
+  FileArchive,
   FileJson,
   FileText,
   Trash2,
@@ -24,6 +25,7 @@ import {
   APP_LOG_MAX_BYTES,
   clearAppLogRecords,
   exportLogRecords,
+  exportSupportBundleRecords,
   formatLogRecord,
   getAppLogBufferSize,
   getAppLogRecords,
@@ -32,6 +34,7 @@ import {
   redactLogRecord,
   setAppLogSubscriptionLevel,
   subscribeAppLogRecords,
+  supportBundleFilename,
   type AppLogField,
   type AppLogLevel,
   type AppLogRecord,
@@ -199,6 +202,58 @@ export function Logs() {
     }
   };
 
+  const exportSupportBundle = async () => {
+    const issueDescription = window.prompt("Briefly describe what went wrong.");
+    if (issueDescription === null) return;
+    const description = issueDescription.trim();
+    if (!description) {
+      addNotification({
+        title: "Support bundle not exported",
+        body: "Add a short issue description first.",
+        tone: "warning",
+      });
+      return;
+    }
+    const generatedAt = new Date().toISOString();
+    const filename = supportBundleFilename(new Date(generatedAt));
+    const contents = exportSupportBundleRecords(records, {
+      issueDescription: description,
+      header: {
+        appVersion: appVersionLabel(),
+        os: osLabel(),
+        generatedAt,
+        timeRange: timeRangeLabel(records),
+        activeFilter: `support_bundle=all_records, ui_filter=(${filterLabel(
+          captureLevel,
+          levelFilter,
+          moduleFilter,
+          query,
+          regex,
+        )})`,
+        redaction: "redacted-amounts",
+      },
+    });
+    try {
+      if (isFilePickerAvailable) {
+        const destination = await saveFile({
+          title: "Export Kassiber support bundle",
+          defaultPath: filename,
+          filters: [{ name: "JSONL", extensions: ["jsonl"] }],
+        });
+        if (!destination) return;
+        await saveLogsExportAs(destination, contents);
+        return;
+      }
+      triggerBrowserDownload(filename, contents, "application/x-ndjson");
+    } catch (error) {
+      addNotification({
+        title: "Could not export support bundle",
+        body: error instanceof Error ? error.message : String(error),
+        tone: "error",
+      });
+    }
+  };
+
   const copyLast200 = async () => {
     const text = filteredRecords
       .slice(-200)
@@ -278,6 +333,10 @@ export function Logs() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => void exportSupportBundle()}>
+                <FileArchive className="size-4" aria-hidden="true" />
+                Support bundle
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => void exportFormat("md")}>
                 <FileText className="size-4" aria-hidden="true" />
                 Markdown
