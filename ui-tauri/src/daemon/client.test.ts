@@ -115,6 +115,15 @@ describe("daemon mutation invalidation scope", () => {
     }
   });
 
+  it("does not invalidate daemon reads after read-only backend probes", () => {
+    expect(
+      invalidatedDaemonQueryKindsForMutation("ui.backends.electrum.test"),
+    ).toEqual([]);
+    expect(
+      invalidatedDaemonQueryKindsForMutation("ui.backends.http.test"),
+    ).toEqual([]);
+  });
+
   it("keeps unaudited mutations on broad daemon invalidation", () => {
     expect(
       invalidatedDaemonQueryKindsForMutation("ui.transactions.metadata.update"),
