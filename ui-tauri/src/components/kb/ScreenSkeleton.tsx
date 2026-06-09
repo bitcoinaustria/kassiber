@@ -13,6 +13,12 @@ interface ScreenRefreshSkeletonProps {
   label?: string;
 }
 
+interface ScreenNoticeProps {
+  className?: string;
+  title: string;
+  body: string;
+}
+
 export function ScreenSkeleton({
   className,
   titleWidth = "w-40",
@@ -88,6 +94,17 @@ export function ScreenSkeleton({
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+export function ScreenNotice({ className, title, body }: ScreenNoticeProps) {
+  return (
+    <div className={cn(screenShellClassName, className)}>
+      <div className="rounded-xl border bg-card px-3 py-3 sm:px-4">
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{body}</p>
       </div>
     </div>
   );

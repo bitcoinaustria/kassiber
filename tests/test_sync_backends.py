@@ -1,11 +1,20 @@
 import io
+import json
 import unittest
 from unittest.mock import patch
 
-from kassiber.core.sync import WalletSyncHooks, WalletSyncState, sync_wallet_from_backend
+from kassiber.core.sync import (
+    WalletSyncHooks,
+    WalletSyncState,
+    emit_sync_progress,
+    sync_progress_emitter,
+    sync_wallet_from_backend,
+    sync_wallets,
+)
 from kassiber.core.sync_backends import (
     ElectrumClient,
     _connect_via_socks5,
+    _emit_backend_progress,
     _read_exact,
     _socks5_address,
     bitcoinrpc_sync_adapter,
@@ -14,10 +23,12 @@ from kassiber.core.sync_backends import (
     esplora_sync_adapter,
     record_from_bitcoin_esplora_tx,
     record_from_bitcoinrpc_details,
+    scan_descriptor_targets,
     scriptpubkey_scripthash,
 )
 from kassiber.errors import AppError
 from kassiber.time_utils import timestamp_to_iso
+from kassiber.wallet_descriptors import DescriptorBranch, DescriptorPlan, DerivedTarget
 
 
 def _header_hex(timestamp):
@@ -53,12 +64,204 @@ class SyncBackendsTest(unittest.TestCase):
                 tracked_scripts={target["script_pubkey"]: target},
                 history_cache={},
             ),
-            normalize_addresses=lambda values: [],
+            normalize_addresses=lambda values: list(values or []),
             backend_adapters={},
         )
         with self.assertRaises(AppError) as exc:
             sync_wallet_from_backend(None, {}, {}, wallet, hooks)
         self.assertIn("not implemented", str(exc.exception))
+
+    def test_sync_wallet_from_backend_attaches_wallet_to_backend_progress(self):
+        wallet = {"label": "Cold", "config_json": "{}"}
+        target = {"address": "bc1qwatch", "script_pubkey": "0014watch"}
+        progress = []
+
+        def adapter(backend, wallet, sync_state):
+            emit_sync_progress({"phase": "backend_fetch", "known_txids": 2})
+            return [], {"freshness_checkpoint": {"ok": True}}
+
+        hooks = WalletSyncHooks(
+            import_file=lambda *args, **kwargs: {},
+            insert_records=lambda *args, **kwargs: {"imported": 0, "skipped": 0},
+            resolve_backend=lambda runtime_config, backend_name: {
+                "name": "default",
+                "kind": "esplora",
+                "url": "https://example.invalid",
+            },
+            resolve_sync_state=lambda backend, wallet: WalletSyncState(
+                chain="bitcoin",
+                network="bitcoin",
+                descriptor_plan=None,
+                policy_asset_id="",
+                targets=[target],
+                tracked_scripts={target["script_pubkey"]: target},
+                history_cache={},
+            ),
+            normalize_addresses=lambda values: list(values or []),
+            backend_adapters={"esplora": adapter},
+        )
+
+        token = sync_progress_emitter.set(lambda payload: progress.append(dict(payload)))
+        try:
+            sync_wallet_from_backend(None, {}, {}, wallet, hooks)
+        finally:
+            sync_progress_emitter.reset(token)
+
+        self.assertTrue(progress)
+        self.assertIn("discovery", [item.get("phase") for item in progress])
+        self.assertIn("backend_fetch", [item.get("phase") for item in progress])
+        self.assertEqual({item.get("wallet") for item in progress}, {"Cold"})
+        self.assertEqual(progress[-1]["known_txids"], 2)
+
+    def test_backend_progress_reuses_known_counters_for_ui_progress(self):
+        progress = []
+        token = sync_progress_emitter.set(lambda payload: progress.append(dict(payload)))
+        try:
+            _emit_backend_progress(
+                "backend_fetch",
+                target_count=10,
+                targets_checked=3,
+            )
+            _emit_backend_progress(
+                "decode_enrich",
+                transactions_seen=40,
+                transactions_total=100,
+            )
+        finally:
+            sync_progress_emitter.reset(token)
+
+        self.assertEqual(progress[0]["processed"], 3)
+        self.assertEqual(progress[0]["total"], 10)
+        self.assertEqual(progress[1]["processed"], 40)
+        self.assertEqual(progress[1]["total"], 100)
+
+    def test_sync_wallet_from_backend_keeps_inventory_when_utxos_skipped(self):
+        wallet = {
+            "id": "wallet-1",
+            "label": "Watch",
+            "kind": "descriptor",
+            "config_json": '{"backend": "esplora", "addresses": ["bc1qwatch"]}',
+        }
+        profile = {"id": "profile-1"}
+        target = {"address": "bc1qwatch", "script_pubkey": "0014watch"}
+        inventory_calls = []
+
+        def update_inventory(*args):
+            inventory_calls.append(args)
+            return {"updated": 1}
+
+        hooks = WalletSyncHooks(
+            import_file=lambda *args, **kwargs: {},
+            insert_records=lambda *args, **kwargs: {
+                "imported": 0,
+                "skipped": 0,
+                "unchanged": 0,
+                "journal_invalidated": False,
+            },
+            resolve_backend=lambda runtime_config, backend_name: {
+                "name": backend_name,
+                "kind": "esplora",
+                "url": "https://example.invalid",
+            },
+            resolve_sync_state=lambda backend, wallet: WalletSyncState(
+                chain="bitcoin",
+                network="bitcoin",
+                descriptor_plan=None,
+                policy_asset_id="",
+                targets=[target],
+                tracked_scripts={target["script_pubkey"]: target},
+                history_cache={},
+                checkpoint=wallet.get("_freshness_checkpoint"),
+            ),
+            normalize_addresses=lambda values: list(values or []),
+            backend_adapters={
+                "esplora": lambda backend, wallet, sync_state: (
+                    [],
+                    {
+                        "scripts_changed": 0,
+                        "scripts_unchanged": 1,
+                        "utxos_skipped_unchanged": True,
+                    },
+                )
+            },
+            update_output_inventory=update_inventory,
+        )
+
+        outcome = sync_wallet_from_backend(
+            None,
+            {},
+            profile,
+            wallet,
+            hooks,
+            checkpoint={"esplora_scripthashes": {}},
+        )
+
+        self.assertEqual(inventory_calls, [])
+        self.assertFalse(outcome["utxos_refreshed"])
+        self.assertTrue(outcome["utxos_skipped_unchanged"])
+        self.assertEqual(outcome["scripts_checked"], 1)
+        self.assertEqual(outcome["records_fetched"], 0)
+        self.assertFalse(outcome["journal_invalidated"])
+        self.assertIn("elapsed_ms", outcome)
+
+    def test_sync_wallets_force_full_ignores_stored_checkpoint(self):
+        wallet = {
+            "id": "wallet-1",
+            "kind": "descriptor",
+            "label": "Watch",
+            "config_json": json.dumps(
+                {"backend": "esplora", "addresses": ["bc1qwatch"]}
+            ),
+        }
+        profile = {"id": "profile-1"}
+        target = {"address": "bc1qwatch", "script_pubkey": "0014watch"}
+        checkpoints_seen = []
+
+        hooks = WalletSyncHooks(
+            import_file=lambda *args, **kwargs: {},
+            insert_records=lambda *args, **kwargs: {
+                "imported": 0,
+                "skipped": 0,
+                "unchanged": 0,
+                "journal_invalidated": False,
+            },
+            resolve_backend=lambda runtime_config, backend_name: {
+                "name": backend_name,
+                "kind": "esplora",
+                "url": "https://example.invalid",
+            },
+            resolve_sync_state=lambda backend, wallet: WalletSyncState(
+                chain="bitcoin",
+                network="bitcoin",
+                descriptor_plan=None,
+                policy_asset_id="",
+                targets=[target],
+                tracked_scripts={target["script_pubkey"]: target},
+                history_cache={},
+                checkpoint=wallet.get("_freshness_checkpoint"),
+            ),
+            normalize_addresses=lambda values: list(values or []),
+            backend_adapters={
+                "esplora": lambda backend, wallet, sync_state: (
+                    checkpoints_seen.append(sync_state.checkpoint) or [],
+                    {"freshness_checkpoint": {"fresh": True}, "utxos": []},
+                )
+            },
+        )
+
+        results = sync_wallets(
+            None,
+            {},
+            profile,
+            [wallet],
+            hooks,
+            checkpoints={"wallet-1": {"highest_used": {"0": 42}}},
+            force_full=True,
+        )
+
+        self.assertEqual(checkpoints_seen, [{}])
+        self.assertTrue(results[0]["force_full"])
+        self.assertTrue(results[0]["utxos_refreshed"])
 
     def test_esplora_sync_adapter_returns_record_shape(self):
         target = {"address": "bc1qesplora", "script_pubkey": "0014" + "11" * 20}
@@ -131,7 +334,7 @@ class SyncBackendsTest(unittest.TestCase):
         ), patch(
             "kassiber.core.sync_backends.fetch_esplora_scripthash_utxos",
             return_value=[],
-        ):
+        ) as fetch_utxos:
             sync_state = WalletSyncState(
                 chain="bitcoin",
                 network="bitcoin",
@@ -165,15 +368,24 @@ class SyncBackendsTest(unittest.TestCase):
 
         self.assertEqual(records, [])
         self.assertEqual(second_meta["scripts_unchanged"], 1)
+        self.assertTrue(second_meta["utxos_skipped_unchanged"])
+        self.assertNotIn("utxos", second_meta)
         self.assertEqual(len(fetch_calls), 1)
+        self.assertEqual(fetch_utxos.call_count, 1)
 
     def test_esplora_descriptor_discovery_rechecks_previously_unused_scripts(self):
         target = {"address": "bc1qgap", "script_pubkey": "0014" + "22" * 20}
         scripthash = scriptpubkey_scripthash(target["script_pubkey"])
         usage_checks = []
 
-        def fake_scan(plan, target_used=None, target_used_batch=None, scan_batch_size=None):
-            del plan, target_used, scan_batch_size
+        def fake_scan(
+            plan,
+            target_used=None,
+            target_used_batch=None,
+            scan_batch_size=None,
+            highest_used=None,
+        ):
+            del plan, target_used, scan_batch_size, highest_used
             self.assertIsNotNone(target_used_batch)
             usage_checks.extend(target_used_batch([target]))
             return [target]
@@ -335,7 +547,7 @@ class SyncBackendsTest(unittest.TestCase):
         ), patch(
             "kassiber.core.sync_backends.electrum_utxos_for_wallet",
             return_value=[],
-        ):
+        ) as fetch_utxos:
             sync_state = WalletSyncState(
                 chain="bitcoin",
                 network="bitcoin",
@@ -371,6 +583,9 @@ class SyncBackendsTest(unittest.TestCase):
         second_calls = calls[first_call_count:]
         self.assertEqual(records, [])
         self.assertEqual(second_meta["scripts_unchanged"], 1)
+        self.assertTrue(second_meta["utxos_skipped_unchanged"])
+        self.assertNotIn("utxos", second_meta)
+        self.assertEqual(fetch_utxos.call_count, 1)
         self.assertEqual(
             second_calls,
             [("blockchain.scripthash.subscribe", (scripthash,))],
@@ -402,8 +617,14 @@ class SyncBackendsTest(unittest.TestCase):
                         raise AssertionError(f"Unexpected Electrum call: {key!r}")
                 return responses
 
-        def fake_scan(plan, target_used=None, target_used_batch=None, scan_batch_size=None):
-            del plan, target_used, scan_batch_size
+        def fake_scan(
+            plan,
+            target_used=None,
+            target_used_batch=None,
+            scan_batch_size=None,
+            highest_used=None,
+        ):
+            del plan, target_used, scan_batch_size, highest_used
             self.assertIsNotNone(target_used_batch)
             self.assertEqual(target_used_batch([target]), [True])
             return [target]
@@ -429,6 +650,56 @@ class SyncBackendsTest(unittest.TestCase):
             batch_calls,
             [("blockchain.scripthash.subscribe", [scripthash])],
         )
+
+    def test_descriptor_scan_reuses_highest_used_targets_and_checks_trailing_gap(self):
+        class FakeDescriptor:
+            is_wildcard = True
+
+        plan = DescriptorPlan(
+            chain="bitcoin",
+            network="bitcoin",
+            gap_limit=2,
+            descriptor_fingerprint="fp",
+            branches=(DescriptorBranch(0, "receive", FakeDescriptor()),),
+        )
+        checked = []
+
+        def fake_derive(plan, branch_index=None, start=0, end=0):
+            del plan
+            return [
+                DerivedTarget(
+                    chain="bitcoin",
+                    network="bitcoin",
+                    branch_index=branch_index,
+                    branch_label="receive",
+                    address_index=index,
+                    address=f"bc1q{index}",
+                    unconfidential_address=None,
+                    script_pubkey=f"{index:064x}",
+                    derivation_path=f"m/0/{index}",
+                    derivation_paths=(f"m/0/{index}",),
+                    key_origins=(),
+                )
+                for index in range(start, end)
+            ]
+
+        def target_used_batch(targets):
+            checked.extend(target["address_index"] for target in targets)
+            return [False for _ in targets]
+
+        with patch(
+            "kassiber.core.sync_backends.derive_descriptor_targets",
+            side_effect=fake_derive,
+        ):
+            targets = scan_descriptor_targets(
+                plan,
+                target_used_batch=target_used_batch,
+                scan_batch_size=1,
+                highest_used={"0": 2},
+            )
+
+        self.assertEqual([target["address_index"] for target in targets], [0, 1, 2, 3, 4])
+        self.assertEqual(checked, [3, 4])
 
     def test_electrum_call_raises_app_error_for_non_json_response(self):
         client = ElectrumClient({"name": "electrum", "url": "tcp://electrum.example:50001"})
@@ -513,6 +784,8 @@ class SyncBackendsTest(unittest.TestCase):
                         "blocktime": 1_700_000_000,
                     }
                 ]
+            if key == ("getbestblockhash", (), None):
+                return "aa" * 32
             if key == (
                 "listunspent",
                 (0, 9999999, ["bc1qcore"], True),
@@ -529,6 +802,8 @@ class SyncBackendsTest(unittest.TestCase):
             )
         self.assertEqual(meta["core_wallet"], "kassiber-wallet-1")
         self.assertEqual(meta["imported_addresses"], 1)
+        self.assertEqual(meta["bitcoinrpc_sync_mode"], "full_scan")
+        self.assertEqual(meta["freshness_checkpoint"]["bitcoinrpc_last_block"], "aa" * 32)
         self.assertEqual(meta["utxos"], [])
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["txid"], "33" * 32)
@@ -537,6 +812,65 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertAlmostEqual(float(records[0]["amount"]), 0.001, places=12)
         self.assertEqual(records[0]["occurred_at"], timestamp_to_iso(1_700_000_000))
         self.assertEqual(records[0]["confirmed_at"], timestamp_to_iso(1_700_000_000))
+
+    def test_bitcoinrpc_checkpoint_uses_listsinceblock(self):
+        target = {"address": "bc1qcore", "script_pubkey": "0014core"}
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+            checkpoint={"bitcoinrpc_last_block": "aa" * 32},
+        )
+        wallet = {"id": "wallet-1"}
+        calls = []
+
+        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None):
+            del backend
+            key = (method, tuple(params or ()), wallet_name)
+            calls.append(method)
+            if key == ("listwallets", (), None):
+                return ["kassiber-wallet-1"]
+            if key == ("getaddressinfo", ("bc1qcore",), "kassiber-wallet-1"):
+                return {"iswatchonly": True, "ismine": False}
+            if key == ("listsinceblock", ("aa" * 32, 1, True, True), "kassiber-wallet-1"):
+                return {
+                    "transactions": [
+                        {
+                            "txid": "44" * 32,
+                            "category": "receive",
+                            "amount": 0.002,
+                            "fee": 0,
+                            "blocktime": 1_700_000_100,
+                        }
+                    ],
+                    "lastblock": "bb" * 32,
+                    "removed": [],
+                }
+            if key == (
+                "listunspent",
+                (0, 9999999, ["bc1qcore"], True),
+                "kassiber-wallet-1",
+            ):
+                return []
+            raise AssertionError(f"Unexpected RPC call: {key!r}")
+
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call):
+            records, meta = bitcoinrpc_sync_adapter(
+                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                wallet,
+                sync_state,
+            )
+
+        self.assertNotIn("listtransactions", calls)
+        self.assertEqual(meta["imported_addresses"], 0)
+        self.assertEqual(meta["bitcoinrpc_sync_mode"], "sinceblock")
+        self.assertEqual(meta["freshness_checkpoint"]["bitcoinrpc_last_block"], "bb" * 32)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["txid"], "44" * 32)
 
     def test_esplora_mempool_record_leaves_confirmed_at_empty(self):
         tracked_script = "0014watch"

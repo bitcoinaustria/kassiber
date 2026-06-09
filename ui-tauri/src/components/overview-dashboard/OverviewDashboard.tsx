@@ -20,8 +20,7 @@ import { StatsCards } from "./StatsCards";
 import {
   activeMarketFiatCurrency,
   activeMarketFiatRate,
-  toDashboardTransaction as toOverviewTransaction,
-  transactionRecords,
+  overviewTransactions,
 } from "./model";
 import { useOverviewTransactionDetail } from "./useOverviewTransactionDetail";
 import { WelcomeSection } from "./WelcomeSection";
@@ -61,10 +60,7 @@ export const OverviewDashboard = ({
     explorerSettings,
   });
   const transactions = React.useMemo(
-    () =>
-      snapshot.txs.length
-        ? snapshot.txs.map(toOverviewTransaction)
-        : transactionRecords,
+    () => overviewTransactions(snapshot),
     [snapshot.txs],
   );
   const fiatCurrency = activeMarketFiatCurrency(snapshot);

@@ -205,6 +205,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       : ["coinbase-exchange", "coingecko"];
   const marketRateProviderLabel =
     MARKET_RATE_PROVIDER_LABELS[marketRateProvider] ?? marketRateProvider;
+  const activeRatePair = freshnessSettings?.active_rate_pair ?? "BTC-fiat";
   const rateRebuildProgress = rateRebuildTransactionProgress(rateRebuildResult);
   const rateRebuildSamples =
     rateRebuildResult?.sync.reduce(
@@ -217,7 +218,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
     setRateRebuildResult(null);
     rebuildNoticeRef.current = addNotification({
       title: "Pricing cache rebuild started",
-      body: `Kassiber is clearing provider-derived prices, fetching fresh ${marketRateProviderLabel} market rates, and reprocessing journals.`,
+      body: `Kassiber is clearing provider-derived prices, fetching fresh ${marketRateProviderLabel} market rates for ${activeRatePair}, and reprocessing journals.`,
       tone: "warning",
       progress: {
         indeterminate: true,
@@ -441,7 +442,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
             <p className="text-xs text-muted-foreground">
               Clear selected provider samples, checked-empty minutes, and
               cached provider-generated transaction prices, then fetch fresh
-              market rates for the active books.
+              market rates for {activeRatePair}.
             </p>
           </div>
           <Button
@@ -518,6 +519,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
                     : "text-emerald-700/80 dark:text-emerald-300/80",
                 )}
               >
+                {rateRebuildResult.pair ?? activeRatePair} ·{" "}
                 {formatCount(rateRebuildSamples)} rate rows fetched
               </span>
             </div>
@@ -760,8 +762,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
             <DialogTitle>Rebuild pricing cache?</DialogTitle>
             <DialogDescription>
               Kassiber will delete {marketRateProviderLabel} provider cache rows
-              and refetch market rates for missing transaction windows in the
-              active books.
+              and refetch market rates for {activeRatePair}.
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">

@@ -1934,6 +1934,7 @@ def sync_wallet_from_backend(
     wallet,
     *,
     checkpoint=None,
+    force_full=False,
 ):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     return core_sync.sync_wallet_from_backend(
@@ -1943,6 +1944,7 @@ def sync_wallet_from_backend(
         wallet,
         _wallet_sync_hooks(),
         checkpoint=checkpoint,
+        force_full=force_full,
     )
 
 
@@ -1955,6 +1957,7 @@ def sync_wallet(
     sync_all=False,
     *,
     freshness_checkpoints=None,
+    force_full=False,
 ):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     if sync_all and wallet_ref:
@@ -1973,6 +1976,7 @@ def sync_wallet(
                     [wallet],
                     _wallet_sync_hooks(commit=False),
                     checkpoints=freshness_checkpoints,
+                    force_full=force_full,
                 )
                 _mark_wallet_synced_from_results(conn, wallet, wallet_results)
                 results.extend(wallet_results)
@@ -2005,6 +2009,7 @@ def sync_wallet(
             wallets,
             _wallet_sync_hooks(),
             checkpoints=freshness_checkpoints,
+            force_full=force_full,
         )
         _mark_wallet_synced_from_results(conn, wallets[0], results)
         conn.commit()

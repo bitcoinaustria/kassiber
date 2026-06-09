@@ -6,7 +6,7 @@ import {
   readTransactionDetailParams,
   type SwapCandidateReference,
 } from "@/components/transactions/dashboard/model";
-import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
+import { ScreenNotice, ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { useDaemon, useDaemonInfinite } from "@/daemon/client";
 import {
   MOCK_TRANSACTIONS,
@@ -83,7 +83,11 @@ export function Transactions() {
     };
   }, [transactionsQuery.data]);
   const transactions: TransactionsList =
-    hasLiveTransactions && workbenchData ? workbenchData : MOCK_TRANSACTIONS;
+    hasLiveTransactions && workbenchData
+      ? workbenchData
+      : dataMode === "real"
+        ? { ...MOCK_TRANSACTIONS, txs: [], nextCursor: null, hasMore: false }
+        : MOCK_TRANSACTIONS;
   const tableTransactions: TransactionsList =
     liveTransactions ??
     (hasLiveTableTransactions ? firstPage?.data : null) ??
@@ -98,6 +102,20 @@ export function Transactions() {
     return <ScreenSkeleton titleWidth="w-44" />;
   }
 
+  if (dataMode === "real" && !hasLiveTransactions) {
+    return (
+      <ScreenNotice
+        title="Transactions unavailable"
+        body={
+          workbenchQuery.error instanceof Error
+            ? workbenchQuery.error.message
+            : workbenchQuery.data?.error?.message ??
+              "Kassiber could not read real transactions for the current book."
+        }
+      />
+    );
+  }
+
   const hasLiveOverview =
     overview.data?.kind === "ui.overview.snapshot" && Boolean(overview.data.data);
   const nowRate =
@@ -105,7 +123,9 @@ export function Transactions() {
       ? (overview.data?.data?.priceEur ?? null)
       : hasLiveTransactions
         ? null
-        : MOCK_OVERVIEW.priceEur;
+        : dataMode === "real"
+          ? null
+          : MOCK_OVERVIEW.priceEur;
   const hasLiveSwapSuggestions =
     swapQuery.data?.kind === "ui.transfers.suggest" &&
     Boolean(swapQuery.data.data);

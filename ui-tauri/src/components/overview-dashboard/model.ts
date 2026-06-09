@@ -2221,6 +2221,10 @@ export function toDashboardTransaction(tx: OverviewTx, index: number): Transacti
   };
 }
 
+export function overviewTransactions(snapshot: OverviewSnapshot) {
+  return snapshot.txs.map(toDashboardTransaction);
+}
+
 export function initials(value: string) {
   return value
     .split(/\s+/)

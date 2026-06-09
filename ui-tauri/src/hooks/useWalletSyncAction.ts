@@ -19,6 +19,7 @@ import { useUiStore } from "@/store/ui";
 
 type WalletSyncOptions = {
   onTrustedSuccess?: () => void;
+  forceFull?: boolean;
 };
 
 export function useWalletSyncAction() {
@@ -94,8 +95,10 @@ export function useWalletSyncAction() {
       startedAtRef.current = startedAt;
       setActiveMaintenanceProgress({
         id: BOOK_REFRESH_PROGRESS_ID,
-        title: "Refreshing book",
-        body: "Kassiber is refreshing sources, market rates, and journals.",
+        title: options?.forceFull ? "Rescanning book" : "Refreshing book",
+        body: options?.forceFull
+          ? "Kassiber is rescanning sources, market rates, and journals."
+          : "Kassiber is refreshing sources, market rates, and journals.",
         tone: "warning",
         progress: startingSyncProgress(),
         details: ["Sources queued", "Rates and journals included"],
@@ -104,14 +107,22 @@ export function useWalletSyncAction() {
         updatedAt: startedAt,
       });
       noticeIdRef.current = addNotification({
-        title: "Book refresh started",
-        body: "Kassiber is refreshing sources, market rates, and journals.",
+        title: options?.forceFull ? "Book rescan started" : "Book refresh started",
+        body: options?.forceFull
+          ? "Kassiber is rescanning sources, market rates, and journals."
+          : "Kassiber is refreshing sources, market rates, and journals.",
         tone: "warning",
         dedupeKey: "book-refresh",
         progress: startingSyncProgress(),
       });
       refreshBook.mutate(
-        { all: true, rates: true, journals: true, run: true },
+        {
+          all: true,
+          rates: true,
+          journals: true,
+          run: true,
+          force_full: Boolean(options?.forceFull),
+        },
         {
           onSuccess: (envelope) => {
             const body = summarizeFreshnessRun(envelope.data);

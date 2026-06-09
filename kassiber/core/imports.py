@@ -2,7 +2,6 @@ from __future__ import annotations
 
 """Import orchestration helpers above the parser-only `kassiber.importers` boundary."""
 
-import contextvars
 import json
 import os
 import sqlite3
@@ -39,6 +38,7 @@ from ..util import str_or_none
 from ..wallet_descriptors import normalize_asset_code
 from . import output_inventory as core_output_inventory
 from .privacy_hops import privacy_boundary_from_import_record
+from .sync import sync_progress_emitter
 
 INBOUND_DIRECTIONS = {"in", "inbound", "receive", "received", "deposit", "credit", "buy"}
 OUTBOUND_DIRECTIONS = {"out", "outbound", "send", "sent", "withdrawal", "withdraw", "debit", "sell"}
@@ -84,18 +84,47 @@ EXCHANGE_EVIDENCE_RECONCILIATION_TAGS = {
 
 ProgressCallback = Callable[[Mapping[str, Any]], None]
 
-# Contextvar threaded by the daemon when it wants long-running imports to
-# emit row-count progress over the JSONL stream. The CLI leaves this empty
-# so no behavior change for `kassiber wallets sync` from a terminal.
-sync_progress_emitter: contextvars.ContextVar[ProgressCallback | None] = (
-    contextvars.ContextVar("kassiber.sync_progress_emitter", default=None)
-)
-
-
 @dataclass(frozen=True)
 class ImportCoordinatorHooks:
     ensure_tag_row: EnsureTagRow
     invalidate_journals: InvalidateJournals
+
+
+TRANSACTION_METADATA_CHANGE_KEYS = (
+    "btcpay_notes_set",
+    "btcpay_tags_added",
+    "phoenix_notes_set",
+    "phoenix_tags_added",
+    "river_notes_set",
+    "river_tags_added",
+    "wasabi_notes_set",
+    "wasabi_tags_added",
+    "wasabi_review_marked",
+    "wasabi_review_cleared",
+)
+
+
+def _metadata_changed(outcome: Mapping[str, Any]) -> bool:
+    for key in TRANSACTION_METADATA_CHANGE_KEYS:
+        value = outcome.get(key)
+        try:
+            if int(value or 0) > 0:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def _invalidate_journals_for_metadata_changes(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+    outcome: dict[str, Any],
+    hooks: ImportCoordinatorHooks,
+) -> None:
+    if outcome.get("journal_invalidated") or not _metadata_changed(outcome):
+        return
+    hooks.invalidate_journals(conn, profile["id"])
+    outcome["journal_invalidated"] = True
 
 
 def normalize_import_direction(direction: Any, amount: Any) -> str:
@@ -1053,7 +1082,9 @@ def insert_wallet_records(
                 imported=imported,
                 skipped=skipped,
             )
-    hooks.invalidate_journals(conn, profile["id"])
+    journal_invalidated = bool(imported or updated)
+    if journal_invalidated:
+        hooks.invalidate_journals(conn, profile["id"])
     if commit:
         conn.commit()
     outcome = {
@@ -1062,6 +1093,7 @@ def insert_wallet_records(
         "imported": imported,
         "skipped": skipped,
         "unchanged": unchanged,
+        "journal_invalidated": journal_invalidated,
         "inserted_records": inserted_records,
         "updated_records": updated_records,
     }
@@ -1164,7 +1196,9 @@ def enrich_profile_records(
                 imported=0,
                 skipped=skipped,
             )
-    hooks.invalidate_journals(conn, profile["id"])
+    journal_invalidated = bool(updated)
+    if journal_invalidated:
+        hooks.invalidate_journals(conn, profile["id"])
     if commit:
         conn.commit()
     outcome = {
@@ -1174,6 +1208,7 @@ def enrich_profile_records(
         "skipped": skipped,
         "matched": matched,
         "unchanged": unchanged,
+        "journal_invalidated": journal_invalidated,
         "skipped_unmatched": skipped_unmatched,
         "skipped_ambiguous": skipped_ambiguous,
         "updated_records": updated_records,
@@ -1323,6 +1358,7 @@ def import_records_into_wallet(
         outcome.update(apply_phoenix_metadata(conn, profile, wallet, records, hooks, commit=False))
     if apply_river:
         outcome.update(apply_river_metadata(conn, profile, wallet, records, hooks, commit=False))
+    _invalidate_journals_for_metadata_changes(conn, profile, outcome, hooks)
     if commit:
         conn.commit()
     return outcome
@@ -1842,6 +1878,7 @@ def import_wasabi_bundle_into_wallet(
             "input_format": "wasabi_bundle",
         }
     )
+    _invalidate_journals_for_metadata_changes(conn, profile, outcome, hooks)
     if commit:
         conn.commit()
     return outcome

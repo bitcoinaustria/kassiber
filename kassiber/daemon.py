@@ -2413,12 +2413,24 @@ def _rates_rebuild_payload(
             retryable=False,
         )
     reprice_transactions = bool(args.get("reprice_transactions", True))
+    active_profile = None
+    if pair is None:
+        _, active_profile = resolve_scope(conn, None, None)
+        pair = core_rates.transaction_rate_pair("BTC", active_profile["fiat_currency"])
+        if pair is None:
+            raise AppError(
+                "Active profile fiat currency is not supported for automatic BTC rate rebuild",
+                code="validation",
+                retryable=False,
+                details={"fiat_currency": active_profile["fiat_currency"]},
+            )
     profile_id = None
     journal_input_version_before = None
     if reprice_transactions:
-        _, profile = resolve_scope(conn, None, None)
-        profile_id = profile["id"]
-        journal_input_version_before = int(profile["journal_input_version"] or 0)
+        if active_profile is None:
+            _, active_profile = resolve_scope(conn, None, None)
+        profile_id = active_profile["id"]
+        journal_input_version_before = int(active_profile["journal_input_version"] or 0)
     rebuilt = core_rates.rebuild_rates_cache(
         conn,
         pair=pair,

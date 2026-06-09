@@ -24,12 +24,17 @@ from kassiber.daemon import (
     _planned_auto_read_tools,
     _reports_tax_summary_payload,
 )
+from kassiber.core import freshness as core_freshness
 from kassiber.db import open_db
 from kassiber.daemon_freshness import (
     _auto_process_journals_if_needed,
     _auto_sync_wallets_if_enabled,
+    _coerce_wallets_sync_args,
+    _freshness_wallet_source_specs,
     _maintenance_run_payload,
+    _sync_results_from_freshness_jobs,
 )
+from kassiber.errors import AppError
 from kassiber.secrets.sqlcipher import sqlcipher_available
 from kassiber.wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
@@ -670,6 +675,100 @@ class DaemonReportDepthClampTest(unittest.TestCase):
         # explicit default overrides the 8 fallback (used by coverage).
         self.assertEqual(_resolve_report_depth(None, default=16), 16)
         self.assertEqual(_resolve_report_depth(99_999, default=16), _DAEMON_REPORT_DEPTH_CAP)
+
+
+class DaemonFreshnessForceFullTest(unittest.TestCase):
+    def test_wallet_sync_args_accept_force_full_boolean(self):
+        self.assertEqual(
+            _coerce_wallets_sync_args(
+                {"wallet": "Cold", "force_full": True},
+                strict=True,
+            ),
+            {"wallet": "Cold", "all": False, "force_full": True},
+        )
+        with self.assertRaises(AppError):
+            _coerce_wallets_sync_args({"force_full": "yes"}, strict=True)
+
+    def test_force_full_wallet_specs_disable_single_flight_and_mark_payload(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-force-full-specs-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            try:
+                conn.execute(
+                    "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+                    ("workspace-1", "Main", "2026-01-01T00:00:00Z"),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO profiles(
+                        id, workspace_id, label, fiat_currency, tax_country,
+                        tax_long_term_days, gains_algorithm, created_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "profile-1",
+                        "workspace-1",
+                        "Default",
+                        "EUR",
+                        "generic",
+                        365,
+                        "FIFO",
+                        "2026-01-01T00:00:00Z",
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO wallets(
+                        id, workspace_id, profile_id, label, kind, config_json, created_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "wallet-1",
+                        "workspace-1",
+                        "profile-1",
+                        "Cold",
+                        "descriptor",
+                        json.dumps({"descriptor": "dummy-descriptor"}),
+                        "2026-01-01T00:00:00Z",
+                    ),
+                )
+
+                specs = _freshness_wallet_source_specs(
+                    conn,
+                    "profile-1",
+                    include_rates=False,
+                    include_journals=False,
+                    force_full=True,
+                )
+
+                self.assertEqual(len(specs), 1)
+                self.assertEqual(
+                    specs[0]["payload"],
+                    {
+                        "wallet_id": "wallet-1",
+                        "wallet_label": "Cold",
+                        "force_full": True,
+                    },
+                )
+                self.assertFalse(specs[0]["single_flight"])
+            finally:
+                conn.close()
+
+    def test_failed_wallet_freshness_result_uses_wallet_label(self):
+        results = _sync_results_from_freshness_jobs(
+            [
+                {
+                    "job_type": core_freshness.JOB_ONCHAIN_WALLET,
+                    "status": "failed",
+                    "source_label": "Cold on-chain history",
+                    "payload": {"wallet_id": "wallet-1", "wallet_label": "Cold"},
+                    "error": {"code": "backend_timeout", "message": "Timed out"},
+                }
+            ]
+        )
+
+        self.assertEqual(results[0]["wallet"], "Cold")
+        self.assertEqual(results[0]["status"], "error")
+        self.assertEqual(results[0]["code"], "backend_timeout")
 
 
 class DaemonSmokeTest(unittest.TestCase):

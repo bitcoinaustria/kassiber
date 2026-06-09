@@ -43,6 +43,46 @@ describe("syncResults", () => {
     ).toBe("Descriptor refresh failed: Failed to reach backend local-esplora: timed out");
   });
 
+  it("summarizes successful refresh observability", () => {
+    expect(
+      describeWalletSyncResult(
+        {
+          wallet: "Descriptor",
+          status: "synced",
+          imported: 0,
+          updated: 1,
+          unchanged: 12,
+          scripts_checked: 24,
+          utxos_skipped_unchanged: true,
+          journal_invalidated: true,
+          elapsed_ms: 42,
+        },
+        "Descriptor",
+      ),
+    ).toBe(
+      "Descriptor refreshed: 1 updated, 12 unchanged · 24 scripts checked · UTXOs unchanged · journals marked stale · 42 ms.",
+    );
+  });
+
+  it("marks force-full rescans in refresh summaries", () => {
+    expect(
+      describeWalletSyncResult(
+        {
+          wallet: "Cold",
+          status: "synced",
+          force_full: true,
+          records_fetched: 2,
+          target_count: 3,
+          utxos_refreshed: true,
+          journal_invalidated: false,
+        },
+        "Cold",
+      ),
+    ).toBe(
+      "Cold refreshed: full rescan · 2 source rows · 3 targets · UTXOs refreshed · journals unchanged.",
+    );
+  });
+
   it("only trusts all-wallet refresh results without errors for report refresh chaining", () => {
     expect(
       syncResultsAreTrustedForReports([
