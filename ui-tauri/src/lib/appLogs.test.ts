@@ -163,6 +163,8 @@ describe("typed app logs", () => {
       "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
     const url = "https://user:password@example.test/wallet?api_key=sk-url-secret";
     const localPath = "/Users/dev/.kassiber/data/kassiber.sqlite";
+    const amountText = "0.12345678 BTC";
+    const rateText = "BTC/EUR 64000.12";
     const records: AppLogRecord[] = [
       {
         ...record({
@@ -193,7 +195,7 @@ describe("typed app logs", () => {
     ];
 
     const exported = exportSupportBundleRecords(records, {
-      issueDescription: `Tax summary fails for ${txid} and ${url}`,
+      issueDescription: `Tax summary lost ${amountText} at ${rateText} for ${txid} and ${url}`,
       header: {
         appVersion: "0.22.0 (abc1234)",
         os: "macOS",
@@ -206,6 +208,8 @@ describe("typed app logs", () => {
 
     expect(exported).toContain('"redaction":"high_signal"');
     expect(exported).toContain("1.234 BTC");
+    expect(exported).toContain(amountText);
+    expect(exported).toContain(rateText);
     expect(exported).toContain(address);
     expect(exported).toContain(txid);
     expect(exported).toContain(localPath);
@@ -235,6 +239,11 @@ describe("typed app logs", () => {
     const descriptor = "wpkh([abcd1234/84h/0h/0h]xpub661MyMwAqRbcFsecret/0/*)";
     const url = "https://user:secret@example.test/wallet?api_key=sk-url-secret";
     const localPath = "/Users/dev/.kassiber/data/kassiber.sqlite";
+    const amountText = "0.12345678 BTC";
+    const fiatAmountText = "\u20ac12,345.67";
+    const prefixedFiatAmountText = "USD 42.10";
+    const satsText = "2500 sats";
+    const rateText = "BTC/EUR 64000.12";
     const records: AppLogRecord[] = [
       {
         ...record({
@@ -245,6 +254,10 @@ describe("typed app logs", () => {
           email: { type: "email", value: "dev@example.test" },
           data_root: { type: "path", value: localPath },
           amount: { type: "amount", value: "1.234 BTC" },
+          error_message: {
+            type: "text",
+            value: `lost ${amountText}, fee ${satsText}, fiat ${fiatAmountText}, proceeds ${prefixedFiatAmountText}, rate ${rateText}`,
+          },
         }),
         id: "log-1",
         ts: "2026-05-17T18:00:00.000Z",
@@ -288,7 +301,7 @@ describe("typed app logs", () => {
     ];
 
     const exported = exportSupportBundleRecords(records, {
-      issueDescription: `Tax summary fails for ${txid} and ${url}`,
+      issueDescription: `Tax summary lost ${amountText}, fiat ${fiatAmountText}, proceeds ${prefixedFiatAmountText}, rate ${rateText}, and ${url}`,
       header: {
         appVersion: "0.22.0 (abc1234)",
         os: "macOS",
@@ -306,10 +319,17 @@ describe("typed app logs", () => {
     expect(exported).toContain('"redaction":"public_safe"');
     expect(exported).toContain("missing_price");
     expect(exported).toContain("amount#");
+    expect(exported).toContain("[redacted-amount]");
+    expect(exported).toContain("[redacted-rate]");
     expect(exported).toContain("[redacted-url]");
     expect(exported).toContain("[redacted-txid]");
     expect(exported).toContain("[redacted-address]");
     expect(exported).not.toContain("1.234 BTC");
+    expect(exported).not.toContain(amountText);
+    expect(exported).not.toContain(fiatAmountText);
+    expect(exported).not.toContain(prefixedFiatAmountText);
+    expect(exported).not.toContain(satsText);
+    expect(exported).not.toContain(rateText);
     expect(exported).not.toContain("xpub661MyMwAqRbcFsecret");
     expect(exported).not.toContain("sk-url-secret");
     expect(exported).not.toContain("dev@example.test");

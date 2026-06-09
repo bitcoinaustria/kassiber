@@ -140,6 +140,13 @@ const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
   ],
 ];
 
+const PUBLIC_SAFE_AMOUNT_NUMBER =
+  "[+-]?(?:(?:\\d{1,3}(?:[,_ .]\\d{3})+)|\\d+)(?:[.,]\\d+)?";
+const PUBLIC_SAFE_AMOUNT_UNITS =
+  "BTC|XBT|LBTC|sats?|msats?|EUR|USD|CHF|GBP|JPY|CAD|AUD|NZD|SEK|NOK|DKK|PLN|CZK|HUF";
+const PUBLIC_SAFE_PAIR_UNITS = PUBLIC_SAFE_AMOUNT_UNITS;
+const PUBLIC_SAFE_CURRENCY_SYMBOLS = "\\u20ac$\\u00a3\\u00a5\\u20bf";
+
 const PUBLIC_SAFE_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
   [
     /\b(?:https?|tcp|ssl):\/\/[^\s,;"')\]}]+/gi,
@@ -148,6 +155,35 @@ const PUBLIC_SAFE_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
   [
     /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi,
     "[redacted-email]",
+  ],
+  [
+    new RegExp(
+      `\\b(?:${PUBLIC_SAFE_PAIR_UNITS})[/-](?:${PUBLIC_SAFE_PAIR_UNITS})\\s*(?::|=|at|rate)?\\s*${PUBLIC_SAFE_AMOUNT_NUMBER}\\b`,
+      "gi",
+    ),
+    "[redacted-rate]",
+  ],
+  [
+    new RegExp(
+      `\\b(?:${PUBLIC_SAFE_AMOUNT_UNITS})\\s*${PUBLIC_SAFE_AMOUNT_NUMBER}\\b`,
+      "gi",
+    ),
+    "[redacted-amount]",
+  ],
+  [
+    new RegExp(
+      `\\b${PUBLIC_SAFE_AMOUNT_NUMBER}\\s*(?:${PUBLIC_SAFE_AMOUNT_UNITS})\\b`,
+      "gi",
+    ),
+    "[redacted-amount]",
+  ],
+  [
+    new RegExp(`[${PUBLIC_SAFE_CURRENCY_SYMBOLS}]\\s*${PUBLIC_SAFE_AMOUNT_NUMBER}\\b`, "g"),
+    "[redacted-amount]",
+  ],
+  [
+    new RegExp(`\\b${PUBLIC_SAFE_AMOUNT_NUMBER}\\s*[${PUBLIC_SAFE_CURRENCY_SYMBOLS}]`, "g"),
+    "[redacted-amount]",
   ],
   [
     /\b(?:bc1|tb1|bcrt1|lq1|ex1)[023456789acdefghjklmnpqrstuvwxyz]{20,90}\b/gi,
