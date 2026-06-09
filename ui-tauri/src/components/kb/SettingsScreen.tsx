@@ -37,7 +37,11 @@ import { screenPanelClassName } from "@/lib/screen-layout";
 import { setSessionUnlockPassphrase } from "@/store/sessionLock";
 import { useUiStore } from "@/store/ui";
 import { databasePassphraseHint } from "@/components/kb/Onboarding/constants";
-import { settingsSectionForHash, type SettingsSectionId } from "./settingsSections";
+import {
+  PENDING_SETTINGS_BACKEND_EDIT_KEY,
+  settingsSectionForHash,
+  type SettingsSectionId,
+} from "./settingsSections";
 import { AppearanceSettingsPanel } from "./settings/AppearanceSettingsPanel";
 import { AiProvidersSettingsPanel } from "./settings/AiProvidersSettingsPanel";
 import { SyncBackendSettingsModal, backendTypeIdForConnectionSetup, type SyncBackendNetwork } from "./settings/SyncBackendSettingsModal";
@@ -190,6 +194,13 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const [activeSectionId, setActiveSectionId] = React.useState<SettingsSectionId>(
     () => routeSectionId ?? DEFAULT_SETTINGS_SECTION,
   );
+  const [pendingBackendEditId, setPendingBackendEditId] = React.useState<
+    string | null
+  >(() =>
+    typeof window === "undefined"
+      ? null
+      : window.sessionStorage.getItem(PENDING_SETTINGS_BACKEND_EDIT_KEY),
+  );
 
   const openTouchIdEnrollment = React.useCallback(() => {
     setTouchIdEnrollError(null);
@@ -281,9 +292,21 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   // explicit `kassiber:settings-section` event and force re-selection.
   React.useEffect(() => {
     const handler = (event: Event) => {
-      const detail = (event as CustomEvent<{ section?: string | null }>).detail;
+      const detail = (
+        event as CustomEvent<{
+          section?: string | null;
+          backendId?: string | null;
+        }>
+      ).detail;
       const next = settingsSectionForHash(detail?.section ?? "");
       if (next) setActiveSectionId(next);
+      if (detail?.backendId) {
+        setPendingBackendEditId(detail.backendId);
+        window.sessionStorage.setItem(
+          PENDING_SETTINGS_BACKEND_EDIT_KEY,
+          detail.backendId,
+        );
+      }
     };
     window.addEventListener("kassiber:settings-section", handler);
     return () => {
@@ -308,6 +331,22 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     () => backends.find((backend) => backend.id === editingBackendId) ?? null,
     [backends, editingBackendId],
   );
+
+  React.useEffect(() => {
+    if (!pendingBackendEditId) return;
+    const backend = backends.find((candidate) => candidate.id === pendingBackendEditId);
+    if (!backend) {
+      if (!backendSettingsQuery.isFetched) return;
+      window.sessionStorage.removeItem(PENDING_SETTINGS_BACKEND_EDIT_KEY);
+      setPendingBackendEditId(null);
+      return;
+    }
+    setEditingBackendId(backend.id);
+    setInitialBackendTypeId(null);
+    setBackendDialogOpen(true);
+    window.sessionStorage.removeItem(PENDING_SETTINGS_BACKEND_EDIT_KEY);
+    setPendingBackendEditId(null);
+  }, [backendSettingsQuery.isFetched, backends, pendingBackendEditId]);
 
   const onResetWorkspace = () => {
     const ok = window.confirm(

@@ -130,6 +130,7 @@ import { PreAlphaBanner } from "./PreAlphaBanner";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { BookSwitcherPopover } from "./BookSwitcherPopover";
+import { NetworkStatusIndicator } from "./NetworkStatusIndicator";
 import {
   routeProgressFromActiveMaintenance,
   routeProgressFromNotifications,
@@ -2275,6 +2276,7 @@ function AppDashboardHeader({
             <Eye className="size-4" aria-hidden="true" />
           )}
         </Button>
+        <NetworkStatusIndicator daemonEnabled={daemonEnabled} />
         <Button
           variant="ghost"
           size="icon"
