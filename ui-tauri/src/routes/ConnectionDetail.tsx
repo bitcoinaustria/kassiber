@@ -944,7 +944,7 @@ function ConnectionDetailView({
               disabled={isWalletSyncRunning}
               aria-busy={isWalletSyncRunning}
               aria-label={`${refreshButtonLabel} ${connection.label}`}
-              onClick={onSync}
+              onClick={() => onSync()}
             >
               <RefreshCw
                 className={cn("size-4", isWalletSyncRunning && "animate-spin")}
@@ -1205,7 +1205,7 @@ function ConnectionDetailView({
               variant="outline"
               size="sm"
               disabled={isWalletSyncRunning}
-              onClick={onSync}
+              onClick={() => onSync()}
             >
               <RefreshCw
                 className={cn("size-4", isWalletSyncRunning && "animate-spin")}
@@ -1288,7 +1288,7 @@ function ConnectionDetailView({
                     variant="outline"
                     size="sm"
                     disabled={isWalletSyncRunning}
-                    onClick={onSync}
+                    onClick={() => onSync()}
                   >
                     <RefreshCw
                       className={cn(
