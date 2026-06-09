@@ -260,8 +260,12 @@ python3 -m kassiber reports export-source-funds-pdf \
 ```
 
 Reports carry overview metrics, deterministic narrative text, a simplified
-reviewed flow path, data-source rollups, source mix, level-by-level flow
-rows, transaction details, review gates, and disclosure notes. The
+reviewed flow path, data-source rollups (including how each row entered
+Kassiber: chain sync, platform export, or manual import), source mix with
+root-source details, level-by-level flow rows, per-level transaction detail
+tables (date, source, in/out amount, fee, fiat value, txid, data source),
+review gates, a missing-history section when gaps exist, and disclosure
+notes including the wallets the report names and what sharing it reveals. The
 simplified flow chart follows reviewed local source, wallet-transfer, and
 consolidation-style links; CoinJoin/PayJoin traversal is deferred and shown
 as a privacy boundary rather than ownership proof through unrelated

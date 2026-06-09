@@ -235,3 +235,45 @@ kassiber reports export-pdf --wallet satoshi-liquid --file satoshi-liquid-report
 
 Use these instead of inventing extra report renderers unless the user asks for
 a custom output beyond Kassiber's built-in exports.
+
+## Source of funds (Mittelherkunftsnachweis)
+
+Target-anchored proof-of-source workflow: pick the outgoing target
+transaction (e.g. a planned exchange sale), link upstream funding evidence,
+review gates, then export a PDF rendered only from a saved immutable case
+snapshot.
+
+```bash
+# Build/maintain the review graph.
+kassiber source-funds sources create --type fiat_purchase --label "Bank purchase" \
+  --asset BTC --amount 0.10000000 --attachment <attachment-id>
+kassiber source-funds links create --from-source <source-id> \
+  --to-transaction <txid-or-id> --type manual_source \
+  --allocation-amount 0.10000000 --allocation-policy explicit
+kassiber source-funds suggest --target-transaction <txid-or-id>
+kassiber source-funds links bulk-review --target-transaction <txid-or-id>
+
+# Preview gates + disclosure, freeze a case, then export it.
+kassiber --machine reports source-funds --target-transaction <txid-or-id> \
+  --target-amount 0.10000000 --reveal-mode standard --save-case
+kassiber reports export-source-funds-pdf --case <case-id> --file sof.pdf
+kassiber reports export-source-funds-bundle --case <case-id> --file sof-bundle.zip
+```
+
+Gotchas:
+
+- `export-source-funds-pdf` / `export-source-funds-bundle` take ONLY
+  `--case` + `--file`: target, reveal mode, and report options are frozen
+  into the snapshot at `--save-case` time and cannot be reshaped at export.
+- Export hard-fails (`export_blocked`) while `explain_gates.blockers` is
+  non-empty; there is no force flag. Resolve blockers (review suggested
+  links, fix allocations, attach missing-history attestations) instead.
+- Reveal modes: `labels_only`, `minimal`, `standard`, `full`. Free-text and
+  txids tighten as the mode narrows; `disclosure_preview` in the machine
+  envelope lists exactly what would be disclosed, the wallets the report
+  names, and the common-ownership consequence of sharing it.
+- The machine envelope carries the granular trace: `flow_levels` (per-level
+  nodes with direction, fee, fiat value, `data_provenance` =
+  chain_sync/platform_export/manual_import, per-level fiat subtotals),
+  `data_provenance_summary`, `source_mix`, `gaps` (missing-history items
+  carry the unexplained amount), and `findings`.
