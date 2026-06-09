@@ -335,9 +335,10 @@ def _wallet_chain_network(config_json: Any, asset: Any) -> tuple[str, str]:
 
 def _wallet_data_provenance(wallet_kind: Any, config_json: Any) -> str:
     kind = str(wallet_kind or "").strip().lower()
-    if kind in _CHAIN_SYNC_WALLET_KINDS:
-        return "chain_sync"
-    if kind == "address":
+    if kind in _CHAIN_SYNC_WALLET_KINDS or kind == "address":
+        # Descriptor/xpub/address wallets are chain-verified only when they
+        # actually sync from the chain; the same kinds can also be created
+        # around a file-based source, and those rows are platform exports.
         config = _safe_json_loads(config_json)
         has_import_source = isinstance(config, dict) and bool(
             config.get("source_file") or config.get("source_format")
@@ -1908,6 +1909,27 @@ def _summarize_report_data_sources(nodes: Sequence[Mapping[str, Any]]) -> list[d
     return sorted(rows, key=lambda row: (row["kind"], row["label"]))
 
 
+def _allocated_fiat_value(node: Mapping[str, Any]) -> float | None:
+    """Pro-rata fiat value of the traced slice of this node.
+
+    Node ``fiat_value`` prices the FULL transaction/source amount, while the
+    level tables show ``required_amount`` (the reviewed allocation). Scaling
+    keeps level subtotals honest when only part of a transaction feeds the
+    target.
+    """
+    fiat = node.get("fiat_value")
+    if fiat is None:
+        return None
+    amount_msat = node.get("amount_msat")
+    required_msat = node.get("required_amount_msat")
+    if not amount_msat or required_msat is None:
+        return round(float(fiat), 2)
+    try:
+        return round(float(fiat) * (int(required_msat) / int(amount_msat)), 2)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+
+
 def _compact_flow_node(node: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "id": node.get("id", ""),
@@ -1929,6 +1951,7 @@ def _compact_flow_node(node: Mapping[str, Any]) -> dict[str, Any]:
         "external_id": node.get("external_id", ""),
         "fiat_currency": node.get("fiat_currency", ""),
         "fiat_value": node.get("fiat_value"),
+        "fiat_value_allocated": _allocated_fiat_value(node),
         "data_provenance": node.get("data_provenance", ""),
         "review_state": node.get("review_state", ""),
     }
@@ -1980,21 +2003,24 @@ def _build_flow_levels(report: Mapping[str, Any]) -> list[dict[str, Any]]:
                 str(node.get("label") or ""),
             ),
         )
-        fiat_currencies = {
-            str(node.get("fiat_currency") or "")
-            for node in level_nodes
-            if node.get("fiat_value") is not None
-        }
+        compact_nodes = [_compact_flow_node(node) for node in level_nodes]
+        # Subtotal only when every node in the level has a priced, allocated
+        # fiat slice in one currency — a partial sum would silently understate
+        # the level, and full-transaction values would overstate it.
+        allocated_values = [node.get("fiat_value_allocated") for node in compact_nodes]
+        fiat_currencies = {str(node.get("fiat_currency") or "") for node in compact_nodes}
         fiat_total = (
-            round(sum(float(node.get("fiat_value") or 0) for node in level_nodes if node.get("fiat_value") is not None), 2)
-            if len(fiat_currencies) == 1
+            round(sum(float(value) for value in allocated_values), 2)
+            if allocated_values
+            and all(value is not None for value in allocated_values)
+            and len(fiat_currencies) == 1
             else None
         )
         rows.append(
             {
                 "level": depth + 1,
                 "role": "target" if depth == 0 else "upstream",
-                "nodes": [_compact_flow_node(node) for node in level_nodes],
+                "nodes": compact_nodes,
                 "transaction_count": sum(1 for node in level_nodes if node.get("node_type") == "transaction"),
                 "source_count": sum(1 for node in level_nodes if node.get("node_type") == "source"),
                 "assets": sorted({str(node.get("asset") or "") for node in level_nodes if node.get("asset")}),
@@ -2636,6 +2662,8 @@ def build_report(
                         "warning",
                         "Reviewed missing-history gap included; it is not a real root source.",
                         ref=source["id"],
+                        amount_msat=int(source_required) if source_required is not None else None,
+                        asset=source["asset"],
                     )
                 elif source["source_type"] == "opening_balance_attestation":
                     _add_finding(

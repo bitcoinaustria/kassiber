@@ -714,14 +714,15 @@ export const fixtures: Record<string, unknown> = {
         { id: "tx2", node_type: "transaction", transaction_id: "tx2", external_id: SOURCE_FUNDS_FIXTURE_TARGET_TXID, label: "target deposit", wallet: "Multisig Vault", asset: "BTC", direction: "inbound", fee: 0, fee_msat: 0, data_provenance: "chain_sync" },
       ],
       edges: [
-        { id: "link:1", link_type: "manual_source", state: "reviewed", method: "manual", allocation_amount: 0.15, asset: "BTC", allocation_policy: "explicit" },
+        { id: "link:1", from: "source:1", to: "tx1", link_type: "manual_source", state: "reviewed", method: "manual", allocation_amount: 0.15, asset: "BTC", allocation_policy: "explicit" },
+        { id: "link:2", from: "tx1", to: "tx2", link_type: "self_transfer", state: "reviewed", method: "manual", allocation_amount: 0.15, asset: "BTC", allocation_policy: "explicit" },
       ],
     },
     allocations: {
       target_amount: 0.15,
       target_amount_msat: 15_000_000_000,
       asset: "BTC",
-      reviewed_edge_count: 1,
+      reviewed_edge_count: 2,
     },
     source_mix: [{ source_type: "fiat_purchase", amount: 0.15, amount_msat: 15_000_000_000, percent_of_target: 100, count: 1 }],
     report_context: {
@@ -742,22 +743,32 @@ export const fixtures: Record<string, unknown> = {
       target_wallet: "Multisig Vault",
       time_range: { start: "2024-10-31T09:00:00Z", end: "2024-11-05T10:12:00Z" },
       transaction_count: 2,
-      link_count: 1,
+      link_count: 2,
       root_source_count: 1,
       source_category_count: 1,
-      data_source_count: 2,
+      data_source_count: 3,
       blocker_count: 0,
       warning_count: 1,
     },
     narrative: {
       generated_by: "local_rule_summary",
       paragraphs: [
-        "This report traces 0.15000000 BTC for Vault migration through 1 reviewed link across 2 transactions.",
+        "This report traces 0.15000000 BTC for Vault migration through 2 reviewed links across 2 transactions.",
         "The reviewed source mix is fiat purchase: 0.15000000 BTC, 100.0% of target. The path spans 2024-10-31T09:00:00Z to 2024-11-05T10:12:00Z and uses 2 local data sources.",
         "Export is currently clear under the current review gates.",
       ],
     },
     data_sources: [
+      {
+        label: "Exchange",
+        kind: "wallet",
+        provenance: "platform_export",
+        transaction_count: 1,
+        source_count: 0,
+        assets: ["BTC"],
+        first_seen: "2024-10-31T09:05:00Z",
+        last_seen: "2024-10-31T09:05:00Z",
+      },
       {
         label: "Multisig Vault",
         kind: "wallet",
@@ -828,7 +839,7 @@ export const fixtures: Record<string, unknown> = {
         {
           level: 1,
           role: "source",
-          distance_to_target: 1,
+          distance_to_target: 2,
           nodes: [
             {
               id: "source:1",
@@ -843,12 +854,31 @@ export const fixtures: Record<string, unknown> = {
         },
         {
           level: 2,
+          role: "upstream",
+          distance_to_target: 1,
+          nodes: [
+            {
+              id: "tx1",
+              node_type: "transaction",
+              transaction_id: "tx1",
+              kind: "outbound",
+              label: "withdraw-1",
+              wallet: "Exchange",
+              asset: "BTC",
+              amount: 0.15,
+              occurred_at: "2024-10-31T09:05:00Z",
+            },
+          ],
+        },
+        {
+          level: 3,
           role: "target",
           distance_to_target: 0,
           nodes: [
             {
               id: "tx2",
               node_type: "transaction",
+              transaction_id: "tx19",
               kind: "inbound",
               label: "target deposit",
               wallet: "Multisig Vault",
@@ -863,10 +893,21 @@ export const fixtures: Record<string, unknown> = {
         {
           id: "link:1",
           from: "source:1",
-          to: "tx2",
+          to: "tx1",
           link_type: "manual_source",
           asset: "BTC",
           amount: 0.15,
+          percent_of_target: 100,
+          deferred_privacy_hop: false,
+        },
+        {
+          id: "link:2",
+          from: "tx1",
+          to: "tx2",
+          link_type: "self_transfer",
+          asset: "BTC",
+          amount: 0.15,
+          percent_of_target: 100,
           deferred_privacy_hop: false,
         },
       ],
@@ -893,7 +934,7 @@ export const fixtures: Record<string, unknown> = {
       source_mix_ring_svg:
         '<svg viewBox="0 0 240 100" xmlns="http://www.w3.org/2000/svg"><circle cx="49" cy="50" r="45" fill="#2563eb"/><circle cx="49" cy="50" r="26" fill="#ffffff"/><text x="49" y="50" font-family="Helvetica,Arial,sans-serif" font-size="9" font-weight="700" fill="#222222" text-anchor="middle">0.30000000</text><text x="49" y="60" font-family="Helvetica,Arial,sans-serif" font-size="6" fill="#666666" text-anchor="middle">BTC explained</text><rect x="104" y="46" width="7" height="7" fill="#2563eb"/><text x="115" y="52" font-family="Helvetica,Arial,sans-serif" font-size="6.4" fill="#222222">fiat purchase  100.0%</text></svg>',
       data_source_ring_svg:
-        '<svg viewBox="0 0 240 100" xmlns="http://www.w3.org/2000/svg"><circle cx="49" cy="50" r="45" fill="#0ea5e9"/><circle cx="49" cy="50" r="26" fill="#ffffff"/><text x="49" y="50" font-family="Helvetica,Arial,sans-serif" font-size="9" font-weight="700" fill="#222222" text-anchor="middle">3</text><text x="49" y="60" font-family="Helvetica,Arial,sans-serif" font-size="6" fill="#666666" text-anchor="middle">transactions</text><rect x="104" y="40" width="7" height="7" fill="#0891b2"/><text x="115" y="46" font-family="Helvetica,Arial,sans-serif" font-size="6.4" fill="#222222">Blockchain (watch-only sync)  50.0%</text><rect x="104" y="52" width="7" height="7" fill="#2563eb"/><text x="115" y="58" font-family="Helvetica,Arial,sans-serif" font-size="6.4" fill="#222222">Platform export / API  50.0%</text></svg>',
+        '<svg viewBox="0 0 240 100" xmlns="http://www.w3.org/2000/svg"><circle cx="49" cy="50" r="45" fill="#0ea5e9"/><circle cx="49" cy="50" r="26" fill="#ffffff"/><text x="49" y="50" font-family="Helvetica,Arial,sans-serif" font-size="9" font-weight="700" fill="#222222" text-anchor="middle">2</text><text x="49" y="60" font-family="Helvetica,Arial,sans-serif" font-size="6" fill="#666666" text-anchor="middle">transactions</text><rect x="104" y="40" width="7" height="7" fill="#0891b2"/><text x="115" y="46" font-family="Helvetica,Arial,sans-serif" font-size="6.4" fill="#222222">Blockchain (watch-only sync)  50.0%</text><rect x="104" y="52" width="7" height="7" fill="#2563eb"/><text x="115" y="58" font-family="Helvetica,Arial,sans-serif" font-size="6.4" fill="#222222">Platform export / API  50.0%</text></svg>',
     },
   },
   "ui.source_funds.cases.save": {
@@ -934,14 +975,15 @@ export const fixtures: Record<string, unknown> = {
         { id: "tx2", node_type: "transaction", transaction_id: "tx2", external_id: SOURCE_FUNDS_FIXTURE_TARGET_TXID, label: "target deposit", wallet: "Multisig Vault", asset: "BTC", direction: "inbound", fee: 0, fee_msat: 0, data_provenance: "chain_sync" },
       ],
       edges: [
-        { id: "link:1", link_type: "manual_source", state: "reviewed", method: "manual", allocation_amount: 0.15, asset: "BTC", allocation_policy: "explicit" },
+        { id: "link:1", from: "source:1", to: "tx1", link_type: "manual_source", state: "reviewed", method: "manual", allocation_amount: 0.15, asset: "BTC", allocation_policy: "explicit" },
+        { id: "link:2", from: "tx1", to: "tx2", link_type: "self_transfer", state: "reviewed", method: "manual", allocation_amount: 0.15, asset: "BTC", allocation_policy: "explicit" },
       ],
     },
     allocations: {
       target_amount: 0.15,
       target_amount_msat: 15_000_000_000,
       asset: "BTC",
-      reviewed_edge_count: 1,
+      reviewed_edge_count: 2,
     },
     source_mix: [{ source_type: "fiat_purchase", amount: 0.15, amount_msat: 15_000_000_000, count: 1 }],
     gaps: [{ code: "missing_history", severity: "warning", message: "Reviewed prior-history gap included.", ref: "source:gap" }],

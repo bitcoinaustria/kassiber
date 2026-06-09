@@ -706,6 +706,14 @@ class _SourceFundsPdfBuilder:
                 "small",
             )
         )
+        # Case snapshots saved before the level nodes carried
+        # direction/fee/provenance still have those fields on the full graph
+        # nodes; fall back there so legacy exports keep correct In/Out sides.
+        graph_nodes_by_id = {
+            str(graph_node.get("id")): graph_node
+            for graph_node in (self.report.get("graph") or {}).get("nodes") or []
+            if graph_node.get("id")
+        }
         rendered_any = False
         for level in levels:
             nodes = list(level.get("nodes") or [])
@@ -728,6 +736,7 @@ class _SourceFundsPdfBuilder:
                 ["Date", "Source", "Type", "In", "Out", "Fee", "Fiat", "ID / hash", "Data src"]
             ]
             for node in nodes:
+                graph_node = graph_nodes_by_id.get(str(node.get("id") or ""), {})
                 is_source = node.get("node_type") == "source"
                 amount = self.amt(
                     node.get("required_amount")
@@ -735,16 +744,24 @@ class _SourceFundsPdfBuilder:
                     else node.get("amount"),
                     node.get("asset"),
                 )
-                direction = str(node.get("direction") or "")
+                direction = str(node.get("direction") or graph_node.get("direction") or "")
                 inbound = is_source or direction == "inbound"
                 fee = node.get("fee")
+                if fee is None:
+                    fee = graph_node.get("fee")
                 fee_cell = self.amt(fee) if fee and float(fee) > 0 else ""
                 if is_source:
                     provenance = "attested"
                 else:
                     provenance = _PROVENANCE_SHORT.get(
-                        str(node.get("data_provenance") or ""), ""
+                        str(node.get("data_provenance") or graph_node.get("data_provenance") or ""),
+                        "",
                     )
+                fiat_value = (
+                    node.get("fiat_value_allocated")
+                    if "fiat_value_allocated" in node
+                    else node.get("fiat_value")
+                )
                 rows.append(
                     [
                         _node_time(node),
@@ -753,7 +770,7 @@ class _SourceFundsPdfBuilder:
                         amount if inbound else "",
                         "" if inbound else amount,
                         fee_cell,
-                        _fiat(node.get("fiat_value"), node.get("fiat_currency")),
+                        _fiat(fiat_value, node.get("fiat_currency")),
                         node.get("external_id") or ("" if is_source else node.get("label", "")),
                         provenance,
                     ]

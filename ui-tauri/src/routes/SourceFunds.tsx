@@ -35,7 +35,7 @@ import {
 import { type Transaction } from "@/components/transactions";
 import { TransactionDetailController } from "@/components/transactions/dashboard/TransactionDetailController";
 import { toDashboardTransaction } from "@/components/transactions/dashboard/model";
-import { useCurrency } from "@/lib/currency";
+import { formatFiatAmount, useCurrency } from "@/lib/currency";
 import { type Tx } from "@/mocks/seed";
 import {
   Card,
@@ -235,6 +235,7 @@ type SourceFundsPreview = {
   data_sources?: {
     label: string;
     kind: string;
+    provenance?: string;
     transaction_count: number;
     source_count: number;
     assets: string[];
@@ -285,6 +286,7 @@ type SourceFundsPreview = {
       fee_msat?: number | null;
       fiat_currency?: string;
       fiat_value?: number | null;
+      fiat_value_allocated?: number | null;
       occurred_at?: string;
       acquired_at?: string;
       external_id?: string;
@@ -3466,11 +3468,10 @@ function FlowLevelDetailPreview({
               </span>
               {level.fiat_value_total != null && (
                 <span className="font-mono tabular-nums">
-                  {level.fiat_value_total.toLocaleString("de-AT", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}{" "}
-                  {level.fiat_currency}
+                  {formatFiatAmount(
+                    level.fiat_value_total,
+                    level.fiat_currency || "EUR",
+                  )}
                 </span>
               )}
             </div>
@@ -3484,7 +3485,7 @@ function FlowLevelDetailPreview({
               return (
                 <div
                   key={node.id}
-                  className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-0.5 border-b px-3 py-1.5 text-xs last:border-b-0 sm:grid-cols-[110px_1fr_90px_120px_70px]"
+                  className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-b px-3 py-1.5 text-xs last:border-b-0 sm:grid sm:grid-cols-[110px_1fr_90px_120px_70px]"
                 >
                   <span className="text-muted-foreground">
                     {formatDateTime(node.occurred_at || node.acquired_at)}
@@ -3498,8 +3499,9 @@ function FlowLevelDetailPreview({
                       : pretty(node.direction ?? "")}
                   </span>
                   <span className="text-right font-mono tabular-nums">
-                    {inbound ? "+" : "−"}
-                    {formatBtc(amount, node.asset || "BTC")}
+                    {amount == null
+                      ? "—"
+                      : `${inbound ? "+" : "−"}${formatBtc(amount, node.asset || "BTC")}`}
                   </span>
                   <span className="text-right text-muted-foreground">
                     {provenance}

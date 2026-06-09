@@ -1205,6 +1205,117 @@ class SourceFundsCliTest(unittest.TestCase):
         self.assertEqual(preview["wallets_named"], ["Gran Parent", "Gran Target"])
         self.assertIn("common ownership", preview["ownership_note"])
 
+    def test_wallet_data_provenance_mapping(self):
+        from kassiber.core.source_funds import _wallet_data_provenance
+
+        self.assertEqual(_wallet_data_provenance("descriptor", None), "chain_sync")
+        self.assertEqual(_wallet_data_provenance("xpub", "{}"), "chain_sync")
+        # File-sourced descriptor/address wallets are platform exports, not
+        # chain-verified rows.
+        self.assertEqual(
+            _wallet_data_provenance(
+                "descriptor", '{"source_file": "wallet.csv", "source_format": "sparrow_csv"}'
+            ),
+            "platform_export",
+        )
+        self.assertEqual(
+            _wallet_data_provenance("address", '{"source_file": "rows.csv"}'),
+            "platform_export",
+        )
+        self.assertEqual(_wallet_data_provenance("address", '{"addresses": ["bc1..."]}'), "chain_sync")
+        self.assertEqual(_wallet_data_provenance("river", None), "platform_export")
+        self.assertEqual(_wallet_data_provenance("strike", None), "platform_export")
+        self.assertEqual(_wallet_data_provenance("custom", None), "manual_import")
+        self.assertEqual(_wallet_data_provenance(None, None), "manual_import")
+
+    def test_level_fiat_subtotals_scale_to_the_allocated_slice(self):
+        """A 1.0 BTC parent of which only 0.1 BTC feeds the target must
+        contribute its pro-rata fiat slice to the level subtotal, not the
+        full transaction value."""
+        self._init_default_workspace()
+        self._write_csv(
+            "alloc-parent.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            "2026-03-01T09:00:00Z,alloc-parent,outbound,BTC,1.00000000,0,50000,Big parent spend\n",
+        )
+        self._write_csv(
+            "alloc-target.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            "2026-03-01T09:30:00Z,alloc-target,inbound,BTC,0.10000000,0,50000,Target deposit\n",
+        )
+        self._create_wallet_and_import("Alloc Parent", "alloc-parent.csv")
+        self._create_wallet_and_import("Alloc Target", "alloc-target.csv")
+        source = self.cli(
+            "source-funds",
+            "sources",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--type",
+            "fiat_purchase",
+            "--label",
+            "Allocation source",
+            "--asset",
+            "BTC",
+            "--amount",
+            "1.00000000",
+        )["data"]
+        self.cli(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-source",
+            source["id"],
+            "--to-transaction",
+            "alloc-parent",
+            "--type",
+            "manual_source",
+            "--allocation-amount",
+            "0.10000000",
+            "--allocation-policy",
+            "explicit",
+        )
+        self.cli(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-transaction",
+            "alloc-parent",
+            "--to-transaction",
+            "alloc-target",
+            "--type",
+            "self_transfer",
+            "--allocation-amount",
+            "0.10000000",
+            "--from-amount",
+            "0.10000000",
+            "--allocation-policy",
+            "explicit",
+        )
+        report = self._source_funds_report_for_target(
+            target="alloc-target",
+            amount="0.10000000",
+        )
+        levels = {level["level"]: level for level in report["flow_levels"]}
+        # Target: 0.1 BTC fully traced at 50,000 EUR/BTC.
+        self.assertEqual(levels[1]["fiat_value_total"], 5000.0)
+        # Parent: full tx is 1.0 BTC (50,000 EUR) but only 0.1 BTC feeds the
+        # target, so the subtotal is the 5,000 EUR slice.
+        self.assertEqual(levels[2]["fiat_value_total"], 5000.0)
+        parent_node = levels[2]["nodes"][0]
+        self.assertEqual(parent_node["fiat_value"], 50000.0)
+        self.assertEqual(parent_node["fiat_value_allocated"], 5000.0)
+
     def test_missing_history_gap_carries_unexplained_amount(self):
         self._seed_single_target(amount="0.20000000")
         blockers, report = self._report_blockers()

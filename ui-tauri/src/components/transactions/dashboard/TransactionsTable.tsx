@@ -1227,6 +1227,7 @@ const TransactionsTable = ({
         explorerSettings={explorerSettings}
         nowRate={nowRate}
         navList={filteredTransactions}
+        evidenceSourceList={records}
         onOpenChange={(open) => {
           if (!open) {
             setDetailTransaction(null);
