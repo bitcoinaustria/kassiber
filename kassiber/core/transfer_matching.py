@@ -51,6 +51,7 @@ existing pair / dismissal records and receive a list of frozen
 
 from __future__ import annotations
 
+import bisect
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable, Mapping, Optional, Sequence
@@ -428,7 +429,31 @@ def _match_heuristic(
     fee_pct_max: float,
     fee_sats_min: int,
 ) -> list[tuple[Mapping, Mapping]]:
-    in_with_time = [(row, _iso_to_seconds(_record_get(row, "occurred_at"))) for row in in_rows]
+    """Pair each outbound with every inbound inside the time window and
+    fee tolerance.
+
+    Inbound rows are resolved and time-sorted once so each outbound only
+    scans the ``[out - window, out + window]`` bisect slice instead of
+    every inbound — O((n_out + n_in) log n_in + matches) instead of
+    O(n_out × n_in). Pair emission order differs from input order, which
+    is fine: ``suggest_swap_candidates`` applies a total-order sort and
+    conflict clustering is order-independent.
+    """
+    in_entries: list[tuple[float, Mapping, int]] = []
+    for in_row in in_rows:
+        in_seconds = _iso_to_seconds(_record_get(in_row, "occurred_at"))
+        if in_seconds is None:
+            continue
+        in_amount = int(_record_get(in_row, "amount") or 0)
+        if in_amount <= 0:
+            # Zero/negative inbound rows (failed imports, placeholder
+            # rows) would otherwise match any small outbound within the
+            # absolute fee floor.
+            continue
+        in_entries.append((in_seconds, in_row, in_amount))
+    in_entries.sort(key=lambda entry: entry[0])
+    in_times = [entry[0] for entry in in_entries]
+
     pairs: list[tuple[Mapping, Mapping]] = []
     for out_row in out_rows:
         out_seconds = _iso_to_seconds(_record_get(out_row, "occurred_at"))
@@ -438,18 +463,13 @@ def _match_heuristic(
         if out_amount <= 0:
             continue
         threshold = fee_threshold_msat(out_amount, fee_pct_max, fee_sats_min)
-        for in_row, in_seconds in in_with_time:
-            if in_seconds is None:
-                continue
-            if _record_get(out_row, "wallet_id") == _record_get(in_row, "wallet_id"):
-                continue
-            if abs(in_seconds - out_seconds) > time_window_seconds:
-                continue
-            in_amount = int(_record_get(in_row, "amount") or 0)
-            if in_amount <= 0:
-                # Zero/negative inbound rows (failed imports, placeholder
-                # rows) would otherwise match any small outbound within the
-                # absolute fee floor.
+        out_wallet_id = _record_get(out_row, "wallet_id")
+        # Both bounds inclusive, matching the previous abs(delta) > window
+        # rejection exactly.
+        lo = bisect.bisect_left(in_times, out_seconds - time_window_seconds)
+        hi = bisect.bisect_right(in_times, out_seconds + time_window_seconds)
+        for _, in_row, in_amount in in_entries[lo:hi]:
+            if out_wallet_id == _record_get(in_row, "wallet_id"):
                 continue
             delta = out_amount - in_amount
             if delta < 0 or delta > threshold:

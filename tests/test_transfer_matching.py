@@ -7,6 +7,7 @@ exercise the full algorithm end-to-end.
 """
 
 import unittest
+from datetime import datetime, timedelta, timezone
 
 from kassiber.core.transfer_matching import (
     CONFIDENCE_EXACT,
@@ -297,6 +298,75 @@ class HeuristicMatchTests(unittest.TestCase):
         out = _row(id="o", wallet_id="A", direction="outbound", amount=2_000_000, asset="LBTC")
         inbound = _row(id="i", wallet_id="B", direction="inbound", amount=-1_000_000, asset="BTC")
         self.assertEqual(suggest_swap_candidates([out, inbound], tax_country="at"), [])
+
+    def test_window_slice_matches_naive_all_pairs_reference(self):
+        # Outbounds and inbounds scattered across weeks, most far outside
+        # the 24h window of any outbound. Pins the time-sorted bisect slice
+        # against a naive all-pairs evaluation of the same predicates so the
+        # windowing can never drift from the documented contract, including
+        # the inclusive boundary at exactly ±window.
+        window = 24 * 3600
+        base = datetime(2026, 3, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+        def at(offset_seconds):
+            return (base + timedelta(seconds=offset_seconds)).isoformat().replace("+00:00", "Z")
+
+        outs = [
+            _row(id="o-day0", wallet_id="A", direction="outbound", asset="LBTC",
+                 amount=100_000_000_000, occurred_at=at(0)),
+            _row(id="o-day10", wallet_id="A", direction="outbound", asset="LBTC",
+                 amount=50_000_000_000, occurred_at=at(10 * 86_400)),
+            _row(id="o-day30", wallet_id="B", direction="outbound", asset="LBTC",
+                 amount=20_000_000_000, occurred_at=at(30 * 86_400)),
+        ]
+        ins = [
+            # Near o-day0: inside window and tolerance.
+            _row(id="i-near0", wallet_id="B", direction="inbound", asset="BTC",
+                 amount=99_900_000_000, occurred_at=at(2 * 3600)),
+            # Exactly at the +window boundary of o-day0: inclusive, matches.
+            _row(id="i-edge0", wallet_id="C", direction="inbound", asset="BTC",
+                 amount=99_950_000_000, occurred_at=at(window)),
+            # One second past the boundary: rejected.
+            _row(id="i-past0", wallet_id="C", direction="inbound", asset="BTC",
+                 amount=99_950_000_000, occurred_at=at(window + 1)),
+            # Near o-day10, inside window; amount fits only o-day10.
+            _row(id="i-near10", wallet_id="C", direction="inbound", asset="BTC",
+                 amount=49_900_000_000, occurred_at=at(10 * 86_400 - 3600)),
+            # Far outside every outbound's window despite a matching amount.
+            _row(id="i-far", wallet_id="C", direction="inbound", asset="BTC",
+                 amount=99_900_000_000, occurred_at=at(60 * 86_400)),
+            # Inside o-day30's window but the amount delta exceeds tolerance.
+            _row(id="i-wrong-size30", wallet_id="C", direction="inbound", asset="BTC",
+                 amount=10_000_000_000, occurred_at=at(30 * 86_400 + 3600)),
+        ]
+
+        candidates = suggest_swap_candidates(
+            [*outs, *ins], time_window_seconds=window, tax_country="at"
+        )
+        matched = {(c.out_id, c.in_id) for c in candidates}
+
+        expected = set()
+        for out in outs:
+            out_seconds = datetime.fromisoformat(out["occurred_at"].replace("Z", "+00:00")).timestamp()
+            threshold = fee_threshold_msat(out["amount"], 0.01, 2500)
+            for inbound in ins:
+                in_seconds = datetime.fromisoformat(inbound["occurred_at"].replace("Z", "+00:00")).timestamp()
+                if out["wallet_id"] == inbound["wallet_id"]:
+                    continue
+                if abs(in_seconds - out_seconds) > window:
+                    continue
+                delta = out["amount"] - inbound["amount"]
+                if delta < 0 or delta > threshold:
+                    continue
+                expected.add((out["id"], inbound["id"]))
+
+        self.assertEqual(matched, expected)
+        self.assertIn(("o-day0", "i-near0"), matched)
+        self.assertIn(("o-day0", "i-edge0"), matched)
+        self.assertIn(("o-day10", "i-near10"), matched)
+        self.assertNotIn(("o-day0", "i-past0"), matched)
+        self.assertTrue(all(in_id != "i-far" for _, in_id in matched))
+        self.assertTrue(all(in_id != "i-wrong-size30" for _, in_id in matched))
 
 
 class ConflictClusteringTests(unittest.TestCase):
