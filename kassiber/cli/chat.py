@@ -176,7 +176,12 @@ def _split_tool_names(values: Iterable[str] | None) -> set[str]:
             stripped = item.strip()
             if stripped:
                 names.add(stripped)
-                names.add(stripped.replace("_", "."))
+    # Consent prompts carry the catalog display name; accept the OpenAI wire
+    # name too by mapping it through the catalog instead of guessing with
+    # string replacement (display names may themselves contain underscores).
+    for entry in TOOL_CATALOG:
+        if entry.wire_name and entry.wire_name in names:
+            names.add(entry.name)
     return names
 
 

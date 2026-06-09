@@ -239,13 +239,15 @@ class CliChatTest(unittest.TestCase):
             with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
                 data_root = Path(tmp) / "data"
                 _seed_provider(data_root, f"http://127.0.0.1:{server.server_port}/v1")
+                # Wire-name form; pins the catalog mapping back to the dotted
+                # display name used in consent prompts.
                 payload = _run_json(
                     data_root,
                     "chat",
                     "--provider",
                     "tool-local",
                     "--allow-tool",
-                    "ui.journals.process",
+                    "ui_journals_process",
                     "Process journals",
                 )
         finally:
