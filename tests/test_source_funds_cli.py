@@ -683,10 +683,6 @@ class SourceFundsCliTest(unittest.TestCase):
             "Sof",
             "--profile",
             "Default",
-            "--target-transaction",
-            "target-deposit-1",
-            "--target-amount",
-            "0.20000000",
             "--file",
             str(self.root / "blocked.pdf"),
         )
@@ -1072,14 +1068,151 @@ class SourceFundsCliTest(unittest.TestCase):
             "Sof",
             "--profile",
             "Default",
-            "--target-transaction",
-            "disclosure-target",
-            "--target-amount",
-            "0.10000000",
             "--file",
             str(self.root / "live-export.pdf"),
         )
         self.assertEqual(error["error"]["code"], "validation")
+
+    def test_report_granularity_fields_fee_provenance_levels(self):
+        """Every transaction node carries fee + import provenance, levels
+        carry per-level fiat subtotals, and the disclosure preview names the
+        wallets whose common ownership the report demonstrates."""
+        self._init_default_workspace()
+        self._write_csv(
+            "gran-parent.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            "2026-03-01T09:00:00Z,gran-parent,outbound,BTC,0.10005000,0.00005000,50000,Parent spend\n",
+        )
+        self._write_csv(
+            "gran-target.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            "2026-03-01T09:30:00Z,gran-target,inbound,BTC,0.10000000,0,50000,Target deposit\n",
+        )
+        self._create_wallet_and_import("Gran Parent", "gran-parent.csv")
+        self._create_wallet_and_import("Gran Target", "gran-target.csv")
+        source = self.cli(
+            "source-funds",
+            "sources",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--type",
+            "fiat_purchase",
+            "--label",
+            "Granularity source",
+            "--asset",
+            "BTC",
+            "--amount",
+            "0.10005000",
+        )["data"]
+        self.cli(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-source",
+            source["id"],
+            "--to-transaction",
+            "gran-parent",
+            "--type",
+            "manual_source",
+            "--allocation-amount",
+            "0.10005000",
+            "--allocation-policy",
+            "explicit",
+        )
+        self.cli(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-transaction",
+            "gran-parent",
+            "--to-transaction",
+            "gran-target",
+            "--type",
+            "self_transfer",
+            "--allocation-amount",
+            "0.10000000",
+            "--from-amount",
+            "0.10005000",
+            "--allocation-policy",
+            "explicit",
+        )
+        report = self._source_funds_report_for_target(
+            target="gran-target",
+            amount="0.10000000",
+        )
+        tx_nodes = {
+            node["external_id"]: node
+            for node in report["graph"]["nodes"]
+            if node["node_type"] == "transaction"
+        }
+        parent = tx_nodes["gran-parent"]
+        self.assertEqual(parent["fee_msat"], 5_000_000)
+        self.assertEqual(parent["fee"], 0.00005)
+        self.assertEqual(parent["data_provenance"], "manual_import")
+        self.assertEqual(tx_nodes["gran-target"]["fee_msat"], 0)
+        self.assertEqual(report["target"]["data_provenance"], "manual_import")
+
+        self.assertEqual(
+            report["data_provenance_summary"],
+            [
+                {
+                    "provenance": "manual_import",
+                    "label": "Manual / custom import",
+                    "count": 2,
+                    "percent": 100.0,
+                }
+            ],
+        )
+
+        levels = report["flow_levels"]
+        self.assertEqual([level["level"] for level in levels], [1, 2, 3])
+        target_level = levels[0]
+        self.assertEqual(target_level["role"], "target")
+        self.assertEqual(target_level["assets"], ["BTC"])
+        self.assertEqual(target_level["fiat_currency"], "EUR")
+        self.assertEqual(target_level["fiat_value_total"], 5000.0)
+        target_node = target_level["nodes"][0]
+        self.assertEqual(target_node["direction"], "inbound")
+        self.assertEqual(target_node["data_provenance"], "manual_import")
+        parent_node = levels[1]["nodes"][0]
+        self.assertEqual(parent_node["direction"], "outbound")
+        self.assertEqual(parent_node["fee_msat"], 5_000_000)
+        source_node = levels[2]["nodes"][0]
+        self.assertEqual(source_node["node_type"], "source")
+        self.assertEqual(source_node["direction"], "")
+
+        wallet_rows = {
+            row["label"]: row
+            for row in report["data_sources"]
+            if row["kind"] == "wallet"
+        }
+        self.assertEqual(wallet_rows["Gran Parent"]["provenance"], "manual_import")
+        source_rows = [row for row in report["data_sources"] if row["kind"] == "fiat_purchase"]
+        self.assertEqual(source_rows[0]["provenance"], "attested_source")
+
+        preview = report["disclosure_preview"]
+        self.assertEqual(preview["wallets_named"], ["Gran Parent", "Gran Target"])
+        self.assertIn("common ownership", preview["ownership_note"])
+
+    def test_missing_history_gap_carries_unexplained_amount(self):
+        self._seed_single_target(amount="0.20000000")
+        blockers, report = self._report_blockers()
+        self.assertIn("missing_history", blockers)
+        gap = next(item for item in report["gaps"] if item["code"] == "missing_history")
+        self.assertEqual(gap["amount_msat"], 20_000_000_000)
+        self.assertEqual(gap["amount"], 0.2)
+        self.assertEqual(gap["asset"], "BTC")
 
     def test_export_via_case_matches_preview_snapshot_hash(self):
         self._seed_exportable_disclosure_path()

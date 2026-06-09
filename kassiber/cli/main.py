@@ -2095,17 +2095,10 @@ def build_parser() -> argparse.ArgumentParser:
     export_source_funds_pdf = reports_sub.add_parser("export-source-funds-pdf")
     export_source_funds_pdf.add_argument("--workspace")
     export_source_funds_pdf.add_argument("--profile")
-    export_source_funds_pdf.add_argument("--case")
-    export_source_funds_pdf.add_argument("--target-transaction")
-    export_source_funds_pdf.add_argument("--target-amount")
     export_source_funds_pdf.add_argument(
-        "--purpose",
-        choices=list(core_source_funds.REPORT_PURPOSES),
-        default="existing_transaction",
+        "--case",
+        help="Saved case id from `reports source-funds --save-case`; the snapshot freezes target, reveal mode, and report options.",
     )
-    export_source_funds_pdf.add_argument("--planned-destination")
-    export_source_funds_pdf.add_argument("--planned-note")
-    export_source_funds_pdf.add_argument("--reveal-mode", choices=list(core_source_funds.REVEAL_MODES))
     export_source_funds_pdf.add_argument("--file", required=True)
 
     export_source_funds_bundle = reports_sub.add_parser("export-source-funds-bundle")
@@ -4014,12 +4007,6 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.file,
                     _source_funds_hooks(),
                     case_ref=args.case,
-                    target_transaction_ref=args.target_transaction,
-                    target_amount=args.target_amount,
-                    report_purpose=args.purpose,
-                    planned_destination=args.planned_destination,
-                    planned_note=args.planned_note,
-                    reveal_mode=args.reveal_mode,
                 ),
             )
         if args.reports_command == "export-source-funds-bundle":

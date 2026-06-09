@@ -2081,12 +2081,8 @@ def _ui_source_funds_payload_from_conn(
         if data_root is None:
             raise AppError("source-funds PDF export requires a data root", code="validation")
         case_ref = args.get("case")
-        target = args.get("target_transaction")
         if case_ref is not None and not isinstance(case_ref, str):
             raise AppError("ui.source_funds.export_pdf case must be a string", code="validation")
-        if target is not None and not isinstance(target, str):
-            raise AppError("ui.source_funds.export_pdf target_transaction must be a string", code="validation")
-        explicit_export_reveal = args.get("reveal_mode")
         path = _managed_report_export_path(data_root, "kassiber-source-funds", ".pdf")
         payload = dict(
             core_source_funds.export_pdf(
@@ -2096,12 +2092,6 @@ def _ui_source_funds_payload_from_conn(
                 path,
                 hooks,
                 case_ref=case_ref,
-                target_transaction_ref=target,
-                target_amount=args.get("target_amount"),
-                report_purpose=str(args.get("report_purpose") or "existing_transaction"),
-                planned_destination=args.get("planned_destination") if isinstance(args.get("planned_destination"), str) else None,
-                planned_note=args.get("planned_note") if isinstance(args.get("planned_note"), str) else None,
-                reveal_mode=str(explicit_export_reveal) if isinstance(explicit_export_reveal, str) and explicit_export_reveal else None,
             )
         )
         payload.update(
@@ -2114,10 +2104,12 @@ def _ui_source_funds_payload_from_conn(
         return payload
 
     if kind == "ui.source_funds.export_bundle":
+        if data_root is None:
+            raise AppError("source-funds bundle export requires a data root", code="validation")
         case_ref = args.get("case")
         if case_ref is not None and not isinstance(case_ref, str):
             raise AppError("ui.source_funds.export_bundle case must be a string", code="validation")
-        path = _managed_report_export_path(ctx.data_root, "kassiber-source-funds-bundle", ".zip")
+        path = _managed_report_export_path(data_root, "kassiber-source-funds-bundle", ".zip")
         payload = dict(
             core_source_funds.export_bundle(
                 conn,
@@ -2125,7 +2117,7 @@ def _ui_source_funds_payload_from_conn(
                 None,
                 path,
                 hooks,
-                data_root=ctx.data_root,
+                data_root=data_root,
                 case_ref=case_ref,
             )
         )

@@ -73,6 +73,34 @@ def _node_time(node: Mapping[str, Any]) -> str:
     return _datetime(node.get("occurred_at") or node.get("acquired_at") or "")
 
 
+# Compact per-row provenance labels for the level tables; the data-sources
+# section carries the long-form wording.
+_PROVENANCE_SHORT = {
+    "chain_sync": "chain",
+    "platform_export": "platform",
+    "manual_import": "manual",
+}
+
+# Reviewer-facing fallback wording when a reviewed link has no free-text
+# explanation (or the reveal mode redacts it).
+_LINK_TYPE_EXPLANATIONS = {
+    "self_transfer": "Reviewed transfer between wallets of the same holder.",
+    "exchange_transfer": "Reviewed transfer between an exchange account and an owned wallet.",
+    "trade": "Reviewed trade execution on a platform.",
+    "swap": "Reviewed cross-asset swap.",
+    "peg_in": "Reviewed Liquid peg-in.",
+    "peg_out": "Reviewed Liquid peg-out.",
+    "lightning_funding": "Reviewed Lightning channel funding.",
+    "lightning_close": "Reviewed Lightning channel close.",
+    "lightning_routed": "Reviewed routed Lightning payment.",
+    "lightning_swap": "Reviewed Lightning submarine swap.",
+    "coinjoin": "Reviewed CoinJoin boundary (traversal deferred).",
+    "payjoin": "Reviewed PayJoin boundary (traversal deferred).",
+    "manual_source": "Reviewed link to a documented root source.",
+    "missing_history": "Reviewed missing-history attestation.",
+}
+
+
 def _report_title(report: Mapping[str, Any]) -> str:
     context = report.get("report_context") or {}
     return str(context.get("report_title") or "Source of Funds Report")
@@ -337,7 +365,11 @@ class _SourceFundsPdfBuilder:
             glance,
             self.spacer(4),
             self.kv_table(rows),
+            self.spacer(5),
+            self.p("Contents", "h2"),
         ]
+        for index, title in enumerate(self._included_section_titles(), start=1):
+            story.append(self.p(f"{index}. {title}", "body"))
         if purpose.get("type") == "planned_exchange_sale":
             story.extend(
                 [
@@ -543,6 +575,43 @@ class _SourceFundsPdfBuilder:
             story.append(
                 self.table(rows, widths=(58, 28, 22, 22, 16), compact=True, right_columns={1, 3, 4})
             )
+        source_nodes = [
+            node
+            for node in (self.report.get("graph") or {}).get("nodes") or []
+            if node.get("node_type") == "source"
+        ]
+        if source_nodes:
+            detail_rows: list[list[Any]] = [
+                ["Date", "Source", "Type", "Amount", "Asset", "Fiat value", "Review"]
+            ]
+            for node in sorted(source_nodes, key=lambda item: str(item.get("acquired_at") or "")):
+                detail_rows.append(
+                    [
+                        _datetime(node.get("acquired_at")),
+                        node.get("label", ""),
+                        _label(node.get("source_type")),
+                        self.amt(
+                            node.get("required_amount")
+                            if node.get("required_amount") is not None
+                            else node.get("amount")
+                        ),
+                        node.get("asset", ""),
+                        _fiat(node.get("fiat_value"), node.get("fiat_currency")),
+                        node.get("review_state", ""),
+                    ]
+                )
+            story.extend(
+                [
+                    self.spacer(4),
+                    self.p("Root Source Details", "h2"),
+                    self.table(
+                        detail_rows,
+                        widths=(20, 50, 26, 26, 13, 24, 17),
+                        compact=True,
+                        right_columns={3, 5},
+                    ),
+                ]
+            )
         return story
 
     def data_sources(self) -> list[Any]:
@@ -560,15 +629,21 @@ class _SourceFundsPdfBuilder:
                     width=self._content_width(),
                 )
             )
-        rows = [["Name", "Kind", "Transactions", "Sources", "Assets", "Period"]]
+        rows = [["Name", "Kind", "Provenance", "Transactions", "Sources", "Assets", "Period"]]
         for item in self.report.get("data_sources") or []:
             period = ""
             if item.get("first_seen") or item.get("last_seen"):
                 period = f"{_datetime(item.get('first_seen'))} - {_datetime(item.get('last_seen'))}"
+            provenance = str(item.get("provenance") or "")
+            if provenance == "attested_source":
+                provenance_label = "attested"
+            else:
+                provenance_label = _PROVENANCE_SHORT.get(provenance, _label(provenance))
             rows.append(
                 [
                     item.get("label", ""),
                     _label(item.get("kind")),
+                    provenance_label,
                     item.get("transaction_count", 0),
                     item.get("source_count", 0),
                     ", ".join(item.get("assets") or []),
@@ -579,7 +654,12 @@ class _SourceFundsPdfBuilder:
             story.append(self.p("No data-source rollups in this case snapshot."))
         else:
             story.append(
-                self.table(rows, widths=(42, 28, 17, 16, 20, 45), compact=True, right_columns={2, 3})
+                self.table(
+                    rows,
+                    widths=(38, 24, 20, 17, 14, 18, 45),
+                    compact=True,
+                    right_columns={3, 4},
+                )
             )
         return story
 
@@ -613,36 +693,81 @@ class _SourceFundsPdfBuilder:
         return story
 
     def transaction_details(self) -> list[Any]:
-        story: list[Any] = [self.p("Transaction Details", "h1")]
+        story: list[Any] = [self.p("Transaction Details by Level", "h1")]
         levels = list(self.report.get("flow_levels") or [])
-        tx_rows: list[list[Any]] = [["Level", "Date", "Source", "Type", "Amount", "Asset", "Fiat", "ID"]]
+        if not levels:
+            story.append(self.p("No transaction-level rows in this case snapshot."))
+            return story
+        story.append(
+            self.p(
+                "Level 1 is the report target; each further level moves one reviewed hop "
+                "backwards towards the root sources. In/Out follow the row's direction; "
+                "the data-source column states how the row entered Kassiber.",
+                "small",
+            )
+        )
+        rendered_any = False
         for level in levels:
-            for node in level.get("nodes") or []:
-                if node.get("node_type") != "transaction":
-                    continue
-                tx_rows.append(
+            nodes = list(level.get("nodes") or [])
+            if not nodes:
+                continue
+            rendered_any = True
+            tx_count = int(level.get("transaction_count") or 0)
+            source_count = int(level.get("source_count") or 0)
+            counts = []
+            if tx_count:
+                counts.append(f"{tx_count} transaction{'' if tx_count == 1 else 's'}")
+            if source_count:
+                counts.append(f"{source_count} source{'' if source_count == 1 else 's'}")
+            heading = f"Level {level.get('level', '')} ({', '.join(counts) or 'no rows'})"
+            fiat_total = level.get("fiat_value_total")
+            if fiat_total is not None:
+                heading += f" — {_fiat(fiat_total, level.get('fiat_currency'))}"
+            story.append(self.p(heading, "h2"))
+            rows: list[list[Any]] = [
+                ["Date", "Source", "Type", "In", "Out", "Fee", "Fiat", "ID / hash", "Data src"]
+            ]
+            for node in nodes:
+                is_source = node.get("node_type") == "source"
+                amount = self.amt(
+                    node.get("required_amount")
+                    if node.get("required_amount") is not None
+                    else node.get("amount"),
+                    node.get("asset"),
+                )
+                direction = str(node.get("direction") or "")
+                inbound = is_source or direction == "inbound"
+                fee = node.get("fee")
+                fee_cell = self.amt(fee) if fee and float(fee) > 0 else ""
+                if is_source:
+                    provenance = "attested"
+                else:
+                    provenance = _PROVENANCE_SHORT.get(
+                        str(node.get("data_provenance") or ""), ""
+                    )
+                rows.append(
                     [
-                        level.get("level", ""),
                         _node_time(node),
-                        node.get("wallet", ""),
-                        _label(node.get("direction")),
-                        self.amt(node.get("required_amount") if node.get("required_amount") is not None else node.get("amount")),
-                        node.get("asset", ""),
+                        node.get("label", "") if is_source else node.get("wallet", ""),
+                        _label(node.get("source_type")) if is_source else _label(direction),
+                        amount if inbound else "",
+                        "" if inbound else amount,
+                        fee_cell,
                         _fiat(node.get("fiat_value"), node.get("fiat_currency")),
-                        node.get("external_id") or node.get("label", ""),
+                        node.get("external_id") or ("" if is_source else node.get("label", "")),
+                        provenance,
                     ]
                 )
-        if len(tx_rows) == 1:
-            story.append(self.p("No transaction-level rows in this case snapshot."))
-        else:
             story.append(
                 self.table(
-                    tx_rows,
-                    widths=(10, 24, 28, 20, 22, 13, 21, 34),
+                    rows,
+                    widths=(20, 23, 15, 20, 20, 17, 19, 29, 13),
                     compact=True,
-                    right_columns={0, 4, 6},
+                    right_columns={3, 4, 5, 6},
                 )
             )
+        if not rendered_any:
+            story.append(self.p("No transaction-level rows in this case snapshot."))
         return story
 
     def flow_links(self) -> list[Any]:
@@ -651,20 +776,74 @@ class _SourceFundsPdfBuilder:
         if not edges:
             story.append(self.p("No reviewed links yet."))
             return story
-        rows = [["Type", "State", "Method", "Amount", "Policy", "Explanation"]]
+        nodes_by_id = {
+            str(node.get("id")): node
+            for node in (self.report.get("graph") or {}).get("nodes") or []
+            if node.get("id")
+        }
+
+        def endpoint(node_id: Any) -> str:
+            node = nodes_by_id.get(str(node_id or ""))
+            if not node:
+                return ""
+            if node.get("node_type") == "source":
+                return str(node.get("label") or _label(node.get("source_type")))
+            return str(node.get("wallet") or node.get("label") or "")
+
+        rows = [["Type", "From", "To", "Amount", "Method", "Explanation"]]
         for edge in edges:
+            explanation = edge.get("explanation") or _LINK_TYPE_EXPLANATIONS.get(
+                str(edge.get("link_type") or ""), ""
+            )
             rows.append(
                 [
                     _label(edge.get("link_type")),
-                    edge.get("state", ""),
-                    _label(edge.get("method")),
+                    endpoint(edge.get("from")),
+                    endpoint(edge.get("to")),
                     self.amt(edge.get("allocation_amount"), edge.get("asset", "")),
-                    _label(edge.get("allocation_policy")),
-                    edge.get("explanation") or "",
+                    _label(edge.get("method")),
+                    explanation,
                 ]
             )
         story.append(
-            self.table(rows, widths=(22, 20, 28, 28, 22, 52), compact=True, right_columns={3})
+            self.p(
+                "All links shown are reviewed; suggested links never reach an exported report.",
+                "small",
+            )
+        )
+        story.append(
+            self.table(rows, widths=(20, 30, 30, 26, 24, 46), compact=True, right_columns={3})
+        )
+        return story
+
+    def missing_history(self) -> list[Any]:
+        gaps = list(self.report.get("gaps") or [])
+        if not gaps:
+            return []
+        story: list[Any] = [self.p("Missing History and Gaps", "h1")]
+        story.append(
+            self.p(
+                "These reviewed paths stop before a documented root source, or pass a "
+                "boundary Kassiber will not traverse. Attested gaps are disclosed as "
+                "gaps, never papered over.",
+                "small",
+            )
+        )
+        rows: list[list[Any]] = [["Severity", "Gap", "Amount", "Reference"]]
+        for gap in gaps:
+            amount = ""
+            if gap.get("amount") is not None:
+                amount = self.amt(gap.get("amount"), gap.get("asset", ""))
+            rows.append(
+                [
+                    gap.get("severity", ""),
+                    gap.get("message", ""),
+                    amount,
+                    gap.get("ref", ""),
+                ]
+            )
+        story.append(
+            self.table(rows, widths=(18, 90, 28, 40), compact=True, right_columns={2})
         )
         return story
 
@@ -755,6 +934,22 @@ class _SourceFundsPdfBuilder:
             )
         else:
             story.append(self.p("No evidence attachments in this disclosure."))
+        footprint_rows: list[tuple[str, Any]] = [
+            ("Txids disclosed", len(txids)),
+            ("Evidence files", len(attachments)),
+        ]
+        wallets_named = list(preview.get("wallets_named") or [])
+        if wallets_named:
+            footprint_rows.append(("Wallets named", ", ".join(wallets_named)))
+        story.extend(
+            [
+                self.spacer(4),
+                self.p("What sharing this report reveals", "h2"),
+                self.kv_table(footprint_rows),
+            ]
+        )
+        if preview.get("ownership_note"):
+            story.append(self.p(preview["ownership_note"], "small"))
         story.append(self.p(preview.get("privacy_note", "")))
         excluded = preview.get("excluded") or []
         if excluded:
@@ -772,30 +967,49 @@ class _SourceFundsPdfBuilder:
             self.p("Suggested links and unconfirmed chain observations are never used as PDF proof."),
         ]
 
+    def _section_plan(self) -> list[tuple[str | None, str, Any]]:
+        # (section_key, contents title, builder) — keyed sections can be
+        # omitted via the advanced `omit_sections` option; None keys are
+        # always included. A builder returning an empty story (e.g. no
+        # missing-history gaps) drops out of both the report and the
+        # contents list.
+        return [
+            (None, "Source of Funds Overview", self.overview),
+            (None, "Origin and Transaction Flow", self.narrative),
+            (None, "Simplified Flow Path", self.simplified_flow),
+            (None, "Data Sources", self.data_sources),
+            (None, "Evidence Checklist", self.evidence_checklist),
+            (None, "Review Gates", self.review_gates),
+            (None, "Missing History and Gaps", self.missing_history),
+            (None, "Source Mix", self.source_mix),
+            ("flow_levels", "Flow Diagram Data", self.flow_levels),
+            ("transaction_details", "Transaction Details by Level", self.transaction_details),
+            ("flow_links", "Reviewed Flow Links", self.flow_links),
+            ("graph_nodes", "Disclosure Graph Nodes", self.graph_nodes),
+            (None, "Disclosure Preview", self.disclosure_preview),
+            (None, "Limitations", self.limitations),
+        ]
+
+    def _included_section_titles(self) -> list[str]:
+        titles = []
+        for key, title, _builder in self._section_plan():
+            if key and key in self.omitted_sections:
+                continue
+            if title == "Missing History and Gaps" and not self.report.get("gaps"):
+                continue
+            titles.append(title)
+        return titles
+
     def build(self) -> list[Any]:
         story = self.cover()
         story.append(self.rl["PageBreak"]())
-        # (section_key, builder) — keyed sections can be omitted via the
-        # advanced `omit_sections` option; None keys are always included.
-        sections: list[tuple[str | None, Any]] = [
-            (None, self.overview),
-            (None, self.narrative),
-            (None, self.simplified_flow),
-            (None, self.data_sources),
-            (None, self.evidence_checklist),
-            (None, self.review_gates),
-            (None, self.source_mix),
-            ("flow_levels", self.flow_levels),
-            ("transaction_details", self.transaction_details),
-            ("flow_links", self.flow_links),
-            ("graph_nodes", self.graph_nodes),
-            (None, self.disclosure_preview),
-            (None, self.limitations),
-        ]
-        for key, builder in sections:
+        for key, _title, builder in self._section_plan():
             if key and key in self.omitted_sections:
                 continue
-            story.extend(builder())
+            content = builder()
+            if not content:
+                continue
+            story.extend(content)
             story.append(self.spacer(7))
         return story
 

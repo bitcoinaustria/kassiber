@@ -69,6 +69,9 @@ _RING_COLORS = {
     "import": "#16a34a",
     "manual": "#d97706",
     "blockchain": "#0891b2",
+    "chain_sync": "#0891b2",
+    "platform_export": "#2563eb",
+    "manual_import": "#d97706",
 }
 _RING_FALLBACK = ["#2563eb", "#16a34a", "#d97706", "#a855f7", "#0891b2", "#dc2626"]
 
@@ -196,7 +199,22 @@ def source_mix_segments(report: Mapping[str, Any]) -> list[dict[str, Any]]:
 
 
 def data_source_segments(report: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """Donut segments for the data-source ring (transactions grouped by kind)."""
+    """Donut segments for the data-source ring (transactions by provenance).
+
+    Falls back to the legacy by-kind grouping for case snapshots saved
+    before ``data_provenance_summary`` existed.
+    """
+    segments = [
+        {
+            "key": str(row.get("provenance") or "manual_import"),
+            "label": str(row.get("label") or _label(row.get("provenance"))),
+            "value": float(row.get("count") or 0),
+        }
+        for row in report.get("data_provenance_summary") or []
+        if (row.get("count") or 0) > 0
+    ]
+    if segments:
+        return segments
     by_kind: dict[str, int] = {}
     for item in report.get("data_sources") or []:
         kind = str(item.get("kind") or "other")
