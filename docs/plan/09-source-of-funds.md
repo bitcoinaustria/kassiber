@@ -222,10 +222,32 @@ source-of-funds documents:
 
 The shipped local report envelope now carries those sections as structured
 fields instead of PDF-only prose: `overview`, `narrative`, `data_sources`,
-`simplified_flow`, `flow_levels`, `source_mix`, `graph`, `findings`,
-`disclosure_preview`, `report_context`, and (when requested) `diagrams`. The
-narrative and simplified chart model are generated deterministically from the
-saved review graph on the user's machine.
+`data_provenance_summary`, `simplified_flow`, `flow_levels`, `source_mix`,
+`graph`, `findings`, `disclosure_preview`, `report_context`, and (when
+requested) `diagrams`. The narrative and simplified chart model are generated
+deterministically from the saved review graph on the user's machine.
+
+Per-transaction granularity matches strict exchange-facing reviews: every
+transaction node carries `fee`/`fee_msat` and a `data_provenance` value
+(`chain_sync` for descriptor/xpub watch-only sync, `platform_export` for
+exchange/node CSV and API imports, `manual_import` for custom/manual rows),
+derived from the owning wallet's kind. `flow_levels` nodes additionally carry
+`direction`, and each level row carries `assets` plus a `fiat_value_total`
+subtotal when the level's priced nodes share one fiat currency. The PDF
+renders this as one "Transaction Details by Level" sub-table per level (Date,
+Source, Type, In, Out, Fee, Fiat, ID/hash, Data source), with root sources
+included as attested rows. `data_provenance_summary` rolls disclosed
+transactions up by provenance for the data-sources ring; the data-sources
+table keeps wallet/category rollups and gains a per-row provenance column.
+`missing_history` gap findings carry the unexplained `amount`/`amount_msat`
+where the walk knows it, and the PDF renders a dedicated "Missing History and
+Gaps" section whenever `gaps` is non-empty.
+
+`disclosure_preview` also quantifies the disclosure footprint: `wallets_named`
+lists the wallet labels the report exposes, and `ownership_note` states the
+core privacy consequence — sharing the report demonstrates common ownership
+of those wallets to the recipient. This is a deliberate lightweight summary,
+not a chain-analysis privacy scorer.
 
 Diagrams are rendered by a single on-device substrate
 ([kassiber/core/source_funds_diagram.py](../../kassiber/core/source_funds_diagram.py)):

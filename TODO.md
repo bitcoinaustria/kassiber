@@ -319,6 +319,13 @@ top of the monolith.
   copy selected URL references as new rows, duplicate managed file attachments
   under new attachment ids, preserve provenance, and surface copied evidence in
   readiness/audit package manifests.
+- [x] Match strict exchange-facing granularity in the report: per-transaction
+  fee and import-provenance columns (chain sync / platform export / manual
+  import), level-grouped PDF transaction detail tables with in/out amounts and
+  per-level fiat subtotals, provenance-based data-source ring, root-source
+  detail table, contents list on the cover, a missing-history section with
+  unexplained amounts, and a disclosure-footprint summary (wallets named +
+  common-ownership note) in payload, PDF, and desktop preview.
 - [ ] Add graph visualization polish for dense source-funds cases after real-user feedback; keep the current editor workflow as the source of truth
 - [ ] Add optional configured-backend chain observations with an explicit public-backend privacy warning; keep them weak suggestions unless reviewed
 - [ ] Add optional OCR/photo/invoice extraction after the evidence review and
