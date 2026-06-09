@@ -89,7 +89,6 @@ smoke_py -m kassiber chat --help >/dev/null
 smoke_py -m kassiber ai --help >/dev/null
 smoke_py -m kassiber ai providers --help >/dev/null
 smoke_py -m kassiber ai providers create --help >/dev/null
-smoke_py -m kassiber ai chat --help >/dev/null
 smoke_py -m kassiber secrets --help >/dev/null
 smoke_py -m kassiber secrets init --help >/dev/null
 smoke_py -m kassiber secrets change-passphrase --help >/dev/null

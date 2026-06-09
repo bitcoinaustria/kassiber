@@ -143,17 +143,35 @@ kassiber chat
 ```
 
 `kassiber chat` is the CLI client for the same daemon-backed assistant used by
-the desktop UI. It starts a local daemon transport, sends `ai.chat` requests
-with `tools_enabled=true`, renders streaming deltas in the terminal, and sends
-`ai.tool_call.consent` decisions when mutating tools ask for approval. Omit the
-prompt for REPL mode; pass a prompt positionally or with `--prompt` for one
-turn. `kassiber ai chat` remains a provider-only compatibility command and
-does not run the daemon tool loop.
+the desktop UI — there is exactly one chat surface and one protocol. It starts
+a local daemon transport, sends `ai.chat` requests with `tools_enabled=true`,
+renders streaming deltas in the terminal, and sends `ai.tool_call.consent`
+decisions when mutating tools ask for approval. Omit the prompt for REPL mode
+(`/help` lists commands, `/tools` lists the daemon tool catalog with consent
+classes, Ctrl-C cancels the current turn without ending the session); pass a
+prompt positionally or with `--prompt` for one turn. After each rendered turn
+a dim provenance footer shows provider/model, the tools that actually ran, and
+whether journals were auto-refreshed — the same provenance the desktop
+Assistant records. `--no-tools` disables the tool loop for a provider-only
+exchange, and `--system "..."` replaces the built-in Kassiber system prompt
+with a raw one (`system_prompt_kind="raw"`).
+
+Three output modes cover scripting:
+
+- default rendered text for humans;
+- `--machine` / `--format json` (one-shot only) emits a single `chat` envelope
+  with the final message, `finish_reason`, provenance, and tool-call summary;
+- `--stream-json` (one-shot only, mutually exclusive with `--machine`) emits
+  the raw daemon stream records — `ai.chat.status`, `ai.chat.delta`,
+  `ai.chat.tool_call`, `ai.chat.tool_result`, then the terminal `ai.chat` — as
+  NDJSON, mirroring what the desktop bridge streams.
 
 For automation, `kassiber chat --yes "..."` approves mutating tool requests for
 that chat session without prompting. Prefer the narrower
 `--allow-tool ui.journals.process` form when a script should approve only one
-tool; unlisted mutating tools are denied without a TTY.
+tool. Machine and `--stream-json` runs never prompt interactively even on a
+TTY; there, and without a TTY in rendered mode, unapproved mutating tools are
+denied and the denial is fed back to the model as `user_denied`.
 
 Provider API-key entry supports `--api-key-stdin` and `--api-key-fd FD`. The
 legacy `--api-key <value>` form still works as a warning-on-use compatibility

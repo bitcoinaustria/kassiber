@@ -102,6 +102,8 @@ def _stop_server(server):
 
 
 def _run(data_root, *args):
+    # stdin must not inherit the test runner's terminal: the non-TTY consent
+    # policy is part of what these tests pin down.
     return subprocess.run(
         [
             sys.executable,
@@ -116,6 +118,7 @@ def _run(data_root, *args):
         text=True,
         check=False,
         timeout=15,
+        stdin=subprocess.DEVNULL,
     )
 
 
@@ -261,6 +264,117 @@ class CliChatTest(unittest.TestCase):
                 for message in server.requests[1]["messages"]  # type: ignore[attr-defined]
             )
         )
+
+    def test_chat_stream_json_emits_daemon_records(self):
+        server = _start_tool_chat_server(
+            [
+                _tool_call_message("status"),
+                _chat_completion_response(
+                    {"role": "assistant", "content": "Kassiber is ready."},
+                ),
+            ]
+        )
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+                data_root = Path(tmp) / "data"
+                _seed_provider(data_root, f"http://127.0.0.1:{server.server_port}/v1")
+                result = _run(
+                    data_root,
+                    "chat",
+                    "--stream-json",
+                    "--provider",
+                    "tool-local",
+                    "Check local status",
+                )
+        finally:
+            _stop_server(server)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        records = [json.loads(line) for line in result.stdout.splitlines() if line]
+        kinds = [record["kind"] for record in records]
+        self.assertIn("ai.chat.tool_call", kinds)
+        self.assertIn("ai.chat.tool_result", kinds)
+        self.assertIn("ai.chat.delta", kinds)
+        self.assertEqual(kinds[-1], "ai.chat")
+        self.assertEqual(records[-1]["data"]["finish_reason"], "stop")
+
+    def test_chat_stream_json_denies_mutating_tools(self):
+        server = _start_tool_chat_server(
+            [
+                _tool_call_message("ui_journals_process"),
+                _chat_completion_response(
+                    {"role": "assistant", "content": "I did not process journals."},
+                ),
+            ]
+        )
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+                data_root = Path(tmp) / "data"
+                _seed_provider(data_root, f"http://127.0.0.1:{server.server_port}/v1")
+                result = _run(
+                    data_root,
+                    "chat",
+                    "--stream-json",
+                    "--provider",
+                    "tool-local",
+                    "Process journals",
+                )
+        finally:
+            _stop_server(server)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        records = [json.loads(line) for line in result.stdout.splitlines() if line]
+        mutating_call = next(
+            r
+            for r in records
+            if r["kind"] == "ai.chat.tool_call"
+            and r["data"]["kind_class"] == "mutating"
+        )
+        denied = next(
+            r
+            for r in records
+            if r["kind"] == "ai.chat.tool_result"
+            and r["data"]["call_id"] == mutating_call["data"]["call_id"]
+        )
+        self.assertFalse(denied["data"]["ok"])
+        self.assertEqual(denied["data"]["reason"], "user_denied")
+
+    def test_chat_stream_json_rejects_machine_format(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+            data_root = Path(tmp) / "data"
+            result = _run(data_root, "--machine", "chat", "--stream-json", "hello")
+        self.assertNotEqual(result.returncode, 0)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["error"]["code"], "validation")
+
+    def test_chat_system_flag_replaces_kassiber_prompt(self):
+        server = _start_tool_chat_server(
+            [
+                _chat_completion_response(
+                    {"role": "assistant", "content": "ok"},
+                ),
+            ]
+        )
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+                data_root = Path(tmp) / "data"
+                _seed_provider(data_root, f"http://127.0.0.1:{server.server_port}/v1")
+                payload = _run_json(
+                    data_root,
+                    "chat",
+                    "--provider",
+                    "tool-local",
+                    "--system",
+                    "You are terse.",
+                    "hello",
+                )
+        finally:
+            _stop_server(server)
+
+        self.assertEqual(payload["data"]["message"]["content"], "ok")
+        first = server.requests[0]["messages"][0]  # type: ignore[attr-defined]
+        self.assertEqual(first["role"], "system")
+        self.assertEqual(first["content"], "You are terse.")
 
     def test_chat_non_tty_denies_mutating_consent_without_allow_policy(self):
         server = _start_tool_chat_server(

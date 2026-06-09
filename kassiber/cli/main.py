@@ -17,12 +17,11 @@ from ..ai import (
     get_db_ai_provider,
     get_ai_provider_api_key_for_use,
     redact_ai_provider_for_output,
-    require_ai_provider_acknowledged,
     resolve_ai_provider,
     set_default_ai_provider,
     update_db_ai_provider,
 )
-from ..ai.client import CLI_DEFAULT_MODEL, ai_client_for_locator, is_cli_provider_locator
+from ..ai.client import ai_client_for_locator
 from ..ai.providers import (
     list_with_default as list_ai_providers_with_default,
 )
@@ -134,39 +133,11 @@ def _ai_provider_redacted(conn: sqlite3.Connection, provider: dict) -> dict:
     return redact_ai_provider_for_output(provider, default_name=get_default_ai_provider_name(conn))
 
 
-def _ai_chat_messages(args: argparse.Namespace) -> list[dict]:
-    messages: list[dict] = []
-    if getattr(args, "system", None):
-        messages.append({"role": "system", "content": args.system})
-    messages.append({"role": "user", "content": args.prompt})
-    return messages
-
-
-def _ai_chat_options(args: argparse.Namespace) -> dict | None:
-    options: dict = {}
-    temp = getattr(args, "temperature", None)
-    if temp is not None:
-        options["temperature"] = temp
-    max_tokens = getattr(args, "max_tokens", None)
-    if max_tokens is not None:
-        options["max_tokens"] = max_tokens
-    return options or None
-
-
 def _ai_client_for(provider: dict):
     return ai_client_for_locator(
         base_url=provider["base_url"],
         api_key=get_ai_provider_api_key_for_use(provider),
     )
-
-
-def _ai_model_for(provider: dict, explicit_model: str | None) -> str | None:
-    model = explicit_model or provider.get("default_model")
-    if model:
-        return model
-    if is_cli_provider_locator(provider["base_url"]):
-        return CLI_DEFAULT_MODEL
-    return None
 
 
 def _backend_extra_config(args: argparse.Namespace) -> dict[str, object] | None:
@@ -493,12 +464,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     chat = sub.add_parser(
         "chat",
-        description="Interactive daemon-backed Kassiber AI assistant.",
+        description=(
+            "Kassiber AI assistant — the same daemon tool loop, consent, and "
+            "cancel protocol as the desktop Assistant."
+        ),
     )
     chat.add_argument("prompt", nargs="?", help="One-shot prompt. Omit for REPL mode.")
     chat.add_argument("--prompt", dest="prompt_text", help="One-shot prompt text.")
     chat.add_argument("--provider", help="Provider name (defaults to the stored default)")
     chat.add_argument("--model", help="Model id (defaults to the provider's default_model)")
+    chat.add_argument(
+        "--system",
+        help="Raw system prompt replacing the built-in Kassiber assistant prompt.",
+    )
     chat.add_argument("--temperature", type=float)
     chat.add_argument("--max-tokens", type=int)
     chat.add_argument(
@@ -530,6 +508,15 @@ def build_parser() -> argparse.ArgumentParser:
             "Non-interactively allow only this mutating tool name; repeat or "
             "pass comma-separated names. Other mutating tools still prompt on a TTY "
             "or deny without one."
+        ),
+    )
+    chat.add_argument(
+        "--stream-json",
+        action="store_true",
+        help=(
+            "One-shot scripting mode: emit the raw daemon stream records "
+            "(ai.chat.status/delta/tool_call/tool_result and the terminal "
+            "ai.chat) as NDJSON instead of rendered text."
         ),
     )
 
@@ -1886,14 +1873,6 @@ def build_parser() -> argparse.ArgumentParser:
     ai_models = ai_sub.add_parser("models", description="List models the configured provider exposes.")
     ai_models.add_argument("--provider", help="Provider name (defaults to the stored default)")
 
-    ai_chat = ai_sub.add_parser("chat", description="Send one prompt to the AI provider (non-streaming).")
-    ai_chat.add_argument("prompt", help="User prompt; use --system for an additional system message")
-    ai_chat.add_argument("--provider", help="Provider name (defaults to the stored default)")
-    ai_chat.add_argument("--model", help="Model id (defaults to the provider's default_model)")
-    ai_chat.add_argument("--system", help="Optional system prompt")
-    ai_chat.add_argument("--temperature", type=float)
-    ai_chat.add_argument("--max-tokens", type=int)
-
     return parser
 
 
@@ -1902,6 +1881,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         return daemon_runtime.run(conn, args)
     if args.command == "chat":
         result = run_chat_command(args)
+        if getattr(args, "stream_json", False):
+            return None
         if args.format == "json":
             return emit(args, result.to_payload(), kind="chat")
         return None
@@ -3614,32 +3595,6 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             provider = resolve_ai_provider(conn, args.provider)
             client = _ai_client_for(provider)
             return emit(args, {"provider": provider["name"], "models": client.list_models()})
-        if args.ai_command == "chat":
-            provider = resolve_ai_provider(conn, args.provider)
-            model = _ai_model_for(provider, args.model)
-            if not model:
-                raise AppError(
-                    "AI chat requires a model",
-                    code="validation",
-                    hint=f"Pass --model, or set --default-model on provider '{provider['name']}'.",
-                )
-            require_ai_provider_acknowledged(provider)
-            client = _ai_client_for(provider)
-            response = client.chat(
-                messages=_ai_chat_messages(args),
-                model=model,
-                options=_ai_chat_options(args),
-            )
-            return emit(
-                args,
-                {
-                    "provider": provider["name"],
-                    "model": model,
-                    "message": {"role": response["role"], "content": response["content"]},
-                    "finish_reason": response.get("finish_reason"),
-                    "usage": response.get("usage"),
-                },
-            )
     raise AppError("Unknown command")
 
 

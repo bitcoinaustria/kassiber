@@ -180,8 +180,8 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `rates {pairs,sync,rebuild,latest,range,set}`
 - `diagnostics {collect}`
 - `ai providers {list,get,create,update,delete,set-default,clear-default}`
-- `ai {models,chat}` — provider/model management plus legacy provider-only chat;
-  use top-level `chat` for the daemon-backed tool loop with consent/cancel parity.
+- `ai {models}` — provider/model management; chat lives at top-level `chat`,
+  which drives the daemon `ai.chat` tool loop with consent/cancel parity.
 
 ## Pagination
 
@@ -353,7 +353,6 @@ uv run python -m kassiber chat --help
 uv run python -m kassiber ai --help
 uv run python -m kassiber ai providers --help
 uv run python -m kassiber ai providers create --help
-uv run python -m kassiber ai chat --help
 ```
 
 - Safe local workflow:

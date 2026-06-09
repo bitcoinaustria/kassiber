@@ -26,15 +26,20 @@ kassiber chat "Summarise report blockers and suggest next actions."
 kassiber chat
 kassiber chat --allow-tool ui.journals.process "Refresh journals, then summarize blockers."
 kassiber chat --yes "Sync allowed wallets and summarize what changed."
+kassiber chat --stream-json "List my largest outbound transactions."
+kassiber --machine chat "How many transactions are missing prices?"
 ```
 
-`kassiber chat` mirrors the desktop Assistant and drives daemon `ai.chat`,
-`ai.tool_call.consent`, and `ai.chat.cancel`. Mutating tools prompt on a TTY.
+`kassiber chat` is the only chat command. It mirrors the desktop Assistant and
+drives daemon `ai.chat`, `ai.tool_call.consent`, and `ai.chat.cancel`.
+Mutating tools prompt on a TTY in rendered mode; in the REPL, `/tools` lists
+the tool catalog with consent classes and Ctrl-C cancels the current turn.
 For scripts, `--allow-tool <daemon-tool-name>` approves only that tool;
-`--yes` approves all mutating tools for the chat session. Without a TTY and
-without an allow policy, mutating tool requests are denied and fed back to the
-model. Do not use `kassiber ai chat` when tool use, stale-journal refresh,
-consent, or cancellation are required; that command is provider-only.
+`--yes` approves all mutating tools for the chat session. `--machine` emits a
+single final `chat` envelope; `--stream-json` emits the raw daemon stream
+records as NDJSON (both one-shot only). Neither machine mode ever prompts for
+consent; unapproved mutating tool requests are denied and fed back to the
+model. Use `--no-tools` for a provider-only exchange without the tool loop.
 
 ## Fast paths
 

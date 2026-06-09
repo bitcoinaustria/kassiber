@@ -8,10 +8,29 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Iterable, TextIO
 
+from ..ai.client import CLI_DEFAULT_MODEL, is_cli_provider_locator
+from ..ai.tools import TOOL_CATALOG
 from ..errors import AppError
 
 
 _CONSENT_DECISIONS = {"allow_once", "allow_session", "deny"}
+_ANSI_DIM = "\x1b[2m"
+_ANSI_RESET = "\x1b[0m"
+_FINISH_NOTICES = {
+    "cancelled": "Cancelled.",
+    "tool_loop_max_iterations": (
+        "Stopped at the tool-loop iteration limit; raise "
+        "--tool-loop-max-iterations to let the assistant keep working."
+    ),
+    "length": "Stopped at the provider token limit; raise --max-tokens for longer answers.",
+}
+_REPL_HELP = (
+    "Commands:\n"
+    "  /help   show this help\n"
+    "  /tools  list daemon AI tools and their consent class\n"
+    "  /exit   leave the chat (also /quit or Ctrl-D)\n"
+    "Press Ctrl-C while the assistant is replying to cancel that turn.\n"
+)
 
 
 @dataclass
@@ -192,8 +211,13 @@ def _build_chat_args(args: Any, messages: list[dict[str, str]]) -> dict[str, Any
         "messages": messages,
         "tools_enabled": not getattr(args, "no_tools", False),
         "tool_loop_max_iterations": getattr(args, "tool_loop_max_iterations", 8),
-        "system_prompt_kind": "kassiber",
     }
+    system = getattr(args, "system", None)
+    if system:
+        payload["system_prompt_kind"] = "raw"
+        payload["system_prompt"] = system
+    else:
+        payload["system_prompt_kind"] = "kassiber"
     options = _chat_options(args)
     if options:
         payload["options"] = options
@@ -209,19 +233,25 @@ def _provider_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return []
 
 
+def _error_from_envelope(record: dict[str, Any], *, message: str, code: str) -> AppError:
+    error = record.get("error") if isinstance(record.get("error"), dict) else {}
+    return AppError(
+        error.get("message", message),
+        code=error.get("code", code),
+        details=error.get("details"),
+        hint=error.get("hint"),
+        retryable=bool(error.get("retryable")),
+    )
+
+
 def _read_control_response(client: _DaemonChatClient, request_id: str) -> dict[str, Any]:
     while True:
         record = client.read()
         if record.get("request_id") != request_id:
             continue
         if record.get("kind") == "error":
-            error = record.get("error", {})
-            raise AppError(
-                error.get("message", "daemon request failed"),
-                code=error.get("code", "daemon_request_failed"),
-                details=error.get("details"),
-                hint=error.get("hint"),
-                retryable=bool(error.get("retryable")),
+            raise _error_from_envelope(
+                record, message="daemon request failed", code="daemon_request_failed"
             )
         return record
 
@@ -246,6 +276,10 @@ def _resolve_default_model(client: _DaemonChatClient, args: Any) -> None:
             retryable=False,
         )
     model = selected.get("default_model")
+    if (not isinstance(model, str) or not model.strip()) and is_cli_provider_locator(
+        str(selected.get("base_url") or "")
+    ):
+        model = CLI_DEFAULT_MODEL
     if not isinstance(model, str) or not model.strip():
         name = selected.get("name") or provider_name or "selected provider"
         raise AppError(
@@ -260,6 +294,13 @@ def _resolve_default_model(client: _DaemonChatClient, args: Any) -> None:
 def _write(text: str, out: TextIO) -> None:
     out.write(text)
     out.flush()
+
+
+def _write_dim(text: str, out: TextIO) -> None:
+    if out.isatty():
+        _write(f"{_ANSI_DIM}{text}{_ANSI_RESET}", out)
+    else:
+        _write(text, out)
 
 
 def _interactive_consent(
@@ -296,11 +337,14 @@ def _interactive_consent(
 
 
 def _policy_decision(args: Any, tool_name: str, stdin: TextIO) -> str | None:
-    allow_tools = _split_tool_names(getattr(args, "allow_tool", None))
     if getattr(args, "yes", False):
         return "allow_session"
-    if tool_name in allow_tools:
+    if tool_name in _split_tool_names(getattr(args, "allow_tool", None)):
         return "allow_session"
+    # Machine and NDJSON outputs are scripted surfaces: never mix an
+    # interactive prompt into them, even when stdin happens to be a TTY.
+    if getattr(args, "format", None) == "json" or getattr(args, "stream_json", False):
+        return "deny"
     if not stdin.isatty():
         return "deny"
     return None
@@ -340,6 +384,52 @@ def _send_cancel(client: _DaemonChatClient, target_request_id: str) -> str:
     return request_id
 
 
+def _drain_until_terminal(client: _DaemonChatClient, request_id: str) -> dict[str, Any]:
+    while True:
+        record = client.read()
+        if record.get("request_id") != request_id:
+            continue
+        if record.get("kind") in {"ai.chat", "error"}:
+            return record
+
+
+def _render_turn_footer(terminal: dict[str, Any], out: TextIO) -> None:
+    data = terminal.get("data") if isinstance(terminal.get("data"), dict) else {}
+    notice = _FINISH_NOTICES.get(data.get("finish_reason") or "")
+    if notice:
+        _write(notice + "\n", sys.stderr)
+    if not out.isatty():
+        return
+    provenance = (
+        data.get("provenance") if isinstance(data.get("provenance"), dict) else {}
+    )
+    parts: list[str] = []
+    provider = data.get("provider")
+    model = data.get("model")
+    if provider and model:
+        parts.append(f"{provider}/{model}")
+    tools_used = provenance.get("tools_used")
+    if isinstance(tools_used, list) and tools_used:
+        parts.append("tools: " + ", ".join(str(name) for name in tools_used))
+    if provenance.get("auto_journal_processed"):
+        parts.append("journals auto-refreshed")
+    if provenance.get("auto_sync_attempted"):
+        parts.append("synced" if provenance.get("auto_sync_ok") else "sync attempted")
+    if parts:
+        _write_dim("— " + " · ".join(parts) + "\n", out)
+
+
+def _render_tool_listing(out: TextIO) -> None:
+    width = max(len(entry.name) for entry in TOOL_CATALOG)
+    for entry in sorted(TOOL_CATALOG, key=lambda e: (e.kind_class, e.name)):
+        consent = (
+            "mutating (asks consent)"
+            if entry.kind_class == "mutating"
+            else "read-only"
+        )
+        _write(f"  {entry.name.ljust(width)}  {consent}\n", out)
+
+
 def _run_turn(
     client: _DaemonChatClient,
     args: Any,
@@ -348,6 +438,7 @@ def _run_turn(
     stdin: TextIO,
     out: TextIO,
     render: bool,
+    stream_out: TextIO | None = None,
 ) -> ChatTurnResult:
     request_id = f"chat-{uuid.uuid4().hex}"
     client.send(
@@ -367,31 +458,25 @@ def _run_turn(
             record_request_id = record.get("request_id")
             if record_request_id in control_requests:
                 if kind == "error":
-                    raise AppError(
-                        record.get("error", {}).get("message", "chat control failed"),
-                        code=record.get("error", {}).get("code", "chat_control_failed"),
-                        details=record.get("error", {}).get("details"),
-                        hint=record.get("error", {}).get("hint"),
-                        retryable=bool(record.get("error", {}).get("retryable")),
+                    raise _error_from_envelope(
+                        record, message="chat control failed", code="chat_control_failed"
                     )
                 continue
             if record_request_id != request_id:
                 continue
+            if stream_out is not None:
+                _write(json.dumps(record, separators=(",", ":")) + "\n", stream_out)
             if kind == "error":
-                error = record.get("error", {})
-                raise AppError(
-                    error.get("message", "chat failed"),
-                    code=error.get("code", "chat_failed"),
-                    details=error.get("details"),
-                    hint=error.get("hint"),
-                    retryable=bool(error.get("retryable")),
-                )
+                raise _error_from_envelope(record, message="chat failed", code="chat_failed")
             data = record.get("data") if isinstance(record.get("data"), dict) else {}
             if kind == "ai.chat.status":
                 if render and data.get("label"):
-                    _write(f"\n{data['label']}...\n", out)
+                    _write_dim(f"{data['label']}...\n", out)
             elif kind == "ai.chat.delta":
                 delta = data.get("delta") if isinstance(data.get("delta"), dict) else {}
+                reasoning = delta.get("reasoning")
+                if render and isinstance(reasoning, str) and reasoning and out.isatty():
+                    _write(f"{_ANSI_DIM}{reasoning}{_ANSI_RESET}", out)
                 visible = delta.get("content")
                 if isinstance(visible, str) and visible:
                     content_parts.append(visible)
@@ -472,8 +557,24 @@ def _run_turn(
                     tool_calls=list(tool_calls.values()),
                 )
     except KeyboardInterrupt:
+        # Cancel this turn cooperatively, then wait for the daemon's terminal
+        # record so the transport stays usable for the next REPL turn.
         _send_cancel(client, request_id)
-        raise
+        try:
+            terminal = _drain_until_terminal(client, request_id)
+        except KeyboardInterrupt:
+            raise AppError("chat cancelled", code="cancelled", retryable=False) from None
+        if terminal.get("kind") == "error":
+            raise _error_from_envelope(terminal, message="chat failed", code="chat_failed")
+        if stream_out is not None:
+            _write(json.dumps(terminal, separators=(",", ":")) + "\n", stream_out)
+        if render:
+            _write("\n", out)
+        return ChatTurnResult(
+            content="".join(content_parts),
+            terminal=terminal,
+            tool_calls=list(tool_calls.values()),
+        )
 
 
 def run_chat_command(
@@ -485,9 +586,17 @@ def run_chat_command(
     input_stream = stdin or sys.stdin
     output_stream = stdout or sys.stdout
     one_shot_prompt = _resolve_prompt(args)
-    if getattr(args, "format", None) == "json" and one_shot_prompt is None:
+    stream_json = bool(getattr(args, "stream_json", False))
+    machine = getattr(args, "format", None) == "json"
+    if stream_json and machine:
         raise AppError(
-            "--machine chat requires a one-shot prompt",
+            "--stream-json already emits NDJSON; drop --machine / --format json",
+            code="validation",
+            retryable=False,
+        )
+    if (machine or stream_json) and one_shot_prompt is None:
+        raise AppError(
+            "machine chat output requires a one-shot prompt",
             code="validation",
             retryable=False,
         )
@@ -507,48 +616,60 @@ def run_chat_command(
             model=args.model,
         )
         messages: list[dict[str, str]] = []
-        render = getattr(args, "format", None) != "json"
-        try:
-            if one_shot_prompt is not None:
-                messages.append({"role": "user", "content": one_shot_prompt})
-                result = _run_turn(
-                    client,
-                    args,
-                    messages,
-                    stdin=input_stream,
-                    out=output_stream,
-                    render=render,
-                )
-                session.turns.append(result)
-                messages.append({"role": "assistant", "content": result.content})
-                return session
+        render = not machine and not stream_json
+        if one_shot_prompt is not None:
+            messages.append({"role": "user", "content": one_shot_prompt})
+            result = _run_turn(
+                client,
+                args,
+                messages,
+                stdin=input_stream,
+                out=output_stream,
+                render=render,
+                stream_out=output_stream if stream_json else None,
+            )
+            session.turns.append(result)
+            if render:
+                _render_turn_footer(result.terminal, output_stream)
+            return session
 
-            _write("Kassiber chat. Type /exit to quit.\n", output_stream)
-            while True:
+        _write("Kassiber chat. /help for commands, /exit to quit.\n", output_stream)
+        while True:
+            try:
                 _write("> ", output_stream)
                 prompt = input_stream.readline()
-                if prompt == "":
-                    break
-                prompt = prompt.strip()
-                if not prompt:
-                    continue
-                if prompt in {"/exit", "/quit"}:
-                    break
-                messages.append({"role": "user", "content": prompt})
-                result = _run_turn(
-                    client,
-                    args,
-                    messages,
-                    stdin=input_stream,
-                    out=output_stream,
-                    render=True,
-                )
-                session.turns.append(result)
+            except KeyboardInterrupt:
+                _write("\n", output_stream)
+                break
+            if prompt == "":
+                break
+            prompt = prompt.strip()
+            if not prompt:
+                continue
+            if prompt in {"/exit", "/quit"}:
+                break
+            if prompt == "/help":
+                _write(_REPL_HELP, output_stream)
+                continue
+            if prompt == "/tools":
+                _render_tool_listing(output_stream)
+                continue
+            if prompt.startswith("/"):
+                _write(f"Unknown command {prompt}. /help lists commands.\n", output_stream)
+                continue
+            messages.append({"role": "user", "content": prompt})
+            result = _run_turn(
+                client,
+                args,
+                messages,
+                stdin=input_stream,
+                out=output_stream,
+                render=True,
+            )
+            session.turns.append(result)
+            _render_turn_footer(result.terminal, output_stream)
+            if result.content:
                 messages.append({"role": "assistant", "content": result.content})
-            return session
-        except KeyboardInterrupt:
-            if render:
-                _write("\nCancelled.\n", output_stream)
-            raise AppError("chat cancelled", code="cancelled", retryable=False) from None
+        return session
     finally:
         client.close()
