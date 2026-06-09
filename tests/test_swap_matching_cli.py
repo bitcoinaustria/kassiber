@@ -346,6 +346,79 @@ class SwapMatchingCliTest(unittest.TestCase):
         self.assertEqual(code, 0, payload)
         self.assertEqual(payload["data"]["summary"]["count"], 1)
 
+    def test_conflict_split_across_candidate_type_filter_blocks_bulk_pair(self):
+        # One outbound BTC leg matches both a same-asset inbound (transfer
+        # interpretation) and a cross-asset inbound (swap interpretation).
+        # Filtering by candidate_type hides one sibling per view, but the
+        # matcher-stamped conflict_size must keep bulk-pair from silently
+        # choosing either interpretation.
+        data_root = self._fresh_root("split-conflict")
+        out_csv = Path(self._tmp.name) / "split-out.csv"
+        in_btc_csv = Path(self._tmp.name) / "split-in-btc.csv"
+        in_lbtc_csv = Path(self._tmp.name) / "split-in-lbtc.csv"
+        out_csv.write_text(_BTC_TRANSFER_OUT_CSV, encoding="utf-8")
+        in_btc_csv.write_text(_BTC_TRANSFER_IN_CSV, encoding="utf-8")
+        in_lbtc_csv.write_text(
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            "2026-03-16T10:10:00Z,lbtc-swap-in,inbound,LBTC,0.09998000,0,40000,Possible peg-in\n",
+            encoding="utf-8",
+        )
+
+        _run(data_root, "init")
+        _run(data_root, "workspaces", "create", "Main")
+        _run(
+            data_root, "profiles", "create",
+            "--workspace", "Main",
+            "--fiat-currency", "USD",
+            "--tax-country", "at",
+            "Swap",
+        )
+        for wallet, csv_path in (
+            ("cold-onchain", out_csv),
+            ("hot-onchain", in_btc_csv),
+            ("liquid-vault", in_lbtc_csv),
+        ):
+            _run(
+                data_root, "wallets", "create",
+                "--workspace", "Main",
+                "--profile", "Swap",
+                "--label", wallet,
+                "--kind", "custom",
+            )
+            _run(
+                data_root, "wallets", "import-csv",
+                "--workspace", "Main",
+                "--profile", "Swap",
+                "--wallet", wallet,
+                "--file", str(csv_path),
+            )
+
+        # The swap-only view shows one candidate but still reports the
+        # conflict with the hidden transfer-interpretation sibling.
+        payload, code = _run(
+            data_root, "transfers", "suggest",
+            "--workspace", "Main", "--profile", "Swap",
+            "--candidate-type", "swap",
+        )
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload["data"]["counts"]["total"], 1)
+        self.assertEqual(payload["data"]["counts"]["conflicts"], 1)
+        candidate = payload["data"]["candidates"][0]
+        self.assertEqual(candidate["in_asset"], "LBTC")
+        self.assertEqual(candidate["conflict_size"], 2)
+
+        # Bulk-pair must skip the conflicted candidate in both views.
+        for candidate_type in ("swap", "transfer"):
+            payload, code = _run(
+                data_root, "transfers", "bulk-pair",
+                "--workspace", "Main", "--profile", "Swap",
+                "--candidate-type", candidate_type,
+                "--confidence", "strong",
+            )
+            self.assertEqual(code, 0, payload)
+            self.assertEqual(payload["data"]["summary"]["count"], 0, payload)
+            self.assertEqual(payload["data"]["summary"]["skipped_conflicts"], 1, payload)
+
     def test_dismiss_blocks_candidate_until_expiry(self):
         data_root = self._fresh_root("dismiss")
         _bootstrap_profile(data_root, self.phoenix_csv, self.liquid_csv)

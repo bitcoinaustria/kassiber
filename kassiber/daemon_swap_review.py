@@ -468,10 +468,6 @@ def build_swap_review_context_payload(
     )
     candidates = list(candidate_payload.get("candidates", []))
     limited_candidates = candidates[:limit]
-    conflict_sizes: dict[str, int] = {}
-    for candidate in candidates:
-        conflict_id = str(candidate.get("conflict_set_id") or "")
-        conflict_sizes[conflict_id] = conflict_sizes.get(conflict_id, 0) + 1
 
     tx_ids: list[str] = []
     for candidate in limited_candidates:
@@ -487,7 +483,9 @@ def build_swap_review_context_payload(
         out_id = str(candidate.get("out_id") or "")
         in_id = str(candidate.get("in_id") or "")
         conflict_id = str(candidate.get("conflict_set_id") or "")
-        conflict_size = conflict_sizes.get(conflict_id, 0)
+        # Matcher-stamped over the full candidate set; the filters applied
+        # above must not shrink it, or hidden siblings would be ignored.
+        conflict_size = int(candidate.get("conflict_size") or 0)
         fee = _swap_review_fee(
             candidate,
             fee_pct_max=fee_pct_max,

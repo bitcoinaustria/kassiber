@@ -286,6 +286,18 @@ class HeuristicMatchTests(unittest.TestCase):
         self.assertEqual(len(candidates), 1)
         self.assertEqual(candidates[0].confidence, CONFIDENCE_STRONG)
 
+    def test_zero_amount_inbound_rejected(self):
+        # A zero-amount inbound row sits within the absolute fee floor of any
+        # small outbound; it must never become a heuristic candidate.
+        out = _row(id="o", wallet_id="A", direction="outbound", amount=2_000_000, asset="LBTC")  # 2000 sats
+        inbound = _row(id="i", wallet_id="B", direction="inbound", amount=0, asset="BTC")
+        self.assertEqual(suggest_swap_candidates([out, inbound], tax_country="at"), [])
+
+    def test_negative_amount_inbound_rejected(self):
+        out = _row(id="o", wallet_id="A", direction="outbound", amount=2_000_000, asset="LBTC")
+        inbound = _row(id="i", wallet_id="B", direction="inbound", amount=-1_000_000, asset="BTC")
+        self.assertEqual(suggest_swap_candidates([out, inbound], tax_country="at"), [])
+
 
 class ConflictClusteringTests(unittest.TestCase):
     def test_two_heuristic_candidates_share_leg_get_same_cluster_id(self):
@@ -297,6 +309,31 @@ class ConflictClusteringTests(unittest.TestCase):
         candidates = suggest_swap_candidates([out, in1, in2], tax_country="at")
         self.assertEqual(len(candidates), 2)
         self.assertEqual(candidates[0].conflict_set_id, candidates[1].conflict_set_id)
+        self.assertEqual([c.conflict_size for c in candidates], [2, 2])
+
+    def test_solo_candidate_gets_conflict_size_one(self):
+        out = _row(id="o", wallet_id="A", asset="LBTC", direction="outbound", amount=100_000_000)
+        inbound = _row(id="i", wallet_id="B", asset="BTC", direction="inbound",
+                       amount=99_500_000, occurred_at="2026-03-14T17:32:00Z")
+        candidates = suggest_swap_candidates([out, inbound], tax_country="at")
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].conflict_size, 1)
+
+    def test_cross_type_conflict_keeps_size_across_interpretations(self):
+        # One outbound BTC leg that matches both a same-asset inbound
+        # (transfer interpretation) and a cross-asset inbound (swap
+        # interpretation). Both candidates carry conflict_size=2 so a
+        # filtered swap-only or transfer-only view cannot make either
+        # look solo.
+        out = _row(id="o", wallet_id="A", asset="BTC", direction="outbound", amount=100_000_000_000)
+        transfer_in = _row(id="i-btc", wallet_id="B", asset="BTC", direction="inbound",
+                           amount=99_900_000_000, occurred_at="2026-03-14T17:40:00Z")
+        swap_in = _row(id="i-lbtc", wallet_id="C", asset="LBTC", direction="inbound",
+                       amount=99_800_000_000, occurred_at="2026-03-14T17:45:00Z")
+        candidates = suggest_swap_candidates([out, transfer_in, swap_in], tax_country="at")
+        self.assertEqual(len(candidates), 2)
+        self.assertEqual({c.in_id for c in candidates}, {"i-btc", "i-lbtc"})
+        self.assertEqual([c.conflict_size for c in candidates], [2, 2])
 
     def test_exact_dominates_heuristic_with_overlap(self):
         # Exact (payment_hash) and heuristic candidates that share the same

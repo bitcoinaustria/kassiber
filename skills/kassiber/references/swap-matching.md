@@ -45,9 +45,16 @@ review requirements.
   below the fee threshold (`max(1% of out, 2500 sats)`). Method is
   `heuristic`. Always eyeball before pairing — the user has to confirm.
 
-`conflicts > 0` means two or more candidates share a leg. Bulk-pair
-intentionally skips conflict clusters; the user must disambiguate
-manually.
+`conflicts > 0` means two or more candidates share a leg. Each
+candidate carries `conflict_set_id` plus `conflict_size` — the
+cluster's cardinality stamped at match time over the FULL candidate
+set. Bulk-pair, rule auto-apply, and the review surfaces all gate on
+`conflict_size > 1`, so a cluster split across filters (for example the
+swap vs transfer tabs, or an `asset_pair` filter that hides one
+sibling) still blocks every member from bulk actions. Resolving a
+conflict is manual: pair the correct candidate from the row (pairing
+consumes its legs, so the losing siblings disappear on the next
+suggest) or dismiss the wrong ones.
 
 ## What the matcher does NOT do
 

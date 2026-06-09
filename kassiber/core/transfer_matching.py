@@ -38,7 +38,12 @@ No SQLite, no env, no logging. Callers feed in already-fetched rows
 existing pair / dismissal records and receive a list of frozen
 ``SwapCandidate`` dataclasses. Two side-tables flow alongside:
 
-* ``conflict_set_id`` so the UI can render clusters.
+* ``conflict_set_id`` / ``conflict_size`` so review surfaces can render
+  clusters. The size is stamped at match time over the FULL candidate
+  set — downstream filters (confidence, asset/route pair, swap-vs-
+  transfer tabs) must never recompute it from a filtered list, or a
+  cluster split across filters looks falsely solo and bulk-pair would
+  silently choose for the user.
 * ``swap_fee_msat`` / ``swap_fee_kind`` computed once at match time so
   the review surface can show the "what actually left your custody"
   number without re-deriving it.
@@ -105,7 +110,11 @@ class SwapCandidate:
     swap_fee_kind: str
     default_kind: str
     default_policy: str
-    conflict_set_id: str
+    conflict_set_id: str = ""
+    # Cluster cardinality over the full (unfiltered) candidate set.
+    # ``> 1`` means this candidate needs manual disambiguation even when
+    # its cluster siblings are hidden by a downstream filter.
+    conflict_size: int = 1
 
 
 def suggest_swap_candidates(
@@ -210,6 +219,7 @@ def suggest_swap_candidates(
             abs(c.swap_fee_msat),
             c.out_occurred_at,
             c.out_id,
+            c.in_id,
         )
     )
     return candidates
@@ -436,6 +446,11 @@ def _match_heuristic(
             if abs(in_seconds - out_seconds) > time_window_seconds:
                 continue
             in_amount = int(_record_get(in_row, "amount") or 0)
+            if in_amount <= 0:
+                # Zero/negative inbound rows (failed imports, placeholder
+                # rows) would otherwise match any small outbound within the
+                # absolute fee floor.
+                continue
             delta = out_amount - in_amount
             if delta < 0 or delta > threshold:
                 continue
@@ -484,19 +499,21 @@ def _build_candidate(
         swap_fee_kind=swap_fee_kind,
         default_kind=default_kind_for(out_asset, in_asset, out_wallet_kind, in_wallet_kind),
         default_policy=default_policy,
-        conflict_set_id="",  # filled in by _stamp_conflict_set_ids
+        # conflict_set_id / conflict_size are filled in by _stamp_conflict_set_ids
     )
 
 
 def _stamp_conflict_set_ids(candidates: Sequence[SwapCandidate]) -> list[SwapCandidate]:
-    """Replace each candidate's ``conflict_set_id`` with a stable cluster id.
+    """Stamp each candidate's ``conflict_set_id`` and ``conflict_size``.
 
     Two candidates conflict when they share an out or in leg. The
-    cluster id is the lexicographic minimum of the leg ids touched by
-    that cluster, so the same data always yields the same cluster id.
-    Exact-confidence candidates dominate heuristic candidates sharing a
-    leg — the heuristic siblings drop out so they can't be bulk-paired
-    by mistake.
+    cluster id is the lexicographic minimum of the candidate keys in
+    that cluster, so the same data always yields the same cluster id;
+    the size is the cluster's cardinality over the full candidate set,
+    so downstream filtering cannot make a conflicted candidate look
+    solo. Exact-confidence candidates dominate heuristic candidates
+    sharing a leg — the heuristic siblings drop out so they can't be
+    bulk-paired by mistake.
     """
     surviving: list[SwapCandidate] = []
     consumed_legs_by_exact: set[str] = set()
@@ -545,12 +562,24 @@ def _stamp_conflict_set_ids(candidates: Sequence[SwapCandidate]) -> list[SwapCan
         for other in siblings[1:]:
             union(first, other)
 
-    return [
-        SwapCandidate(
-            **{**candidate.__dict__, "conflict_set_id": find(_candidate_key(candidate))}
+    cluster_sizes: dict[str, int] = {}
+    for candidate in surviving:
+        root = find(_candidate_key(candidate))
+        cluster_sizes[root] = cluster_sizes.get(root, 0) + 1
+
+    stamped: list[SwapCandidate] = []
+    for candidate in surviving:
+        root = find(_candidate_key(candidate))
+        stamped.append(
+            SwapCandidate(
+                **{
+                    **candidate.__dict__,
+                    "conflict_set_id": root,
+                    "conflict_size": cluster_sizes[root],
+                }
+            )
         )
-        for candidate in surviving
-    ]
+    return stamped
 
 
 def _candidate_key(candidate: SwapCandidate) -> str:

@@ -770,6 +770,7 @@ def _candidate_to_dict(candidate):
         "default_kind": candidate.default_kind,
         "default_policy": candidate.default_policy,
         "conflict_set_id": candidate.conflict_set_id,
+        "conflict_size": candidate.conflict_size,
     }
     return data
 
@@ -969,10 +970,13 @@ def suggest_transfer_candidates(
 
 
 def _count_conflict_clusters(candidates):
-    cluster_sizes = {}
-    for candidate in candidates:
-        cluster_sizes[candidate.conflict_set_id] = cluster_sizes.get(candidate.conflict_set_id, 0) + 1
-    return sum(1 for size in cluster_sizes.values() if size > 1)
+    """Count distinct conflict clusters among the given candidates.
+
+    Uses the matcher-stamped ``conflict_size`` (computed over the full
+    candidate set) so a filtered view still reports a cluster whose
+    siblings are hidden by the active filters.
+    """
+    return len({c.conflict_set_id for c in candidates if c.conflict_size > 1})
 
 
 def bulk_pair_transfers(
@@ -1024,29 +1028,33 @@ def bulk_pair_transfers(
         method=method,
         candidate_type=candidate_type,
     )
-    cluster_sizes = {}
-    for candidate in candidates:
-        cluster_sizes[candidate.conflict_set_id] = cluster_sizes.get(candidate.conflict_set_id, 0) + 1
     applied = []
     pair_source = "bulk_exact" if confidence == "exact" else "bulk_selected"
-    for candidate in candidates:
-        if cluster_sizes.get(candidate.conflict_set_id, 0) > 1:
-            continue
-        if confidence == "exact" and candidate.confidence != "exact":
-            continue
-        pair = create_transaction_pair(
-            conn,
-            workspace["id"],
-            profile["id"],
-            candidate.out_id,
-            candidate.in_id,
-            kind=candidate.default_kind,
-            policy=candidate.default_policy,
-            pair_source=pair_source,
-            confidence_at_pair=candidate.confidence,
-            commit=False,
-        )
-        applied.append(pair)
+    try:
+        for candidate in candidates:
+            # conflict_size is stamped over the unfiltered candidate set, so
+            # a cluster split across filters (e.g. the swap vs transfer tabs)
+            # still blocks bulk-pairing of every member.
+            if candidate.conflict_size > 1:
+                continue
+            if confidence == "exact" and candidate.confidence != "exact":
+                continue
+            pair = create_transaction_pair(
+                conn,
+                workspace["id"],
+                profile["id"],
+                candidate.out_id,
+                candidate.in_id,
+                kind=candidate.default_kind,
+                policy=candidate.default_policy,
+                pair_source=pair_source,
+                confidence_at_pair=candidate.confidence,
+                commit=False,
+            )
+            applied.append(pair)
+    except Exception:
+        conn.rollback()
+        raise
     if applied:
         conn.commit()
     total_fee_msat = sum(int(pair.get("swap_fee_msat") or 0) for pair in applied)
@@ -1054,7 +1062,7 @@ def bulk_pair_transfers(
         "applied": applied,
         "summary": {
             "count": len(applied),
-            "skipped_conflicts": sum(1 for c in candidates if cluster_sizes.get(c.conflict_set_id, 0) > 1),
+            "skipped_conflicts": sum(1 for c in candidates if c.conflict_size > 1),
             "total_swap_fee_msat": total_fee_msat,
         },
     }

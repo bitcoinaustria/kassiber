@@ -157,13 +157,25 @@ class ApplyRulesTests(unittest.TestCase):
 
     def test_conflict_cluster_blocks_auto_pair(self):
         candidates = [
-            _candidate(out_id="o1", in_id="i1", conflict_set_id="cluster-X"),
-            _candidate(out_id="o1", in_id="i2", conflict_set_id="cluster-X"),
+            _candidate(out_id="o1", in_id="i1", conflict_set_id="cluster-X", conflict_size=2),
+            _candidate(out_id="o1", in_id="i2", conflict_set_id="cluster-X", conflict_size=2),
         ]
         rules = [_rule(predicate={})]
         auto, remaining = apply_rules(candidates, rules)
         self.assertEqual(auto, [])
         self.assertEqual(len(remaining), 2)
+
+    def test_conflict_size_blocks_auto_pair_even_when_siblings_filtered_out(self):
+        # The caller may pass a filtered candidate list (e.g. swap-only view)
+        # that hides the cluster sibling. The stamped conflict_size still
+        # blocks auto-pairing.
+        candidates = [
+            _candidate(out_id="o1", in_id="i1", conflict_set_id="cluster-X", conflict_size=2),
+        ]
+        rules = [_rule(predicate={})]
+        auto, remaining = apply_rules(candidates, rules)
+        self.assertEqual(auto, [])
+        self.assertEqual(len(remaining), 1)
 
     def test_min_confidence_filter_via_rule(self):
         # Strong candidate, rule requires exact → no match.

@@ -83,6 +83,8 @@ export type SwapCandidateReference = {
   in_asset?: string;
   out_asset?: string;
   conflict_set_id?: string;
+  /** Matcher-stamped cluster size over the full candidate set. */
+  conflict_size?: number;
 };
 
 const flowColors: Record<TransactionFlow, string> = {
@@ -781,6 +783,8 @@ function isCrossAssetCandidateRef(candidate: SwapCandidateReference): boolean {
 function nonConflictedCandidateRefs(
   candidateRefs: SwapCandidateReference[],
 ): SwapCandidateReference[] {
+  // Prefer the matcher-stamped conflict_size (computed over the full
+  // candidate set); the local recount only covers refs missing the field.
   const clusterSizes = new Map<string, number>();
   candidateRefs.forEach((candidate, index) => {
     const clusterId = candidate.conflict_set_id ?? `solo:${index}`;
@@ -790,7 +794,9 @@ function nonConflictedCandidateRefs(
   const usedLegs = new Set<string>();
   return candidateRefs.filter((candidate, index) => {
     const clusterId = candidate.conflict_set_id ?? `solo:${index}`;
-    if ((clusterSizes.get(clusterId) ?? 0) > 1) return false;
+    const clusterSize =
+      candidate.conflict_size ?? clusterSizes.get(clusterId) ?? 0;
+    if (clusterSize > 1) return false;
     if (usedLegs.has(candidate.in_id) || usedLegs.has(candidate.out_id)) {
       return false;
     }

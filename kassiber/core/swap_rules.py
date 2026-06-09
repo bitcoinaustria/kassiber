@@ -182,18 +182,16 @@ def apply_rules(
     sorted by descending specificity (ties broken by rule id). Disabled
     rules are skipped; candidates in a conflict cluster larger than one
     are intentionally NOT auto-paired — the user must disambiguate.
+    Conflict membership comes from the matcher-stamped ``conflict_size``
+    so a filtered candidate list cannot make a cluster member look solo.
     """
     enabled = [rule for rule in rules if rule.enabled]
     enabled.sort(key=lambda rule: (-rule_specificity(rule), rule.id))
 
-    cluster_sizes: dict[str, int] = {}
-    for candidate in candidates:
-        cluster_sizes[candidate.conflict_set_id] = cluster_sizes.get(candidate.conflict_set_id, 0) + 1
-
     auto_paired: list[RuleMatch] = []
     remaining: list[SwapCandidate] = []
     for candidate in candidates:
-        if cluster_sizes.get(candidate.conflict_set_id, 0) > 1:
+        if candidate.conflict_size > 1:
             remaining.append(candidate)
             continue
         match = None

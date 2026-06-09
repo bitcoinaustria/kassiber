@@ -155,6 +155,9 @@ interface SwapCandidate {
   default_kind: PairKind;
   default_policy: PairPolicy;
   conflict_set_id: string;
+  /** Cluster cardinality over the full unfiltered candidate set; > 1 means
+   * this candidate shares a leg with others (possibly hidden by filters). */
+  conflict_size: number;
   rule_match?: {
     rule_id: string;
     rule_name: string | null;
@@ -504,7 +507,10 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
   );
   const counts = data?.data?.counts ?? { total: 0, exact: 0, strong: 0, conflicts: 0 };
 
-  const clusterSizes = useMemo(() => {
+  // Count of cluster members visible under the current filters/tab.
+  // conflict_size is stamped server-side over the full candidate set, so
+  // visibleClusterCounts < conflict_size means siblings are hidden here.
+  const visibleClusterCounts = useMemo(() => {
     const sizes: Record<string, number> = {};
     for (const candidate of candidates) {
       sizes[candidate.conflict_set_id] = (sizes[candidate.conflict_set_id] ?? 0) + 1;
@@ -517,29 +523,22 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
   const exactSolo = useMemo(
     () =>
       candidates.filter(
-        (c) =>
-          c.confidence === "exact" &&
-          (clusterSizes[c.conflict_set_id] ?? 0) <= 1,
+        (c) => c.confidence === "exact" && c.conflict_size <= 1,
       ),
-    [candidates, clusterSizes],
+    [candidates],
   );
 
   const ruleSolo = useMemo(
     () =>
       candidates.filter(
-        (c) =>
-          c.rule_match &&
-          (clusterSizes[c.conflict_set_id] ?? 0) <= 1,
+        (c) => c.rule_match && c.conflict_size <= 1,
       ),
-    [candidates, clusterSizes],
+    [candidates],
   );
 
   const selectableCandidates = useMemo(
-    () =>
-      candidates.filter(
-        (c) => (clusterSizes[c.conflict_set_id] ?? 0) <= 1,
-      ),
-    [candidates, clusterSizes],
+    () => candidates.filter((c) => c.conflict_size <= 1),
+    [candidates],
   );
 
   const selectableCandidatesByKey = useMemo(() => {
@@ -764,7 +763,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
         category: "Selection",
         handler: () => {
           if (!cursorCandidate) return;
-          if ((clusterSizes[cursorCandidate.conflict_set_id] ?? 0) > 1) return;
+          if (cursorCandidate.conflict_size > 1) return;
           toggleSelected(candidateKey(cursorCandidate));
         },
       },
@@ -815,7 +814,6 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
     ];
   }, [
     candidates,
-    clusterSizes,
     cursorCandidate,
     exactSolo,
     detailCandidate,
@@ -1139,7 +1137,10 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                 <TableBody>
                   {candidates.map((candidate) => {
                     const key = candidateKey(candidate);
-                    const conflicted = (clusterSizes[candidate.conflict_set_id] ?? 0) > 1;
+                    const conflicted = candidate.conflict_size > 1;
+                    const hiddenSiblings =
+                      candidate.conflict_size -
+                      (visibleClusterCounts[candidate.conflict_set_id] ?? 1);
                     return (
                       <TableRow
                         key={key}
@@ -1162,9 +1163,13 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                         <TableCell className="whitespace-normal">
                           <ConfidenceBadge candidate={candidate} />
                           {conflicted ? (
-                            <p className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-300">
+                            <p
+                              className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-300"
+                              title={`One of these transactions appears in ${candidate.conflict_size} possible matches. Open the row to pick the right one — pairing or dismissing resolves the others.${hiddenSiblings > 0 ? ` ${hiddenSiblings} alternative match(es) are hidden by the current tab or filters.` : ""}`}
+                            >
                               <AlertTriangle className="size-3" />
-                              {clusterSizes[candidate.conflict_set_id]} share a leg
+                              {candidate.conflict_size} matches share a leg
+                              {hiddenSiblings > 0 ? ` (${hiddenSiblings} hidden)` : ""}
                             </p>
                           ) : null}
                         </TableCell>
@@ -1773,6 +1778,19 @@ function SwapCandidateDetailSheet({
                   {candidate.rule_match ? (
                     <p className="mt-2 text-xs text-muted-foreground">
                       Auto-pair route: {candidate.rule_match.rule_name ?? candidate.rule_match.rule_id}
+                    </p>
+                  ) : null}
+                  {candidate.conflict_size > 1 ? (
+                    <p className="mt-2 inline-flex items-start gap-1 text-xs text-amber-700 dark:text-amber-300">
+                      <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+                      <span>
+                        One of these transactions also appears in{" "}
+                        {candidate.conflict_size - 1} other possible match
+                        {candidate.conflict_size - 1 === 1 ? "" : "es"} (it may
+                        be listed under the other tab or filtered out). Bulk
+                        actions skip it; pair the correct match here or dismiss
+                        the wrong ones to resolve the conflict.
+                      </span>
                     </p>
                   ) : null}
                 </div>

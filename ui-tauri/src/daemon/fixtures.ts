@@ -273,6 +273,7 @@ export const fixtures: Record<string, unknown> = {
         default_kind: "submarine-swap",
         default_policy: "carrying-value",
         conflict_set_id: "solo:phoenix-liquid",
+        conflict_size: 1,
         rule_match: {
           rule_id: "rule:phoenix-liquid",
           rule_name: "Phoenix to Liquid",
@@ -304,6 +305,7 @@ export const fixtures: Record<string, unknown> = {
         default_kind: "peg-out",
         default_policy: "carrying-value",
         conflict_set_id: "solo:liquid-onchain",
+        conflict_size: 1,
       },
     ],
     counts: {
