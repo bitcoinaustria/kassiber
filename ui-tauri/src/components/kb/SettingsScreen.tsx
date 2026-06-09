@@ -302,10 +302,6 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       if (next) setActiveSectionId(next);
       if (detail?.backendId) {
         setPendingBackendEditId(detail.backendId);
-        window.sessionStorage.setItem(
-          PENDING_SETTINGS_BACKEND_EDIT_KEY,
-          detail.backendId,
-        );
       }
     };
     window.addEventListener("kassiber:settings-section", handler);

@@ -24,9 +24,9 @@ import {
   connectionHealthTone,
   connectionProbeKind,
   endpointWithPort,
-  isConnectionHealthStale,
   nextConnectionHealthCheckDelayMs,
   settingsHashForConnection,
+  shouldRunImmediateConnectionHealthCheck,
   type ConnectionHealthStatus,
   type ConnectionIndicatorTone,
   type ConnectionProbeKind,
@@ -40,7 +40,6 @@ import {
 } from "@/lib/networkStatus";
 import { PENDING_SETTINGS_BACKEND_EDIT_KEY } from "./settingsSections";
 import {
-  DEFAULT_RATE_BACKENDS,
   backendProtocolLabel,
   backendRowToSettingsBackend,
   type Backend,
@@ -77,14 +76,11 @@ type BackendProbeEnvelope = {
 function connectionRowsFromBackends(
   savedBackends: Backend[],
 ): ConnectionHealthRow[] {
-  const rows = [
-    ...savedBackends.map((backend) =>
+  const rows = savedBackends
+    .filter((backend) => backend.on && backend.url.trim())
+    .map((backend) =>
       connectionRowFromBackend(backend, `backend:${backend.id}`, backend.id),
-    ),
-    ...DEFAULT_RATE_BACKENDS.map((backend) =>
-      connectionRowFromBackend(backend, `rate:${backend.id}`),
-    ),
-  ];
+    );
   const seen = new Set<string>();
   return rows.filter((row) => {
     const key = `${row.rawUrl}|${row.name}`;
@@ -125,7 +121,7 @@ function rowHealthStatus(
   row: ConnectionHealthRow,
   records: Record<string, ConnectionHealthRecord>,
 ): ConnectionHealthStatus {
-  if (!row.rawUrl.trim() || row.endpoint === "Missing endpoint") {
+  if (!row.rawUrl.trim()) {
     return "unhealthy";
   }
   if (row.probeKind === "unsupported") {
@@ -173,8 +169,10 @@ function connectionIndicatorClassName(tone: ConnectionIndicatorTone) {
     case "warning":
       return "border-amber-500/35 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 hover:text-amber-700 dark:text-amber-300 dark:hover:text-amber-300";
     case "online":
-    default:
       return "border-emerald-500/20 bg-sidebar-accent/30 text-emerald-700 hover:bg-sidebar-accent/60 hover:text-emerald-700 dark:text-emerald-300 dark:hover:text-emerald-300";
+    case "neutral":
+    default:
+      return "border-border bg-sidebar-accent/20 text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground";
   }
 }
 
@@ -185,8 +183,10 @@ function connectionIndicatorLabel(tone: ConnectionIndicatorTone) {
     case "warning":
       return "Connection issue";
     case "online":
-    default:
       return "Connections online";
+    case "neutral":
+    default:
+      return "Connections not checked";
   }
 }
 
@@ -258,12 +258,20 @@ export function NetworkStatusIndicator({
     .filter((value): value is string => Boolean(value))
     .sort()
     .at(-1);
+  const hasUncheckedConnection = checkableRows.some(
+    (row) => healthRecords[row.id]?.fingerprint !== row.fingerprint,
+  );
   const canCheckConnections = canRunConnectionHealthChecks({
     checking,
     checkableConnectionCount: checkableRows.length,
     daemonEnabled,
     documentVisible,
     networkStatus: status,
+  });
+  const shouldRunImmediateCheck = shouldRunImmediateConnectionHealthCheck({
+    canCheckConnections,
+    hasUncheckedConnection,
+    lastCheckedAt,
   });
 
   React.useEffect(() => {
@@ -286,17 +294,6 @@ export function NetworkStatusIndicator({
     const now = new Date().toISOString();
     if (!canCheckConnections) return;
     setChecking(true);
-    setHealthRecords((current) => {
-      const next = { ...current };
-      for (const row of checkableRows) {
-        next[row.id] = {
-          ...next[row.id],
-          fingerprint: row.fingerprint,
-          status: "checking",
-        };
-      }
-      return next;
-    });
     const results = await Promise.all(
       checkableRows.map(
         async (row): Promise<[string, ConnectionHealthRecord]> => {
@@ -355,25 +352,9 @@ export function NetworkStatusIndicator({
   }, [canCheckConnections, checkableRows, testElectrum, testHttp]);
 
   React.useEffect(() => {
-    if (!canCheckConnections) return;
-    const hasUncheckedConnection = checkableRows.some(
-      (row) => healthRecords[row.id]?.fingerprint !== row.fingerprint,
-    );
-    if (!hasUncheckedConnection) return;
+    if (!shouldRunImmediateCheck) return;
     void runConnectionChecks();
-  }, [
-    canCheckConnections,
-    checkableRows,
-    healthRecords,
-    runConnectionChecks,
-  ]);
-
-  React.useEffect(() => {
-    if (!canCheckConnections) return;
-    if (!lastCheckedAt) return;
-    if (!isConnectionHealthStale(lastCheckedAt)) return;
-    void runConnectionChecks();
-  }, [canCheckConnections, lastCheckedAt, runConnectionChecks]);
+  }, [runConnectionChecks, shouldRunImmediateCheck]);
 
   React.useEffect(() => {
     if (!canCheckConnections || !lastCheckedAt) return undefined;
@@ -398,16 +379,14 @@ export function NetworkStatusIndicator({
         to: "/settings",
         hash: row.settingsHash,
       });
-      window.setTimeout(() => {
-        window.dispatchEvent(
-          new CustomEvent("kassiber:settings-section", {
-            detail: {
-              section: row.settingsHash,
-              backendId: row.backendId ?? null,
-            },
-          }),
-        );
-      }, 50);
+      window.dispatchEvent(
+        new CustomEvent("kassiber:settings-section", {
+          detail: {
+            section: row.settingsHash,
+            backendId: row.backendId ?? null,
+          },
+        }),
+      );
       setOpen(false);
     },
     [navigate],

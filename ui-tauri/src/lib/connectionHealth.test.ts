@@ -10,6 +10,7 @@ import {
   isConnectionHealthStale,
   nextConnectionHealthCheckDelayMs,
   settingsHashForConnection,
+  shouldRunImmediateConnectionHealthCheck,
   type ConnectionHealthSnapshot,
 } from "./connectionHealth";
 
@@ -82,7 +83,17 @@ describe("connection health model", () => {
     const healthy: ConnectionHealthSnapshot = { status: "healthy" };
     const failed: ConnectionHealthSnapshot = { status: "unhealthy" };
 
+    expect(connectionHealthTone("online", [])).toBe("neutral");
+    expect(connectionHealthTone("online", [{ status: "unknown" }])).toBe(
+      "neutral",
+    );
+    expect(connectionHealthTone("online", [{ status: "unavailable" }])).toBe(
+      "neutral",
+    );
     expect(connectionHealthTone("online", [healthy, healthy])).toBe("online");
+    expect(connectionHealthTone("online", [healthy, { status: "unknown" }])).toBe(
+      "online",
+    );
     expect(connectionHealthTone("online", [healthy, failed])).toBe("warning");
     expect(connectionHealthTone("online", [healthy, failed, failed])).toBe(
       "warning",
@@ -145,5 +156,42 @@ describe("connection health model", () => {
     expect(isConnectionHealthStale("2026-06-09T11:59:00.000Z", now)).toBe(
       true,
     );
+  });
+
+  it("collapses immediate refresh reasons into one run decision", () => {
+    const now = Date.parse("2026-06-09T12:00:00.000Z");
+
+    expect(
+      shouldRunImmediateConnectionHealthCheck({
+        canCheckConnections: false,
+        hasUncheckedConnection: true,
+        lastCheckedAt: "2026-06-09T11:59:00.000Z",
+        nowMs: now,
+      }),
+    ).toBe(false);
+    expect(
+      shouldRunImmediateConnectionHealthCheck({
+        canCheckConnections: true,
+        hasUncheckedConnection: true,
+        lastCheckedAt: "2026-06-09T11:59:59.000Z",
+        nowMs: now,
+      }),
+    ).toBe(true);
+    expect(
+      shouldRunImmediateConnectionHealthCheck({
+        canCheckConnections: true,
+        hasUncheckedConnection: false,
+        lastCheckedAt: "2026-06-09T11:59:00.000Z",
+        nowMs: now,
+      }),
+    ).toBe(true);
+    expect(
+      shouldRunImmediateConnectionHealthCheck({
+        canCheckConnections: true,
+        hasUncheckedConnection: false,
+        lastCheckedAt: "2026-06-09T11:59:01.000Z",
+        nowMs: now,
+      }),
+    ).toBe(false);
   });
 });

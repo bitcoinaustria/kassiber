@@ -8,7 +8,7 @@ export type ConnectionHealthStatus =
   | "healthy"
   | "unhealthy"
   | "unavailable";
-export type ConnectionIndicatorTone = "online" | "warning" | "error";
+export type ConnectionIndicatorTone = "neutral" | "online" | "warning" | "error";
 
 export const CONNECTION_HEALTH_CHECK_INTERVAL_MS = 60_000;
 export const CONNECTION_HEALTH_CHECK_JITTER_MS = 5_000;
@@ -31,6 +31,13 @@ export interface ConnectionHealthCheckGateInput {
   daemonEnabled: boolean;
   documentVisible: boolean;
   networkStatus: NetworkStatus;
+}
+
+export interface ImmediateConnectionHealthCheckInput {
+  canCheckConnections: boolean;
+  hasUncheckedConnection: boolean;
+  lastCheckedAt?: string;
+  nowMs?: number;
 }
 
 export function endpointWithPort(raw: string): string {
@@ -91,15 +98,16 @@ export function connectionHealthTone(
   snapshots: ConnectionHealthSnapshot[],
 ): ConnectionIndicatorTone {
   if (networkStatus === "offline") return "error";
-  if (snapshots.some((snapshot) => snapshot.status === "checking")) {
-    return "warning";
-  }
   const unhealthy = snapshots.filter(
     (snapshot) => snapshot.status === "unhealthy",
   ).length;
-  if (unhealthy === 0) return "online";
   const healthy = snapshots.some((snapshot) => snapshot.status === "healthy");
-  return healthy ? "warning" : "error";
+  if (unhealthy > 0) return healthy ? "warning" : "error";
+  if (snapshots.some((snapshot) => snapshot.status === "checking")) {
+    return "warning";
+  }
+  if (healthy) return "online";
+  return "neutral";
 }
 
 export function canRunConnectionHealthChecks({
@@ -135,4 +143,17 @@ export function isConnectionHealthStale(
   const checkedAtMs = Date.parse(checkedAt);
   if (Number.isNaN(checkedAtMs)) return true;
   return nowMs - checkedAtMs >= CONNECTION_HEALTH_CHECK_INTERVAL_MS;
+}
+
+export function shouldRunImmediateConnectionHealthCheck({
+  canCheckConnections,
+  hasUncheckedConnection,
+  lastCheckedAt,
+  nowMs,
+}: ImmediateConnectionHealthCheckInput): boolean {
+  if (!canCheckConnections) return false;
+  return (
+    hasUncheckedConnection ||
+    isConnectionHealthStale(lastCheckedAt, nowMs)
+  );
 }
