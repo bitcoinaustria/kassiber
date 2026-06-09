@@ -57,6 +57,7 @@ export interface BackendSettingsRow {
   network?: string;
   url?: string;
   source?: string;
+  default?: string;
   is_default?: boolean;
   has_url?: boolean;
   has_auth_header?: boolean;
@@ -415,6 +416,7 @@ export function backendRowToSettingsBackend(row: BackendSettingsRow): Backend {
   const net = backendNetFromRow(row);
   const id = row.name || "backend";
   const name = row.display_name?.trim() || id;
+  const isDefault = row.is_default === true || row.default === "yes";
   return {
     id,
     name,
@@ -423,9 +425,9 @@ export function backendRowToSettingsBackend(row: BackendSettingsRow): Backend {
     kind: row.kind,
     chain: row.chain,
     network: row.network,
-    health: row.is_default ? "default" : row.source || row.kind || "configured",
+    health: isDefault ? "default" : row.source || row.kind || "configured",
     on: row.has_url !== false,
-    isDefault: row.is_default === true,
+    isDefault,
     auth: backendAuthLabel(row),
     commandoPeerId: row.has_commando_peer_id
       ? CLN_PRESENCE_SENTINEL_COMMANDO_PEER

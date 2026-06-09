@@ -2829,6 +2829,33 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.backends.set_default") {
+      const args = (req.args ?? {}) as { name?: unknown };
+      const name = typeof args.name === "string" ? args.name.trim() : "";
+      if (!mockBackendSettingsRows.some((row) => row.name === name)) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "not_found",
+            message: `Backend '${name || "backend"}' not found`,
+            retryable: false,
+          },
+        };
+      }
+      mockBackendSettingsRows = mockBackendSettingsRows.map((row) => ({
+        ...row,
+        is_default: row.name === name,
+      }));
+      return {
+        kind: "ui.backends.set_default",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: { default_backend: name } as T,
+      };
+    }
+
     if (req.kind === "ui.wallets.delete") {
       const args = (req.args ?? {}) as {
         wallet?: unknown;

@@ -141,12 +141,17 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   );
   const createBackend = useDaemonMutation<BackendSettingsRow>("ui.backends.create");
   const updateBackend = useDaemonMutation<BackendSettingsRow>("ui.backends.update");
+  const setDefaultBackend = useDaemonMutation<{ default_backend: string }>(
+    "ui.backends.set_default",
+  );
   const createWallet = useDaemonMutation("ui.wallets.create");
   const deleteBackend = useDaemonMutation<{
     name: string;
     deleted: boolean;
     detached_wallet_refs?: string[];
   }>("ui.backends.delete");
+  const [settingDefaultBackendId, setSettingDefaultBackendId] =
+    React.useState<string | null>(null);
   const [backendDialogOpen, setBackendDialogOpen] = React.useState(false);
   const [editingBackendId, setEditingBackendId] = React.useState<string | null>(
     null,
@@ -482,6 +487,34 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     setInitialBackendTypeId(null);
   };
 
+  const onSetDefaultBackend = async (backend: Backend) => {
+    setSettingDefaultBackendId(backend.id);
+    try {
+      await setDefaultBackend.mutateAsync({ name: backend.id });
+      const refreshed = await backendSettingsQuery.refetch();
+      const refreshedBackends = (refreshed.data?.data?.backends ?? []).map(
+        backendRowToSettingsBackend,
+      );
+      setExplorerSettings(deriveExplorerSettings(refreshedBackends));
+      addNotification({
+        title: "Default backend updated",
+        body: `${backend.name} will be used whenever a workflow asks for the default backend.`,
+        tone: "success",
+      });
+    } catch (error) {
+      addNotification({
+        title: "Default backend was not changed",
+        body:
+          error instanceof Error
+            ? error.message
+            : "Kassiber could not update the default backend.",
+        tone: "warning",
+      });
+    } finally {
+      setSettingDefaultBackendId(null);
+    }
+  };
+
   const onInstallTerminalCommand = async () => {
     const wasRepair = Boolean(terminalStatus?.needsRepair);
     setTerminalCommandPending(true);
@@ -802,6 +835,8 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             backends={backends}
             onAdd={() => openAddBackend("bitcoin")}
             onEdit={openEditBackend}
+            onSetDefault={onSetDefaultBackend}
+            settingDefaultBackendId={settingDefaultBackendId}
           />
         );
       case "network-lightning":
@@ -811,6 +846,8 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             backends={backends}
             onAdd={() => openAddBackend("lnd")}
             onEdit={openEditBackend}
+            onSetDefault={onSetDefaultBackend}
+            settingDefaultBackendId={settingDefaultBackendId}
           />
         );
       case "network-liquid":
@@ -820,6 +857,8 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             backends={backends}
             onAdd={() => openAddBackend("liquid")}
             onEdit={openEditBackend}
+            onSetDefault={onSetDefaultBackend}
+            settingDefaultBackendId={settingDefaultBackendId}
           />
         );
       case "network-market":

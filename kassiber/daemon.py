@@ -228,6 +228,7 @@ SUPPORTED_KINDS = (
     "ui.backends.create",
     "ui.backends.update",
     "ui.backends.delete",
+    "ui.backends.set_default",
     "ui.backends.electrum.test",
     "ui.backends.http.test",
     "ui.reports.capital_gains",
@@ -5135,15 +5136,17 @@ def _backend_public_defaults_payload(ctx: "DaemonContext") -> dict[str, Any]:
 
 def _backend_settings_list_payload(ctx: "DaemonContext") -> dict[str, Any]:
     backends = core_accounts.list_backends(ctx.runtime_config)
+    default_backend = str(ctx.runtime_config.get("default_backend") or "")
     for backend in backends:
         name = backend.get("name")
         if isinstance(name, str) and name:
+            backend["is_default"] = name == default_backend
             backend["wallet_refs"] = wallet_backend_references(ctx.conn, name)
     return {
         "backends": backends,
         "summary": {
             "count": len(ctx.runtime_config.get("backends", {})),
-            "default_backend": str(ctx.runtime_config.get("default_backend") or "") or None,
+            "default_backend": default_backend or None,
         },
     }
 
@@ -5442,6 +5445,13 @@ def _update_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[
 def _delete_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[str, Any]:
     name = _required_str_arg(args, "name", "Backend name")
     payload = core_accounts.delete_backend(ctx.conn, name)
+    merge_db_backends(ctx.conn, ctx.runtime_config)
+    return payload
+
+
+def _set_default_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[str, Any]:
+    name = _required_str_arg(args, "name", "Backend name")
+    payload = core_accounts.set_default_backend(ctx.conn, ctx.runtime_config, name)
     merge_db_backends(ctx.conn, ctx.runtime_config)
     return payload
 
@@ -7481,6 +7491,21 @@ def handle_request(
                 request_id,
             ),
             True,
+        )
+
+    if kind == "ui.backends.set_default":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.backends.set_default",
+                    _set_default_backend_payload(
+                        ctx,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
         )
 
     if kind == "ui.backends.electrum.test":

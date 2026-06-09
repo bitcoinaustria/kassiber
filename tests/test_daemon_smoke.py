@@ -791,6 +791,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.wallets.utxos", ready["data"]["supported_kinds"])
             self.assertIn("ui.backends.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.backends.options", ready["data"]["supported_kinds"])
+            self.assertIn("ui.backends.set_default", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.capital_gains", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.summary", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.balance_sheet", ready["data"]["supported_kinds"])
@@ -916,6 +917,81 @@ class DaemonSmokeTest(unittest.TestCase):
             code, stderr = _close_daemon(proc)
             self.assertEqual(code, 0, stderr)
             self.assertEqual(stderr, "")
+
+    def test_daemon_backend_settings_can_set_default(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-backend-default-") as tmp:
+            data_root = Path(tmp) / "data"
+            _run_cli(data_root, "init")
+            _run_cli(
+                data_root,
+                "backends",
+                "create",
+                "bench",
+                "--kind",
+                "electrum",
+                "--url",
+                "ssl://bench.example:50002",
+            )
+            proc = _start_daemon(data_root)
+            try:
+                ready = _read_payload_timeout(proc)
+                self.assertEqual(ready["kind"], "daemon.ready")
+                self.assertIn(
+                    "ui.backends.set_default",
+                    ready["data"]["supported_kinds"],
+                )
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "backend-settings-before",
+                        "kind": "ui.backends.settings.list",
+                    },
+                )
+                before = _read_payload_timeout(proc)
+                self.assertEqual(before["kind"], "ui.backends.settings.list")
+                before_rows = {
+                    row["name"]: row for row in before["data"]["backends"]
+                }
+                self.assertFalse(before_rows["bench"]["is_default"])
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "set-default-backend",
+                        "kind": "ui.backends.set_default",
+                        "args": {"name": "bench"},
+                    },
+                )
+                updated = _read_payload_timeout(proc)
+                self.assertEqual(updated["kind"], "ui.backends.set_default")
+                self.assertEqual(updated["data"]["default_backend"], "bench")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "backend-settings-after",
+                        "kind": "ui.backends.settings.list",
+                    },
+                )
+                after = _read_payload_timeout(proc)
+                self.assertEqual(after["kind"], "ui.backends.settings.list")
+                self.assertEqual(after["data"]["summary"]["default_backend"], "bench")
+                after_rows = {row["name"]: row for row in after["data"]["backends"]}
+                self.assertTrue(after_rows["bench"]["is_default"])
+                self.assertFalse(after_rows["mempool"]["is_default"])
+
+                _write_payload(
+                    proc,
+                    {"request_id": "shutdown-1", "kind": "daemon.shutdown"},
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    _close_daemon(proc)
 
     def test_ai_provider_set_api_key_redacts_secret_from_daemon_envelopes_and_stderr(self):
         secret_marker = "sk-daemon-secret-marker"
