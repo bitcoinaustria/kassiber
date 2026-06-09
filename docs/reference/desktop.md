@@ -18,7 +18,11 @@ Current development modes:
 - `pnpm dev` in `ui-tauri/` runs the browser dashboard against the
   loopback-only Vite daemon bridge by default. `pnpm dev:bridge` is the
   explicit form of the same mode. Use `pnpm dev:browser` for mock daemon
-  fixtures when you want disconnected UI layout work.
+  fixtures when you want disconnected UI layout work. In bridge mode, the
+  Welcome screen can open existing local books through a dev-only loopback
+  folder picker; the Vite bridge validates the selected Kassiber data root and
+  restarts its Python daemon with `--data-root` before the normal unlock/profile
+  picker flow continues in the browser.
 - `pnpm tauri:dev` runs the Tauri shell, starts `python -m kassiber daemon`,
   and calls the Rust `daemon_invoke` boundary. The command allowlists the
   current UI data, export, and action kinds. Report exports write under the
@@ -52,10 +56,40 @@ and ad-hoc signed; first-launch Gatekeeper handling is documented in
 [prerelease-binaries.md → Local Apple Silicon build](prerelease-binaries.md#local-apple-silicon-build).
 
 The authenticated shell includes a Diagnostics screen with a redacted
-daemon/transport activity log and a downloadable JSON export. It is meant for
+daemon/transport activity log and downloadable exports. It is meant for
 prerelease and development troubleshooting: request logs include argument keys,
 not argument values, while terminal daemon errors keep their structured
-message, hint, and redacted details when the daemon exposes them.
+message, hint, and redacted details when the daemon exposes them. Every logged
+daemon invoke gets a client request id and matching `trace_id`, so support
+exports can group start, stream, terminal, and failure records.
+
+For user-shareable troubleshooting, Logs offers **Export → Support bundle**.
+The bundle is a `.support.jsonl` file containing the user's short issue
+description, a manifest, a redaction report, recent redacted events,
+last-failure context, and redacted AI provenance records. High-signal mode is
+the default for trusted maintainer debugging and keeps operational values such
+as amounts, txids, addresses, labels, paths, URLs, and daemon error messages
+readable. Public-safe mode masks those operational values for public posting.
+Both modes apply the secret floor: descriptors are reduced to script
+shape/derivation hints, xpubs are stable-hashed, and private keys, recovery
+phrases, API keys, passwords, bearer tokens, cookies, raw daemon arguments,
+raw AI prompts, imported rows, database files, and stack locals are excluded or
+redacted.
+
+The Connections detail page includes a read-only UTXOs table for chain-backed
+wallet sources. Refreshing a descriptor/xpub/address wallet updates the local
+output inventory, and the detail page shows current unspent transaction outputs with
+outpoint, amount, confirmation state, receive/change branch/index when known,
+address or safe label, and source freshness. It shows all rows returned by the
+daemon payload, reports when that payload is capped, offers sorting by size,
+chain date, confirmations, or outpoint, and can open the UTXO's transaction in a
+configured/public explorer after the same privacy warning used by transaction
+detail explorer links. The table is
+inventory-only: there is no spend, PSBT, signing, broadcast, coin-selection, or
+freeze action.
+Unsupported file/BTCPay/Lightning-style sources show an unsupported state, and
+Liquid sources show an unblind blocker unless Kassiber has descriptor material
+that can unblind outputs locally.
 
 Settings -> AI providers displays each provider's API-key presence plus storage
 location/state. Saving provider metadata does not include the raw key in the

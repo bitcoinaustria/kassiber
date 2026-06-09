@@ -1,8 +1,7 @@
-import { AlertTriangle, Pencil, Plus, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Pencil, Plus, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { PlannedBadge } from "./SettingsControls";
 import {
   backendExplorerBaseUrl,
   backendProtocolLabel,
@@ -45,11 +44,15 @@ export function NetworkLayerSettingsPanel({
   backends,
   onAdd,
   onEdit,
+  onSetDefault,
+  settingDefaultBackendId,
 }: {
   layer: NetworkLayer;
   backends: Backend[];
   onAdd: () => void;
   onEdit: (backend: Backend) => void;
+  onSetDefault: (backend: Backend) => void;
+  settingDefaultBackendId?: string | null;
 }) {
   const meta = NETWORK_LAYER_META[layer];
   const layerBackends = backendsForLayer(backends, layer);
@@ -92,6 +95,9 @@ export function NetworkLayerSettingsPanel({
               key={backend.id}
               backend={backend}
               onEdit={() => onEdit(backend)}
+              onSetDefault={() => onSetDefault(backend)}
+              setDefaultPending={settingDefaultBackendId === backend.id}
+              setDefaultDisabled={settingDefaultBackendId !== null}
             />
           ))}
         </div>
@@ -117,9 +123,15 @@ export function NetworkLayerSettingsPanel({
 export function BackendLayerCard({
   backend,
   onEdit,
+  onSetDefault,
+  setDefaultPending = false,
+  setDefaultDisabled = false,
 }: {
   backend: Backend;
   onEdit: () => void;
+  onSetDefault: () => void;
+  setDefaultPending?: boolean;
+  setDefaultDisabled?: boolean;
 }) {
   const trust = backendTrust(backend);
   const TrustIcon = trust.icon;
@@ -182,11 +194,11 @@ export function BackendLayerCard({
               type="button"
               size="sm"
               variant="ghost"
-              disabled
-              title="Setting the default backend from the desktop app is coming soon — use the CLI: kassiber backends set-default"
+              disabled={setDefaultDisabled}
+              onClick={onSetDefault}
             >
-              Set as default
-              <PlannedBadge className="ml-1" />
+              <CheckCircle2 className="size-4" aria-hidden="true" />
+              {setDefaultPending ? "Setting default" : "Set as default"}
             </Button>
           </div>
         ) : null}

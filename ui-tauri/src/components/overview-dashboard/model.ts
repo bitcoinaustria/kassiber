@@ -18,9 +18,12 @@ import * as React from "react";
 import { type ChartConfig } from "@/components/ui/chart";
 import {
   formatBtc,
+  formatCompactFiatAmount,
+  formatFiatAmount,
   MISSING_FIAT_LABEL,
   type Currency,
 } from "@/lib/currency";
+import { formatShortDate } from "@/lib/date";
 import { useUiStore } from "@/store/ui";
 import {
   type OverviewSnapshot,
@@ -65,6 +68,7 @@ export type PortfolioChartPoint = {
   balanceBtc: number;
   valueEur: number;
   costBasisEur: number;
+  priceEur?: number;
   unrealizedEur: number;
 };
 
@@ -111,6 +115,7 @@ export type TreasuryChartPoint = PortfolioChartPoint & {
   activityValueEur: number;
   eventPriceEur?: number;
   eventBalanceBtc?: number;
+  markerBalanceBtc?: number;
   eventSize: number;
   eventFlow?: ActivityFlow;
   eventSignedBtc?: number;
@@ -149,6 +154,7 @@ export type ActivityScatterDotProps = {
   payload?: TreasuryChartPoint;
   activeSeries: TreasuryChartSeriesKey | null;
   onOpenTransactionDetail?: (transactionId: string) => void;
+  onHoverActivityPoint?: (point: TreasuryChartPoint | null) => void;
 };
 
 export type ActivityMarkerView = {
@@ -162,6 +168,8 @@ export type TreasuryActivityEvent = {
   btc: number;
   signedBtc: number;
   feeBtc: number;
+  postBalanceBtc?: number;
+  postCostBasisEur?: number;
   occurredAt: Date;
   priceEur: number;
   valueEur: number;
@@ -184,6 +192,8 @@ export type Transaction = {
   id: string;
   txid: string;
   explorerId?: string;
+  profileId?: string;
+  scopeLabel?: string;
   counterparty: string;
   counterpartyInitials: string;
   paymentMethod?: "On-chain" | "Lightning" | "Liquid" | "Other";
@@ -192,6 +202,7 @@ export type Transaction = {
   flow?: OverviewTransactionFlow;
   amount: number | null;
   amountBtc?: number;
+  fiatCurrency?: string | null;
   date: string;
 };
 
@@ -219,13 +230,6 @@ export const currencyFormatter = new Intl.NumberFormat("en-US", {
 
 export const numberFormatter = new Intl.NumberFormat("en-US");
 
-export const compactCurrencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "EUR",
-  notation: "compact",
-  maximumFractionDigits: 0,
-});
-
 export const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
 export function btcFromEur(eur: number, priceEur: number) {
@@ -233,64 +237,153 @@ export function btcFromEur(eur: number, priceEur: number) {
 }
 
 export function formatDisplayMoney(
-  eur: number | null,
-  priceEur: number,
+  fiatValue: number | null,
+  fiatRate: number,
   currency: Currency,
+  fiatCurrency = "EUR",
 ) {
-  if (eur === null) return MISSING_FIAT_LABEL;
-  if (currency === "btc") return formatBtc(btcFromEur(eur, priceEur));
-  return currencyFormatter.format(eur);
+  if (fiatValue === null) return MISSING_FIAT_LABEL;
+  if (currency === "btc") return formatBtc(btcFromEur(fiatValue, fiatRate));
+  return formatFiatAmount(fiatValue, fiatCurrency);
 }
 
 export function formatSignedDisplayMoney(
-  eur: number | null,
-  priceEur: number,
+  fiatValue: number | null,
+  fiatRate: number,
   currency: Currency,
+  fiatCurrency = "EUR",
 ) {
-  if (eur === null) return MISSING_FIAT_LABEL;
+  if (fiatValue === null) return MISSING_FIAT_LABEL;
   if (currency === "btc") {
-    return formatBtc(btcFromEur(eur, priceEur), { sign: true });
+    return formatBtc(btcFromEur(fiatValue, fiatRate), { sign: true });
   }
-  const prefix = eur >= 0 ? "+ " : "− ";
-  return `${prefix}${currencyFormatter.format(Math.abs(eur))}`;
+  const prefix = fiatValue >= 0 ? "+ " : "− ";
+  return `${prefix}${formatFiatAmount(Math.abs(fiatValue), fiatCurrency)}`;
 }
 
 export function formatCompactDisplayMoney(
-  eur: number,
-  priceEur: number,
+  fiatValue: number,
+  fiatRate: number,
   currency: Currency,
+  fiatCurrency = "EUR",
 ) {
   if (currency === "btc") {
-    return formatBtc(btcFromEur(eur, priceEur), { precision: 3 });
+    return formatBtc(btcFromEur(fiatValue, fiatRate), { precision: 3 });
   }
-  return compactCurrencyFormatter.format(eur);
+  return formatCompactFiatAmount(fiatValue, fiatCurrency);
 }
 
 export function formatPortfolioMoney(
   amount: number,
-  priceEur: number,
+  fiatRate: number,
   currency: Currency,
+  fiatCurrency = "EUR",
 ) {
   if (currency === "btc") return formatBtc(amount);
-  return formatDisplayMoney(amount, priceEur, currency);
+  return formatDisplayMoney(amount, fiatRate, currency, fiatCurrency);
 }
 
-export function formatDriverValue(btc: number, priceEur: number, currency: Currency) {
+export function formatDriverValue(
+  btc: number,
+  fiatRate: number,
+  currency: Currency,
+  fiatCurrency = "EUR",
+) {
   if (currency === "btc") {
     return formatBtc(btc, { precision: btc > 0 && btc < 0.001 ? 8 : 3 });
   }
-  return formatCompactDisplayMoney(btc * priceEur, priceEur, currency);
+  return formatCompactDisplayMoney(btc * fiatRate, fiatRate, currency, fiatCurrency);
 }
 
 export function formatDetailedPortfolioMoney(
   amount: number,
-  priceEur: number,
+  fiatRate: number,
   currency: Currency,
+  fiatCurrency = "EUR",
 ) {
   if (currency === "btc") {
     return formatBtc(amount, { precision: Math.abs(amount) < 0.01 ? 8 : 4 });
   }
-  return formatDisplayMoney(amount, priceEur, currency);
+  return formatDisplayMoney(amount, fiatRate, currency, fiatCurrency);
+}
+
+export function activeMarketFiatCurrency(snapshot: OverviewSnapshot) {
+  return (
+    snapshot.marketRate?.fiatCurrency ??
+    snapshot.fiat.fiatCurrency ??
+    "EUR"
+  ).toUpperCase();
+}
+
+export function activeMarketFiatRate(snapshot: OverviewSnapshot) {
+  const rate = snapshot.marketRate?.rate;
+  if (typeof rate === "number" && Number.isFinite(rate) && rate > 0) {
+    return rate;
+  }
+  const fiatCurrency = activeMarketFiatCurrency(snapshot);
+  if (fiatCurrency === "USD") return snapshot.priceUsd;
+  return snapshot.priceEur;
+}
+
+export function formatMarketRateValue(snapshot: OverviewSnapshot) {
+  const fiatCurrency = activeMarketFiatCurrency(snapshot);
+  const rate = snapshot.marketRate?.rate;
+  if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0) {
+    return `No ${fiatCurrency} rate`;
+  }
+  return `${formatFiatAmount(rate, fiatCurrency)} / BTC`;
+}
+
+const MARKET_RATE_SOURCE_LABELS: Record<string, string> = {
+  "coinbase-exchange": "Coinbase Exchange",
+  "kraken-csv": "Kraken CSV",
+  coingecko: "CoinGecko",
+  manual: "Manual",
+};
+
+export function formatMarketRateSource(source: string | null | undefined) {
+  if (!source) return "No source";
+  const normalized = source.trim().toLowerCase();
+  return MARKET_RATE_SOURCE_LABELS[normalized] ?? source;
+}
+
+export function marketRateSyncLabel(snapshot: OverviewSnapshot) {
+  const syncedAt = snapshot.marketRate?.fetchedAt ?? snapshot.marketRate?.timestamp;
+  return syncedAt ? `Synced ${formatShortDate(syncedAt)}` : "Not synced";
+}
+
+export function formatRelativeMarketRateTime(
+  value: string | null | undefined,
+  nowMs = Date.now(),
+) {
+  if (!value) return null;
+  const thenMs = Date.parse(value);
+  if (!Number.isFinite(thenMs)) return null;
+  const diffSec = Math.max(0, Math.floor((nowMs - thenMs) / 1000));
+  if (diffSec < 60) return "just now";
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+  return `${Math.floor(diffSec / 86400)}d ago`;
+}
+
+export function marketRateCompactLabel(snapshot: OverviewSnapshot) {
+  const syncedAt = snapshot.marketRate?.fetchedAt ?? snapshot.marketRate?.timestamp;
+  const source = snapshot.marketRate?.source;
+  const sourceLabel = source
+    ? formatMarketRateSource(source).replace(/\s+Exchange$/, "")
+    : null;
+  if (!syncedAt && !sourceLabel) return "Fetch rates";
+  const timeLabel = formatRelativeMarketRateTime(syncedAt);
+  return [sourceLabel, timeLabel].filter(Boolean).join(" · ");
+}
+
+export function marketRateDetailLabel(snapshot: OverviewSnapshot) {
+  const pair = snapshot.marketRate?.pair;
+  const source = snapshot.marketRate?.source;
+  if (!pair && !source) return "Fetch rates";
+  if (!pair) return formatMarketRateSource(source);
+  if (!source) return pair;
+  return `${formatMarketRateSource(source)} · ${pair}`;
 }
 
 export function donutCenterValueClass(value: string) {
@@ -444,7 +537,7 @@ export function latestPortfolioBalanceBtc(snapshot: OverviewSnapshot) {
   }
   const latestBalance = snapshot.balanceSeries[snapshot.balanceSeries.length - 1];
   if (typeof latestBalance === "number") return latestBalance;
-  return btcFromEur(snapshot.fiat.eurBalance, snapshot.priceEur);
+  return btcFromEur(snapshot.fiat.eurBalance, activeMarketFiatRate(snapshot));
 }
 
 export function buildStatsData(
@@ -463,7 +556,7 @@ export function buildStatsData(
         : 0,
       isPositive: snapshot.fiat.eurUnrealized >= 0,
       comparisonLabel: isBitcoinMode
-        ? "BTC balance"
+        ? "Bitcoin balance"
         : snapshot.fiat.eurCostBasis
           ? "vs cost basis"
           : "from loaded rows",
@@ -644,13 +737,14 @@ export function fallbackPortfolioData(
   currency: Currency,
   { densify }: { densify: boolean },
 ): PortfolioChartPoint[] {
+  const fiatRate = activeMarketFiatRate(snapshot);
   const scoped = densify
-    ? expandFallbackYearData(data, snapshot.priceEur)
+    ? expandFallbackYearData(data, fiatRate)
     : data;
   return scoped.map((point, index) => {
     const valueEur = point.thisYear;
     const costBasisEur = point.prevYear;
-    const balanceBtc = btcFromEur(valueEur, snapshot.priceEur);
+    const balanceBtc = btcFromEur(valueEur, fiatRate);
     return buildPortfolioChartPoint(
       {
         date: `fallback-${index}`,
@@ -697,6 +791,7 @@ export function getDataForPeriod(
     if (period === "ytd") return fallback.slice(0, 6);
     return fallback;
   }
+  const fiatRate = activeMarketFiatRate(snapshot);
   const labels =
     period === "5years"
       ? ["2022", "2023", "2024", "2025", "2026"]
@@ -718,7 +813,7 @@ export function getDataForPeriod(
     const isLatestPoint = index === snapshot.balanceSeries.length - 1;
     const value = isLatestPoint
       ? snapshot.fiat.eurBalance
-      : btc * snapshot.priceEur;
+      : btc * fiatRate;
     const basisShare =
       snapshot.fiat.eurBalance > 0
         ? value / snapshot.fiat.eurBalance
@@ -809,7 +904,12 @@ export function isPointInPeriod(
 export function buildPortfolioChartPoint(
   point: Pick<
     PortfolioPoint,
-    "date" | "label" | "balanceBtc" | "valueEur" | "costBasisEur"
+    | "date"
+    | "label"
+    | "balanceBtc"
+    | "valueEur"
+    | "costBasisEur"
+    | "priceEur"
   >,
   month: string,
   detailLabel: string,
@@ -841,6 +941,7 @@ export function buildPortfolioChartPoint(
     balanceBtc: point.balanceBtc,
     valueEur: point.valueEur,
     costBasisEur: point.costBasisEur,
+    priceEur: point.priceEur,
     unrealizedEur,
   };
 }
@@ -867,10 +968,17 @@ export function parseOverviewTxDate(value: string | undefined) {
   return Number.isNaN(parsed.valueOf()) ? null : parsed;
 }
 
+export function endOfIsoDayDate(value: string | undefined) {
+  const parsed = parseIsoDayDate(value);
+  if (!parsed) return null;
+  parsed.setUTCHours(23, 59, 59, 999);
+  return parsed;
+}
+
 export function treasurySortTime(value: string | undefined) {
   if (!value) return null;
   const key = value.split("#")[0] ?? value;
-  const parsed = key.includes("T") ? new Date(key) : parseIsoDayDate(key);
+  const parsed = key.includes("T") ? new Date(key) : endOfIsoDayDate(key);
   return parsed && !Number.isNaN(parsed.valueOf()) ? parsed.valueOf() : null;
 }
 
@@ -1066,11 +1174,17 @@ export function formatTreasuryDetailDate(value: string) {
   });
 }
 
-export function formatEurPrice(eur: number) {
-  if (Math.abs(eur) >= 100_000) return `${Math.round(eur).toLocaleString("en-US")} EUR`;
-  return `${eur.toLocaleString("en-US", {
+export function formatFiatPrice(value: number, fiatCurrency = "EUR") {
+  const rounded = Math.abs(value) >= 100_000
+    ? Math.round(value).toLocaleString("en-US")
+    : value.toLocaleString("en-US", {
     maximumFractionDigits: 0,
-  })} EUR`;
+  });
+  return `${rounded} ${fiatCurrency}`;
+}
+
+export function formatEurPrice(eur: number) {
+  return formatFiatPrice(eur, "EUR");
 }
 
 export function treasuryPrimaryValue(point: TreasuryChartPoint) {
@@ -1142,6 +1256,7 @@ export const activityFlowKeys: ActivityFlow[] = [
 
 export function activityTxs(snapshot: OverviewSnapshot): TreasuryActivityEvent[] {
   const txs = snapshot.activityTxs?.length ? snapshot.activityTxs : snapshot.txs;
+  const fiatRate = activeMarketFiatRate(snapshot);
   return txs
     .flatMap((tx, sequence) => {
       const occurredAt = parseOverviewTxDate(tx.occurredAt ?? tx.date);
@@ -1160,13 +1275,23 @@ export function activityTxs(snapshot: OverviewSnapshot): TreasuryActivityEvent[]
       if (volumeBtc <= 0 && feeBtc <= 0) return [];
       const valueEur = Math.abs(tx.eur ?? 0);
       const priceEur =
-        valueEur > 0 && btc > 0 ? valueEur / btc : tx.rate ?? snapshot.priceEur;
+        valueEur > 0 && btc > 0 ? valueEur / btc : tx.rate ?? fiatRate;
+      const postBalanceBtc =
+        typeof tx.balanceBtc === "number" && Number.isFinite(tx.balanceBtc)
+          ? tx.balanceBtc
+          : undefined;
+      const postCostBasisEur =
+        typeof tx.costBasisEur === "number" && Number.isFinite(tx.costBasisEur)
+          ? tx.costBasisEur
+          : undefined;
       return [
         {
           tx,
           btc,
           signedBtc,
           feeBtc,
+          postBalanceBtc,
+          postCostBasisEur,
           occurredAt,
           priceEur,
           valueEur,
@@ -1212,8 +1337,13 @@ export function buildTreasuryBasePoint(
   point: PortfolioChartPoint,
   snapshot: OverviewSnapshot,
 ): TreasuryChartPoint {
+  const fiatRate = activeMarketFiatRate(snapshot);
   const bitcoinPriceEur =
-    point.balanceBtc > 0 ? point.valueEur / point.balanceBtc : snapshot.priceEur;
+    point.priceEur && point.priceEur > 0
+      ? point.priceEur
+      : point.balanceBtc > 0
+        ? point.valueEur / point.balanceBtc
+        : fiatRate;
   const avgCostEur =
     point.balanceBtc > 0 && point.costBasisEur > 0
       ? point.costBasisEur / point.balanceBtc
@@ -1254,20 +1384,30 @@ export function buildTreasuryActivityPoint(
   event: TreasuryActivityEvent,
   anchor: TreasuryChartPoint | null,
   snapshot: OverviewSnapshot,
+  options: {
+    drawLineValues?: boolean;
+    markerAnchor?: TreasuryChartPoint | null;
+  } = {},
 ): TreasuryChartPoint {
-  const balanceBtc = anchor?.balanceBtc ?? latestPortfolioBalanceBtc(snapshot);
-  const costBasisEur = anchor?.costBasisEur ?? snapshot.fiat.eurCostBasis;
+  const balanceBtc =
+    event.postBalanceBtc ?? anchor?.balanceBtc ?? latestPortfolioBalanceBtc(snapshot);
+  const costBasisEur =
+    event.postCostBasisEur ?? anchor?.costBasisEur ?? snapshot.fiat.eurCostBasis;
   const valueEur =
     balanceBtc > 0
       ? balanceBtc * event.priceEur
       : anchor?.valueEur ?? snapshot.fiat.eurBalance;
   const avgCostEur =
     balanceBtc > 0 && costBasisEur > 0 ? costBasisEur / balanceBtc : null;
-  const date = activityDateKey(event);
+  const markerAnchor = options.markerAnchor ?? null;
+  const eventDate = activityDateKey(event);
+  const date = options.drawLineValues
+    ? eventDate
+    : markerAnchor?.date ?? eventDate;
   return {
     date,
     month: formatTreasuryTick(date),
-    detailLabel: formatTreasuryDetailDate(date),
+    detailLabel: formatTreasuryDetailDate(eventDate),
     thisYear: valueEur,
     prevYear: costBasisEur,
     balanceBtc,
@@ -1276,9 +1416,9 @@ export function buildTreasuryActivityPoint(
     unrealizedEur: valueEur - costBasisEur,
     bitcoinPriceEur: event.priceEur,
     avgCostEur,
-    lineBalanceBtc: balanceBtc,
-    lineBitcoinPriceEur: event.priceEur,
-    lineAvgCostEur: avgCostEur,
+    lineBalanceBtc: options.drawLineValues ? balanceBtc : undefined,
+    lineBitcoinPriceEur: undefined,
+    lineAvgCostEur: options.drawLineValues ? avgCostEur : undefined,
     brushBalanceBtc: balanceBtc,
     reserveValueEur: valueEur,
     activityBtc: event.volumeBtc,
@@ -1286,6 +1426,7 @@ export function buildTreasuryActivityPoint(
     activityValueEur: event.valueEur,
     eventPriceEur: event.priceEur,
     eventBalanceBtc: balanceBtc,
+    markerBalanceBtc: markerAnchor?.balanceBtc ?? balanceBtc,
     eventSize: Math.max(event.volumeBtc, event.feeBtc),
     eventFlow: event.flow,
     eventSignedBtc: event.signedBtc,
@@ -1311,6 +1452,21 @@ export function enrichTreasuryChartData(
 ): TreasuryChartPoint[] {
   const basePoints = points.map((point) => buildTreasuryBasePoint(point, snapshot));
   const events = activityTxs(snapshot);
+  const drawActivityLineValues = period === "30days";
+  const basePointsByDay = new Map(
+    basePoints.map((point) => [String(point.date).slice(0, 10), point]),
+  );
+  const findMarkerAnchor = (event: TreasuryActivityEvent) => {
+    if (drawActivityLineValues) return null;
+    const eventDay = event.occurredAt.toISOString().slice(0, 10);
+    const sameDayPoint = basePointsByDay.get(eventDay);
+    if (sameDayPoint) return sameDayPoint;
+    const eventTime = event.occurredAt.valueOf();
+    return (
+      basePoints.find((point) => point.sortTimeMs >= eventTime) ??
+      nearestTreasuryAnchor(basePoints, event)
+    );
+  };
   const candidateTimes = [
     ...basePoints.map((point) => point.sortTimeMs).filter((time) => time > 0),
     ...events.map((event) => event.occurredAt.valueOf()),
@@ -1324,6 +1480,10 @@ export function enrichTreasuryChartData(
         event,
         nearestTreasuryAnchor(basePoints, event),
         snapshot,
+        {
+          drawLineValues: drawActivityLineValues,
+          markerAnchor: findMarkerAnchor(event),
+        },
       ),
     );
 
@@ -1366,6 +1526,7 @@ export function activityMarkerView(
   plottedData: TreasuryChartPoint[],
   showEvents: boolean,
   markerMinimumForPoint: (point: TreasuryChartPoint) => number,
+  includeActivityPointsInDisplay = false,
 ): ActivityMarkerView {
   const activityPoints = plottedData.filter((point) => point.isActivityEvent);
   const visibleActivityMarkers = activityPoints.filter(
@@ -1373,17 +1534,24 @@ export function activityMarkerView(
       showEvents &&
       (point.eventSize || point.activityBtc) >= markerMinimumForPoint(point),
   );
-  const visibleActivityMarkerIds = new Set(
-    visibleActivityMarkers.map((point) => point.date),
-  );
   const chartDisplayData = plottedData.filter(
-    (point) => !point.isActivityEvent || visibleActivityMarkerIds.has(point.date),
+    (point) => !point.isActivityEvent || includeActivityPointsInDisplay,
   );
   return {
     activityPoints,
     chartDisplayData,
     visibleActivityMarkers,
   };
+}
+
+export function brushedActivityMarkers(
+  activityMarkers: TreasuryChartPoint[],
+  selectedChartDisplayData: TreasuryChartPoint[],
+) {
+  const selectedDates = new Set(
+    selectedChartDisplayData.map((point) => String(point.date)),
+  );
+  return activityMarkers.filter((point) => selectedDates.has(String(point.date)));
 }
 
 export function expandFallbackYearData(
@@ -1552,6 +1720,7 @@ export function railForConnection(kind: string, label: string): BalanceRail {
 }
 
 export function buildBalanceRailItems(snapshot: OverviewSnapshot) {
+  const fiatRate = activeMarketFiatRate(snapshot);
   const byRail: Record<BalanceRail, number> = {
     onchain: 0,
     lightning: 0,
@@ -1561,7 +1730,7 @@ export function buildBalanceRailItems(snapshot: OverviewSnapshot) {
   for (const connection of snapshot.connections) {
     if (connection.balance <= 0) continue;
     const rail = railForConnection(connection.kind, connection.label);
-    byRail[rail] += connection.balance * snapshot.priceEur;
+    byRail[rail] += connection.balance * fiatRate;
   }
   const total = Object.values(byRail).reduce((sum, value) => sum + value, 0);
   const items = [
@@ -1601,11 +1770,12 @@ export function buildBalanceRailItems(snapshot: OverviewSnapshot) {
 }
 
 export function buildHoldingsBySource(snapshot: OverviewSnapshot): HoldingsItem[] {
+  const fiatRate = activeMarketFiatRate(snapshot);
   const rows = snapshot.connections
     .filter((connection) => connection.balance > 0)
     .map((connection) => ({
       name: connection.label,
-      value: connection.balance * snapshot.priceEur,
+      value: connection.balance * fiatRate,
     }))
     .sort((a, b) => b.value - a.value);
   const total = rows.reduce((sum, item) => sum + item.value, 0);
@@ -1996,11 +2166,15 @@ export function flowForOverviewTx(tx: OverviewTx): OverviewTransactionFlow {
 }
 
 export function toDashboardTransaction(tx: OverviewTx, index: number): Transaction {
+  const displayAmountSat =
+    tx.type === "Consolidation" && tx.amountSat === 0 && tx.feeSat
+      ? -Math.abs(tx.feeSat)
+      : tx.amountSat;
   const amount =
     tx.eur !== null
       ? tx.eur
       : tx.rate !== null
-        ? (tx.amountSat / 100_000_000) * tx.rate
+        ? (displayAmountSat / 100_000_000) * tx.rate
         : null;
   const account = tx.account || tx.counter || "Unassigned";
   const accountLower = account.toLowerCase();
@@ -2041,9 +2215,14 @@ export function toDashboardTransaction(tx: OverviewTx, index: number): Transacti
     status,
     flow: flowForOverviewTx(tx),
     amount,
-    amountBtc: tx.amountSat / 100_000_000,
+    amountBtc: displayAmountSat / 100_000_000,
+    fiatCurrency: tx.fiatCurrency,
     date: tx.date,
   };
+}
+
+export function overviewTransactions(snapshot: OverviewSnapshot) {
+  return snapshot.txs.map(toDashboardTransaction);
 }
 
 export function initials(value: string) {

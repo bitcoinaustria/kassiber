@@ -12,7 +12,11 @@ from kassiber.core import rates as core_rates
 from kassiber.core import pricing
 from kassiber.core.rates import get_cached_rate_at_or_before
 from kassiber.core.ui_snapshot import build_transactions_snapshot
-from kassiber.daemon import _rates_kraken_csv_import_payload, _rates_rebuild_payload
+from kassiber.daemon import (
+    _rates_kraken_csv_import_payload,
+    _rates_latest_payload,
+    _rates_rebuild_payload,
+)
 from kassiber.db import open_db, set_setting
 from kassiber.errors import AppError
 
@@ -589,6 +593,38 @@ class KrakenCsvRatesTest(unittest.TestCase):
         self.assertEqual(summaries["BTC-EUR"]["granularity"], "daily")
         self.assertEqual(summaries["BTC-USD"]["granularity"], "daily")
 
+    def test_bundled_kraken_daily_seed_is_idempotent(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+
+        _, first = core_rates.ensure_bundled_kraken_btc_daily_seed(conn)
+        _, second = core_rates.ensure_bundled_kraken_btc_daily_seed(conn)
+
+        first_summaries = {row["pair"]: row for row in first}
+        second_summaries = {row["pair"]: row for row in second}
+        self.assertFalse(first_summaries["BTC-EUR"]["already_seeded"])
+        self.assertFalse(first_summaries["BTC-USD"]["already_seeded"])
+        self.assertEqual(first_summaries["BTC-EUR"]["samples"], 4581)
+        self.assertEqual(first_summaries["BTC-USD"]["samples"], 4548)
+        self.assertTrue(second_summaries["BTC-EUR"]["already_seeded"])
+        self.assertTrue(second_summaries["BTC-USD"]["already_seeded"])
+        self.assertEqual(second_summaries["BTC-EUR"]["samples"], 0)
+        self.assertEqual(second_summaries["BTC-USD"]["samples"], 0)
+
+        rows = conn.execute(
+            """
+            SELECT pair, COUNT(*) AS count
+            FROM rates_cache
+            WHERE source = 'kraken-csv'
+            GROUP BY pair
+            ORDER BY pair
+            """
+        ).fetchall()
+        self.assertEqual(
+            [(row["pair"], row["count"]) for row in rows],
+            [("BTC-EUR", 4581), ("BTC-USD", 4548)],
+        )
+
     def test_bundled_kraken_import_supports_non_filesystem_resources(self):
         conn = open_db(str(self.data_root))
         self.addCleanup(conn.close)
@@ -743,6 +779,246 @@ class KrakenCsvRatesTest(unittest.TestCase):
         self.assertTrue(
             all((end - start).total_seconds() <= 300 * 60 for start, end in windows)
         )
+
+    def test_coinbase_latest_rate_sync_fetches_only_recent_quote(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+        calls = []
+
+        def fake_coinbase_rows(pair, start, end, granularity=60):
+            calls.append((pair, start, end, granularity))
+            return [
+                [
+                    1714566720,
+                    "59980.00",
+                    "60000.00",
+                    "59990.00",
+                    "59995.00",
+                    "0.40",
+                ],
+                [
+                    1714566780,
+                    "59990.00",
+                    "60020.00",
+                    "60000.00",
+                    "60010.00",
+                    "0.50",
+                ],
+            ]
+
+        with patch.object(
+            core_rates,
+            "_coinbase_exchange_candles",
+            side_effect=fake_coinbase_rows,
+        ):
+            summary = core_rates.sync_latest_rates(conn, pair="BTC-EUR")
+
+        self.assertEqual(summary[0]["mode"], "latest_quote")
+        self.assertEqual(summary[0]["samples"], 1)
+        self.assertEqual(len(calls), 1)
+        pair, start, end, granularity = calls[0]
+        self.assertEqual(pair, "BTC-EUR")
+        self.assertEqual(granularity, 60)
+        self.assertLessEqual((end - start).total_seconds(), 5 * 60)
+        row = conn.execute(
+            """
+            SELECT timestamp, rate_exact, open_rate_exact, close_rate_exact
+            FROM rates_cache
+            WHERE pair = 'BTC-EUR' AND source = 'coinbase-exchange'
+            """
+        ).fetchone()
+        self.assertEqual(row["timestamp"], "2024-05-01T12:34:00Z")
+        self.assertEqual(row["rate_exact"], "60010.00")
+        self.assertEqual(row["open_rate_exact"], "60000.00")
+        self.assertEqual(row["close_rate_exact"], "60010.00")
+
+    def test_coingecko_latest_rate_sync_uses_live_provider_setting(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+
+        with patch.object(
+            core_rates,
+            "fetch_rates_coingecko",
+            return_value=[
+                ("2024-05-01T12:30:00Z", 59990.0),
+                ("2024-05-01T12:35:00Z", 60010.5),
+            ],
+        ) as fetch:
+            summary = core_rates.sync_latest_rates(
+                conn,
+                pair="BTC-EUR",
+                source=core_rates.RATE_SOURCE_COINGECKO,
+            )
+
+        fetch.assert_called_once_with("BTC-EUR", days=1)
+        self.assertEqual(summary[0]["source"], core_rates.RATE_SOURCE_COINGECKO)
+        self.assertEqual(summary[0]["mode"], "latest_quote")
+        self.assertEqual(summary[0]["samples"], 1)
+        self.assertEqual(summary[0]["granularity"], "five_minute")
+        row = conn.execute(
+            """
+            SELECT timestamp, rate_exact, source, granularity, method
+            FROM rates_cache
+            WHERE pair = 'BTC-EUR' AND source = 'coingecko'
+            """
+        ).fetchone()
+        self.assertEqual(row["timestamp"], "2024-05-01T12:35:00Z")
+        self.assertEqual(row["rate_exact"], "60010.5")
+        self.assertEqual(row["source"], core_rates.RATE_SOURCE_COINGECKO)
+        self.assertEqual(row["granularity"], "five_minute")
+        self.assertEqual(row["method"], "market_chart")
+
+    def test_desktop_latest_payload_preserves_historical_rate_cache(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+        core_rates.upsert_rate(
+            conn,
+            "BTC-EUR",
+            "2024-05-01T12:34:00Z",
+            "59900.00",
+            core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+            fetched_at="2024-05-01T12:35:00Z",
+            granularity="minute",
+            method="product_candles",
+        )
+        conn.commit()
+
+        def fake_coinbase_rows(pair, start, end, granularity=60):
+            return [
+                [
+                    1714653240,
+                    "60980.00",
+                    "61040.00",
+                    "60990.00",
+                    "61010.00",
+                    "0.55",
+                ],
+            ]
+
+        with patch.object(
+            core_rates,
+            "_coinbase_exchange_candles",
+            side_effect=fake_coinbase_rows,
+        ):
+            payload = _rates_latest_payload(conn, {"pair": "BTC-EUR"})
+
+        self.assertEqual(payload["source"], core_rates.RATE_SOURCE_COINBASE_EXCHANGE)
+        self.assertEqual(payload["pair"], "BTC-EUR")
+        self.assertEqual(payload["latest"][0]["mode"], "latest_quote")
+        self.assertEqual(payload["marketRate"]["rate"], 61010.0)
+        self.assertEqual(payload["marketRate"]["timestamp"], "2024-05-02T12:35:00Z")
+        rows = conn.execute(
+            """
+            SELECT timestamp, rate_exact
+            FROM rates_cache
+            WHERE pair = 'BTC-EUR' AND source = 'coinbase-exchange'
+            ORDER BY timestamp ASC
+            """
+        ).fetchall()
+        self.assertEqual(
+            [(row["timestamp"], row["rate_exact"]) for row in rows],
+            [
+                ("2024-05-01T12:34:00Z", "59900.00"),
+                ("2024-05-02T12:35:00Z", "61010.00"),
+            ],
+        )
+
+    def test_desktop_latest_payload_defaults_to_configured_market_provider(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+        core_rates.set_market_rate_provider(
+            conn,
+            core_rates.RATE_SOURCE_COINGECKO,
+            commit=True,
+        )
+
+        with patch.object(
+            core_rates,
+            "fetch_rates_coingecko",
+            return_value=[
+                ("2024-05-01T12:30:00Z", 59990.0),
+                ("2024-05-01T12:35:00Z", 60010.5),
+            ],
+        ) as fetch:
+            payload = _rates_latest_payload(conn, {"pair": "BTC-EUR"})
+
+        fetch.assert_called_once_with("BTC-EUR", days=1)
+        self.assertEqual(payload["source"], core_rates.RATE_SOURCE_COINGECKO)
+        self.assertEqual(payload["latest"][0]["source"], core_rates.RATE_SOURCE_COINGECKO)
+        self.assertEqual(payload["marketRate"]["source"], core_rates.RATE_SOURCE_COINGECKO)
+        self.assertEqual(payload["marketRate"]["rate"], 60010.5)
+
+    def test_desktop_rebuild_defaults_to_configured_market_rate_provider(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+        core_rates.set_market_rate_provider(
+            conn,
+            core_rates.RATE_SOURCE_COINGECKO,
+            commit=True,
+        )
+
+        with patch.object(
+            core_rates,
+            "fetch_rates_coingecko",
+            return_value=[("2024-05-01T12:35:00Z", 60010.5)],
+        ) as fetch:
+            payload = _rates_rebuild_payload(
+                conn,
+                {
+                    "pair": "BTC-EUR",
+                    "days": 1,
+                    "reprice_transactions": False,
+                },
+            )
+
+        fetch.assert_called_once_with("BTC-EUR", days=1)
+        self.assertEqual(payload["source"], core_rates.RATE_SOURCE_COINGECKO)
+        self.assertEqual(payload["sync"][0]["source"], core_rates.RATE_SOURCE_COINGECKO)
+
+    def test_desktop_rebuild_without_pair_defaults_to_active_profile_btc_pair(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+        self._seed_transaction_needing_rate(conn, profile_fiat="EUR")
+        set_setting(conn, "context_workspace", "workspace-1")
+        set_setting(conn, "context_profile", "profile-1")
+        core_rates.set_market_rate_provider(
+            conn,
+            core_rates.RATE_SOURCE_COINGECKO,
+            commit=True,
+        )
+
+        with patch.object(
+            core_rates,
+            "fetch_rates_coingecko",
+            return_value=[("2024-05-01T12:35:00Z", 60010.5)],
+        ) as fetch:
+            payload = _rates_rebuild_payload(
+                conn,
+                {
+                    "days": 1,
+                    "reprice_transactions": False,
+                },
+            )
+
+        fetch.assert_called_once_with("BTC-EUR", days=1)
+        self.assertEqual(payload["pair"], "BTC-EUR")
+        self.assertEqual(payload["source"], core_rates.RATE_SOURCE_COINGECKO)
+
+    def test_coinbase_background_sync_skips_warm_cache_when_idle(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+
+        with patch.object(core_rates, "_coinbase_exchange_candles") as fetch:
+            summary = core_rates.sync_rates(
+                conn,
+                pair="BTC-EUR",
+                days=1,
+                warm_cache_when_idle=False,
+            )
+
+        fetch.assert_not_called()
+        self.assertEqual(summary[0]["mode"], "idle_no_missing_minutes")
+        self.assertEqual(summary[0]["samples"], 0)
 
     def test_coinbase_sync_fetches_only_missing_transaction_window(self):
         conn = open_db(str(self.data_root))

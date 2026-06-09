@@ -14,6 +14,7 @@ export type ConnectionKind =
   | "xpub"
   | "address"
   | "descriptor"
+  | "samourai"
   | "core-ln"
   | "lnd"
   | "nwc"
@@ -255,11 +256,27 @@ export interface PortfolioPoint {
   balanceBtc: number;
   valueEur: number;
   costBasisEur: number;
+  priceEur?: number;
+  priceTimestamp?: string | null;
+  priceSource?: string | null;
+}
+
+export interface MarketRateSnapshot {
+  asset: "BTC";
+  fiatCurrency: string;
+  pair: string | null;
+  rate: number | null;
+  timestamp: string | null;
+  source: string | null;
+  fetchedAt: string | null;
+  granularity: string | null;
+  method: string | null;
 }
 
 export interface OverviewSnapshot {
   priceEur: number;
   priceUsd: number;
+  marketRate?: MarketRateSnapshot;
   connections: Connection[];
   activityTxs?: Tx[];
   txs: Tx[];
@@ -277,9 +294,25 @@ export interface OverviewSnapshot {
   };
 }
 
+const minutesAgoIso = (minutes: number) =>
+  new Date(Date.now() - minutes * 60_000).toISOString();
+
+const MOCK_MARKET_RATE_FETCHED_AT = minutesAgoIso(2);
+
 export const MOCK_OVERVIEW: OverviewSnapshot = {
   priceEur: 71_420.18,
   priceUsd: 76_597.49,
+  marketRate: {
+    asset: "BTC",
+    fiatCurrency: "EUR",
+    pair: "BTC-EUR",
+    rate: 71_420.18,
+    timestamp: MOCK_MARKET_RATE_FETCHED_AT,
+    source: "coinbase-exchange",
+    fetchedAt: MOCK_MARKET_RATE_FETCHED_AT,
+    granularity: "60",
+    method: "close",
+  },
   connections: [
     {
       id: "c1",
@@ -766,7 +799,7 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
     { id: "tx9", date: "2026-04-07 13:12", type: "Income", account: "Multisig Vault", counter: "Invoice · Globex AG", amountSat: 1_210_000, eur: 864.18, rate: 71420.0, tag: "Revenue", conf: 820 },
     { id: "tx10", date: "2026-04-06 15:30", type: "Swap", account: "NWC · Alby → Cashu · minibits", counter: "LN → ecash swap", amountSat: 500_000, eur: 357.10, rate: 71420.0, tag: "Swap", conf: 1 },
     { id: "tx11", date: "2026-04-05 11:08", type: "Swap", account: "Multisig Vault → Home Node (CLN)", counter: "Submarine swap · on-chain → LN", amountSat: 2_000_000, eur: 1428.40, rate: 71420.0, tag: "Swap", conf: 12 },
-    { id: "tx12", date: "2026-04-03 09:22", type: "Consolidation", account: "Cold Storage", counter: "12 UTXOs → 1", amountSat: -42_180, eur: -30.13, rate: 71432.0, tag: "Consolidation", conf: 210 },
+    { id: "tx12", date: "2026-04-03 09:22", type: "Consolidation", account: "Cold Storage", counter: "12 UTXOs → 1", amountSat: 0, feeSat: 42_180, eur: -30.13, rate: 71432.0, tag: "Consolidation fee", conf: 210 },
   ],
   balanceSeries: [0.8, 1.1, 1.6, 1.55, 2.2, 2.4, 2.8, 3.1, 3.6, 4.0, 4.3, 4.38],
   portfolioSeries: [

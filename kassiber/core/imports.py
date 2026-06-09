@@ -2,13 +2,13 @@ from __future__ import annotations
 
 """Import orchestration helpers above the parser-only `kassiber.importers` boundary."""
 
-import contextvars
 import json
 import os
 import sqlite3
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from typing import Any, Callable, Mapping, Sequence
 
 from ..envelope import json_ready
@@ -27,12 +27,18 @@ from ..importers import (
     is_river_format,
     is_strike_format,
     is_twentyonebitcoin_format,
+    is_wasabi_format,
+    load_wasabi_bundle,
+    load_wasabi_bundle_payload,
     load_import_records,
 )
 from ..msat import btc_to_msat, dec
 from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
 from ..util import str_or_none
 from ..wallet_descriptors import normalize_asset_code
+from . import output_inventory as core_output_inventory
+from .privacy_hops import privacy_boundary_from_import_record
+from .sync import sync_progress_emitter
 
 INBOUND_DIRECTIONS = {"in", "inbound", "receive", "received", "deposit", "credit", "buy"}
 OUTBOUND_DIRECTIONS = {"out", "outbound", "send", "sent", "withdrawal", "withdraw", "debit", "sell"}
@@ -78,18 +84,47 @@ EXCHANGE_EVIDENCE_RECONCILIATION_TAGS = {
 
 ProgressCallback = Callable[[Mapping[str, Any]], None]
 
-# Contextvar threaded by the daemon when it wants long-running imports to
-# emit row-count progress over the JSONL stream. The CLI leaves this empty
-# so no behavior change for `kassiber wallets sync` from a terminal.
-sync_progress_emitter: contextvars.ContextVar[ProgressCallback | None] = (
-    contextvars.ContextVar("kassiber.sync_progress_emitter", default=None)
-)
-
-
 @dataclass(frozen=True)
 class ImportCoordinatorHooks:
     ensure_tag_row: EnsureTagRow
     invalidate_journals: InvalidateJournals
+
+
+TRANSACTION_METADATA_CHANGE_KEYS = (
+    "btcpay_notes_set",
+    "btcpay_tags_added",
+    "phoenix_notes_set",
+    "phoenix_tags_added",
+    "river_notes_set",
+    "river_tags_added",
+    "wasabi_notes_set",
+    "wasabi_tags_added",
+    "wasabi_review_marked",
+    "wasabi_review_cleared",
+)
+
+
+def _metadata_changed(outcome: Mapping[str, Any]) -> bool:
+    for key in TRANSACTION_METADATA_CHANGE_KEYS:
+        value = outcome.get(key)
+        try:
+            if int(value or 0) > 0:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def _invalidate_journals_for_metadata_changes(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+    outcome: dict[str, Any],
+    hooks: ImportCoordinatorHooks,
+) -> None:
+    if outcome.get("journal_invalidated") or not _metadata_changed(outcome):
+        return
+    hooks.invalidate_journals(conn, profile["id"])
+    outcome["journal_invalidated"] = True
 
 
 def normalize_import_direction(direction: Any, amount: Any) -> str:
@@ -108,8 +143,8 @@ _EXISTING_TRANSACTION_COLUMNS = """
        confirmed_at, fiat_rate, fiat_value, fiat_price_source, fiat_rate_exact,
        fiat_value_exact, pricing_source_kind, pricing_provider, pricing_pair,
        pricing_timestamp, pricing_fetched_at, pricing_granularity, pricing_method,
-       pricing_external_ref, pricing_quality, kind, description, counterparty,
-       raw_json, payment_hash, payment_hash_source
+       pricing_external_ref, pricing_quality, kind, privacy_boundary, description,
+       counterparty, raw_json, payment_hash, payment_hash_source
 """
 
 
@@ -406,6 +441,47 @@ def _raw_json_field(existing: Mapping[str, Any], field: str) -> str | None:
     return str(value)
 
 
+def _raw_json_payload(row: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    raw_json = row.get("raw_json") if hasattr(row, "get") else row["raw_json"]
+    if not raw_json:
+        return None
+    try:
+        payload = json.loads(raw_json)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, Mapping) else None
+
+
+def _privacy_boundary_is_import_authored(existing: Mapping[str, Any]) -> bool:
+    current = existing["privacy_boundary"]
+    if current in (None, ""):
+        return False
+    payload = _raw_json_payload(existing)
+    if payload is None:
+        return False
+    try:
+        boundary = privacy_boundary_from_import_record(payload)
+    except AppError:
+        return False
+    return boundary == current
+
+
+def _same_import_raw_source(existing: Mapping[str, Any], normalized: Mapping[str, Any]) -> bool:
+    existing_payload = _raw_json_payload(existing)
+    normalized_payload = _raw_json_payload(normalized)
+    if existing_payload is None or normalized_payload is None:
+        return False
+    source = existing_payload.get("source")
+    return bool(source) and source == normalized_payload.get("source")
+
+
+def _same_wasabi_history_source(existing: Mapping[str, Any], normalized: Mapping[str, Any]) -> bool:
+    if not _same_import_raw_source(existing, normalized):
+        return False
+    payload = _raw_json_payload(existing)
+    return payload is not None and payload.get("source") == "wasabi_gethistory"
+
+
 def _metadata_field_is_import_authored(existing: Mapping[str, Any], field: str) -> bool:
     current = existing[field]
     if current in (None, ""):
@@ -453,11 +529,36 @@ def _transaction_merge_updates(existing: Mapping[str, Any], normalized: Mapping[
         normalized["pricing_source_kind"] == pricing.SOURCE_EXCHANGE_EXECUTION
         and incoming_priority >= existing_priority
     )
+    kind_is_refreshable = (
+        _same_wasabi_history_source(existing, normalized)
+        and existing["kind"] in {"coinjoin", "deposit", "withdrawal"}
+    )
     if (
-        (exchange_execution_overrides and _metadata_field_is_import_authored(existing, "kind"))
-        or not existing["kind"]
-    ) and normalized["kind"]:
+        normalized["kind"]
+        and existing["kind"] != normalized["kind"]
+        and (
+            (exchange_execution_overrides and _metadata_field_is_import_authored(existing, "kind"))
+            or not existing["kind"]
+            or kind_is_refreshable
+        )
+    ):
         updates["kind"] = normalized["kind"]
+    if (
+        normalized["privacy_boundary"]
+        and existing["privacy_boundary"] != normalized["privacy_boundary"]
+        and (
+            not existing["privacy_boundary"]
+            or _privacy_boundary_is_import_authored(existing)
+        )
+    ):
+        updates["privacy_boundary"] = normalized["privacy_boundary"]
+    elif (
+        existing["privacy_boundary"]
+        and normalized["privacy_boundary"] is None
+        and _privacy_boundary_is_import_authored(existing)
+        and _same_import_raw_source(existing, normalized)
+    ):
+        updates["privacy_boundary"] = None
     if (
         (exchange_execution_overrides and _metadata_field_is_import_authored(existing, "description"))
         or not existing["description"]
@@ -803,6 +904,7 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
         "fiat_currency": _import_price_currency(record),
         **payload,
         "kind": record.get("kind"),
+        "privacy_boundary": privacy_boundary_from_import_record(record),
         "description": record.get("description"),
         "counterparty": record.get("counterparty"),
         "payment_hash": payment_hash,
@@ -915,9 +1017,10 @@ def insert_wallet_records(
                 fiat_rate, fiat_value, fiat_price_source, fiat_rate_exact,
                 fiat_value_exact, pricing_source_kind, pricing_provider, pricing_pair,
                 pricing_timestamp, pricing_fetched_at, pricing_granularity,
-                pricing_method, pricing_external_ref, pricing_quality, kind, description,
-                counterparty, raw_json, payment_hash, payment_hash_source, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                pricing_method, pricing_external_ref, pricing_quality, kind,
+                privacy_boundary, description, counterparty, raw_json,
+                payment_hash, payment_hash_source, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 tx_id,
@@ -948,6 +1051,7 @@ def insert_wallet_records(
                 normalized["pricing_external_ref"],
                 normalized["pricing_quality"],
                 normalized["kind"],
+                normalized["privacy_boundary"],
                 normalized["description"],
                 normalized["counterparty"],
                 normalized["raw_json"],
@@ -978,7 +1082,9 @@ def insert_wallet_records(
                 imported=imported,
                 skipped=skipped,
             )
-    hooks.invalidate_journals(conn, profile["id"])
+    journal_invalidated = bool(imported or updated)
+    if journal_invalidated:
+        hooks.invalidate_journals(conn, profile["id"])
     if commit:
         conn.commit()
     outcome = {
@@ -987,6 +1093,7 @@ def insert_wallet_records(
         "imported": imported,
         "skipped": skipped,
         "unchanged": unchanged,
+        "journal_invalidated": journal_invalidated,
         "inserted_records": inserted_records,
         "updated_records": updated_records,
     }
@@ -1089,7 +1196,9 @@ def enrich_profile_records(
                 imported=0,
                 skipped=skipped,
             )
-    hooks.invalidate_journals(conn, profile["id"])
+    journal_invalidated = bool(updated)
+    if journal_invalidated:
+        hooks.invalidate_journals(conn, profile["id"])
     if commit:
         conn.commit()
     outcome = {
@@ -1099,6 +1208,7 @@ def enrich_profile_records(
         "skipped": skipped,
         "matched": matched,
         "unchanged": unchanged,
+        "journal_invalidated": journal_invalidated,
         "skipped_unmatched": skipped_unmatched,
         "skipped_ambiguous": skipped_ambiguous,
         "updated_records": updated_records,
@@ -1248,6 +1358,7 @@ def import_records_into_wallet(
         outcome.update(apply_phoenix_metadata(conn, profile, wallet, records, hooks, commit=False))
     if apply_river:
         outcome.update(apply_river_metadata(conn, profile, wallet, records, hooks, commit=False))
+    _invalidate_journals_for_metadata_changes(conn, profile, outcome, hooks)
     if commit:
         conn.commit()
     return outcome
@@ -1492,6 +1603,135 @@ def apply_btcpay_metadata(
     }
 
 
+def apply_wasabi_metadata(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+    wallet: Mapping[str, Any],
+    records: Sequence[ImportRow],
+    metadata: Mapping[str, Any],
+    hooks: ImportCoordinatorHooks,
+    *,
+    commit: bool = True,
+) -> dict[str, int]:
+    notes_set = 0
+    tags_added = 0
+    tags_created = 0
+    review_marked = 0
+    review_cleared = 0
+    wasabi_tag, created = hooks.ensure_tag_row(
+        conn,
+        profile["workspace_id"],
+        profile["id"],
+        "wasabi",
+        "Wasabi",
+    )
+    if created:
+        tags_created += 1
+    coinjoin_tag, created = hooks.ensure_tag_row(
+        conn,
+        profile["workspace_id"],
+        profile["id"],
+        "coinjoin",
+        "CoinJoin",
+    )
+    if created:
+        tags_created += 1
+    privacy_tag, created = hooks.ensure_tag_row(
+        conn,
+        profile["workspace_id"],
+        profile["id"],
+        "privacy-hop-review",
+        "Privacy hop review",
+    )
+    if created:
+        tags_created += 1
+    for record in records:
+        txid = str_or_none(record.get("txid"))
+        if not txid:
+            continue
+        tx = conn.execute(
+            """
+            SELECT id, note, review_status, privacy_boundary
+            FROM transactions
+            WHERE profile_id = ? AND wallet_id = ? AND external_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (profile["id"], wallet["id"], txid),
+        ).fetchone()
+        if not tx:
+            continue
+        label = str_or_none(record.get("_wasabi_label"))
+        if label and not tx["note"]:
+            conn.execute("UPDATE transactions SET note = ? WHERE id = ?", (label, tx["id"]))
+            notes_set += 1
+        tag_ids = [wasabi_tag["id"]]
+        if record.get("_wasabi_islikelycoinjoin"):
+            tag_ids.extend([coinjoin_tag["id"], privacy_tag["id"]])
+            if tx["review_status"] not in {"review", "completed"}:
+                conn.execute(
+                    "UPDATE transactions SET review_status = ? WHERE id = ?",
+                    ("review", tx["id"]),
+                )
+                review_marked += 1
+        elif not tx["privacy_boundary"]:
+            had_privacy_review_tag = conn.execute(
+                """
+                SELECT 1
+                FROM transaction_tags
+                WHERE transaction_id = ? AND tag_id = ?
+                LIMIT 1
+                """,
+                (tx["id"], privacy_tag["id"]),
+            ).fetchone()
+            conn.execute(
+                """
+                DELETE FROM transaction_tags
+                WHERE transaction_id = ?
+                  AND tag_id IN (?, ?)
+                """,
+                (tx["id"], coinjoin_tag["id"], privacy_tag["id"]),
+            )
+            if had_privacy_review_tag and tx["review_status"] == "review":
+                conn.execute(
+                    "UPDATE transactions SET review_status = NULL WHERE id = ?",
+                    (tx["id"],),
+                )
+                review_cleared += 1
+        for tag_id in tag_ids:
+            before = conn.total_changes
+            conn.execute(
+                "INSERT OR IGNORE INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
+                (tx["id"], tag_id),
+            )
+            if conn.total_changes > before:
+                tags_added += 1
+    try:
+        config = json.loads(wallet["config_json"] or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        config = {}
+    original_config = dict(config)
+    if metadata:
+        config["wasabi_metadata"] = json_ready(metadata)
+    config.setdefault("chain", "bitcoin")
+    config.setdefault("network", "mainnet")
+    config.setdefault("source_format", "wasabi_bundle")
+    if metadata or config != original_config:
+        conn.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps(config, sort_keys=True), wallet["id"]),
+        )
+    if commit:
+        conn.commit()
+    return {
+        "wasabi_notes_set": notes_set,
+        "wasabi_tags_added": tags_added,
+        "wasabi_tags_created": tags_created,
+        "wasabi_review_marked": review_marked,
+        "wasabi_review_cleared": review_cleared,
+    }
+
+
 def import_file_into_wallet(
     conn: sqlite3.Connection,
     profile: Mapping[str, Any],
@@ -1502,6 +1742,20 @@ def import_file_into_wallet(
     *,
     commit: bool = True,
 ) -> dict[str, Any]:
+    if is_wasabi_format(input_format):
+        outcome = import_wasabi_bundle_into_wallet(
+            conn,
+            profile,
+            wallet,
+            load_wasabi_bundle(file_path),
+            hooks,
+            source_label=f"file:{input_format}",
+            commit=False,
+        )
+        outcome["file"] = os.path.abspath(file_path)
+        if commit:
+            conn.commit()
+        return outcome
     records = load_import_records(file_path, input_format)
     outcome = import_records_into_wallet(
         conn,
@@ -1542,6 +1796,94 @@ def import_file_into_wallet(
     return outcome
 
 
+def import_wasabi_bundle_payload_into_wallet(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+    wallet: Mapping[str, Any],
+    payload: Any,
+    hooks: ImportCoordinatorHooks,
+    *,
+    source_label: str = "inline:wasabi_bundle",
+    commit: bool = True,
+) -> dict[str, Any]:
+    return import_wasabi_bundle_into_wallet(
+        conn,
+        profile,
+        wallet,
+        load_wasabi_bundle_payload(payload),
+        hooks,
+        source_label=source_label,
+        commit=commit,
+    )
+
+
+def import_wasabi_bundle_into_wallet(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+    wallet: Mapping[str, Any],
+    bundle: Mapping[str, Any],
+    hooks: ImportCoordinatorHooks,
+    *,
+    source_label: str,
+    commit: bool = True,
+) -> dict[str, Any]:
+    records = list(bundle.get("records") or [])
+    outcome = import_records_into_wallet(
+        conn,
+        profile,
+        wallet,
+        records,
+        source_label,
+        hooks,
+        commit=False,
+    )
+    outcome.update(
+        apply_wasabi_metadata(
+            conn,
+            profile,
+            wallet,
+            records,
+            bundle.get("metadata") or {},
+            hooks,
+            commit=False,
+        )
+    )
+    coins = bundle.get("coins") or []
+    if bundle.get("coin_sections_present"):
+        config = json.loads(wallet["config_json"] or "{}")
+        chain = str(config.get("chain") or "bitcoin")
+        network = str(config.get("network") or "mainnet")
+        inventory = core_output_inventory.update_wallet_output_inventory(
+            conn,
+            profile,
+            wallet,
+            {"name": "wasabi", "kind": "wasabi_bundle"},
+            SimpleNamespace(chain=chain, network=network),
+            coins,
+            commit=False,
+        )
+        outcome.update(
+            {
+                "wasabi_coins_observed": inventory["observed"],
+                "wasabi_coins_active": inventory["active"],
+                "wasabi_coins_marked_spent": inventory["spent"],
+            }
+        )
+    outcome.update(
+        {
+            "wasabi_transactions": len(records),
+            "wasabi_payments_in_coinjoin": len(bundle.get("payments_in_coinjoin") or []),
+            "wasabi_wallet_json_present": bool(bundle.get("wallet_json_present")),
+            "wasabi_listkeys_count": int(bundle.get("listkeys_count") or 0),
+            "input_format": "wasabi_bundle",
+        }
+    )
+    _invalidate_journals_for_metadata_changes(conn, profile, outcome, hooks)
+    if commit:
+        conn.commit()
+    return outcome
+
+
 __all__ = [
     "ImportCoordinatorHooks",
     "apply_btcpay_metadata",
@@ -1551,6 +1893,7 @@ __all__ = [
     "import_file_into_profile",
     "normalize_bullbitcoin_import_mode",
     "import_file_into_wallet",
+    "import_wasabi_bundle_payload_into_wallet",
     "import_records_into_wallet",
     "insert_wallet_records",
     "make_transaction_fingerprint",

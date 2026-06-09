@@ -31,6 +31,7 @@ export interface OnboardingForm {
   databaseMode: DatabaseMode;
   databasePassphrase: string;
   databasePassphraseConfirm: string;
+  enableTouchId: boolean;
   recoveryAcknowledged: boolean;
   plaintextAcknowledged: boolean;
   migrateCredentials: boolean;
@@ -62,14 +63,19 @@ export interface StepComponentProps {
   ) => void;
   onSubmit: () => void;
   goBack?: () => void;
+  onJump?: (index: number) => void;
   canContinue?: boolean;
+  submitting?: boolean;
   currentStep: number;
   totalSteps: number;
+  backendPreviewRows?: BackendPreviewRow[];
 }
 
 export interface OnboardingStep {
   component: ComponentType<StepComponentProps>;
   isComplete: (form: OnboardingForm) => boolean;
+  /** Short label shown in the progress stepper (e.g. "Books", "Database"). */
+  label?: string;
 }
 
 export interface BackendPreviewRow {

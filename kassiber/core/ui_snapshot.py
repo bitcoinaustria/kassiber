@@ -5,19 +5,34 @@ import binascii
 import json
 import sqlite3
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
-from ..backends import redact_backend_for_output
+from ..backends import backend_value, redact_backend_for_output
 from ..errors import AppError
 from ..msat import msat_to_btc
 from ..tax_policy import build_tax_policy
 from ..time_utils import _iso_z, _parse_iso_datetime
-from ..wallet_descriptors import DEFAULT_DESCRIPTOR_GAP_LIMIT
+from ..wallet_descriptors import (
+    BITCOIN_NETWORK_ALIASES,
+    CHAIN_ALIASES,
+    DEFAULT_DESCRIPTOR_GAP_LIMIT,
+    LIQUID_NETWORK_ALIASES,
+    liquid_plan_can_unblind,
+    normalize_chain,
+    normalize_network,
+)
+from . import output_inventory as core_output_inventory
 from . import rates as core_rates
 from . import reports as report_builders
+from .samourai import samourai_metadata_from_wallet_config
+from . import transaction_history
 from .repo import current_context_snapshot
-from .wallets import wallet_btcpay_provenance_config
+from .sync import normalize_backend_kind
+from .wallets import (
+    load_wallet_descriptor_plan_from_config,
+    wallet_btcpay_provenance_config,
+)
 
 
 MAX_UI_LIST_LIMIT = 500
@@ -42,6 +57,7 @@ END
 """.strip()
 _AUDIT_PROFILE_TABLE_COLUMNS = {
     "transactions": "created_at",
+    "transaction_edit_events": "changed_at",
     "journal_entries": "created_at",
     "journal_quarantines": "created_at",
     "wallets": "created_at",
@@ -53,6 +69,17 @@ def _empty_overview_snapshot() -> dict[str, Any]:
     return {
         "priceEur": 0.0,
         "priceUsd": 0.0,
+        "marketRate": {
+            "asset": "BTC",
+            "fiatCurrency": "EUR",
+            "pair": "BTC-EUR",
+            "rate": None,
+            "timestamp": None,
+            "source": None,
+            "fetchedAt": None,
+            "granularity": None,
+            "method": None,
+        },
         "connections": [],
         "txs": [],
         "balanceSeries": [0.0] * 12,
@@ -74,18 +101,91 @@ def _empty_overview_snapshot() -> dict[str, Any]:
     }
 
 
+def _empty_workspace_overview_snapshot(
+    workspace: sqlite3.Row | None = None,
+) -> dict[str, Any]:
+    return {
+        "workspace": (
+            {
+                "id": workspace["id"],
+                "label": workspace["label"],
+            }
+            if workspace is not None
+            else None
+        ),
+        "scope": {
+            "kind": "workspace",
+            "label": "Book set",
+        },
+        "books": [],
+        "connections": [],
+        "txs": [],
+        "activityTxs": [],
+        "balanceSeries": [0.0] * 12,
+        "portfolioSeries": [],
+        "fiat": {
+            "mode": "empty",
+            "fiatCurrency": None,
+            "currencies": [],
+            "mixed": False,
+            "partial": False,
+            "eurBalance": 0.0,
+            "eurCostBasis": 0.0,
+            "eurUnrealized": 0.0,
+            "eurRealizedYTD": 0.0,
+            "btcBalance": 0.0,
+            "books": [],
+        },
+        "status": {
+            "workspace": workspace["label"] if workspace is not None else None,
+            "workspaceId": workspace["id"] if workspace is not None else None,
+            "bookCount": 0,
+            "transactionCount": 0,
+            "needsJournals": False,
+            "quarantines": 0,
+            "ready": False,
+            "mixedFiat": False,
+        },
+    }
+
+
 def _latest_rate(conn: sqlite3.Connection, pair: str) -> float:
+    row = _latest_rate_row(conn, pair)
+    return float(row["rate"]) if row else 0.0
+
+
+def _latest_rate_row(conn: sqlite3.Connection, pair: str) -> sqlite3.Row | None:
     row = conn.execute(
         """
-        SELECT rate
+        SELECT pair, timestamp, rate, source, fetched_at, granularity, method
         FROM rates_cache
         WHERE pair = ?
-        ORDER BY timestamp DESC, fetched_at DESC
+        ORDER BY timestamp DESC,
+                 CASE WHEN source = 'manual' THEN 0 ELSE 1 END ASC,
+                 fetched_at DESC,
+                 source ASC
         LIMIT 1
         """,
         (pair,),
     ).fetchone()
-    return float(row["rate"]) if row else 0.0
+    return row
+
+
+def _market_rate_snapshot(conn: sqlite3.Connection, fiat_currency: str) -> dict[str, Any]:
+    fiat_code = str(fiat_currency or "EUR").strip().upper() or "EUR"
+    pair = core_rates.transaction_rate_pair("BTC", fiat_code)
+    row = _latest_rate_row(conn, pair) if pair else None
+    return {
+        "asset": "BTC",
+        "fiatCurrency": fiat_code,
+        "pair": pair,
+        "rate": float(row["rate"]) if row else None,
+        "timestamp": row["timestamp"] if row else None,
+        "source": row["source"] if row else None,
+        "fetchedAt": row["fetched_at"] if row else None,
+        "granularity": row["granularity"] if row else None,
+        "method": row["method"] if row else None,
+    }
 
 
 def _latest_transaction_rate(
@@ -302,6 +402,92 @@ def _wallet_backend_summary(
         "name": backend_name,
         "source": backend_source,
         "sync_mode": sync_mode,
+    }
+
+
+def _unique_text_values(values: list[Any]) -> list[str]:
+    output = []
+    for value in values:
+        text = _string_or_empty(value)
+        if text and text not in output:
+            output.append(text)
+    return output
+
+
+def _wallet_utxo_chain_filter_values(value: Any) -> list[str]:
+    try:
+        canonical = normalize_chain(value)
+    except ValueError:
+        return _unique_text_values([value])
+    aliases = [alias for alias, target in CHAIN_ALIASES.items() if target == canonical]
+    return _unique_text_values([canonical, value, *aliases])
+
+
+def _wallet_utxo_network_filter_values(chain: str, value: Any) -> list[str]:
+    try:
+        canonical = normalize_network(chain, value)
+    except ValueError:
+        return _unique_text_values([value])
+    aliases_map = BITCOIN_NETWORK_ALIASES if chain == "bitcoin" else LIQUID_NETWORK_ALIASES
+    aliases = [alias for alias, target in aliases_map.items() if target == canonical]
+    return _unique_text_values([canonical, value, *aliases])
+
+
+def _wallet_utxo_source_filter(
+    config: dict[str, Any],
+    backend_summary: dict[str, str],
+    backend: Any,
+) -> dict[str, Any]:
+    if _string_or_empty(config.get("source_format")) == "wasabi_bundle":
+        chain_values = _wallet_utxo_chain_filter_values(config.get("chain") or "bitcoin")
+        network_values = _wallet_utxo_network_filter_values(
+            chain_values[0] if chain_values else "bitcoin",
+            config.get("network") or "mainnet",
+        )
+        return {
+            "backend_name": ["wasabi"],
+            "backend_kind": ["wasabi_bundle"],
+            "chain": chain_values,
+            "network": network_values,
+        }
+    backend_chain = (
+        backend_value(backend, "chain")
+        if isinstance(backend, dict)
+        else None
+    )
+    chain_source = backend_chain or config.get("chain")
+    chain_values = _wallet_utxo_chain_filter_values(chain_source)
+    chain = chain_values[0] if chain_values else _string_or_empty(chain_source)
+    backend_network = (
+        backend_value(backend, "network")
+        if isinstance(backend, dict)
+        else None
+    )
+    network_values = _wallet_utxo_network_filter_values(
+        chain or "bitcoin",
+        backend_network or config.get("network"),
+    )
+    backend_kind = (
+        backend_value(backend, "kind")
+        if isinstance(backend, dict)
+        else None
+    )
+    backend_kind_values = (
+        _unique_text_values([normalize_backend_kind(backend_kind), backend_kind])
+        if _string_or_empty(backend_kind)
+        else []
+    )
+    backend_name_values = _unique_text_values(
+        [
+            backend_summary.get("name"),
+            backend.get("name") if isinstance(backend, dict) else None,
+        ]
+    )
+    return {
+        "backend_name": backend_name_values or None,
+        "backend_kind": backend_kind_values or None,
+        "chain": chain_values,
+        "network": network_values,
     }
 
 
@@ -747,7 +933,7 @@ def _activity_transactions(conn: sqlite3.Connection, profile_id: str) -> list[di
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
-        WHERE t.profile_id = ?
+        WHERE t.profile_id = ? AND t.asset IN ('BTC', 'LBTC')
         ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
         """,
         (profile_id,),
@@ -1080,7 +1266,7 @@ def _balance_series(conn: sqlite3.Connection, profile_id: str) -> list[float]:
         """
         SELECT occurred_at, direction, amount, fee
         FROM transactions
-        WHERE profile_id = ? AND excluded = 0 AND asset = 'BTC'
+        WHERE profile_id = ? AND excluded = 0 AND asset IN ('BTC', 'LBTC')
         ORDER BY occurred_at ASC, created_at ASC, id ASC
         """,
         (profile_id,),
@@ -1125,7 +1311,7 @@ def _portfolio_cost_basis_by_date(
         """
         SELECT occurred_at, quantity, fiat_value, COALESCE(cost_basis, 0) AS cost_basis
         FROM journal_entries
-        WHERE profile_id = ? AND asset = 'BTC'
+        WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
         ORDER BY occurred_at ASC, created_at ASC, id ASC
         """,
         (profile_id,),
@@ -1145,6 +1331,60 @@ def _portfolio_cost_basis_by_date(
     return by_date
 
 
+def _parse_day(value: str | None) -> date | None:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
+
+
+def _daily_rate_rows(
+    conn: sqlite3.Connection,
+    pair: str | None,
+    start_day: date,
+) -> list[sqlite3.Row]:
+    if not pair:
+        return []
+    return conn.execute(
+        """
+        WITH ranked AS (
+            SELECT
+                substr(timestamp, 1, 10) AS rate_day,
+                timestamp,
+                rate,
+                source,
+                fetched_at,
+                granularity,
+                method,
+                ROW_NUMBER() OVER (
+                    PARTITION BY substr(timestamp, 1, 10)
+                    ORDER BY CASE
+                                 WHEN source = 'manual'
+                                      AND timestamp LIKE substr(timestamp, 1, 10) || 'T00:00:00%'
+                                      THEN 0
+                                 WHEN granularity = 'daily' THEN 1
+                                 ELSE 2
+                             END ASC,
+                             timestamp DESC,
+                             CASE WHEN source = 'manual' THEN 0 ELSE 1 END ASC,
+                             fetched_at DESC,
+                             source ASC
+                ) AS rn
+            FROM rates_cache
+            WHERE pair = ?
+              AND timestamp >= ?
+        )
+        SELECT rate_day, timestamp, rate, source, fetched_at, granularity, method
+        FROM ranked
+        WHERE rn = 1
+        ORDER BY rate_day ASC
+        """,
+        (pair, start_day.isoformat()),
+    ).fetchall()
+
+
 def _portfolio_cost_basis_by_transaction(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -1153,7 +1393,7 @@ def _portfolio_cost_basis_by_transaction(
         """
         SELECT transaction_id, quantity, fiat_value, cost_basis
         FROM journal_entries
-        WHERE profile_id = ? AND asset = 'BTC'
+        WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
         ORDER BY occurred_at ASC, created_at ASC, id ASC
         """,
         (profile_id,),
@@ -1181,7 +1421,7 @@ def _current_portfolio_cost_basis(
         """
         SELECT quantity, fiat_value, cost_basis
         FROM journal_entries
-        WHERE profile_id = ? AND asset = 'BTC'
+        WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
         ORDER BY occurred_at ASC, created_at ASC, id ASC
         """,
         (profile_id,),
@@ -1199,6 +1439,7 @@ def _current_portfolio_cost_basis(
 def _portfolio_series(
     conn: sqlite3.Connection,
     profile_id: str,
+    fiat_currency: str,
     fallback_rate: float,
     final_balance_btc: float,
     final_value_eur: float,
@@ -1207,7 +1448,7 @@ def _portfolio_series(
         """
         SELECT occurred_at, direction, amount, fee, fiat_rate, fiat_value
         FROM transactions
-        WHERE profile_id = ? AND excluded = 0 AND asset = 'BTC'
+        WHERE profile_id = ? AND excluded = 0 AND asset IN ('BTC', 'LBTC')
         ORDER BY occurred_at ASC, created_at ASC, id ASC
         """,
         (profile_id,),
@@ -1216,6 +1457,92 @@ def _portfolio_series(
         return []
 
     cost_basis_by_date = _portfolio_cost_basis_by_date(conn, profile_id)
+    tx_deltas_by_day: dict[date, int] = defaultdict(int)
+    for row in rows:
+        day = _parse_day(row["occurred_at"])
+        if day is None:
+            continue
+        amount = int(row["amount"] or 0)
+        fee = int(row["fee"] or 0)
+        tx_deltas_by_day[day] += (
+            amount if row["direction"] == "inbound" else -amount - fee
+        )
+
+    sorted_tx_days = sorted(tx_deltas_by_day)
+    if not sorted_tx_days:
+        return []
+
+    pair = core_rates.transaction_rate_pair("BTC", fiat_currency)
+    daily_rates = _daily_rate_rows(conn, pair, sorted_tx_days[0])
+    if daily_rates:
+        cost_basis_items = sorted(
+            (day, value)
+            for raw_day, value in cost_basis_by_date.items()
+            if (day := _parse_day(raw_day)) is not None
+        )
+        quantity_msat = 0
+        tx_index = 0
+        cost_basis_index = 0
+        day_cost_basis = 0.0
+        output: list[dict[str, Any]] = []
+
+        for rate_row in daily_rates:
+            rate_day = _parse_day(rate_row["rate_day"])
+            if rate_day is None:
+                continue
+            while tx_index < len(sorted_tx_days) and sorted_tx_days[tx_index] <= rate_day:
+                quantity_msat += tx_deltas_by_day[sorted_tx_days[tx_index]]
+                tx_index += 1
+            while (
+                cost_basis_index < len(cost_basis_items)
+                and cost_basis_items[cost_basis_index][0] <= rate_day
+            ):
+                day_cost_basis = cost_basis_items[cost_basis_index][1]
+                cost_basis_index += 1
+
+            balance_btc = float(msat_to_btc(quantity_msat))
+            price_eur = float(rate_row["rate"] or 0)
+            day_key = rate_day.isoformat()
+            output.append(
+                {
+                    "date": day_key,
+                    "label": day_key,
+                    "balanceBtc": balance_btc,
+                    "valueEur": balance_btc * price_eur,
+                    "costBasisEur": day_cost_basis,
+                    "priceEur": price_eur,
+                    "priceTimestamp": rate_row["timestamp"],
+                    "priceSource": rate_row["source"],
+                }
+            )
+
+        last_tx_day = sorted_tx_days[-1]
+        last_output_day = _parse_day(output[-1]["date"]) if output else None
+        if last_output_day is not None and last_tx_day > last_output_day:
+            while tx_index < len(sorted_tx_days):
+                quantity_msat += tx_deltas_by_day[sorted_tx_days[tx_index]]
+                tx_index += 1
+            while cost_basis_index < len(cost_basis_items):
+                day_cost_basis = cost_basis_items[cost_basis_index][1]
+                cost_basis_index += 1
+            rate = fallback_rate or float(daily_rates[-1]["rate"] or 0)
+            output.append(
+                {
+                    "date": last_tx_day.isoformat(),
+                    "label": last_tx_day.isoformat(),
+                    "balanceBtc": final_balance_btc,
+                    "valueEur": (
+                        final_value_eur
+                        if fallback_rate
+                        else float(msat_to_btc(quantity_msat)) * rate
+                    ),
+                    "costBasisEur": day_cost_basis,
+                    "priceEur": rate,
+                }
+            )
+
+        return output
+
     quantity_msat = 0
     latest_rate = fallback_rate
     output: list[dict[str, Any]] = []
@@ -1255,6 +1582,7 @@ def _portfolio_series(
                 "balanceBtc": final_balance_btc,
                 "valueEur": final_value_eur,
                 "costBasisEur": day_cost_basis,
+                "priceEur": fallback_rate or latest_rate,
             }
         )
     return output
@@ -1264,10 +1592,10 @@ def _fiat_snapshot(
     conn: sqlite3.Connection,
     profile_id: str,
     fiat_currency: str,
-    price_eur: float,
+    fiat_rate: float,
     balances: dict[str, float],
 ) -> dict[str, Any]:
-    market_value = sum(balances.values()) * price_eur
+    market_value = sum(balances.values()) * fiat_rate
     realized_row = conn.execute(
         """
         SELECT SUM(COALESCE(gain_loss, 0)) AS gain_loss
@@ -1288,17 +1616,43 @@ def _fiat_snapshot(
     }
 
 
-def build_overview_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
-    context = current_context_snapshot(conn)
-    if not context["workspace_id"] or not context["profile_id"]:
-        return _empty_overview_snapshot()
+def _profile_readiness(
+    *,
+    wallet_count: int,
+    transaction_count: int,
+    freshness: dict[str, Any],
+) -> dict[str, Any]:
+    hints: list[str] = []
+    if wallet_count == 0:
+        hints.append("Add a watch-only source before refreshing or importing transactions.")
+    elif transaction_count == 0:
+        hints.append("Refresh sources or import files before journal processing.")
+    if freshness["needs_processing"]:
+        hints.append("Run journal processing before trusting reports.")
+    if freshness["quarantine_count"]:
+        hints.append("Review quarantined transactions before tax export.")
+    ready = (
+        wallet_count > 0
+        and transaction_count > 0
+        and freshness["status"] == "current"
+        and freshness["quarantine_count"] == 0
+    )
+    if ready:
+        hints.append("Reports are ready from the current processed journal state.")
+    return {"ready": ready, "hints": hints}
 
-    profile = conn.execute(
-        "SELECT * FROM profiles WHERE id = ?",
-        (context["profile_id"],),
-    ).fetchone()
-    if profile is None:
-        return _empty_overview_snapshot()
+
+def _readiness_ready(readiness: dict[str, Any]) -> bool:
+    return bool(readiness.get("ready"))
+
+
+def _build_profile_overview_snapshot(
+    conn: sqlite3.Connection,
+    *,
+    workspace: sqlite3.Row,
+    profile: sqlite3.Row,
+) -> dict[str, Any]:
+    freshness = _journal_freshness(conn, profile)
 
     active_transactions = conn.execute(
         """
@@ -1308,12 +1662,6 @@ def build_overview_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         """,
         (profile["id"],),
     ).fetchone()["count"]
-    needs_journals = _journal_freshness(conn, profile)["needs_processing"]
-    quarantines = conn.execute(
-        "SELECT COUNT(*) AS count FROM journal_quarantines WHERE profile_id = ?",
-        (profile["id"],),
-    ).fetchone()["count"]
-
     price_eur = _latest_rate(conn, "BTC-EUR") or _latest_transaction_rate(
         conn,
         profile["id"],
@@ -1324,6 +1672,16 @@ def build_overview_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         profile["id"],
         "USD",
     )
+    market_rate = _market_rate_snapshot(conn, profile["fiat_currency"])
+    book_fiat_rate = (
+        float(market_rate["rate"])
+        if market_rate["rate"] is not None
+        else _latest_transaction_rate(
+            conn,
+            profile["id"],
+            market_rate["fiatCurrency"],
+        )
+    )
     # Connection tiles are a wallet/source status surface, not a tax-report
     # surface. Use raw synced transactions so quarantined or partially
     # processed journal rows do not make a wallet with imported funds look
@@ -1333,12 +1691,13 @@ def build_overview_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         conn,
         profile["id"],
         profile["fiat_currency"],
-        price_eur,
+        book_fiat_rate,
         balances,
     )
     snapshot = {
         "priceEur": price_eur,
         "priceUsd": price_usd,
+        "marketRate": market_rate,
         "connections": _connections(conn, profile["id"], balances),
         "txs": _transactions(conn, profile["id"]),
         "activityTxs": _activity_transactions(conn, profile["id"]),
@@ -1346,20 +1705,392 @@ def build_overview_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         "portfolioSeries": _portfolio_series(
             conn,
             profile["id"],
-            price_eur,
+            profile["fiat_currency"],
+            book_fiat_rate,
             sum(balances.values()),
             fiat["eurBalance"],
         ),
         "fiat": fiat,
         "status": {
-            "workspace": context["workspace_label"] or None,
-            "profile": context["profile_label"] or None,
+            "workspace": workspace["label"],
+            "profile": profile["label"],
             "transactionCount": int(active_transactions or 0),
-            "needsJournals": needs_journals,
-            "quarantines": int(quarantines or 0),
+            "needsJournals": freshness["needs_processing"],
+            "quarantines": freshness["quarantine_count"],
         },
     }
     return snapshot
+
+
+def _profile_overview_for_status(
+    conn: sqlite3.Connection,
+    *,
+    workspace: sqlite3.Row,
+    profile: sqlite3.Row,
+) -> dict[str, Any]:
+    snapshot = _build_profile_overview_snapshot(
+        conn,
+        workspace=workspace,
+        profile=profile,
+    )
+    wallet_count = len(snapshot["connections"])
+    transaction_count = int(snapshot["status"].get("transactionCount") or 0)
+    freshness = _journal_freshness(conn, profile)
+    readiness = _profile_readiness(
+        wallet_count=wallet_count,
+        transaction_count=transaction_count,
+        freshness=freshness,
+    )
+    return {
+        "profile": {
+            "id": profile["id"],
+            "label": profile["label"],
+            "fiatCurrency": str(profile["fiat_currency"] or "EUR").upper(),
+            "taxCountry": profile["tax_country"],
+            "taxLongTermDays": int(profile["tax_long_term_days"] or 0),
+            "gainsAlgorithm": profile["gains_algorithm"],
+        },
+        "workspace": {
+            "id": workspace["id"],
+            "label": workspace["label"],
+        },
+        "connections": snapshot["connections"],
+        "txs": snapshot["txs"],
+        "activityTxs": snapshot.get("activityTxs", []),
+        "balanceSeries": snapshot["balanceSeries"],
+        "portfolioSeries": snapshot.get("portfolioSeries", []),
+        "fiat": snapshot["fiat"],
+        "marketRate": snapshot.get("marketRate"),
+        "status": {
+            **snapshot["status"],
+            "workspaceId": workspace["id"],
+            "profileId": profile["id"],
+            "workspace": workspace["label"],
+            "profile": profile["label"],
+            "journalEntryCount": freshness["journal_entry_count"],
+            "freshnessStatus": freshness["status"],
+            "freshnessReason": freshness["reason"],
+        },
+        "journals": freshness,
+        "readiness": readiness,
+    }
+
+
+def build_overview_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
+    context = current_context_snapshot(conn)
+    if not context["workspace_id"] or not context["profile_id"]:
+        return _empty_overview_snapshot()
+
+    workspace = conn.execute(
+        "SELECT * FROM workspaces WHERE id = ?",
+        (context["workspace_id"],),
+    ).fetchone()
+    profile = conn.execute(
+        "SELECT * FROM profiles WHERE id = ?",
+        (context["profile_id"],),
+    ).fetchone()
+    if workspace is None or profile is None:
+        return _empty_overview_snapshot()
+    return _build_profile_overview_snapshot(
+        conn,
+        workspace=workspace,
+        profile=profile,
+    )
+
+
+def _workspace_overview_args(args: dict[str, Any] | None) -> str:
+    raw_args = _coerce_args(args)
+    unknown = sorted(set(raw_args) - {"workspace_id"})
+    if unknown:
+        raise AppError(
+            "ui.workspace.overview.snapshot received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    workspace_id = raw_args.get("workspace_id")
+    if not isinstance(workspace_id, str) or not workspace_id.strip():
+        raise AppError(
+            "ui.workspace.overview.snapshot requires args.workspace_id",
+            code="validation",
+            retryable=False,
+        )
+    return workspace_id.strip()
+
+
+def _workspace_overview_row(
+    conn: sqlite3.Connection,
+    workspace_id: str,
+) -> sqlite3.Row:
+    row = conn.execute(
+        "SELECT * FROM workspaces WHERE id = ?",
+        (workspace_id,),
+    ).fetchone()
+    if row is None:
+        raise AppError(
+            f"Book set '{workspace_id}' was not found",
+            code="not_found",
+            retryable=False,
+        )
+    return row
+
+
+def _with_book_boundary(
+    items: list[dict[str, Any]],
+    *,
+    workspace: sqlite3.Row,
+    profile: sqlite3.Row,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            **dict(item),
+            "workspaceId": workspace["id"],
+            "workspaceLabel": workspace["label"],
+            "profileId": profile["id"],
+            "profileLabel": profile["label"],
+            "book": {
+                "id": profile["id"],
+                "label": profile["label"],
+            },
+        }
+        for item in items
+    ]
+
+
+def _sum_balance_series(books: list[dict[str, Any]]) -> list[float]:
+    totals = [0.0] * 12
+    for book in books:
+        series = list(book.get("balanceSeries") or [])
+        if len(series) < 12:
+            series = [series[0] if series else 0.0] * (12 - len(series)) + series
+        for index, value in enumerate(series[-12:]):
+            totals[index] += float(value or 0)
+    return totals
+
+
+def _workspace_portfolio_series(
+    books: list[dict[str, Any]],
+    *,
+    same_fiat: bool,
+) -> list[dict[str, Any]]:
+    book_points: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
+    for book in books:
+        points = sorted(
+            [
+                dict(point)
+                for point in (book.get("portfolioSeries") or [])
+                if str(point.get("date") or "")
+            ],
+            key=lambda point: str(point.get("date") or ""),
+        )
+        if points:
+            book_points.append((book, points))
+    date_keys = sorted(
+        {
+            str(point.get("date") or "")
+            for _, points in book_points
+            for point in points
+            if point.get("date")
+        }
+    )
+    if not date_keys:
+        return []
+
+    indexes = {book["profile"]["id"]: 0 for book, _ in book_points}
+    last_points: dict[str, dict[str, Any]] = {}
+    output: list[dict[str, Any]] = []
+    for date_key in date_keys:
+        aggregate: dict[str, Any] = {
+            "date": date_key,
+            "label": date_key,
+            "balanceBtc": 0.0,
+            "books": [],
+        }
+        if same_fiat:
+            aggregate["valueEur"] = 0.0
+            aggregate["costBasisEur"] = 0.0
+        carried_books: list[dict[str, Any]] = []
+        for book, points in book_points:
+            profile = book["profile"]
+            profile_id = profile["id"]
+            index = indexes[profile_id]
+            while index < len(points) and str(points[index].get("date") or "") <= date_key:
+                last_points[profile_id] = points[index]
+                index += 1
+            indexes[profile_id] = index
+            point = last_points.get(profile_id)
+            if point is None:
+                continue
+            balance_btc = float(point.get("balanceBtc") or 0)
+            value = float(point.get("valueEur") or 0)
+            cost_basis = float(point.get("costBasisEur") or 0)
+            aggregate["balanceBtc"] += balance_btc
+            if same_fiat:
+                aggregate["valueEur"] += value
+                aggregate["costBasisEur"] += cost_basis
+            carried_books.append(
+                {
+                    "profileId": profile_id,
+                    "profileLabel": profile["label"],
+                    "fiatCurrency": profile["fiatCurrency"],
+                    "balanceBtc": balance_btc,
+                    "value": value,
+                    "costBasis": cost_basis,
+                }
+            )
+        aggregate["books"] = carried_books
+        if same_fiat and aggregate["balanceBtc"]:
+            aggregate["priceEur"] = aggregate["valueEur"] / aggregate["balanceBtc"]
+        output.append(aggregate)
+    return output
+
+
+def _workspace_fiat_rollup(
+    books: list[dict[str, Any]],
+    *,
+    currencies: list[str],
+) -> dict[str, Any]:
+    btc_balance = sum(
+        sum(float(connection.get("balance") or 0) for connection in book["connections"])
+        for book in books
+    )
+    book_rows = [
+        {
+            "profileId": book["profile"]["id"],
+            "profileLabel": book["profile"]["label"],
+            "fiatCurrency": book["profile"]["fiatCurrency"],
+            "balance": float(book["fiat"].get("eurBalance") or 0),
+            "costBasis": float(book["fiat"].get("eurCostBasis") or 0),
+            "unrealized": float(book["fiat"].get("eurUnrealized") or 0),
+            "realizedYTD": float(book["fiat"].get("eurRealizedYTD") or 0),
+        }
+        for book in books
+    ]
+    if not books:
+        return _empty_workspace_overview_snapshot()["fiat"]
+    if len(currencies) == 1:
+        return {
+            "mode": "single",
+            "fiatCurrency": currencies[0],
+            "currencies": currencies,
+            "mixed": False,
+            "partial": False,
+            "eurBalance": sum(row["balance"] for row in book_rows),
+            "eurCostBasis": sum(row["costBasis"] for row in book_rows),
+            "eurUnrealized": sum(row["unrealized"] for row in book_rows),
+            "eurRealizedYTD": sum(row["realizedYTD"] for row in book_rows),
+            "btcBalance": btc_balance,
+            "books": book_rows,
+        }
+    return {
+        "mode": "mixed",
+        "fiatCurrency": None,
+        "currencies": currencies,
+        "mixed": True,
+        "partial": True,
+        "eurBalance": None,
+        "eurCostBasis": None,
+        "eurUnrealized": None,
+        "eurRealizedYTD": None,
+        "btcBalance": btc_balance,
+        "books": book_rows,
+        "label": "Mixed fiat currencies; per-book fiat rows are shown without conversion.",
+    }
+
+
+def build_workspace_overview_snapshot(
+    conn: sqlite3.Connection,
+    args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    workspace_id = _workspace_overview_args(args)
+    workspace = _workspace_overview_row(conn, workspace_id)
+    profile_rows = conn.execute(
+        """
+        SELECT *
+        FROM profiles
+        WHERE workspace_id = ?
+        ORDER BY created_at ASC, label ASC
+        """,
+        (workspace["id"],),
+    ).fetchall()
+    if not profile_rows:
+        return _empty_workspace_overview_snapshot(workspace)
+
+    books = [
+        _profile_overview_for_status(conn, workspace=workspace, profile=profile)
+        for profile in profile_rows
+    ]
+    currencies = sorted(
+        {
+            str(book["profile"]["fiatCurrency"] or "").upper()
+            for book in books
+            if book["profile"].get("fiatCurrency")
+        }
+    )
+    same_fiat = len(currencies) == 1
+    connections: list[dict[str, Any]] = []
+    txs: list[dict[str, Any]] = []
+    activity_txs: list[dict[str, Any]] = []
+    for book in books:
+        profile = next(row for row in profile_rows if row["id"] == book["profile"]["id"])
+        connections.extend(
+            _with_book_boundary(book["connections"], workspace=workspace, profile=profile)
+        )
+        txs.extend(_with_book_boundary(book["txs"], workspace=workspace, profile=profile))
+        activity_txs.extend(
+            _with_book_boundary(
+                book.get("activityTxs") or [],
+                workspace=workspace,
+                profile=profile,
+            )
+        )
+
+    def recent_key(item: dict[str, Any]) -> tuple[str, str]:
+        return (
+            str(item.get("occurredAt") or item.get("date") or ""),
+            str(item.get("id") or ""),
+        )
+
+    txs = sorted(txs, key=recent_key, reverse=True)[:20]
+    activity_txs = sorted(activity_txs, key=recent_key, reverse=True)[:20]
+    total_transactions = sum(
+        int(book["status"].get("transactionCount") or 0) for book in books
+    )
+    quarantine_count = sum(
+        int(book["journals"].get("quarantine_count") or 0) for book in books
+    )
+    needs_journals = any(bool(book["journals"].get("needs_processing")) for book in books)
+    ready_books = sum(1 for book in books if _readiness_ready(book["readiness"]))
+    blocked_books = len(books) - ready_books
+    return {
+        "workspace": {
+            "id": workspace["id"],
+            "label": workspace["label"],
+        },
+        "scope": {
+            "kind": "workspace",
+            "label": "Book set",
+        },
+        "books": books,
+        "connections": connections,
+        "txs": txs,
+        "activityTxs": activity_txs,
+        "balanceSeries": _sum_balance_series(books),
+        "portfolioSeries": _workspace_portfolio_series(books, same_fiat=same_fiat),
+        "fiat": _workspace_fiat_rollup(books, currencies=currencies),
+        "status": {
+            "workspace": workspace["label"],
+            "workspaceId": workspace["id"],
+            "bookCount": len(books),
+            "transactionCount": total_transactions,
+            "needsJournals": needs_journals,
+            "quarantines": quarantine_count,
+            "ready": blocked_books == 0,
+            "readyBooks": ready_books,
+            "blockedBooks": blocked_books,
+            "mixedFiat": not same_fiat,
+        },
+    }
 
 
 def _build_transactions_page_snapshot(
@@ -2644,6 +3375,7 @@ def build_wallets_list_snapshot(
     wallets = []
     for row in rows:
         config = _json_config(row["config_json"])
+        samourai_metadata = samourai_metadata_from_wallet_config(config)
         backend_summary = _wallet_backend_summary(row["kind"], config, default_backend)
         backend_name = backend_summary["name"]
         last_synced_at = _string_or_empty(config.get("last_synced_at"))
@@ -2682,6 +3414,7 @@ def build_wallets_list_snapshot(
                 "sync_status": "has_transactions" if tx_count else "empty",
                 "journals_stale": freshness["needs_processing"] and tx_count > 0,
                 "btcpay_provenance": provenance_routes,
+                "samourai": samourai_metadata,
                 "created_at": row["created_at"],
             }
         )
@@ -2695,6 +3428,290 @@ def build_wallets_list_snapshot(
             "transaction_count": sum(wallet["transaction_count"] for wallet in wallets),
             "needs_journals": bool(freshness["needs_processing"]),
         },
+    }
+
+
+def _wallet_ref_arg(args: Any) -> str:
+    if not isinstance(args, dict):
+        raise AppError(
+            "ui.wallets.utxos args must be an object",
+            code="validation",
+            retryable=False,
+        )
+    wallet = args.get("wallet") or args.get("connection")
+    if not isinstance(wallet, str) or not wallet.strip():
+        raise AppError(
+            "ui.wallets.utxos wallet must be a non-empty string",
+            code="validation",
+            retryable=False,
+        )
+    return wallet.strip()
+
+
+def _resolve_wallet_for_utxos(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    wallet_ref: str,
+) -> sqlite3.Row:
+    row = conn.execute(
+        """
+        SELECT
+            w.id,
+            w.label,
+            w.kind,
+            w.config_json,
+            w.created_at,
+            a.code AS account_code,
+            a.label AS account_label
+        FROM wallets w
+        LEFT JOIN accounts a ON a.id = w.account_id
+        WHERE w.profile_id = ?
+          AND (w.id = ? OR w.label = ?)
+        ORDER BY CASE WHEN w.id = ? THEN 0 ELSE 1 END, w.label ASC
+        LIMIT 1
+        """,
+        (profile_id, wallet_ref, wallet_ref, wallet_ref),
+    ).fetchone()
+    if row is None:
+        raise AppError(
+            f"Wallet '{wallet_ref}' was not found in the active profile",
+            code="not_found",
+            retryable=False,
+        )
+    return row
+
+
+def _wallet_utxo_support(
+    wallet: sqlite3.Row,
+    config: dict[str, Any],
+    backend_summary: dict[str, str],
+    backend: Any,
+) -> dict[str, Any]:
+    sync_mode = backend_summary["sync_mode"]
+    has_descriptor = bool(config.get("descriptor"))
+    has_addresses = bool(config.get("addresses"))
+    if _string_or_empty(config.get("source_format")) == "wasabi_bundle":
+        return {
+            "supported": True,
+            "status": "supported",
+            "reason": "wasabi_import",
+            "message": "",
+        }
+    if sync_mode not in {"backend_descriptor", "backend_addresses"}:
+        return {
+            "supported": False,
+            "status": "unsupported_source",
+            "reason": "not_chain_backed",
+            "message": "This source is not a chain-backed watch-only wallet.",
+        }
+    if not isinstance(backend, dict):
+        return {
+            "supported": False,
+            "status": "unsupported_source",
+            "reason": "backend_missing",
+            "message": "This wallet needs a configured Esplora, Electrum, or Bitcoin Core backend before UTXO inventory can refresh.",
+        }
+    backend_kind = normalize_backend_kind(backend.get("kind"))
+    if backend_kind not in {"esplora", "electrum", "bitcoinrpc"}:
+        return {
+            "supported": False,
+            "status": "unsupported_source",
+            "reason": "backend_kind",
+            "message": f"UTXO inventory is not implemented for {backend_kind or 'this backend'} sources yet.",
+        }
+    chain = str(config.get("chain") or "bitcoin").strip().lower() or "bitcoin"
+    if has_descriptor and backend_kind == "bitcoinrpc":
+        return {
+            "supported": False,
+            "status": "unsupported_source",
+            "reason": "bitcoinrpc_descriptor",
+            "message": "Bitcoin Core UTXO inventory is available for address-backed wallets only.",
+        }
+    if chain == "liquid":
+        if not has_descriptor:
+            return {
+                "supported": False,
+                "status": "liquid_unblind_blocked",
+                "reason": "liquid_descriptor_required",
+                "message": "Liquid UTXO inventory requires descriptor-backed outputs so Kassiber can unblind them locally.",
+            }
+        try:
+            descriptor_plan = load_wallet_descriptor_plan_from_config(config)
+        except AppError as exc:
+            return {
+                "supported": False,
+                "status": "liquid_unblind_blocked",
+                "reason": "descriptor_unavailable",
+                "message": str(exc),
+            }
+        if not liquid_plan_can_unblind(descriptor_plan):
+            return {
+                "supported": False,
+                "status": "liquid_unblind_blocked",
+                "reason": "missing_blinding_keys",
+                "message": "Liquid UTXO inventory needs private blinding keys before Kassiber can account for outputs.",
+            }
+    if not has_descriptor and not has_addresses:
+        return {
+            "supported": False,
+            "status": "unsupported_source",
+            "reason": "no_watch_targets",
+            "message": "This wallet has no descriptor, xpub, or addresses to scan.",
+        }
+    return {
+        "supported": True,
+        "status": "supported",
+        "reason": "",
+        "message": "",
+    }
+
+
+def build_wallet_utxos_snapshot(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object] | None,
+    args: Any,
+) -> dict[str, Any]:
+    context, profile = _active_context_and_profile(conn)
+    if profile is None:
+        return {
+            "wallet": None,
+            "utxos": [],
+            "totals": [],
+            "support": {
+                "supported": False,
+                "status": "unsupported_source",
+                "reason": "no_active_profile",
+                "message": "No active profile is selected.",
+            },
+            "freshness": {
+                "status": "no_profile",
+                "last_seen_at": None,
+                "last_synced_at": None,
+                "stale": False,
+            },
+        }
+    wallet_ref = _wallet_ref_arg(args)
+    wallet = _resolve_wallet_for_utxos(conn, profile["id"], wallet_ref)
+    config = _json_config(wallet["config_json"])
+    runtime_backends = (
+        runtime_config.get("backends", {})
+        if isinstance(runtime_config, dict)
+        else {}
+    )
+    default_backend = (
+        runtime_config.get("default_backend")
+        if isinstance(runtime_config, dict)
+        else None
+    )
+    backend_summary = _wallet_backend_summary(wallet["kind"], config, default_backend)
+    backend_name = backend_summary["name"]
+    backend = (
+        runtime_backends.get(str(backend_name))
+        if isinstance(runtime_backends, dict) and backend_name
+        else None
+    )
+    support = _wallet_utxo_support(wallet, config, backend_summary, backend)
+    if support["supported"]:
+        source_filter = _wallet_utxo_source_filter(config, backend_summary, backend)
+        rows = core_output_inventory.list_wallet_output_inventory(
+            conn,
+            wallet["id"],
+            limit=core_output_inventory.DEFAULT_WALLET_OUTPUT_INVENTORY_LIMIT,
+            **source_filter,
+        )
+        inventory_summary = core_output_inventory.wallet_output_inventory_summary(
+            conn,
+            wallet["id"],
+            **source_filter,
+        )
+        totals = core_output_inventory.wallet_output_inventory_totals(
+            conn,
+            wallet["id"],
+            **source_filter,
+        )
+        last_seen_at = inventory_summary["last_seen_at"]
+    else:
+        rows = []
+        totals = []
+        last_seen_at = None
+    last_synced_at = _string_or_empty(config.get("last_synced_at")) or None
+    if not support["supported"]:
+        freshness_status = support["status"]
+    elif last_seen_at:
+        freshness_status = "current"
+    elif last_synced_at:
+        freshness_status = "stale"
+    else:
+        freshness_status = "never_refreshed"
+    return {
+        "wallet": {
+            "id": wallet["id"],
+            "label": wallet["label"],
+            "kind": wallet["kind"],
+            "account": {
+                "code": wallet["account_code"] or "",
+                "label": wallet["account_label"] or "",
+            },
+            "backend": {
+                "name": str(backend_name) if backend_name else "",
+                "source": backend_summary["source"],
+                "kind": str(backend.get("kind") or "") if isinstance(backend, dict) else "",
+            },
+            "chain": str(config.get("chain") or ""),
+            "network": str(config.get("network") or ""),
+            "sync_mode": backend_summary["sync_mode"],
+        },
+        "utxos": rows,
+        "totals": totals,
+        "support": support,
+        "freshness": {
+            "status": freshness_status,
+            "last_seen_at": last_seen_at,
+            "last_synced_at": last_synced_at,
+            "stale": support["supported"] and freshness_status != "current",
+            "active_count": inventory_summary["active_count"] if support["supported"] else 0,
+        },
+        "summary": {
+            "workspace": context["workspace_label"] or None,
+            "profile": context["profile_label"] or None,
+            "count": inventory_summary["active_count"] if support["supported"] else 0,
+            "returned_count": len(rows),
+            "truncated": (
+                support["supported"]
+                and inventory_summary["active_count"] > len(rows)
+            ),
+            "row_limit": (
+                core_output_inventory.DEFAULT_WALLET_OUTPUT_INVENTORY_LIMIT
+                if support["supported"]
+                else None
+            ),
+        },
+    }
+
+
+def _wallet_utxo_row_for_ai(row: dict[str, Any]) -> dict[str, Any]:
+    redacted = dict(row)
+    redacted.pop("address", None)
+    redacted.pop("address_label", None)
+    redacted.pop("branch_index", None)
+    redacted.pop("address_index", None)
+    redacted.pop("anon_history", None)
+    return redacted
+
+
+def build_wallet_utxos_snapshot_for_ai(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object] | None,
+    args: Any,
+) -> dict[str, Any]:
+    payload = build_wallet_utxos_snapshot(conn, runtime_config, args)
+    return {
+        **payload,
+        "utxos": [
+            _wallet_utxo_row_for_ai(row)
+            for row in payload.get("utxos", [])
+            if isinstance(row, dict)
+        ],
     }
 
 
@@ -3234,25 +4251,11 @@ def build_workspace_health_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     rate_pairs = conn.execute(
         "SELECT COUNT(DISTINCT pair) AS count FROM rates_cache",
     ).fetchone()["count"]
-    hints: list[str] = []
-    if int(wallet_count or 0) == 0:
-        hints.append(
-            "Add a watch-only source before refreshing or importing transactions."
-        )
-    elif int(transaction_count or 0) == 0:
-        hints.append("Refresh sources or import files before journal processing.")
-    if freshness["needs_processing"]:
-        hints.append("Run journal processing before trusting reports.")
-    if freshness["quarantine_count"]:
-        hints.append("Review quarantined transactions before tax export.")
-    reports_ready = (
-        int(wallet_count or 0) > 0
-        and int(transaction_count or 0) > 0
-        and freshness["status"] == "current"
-        and freshness["quarantine_count"] == 0
+    readiness = _profile_readiness(
+        wallet_count=int(wallet_count or 0),
+        transaction_count=int(transaction_count or 0),
+        freshness=freshness,
     )
-    if reports_ready:
-        hints.append("Reports are ready from the current processed journal state.")
     return {
         "workspace": {
             "id": context["workspace_id"],
@@ -3276,8 +4279,8 @@ def build_workspace_health_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         },
         "journals": freshness,
         "reports": {
-            "ready": reports_ready,
-            "hints": hints,
+            "ready": _readiness_ready(readiness),
+            "hints": readiness["hints"],
         },
     }
 
@@ -3299,6 +4302,10 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     else:
         counts = health["counts"]
         journals = health["journals"]
+        edit_stale = transaction_history.stale_summary(
+            conn,
+            {"id": health["profile"]["id"], **journals},
+        )
         if counts["wallets"] == 0:
             blockers.append(
                 {
@@ -3322,13 +4329,21 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                 }
             )
         if journals["needs_processing"]:
+            edit_count = int(edit_stale.get("edit_count") or 0)
             blockers.append(
                 {
                     "id": "journals_stale",
                     "severity": "blocking",
                     "title": "Journals need processing",
-                    "detail": journals["reason"],
+                    "detail": (
+                        f"{journals['reason']}; {edit_count} metadata edit(s) "
+                        "changed report inputs."
+                        if edit_count
+                        else journals["reason"]
+                    ),
                     "daemon_kind": "ui.journals.process",
+                    "activity_kind": "ui.activity.history",
+                    "edit_history": edit_stale,
                 }
             )
         if journals["quarantine_count"]:
@@ -3407,6 +4422,7 @@ def build_audit_changes_since_last_answer_snapshot(
                 "transactions": None,
                 "journal_entries": None,
                 "journal_quarantines": None,
+                "transaction_edit_events": None,
                 "wallets": None,
                 "rates": None,
                 "journals_processed_at": profile["last_processed_at"],
@@ -3459,6 +4475,7 @@ def build_audit_changes_since_last_answer_snapshot(
         "transactions": count_since("transactions"),
         "journal_entries": count_since("journal_entries"),
         "journal_quarantines": count_since("journal_quarantines"),
+        "transaction_edit_events": count_since("transaction_edit_events", "changed_at"),
         "wallets": count_since("wallets"),
         "rates": int(
             conn.execute(
@@ -3482,6 +4499,7 @@ def build_audit_changes_since_last_answer_snapshot(
             "transactions": latest("transactions"),
             "journal_entries": latest("journal_entries"),
             "journal_quarantines": latest("journal_quarantines"),
+            "transaction_edit_events": latest("transaction_edit_events", "changed_at"),
             "wallets": latest("wallets"),
             "rates": latest("rates_cache", "fetched_at"),
             "journals_processed_at": profile["last_processed_at"],
@@ -3696,14 +4714,22 @@ def _activity_transaction_rows_to_ui(
 
     output = []
     rendered_pair_ids: set[str] = set()
+    pair_final_rows: dict[str, sqlite3.Row | dict[str, Any]] = {}
     for row in rows:
         pair_meta = pair_meta_by_transaction.get(row["id"])
+        if pair_meta:
+            pair_final_rows[str(pair_meta["pair_id"])] = row
+
+    for row in rows:
+        pair_meta = pair_meta_by_transaction.get(row["id"])
+        output_row = row
         if pair_meta:
             pair_id = str(pair_meta["pair_id"])
             if pair_id in rendered_pair_ids:
                 continue
             rendered_pair_ids.add(pair_id)
+            output_row = pair_final_rows.get(pair_id, row)
         # Activity chart rows intentionally skip metadata tags to keep the
         # uncapped overview payload and SQLite parameter count bounded.
-        output.append(_transaction_row_to_ui(row, [], pair_meta))
+        output.append(_transaction_row_to_ui(output_row, [], pair_meta))
     return output

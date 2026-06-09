@@ -9,6 +9,7 @@
 import { MOCK_OVERVIEW } from "@/mocks/seed";
 import { MOCK_TRANSACTIONS } from "@/mocks/transactions";
 import { MOCK_PROFILES } from "@/mocks/profiles";
+import { MOCK_WORKSPACE_OVERVIEW } from "@/mocks/workspaceOverview";
 import { MOCK_CAPITAL_GAINS } from "@/mocks/reports";
 
 const SOURCE_FUNDS_FIXTURE_TARGET_TXID =
@@ -40,6 +41,7 @@ export const fixtures: Record<string, unknown> = {
     profile: null,
   },
   "ui.overview.snapshot": MOCK_OVERVIEW,
+  "ui.workspace.overview.snapshot": MOCK_WORKSPACE_OVERVIEW,
   "ui.connections.node.snapshot": {
     error: "Pass `connection` to ui.connections.node.snapshot (handled in mock.ts).",
   },
@@ -72,6 +74,178 @@ export const fixtures: Record<string, unknown> = {
       inserted: 0,
       updated: 0,
     })),
+  },
+  "ui.wallets.utxos": {
+    wallet: {
+      id: "c1",
+      label: "Cold Storage",
+    },
+    utxos: [
+      {
+        id: "coin-1",
+        outpoint:
+          "4e9f0b7d8c6a5b4c3d2e1f0099887766554433221100ffeeddccbbaa99887766:0",
+        txid: "4e9f0b7d8c6a5b4c3d2e1f0099887766554433221100ffeeddccbbaa99887766",
+        vout: 0,
+        asset: "BTC",
+        amount: 0.125,
+        amount_sat: 12_500_000,
+        amount_msat: 12_500_000_000,
+        confirmation_status: "confirmed",
+        confirmations: 18,
+        block_height: 884_200,
+        block_time: "2026-03-18T10:20:00Z",
+        address: "bc1qmockcoinaddress0000000000000000000000000000",
+        address_label: "receive #12",
+        branch_label: "receive",
+        branch_index: 0,
+        address_index: 12,
+        source: {
+          backend: "mempool",
+          backend_kind: "esplora",
+          chain: "bitcoin",
+          network: "mainnet",
+          first_seen_at: "2026-03-18T10:22:00Z",
+          last_seen_at: "2026-03-18T10:22:00Z",
+          spent_at: null,
+        },
+      },
+      {
+        id: "coin-2",
+        outpoint:
+          "6f1e2d3c4b5a69788776655443322110ffeeddccbbaa00998877665544332211:1",
+        txid: "6f1e2d3c4b5a69788776655443322110ffeeddccbbaa00998877665544332211",
+        vout: 1,
+        asset: "BTC",
+        amount: 0.03125,
+        amount_sat: 3_125_000,
+        amount_msat: 3_125_000_000,
+        confirmation_status: "mempool",
+        confirmations: 0,
+        block_height: null,
+        block_time: null,
+        address: "bc1qmockchangeaddress000000000000000000000000000",
+        address_label: "change #4",
+        branch_label: "change",
+        branch_index: 1,
+        address_index: 4,
+        source: {
+          backend: "mempool",
+          backend_kind: "esplora",
+          chain: "bitcoin",
+          network: "mainnet",
+          first_seen_at: "2026-03-18T10:24:00Z",
+          last_seen_at: "2026-03-18T10:24:00Z",
+          spent_at: null,
+        },
+      },
+    ],
+    totals: [
+      {
+        asset: "BTC",
+        amount: 0.15625,
+        amount_sat: 15_625_000,
+        amount_msat: 15_625_000_000,
+      },
+    ],
+    support: {
+      supported: true,
+      status: "supported",
+      reason: "",
+      message: "",
+    },
+    freshness: {
+      status: "current",
+      last_seen_at: "2026-03-18T10:24:00Z",
+      last_synced_at: "2026-03-18T10:24:00Z",
+      stale: false,
+      active_count: 2,
+    },
+    summary: {
+      workspace: "My Books",
+      profile: "local books",
+      count: 2,
+    },
+  },
+  "ui.freshness.run": {
+    profile: { id: "mock-profile", label: "Demo book" },
+    results: MOCK_OVERVIEW.connections.map((connection) => ({
+      wallet: connection.label,
+      status: "synced",
+      inserted: 0,
+      updated: 0,
+    })),
+    enqueued: [
+      {
+        job_type: "onchain_wallet_history",
+        source_label: "Treasury watch-only",
+        source_type: "onchain_wallet",
+        status: "queued",
+      },
+      {
+        job_type: "market_rate_coverage",
+        source_label: "Market-rate coverage",
+        source_type: "market_rates",
+        status: "queued",
+      },
+      {
+        job_type: "journal_refresh",
+        source_label: "Journals",
+        source_type: "journals",
+        status: "queued",
+      },
+    ],
+    completed: [
+      {
+        job_type: "onchain_wallet_history",
+        source_label: "Treasury watch-only",
+        source_type: "onchain_wallet",
+        status: "done",
+      },
+      {
+        job_type: "market_rate_coverage",
+        source_label: "Market-rate coverage",
+        source_type: "market_rates",
+        status: "done",
+      },
+      {
+        job_type: "journal_refresh",
+        source_label: "Journals",
+        source_type: "journals",
+        status: "done",
+      },
+    ],
+    sources: [
+      {
+        source_key: "onchain_wallet:mock-wallet",
+        source_type: "onchain_wallet",
+        source_label: "Treasury watch-only",
+        status: "fresh",
+        blocking_reports: false,
+      },
+      {
+        source_key: "market_rates:mock-profile",
+        source_type: "market_rates",
+        source_label: "Market-rate coverage",
+        status: "fresh",
+        blocking_reports: false,
+      },
+      {
+        source_key: "journals:mock-profile",
+        source_type: "journals",
+        source_label: "Journals",
+        status: "fresh",
+        blocking_reports: false,
+      },
+    ],
+    jobs: [],
+    summary: {
+      sources: 3,
+      active_jobs: 0,
+      blocking_reports: 0,
+      rate_limited: 0,
+      failed: 0,
+    },
   },
   "ui.transfers.suggest": {
     candidates: [
@@ -246,6 +420,22 @@ export const fixtures: Record<string, unknown> = {
         is_default: true,
       },
       {
+        name: "liquid",
+        kind: "electrum",
+        chain: "liquid",
+        network: "liquidv1",
+        has_url: true,
+        is_default: false,
+      },
+      {
+        name: "liquid-blockstream",
+        kind: "electrum",
+        chain: "liquid",
+        network: "liquidv1",
+        has_url: true,
+        is_default: false,
+      },
+      {
         name: "btcpay-demo",
         kind: "btcpay",
         chain: "bitcoin",
@@ -256,7 +446,7 @@ export const fixtures: Record<string, unknown> = {
       },
     ],
     summary: {
-      count: 2,
+      count: 4,
       default_backend: "mempool",
     },
     suggestions: [
@@ -265,6 +455,18 @@ export const fixtures: Record<string, unknown> = {
         label: "Built-in mempool.space Bitcoin backend",
         chain: "bitcoin",
         network: "mainnet",
+      },
+      {
+        name: "liquid",
+        label: "Built-in BullBitcoin Liquid Electrum backend",
+        chain: "liquid",
+        network: "liquidv1",
+      },
+      {
+        name: "liquid-blockstream",
+        label: "Built-in Blockstream Liquid Electrum backend",
+        chain: "liquid",
+        network: "liquidv1",
       },
     ],
   },
@@ -1258,6 +1460,18 @@ export const fixtures: Record<string, unknown> = {
     workspace: "My Books",
     profile: { id: "mock-profile", label: "local books" },
     settings: {
+      background_enabled: false,
+      report_read_sync: false,
+      source_classes: {
+        onchain_wallet: false,
+        btcpay_wallet: false,
+        btcpay_provenance: false,
+        market_rates: true,
+        journals: true,
+      },
+      market_rate_provider: "coinbase-exchange",
+      market_rate_providers: ["coinbase-exchange", "coingecko"],
+      active_rate_pair: "BTC-EUR",
       auto_sync_before_report_reads: false,
       setting_key: "ai.auto_sync_before_report_reads.profile.mock-profile",
     },
@@ -1266,6 +1480,18 @@ export const fixtures: Record<string, unknown> = {
     workspace: "My Books",
     profile: { id: "mock-profile", label: "local books" },
     settings: {
+      background_enabled: true,
+      report_read_sync: true,
+      source_classes: {
+        onchain_wallet: true,
+        btcpay_wallet: true,
+        btcpay_provenance: true,
+        market_rates: true,
+        journals: true,
+      },
+      market_rate_provider: "coinbase-exchange",
+      market_rate_providers: ["coinbase-exchange", "coingecko"],
+      active_rate_pair: "BTC-EUR",
       auto_sync_before_report_reads: true,
       setting_key: "ai.auto_sync_before_report_reads.profile.mock-profile",
     },
@@ -1290,7 +1516,21 @@ export const fixtures: Record<string, unknown> = {
       journals: { status: "current", needs_processing: false },
       reports: { ready: true },
     },
-    settings: { auto_sync_before_report_reads: false },
+    settings: {
+      background_enabled: false,
+      report_read_sync: false,
+      source_classes: {
+        onchain_wallet: false,
+        btcpay_wallet: false,
+        btcpay_provenance: false,
+        market_rates: true,
+        journals: true,
+      },
+      market_rate_provider: "coinbase-exchange",
+      market_rate_providers: ["coinbase-exchange", "coingecko"],
+      active_rate_pair: "BTC-EUR",
+      auto_sync_before_report_reads: false,
+    },
   },
   "ai.providers.list": {
     providers: [

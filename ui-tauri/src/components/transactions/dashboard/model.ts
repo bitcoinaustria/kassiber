@@ -5,7 +5,6 @@ import { type Tx } from "@/mocks/seed";
 import {
   type AttachmentItem,
   type JournalEventItem,
-  type SourceFundsLinkItem,
   SATS_PER_BTC,
   formatSignedDisplayMoney,
   transactionBtc,
@@ -51,7 +50,7 @@ type FlowChartSelection = {
   period: PeriodKey;
   bucketKey: string | null;
   bucketLabel: string;
-  segment: FlowChartSegment;
+  segment: FlowChartSegment | null;
   mode: FlowChartMode;
 };
 
@@ -113,6 +112,10 @@ const flowChartConfig = {
 
 function toDashboardTransaction(tx: Tx, index: number): Transaction {
   const tag = tx.tag || "";
+  const displayAmountSat =
+    tx.type === "Consolidation" && tx.amountSat === 0 && tx.feeSat
+      ? tx.feeSat
+      : tx.amountSat;
   const isSwap =
     tag.toLowerCase().includes("swap") ||
     tx.type === "Swap" ||
@@ -120,7 +123,10 @@ function toDashboardTransaction(tx: Tx, index: number): Transaction {
     tx.type === "Melt";
   const flow: TransactionFlow = isSwap
     ? "swap"
-    : tx.internal || tx.type === "Transfer" || tx.type === "Rebalance"
+    : tx.internal ||
+        tx.type === "Transfer" ||
+        tx.type === "Consolidation" ||
+        tx.type === "Rebalance"
       ? "transfer"
       : tx.amountSat >= 0
         ? "incoming"
@@ -149,9 +155,9 @@ function toDashboardTransaction(tx: Tx, index: number): Transaction {
       tx.eur !== null
         ? Math.abs(tx.eur)
         : tx.rate !== null
-          ? Math.abs((tx.amountSat / SATS_PER_BTC) * tx.rate)
+          ? Math.abs((displayAmountSat / SATS_PER_BTC) * tx.rate)
           : null,
-    amountBtc: Math.abs(tx.amountSat / SATS_PER_BTC),
+    amountBtc: Math.abs(displayAmountSat / SATS_PER_BTC),
     feeBtc: tx.feeSat ? Math.abs(tx.feeSat / SATS_PER_BTC) : 0,
     feeEur:
       tx.feeSat && tx.rate !== null
@@ -190,6 +196,10 @@ function toDashboardTransaction(tx: Tx, index: number): Transaction {
     status: tag.toLowerCase().includes("review") ? "review" : status,
     confirmations: tx.conf,
   };
+}
+
+function dashboardRecordsFromTxs(txs: Tx[]) {
+  return txs.map(toDashboardTransaction);
 }
 
 function isRedundantTransactionLabel(label: string, flow: TransactionFlow) {
@@ -234,17 +244,27 @@ const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 type AttachmentRecord = {
   id: string;
   attachment_type: "file" | "url";
-  label: string;
+  label?: string | null;
+  display_label?: string;
   original_filename?: string;
   url?: string;
   media_type?: string;
   size_bytes?: number | null;
   sha256?: string;
   exists?: boolean | null;
+  copied_from_attachment_id?: string;
+  copied_from_transaction_id?: string;
 };
 
 type AttachmentsListData = {
   attachments: AttachmentRecord[];
+};
+
+type AttachmentsCopyData = {
+  copied: number;
+  attachments: AttachmentRecord[];
+  source_transaction_id?: string;
+  target_transaction_id?: string;
 };
 
 type AttachmentOpenData = {
@@ -252,10 +272,6 @@ type AttachmentOpenData = {
   path?: string;
   url?: string;
   attachment: AttachmentRecord;
-};
-
-type SourceFundsLinksData = {
-  links: SourceFundsLinkItem[];
 };
 
 type JournalEventsData = {
@@ -269,6 +285,25 @@ function compactBytes(bytes: number | null | undefined) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function urlAttachmentDetail(
+  rawUrl: string | undefined,
+  label: string,
+  hasStoredLabel: boolean,
+) {
+  if (!rawUrl || rawUrl === label) return undefined;
+  if (hasStoredLabel) return rawUrl;
+  try {
+    const parsed = new URL(rawUrl);
+    const host = parsed.hostname.replace(/^www\./i, "");
+    if (label === host || label.startsWith(`${host} - `)) {
+      return undefined;
+    }
+  } catch {
+    return rawUrl;
+  }
+  return rawUrl;
+}
+
 function attachmentRecordToItem(record: AttachmentRecord): AttachmentItem {
   const kind = record.attachment_type === "url" ? "url" : "file";
   const size = compactBytes(record.size_bytes);
@@ -279,20 +314,80 @@ function attachmentRecordToItem(record: AttachmentRecord): AttachmentItem {
     hash,
     record.exists === false ? "missing file" : null,
   ].filter(Boolean);
+  const storedLabel = record.label?.trim();
+  const label =
+    kind === "url"
+      ? record.display_label || storedLabel || "Link attachment"
+      : record.display_label ||
+        storedLabel ||
+        record.original_filename ||
+        "File attachment";
   return {
     id: record.id,
     kind,
-    label:
-      record.label ||
-      record.original_filename ||
-      record.url ||
-      (kind === "url" ? "Link attachment" : "File attachment"),
+    label,
     detail:
       kind === "url"
-        ? record.url || record.media_type || undefined
+        ? urlAttachmentDetail(record.url, label, Boolean(storedLabel))
         : fileBits.join(" · ") || record.original_filename || undefined,
     href: record.url || undefined,
+    copiedFromAttachmentId: record.copied_from_attachment_id || undefined,
+    copiedFromTransactionId: record.copied_from_transaction_id || undefined,
   };
+}
+
+function replaceAttachmentRecord(
+  attachments: AttachmentRecord[],
+  updated: AttachmentRecord,
+) {
+  let replaced = false;
+  const next = attachments.map((attachment) => {
+    if (attachment.id !== updated.id) return attachment;
+    replaced = true;
+    return updated;
+  });
+  return replaced ? next : attachments;
+}
+
+function upsertAttachmentRecords(
+  attachments: AttachmentRecord[],
+  updates: AttachmentRecord[],
+) {
+  if (!updates.length) return attachments;
+  const updateById = new Map(
+    updates.map((attachment) => [attachment.id, attachment]),
+  );
+  const seen = new Set<string>();
+  const next = attachments.map((attachment) => {
+    const updated = updateById.get(attachment.id);
+    if (!updated) return attachment;
+    seen.add(attachment.id);
+    return updated;
+  });
+  const created = updates.filter((attachment) => !seen.has(attachment.id));
+  return created.length ? [...created, ...next] : next;
+}
+
+function removeAttachmentRecord(
+  attachments: AttachmentRecord[],
+  attachmentId: string,
+) {
+  return attachments.filter((attachment) => attachment.id !== attachmentId);
+}
+
+function isAttachmentListQueryKeyForTransaction(
+  queryKey: readonly unknown[],
+  transactionId: string,
+) {
+  return (
+    queryKey.includes("ui.attachments.list") &&
+    queryKey.some((part) => {
+      if (!part || typeof part !== "object" || Array.isArray(part)) {
+        return false;
+      }
+      return (part as { transaction?: unknown }).transaction === transactionId;
+    })
+  );
 }
 
 const periodLabels: Record<PeriodKey, string> = {
@@ -926,7 +1021,10 @@ function matchesTransactionDeepLink(txn: Transaction, transactionId: string) {
 }
 
 function flowChartSelectionLabel(selection: FlowChartSelection) {
-  return `${selection.bucketLabel} · ${flowChartSegmentLabels[selection.segment]} · ${
+  const segmentLabel = selection.segment
+    ? flowChartSegmentLabels[selection.segment]
+    : "All flows";
+  return `${selection.bucketLabel} · ${segmentLabel} · ${
     flowChartModeLabels[selection.mode]
   }`;
 }
@@ -955,6 +1053,16 @@ function matchesFlowChartSelection(
   }
 
   const flow = displayFlow(txn);
+  if (
+    selection.mode === "external" &&
+    flow !== "incoming" &&
+    flow !== "outgoing"
+  ) {
+    return false;
+  }
+
+  if (selection.segment === null) return true;
+
   if (selection.segment === "transfers") {
     return flow === "transfer" || flow === "layer-transition";
   }
@@ -972,6 +1080,7 @@ export {
   buildBreakdown,
   buildFlowChartRows,
   buildSwapCandidates,
+  dashboardRecordsFromTxs,
   dateFilterOptions,
   filterChipClassName,
   flowAxisDomain,
@@ -990,6 +1099,7 @@ export {
   formatCountBarLabel,
   formatFlowTooltipValue,
   initialPeriodFromUrl,
+  isAttachmentListQueryKeyForTransaction,
   isRedundantTransactionLabel,
   matchesFlowChartSelection,
   matchesTransactionDeepLink,
@@ -999,14 +1109,18 @@ export {
   quickFilterLabel,
   readTransactionDetailParams,
   recordsForPeriod,
+  removeAttachmentRecord,
+  replaceAttachmentRecord,
   sortTransactionsByDateDesc,
   sumByFlow,
   toDashboardTransaction,
+  upsertAttachmentRecords,
   transactionRecords,
   updateTransactionDetailParams,
 };
 
 export type {
+  AttachmentsCopyData,
   AttachmentOpenData,
   AttachmentRecord,
   AttachmentsListData,
@@ -1021,7 +1135,6 @@ export type {
   FlowChartSelection,
   JournalEventsData,
   PeriodKey,
-  SourceFundsLinksData,
   SwapCandidate,
   TableQuickFilter,
 };

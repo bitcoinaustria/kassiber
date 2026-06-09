@@ -37,7 +37,11 @@ import { screenPanelClassName } from "@/lib/screen-layout";
 import { setSessionUnlockPassphrase } from "@/store/sessionLock";
 import { useUiStore } from "@/store/ui";
 import { databasePassphraseHint } from "@/components/kb/Onboarding/constants";
-import { settingsSectionForHash, type SettingsSectionId } from "./settingsSections";
+import {
+  PENDING_SETTINGS_BACKEND_EDIT_KEY,
+  settingsSectionForHash,
+  type SettingsSectionId,
+} from "./settingsSections";
 import { AppearanceSettingsPanel } from "./settings/AppearanceSettingsPanel";
 import { AiProvidersSettingsPanel } from "./settings/AiProvidersSettingsPanel";
 import { SyncBackendSettingsModal, backendTypeIdForConnectionSetup, type SyncBackendNetwork } from "./settings/SyncBackendSettingsModal";
@@ -71,6 +75,8 @@ interface SettingsScreenProps {
 export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
+  const clearClipboard = useUiStore((s) => s.clearClipboard);
+  const setClearClipboard = useUiStore((s) => s.setClearClipboard);
   const currency = useUiStore((s) => s.currency);
   const setCurrency = useUiStore((s) => s.setCurrency);
   const theme = useUiStore((s) => s.theme);
@@ -135,13 +141,17 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   );
   const createBackend = useDaemonMutation<BackendSettingsRow>("ui.backends.create");
   const updateBackend = useDaemonMutation<BackendSettingsRow>("ui.backends.update");
+  const setDefaultBackend = useDaemonMutation<{ default_backend: string }>(
+    "ui.backends.set_default",
+  );
   const createWallet = useDaemonMutation("ui.wallets.create");
   const deleteBackend = useDaemonMutation<{
     name: string;
     deleted: boolean;
     detached_wallet_refs?: string[];
   }>("ui.backends.delete");
-  const [clearClipboard, setClearClipboard] = React.useState(true);
+  const [settingDefaultBackendId, setSettingDefaultBackendId] =
+    React.useState<string | null>(null);
   const [backendDialogOpen, setBackendDialogOpen] = React.useState(false);
   const [editingBackendId, setEditingBackendId] = React.useState<string | null>(
     null,
@@ -188,6 +198,13 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     React.useState(false);
   const [activeSectionId, setActiveSectionId] = React.useState<SettingsSectionId>(
     () => routeSectionId ?? DEFAULT_SETTINGS_SECTION,
+  );
+  const [pendingBackendEditId, setPendingBackendEditId] = React.useState<
+    string | null
+  >(() =>
+    typeof window === "undefined"
+      ? null
+      : window.sessionStorage.getItem(PENDING_SETTINGS_BACKEND_EDIT_KEY),
   );
 
   const openTouchIdEnrollment = React.useCallback(() => {
@@ -280,9 +297,17 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   // explicit `kassiber:settings-section` event and force re-selection.
   React.useEffect(() => {
     const handler = (event: Event) => {
-      const detail = (event as CustomEvent<{ section?: string | null }>).detail;
+      const detail = (
+        event as CustomEvent<{
+          section?: string | null;
+          backendId?: string | null;
+        }>
+      ).detail;
       const next = settingsSectionForHash(detail?.section ?? "");
       if (next) setActiveSectionId(next);
+      if (detail?.backendId) {
+        setPendingBackendEditId(detail.backendId);
+      }
     };
     window.addEventListener("kassiber:settings-section", handler);
     return () => {
@@ -307,6 +332,22 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     () => backends.find((backend) => backend.id === editingBackendId) ?? null,
     [backends, editingBackendId],
   );
+
+  React.useEffect(() => {
+    if (!pendingBackendEditId) return;
+    const backend = backends.find((candidate) => candidate.id === pendingBackendEditId);
+    if (!backend) {
+      if (!backendSettingsQuery.isFetched) return;
+      window.sessionStorage.removeItem(PENDING_SETTINGS_BACKEND_EDIT_KEY);
+      setPendingBackendEditId(null);
+      return;
+    }
+    setEditingBackendId(backend.id);
+    setInitialBackendTypeId(null);
+    setBackendDialogOpen(true);
+    window.sessionStorage.removeItem(PENDING_SETTINGS_BACKEND_EDIT_KEY);
+    setPendingBackendEditId(null);
+  }, [backendSettingsQuery.isFetched, backends, pendingBackendEditId]);
 
   const onResetWorkspace = () => {
     const ok = window.confirm(
@@ -444,6 +485,34 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     setBackendDialogOpen(false);
     setEditingBackendId(null);
     setInitialBackendTypeId(null);
+  };
+
+  const onSetDefaultBackend = async (backend: Backend) => {
+    setSettingDefaultBackendId(backend.id);
+    try {
+      await setDefaultBackend.mutateAsync({ name: backend.id });
+      const refreshed = await backendSettingsQuery.refetch();
+      const refreshedBackends = (refreshed.data?.data?.backends ?? []).map(
+        backendRowToSettingsBackend,
+      );
+      setExplorerSettings(deriveExplorerSettings(refreshedBackends));
+      addNotification({
+        title: "Default backend updated",
+        body: `${backend.name} will be used whenever a workflow asks for the default backend.`,
+        tone: "success",
+      });
+    } catch (error) {
+      addNotification({
+        title: "Default backend was not changed",
+        body:
+          error instanceof Error
+            ? error.message
+            : "Kassiber could not update the default backend.",
+        tone: "warning",
+      });
+    } finally {
+      setSettingDefaultBackendId(null);
+    }
   };
 
   const onInstallTerminalCommand = async () => {
@@ -766,6 +835,8 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             backends={backends}
             onAdd={() => openAddBackend("bitcoin")}
             onEdit={openEditBackend}
+            onSetDefault={onSetDefaultBackend}
+            settingDefaultBackendId={settingDefaultBackendId}
           />
         );
       case "network-lightning":
@@ -775,6 +846,8 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             backends={backends}
             onAdd={() => openAddBackend("lnd")}
             onEdit={openEditBackend}
+            onSetDefault={onSetDefaultBackend}
+            settingDefaultBackendId={settingDefaultBackendId}
           />
         );
       case "network-liquid":
@@ -784,6 +857,8 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             backends={backends}
             onAdd={() => openAddBackend("liquid")}
             onEdit={openEditBackend}
+            onSetDefault={onSetDefaultBackend}
+            settingDefaultBackendId={settingDefaultBackendId}
           />
         );
       case "network-market":

@@ -98,6 +98,7 @@ from ..core.lightning import lnd as _core_lightning_lnd  # noqa: F401 — regist
 from ..core import metadata as core_metadata
 from ..core import rates as core_rates
 from ..core import reports as core_reports
+from ..core import samourai as core_samourai
 from ..core import source_funds as core_source_funds
 from ..core import source_funds_coverage as core_source_funds_coverage
 from ..core import source_funds_recipients as core_source_funds_recipients
@@ -223,6 +224,38 @@ def _normalized_backend_clear_fields(values: Sequence[str] | None) -> list[str]:
 def _add_workspace_profile_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--workspace")
     parser.add_argument("--profile")
+
+
+def _read_optional_text_file(file_path: str | None, label: str) -> str | None:
+    if not file_path:
+        return None
+    try:
+        with open(file_path, "r", encoding="utf-8") as handle:
+            text = handle.read()
+    except OSError as exc:
+        raise AppError(
+            f"Could not read {label} file",
+            code="validation",
+            hint="Choose a readable local file path.",
+            details={"path": file_path},
+            retryable=False,
+        ) from exc
+    text = text.strip()
+    if not text:
+        raise AppError(
+            f"{label} file is empty",
+            code="validation",
+            details={"path": file_path},
+            retryable=False,
+        )
+    if "\x00" in text:
+        raise AppError(
+            f"{label} file contains NUL bytes",
+            code="validation",
+            details={"path": file_path},
+            retryable=False,
+        )
+    return text
 
 
 def _add_austrian_e1kv_report_args(parser: argparse.ArgumentParser) -> None:
@@ -717,7 +750,7 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_create.add_argument("--config")
     wallets_create.add_argument("--config-file")
     wallets_create.add_argument("--source-file")
-    wallets_create.add_argument("--source-format", choices=["json", "csv", "btcpay_json", "btcpay_csv", "phoenix_csv", "river_csv", "bullbitcoin_csv", "coinfinity_csv", "21bitcoin_csv", "pocketbitcoin_csv", "strike_csv"])
+    wallets_create.add_argument("--source-format", choices=["json", "csv", "btcpay_json", "btcpay_csv", "phoenix_csv", "river_csv", "bullbitcoin_csv", "coinfinity_csv", "21bitcoin_csv", "pocketbitcoin_csv", "strike_csv", "wasabi_bundle"])
 
     wallets_sub.add_parser("kinds")
 
@@ -777,6 +810,11 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_import_phoenix.add_argument("--profile")
     wallets_import_phoenix.add_argument("--wallet", required=True)
     wallets_import_phoenix.add_argument("--file", required=True)
+    wallets_import_wasabi = wallets_sub.add_parser("import-wasabi")
+    wallets_import_wasabi.add_argument("--workspace")
+    wallets_import_wasabi.add_argument("--profile")
+    wallets_import_wasabi.add_argument("--wallet", required=True)
+    wallets_import_wasabi.add_argument("--file", required=True)
 
     wallets_import_river = wallets_sub.add_parser("import-river")
     wallets_import_river.add_argument("--workspace")
@@ -812,6 +850,19 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_import_strike.add_argument("--profile")
     wallets_import_strike.add_argument("--wallet")
     wallets_import_strike.add_argument("--file", required=True)
+    wallets_import_samourai = wallets_sub.add_parser("import-samourai")
+    wallets_import_samourai.add_argument("--workspace")
+    wallets_import_samourai.add_argument("--profile")
+    wallets_import_samourai.add_argument("--label", required=True)
+    wallets_import_samourai.add_argument("--account", help="Wallet/reporting bucket code, id, or unique label")
+    wallets_import_samourai.add_argument("--backend")
+    wallets_import_samourai.add_argument("--network")
+    wallets_import_samourai.add_argument("--gap-limit", type=int)
+    wallets_import_samourai.add_argument(
+        "--source-set-file",
+        required=True,
+        help="Local JSON file containing explicit Samourai descriptor/xpub sources",
+    )
     wallets_sync_btcpay = wallets_sub.add_parser("sync-btcpay")
     wallets_sync_btcpay.add_argument("--workspace")
     wallets_sync_btcpay.add_argument("--profile")
@@ -892,6 +943,12 @@ def build_parser() -> argparse.ArgumentParser:
     attachments_list.add_argument("--profile")
     attachments_list.add_argument("--transaction")
 
+    attachments_rename = attachments_sub.add_parser("rename")
+    attachments_rename.add_argument("--workspace")
+    attachments_rename.add_argument("--profile")
+    attachments_rename.add_argument("attachment_id")
+    attachments_rename.add_argument("--label", required=True)
+
     attachments_remove = attachments_sub.add_parser("remove")
     attachments_remove.add_argument("--workspace")
     attachments_remove.add_argument("--profile")
@@ -914,10 +971,12 @@ def build_parser() -> argparse.ArgumentParser:
     notes_set.add_argument("--profile")
     notes_set.add_argument("--transaction", required=True)
     notes_set.add_argument("--note", required=True)
+    notes_set.add_argument("--reason")
     notes_clear = notes_sub.add_parser("clear")
     notes_clear.add_argument("--workspace")
     notes_clear.add_argument("--profile")
     notes_clear.add_argument("--transaction", required=True)
+    notes_clear.add_argument("--reason")
     tags = meta_sub.add_parser("tags")
     tags_sub = tags.add_subparsers(dest="tags_command", required=True)
     tags_list = tags_sub.add_parser("list")
@@ -933,11 +992,13 @@ def build_parser() -> argparse.ArgumentParser:
     tags_add.add_argument("--profile")
     tags_add.add_argument("--transaction", required=True)
     tags_add.add_argument("--tag", required=True)
+    tags_add.add_argument("--reason")
     tags_remove = tags_sub.add_parser("remove")
     tags_remove.add_argument("--workspace")
     tags_remove.add_argument("--profile")
     tags_remove.add_argument("--transaction", required=True)
     tags_remove.add_argument("--tag", required=True)
+    tags_remove.add_argument("--reason")
     bip329 = meta_sub.add_parser("bip329")
     bip329_sub = bip329.add_subparsers(dest="bip329_command", required=True)
     bip329_import = bip329_sub.add_parser("import")
@@ -960,10 +1021,12 @@ def build_parser() -> argparse.ArgumentParser:
     exclude.add_argument("--workspace")
     exclude.add_argument("--profile")
     exclude.add_argument("--transaction", required=True)
+    exclude.add_argument("--reason")
     include = meta_sub.add_parser("include")
     include.add_argument("--workspace")
     include.add_argument("--profile")
     include.add_argument("--transaction", required=True)
+    include.add_argument("--reason")
 
     records = meta_sub.add_parser("records")
     records_sub = records.add_subparsers(dest="records_command", required=True)
@@ -994,10 +1057,12 @@ def build_parser() -> argparse.ArgumentParser:
     rn_set.add_argument("--profile")
     rn_set.add_argument("--transaction", required=True)
     rn_set.add_argument("--note", required=True)
+    rn_set.add_argument("--reason")
     rn_clear = records_note_sub.add_parser("clear")
     rn_clear.add_argument("--workspace")
     rn_clear.add_argument("--profile")
     rn_clear.add_argument("--transaction", required=True)
+    rn_clear.add_argument("--reason")
 
     records_tag = records_sub.add_parser("tag")
     records_tag_sub = records_tag.add_subparsers(dest="records_tag_command", required=True)
@@ -1006,11 +1071,13 @@ def build_parser() -> argparse.ArgumentParser:
     rt_add.add_argument("--profile")
     rt_add.add_argument("--transaction", required=True)
     rt_add.add_argument("--tag", required=True)
+    rt_add.add_argument("--reason")
     rt_remove = records_tag_sub.add_parser("remove")
     rt_remove.add_argument("--workspace")
     rt_remove.add_argument("--profile")
     rt_remove.add_argument("--transaction", required=True)
     rt_remove.add_argument("--tag", required=True)
+    rt_remove.add_argument("--reason")
 
     records_excluded = records_sub.add_parser("excluded")
     records_excluded_sub = records_excluded.add_subparsers(dest="records_excluded_command", required=True)
@@ -1018,10 +1085,57 @@ def build_parser() -> argparse.ArgumentParser:
     re_set.add_argument("--workspace")
     re_set.add_argument("--profile")
     re_set.add_argument("--transaction", required=True)
+    re_set.add_argument("--reason")
     re_clear = records_excluded_sub.add_parser("clear")
     re_clear.add_argument("--workspace")
     re_clear.add_argument("--profile")
     re_clear.add_argument("--transaction", required=True)
+    re_clear.add_argument("--reason")
+
+    history = records_sub.add_parser("history")
+    history_sub = history.add_subparsers(dest="history_command", required=True)
+    history_list = history_sub.add_parser("list")
+    history_list.add_argument("--workspace")
+    history_list.add_argument("--profile")
+    history_list.add_argument("--transaction", required=True)
+    history_list.add_argument("--source")
+    history_list.add_argument("--field-family")
+    history_list.add_argument("--field")
+    history_list.add_argument("--pricing-only", action="store_true")
+    history_list.add_argument("--ai-only", action="store_true")
+    history_list.add_argument("--stale-only", action="store_true")
+    history_list.add_argument("--start")
+    history_list.add_argument("--end")
+    history_list.add_argument("--cursor")
+    history_list.add_argument("--limit", type=int, default=core_metadata.DEFAULT_RECORDS_LIMIT)
+
+    history_activity = history_sub.add_parser("activity")
+    history_activity.add_argument("--workspace")
+    history_activity.add_argument("--profile")
+    history_activity.add_argument("--transaction")
+    history_activity.add_argument("--wallet")
+    history_activity.add_argument("--source")
+    history_activity.add_argument("--field-family")
+    history_activity.add_argument("--field")
+    history_activity.add_argument("--pricing-only", action="store_true")
+    history_activity.add_argument("--ai-only", action="store_true")
+    history_activity.add_argument("--stale-only", action="store_true")
+    history_activity.add_argument("--start")
+    history_activity.add_argument("--end")
+    history_activity.add_argument("--cursor")
+    history_activity.add_argument("--limit", type=int, default=core_metadata.DEFAULT_RECORDS_LIMIT)
+
+    history_stale = history_sub.add_parser("stale")
+    history_stale.add_argument("--workspace")
+    history_stale.add_argument("--profile")
+
+    history_revert = history_sub.add_parser("revert")
+    history_revert.add_argument("--workspace")
+    history_revert.add_argument("--profile")
+    history_revert.add_argument("--transaction", required=True)
+    history_revert.add_argument("--event", required=True)
+    history_revert.add_argument("--field")
+    history_revert.add_argument("--reason")
 
     journals = sub.add_parser("journals")
     journals_sub = journals.add_subparsers(dest="journals_command", required=True)
@@ -2053,6 +2167,18 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     "phoenix_csv",
                 ),
             )
+        if args.wallets_command == "import-wasabi":
+            return emit(
+                args,
+                import_into_wallet(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.wallet,
+                    args.file,
+                    "wasabi_bundle",
+                ),
+            )
         if args.wallets_command == "import-river":
             return emit(
                 args,
@@ -2128,6 +2254,21 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.file,
                     "strike_csv",
                     "full",
+                ),
+            )
+        if args.wallets_command == "import-samourai":
+            return emit(
+                args,
+                core_samourai.import_samourai_wallet_group(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    label=args.label,
+                    account_ref=args.account,
+                    backend=args.backend,
+                    network=args.network,
+                    gap_limit=args.gap_limit,
+                    source_set_file=args.source_set_file,
                 ),
             )
         if args.wallets_command == "sync-btcpay":
@@ -2225,6 +2366,19 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     tx_ref=args.transaction,
                 ),
             )
+        if args.attachments_command == "rename":
+            return emit(
+                args,
+                core_attachments.rename_attachment(
+                    conn,
+                    args.data_root,
+                    args.workspace,
+                    args.profile,
+                    args.attachment_id,
+                    args.label,
+                    attachment_hooks,
+                ),
+            )
         if args.attachments_command == "remove":
             return emit(
                 args,
@@ -2265,14 +2419,25 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 return emit(
                     args,
                     core_metadata.set_transaction_note(
-                        conn, args.workspace, args.profile, args.transaction, args.note, metadata_hooks
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        args.transaction,
+                        args.note,
+                        metadata_hooks,
+                        reason=args.reason,
                     ),
                 )
             if args.notes_command == "clear":
                 return emit(
                     args,
                     core_metadata.clear_transaction_note(
-                        conn, args.workspace, args.profile, args.transaction, metadata_hooks
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        args.transaction,
+                        metadata_hooks,
+                        reason=args.reason,
                     ),
                 )
         if args.metadata_command == "tags":
@@ -2287,14 +2452,26 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 return emit(
                     args,
                     core_metadata.add_tag_to_transaction(
-                        conn, args.workspace, args.profile, args.transaction, args.tag, metadata_hooks
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        args.transaction,
+                        args.tag,
+                        metadata_hooks,
+                        reason=args.reason,
                     ),
                 )
             if args.tags_command == "remove":
                 return emit(
                     args,
                     core_metadata.remove_tag_from_transaction(
-                        conn, args.workspace, args.profile, args.transaction, args.tag, metadata_hooks
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        args.transaction,
+                        args.tag,
+                        metadata_hooks,
+                        reason=args.reason,
                     ),
                 )
         if args.metadata_command == "bip329":
@@ -2331,14 +2508,26 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             return emit(
                 args,
                 core_metadata.set_transaction_excluded(
-                    conn, args.workspace, args.profile, args.transaction, True, metadata_hooks
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.transaction,
+                    True,
+                    metadata_hooks,
+                    reason=args.reason,
                 ),
             )
         if args.metadata_command == "include":
             return emit(
                 args,
                 core_metadata.set_transaction_excluded(
-                    conn, args.workspace, args.profile, args.transaction, False, metadata_hooks
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.transaction,
+                    False,
+                    metadata_hooks,
+                    reason=args.reason,
                 ),
             )
         if args.metadata_command == "records":
@@ -2378,14 +2567,25 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     return emit(
                         args,
                         core_metadata.set_transaction_note(
-                            conn, args.workspace, args.profile, args.transaction, args.note, metadata_hooks
+                            conn,
+                            args.workspace,
+                            args.profile,
+                            args.transaction,
+                            args.note,
+                            metadata_hooks,
+                            reason=args.reason,
                         ),
                     )
                 if args.records_note_command == "clear":
                     return emit(
                         args,
                         core_metadata.clear_transaction_note(
-                            conn, args.workspace, args.profile, args.transaction, metadata_hooks
+                            conn,
+                            args.workspace,
+                            args.profile,
+                            args.transaction,
+                            metadata_hooks,
+                            reason=args.reason,
                         ),
                     )
             if args.records_command == "tag":
@@ -2393,14 +2593,26 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     return emit(
                         args,
                         core_metadata.add_tag_to_transaction(
-                            conn, args.workspace, args.profile, args.transaction, args.tag, metadata_hooks
+                            conn,
+                            args.workspace,
+                            args.profile,
+                            args.transaction,
+                            args.tag,
+                            metadata_hooks,
+                            reason=args.reason,
                         ),
                     )
                 if args.records_tag_command == "remove":
                     return emit(
                         args,
                         core_metadata.remove_tag_from_transaction(
-                            conn, args.workspace, args.profile, args.transaction, args.tag, metadata_hooks
+                            conn,
+                            args.workspace,
+                            args.profile,
+                            args.transaction,
+                            args.tag,
+                            metadata_hooks,
+                            reason=args.reason,
                         ),
                     )
             if args.records_command == "excluded":
@@ -2408,14 +2620,94 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     return emit(
                         args,
                         core_metadata.set_transaction_excluded(
-                            conn, args.workspace, args.profile, args.transaction, True, metadata_hooks
+                            conn,
+                            args.workspace,
+                            args.profile,
+                            args.transaction,
+                            True,
+                            metadata_hooks,
+                            reason=args.reason,
                         ),
                     )
                 if args.records_excluded_command == "clear":
                     return emit(
                         args,
                         core_metadata.set_transaction_excluded(
-                            conn, args.workspace, args.profile, args.transaction, False, metadata_hooks
+                            conn,
+                            args.workspace,
+                            args.profile,
+                            args.transaction,
+                            False,
+                            metadata_hooks,
+                            reason=args.reason,
+                        ),
+                    )
+            if args.records_command == "history":
+                if args.history_command == "list":
+                    return emit(
+                        args,
+                        core_metadata.list_transaction_history(
+                            conn,
+                            args.workspace,
+                            args.profile,
+                            args.transaction,
+                            metadata_hooks,
+                            source=args.source,
+                            field_family=args.field_family,
+                            field=args.field,
+                            pricing_only=args.pricing_only,
+                            ai_only=args.ai_only,
+                            stale_only=args.stale_only,
+                            start=args.start,
+                            end=args.end,
+                            cursor=args.cursor,
+                            limit=args.limit,
+                        ),
+                    )
+                if args.history_command == "activity":
+                    return emit(
+                        args,
+                        core_metadata.list_activity_history(
+                            conn,
+                            args.workspace,
+                            args.profile,
+                            metadata_hooks,
+                            transaction_ref=args.transaction,
+                            wallet_ref=args.wallet,
+                            source=args.source,
+                            field_family=args.field_family,
+                            field=args.field,
+                            pricing_only=args.pricing_only,
+                            ai_only=args.ai_only,
+                            stale_only=args.stale_only,
+                            start=args.start,
+                            end=args.end,
+                            cursor=args.cursor,
+                            limit=args.limit,
+                        ),
+                    )
+                if args.history_command == "stale":
+                    return emit(
+                        args,
+                        core_metadata.stale_transaction_edit_summary(
+                            conn,
+                            args.workspace,
+                            args.profile,
+                            metadata_hooks,
+                        ),
+                    )
+                if args.history_command == "revert":
+                    return emit(
+                        args,
+                        core_metadata.revert_transaction_edit(
+                            conn,
+                            args.workspace,
+                            args.profile,
+                            args.transaction,
+                            metadata_hooks,
+                            event_id=args.event,
+                            field=args.field,
+                            reason=args.reason,
                         ),
                     )
     if args.command == "journals":

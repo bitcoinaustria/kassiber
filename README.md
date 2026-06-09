@@ -66,19 +66,25 @@ workflow almost nobody else covers.
 ## Highlights
 
 - **Direct Bitcoin sync** — Esplora, Electrum, Bitcoin Core RPC, BTCPay
-  Greenfield, Liquid Electrum.
+  Greenfield, Liquid Electrum, plus watch-only UTXO inventory for
+  chain-backed wallet sources.
 - **Imports** — BTCPay CSV/JSON, Phoenix, River, Bull Bitcoin, Coinfinity,
-  21bitcoin, Pocket Bitcoin, Strike, generic CSV/JSON, BIP329 labels.
-- **Review workflows** — notes, tags, exclusions, attachments; reviewed
+  21bitcoin, Pocket Bitcoin, Strike, Samourai/Whirlpool public descriptor/xpub,
+  generic CSV/JSON, BIP329 labels.
+- **Review workflows** — notes, tags, exclusions, attachments; append-only
+  transaction edit history with Activity review and safe revert; reviewed
   transfer/swap pairing for Lightning, Liquid peg-in/peg-out, and submarine
-  swaps; reviewed source-of-funds reports with immutable saved cases and
-  gated PDF export.
+  swaps; reviewed source-of-funds reports with immutable saved cases,
+  gated PDF export, audit evidence summaries, manual evidence reuse between
+  transactions, and a DB-backed audit package manifest/export for
+  trusted handoff.
 - **Tax & reports** — RP2 lot accounting (FIFO/LIFO/HIFO/LOFO and moving
   average); Austrian § 27b EStG with E 1kv PDF / XLSX / CSV; summary,
   balance sheet, capital gains, portfolio, balance history; local
-  BTC-USD / BTC-EUR rates cache (Coinbase + CoinGecko fallback + Kraken
-  OHLCVT local archive, plus bundled BTC-only Kraken offline history for
-  daily values).
+  BTC-USD / BTC-EUR rates cache (configurable live provider, Coinbase by
+  default, CoinGecko supported, plus Kraken OHLCVT local archive and
+  auto-seeded bundled BTC-only Kraken offline history for daily values) and
+  opt-in desktop background refresh for the latest BTC price.
 - **Sovereign storage** — SQLite system of record; optional SQLCipher 4
   passphrase encryption; single-file `tar | age` backups recoverable with
   stock `age` + `tar` + `sqlcipher` even if Kassiber disappears.
@@ -114,6 +120,15 @@ or BTCPay connection, and the optional AI assistant. Every other flow —
 Overview, Connections, Imports, Transactions, Swap Matching, Journals,
 Quarantine, Reports, Source of Funds, Books, Settings, Logs,
 Assistant — is one click away in the sidebar.
+
+Open a wallet in Connections to refresh its source and review its read-only
+UTXOs table: currently unspent transaction outputs, amounts, confirmation state,
+receive/change position when known, and source freshness. The table shows every
+UTXO returned by the capped wallet inventory payload, reports when the response
+is truncated, can be sorted by size, chain date, confirmations, or outpoint, and
+can open a matching public explorer after the same privacy warning used by
+transaction details. Kassiber never constructs
+transactions, signs, broadcasts, freezes coins, or selects coins.
 
 ### CLI
 
@@ -178,8 +193,15 @@ tiers, and the incomplete Tor story.
 
 For public bug reports, run `kassiber diagnostics collect` (or
 `--diagnostics-out auto` on a failing command) — the output is safe to
-paste publicly. Report security-impacting issues to the maintainer
-privately, not in the public tracker.
+paste publicly. In the desktop app, enable Developer tools, open Logs, and
+choose **Export → Support bundle** to create a `.support.jsonl` file with a
+short issue description, redacted log events, last-failure context, and
+redacted AI provenance for local troubleshooting. Support bundles default to
+High-signal for trusted maintainer debugging and offer Public-safe mode for
+public posting; both modes always strip wallet and credential material such as
+descriptors, private keys, recovery phrases, API keys, passwords, and bearer
+tokens. Report security-impacting issues to the maintainer privately, not in
+the public tracker.
 
 ## Contributing & license
 

@@ -1,4 +1,8 @@
-import { useIsFetching, useQueryClient } from "@tanstack/react-query";
+import {
+  useIsFetching,
+  useIsMutating,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   Link,
   Outlet,
@@ -24,6 +28,7 @@ import {
   Fingerprint,
   Gauge,
   Heart,
+  History,
   LifeBuoy,
   LockKeyhole,
   LogOut,
@@ -125,6 +130,12 @@ import { PreAlphaBanner } from "./PreAlphaBanner";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { BookSwitcherPopover } from "./BookSwitcherPopover";
+import { NetworkStatusIndicator } from "./NetworkStatusIndicator";
+import {
+  routeProgressFromActiveMaintenance,
+  routeProgressFromNotifications,
+  type RouteProgressState,
+} from "./progressIndicator";
 import {
   buildAppSearchResults,
   isLikelyTransactionLookupQuery,
@@ -169,7 +180,9 @@ type NotificationItem = Omit<AppNotification, "createdAt"> & {
 };
 
 const APP_COMMIT_SHORT = APP_COMMIT ? APP_COMMIT.slice(0, 7) : "unknown";
+const APP_IS_DEV_BUILD = APP_VERSION === "dev";
 const NATIVE_MENU_EVENT = "kassiber:intent";
+const ACTIVE_PROGRESS_CLEAR_GRACE_MS = 750;
 const topNavIconButtonClassName =
   "size-8 text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground";
 
@@ -177,6 +190,7 @@ function notificationProgressValue(value: number | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(100, value));
 }
+
 const appMainClassName =
   "relative min-h-0 w-full flex-1 overflow-auto overscroll-contain bg-background text-zinc-950 dark:text-zinc-50";
 
@@ -204,6 +218,15 @@ const NAV_GROUPS: NavGroup[] = [
 
 const ROUTE_META: Array<[string, RouteMeta]> = [
   [
+    "/activity",
+    {
+      title: "Activity",
+      icon: History,
+      searchLabel: "Search activity",
+      searchPlaceholder: "Search transactions, wallets...",
+    },
+  ],
+  [
     "/connections/",
     {
       title: "Wallet Detail",
@@ -219,6 +242,15 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       icon: Wallet,
       searchLabel: "Search wallets",
       searchPlaceholder: "Search wallets, imports, backends...",
+    },
+  ],
+  [
+    "/books/",
+    {
+      title: "Book Set Overview",
+      icon: Users,
+      searchLabel: "Search books",
+      searchPlaceholder: "Search books, wallets, reports...",
     },
   ],
   [
@@ -408,7 +440,7 @@ function assistantReturnPathFor(pathname: string): AssistantReturnPath {
   if (pathname === "/transactions") return "/transactions";
   if (pathname === "/reports") return "/reports";
   if (pathname === "/source-of-funds") return "/source-of-funds";
-  if (pathname === "/books" || pathname === "/profiles") return "/books";
+  if (pathname === "/books" || pathname.startsWith("/books/") || pathname === "/profiles") return "/books";
   if (pathname === "/journals") return "/journals";
   if (pathname === "/quarantine") return "/quarantine";
   if (pathname === "/logs" || pathname === "/diagnostics") return "/logs";
@@ -426,11 +458,30 @@ export function AppShell() {
   const setIdentity = useUiStore((s) => s.setIdentity);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const addNotification = useUiStore((s) => s.addNotification);
+  const appNotifications = useUiStore((s) => s.notifications);
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const bumpDaemonSession = useUiStore((s) => s.bumpDaemonSession);
+  const activeMaintenanceProgress = useUiStore(
+    (s) => s.activeMaintenanceProgress,
+  );
+  const clearActiveMaintenanceProgress = useUiStore(
+    (s) => s.clearActiveMaintenanceProgress,
+  );
   const { syncAll, isSyncing } = useWalletSyncAction();
   const dataMode = useUiStore((s) => s.dataMode);
+  const freshnessRunsInFlight = useIsMutating({
+    mutationKey: daemonMutationKey(dataMode, "ui.freshness.run"),
+  });
+  const walletSyncsInFlight = useIsMutating({
+    mutationKey: daemonMutationKey(dataMode, "ui.wallets.sync"),
+  });
+  const journalRunsInFlight = useIsMutating({
+    mutationKey: daemonMutationKey(dataMode, "ui.journals.process"),
+  });
+  const marketRateRunsInFlight = useIsMutating({
+    mutationKey: daemonMutationKey(dataMode, "ui.rates.latest"),
+  });
   const encryptedWorkspace =
     Boolean(identity?.encrypted) || identity?.databaseMode === "sqlcipher";
   const lockEncryptedWorkspaceOnLaunch = shouldLockEncryptedWorkspaceOnLaunch({
@@ -479,7 +530,11 @@ export function AppShell() {
     : true;
   const importRootBlocked = !importRootReady || !importedProjectActive;
   const daemonEnabled = !locked && !importRootBlocked;
-  const shellBusy = routerBusy || daemonFetchCount > 0;
+  const shellProgress =
+    routeProgressFromActiveMaintenance(activeMaintenanceProgress) ??
+    routeProgressFromNotifications(appNotifications);
+  const shellBusy =
+    routerBusy || daemonFetchCount > 0 || Boolean(shellProgress);
   const isAssistantRoute = pathname === "/assistant";
   const routeMeta =
     ROUTE_META.find(([prefix]) => pathname.startsWith(prefix))?.[1] ?? {
@@ -715,6 +770,52 @@ export function AppShell() {
       0,
     [dataMode, queryClient],
   );
+  const activeProgressHasMatchingMutation = React.useCallback(
+    (id: string) => {
+      switch (id) {
+        case "book-refresh":
+          return (
+            isDaemonKindMutating("ui.freshness.run") ||
+            isDaemonKindMutating("ui.wallets.sync")
+          );
+        case "journal-processing":
+          return isDaemonKindMutating("ui.journals.process");
+        case "market-rate-refresh":
+          return isDaemonKindMutating("ui.rates.latest");
+        default:
+          return true;
+      }
+    },
+    [isDaemonKindMutating],
+  );
+
+  React.useEffect(() => {
+    if (!activeMaintenanceProgress?.active) return;
+    if (activeProgressHasMatchingMutation(activeMaintenanceProgress.id)) return;
+
+    const updatedAt = Date.parse(activeMaintenanceProgress.updatedAt);
+    const ageMs = Number.isFinite(updatedAt) ? Date.now() - updatedAt : 0;
+    const delayMs = Math.max(0, ACTIVE_PROGRESS_CLEAR_GRACE_MS - ageMs);
+    const timeout = window.setTimeout(() => {
+      const current = useUiStore.getState().activeMaintenanceProgress;
+      if (!current?.active) return;
+      if (current.id !== activeMaintenanceProgress.id) return;
+      if (activeProgressHasMatchingMutation(current.id)) return;
+      clearActiveMaintenanceProgress(current.id);
+    }, delayMs);
+
+    return () => window.clearTimeout(timeout);
+  }, [
+    activeMaintenanceProgress?.active,
+    activeMaintenanceProgress?.id,
+    activeMaintenanceProgress?.updatedAt,
+    activeProgressHasMatchingMutation,
+    clearActiveMaintenanceProgress,
+    freshnessRunsInFlight,
+    journalRunsInFlight,
+    marketRateRunsInFlight,
+    walletSyncsInFlight,
+  ]);
   const { runJournalProcessing: runMenuJournalProcessing } =
     useJournalProcessingAction({
       beforeRun: ensureWorkspaceForMenuAction,
@@ -724,10 +825,14 @@ export function AppShell() {
 
   const runMenuWalletSync = React.useCallback(() => {
     if (!ensureWorkspaceForMenuAction()) return;
-    if (isSyncing || isDaemonKindMutating("ui.wallets.sync")) {
+    if (
+      isSyncing ||
+      isDaemonKindMutating("ui.freshness.run") ||
+      isDaemonKindMutating("ui.wallets.sync")
+    ) {
       addNotification({
-        title: "Connection refresh already running",
-        body: "Kassiber is already scanning watch-only sources.",
+        title: "Book refresh already running",
+        body: "Kassiber is already refreshing sources, rates, or journals.",
         tone: "info",
       });
       return;
@@ -1142,7 +1247,10 @@ export function AppShell() {
                             : "pb-[240px]",
                         )}
                       >
-                        <RouteTransitionIndicator active={shellBusy} />
+                        <RouteTransitionIndicator
+                          active={shellBusy}
+                          progress={shellProgress}
+                        />
                         <Outlet />
                       </main>
                       {isAssistantRoute ? null : (
@@ -1159,7 +1267,10 @@ export function AppShell() {
                       tabIndex={-1}
                       className={appMainClassName}
                     >
-                      <RouteTransitionIndicator active={shellBusy} />
+                      <RouteTransitionIndicator
+                        active={shellBusy}
+                        progress={shellProgress}
+                      />
                       <Outlet />
                     </main>
                   )
@@ -1173,16 +1284,67 @@ export function AppShell() {
   );
 }
 
-function RouteTransitionIndicator({ active }: { active: boolean }) {
+function RouteTransitionIndicator({
+  active,
+  progress,
+}: {
+  active: boolean;
+  progress?: RouteProgressState | null;
+}) {
+  const value = notificationProgressValue(progress?.value);
+  const isDeterminate =
+    progress && !progress.indeterminate && typeof progress.value === "number";
+  const hasProgressLabel = Boolean(progress?.label);
+  const statusLabel = isDeterminate
+    ? `${Math.round(value)}%`
+    : progress
+      ? "In progress"
+      : null;
+
   return (
     <div
-      aria-hidden="true"
+      aria-hidden={hasProgressLabel ? undefined : "true"}
+      role={hasProgressLabel && active ? "status" : undefined}
+      aria-live={hasProgressLabel && active ? "polite" : undefined}
       className={cn(
-        "pointer-events-none sticky top-0 z-10 h-px w-full overflow-hidden transition-opacity duration-150",
+        "pointer-events-none sticky top-0 z-10 w-full overflow-hidden bg-background/95 px-3 transition-[height,opacity] duration-150 backdrop-blur sm:px-4 md:px-5",
+        active ? (hasProgressLabel ? "h-9" : "h-2") : "h-0",
         active ? "opacity-100" : "opacity-0",
       )}
     >
-      <div className="h-full w-1/2 bg-primary/70 will-change-transform motion-safe:animate-[route-progress_0.9s_ease-in-out_infinite] motion-reduce:w-full motion-reduce:will-change-auto" />
+      <div
+        className={cn(
+          "mx-auto flex h-full w-full flex-col justify-center gap-1",
+          hasProgressLabel ? "pt-1 pb-1.5" : "py-0.5",
+        )}
+      >
+        {progress ? (
+          <div className="flex min-w-0 items-center justify-between gap-3 text-[11px] font-medium leading-none">
+            <span className="min-w-0 truncate text-primary">
+              {progress.label}
+            </span>
+            <span className="shrink-0 text-muted-foreground tabular-nums">
+              {statusLabel}
+            </span>
+          </div>
+        ) : null}
+        <div
+          className={cn(
+            "h-1.5 w-full overflow-hidden rounded-full bg-primary/15",
+            !hasProgressLabel && "h-1",
+          )}
+        >
+          <div
+            className={cn(
+              "h-full rounded-full bg-primary/80",
+              isDeterminate
+                ? "transition-[width] duration-200 ease-out"
+                : "w-1/3 will-change-transform motion-safe:animate-[route-progress_0.9s_ease-in-out_infinite] motion-reduce:w-full motion-reduce:will-change-auto",
+            )}
+            style={isDeterminate ? { width: `${value}%` } : undefined}
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -1258,6 +1420,18 @@ function SidebarActions({
 
   return (
     <SidebarMenu>
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          asChild
+          isActive={pathname === "/activity"}
+          tooltip="Activity"
+        >
+          <Link to="/activity">
+            <History className="size-4" aria-hidden="true" />
+            <span>Activity</span>
+          </Link>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
       {developerToolsEnabled ? (
         <SidebarMenuItem>
           <SidebarMenuButton
@@ -1509,10 +1683,16 @@ function AppVersion() {
       href="https://github.com/bitcoinaustria/kassiber"
       target="_blank"
       rel="noreferrer"
-      title={`Kassiber v${APP_VERSION} (${APP_COMMIT})`}
+      title={
+        APP_IS_DEV_BUILD
+          ? `Kassiber local dev build (${APP_COMMIT})`
+          : `Kassiber v${APP_VERSION} (${APP_COMMIT})`
+      }
       className="inline-flex items-center justify-center gap-1 px-2 pb-1 text-center text-[11px] leading-none text-muted-foreground underline-offset-4 hover:text-foreground hover:underline group-data-[collapsible=icon]:hidden"
     >
-      <span>Kassiber v{APP_VERSION}</span>
+      <span>
+        {APP_IS_DEV_BUILD ? "Kassiber dev" : `Kassiber v${APP_VERSION}`}
+      </span>
       <span aria-hidden="true">·</span>
       <span className="font-mono text-[11px] leading-none">
         {APP_COMMIT_SHORT}
@@ -2096,6 +2276,7 @@ function AppDashboardHeader({
             <Eye className="size-4" aria-hidden="true" />
           )}
         </Button>
+        <NetworkStatusIndicator daemonEnabled={daemonEnabled} />
         <Button
           variant="ghost"
           size="icon"

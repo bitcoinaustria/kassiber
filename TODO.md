@@ -58,6 +58,31 @@ Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the 
   (replacing #154) and PR #159 adds `kassiber/core/lightning/cln.py`
   (replacing #155); both PRs are scoped to a single adapter so review
   stays focused per-implementation.
+- [x] Add watch-only UTXO inventory for chain-backed wallet sources:
+  source refresh now persists current unspent outputs for Esplora/Electrum
+  descriptor/xpub/address wallets and Bitcoin Core address wallets, exposes
+  the redacted `ui.wallets.utxos` daemon surface, and renders a desktop
+  wallet-detail UTXOs table with loading, empty, unsupported, stale, refresh,
+  sorting, explorer-link, and Liquid-unblind-blocker states.
+- [x] Add the shared privacy-import substrate for future wallet importers:
+  typed transaction-level privacy-boundary markers, generic privacy-hop tax
+  quarantine, source-funds opaque-boundary warnings, and typed desktop
+  source-format plumbing. Protocol-specific Wasabi coin-anonymity fields and
+  Samourai/Whirlpool importers landed in separate follow-up PRs.
+- [x] Add Wasabi Wallet watch-only import and privacy-hop evidence handling:
+  sanitized `wasabi_bundle` imports normalize `gethistory`, refresh durable
+  Coins/UTXO anonymity state from `listcoins` / `listunspentcoins`, preserve
+  safe wallet metadata only, wire CLI/daemon/desktop catalog surfaces, and
+  mark ambiguous CoinJoin/PayJoin-style evidence as `privacy_hop_unresolved`
+  instead of guessing provenance or taxable proceeds.
+- [x] Add Samourai/Whirlpool watch-only recovery import: local backup v1/v2
+  decryption, mnemonic and explicit descriptor/xpub source-set import,
+  Deposit/Badbank/Premix/Postmix/Ricochet child sources, redacted daemon/CLI
+  output, UTXO provenance, desktop import/detail surfaces, internal
+  Tx0/mix/remix tax handling, and source-funds privacy-boundary suggestions.
+  Deferred: coordinator-backed mix-status fetches, exact round metadata beyond
+  imported/local evidence, and active Whirlpool client behavior remain out of
+  scope.
 - [ ] Design an opt-in encrypted Lightning **evidence vault** for
   operators who need proof-of-payment for legal disputes, full invoice
   replay for corrupted-bookkeeper recovery, or chain-of-custody records
@@ -161,10 +186,11 @@ top of the monolith.
 ### 0.5c - Transaction attachments
 
 - [x] Add attachment storage and metadata table
-- [x] Add CLI commands for add/list/remove plus `attachments gc` and
+- [x] Add CLI commands for add/list/rename/remove plus `attachments gc` and
   `attachments verify`
 - [x] Make backup/restore aware of attachment files
-- [x] Keep URL attachments string-only; no fetching or indexing
+- [x] Keep URL attachments reference-only; no fetching or indexing. Kassiber
+  derives an editable display label from the URL itself
 
 ### 0.5d - Austrian tax support
 
@@ -218,8 +244,21 @@ top of the monolith.
 - [x] Add deterministic-hop bulk review for consolidation/self-transfer chains while keeping weak time/amount and chain-observation suggestions manual
 - [x] Add local report-shape rollups for overview, narrative, data sources, source mix, simplified flow charts, and level-by-level flow details, and simplify the desktop default workflow while keeping advanced review controls optional
 - [x] Add a basic Austria/EUR source-funds report context with bilingual title, evidence checklist, and fictitious local demo generator
+- [x] Add a DB-backed Reports audit package export for trusted auditor
+  handoff: deterministic `manifest.json`, selected managed evidence files,
+  URL references as labels/links, transaction evidence readiness warnings,
+  source-funds review state, journal context, and explicit exclusion of
+  descriptors/xpubs/backend credentials/logs/AI settings/technical wallet
+  evidence.
+- [x] Add manual transaction-detail evidence reuse: choose another transaction,
+  copy selected URL references as new rows, duplicate managed file attachments
+  under new attachment ids, preserve provenance, and surface copied evidence in
+  readiness/audit package manifests.
 - [ ] Add graph visualization polish for dense source-funds cases after real-user feedback; keep the current editor workflow as the source of truth
 - [ ] Add optional configured-backend chain observations with an explicit public-backend privacy warning; keep them weak suggestions unless reviewed
+- [ ] Add optional OCR/photo/invoice extraction after the evidence review and
+  audit package workflow has real-user feedback; keep suggestions review-gated
+  and never auto-mark evidence complete.
 
 ## Phase 1 - Desktop UI
 
@@ -243,6 +282,10 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   - [x] Promote the desktop screen into a Developer tools-gated typed Logs view
     with subscription-level control, a bounded RAM-only local ring buffer,
     field-type redaction, copy-last-200, and Markdown/JSONL/log exports
+  - [x] Add a support bundle export from Logs with High-signal and Public-safe
+    redaction modes, an issue description, request-correlated redacted events,
+    last-failure context, redaction report, and AI provenance for
+    Codex-assisted debugging
 
 ### 1.1 Daemon mode (no UI yet)
 
@@ -361,7 +404,15 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   primitives, wider dashboard layout, daemon-backed lock controls, SQLCipher
   passphrase rotation, and passphrase plus workspace-name confirmation before
   deleting encrypted local books set data
-- [ ] Books screen
+- [x] Books screen now uses daemon-backed book sets/books, create/rename/switch
+  actions, and a book-set overview route for workspace-level treasury and
+  readiness reads without switching the active book.
+- [ ] Add a book-set treasury export (CSV/PDF) with BTC holdings/activity,
+  per-book fiat rows, and a readiness manifest; keep capital-gains/tax exports
+  book-scoped so lots, transfers, and mixed-fiat semantics never merge across
+  books.
+- [ ] Continue hardening book-management edges: destructive book/book-set
+  deletion UX, backup/restore path, and remaining Settings fixture replacement.
 - [x] Welcome/onboarding screen refreshed with a shadcn-style, SQLCipher-aware
   setup flow that captures books/tax defaults and database
   protection by initializing the local SQLCipher database through the daemon,
@@ -396,10 +447,23 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 
 ### 1.4 Live actions and workers
 
-- [ ] Sync, imports, journals process, metadata edits, transfer pairing,
-  attachments, quarantine resolve, profile/wallet/backend CRUD,
-  backup/restore
-- [ ] Progress + cancellation UI
+- [x] Add a daemon-owned freshness/job subsystem for live source refresh:
+  persistent per-profile source states and jobs, separate on-chain / BTCPay
+  wallet-source / BTCPay provenance / market-rate / journal job types,
+  checkpointed Electrum/Esplora/BTCPay/rate work, cancellation, pause/resume,
+  opt-in background worker, provider cooldowns, redacted envelopes, and Tauri
+  allowlist support.
+- [x] Follow-up hardening for freshness workers: move daemon freshness glue into
+  a focused module, share Retry-After and persisted timestamp parsing helpers,
+  scope the unlocked SQLCipher passphrase to the local daemon session plus
+  one-shot worker handoff, and bound repeat BTCPay page scans with stable-id
+  fingerprints, explicit stop reasons, and rotating deep audits for older
+  metadata edits.
+- [ ] Finish the remaining live-action worker surfaces: file/import flows,
+  metadata edits, transfer pairing, attachments, quarantine resolve,
+  profile/wallet/backend CRUD, backup/restore.
+- [ ] Expand the dedicated progress + cancellation UI beyond sync/freshness
+  helpers into every long-running live action.
 - [ ] Separate secret-entry IPC channel; OS-keychain-backed secret refs
 
 ### 1.5 Packaging, signing, distribution
@@ -420,13 +484,11 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 
 ## Later backlog
 
-- [ ] Split `TransactionDetailSheet.tsx` tab bodies into siblings —
-  the main component is ~1600 lines because the six tab panels live
-  inline. Extract `TabDetails`, `TabClassify`, `TabPricing`, `TabTax`,
-  `TabLinked`, `TabLedger` (and the right-rail children) into their
-  own files; pass `localDraft`, `updateDraft`, `transaction`,
-  `hideSensitive`, `currency`, dirty flags as props. Should land the
-  main file under ~800 lines without changing behavior.
+- [x] Split `TransactionDetailSheet.tsx` tab bodies into siblings —
+  the detail sheet now delegates display helpers, header chrome, the
+  right rail, attachments/commercial panels, and each tab body to focused
+  transaction-detail sibling components, leaving the main state/save
+  coordinator under 800 lines without changing behavior.
 - [x] Wire transaction-detail pricing edits through
   `ui.transactions.metadata.update` — the daemon accepts pricing source
   kind/quality, fiat currency, manual price/value, and evidence reference,
@@ -446,15 +508,15 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   The desktop sheet now lists real attachments, copies selected files,
   stores URL references, opens URL/file targets through the Tauri shell,
   and removes attachment records through daemon mutations.
-- [ ] Change history / audit log for metadata edits — per-row history of
-  what changed (label, tags, note, exclusion, tax handling, pricing
-  source, manual price evidence), who changed it, when, and the prior
-  value. Surfacing target: the `Edit history` panel in the desktop
-  transaction detail sheet (currently a placeholder). Backend needs a
-  new SQLite table (`transaction_edits` or similar), a daemon kind
-  (`ui.transactions.history`), and `metadata.update` writes that
-  append edit rows. Keep local-first and audit-friendly; redaction
-  rules for the sensitive blur should still apply when rendering.
+- [x] Change provenance for transaction metadata edits — append-only
+  `transaction_edit_events` / `transaction_edit_fields` rows capture notes,
+  tags, exclusions, review/tax status, Austrian overrides, and pricing
+  provenance/value changes from CLI, desktop, and AI-tool sources. No-op
+  saves are suppressed; revert creates a new forward edit. Users can inspect
+  per-transaction history, browse the global Activity route with filters,
+  see stale-report prompts, and opt edit history into audit-package export
+  without exposing descriptors, xpubs, backend credentials, wallet files, or
+  unrelated wallet history.
 - [ ] Custom CSV mapping DSL for arbitrary wallet exports
 - [ ] Rates/manual adjustment surface
 - [ ] Full double-entry account model only if a future ledger design needs it:

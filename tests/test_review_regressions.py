@@ -21,6 +21,7 @@ from kassiber.cli.handlers import (
     _audit_transaction_refs,
     create_direct_swap_payout,
     create_transaction_pair,
+    latest_rates_for_profile,
     process_journals,
 )
 from kassiber.core import attachments as core_attachments
@@ -31,6 +32,7 @@ from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
 from kassiber.core.reports import (
     ReportHooks,
     _generic_report_transfer_pair_rows,
+    latest_transaction_rates_for_profile,
     report_austrian_e1kv,
     report_tax_summary,
 )
@@ -353,6 +355,104 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, msg=f"{payload!r}")
         self.assertEqual(payload.get("kind"), kind)
 
+    def test_latest_transaction_rates_are_shared_between_reports_and_ledger_rebuild(self):
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            """
+            CREATE TABLE transactions(
+                profile_id TEXT NOT NULL,
+                excluded INTEGER NOT NULL DEFAULT 0,
+                occurred_at TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                asset TEXT NOT NULL,
+                fiat_rate REAL,
+                fiat_value REAL,
+                fiat_rate_exact TEXT,
+                fiat_value_exact TEXT,
+                amount INTEGER NOT NULL
+            )
+            """
+        )
+        conn.executemany(
+            """
+            INSERT INTO transactions(
+                profile_id, excluded, occurred_at, created_at, asset,
+                fiat_rate, fiat_value, fiat_rate_exact, fiat_value_exact, amount
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "pf-rate",
+                    0,
+                    "2026-01-01T00:00:00Z",
+                    "2026-01-01T00:00:00Z",
+                    "BTC",
+                    50000.0,
+                    None,
+                    None,
+                    None,
+                    btc_to_msat("0.1"),
+                ),
+                (
+                    "pf-rate",
+                    0,
+                    "2026-02-01T00:00:00Z",
+                    "2026-02-01T00:00:00Z",
+                    "BTC",
+                    1.0,
+                    None,
+                    "62000.123456789",
+                    None,
+                    btc_to_msat("0.1"),
+                ),
+                (
+                    "pf-rate",
+                    0,
+                    "2026-02-02T00:00:00Z",
+                    "2026-02-02T00:00:00Z",
+                    "LBTC",
+                    None,
+                    None,
+                    None,
+                    "310.00",
+                    btc_to_msat("0.005"),
+                ),
+                (
+                    "pf-rate",
+                    1,
+                    "2026-03-01T00:00:00Z",
+                    "2026-03-01T00:00:00Z",
+                    "BTC",
+                    99999.0,
+                    None,
+                    None,
+                    None,
+                    btc_to_msat("0.1"),
+                ),
+                (
+                    "pf-other",
+                    0,
+                    "2026-04-01T00:00:00Z",
+                    "2026-04-01T00:00:00Z",
+                    "BTC",
+                    12345.0,
+                    None,
+                    None,
+                    None,
+                    btc_to_msat("0.1"),
+                ),
+            ],
+        )
+
+        report_rates = latest_transaction_rates_for_profile(conn, "pf-rate")
+        ledger_rates = latest_rates_for_profile(conn, "pf-rate")
+
+        self.assertEqual(report_rates, ledger_rates)
+        self.assertEqual(report_rates["BTC"], Decimal("62000.123456789"))
+        self.assertEqual(report_rates["LBTC"], Decimal("62000"))
+
     def test_ui_snapshots_use_populated_profile_rows(self):
         conn = open_db(self.data_root)
         self.addCleanup(conn.close)
@@ -533,12 +633,15 @@ class ReviewRegressionTest(unittest.TestCase):
             """,
             ("tx-ui-in", "ws-ui", "pf-ui", "missing_spot_price", "{}", now),
         )
-        conn.execute(
+        conn.executemany(
             """
             INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at)
             VALUES(?, ?, ?, ?, ?)
             """,
-            ("BTC-EUR", "2026-02-01T00:00:00Z", 65_000, "manual", now),
+            [
+                ("BTC-EUR", "2026-01-10T00:00:00Z", 50_000, "manual", now),
+                ("BTC-EUR", "2026-02-01T00:00:00Z", 65_000, "manual", now),
+            ],
         )
         set_setting(conn, "context_workspace", "ws-ui")
         set_setting(conn, "context_profile", "pf-ui")
@@ -551,6 +654,12 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertFalse(overview["status"]["needsJournals"])
         self.assertEqual(overview["status"]["quarantines"], 2)
         self.assertEqual(overview["priceEur"], 65_000)
+        self.assertEqual(overview["marketRate"]["fiatCurrency"], "EUR")
+        self.assertEqual(overview["marketRate"]["pair"], "BTC-EUR")
+        self.assertEqual(overview["marketRate"]["rate"], 65_000)
+        self.assertEqual(overview["marketRate"]["timestamp"], "2026-02-01T00:00:00Z")
+        self.assertEqual(overview["marketRate"]["source"], "manual")
+        self.assertEqual(overview["marketRate"]["fetchedAt"], now)
         self.assertEqual(len(overview["connections"]), 1)
         self.assertEqual(overview["connections"][0]["label"], "Cold Wallet")
         self.assertAlmostEqual(overview["connections"][0]["balance"], 0.899)
@@ -560,6 +669,12 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertAlmostEqual(overview["fiat"]["eurCostBasis"], 44_950)
         self.assertAlmostEqual(overview["fiat"]["eurUnrealized"], 13_485)
         self.assertGreaterEqual(len(overview["portfolioSeries"]), 2)
+        self.assertEqual(
+            [point["date"] for point in overview["portfolioSeries"]],
+            ["2026-01-10", "2026-02-01"],
+        )
+        self.assertAlmostEqual(overview["portfolioSeries"][0]["priceEur"], 50_000)
+        self.assertAlmostEqual(overview["portfolioSeries"][0]["valueEur"], 50_000)
         self.assertAlmostEqual(overview["portfolioSeries"][-1]["balanceBtc"], 0.899)
         self.assertAlmostEqual(overview["portfolioSeries"][-1]["valueEur"], 58_435)
         self.assertEqual(overview["txs"][0]["id"], "tx-ui-spend")
@@ -624,6 +739,473 @@ class ReviewRegressionTest(unittest.TestCase):
             build_transactions_resolve_snapshot(conn, {"query": "tx-ui-spend", "limit": 1})
         self.assertEqual(unknown_filter.exception.code, "validation")
         self.assertEqual(unknown_filter.exception.details, {"unknown": ["limit"]})
+
+    def test_overview_market_rate_uses_active_book_fiat_currency(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-03-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-usd", "USD Workspace", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-usd",
+                "ws-usd",
+                "USD Book",
+                "USD",
+                "generic",
+                365,
+                "FIFO",
+                now,
+            ),
+        )
+        conn.executemany(
+            """
+            INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at, granularity, method)
+            VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "BTC-EUR",
+                    "2026-03-01T00:00:00Z",
+                    65_000,
+                    "manual",
+                    "2026-03-01T00:01:00Z",
+                    None,
+                    None,
+                ),
+                (
+                    "BTC-USD",
+                    "2026-03-01T00:00:00Z",
+                    70_000,
+                    "coingecko",
+                    "2026-03-01T00:02:00Z",
+                    "daily",
+                    "close",
+                ),
+            ],
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("wal-usd", "ws-usd", "pf-usd", "USD Wallet", "address", "{}", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "tx-usd-in",
+                "ws-usd",
+                "pf-usd",
+                "wal-usd",
+                "usd-in",
+                "fp-usd-in",
+                "2026-03-01T00:00:00Z",
+                "2026-03-01T00:00:00Z",
+                "inbound",
+                "BTC",
+                btc_to_msat("2.0"),
+                0,
+                "USD",
+                68_000,
+                136_000,
+                "import",
+                "transfer",
+                "USD funding",
+                "Exchange",
+                None,
+                0,
+                "{}",
+                now,
+            ),
+        )
+        set_setting(conn, "context_workspace", "ws-usd")
+        set_setting(conn, "context_profile", "pf-usd")
+        conn.commit()
+
+        overview = build_overview_snapshot(conn)
+
+        self.assertEqual(overview["priceEur"], 65_000)
+        self.assertEqual(overview["priceUsd"], 70_000)
+        self.assertEqual(overview["marketRate"]["fiatCurrency"], "USD")
+        self.assertEqual(overview["marketRate"]["pair"], "BTC-USD")
+        self.assertEqual(overview["marketRate"]["rate"], 70_000)
+        self.assertEqual(overview["marketRate"]["source"], "coingecko")
+        self.assertEqual(overview["marketRate"]["fetchedAt"], "2026-03-01T00:02:00Z")
+        self.assertEqual(overview["marketRate"]["granularity"], "daily")
+        self.assertEqual(overview["marketRate"]["method"], "close")
+        self.assertEqual(overview["fiat"]["fiatCurrency"], "USD")
+        self.assertEqual(overview["fiat"]["eurBalance"], 140_000)
+        self.assertEqual(overview["portfolioSeries"][-1]["valueEur"], 140_000)
+
+    def test_overview_portfolio_series_tracks_cached_daily_market_rates(self):
+        self._bootstrap_wallet(label="Daily Rates")
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        profile = conn.execute(
+            "SELECT id, workspace_id FROM profiles WHERE label = 'Default'"
+        ).fetchone()
+        wallet = conn.execute(
+            "SELECT id, account_id FROM wallets WHERE label = 'Daily Rates'"
+        ).fetchone()
+        conn.execute(
+            "UPDATE profiles SET fiat_currency = 'EUR' WHERE id = ?",
+            (profile["id"],),
+        )
+        conn.executemany(
+            """
+            INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at, granularity, method)
+            VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                ("BTC-EUR", "2026-01-01T00:00:00Z", 50_000, "manual", now, "daily", "close"),
+                ("BTC-EUR", "2026-01-02T00:00:00Z", 60_000, "manual", now, "daily", "close"),
+                (
+                    "BTC-EUR",
+                    "2026-01-02T12:00:00Z",
+                    1,
+                    "coinbase-exchange",
+                    now,
+                    "minute",
+                    "close",
+                ),
+                ("BTC-EUR", "2026-01-03T00:00:00Z", 70_000, "manual", now, "daily", "close"),
+            ],
+        )
+        conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "tx-daily-in",
+                profile["workspace_id"],
+                profile["id"],
+                wallet["id"],
+                "daily-in",
+                "fp-daily-in",
+                "2026-01-01T10:00:00Z",
+                "2026-01-01T10:10:00Z",
+                "inbound",
+                "BTC",
+                btc_to_msat("1.0"),
+                0,
+                "EUR",
+                50_000,
+                50_000,
+                "import",
+                "transfer",
+                "Initial funding",
+                "Exchange",
+                None,
+                0,
+                "{}",
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO journal_entries(
+                id, workspace_id, profile_id, transaction_id, wallet_id, account_id,
+                occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
+                cost_basis, proceeds, gain_loss, description, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "je-daily-in",
+                profile["workspace_id"],
+                profile["id"],
+                "tx-daily-in",
+                wallet["id"],
+                wallet["account_id"],
+                "2026-01-01T10:00:00Z",
+                "acquisition",
+                "BTC",
+                btc_to_msat("1.0"),
+                50_000,
+                50_000,
+                None,
+                None,
+                None,
+                "Initial funding",
+                now,
+            ),
+        )
+        set_setting(conn, "context_workspace", profile["workspace_id"])
+        set_setting(conn, "context_profile", profile["id"])
+        conn.commit()
+
+        overview = build_overview_snapshot(conn)
+        self.assertEqual(
+            [point["date"] for point in overview["portfolioSeries"]],
+            ["2026-01-01", "2026-01-02", "2026-01-03"],
+        )
+        self.assertEqual(
+            [point["priceEur"] for point in overview["portfolioSeries"]],
+            [50_000, 60_000, 70_000],
+        )
+        self.assertEqual(
+            [point["valueEur"] for point in overview["portfolioSeries"]],
+            [50_000, 60_000, 70_000],
+        )
+        self.assertEqual(
+            [point["balanceBtc"] for point in overview["portfolioSeries"]],
+            [1.0, 1.0, 1.0],
+        )
+
+    def test_overview_portfolio_series_treats_btc_lbtc_swaps_as_bitcoin_balance(self):
+        self._bootstrap_wallet(label="BTC Wallet")
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        profile = conn.execute(
+            "SELECT id, workspace_id FROM profiles WHERE label = 'Default'"
+        ).fetchone()
+        btc_wallet = conn.execute(
+            "SELECT id FROM wallets WHERE label = 'BTC Wallet'"
+        ).fetchone()
+        conn.execute(
+            "UPDATE profiles SET fiat_currency = 'EUR' WHERE id = ?",
+            (profile["id"],),
+        )
+        conn.execute(
+            """
+            INSERT INTO accounts(id, workspace_id, profile_id, code, label, account_type, asset, created_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "acct-liquid-overview",
+                profile["workspace_id"],
+                profile["id"],
+                "asset:lbtc-overview",
+                "Liquid Overview",
+                "asset",
+                "LBTC",
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(id, workspace_id, profile_id, account_id, label, kind, config_json, created_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "wallet-liquid-overview",
+                profile["workspace_id"],
+                profile["id"],
+                "acct-liquid-overview",
+                "Liquid Wallet",
+                "descriptor",
+                "{}",
+                now,
+            ),
+        )
+        conn.executemany(
+            """
+            INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at, granularity, method)
+            VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                ("BTC-EUR", "2026-01-01T00:00:00Z", 62_000, "manual", now, "daily", "close"),
+                ("BTC-EUR", "2026-01-02T00:00:00Z", 62_000, "manual", now, "daily", "close"),
+                ("BTC-EUR", "2026-01-03T00:00:00Z", 62_000, "manual", now, "daily", "close"),
+            ],
+        )
+        conn.executemany(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "lbtc-before-peg-out",
+                    profile["workspace_id"],
+                    profile["id"],
+                    "wallet-liquid-overview",
+                    "lbtc-before-peg-out",
+                    "fp-lbtc-before-peg-out",
+                    "2026-01-01T10:00:00Z",
+                    "2026-01-01T10:10:00Z",
+                    "inbound",
+                    "LBTC",
+                    btc_to_msat("0.12426275"),
+                    0,
+                    "EUR",
+                    62_000,
+                    7704.2905,
+                    "import",
+                    "deposit",
+                    "Initial Liquid balance",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
+                (
+                    "peg-out-lbtc",
+                    profile["workspace_id"],
+                    profile["id"],
+                    "wallet-liquid-overview",
+                    "peg-out-lbtc",
+                    "fp-peg-out-lbtc",
+                    "2026-01-02T10:00:00Z",
+                    "2026-01-02T10:10:00Z",
+                    "outbound",
+                    "LBTC",
+                    btc_to_msat("0.12426275"),
+                    0,
+                    "EUR",
+                    62_000,
+                    -7704.2905,
+                    "import",
+                    "swap",
+                    "Peg-out send leg",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
+                (
+                    "peg-out-btc",
+                    profile["workspace_id"],
+                    profile["id"],
+                    btc_wallet["id"],
+                    "peg-out-btc",
+                    "fp-peg-out-btc",
+                    "2026-01-02T10:05:00Z",
+                    "2026-01-02T10:15:00Z",
+                    "inbound",
+                    "BTC",
+                    btc_to_msat("0.12413298"),
+                    0,
+                    "EUR",
+                    62_000,
+                    7696.24476,
+                    "import",
+                    "swap",
+                    "Peg-out receive leg",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
+                (
+                    "swap-payment-out",
+                    profile["workspace_id"],
+                    profile["id"],
+                    btc_wallet["id"],
+                    "swap-payment-out",
+                    "fp-swap-payment-out",
+                    "2026-01-03T10:00:00Z",
+                    "2026-01-03T10:10:00Z",
+                    "outbound",
+                    "BTC",
+                    btc_to_msat("0.01000000"),
+                    0,
+                    "EUR",
+                    62_000,
+                    -620,
+                    "import",
+                    "swap",
+                    "Swap payment out",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
+            ],
+        )
+        conn.execute(
+            """
+            INSERT INTO transaction_pairs(
+                id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
+                kind, policy, swap_fee_msat, swap_fee_kind, pair_source, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pair-overview-peg-out",
+                profile["workspace_id"],
+                profile["id"],
+                "peg-out-lbtc",
+                "peg-out-btc",
+                "peg-out",
+                "carrying-value",
+                btc_to_msat("0.00012977"),
+                "combined",
+                "manual",
+                now,
+            ),
+        )
+        set_setting(conn, "context_workspace", profile["workspace_id"])
+        set_setting(conn, "context_profile", profile["id"])
+        conn.commit()
+
+        overview = build_overview_snapshot(conn)
+
+        self.assertEqual(
+            [point["date"] for point in overview["portfolioSeries"]],
+            ["2026-01-01", "2026-01-02", "2026-01-03"],
+        )
+        self.assertAlmostEqual(
+            overview["portfolioSeries"][0]["balanceBtc"],
+            0.12426275,
+            places=8,
+        )
+        self.assertAlmostEqual(
+            overview["portfolioSeries"][1]["balanceBtc"],
+            0.12413298,
+            places=8,
+        )
+        self.assertAlmostEqual(
+            overview["portfolioSeries"][2]["balanceBtc"],
+            0.11413298,
+            places=8,
+        )
+        self.assertLess(
+            overview["portfolioSeries"][1]["balanceBtc"],
+            overview["portfolioSeries"][0]["balanceBtc"],
+        )
+        self.assertLess(
+            overview["portfolioSeries"][2]["balanceBtc"],
+            overview["portfolioSeries"][1]["balanceBtc"],
+        )
+        payment_activity = [
+            row for row in overview["activityTxs"] if row["id"] == "swap-payment-out"
+        ]
+        self.assertEqual(len(payment_activity), 1)
+        self.assertEqual(payment_activity[0]["type"], "Swap")
+        self.assertNotIn("pair", payment_activity[0])
+        self.assertAlmostEqual(payment_activity[0]["balanceBtc"], 0.11413298)
+        self.assertAlmostEqual(overview["fiat"]["eurBalance"], 7076.24476, places=4)
 
     def test_overview_connection_balances_use_raw_wallet_transactions_when_journals_are_partial(self):
         conn = open_db(self.data_root)
@@ -1429,6 +2011,14 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(overview_swap["pair"]["outAmountSat"], 10_000_000)
         self.assertEqual(overview_swap["pair"]["inAmountSat"], 9_990_000)
         self.assertEqual(overview_swap["pair"]["feeSat"], 10_000)
+        overview_activity_swap_rows = [
+            row
+            for row in overview["activityTxs"]
+            if row["id"] in {"swap-in-leg", "swap-out-leg"}
+        ]
+        self.assertEqual(len(overview_activity_swap_rows), 1)
+        self.assertEqual(overview_activity_swap_rows[0]["id"], "swap-in-leg")
+        self.assertAlmostEqual(overview_activity_swap_rows[0]["balanceBtc"], 0.0099)
         connection_by_label = {
             connection["label"]: connection
             for connection in overview["connections"]
@@ -2244,6 +2834,63 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(neutral["proceedsEur"], neutral["costEur"])
         self.assertAlmostEqual(neutral["marketDeltaEur"], 121.16, places=2)
 
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS journal_tax_summary (
+                id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL,
+                profile_id TEXT NOT NULL,
+                year INTEGER NOT NULL,
+                asset TEXT NOT NULL,
+                transaction_type TEXT NOT NULL,
+                capital_gains_type TEXT,
+                quantity INTEGER NOT NULL,
+                proceeds REAL NOT NULL DEFAULT 0,
+                cost_basis REAL NOT NULL DEFAULT 0,
+                gain_loss REAL NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            );
+            """
+        )
+        conn.executemany(
+            """
+            INSERT INTO journal_tax_summary(
+                id, workspace_id, profile_id, year, asset, transaction_type,
+                capital_gains_type, quantity, proceeds, cost_basis, gain_loss, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "jts-taxable-btc",
+                    "ws-neutral-swap",
+                    "pf-neutral-swap",
+                    2026,
+                    "BTC",
+                    "sell",
+                    "short",
+                    btc_to_msat("0.06812704"),
+                    4_284.09,
+                    4_965.50,
+                    -681.41,
+                    now,
+                ),
+                (
+                    "jts-neutral-lbtc",
+                    "ws-neutral-swap",
+                    "pf-neutral-swap",
+                    2026,
+                    "LBTC",
+                    "sell",
+                    "short",
+                    btc_to_msat("0.12426784"),
+                    7_689.18,
+                    7_568.02,
+                    121.16,
+                    now,
+                ),
+            ],
+        )
+
         hooks = ReportHooks(
             resolve_scope=lambda _conn, _workspace, _profile: (
                 conn.execute(
@@ -2258,32 +2905,9 @@ class ReviewRegressionTest(unittest.TestCase):
             resolve_account=lambda *_args, **_kwargs: None,
             resolve_wallet=lambda *_args, **_kwargs: None,
             require_processed_journals=lambda *_args, **_kwargs: None,
-            build_ledger_state=lambda *_args, **_kwargs: {
-                "tax_summary": [
-                    {
-                        "year": 2026,
-                        "asset": "BTC",
-                        "transaction_type": "sell",
-                        "capital_gains_type": "short",
-                        "quantity": 0.06812704,
-                        "quantity_msat": btc_to_msat("0.06812704"),
-                        "proceeds": 4_284.09,
-                        "cost_basis": 4_965.50,
-                        "gain_loss": -681.41,
-                    },
-                    {
-                        "year": 2026,
-                        "asset": "LBTC",
-                        "transaction_type": "sell",
-                        "capital_gains_type": "short",
-                        "quantity": 0.12426784,
-                        "quantity_msat": btc_to_msat("0.12426784"),
-                        "proceeds": 7_689.18,
-                        "cost_basis": 7_568.02,
-                        "gain_loss": 121.16,
-                    },
-                ],
-            },
+            build_ledger_state=lambda *_args, **_kwargs: self.fail(
+                "tax summary reports should read the processed journal snapshot"
+            ),
             list_journal_entries=lambda *_args, **_kwargs: [],
             list_wallets=lambda *_args, **_kwargs: [],
             parse_iso_datetime=lambda *_args, **_kwargs: None,
@@ -2596,11 +3220,15 @@ class ReviewRegressionTest(unittest.TestCase):
         sample_xprv = "xprv" + ("B" * 80)
         sanitized = sanitize_text(
             f"descriptor={sample_upub} backup={sample_xprv} api_key=sk-diagnostics-secret "
+            "mnemonic=abandon abandon abandon seed_phrase=legal winner thank "
             "auth_header=Bearer diagnostics-token amount=12345 sat fee=2500msat "
             "timestamp=2026-04-24T09:00:00Z"
         )
         self.assertNotIn(sample_upub, sanitized)
         self.assertNotIn(sample_xprv, sanitized)
+        self.assertNotIn("abandon", sanitized)
+        self.assertNotIn("legal", sanitized)
+        self.assertNotIn("winner", sanitized)
         self.assertNotIn("sk-diagnostics-secret", sanitized)
         self.assertNotIn("diagnostics-token", sanitized)
         self.assertNotIn("12345", sanitized)
@@ -2620,6 +3248,7 @@ class ReviewRegressionTest(unittest.TestCase):
             backend="secret-backend",
             account="private-account",
             api_key="sk-argv-diagnostics",
+            mnemonic="abandon abandon abandon",
             passphrase="very-private-passphrase",
             type="private-type",
             asset="PRIVATEASSET",
@@ -2634,8 +3263,9 @@ class ReviewRegressionTest(unittest.TestCase):
                 code="secret_error",
                 details={
                     "api_key": "sk-detail-diagnostics",
+                    "mnemonic": "abandon abandon abandon",
                     "nested": {"token": "nested-token"},
-                    "message": "Bearer diagnostics-detail-token",
+                    "message": "Bearer diagnostics-detail-token recovery_phrase=legal winner thank",
                 },
             ),
         )
@@ -2645,6 +3275,9 @@ class ReviewRegressionTest(unittest.TestCase):
             "very-private-passphrase",
             "sk-error-diagnostics",
             "sk-detail-diagnostics",
+            "abandon",
+            "legal",
+            "winner",
             "nested-token",
             "diagnostics-detail-token",
         ):
@@ -2657,6 +3290,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(values["backend"]["value_class"], "redacted")
         self.assertEqual(values["account"]["value_class"], "redacted")
         self.assertEqual(values["api_key"]["value_class"], "redacted")
+        self.assertEqual(values["mnemonic"]["value_class"], "redacted")
         self.assertEqual(values["passphrase"]["value_class"], "redacted")
         self.assertEqual(values["type"]["value_class"], "redacted")
         self.assertEqual(values["asset"]["value_class"], "redacted")
@@ -3226,6 +3860,136 @@ class ReviewRegressionTest(unittest.TestCase):
         conn.close()
         self.assertTrue(json.loads(stored)["altbestand"])
 
+    def test_wallets_update_invalidates_cached_output_inventory_on_config_change(self):
+        self._bootstrap_profile()
+        payload, result = self._run_json(
+            "wallets",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--label",
+            "AddressWallet",
+            "--kind",
+            "address",
+            "--address",
+            "bc1qoldwatchtarget0000000000000000000000000",
+            "--backend",
+            "mempool",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+
+        conn = open_db(self.data_root)
+        try:
+            wallet = conn.execute(
+                """
+                SELECT w.id, w.workspace_id, w.profile_id
+                FROM wallets w
+                WHERE w.label = ?
+                """,
+                ("AddressWallet",),
+            ).fetchone()
+            self.assertIsNotNone(wallet)
+            conn.execute(
+                """
+                INSERT INTO wallet_utxos(
+                    id, workspace_id, profile_id, wallet_id, backend_name,
+                    backend_kind, chain, network, asset, amount, txid, vout,
+                    outpoint, confirmation_status, confirmations, block_height,
+                    block_time, address, address_label, branch_label,
+                    branch_index, address_index, first_seen_at, last_seen_at,
+                    spent_at, raw_json
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "utxo-old",
+                    wallet["workspace_id"],
+                    wallet["profile_id"],
+                    wallet["id"],
+                    "mempool",
+                    "esplora",
+                    "bitcoin",
+                    "mainnet",
+                    "BTC",
+                    1_000_000,
+                    "aa" * 32,
+                    0,
+                    f"{'aa' * 32}:0",
+                    "confirmed",
+                    1,
+                    800_000,
+                    "2026-01-01T00:00:00Z",
+                    "bc1qoldwatchtarget0000000000000000000000000",
+                    "address #0",
+                    "address",
+                    None,
+                    0,
+                    "2026-01-01T00:00:00Z",
+                    "2026-01-01T00:00:00Z",
+                    None,
+                    "{}",
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO wallet_utxo_refreshes(
+                    wallet_id, workspace_id, profile_id, backend_name,
+                    backend_kind, chain, network, observed_count,
+                    active_count, last_seen_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    wallet["id"],
+                    wallet["workspace_id"],
+                    wallet["profile_id"],
+                    "mempool",
+                    "esplora",
+                    "bitcoin",
+                    "mainnet",
+                    1,
+                    1,
+                    "2026-01-01T00:00:00Z",
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        payload, result = self._run_json(
+            "wallets",
+            "update",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--wallet",
+            "AddressWallet",
+            "--config",
+            json.dumps({"addresses": ["bc1qnewwatchtarget0000000000000000000000000"]}),
+        )
+        self._assert_ok(payload, result, "wallets.update")
+
+        conn = open_db(self.data_root)
+        try:
+            wallet_id = payload["data"]["id"]
+            self.assertEqual(
+                conn.execute(
+                    "SELECT COUNT(*) FROM wallet_utxos WHERE wallet_id = ?",
+                    (wallet_id,),
+                ).fetchone()[0],
+                0,
+            )
+            self.assertEqual(
+                conn.execute(
+                    "SELECT COUNT(*) FROM wallet_utxo_refreshes WHERE wallet_id = ?",
+                    (wallet_id,),
+                ).fetchone()[0],
+                0,
+            )
+        finally:
+            conn.close()
+
     def test_wallet_outputs_redact_descriptor_material_but_keep_state_flags(self):
         self._bootstrap_profile()
         descriptor, change_descriptor = _sample_descriptor_pair()
@@ -3490,19 +4254,19 @@ class ReviewRegressionTest(unittest.TestCase):
         payload, result = self._run_json("init")
         self._assert_ok(payload, result, "init")
 
-        payload, result = self._run_json("backends", "delete", "fulcrum")
+        payload, result = self._run_json("backends", "delete", "mempool")
         self._assert_ok(payload, result, "backends.delete")
         self.assertTrue(payload["data"]["deleted"])
 
         payload, result = self._run_json("backends", "list")
         self._assert_ok(payload, result, "backends.list")
         rows = {row["name"]: row for row in payload["data"]}
-        self.assertNotIn("fulcrum", rows)
+        self.assertNotIn("mempool", rows)
 
         runtime = self._bootstrap_runtime_state()
-        self.assertNotIn("fulcrum", runtime.runtime_config["backends"])
+        self.assertNotIn("mempool", runtime.runtime_config["backends"])
 
-        payload, result = self._run_json("backends", "get", "fulcrum")
+        payload, result = self._run_json("backends", "get", "mempool")
         self.assertEqual(result.returncode, 1, msg=payload)
         self.assertEqual(payload.get("kind"), "error")
         self.assertEqual(payload["error"]["code"], "not_found")
@@ -3827,6 +4591,141 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertNotIn("username", stored_config)
         self.assertNotIn("password", stored_config)
         self.assertNotIn("walletprefix", stored_config)
+
+    def test_backends_update_clears_cached_output_inventory_for_backend(self):
+        self._bootstrap_profile()
+        payload, result = self._run_json(
+            "backends",
+            "create",
+            "coin-source",
+            "--kind",
+            "esplora",
+            "--url",
+            "https://coins-one.example",
+            "--chain",
+            "bitcoin",
+            "--network",
+            "mainnet",
+        )
+        self._assert_ok(payload, result, "backends.create")
+        payload, result = self._run_json(
+            "wallets",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--label",
+            "CoinWallet",
+            "--kind",
+            "address",
+            "--address",
+            "bc1qcoinwatchtarget0000000000000000000000000",
+            "--backend",
+            "coin-source",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+        wallet_id = payload["data"]["id"]
+
+        conn = open_db(self.data_root)
+        try:
+            wallet = conn.execute(
+                "SELECT id, workspace_id, profile_id FROM wallets WHERE id = ?",
+                (wallet_id,),
+            ).fetchone()
+            self.assertIsNotNone(wallet)
+            conn.execute(
+                """
+                INSERT INTO wallet_utxos(
+                    id, workspace_id, profile_id, wallet_id, backend_name,
+                    backend_kind, chain, network, asset, amount, txid, vout,
+                    outpoint, confirmation_status, confirmations, block_height,
+                    block_time, address, address_label, branch_label,
+                    branch_index, address_index, first_seen_at, last_seen_at,
+                    spent_at, raw_json
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "utxo-backend-update",
+                    wallet["workspace_id"],
+                    wallet["profile_id"],
+                    wallet["id"],
+                    "coin-source",
+                    "esplora",
+                    "bitcoin",
+                    "mainnet",
+                    "BTC",
+                    1_000_000,
+                    "cc" * 32,
+                    0,
+                    f"{'cc' * 32}:0",
+                    "confirmed",
+                    1,
+                    800_000,
+                    "2026-01-01T00:00:00Z",
+                    "bc1qcoinwatchtarget0000000000000000000000000",
+                    "address #0",
+                    "address",
+                    None,
+                    0,
+                    "2026-01-01T00:00:00Z",
+                    "2026-01-01T00:00:00Z",
+                    None,
+                    "{}",
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO wallet_utxo_refreshes(
+                    wallet_id, workspace_id, profile_id, backend_name,
+                    backend_kind, chain, network, observed_count,
+                    active_count, last_seen_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    wallet["id"],
+                    wallet["workspace_id"],
+                    wallet["profile_id"],
+                    "coin-source",
+                    "esplora",
+                    "bitcoin",
+                    "mainnet",
+                    1,
+                    1,
+                    "2026-01-01T00:00:00Z",
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        payload, result = self._run_json(
+            "backends",
+            "update",
+            "coin-source",
+            "--url",
+            "https://coins-two.example",
+        )
+        self._assert_ok(payload, result, "backends.update")
+
+        conn = open_db(self.data_root)
+        try:
+            self.assertEqual(
+                conn.execute(
+                    "SELECT COUNT(*) FROM wallet_utxos WHERE backend_name = ?",
+                    ("coin-source",),
+                ).fetchone()[0],
+                0,
+            )
+            self.assertEqual(
+                conn.execute(
+                    "SELECT COUNT(*) FROM wallet_utxo_refreshes WHERE backend_name = ?",
+                    ("coin-source",),
+                ).fetchone()[0],
+                0,
+            )
+        finally:
+            conn.close()
 
     def test_backend_outputs_redact_secret_values_but_keep_presence_flags(self):
         payload, result = self._run_json("init")
@@ -8448,7 +9347,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["exports_root"], str(expected_root / "exports"))
         self.assertEqual(payload["data"]["attachments_root"], str(expected_root / "attachments"))
         self.assertEqual(payload["data"]["env_file"], str(expected_root / "config" / "backends.env"))
-        self.assertEqual(payload["data"]["default_backend"], "mempool")
+        self.assertEqual(payload["data"]["default_backend"], "fulcrum")
 
     def test_profiles_create_accepts_austrian_tax_country(self):
         payload, result = self._run_json("init")
@@ -9300,6 +10199,48 @@ class ReviewRegressionTest(unittest.TestCase):
         broken = payload["data"]["results"][0]
         self.assertEqual(broken["status"], "broken")
         self.assertEqual(broken["issues"], ["missing_file"])
+
+    def test_attachments_add_invalid_file_label_does_not_copy_managed_file(self):
+        self._bootstrap_wallet(label="AttachInvalidLabel")
+        self._insert_transaction(
+            wallet_label="AttachInvalidLabel",
+            tx_id="attach-invalid-label",
+            occurred_at="2024-01-01T00:00:00Z",
+            amount_msat=100_000_000,
+        )
+        attachment_file = self.case_dir / "invalid-label-receipt.txt"
+        attachment_file.write_text("receipt\n", encoding="utf-8")
+
+        payload, result = self._run_json(
+            "attachments",
+            "add",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--transaction",
+            "attach-invalid-label",
+            "--file",
+            str(attachment_file),
+            "--label",
+            "   ",
+        )
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+
+        attachments_root = self.case_dir / "attachments"
+        managed_files = (
+            [path for path in attachments_root.rglob("*") if path.is_file()]
+            if attachments_root.exists()
+            else []
+        )
+        self.assertEqual(managed_files, [])
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        count = conn.execute("SELECT COUNT(*) FROM attachments").fetchone()[0]
+        conn.close()
+        self.assertEqual(count, 0)
 
     def test_attachments_verify_and_remove_ignore_escaped_storage_path(self):
         self._bootstrap_wallet(label="AttachEscape")

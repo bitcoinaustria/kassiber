@@ -6,12 +6,14 @@ import {
   clearAppLogRecords,
   emitAppLog,
   exportLogRecords,
+  exportSupportBundleRecords,
   formatLogRecord,
   getAppLogBufferSize,
   getAppLogRecords,
   logFilename,
   setAppLogSubscriptionLevel,
   stableMaskedValue,
+  supportBundleFilename,
   type AppLogRecord,
 } from "./appLogs";
 
@@ -62,7 +64,7 @@ describe("typed app logs", () => {
     });
     expect(redacted).toContain("Daemon invoke finished");
     expect(redacted).toContain("address=bc1qe...f3xy");
-    expect(redacted).toContain("wallet_material=wallet#");
+    expect(redacted).toContain("wallet_material=wpkh([abcd1234/84h/0h/0h][redacted-key])");
     expect(redacted).toContain("label=wallet#");
     expect(redacted).toContain("path=~/.../data");
     expect(redacted).toContain("bc1qe...f3xy");
@@ -146,6 +148,198 @@ describe("typed app logs", () => {
     expect(logFilename("md", "redacted", new Date("2026-05-17T18:08:00Z"))).toBe(
       "kassiber-2026-05-17T18-08Z-redacted.md",
     );
+    expect(supportBundleFilename(new Date("2026-05-17T18:08:00Z"))).toBe(
+      "kassiber-support-2026-05-17T18-08Z.support.jsonl",
+    );
+  });
+
+  it("exports high-signal support bundles while enforcing the secret floor", () => {
+    const txid = "a".repeat(64);
+    const address = "bc1qexample000000000000000000000000000000f3xy";
+    const xprv = "xprv9s21ZrQH143K2secretsecretsecretsecretsecret";
+    const xpub = "xpub661MyMwAqRbcFsecretsecretsecretsecretsecret";
+    const descriptor = `wpkh([abcd1234/84h/0h/0h]${xpub}/0/*)#deadbeef`;
+    const mnemonic =
+      "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    const url = "https://user:password@example.test/wallet?api_key=sk-url-secret";
+    const localPath = "/Users/dev/.kassiber/data/kassiber.sqlite";
+    const amountText = "0.12345678 BTC";
+    const rateText = "BTC/EUR 64000.12";
+    const records: AppLogRecord[] = [
+      {
+        ...record({
+          request_id: { type: "text", value: "req-1" },
+          trace_id: { type: "text", value: "req-1" },
+          backend_url: { type: "url", value: url },
+          email: { type: "email", value: "dev@example.test" },
+          data_root: { type: "path", value: localPath },
+          amount: { type: "amount", value: "1.234 BTC" },
+          txid: { type: "txid", value: txid },
+          address: { type: "address", value: address },
+          wallet_xpub: { type: "xpub", value: xpub },
+          wallet_xpriv: { type: "xpriv", value: xprv },
+          wallet_descriptor: { type: "descriptor", value: descriptor },
+          error_message: {
+            type: "text",
+            value: `Could not price ${txid} for ${address}`,
+          },
+          detail: {
+            type: "text",
+            value: `mnemonic=${mnemonic} raw_private=${xprv}`,
+          },
+        }),
+        id: "log-1",
+        ts: "2026-05-17T18:00:00.000Z",
+        msg: `Could not price ${txid} for ${address} in ${localPath}`,
+      },
+    ];
+
+    const exported = exportSupportBundleRecords(records, {
+      issueDescription: `Tax summary lost ${amountText} at ${rateText} for ${txid} and ${url}`,
+      header: {
+        appVersion: "0.22.0 (abc1234)",
+        os: "macOS",
+        timeRange: "2026-05-17T18:00:00Z to 2026-05-17T18:01:00Z",
+        activeFilter: "capture>=trace",
+        redaction: "high_signal",
+        generatedAt: "2026-05-17T18:08:00Z",
+      },
+    });
+
+    expect(exported).toContain('"redaction":"high_signal"');
+    expect(exported).toContain("1.234 BTC");
+    expect(exported).toContain(amountText);
+    expect(exported).toContain(rateText);
+    expect(exported).toContain(address);
+    expect(exported).toContain(txid);
+    expect(exported).toContain(localPath);
+    expect(exported).toContain("dev@example.test");
+    expect(exported).toContain("Could not price");
+    expect(exported).toContain(`Could not price ${txid} for ${address} in ${localPath}`);
+    expect(exported).toContain("https://[redacted-credentials]@example.test/wallet?api_key=[redacted]");
+    expect(exported).toContain("xpub#");
+    expect(exported).toContain("wpkh([abcd1234/84h/0h/0h][redacted-key])");
+    expect(exported).toContain("[redacted-private-key]");
+    expect(exported).not.toContain("sk-url-secret");
+    expect(exported).not.toContain("user:password");
+    expect(exported).not.toContain(xpub);
+    expect(exported).not.toContain(xprv);
+    expect(exported).not.toContain("deadbeef");
+    for (const word of mnemonic.split(" ")) {
+      expect(exported).not.toContain(word);
+    }
+  });
+
+  it("exports public-safe support bundles with failure context and AI provenance", () => {
+    const txid = "a".repeat(64);
+    const address = "bc1qexample000000000000000000000000000000f3xy";
+    const legacyAddress = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT";
+    const scriptHashAddress = "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy";
+    const liquidAddress = "lq1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
+    const descriptor = "wpkh([abcd1234/84h/0h/0h]xpub661MyMwAqRbcFsecret/0/*)";
+    const url = "https://user:secret@example.test/wallet?api_key=sk-url-secret";
+    const localPath = "/Users/dev/.kassiber/data/kassiber.sqlite";
+    const amountText = "0.12345678 BTC";
+    const fiatAmountText = "\u20ac12,345.67";
+    const prefixedFiatAmountText = "USD 42.10";
+    const satsText = "2500 sats";
+    const rateText = "BTC/EUR 64000.12";
+    const records: AppLogRecord[] = [
+      {
+        ...record({
+          request_id: { type: "text", value: "req-1" },
+          trace_id: { type: "text", value: "req-1" },
+          descriptor_value: { type: "descriptor", value: descriptor },
+          backend_url: { type: "url", value: url },
+          email: { type: "email", value: "dev@example.test" },
+          data_root: { type: "path", value: localPath },
+          amount: { type: "amount", value: "1.234 BTC" },
+          error_message: {
+            type: "text",
+            value: `lost ${amountText}, fee ${satsText}, fiat ${fiatAmountText}, proceeds ${prefixedFiatAmountText}, rate ${rateText}`,
+          },
+        }),
+        id: "log-1",
+        ts: "2026-05-17T18:00:00.000Z",
+      },
+      {
+        id: "log-2",
+        ts: "2026-05-17T18:00:01.000Z",
+        level: "trace",
+        module: "daemon:bridge",
+        file: "daemon/transport.ts",
+        line: 0,
+        msg: "Daemon stream record",
+        fields: {
+          kind: { type: "text", value: "ai.chat.tool_result" },
+          request_id: { type: "text", value: "req-1" },
+          trace_id: { type: "text", value: "req-1" },
+          tool_name: { type: "text", value: "ui.transactions.search" },
+          result_hint: {
+            type: "text",
+            value: `matched ${txid} at ${address} ${legacyAddress} ${scriptHashAddress} ${liquidAddress}`,
+          },
+        },
+      },
+      {
+        id: "log-3",
+        ts: "2026-05-17T18:00:02.000Z",
+        level: "error",
+        module: "daemon:bridge",
+        file: "daemon/transport.ts",
+        line: 0,
+        msg: `failed with mnemonic=abandon and file ${localPath}`,
+        fields: {
+          kind: { type: "text", value: "ui.reports.tax_summary" },
+          request_id: { type: "text", value: "req-1" },
+          trace_id: { type: "text", value: "req-1" },
+          error_code: { type: "text", value: "missing_price" },
+          txid: { type: "txid", value: txid },
+          address: { type: "address", value: address },
+        },
+      },
+    ];
+
+    const exported = exportSupportBundleRecords(records, {
+      issueDescription: `Tax summary lost ${amountText}, fiat ${fiatAmountText}, proceeds ${prefixedFiatAmountText}, rate ${rateText}, and ${url}`,
+      header: {
+        appVersion: "0.22.0 (abc1234)",
+        os: "macOS",
+        timeRange: "2026-05-17T18:00:00Z to 2026-05-17T18:01:00Z",
+        activeFilter: "capture>=trace",
+        redaction: "redacted-amounts",
+        generatedAt: "2026-05-17T18:08:00Z",
+      },
+      mode: "public_safe",
+    });
+
+    expect(exported).toContain("kassiber.support_bundle.manifest");
+    expect(exported).toContain("kassiber.support_bundle.last_failure");
+    expect(exported).toContain("kassiber.support_bundle.ai_provenance");
+    expect(exported).toContain('"redaction":"public_safe"');
+    expect(exported).toContain("missing_price");
+    expect(exported).toContain("amount#");
+    expect(exported).toContain("[redacted-amount]");
+    expect(exported).toContain("[redacted-rate]");
+    expect(exported).toContain("[redacted-url]");
+    expect(exported).toContain("[redacted-txid]");
+    expect(exported).toContain("[redacted-address]");
+    expect(exported).not.toContain("1.234 BTC");
+    expect(exported).not.toContain(amountText);
+    expect(exported).not.toContain(fiatAmountText);
+    expect(exported).not.toContain(prefixedFiatAmountText);
+    expect(exported).not.toContain(satsText);
+    expect(exported).not.toContain(rateText);
+    expect(exported).not.toContain("xpub661MyMwAqRbcFsecret");
+    expect(exported).not.toContain("sk-url-secret");
+    expect(exported).not.toContain("dev@example.test");
+    expect(exported).not.toContain(localPath);
+    expect(exported).not.toContain(txid);
+    expect(exported).not.toContain(address);
+    expect(exported).not.toContain(legacyAddress);
+    expect(exported).not.toContain(scriptHashAddress);
+    expect(exported).not.toContain(liquidAddress);
+    expect(exported).not.toContain("mnemonic=abandon");
   });
 
   it("keeps logs in RAM and does not touch browser storage", () => {

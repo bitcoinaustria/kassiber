@@ -17,6 +17,7 @@ from ..wallet_descriptors import (
     liquid_plan_can_unblind,
     normalize_asset_code,
 )
+from . import output_inventory as core_output_inventory
 from .repo import (
     fetch_wallet_with_account,
     invalidate_journals,
@@ -40,6 +41,8 @@ WALLET_KINDS = [
     "21bitcoin",
     "pocketbitcoin",
     "strike",
+    "wasabi",
+    "samourai",
     "custom",
 ]
 REDACTED_CONFIG_VALUE = "[redacted]"
@@ -60,6 +63,8 @@ WALLET_SAFE_CONFIG_FIELDS = (
     "source_file",
     "source_format",
     "altbestand",
+    "wasabi_metadata",
+    "samourai",
 )
 WALLET_REDACTED_CONFIG_FIELDS = ("descriptor", "change_descriptor")
 
@@ -529,6 +534,16 @@ WALLET_KIND_CATALOG = {
         "config_fields": ["source_file", "source_format"],
         "requires": [],
     },
+    "wasabi": {
+        "summary": "Wasabi Wallet sanitized RPC/export bundle importer with CoinJoin and anonymity evidence.",
+        "config_fields": ["source_file", "source_format", "wasabi_metadata"],
+        "requires": [],
+    },
+    "samourai": {
+        "summary": "Logical Samourai/Whirlpool watch-only wallet group; child descriptor wallets carry sync targets.",
+        "config_fields": ["backend", "chain", "network", "gap_limit", "samourai"],
+        "requires": ["wallets import-samourai"],
+    },
     "custom": {
         "summary": "Custom CSV/JSON source; use with --config/--config-file to describe field mapping.",
         "config_fields": ["source_file", "source_format", "config"],
@@ -638,6 +653,7 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
 
     # Preserve legacy Austrian provenance metadata until a deliberate migration removes it.
     config = json.loads(wallet["config_json"] or "{}")
+    original_config_json = json.dumps(config, sort_keys=True)
     for field in clear_fields:
         if field not in config:
             raise AppError(
@@ -653,6 +669,8 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
             config[key] = value
 
     config = _validated_wallet_config(wallet["kind"], config)
+    config_json = json.dumps(config, sort_keys=True)
+    config_changed = config_json != original_config_json
 
     try:
         conn.execute(
@@ -661,7 +679,7 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
             SET label = ?, account_id = ?, config_json = ?
             WHERE id = ?
             """,
-            (label_value, account_id, json.dumps(config, sort_keys=True), wallet["id"]),
+            (label_value, account_id, config_json, wallet["id"]),
         )
     except sqlite3.IntegrityError as exc:
         raise AppError(
@@ -669,6 +687,12 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
             code="conflict",
             hint="Choose a different wallet label.",
         ) from exc
+    if config_changed:
+        core_output_inventory.clear_wallet_output_inventory(
+            conn,
+            wallet["id"],
+            commit=False,
+        )
     invalidate_journals(conn, profile["id"])
     conn.commit()
     updated = fetch_wallet_with_account(conn, wallet["id"])

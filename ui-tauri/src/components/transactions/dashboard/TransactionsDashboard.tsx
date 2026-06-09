@@ -19,11 +19,10 @@ import { TransactionsTable } from "./TransactionsTable";
 import { PeriodTabs, TransactionWorkbench } from "./TransactionWorkbench";
 import {
   buildSwapCandidates,
+  dashboardRecordsFromTxs,
   initialPeriodFromUrl,
   recordsForPeriod,
   sortTransactionsByDateDesc,
-  toDashboardTransaction,
-  transactionRecords,
   type FlowChartSelection,
   type PeriodKey,
   type SwapCandidateReference,
@@ -92,9 +91,7 @@ const TransactionsDashboard = ({
       ) {
         txs.unshift(focusedTransaction);
       }
-      return txs.length
-        ? txs.map(toDashboardTransaction)
-        : transactionRecords;
+      return dashboardRecordsFromTxs(txs);
     },
     [focusedTransaction, transactions.txs],
   );
@@ -115,7 +112,7 @@ const TransactionsDashboard = ({
     ) {
       txs.unshift(focusedTransaction);
     }
-    return txs.length ? txs.map(toDashboardTransaction) : transactionRecords;
+    return dashboardRecordsFromTxs(txs);
   }, [focusedTransaction, tableTransactions, transactions]);
   const allPeriodRecords = React.useMemo(
     () => sortTransactionsByDateDesc(records),
@@ -198,7 +195,7 @@ const TransactionsDashboard = ({
             variant="outline"
             size="sm"
             className="h-8 gap-2 sm:h-9"
-            aria-label="Refresh watch-only connections"
+            aria-label="Refresh book"
             onClick={() => syncAll()}
             disabled={isSyncing}
           >

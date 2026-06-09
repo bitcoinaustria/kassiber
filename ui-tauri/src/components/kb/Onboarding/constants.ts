@@ -2,7 +2,6 @@ import type {
   AiProviderKind,
   AustrianGainsAlgorithm,
   BackendKind,
-  BackendPreviewRow,
   FiatCurrency,
   GainsAlgorithm,
   GenericGainsAlgorithm,
@@ -10,8 +9,8 @@ import type {
   TaxCountry,
 } from "./types";
 
-export const DEFAULT_BACKEND_NAME = "mempool";
-export const DEFAULT_BACKEND_URL = "https://mempool.bitcoin-austria.at/api";
+export const DEFAULT_BACKEND_NAME = "fulcrum";
+export const DEFAULT_BACKEND_URL = "ssl://index.bitcoin-austria.at:50002";
 export const DEFAULT_ELECTRUM_HOST = "index.bitcoin-austria.at";
 export const DEFAULT_ELECTRUM_SSL_PORT = "50002";
 export const DEFAULT_ELECTRUM_TCP_PORT = "50001";
@@ -29,11 +28,12 @@ export const DEFAULT_FORM: OnboardingForm = {
   databaseMode: "sqlcipher",
   databasePassphrase: "",
   databasePassphraseConfirm: "",
+  enableTouchId: false,
   recoveryAcknowledged: false,
   plaintextAcknowledged: false,
   migrateCredentials: true,
   backendSetupMode: "default",
-  backendKind: "esplora",
+  backendKind: "electrum",
   backendName: DEFAULT_BACKEND_NAME,
   backendUrl: DEFAULT_BACKEND_URL,
   backendHost: DEFAULT_ELECTRUM_HOST,
@@ -184,16 +184,6 @@ export const BACKEND_KIND_LABELS: Record<BackendKind, string> = {
   bitcoinrpc: "Bitcoin Core RPC",
   "liquid-esplora": "Liquid Esplora",
 };
-
-export const PUBLIC_BACKEND_DEFAULTS: readonly BackendPreviewRow[] = [
-  { name: DEFAULT_BACKEND_NAME, kind: "Esplora", url: DEFAULT_BACKEND_URL },
-  {
-    name: "fulcrum",
-    kind: "Electrum",
-    url: "ssl://index.bitcoin-austria.at:50002",
-  },
-  { name: "liquid", kind: "Explorer API", url: "https://liquid.network/api" },
-];
 
 export const AI_PROVIDER_KIND_LABELS: Record<AiProviderKind, string> = {
   local: "Local",

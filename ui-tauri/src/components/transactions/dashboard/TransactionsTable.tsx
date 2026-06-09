@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import * as React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 
 import { Badge } from "@/components/ui/badge";
@@ -48,14 +49,24 @@ import {
 } from "@/components/ui/table";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
-import { openAttachmentFile, openExternalUrl } from "@/daemon/transport";
+import {
+  openAttachmentFile,
+  openExternalUrl,
+  type DaemonEnvelope,
+} from "@/daemon/transport";
 import { cn } from "@/lib/utils";
 import { type Currency } from "@/lib/currency";
 import { type ExplorerSettings } from "@/lib/explorer";
 import { useUiStore } from "@/store/ui";
+import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
+import type {
+  HistoryRevertTarget,
+  TransactionHistoryList,
+} from "@/lib/transactionHistory";
 import {
   ExplorerOpenDialog,
   TransactionDetailSheet,
+  TransactionEvidenceReuseDialog,
   allPaymentMethods,
   allTransactionFlows,
   allTransactionStatuses,
@@ -94,21 +105,25 @@ import {
   dateFilterOptions,
   filterChipClassName,
   flowChartSelectionLabel,
+  isAttachmentListQueryKeyForTransaction,
   isRedundantTransactionLabel,
   matchesFlowChartSelection,
   matchesTransactionDeepLink,
   pairRailLabel,
   quickFilterLabel,
   readTransactionDetailParams,
+  removeAttachmentRecord,
+  replaceAttachmentRecord,
   updateTransactionDetailParams,
+  upsertAttachmentRecords,
   type AttachmentOpenData,
   type AttachmentRecord,
+  type AttachmentsCopyData,
   type AttachmentsListData,
   type BreakdownSelection,
   type FeeFilter,
   type FlowChartSelection,
   type JournalEventsData,
-  type SourceFundsLinksData,
   type TableQuickFilter,
 } from "./model";
 
@@ -154,6 +169,7 @@ const TransactionsTable = ({
   deepLinkedTransactionTab?: string;
 }) => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
   const [dateFilter, setDateFilter] = React.useState<string>("all");
   const [flowFilter, setFlowFilter] = React.useState<string>("all");
@@ -168,6 +184,13 @@ const TransactionsTable = ({
   const [detailTransaction, setDetailTransaction] =
     React.useState<Transaction | null>(null);
   const [detailInitialTab, setDetailInitialTab] = React.useState("details");
+  const [attachmentListOverride, setAttachmentListOverride] = React.useState<{
+    transactionId: string;
+    attachments: AttachmentRecord[];
+  } | null>(null);
+  const [reuseDialogOpen, setReuseDialogOpen] = React.useState(false);
+  const [reuseSourceTransactionId, setReuseSourceTransactionId] =
+    React.useState("");
   const pendingDetailLinkRef = React.useRef(readTransactionDetailParams());
   const tableRef = React.useRef<HTMLDivElement>(null);
   const [drafts, setDrafts] = React.useState<Record<string, TransactionEditDraft>>(
@@ -176,21 +199,37 @@ const TransactionsTable = ({
   const [saveError, setSaveError] = React.useState<string | null>(null);
   const metadataUpdate = useDaemonMutation("ui.transactions.metadata.update");
   const attachmentAdd = useDaemonMutation<AttachmentRecord>("ui.attachments.add");
+  const attachmentCopy = useDaemonMutation<AttachmentsCopyData>(
+    "ui.attachments.copy",
+  );
+  const attachmentRename =
+    useDaemonMutation<AttachmentRecord>("ui.attachments.rename");
   const attachmentRemove = useDaemonMutation<AttachmentRecord>(
     "ui.attachments.remove",
   );
   const attachmentOpen =
     useDaemonMutation<AttachmentOpenData>("ui.attachments.open");
   const unpairTransfer = useDaemonMutation("ui.transfers.unpair");
+  const revertHistory = useDaemonMutation("ui.transactions.history.revert");
+  const { runJournalProcessing, isProcessingJournals } =
+    useJournalProcessingAction({
+      notifyStart: true,
+      notifyAlreadyRunning: true,
+    });
   const attachmentsQuery = useDaemon<AttachmentsListData>(
     "ui.attachments.list",
     { transaction: detailTransaction?.id ?? "" },
     { enabled: Boolean(detailTransaction) },
   );
-  const sourceFundsLinksQuery = useDaemon<SourceFundsLinksData>(
-    "ui.source_funds.links.list",
-    { target_transaction: detailTransaction?.id ?? "" },
+  const historyQuery = useDaemon<TransactionHistoryList>(
+    "ui.transactions.history",
+    { transaction: detailTransaction?.id ?? "", limit: 25 },
     { enabled: Boolean(detailTransaction) },
+  );
+  const reuseSourceAttachmentsQuery = useDaemon<AttachmentsListData>(
+    "ui.attachments.list",
+    { transaction: reuseSourceTransactionId },
+    { enabled: reuseDialogOpen && Boolean(reuseSourceTransactionId) },
   );
   const journalEventsQuery = useDaemon<JournalEventsData>(
     "ui.journals.events.list",
@@ -317,17 +356,122 @@ const TransactionsTable = ({
     openTransactionDetail,
     records,
   ]);
+  const detailAttachmentRecords = React.useMemo(
+    () => {
+      if (
+        attachmentListOverride &&
+        attachmentListOverride.transactionId === detailTransaction?.id
+      ) {
+        return attachmentListOverride.attachments;
+      }
+      return attachmentsQuery.data?.data?.attachments ?? [];
+    },
+    [
+      attachmentListOverride,
+      attachmentsQuery.data?.data?.attachments,
+      detailTransaction?.id,
+    ],
+  );
   const attachmentItems = React.useMemo(
+    () => detailAttachmentRecords.map(attachmentRecordToItem),
+    [detailAttachmentRecords],
+  );
+  React.useEffect(() => {
+    setAttachmentListOverride(null);
+  }, [detailTransaction?.id]);
+  const updateDetailAttachmentRecords = React.useCallback(
+    (updater: (attachments: AttachmentRecord[]) => AttachmentRecord[]) => {
+      if (!detailTransaction) return;
+      setAttachmentListOverride((current) => {
+        const currentAttachments =
+          current?.transactionId === detailTransaction.id
+            ? current.attachments
+            : attachmentsQuery.data?.data?.attachments ?? [];
+        return {
+          transactionId: detailTransaction.id,
+          attachments: updater(currentAttachments),
+        };
+      });
+    },
+    [attachmentsQuery.data?.data?.attachments, detailTransaction],
+  );
+  const updateAttachmentListQueryCache = React.useCallback(
+    (
+      transactionId: string,
+      updater: (attachments: AttachmentRecord[]) => AttachmentRecord[],
+    ) => {
+      queryClient.setQueriesData<DaemonEnvelope<AttachmentsListData>>(
+        {
+          queryKey: ["daemon"],
+          predicate: (query) =>
+            isAttachmentListQueryKeyForTransaction(
+              query.queryKey,
+              transactionId,
+            ),
+        },
+        (current) =>
+          current?.data
+            ? {
+                ...current,
+                data: {
+                  ...current.data,
+                  attachments: updater(current.data.attachments),
+                },
+              }
+            : current,
+      );
+    },
+    [queryClient],
+  );
+  const evidenceSourceTransactions = React.useMemo(
     () =>
-      (attachmentsQuery.data?.data?.attachments ?? []).map(
+      detailTransaction
+        ? records.filter((txn) => txn.id !== detailTransaction.id)
+        : [],
+    [detailTransaction, records],
+  );
+  React.useEffect(() => {
+    if (!reuseDialogOpen) return;
+    if (
+      reuseSourceTransactionId &&
+      evidenceSourceTransactions.some(
+        (transaction) => transaction.id === reuseSourceTransactionId,
+      )
+    ) {
+      return;
+    }
+    setReuseSourceTransactionId(evidenceSourceTransactions[0]?.id ?? "");
+  }, [evidenceSourceTransactions, reuseDialogOpen, reuseSourceTransactionId]);
+  const reuseSourceAttachmentItems = React.useMemo(
+    () =>
+      (reuseSourceAttachmentsQuery.data?.data?.attachments ?? []).map(
         attachmentRecordToItem,
       ),
-    [attachmentsQuery.data],
+    [reuseSourceAttachmentsQuery.data],
   );
-  const sourceFundsLinks =
-    sourceFundsLinksQuery.data?.data?.links ?? [];
   const journalEvents = journalEventsQuery.data?.data?.events ?? [];
   const commercialContext = commercialContextQuery.data?.data;
+  const historyData = historyQuery.data?.data;
+  const revertHistoryTarget = React.useCallback(
+    async (target: HistoryRevertTarget) => {
+      if (!detailTransaction) return;
+      await revertHistory.mutateAsync({
+        transaction: detailTransaction.id,
+        event: target.event.id,
+        ...(target.field ? { field: target.field.field } : {}),
+        reason: target.field
+          ? `Reverted ${target.field.label} from edit history`
+          : "Reverted edit history event",
+      });
+      useUiStore.getState().addNotification({
+        title: "Edit reverted",
+        body: "Kassiber wrote a new edit history entry with the reverted value.",
+        tone: "success",
+        dedupeKey: `history-revert-${target.event.id}-${target.field?.field ?? "event"}`,
+      });
+    },
+    [detailTransaction, revertHistory],
+  );
 
   const hasActiveFilters =
     chartSelection !== null ||
@@ -1379,17 +1523,36 @@ const TransactionsTable = ({
         saveError={saveError}
         nowRate={nowRate}
         attachments={detailTransaction ? attachmentItems : undefined}
-        sourceFundsLinks={sourceFundsLinks}
         journalEvents={journalEvents}
         commercialContext={commercialContext}
         commercialContextLoading={commercialContextQuery.isLoading}
+        historyEvents={historyData?.events}
+        historyStale={historyData?.stale}
+        historyLoading={historyQuery.isLoading}
+        isRevertingHistory={revertHistory.isPending}
+        onRevertHistory={revertHistoryTarget}
+        onProcessJournals={runJournalProcessing}
+        isProcessingJournals={isProcessingJournals}
         onAddAttachmentFiles={async (paths) => {
           if (!detailTransaction) return;
+          const added: AttachmentRecord[] = [];
           for (const path of paths) {
-            await attachmentAdd.mutateAsync({
+            const result = await attachmentAdd.mutateAsync({
               transaction: detailTransaction.id,
               file_path: path,
             });
+            if (result.data) {
+              added.push(result.data);
+            }
+          }
+          if (added.length) {
+            updateDetailAttachmentRecords((attachments) =>
+              upsertAttachmentRecords(attachments, added),
+            );
+            updateAttachmentListQueryCache(
+              detailTransaction.id,
+              (attachments) => upsertAttachmentRecords(attachments, added),
+            );
           }
           useUiStore.getState().addNotification({
             title: "Files attached",
@@ -1400,11 +1563,24 @@ const TransactionsTable = ({
         }}
         onAddAttachmentLinks={async (urls) => {
           if (!detailTransaction) return;
+          const added: AttachmentRecord[] = [];
           for (const url of urls) {
-            await attachmentAdd.mutateAsync({
+            const result = await attachmentAdd.mutateAsync({
               transaction: detailTransaction.id,
               url,
             });
+            if (result.data) {
+              added.push(result.data);
+            }
+          }
+          if (added.length) {
+            updateDetailAttachmentRecords((attachments) =>
+              upsertAttachmentRecords(attachments, added),
+            );
+            updateAttachmentListQueryCache(
+              detailTransaction.id,
+              (attachments) => upsertAttachmentRecords(attachments, added),
+            );
           }
           useUiStore.getState().addNotification({
             title: "Links attached",
@@ -1413,6 +1589,13 @@ const TransactionsTable = ({
             dedupeKey: `attachments-links-${detailTransaction.id}`,
           });
         }}
+        onReuseEvidence={
+          evidenceSourceTransactions.length
+            ? () => {
+                setReuseDialogOpen(true);
+              }
+            : undefined
+        }
         onOpenAttachment={async (item) => {
           const result = await attachmentOpen.mutateAsync({
             attachment: item.id,
@@ -1427,8 +1610,38 @@ const TransactionsTable = ({
             await openAttachmentFile(data.path);
           }
         }}
+        onRenameAttachment={async (item, label) => {
+          if (!detailTransaction) return;
+          const result = await attachmentRename.mutateAsync({
+            attachment: item.id,
+            label,
+          });
+          const updated = result.data;
+          if (updated) {
+            updateDetailAttachmentRecords((attachments) =>
+              replaceAttachmentRecord(attachments, updated),
+            );
+            updateAttachmentListQueryCache(
+              detailTransaction.id,
+              (attachments) => replaceAttachmentRecord(attachments, updated),
+            );
+          }
+          useUiStore.getState().addNotification({
+            title: "Link text updated",
+            body: "Attachment link label saved.",
+            tone: "success",
+          });
+        }}
         onRemoveAttachment={async (item) => {
+          if (!detailTransaction) return;
           await attachmentRemove.mutateAsync({ attachment: item.id });
+          updateDetailAttachmentRecords((attachments) =>
+            removeAttachmentRecord(attachments, item.id),
+          );
+          updateAttachmentListQueryCache(
+            detailTransaction.id,
+            (attachments) => removeAttachmentRecord(attachments, item.id),
+          );
           useUiStore.getState().addNotification({
             title: "Attachment removed",
             body: item.kind === "file" ? "Attachment record and copied file removed." : "Attachment link removed.",
@@ -1465,6 +1678,7 @@ const TransactionsTable = ({
         onOpenChange={(open) => {
           if (!open) {
             setDetailTransaction(null);
+            setReuseDialogOpen(false);
             setSaveError(null);
             updateTransactionDetailParams(null);
           }
@@ -1499,6 +1713,45 @@ const TransactionsTable = ({
             );
             throw error;
           }
+        }}
+      />
+      <TransactionEvidenceReuseDialog
+        open={reuseDialogOpen}
+        onOpenChange={setReuseDialogOpen}
+        targetTransaction={detailTransaction}
+        sourceTransactions={evidenceSourceTransactions}
+        sourceTransactionId={reuseSourceTransactionId}
+        onSourceTransactionIdChange={setReuseSourceTransactionId}
+        sourceAttachments={reuseSourceAttachmentItems}
+        isLoadingSourceAttachments={reuseSourceAttachmentsQuery.isLoading}
+        isCopying={attachmentCopy.isPending}
+        hideSensitive={hideSensitive}
+        onCopy={async (attachmentIds) => {
+          if (!detailTransaction || !reuseSourceTransactionId) return;
+          const result = await attachmentCopy.mutateAsync({
+            transaction: detailTransaction.id,
+            source_transaction: reuseSourceTransactionId,
+            attachments: attachmentIds,
+          });
+          const copied = result.data?.copied ?? attachmentIds.length;
+          const copiedAttachments = result.data?.attachments ?? [];
+          if (copiedAttachments.length) {
+            updateDetailAttachmentRecords((attachments) =>
+              upsertAttachmentRecords(attachments, copiedAttachments),
+            );
+            updateAttachmentListQueryCache(
+              detailTransaction.id,
+              (attachments) =>
+                upsertAttachmentRecords(attachments, copiedAttachments),
+            );
+          }
+          setReuseDialogOpen(false);
+          useUiStore.getState().addNotification({
+            title: "Evidence reused",
+            body: `${copied} evidence item${copied === 1 ? "" : "s"} copied to this transaction.`,
+            tone: "success",
+            dedupeKey: `attachments-copy-${detailTransaction.id}`,
+          });
         }}
       />
     </>

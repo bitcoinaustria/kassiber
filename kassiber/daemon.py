@@ -78,13 +78,14 @@ from .cli.handlers import (
     set_transfer_rule_enabled,
     suggest_transfer_candidates,
     sync_btcpay_commercial_provenance,
-    sync_wallet,
 )
+from .core import audit_package as core_audit_package
 from .core import commercial as core_commercial
 from .core import attachments as core_attachments
 from .core import lightning as core_lightning
 from .core.lightning import lnd as _core_lightning_lnd  # noqa: F401 — registers the LND adapter on import.
 from .core import reports as core_reports
+from .core import samourai as core_samourai
 from .core import source_funds as core_source_funds
 from .core import transfer_matching as core_transfer_matching
 from .core import source_funds_coverage as core_source_funds_coverage
@@ -95,7 +96,7 @@ from .core import maintenance as core_maintenance
 from .core import metadata as core_metadata
 from .core import rates as core_rates
 from .core import wallets as core_wallets
-from .core.repo import current_context_snapshot
+from .core.repo import current_context_snapshot, resolve_wallet as core_resolve_wallet
 from .core.runtime import build_status_payload
 from .core.ui_snapshot import (
     build_audit_changes_since_last_answer_snapshot,
@@ -115,14 +116,18 @@ from .core.ui_snapshot import (
     build_transactions_resolve_snapshot,
     build_transactions_search_snapshot,
     build_transactions_snapshot,
+    build_wallet_utxos_snapshot_for_ai,
+    build_wallet_utxos_snapshot,
     build_wallets_list_snapshot,
     build_workspace_health_snapshot,
+    build_workspace_overview_snapshot,
 )
 from .core.sync_backends import ElectrumClient
 from .backends import (
     BACKEND_KINDS,
     load_runtime_config,
     merge_db_backends,
+    redact_backend_url,
     wallet_backend_references,
 )
 from .db import (
@@ -131,7 +136,6 @@ from .db import (
     resolve_config_root,
     resolve_database_path,
     resolve_effective_data_root,
-    get_setting,
     set_setting,
     resolve_exports_root,
     resolve_attachments_root,
@@ -143,6 +147,26 @@ from .util import str_or_none
 from .daemon_swap_review import (
     SWAP_REVIEW_DEFAULT_LIMIT,
     build_swap_review_context_payload,
+)
+from .daemon_freshness import (
+    _apply_sync_failure_blocker,
+    _auto_maintain_for_read,
+    _clear_unlocked_passphrase,
+    _coerce_wallets_sync_args,
+    _freshness_configure_payload,
+    _freshness_control_payload,
+    _freshness_run_payload,
+    _freshness_status_payload,
+    _journals_process_payload,
+    _maintenance_configure_payload,
+    _maintenance_run_payload,
+    _maintenance_settings_payload,
+    _remember_unlocked_passphrase,
+    _start_freshness_background_worker,
+    _stop_freshness_background_worker,
+    _sync_payload_has_errors,
+    _wallets_sync_payload,
+    _workspace_freshness_run_payload,
 )
 from .secrets.credentials import migrate_dotenv_credentials
 from .secrets.migration import create_empty_encrypted_database, migrate_plaintext_to_encrypted
@@ -166,10 +190,6 @@ AUTO_CONTEXT_MAX_CHARS = 24_000
 AUTO_CONTEXT_ENTRY_MAX_CHARS = 6_000
 AUTO_CONTEXT_LIST_LIMIT = 25
 AUTO_CONTEXT_STRING_LIMIT = 2_000
-AUTO_SYNC_PROFILE_MIN_INTERVAL_SECONDS = 60
-_AUTO_SYNC_PROFILE_LAST_ATTEMPT: dict[str, float] = {}
-_AUTO_SYNC_PROFILE_LAST_RESULT: dict[str, dict[str, Any]] = {}
-_AUTO_SYNC_PROFILE_LOCK = threading.Lock()
 _REQUEST_ID_MISSING = object()
 _SECRET_STORE_CONTROL_REQUEST_KIND = "supervisor.ai_secret_store.request"
 _SECRET_STORE_CONTROL_RESPONSE_KIND = "supervisor.ai_secret_store.response"
@@ -183,22 +203,32 @@ _AI_PROVIDER_SECRET_STORE_IDS = {
 SUPPORTED_KINDS = (
     "status",
     "ui.overview.snapshot",
+    "ui.workspace.overview.snapshot",
     "ui.transactions.list",
     "ui.transactions.extremes",
     "ui.transactions.resolve",
     "ui.transactions.search",
     "ui.transactions.metadata.update",
+    "ui.transactions.history",
+    "ui.transactions.history.revert",
+    "ui.activity.history",
+    "ui.activity.stale",
     "ui.attachments.list",
     "ui.attachments.add",
+    "ui.attachments.copy",
+    "ui.attachments.rename",
     "ui.attachments.remove",
     "ui.attachments.open",
     "ui.wallets.list",
+    "ui.wallets.utxos",
     "ui.backends.list",
     "ui.backends.options",
+    "ui.backends.public_defaults",
     "ui.backends.settings.list",
     "ui.backends.create",
     "ui.backends.update",
     "ui.backends.delete",
+    "ui.backends.set_default",
     "ui.backends.electrum.test",
     "ui.backends.http.test",
     "ui.reports.capital_gains",
@@ -215,6 +245,7 @@ SUPPORTED_KINDS = (
     "ui.reports.export_austrian_e1kv_pdf",
     "ui.reports.export_austrian_e1kv_xlsx",
     "ui.reports.export_austrian_e1kv_csv",
+    "ui.reports.export_audit_package",
     "ui.source_funds.preview",
     "ui.source_funds.cases.save",
     "ui.source_funds.cases.list",
@@ -271,13 +302,22 @@ SUPPORTED_KINDS = (
     "ui.rates.summary",
     "ui.rates.coverage",
     "ui.rates.kraken_csv.import",
+    "ui.rates.latest",
     "ui.rates.rebuild",
     "ui.report.blockers",
     "ui.audit.changes_since_last_answer",
+    "ui.audit.evidence.summary",
     "ui.maintenance.settings",
     "ui.maintenance.configure",
     "ui.maintenance.run",
+    "ui.freshness.status",
+    "ui.freshness.configure",
+    "ui.freshness.run",
+    "ui.freshness.cancel",
+    "ui.freshness.pause",
+    "ui.freshness.resume",
     "ui.workspace.health",
+    "ui.workspace.freshness.run",
     "ui.workspace.create",
     "ui.workspace.rename",
     "ui.workspace.delete",
@@ -287,6 +327,7 @@ SUPPORTED_KINDS = (
     "ui.next_actions",
     "ui.wallets.create",
     "ui.wallets.import_file",
+    "ui.wallets.import_samourai",
     "ui.wallets.preview_descriptor",
     "ui.connections.sources",
     "ui.connections.btcpay.create",
@@ -625,6 +666,9 @@ class DaemonContext:
     input_lines: queue.Queue[str]
     deferred_input_lines: list[str]
     out: Any
+    freshness_stop_event: threading.Event
+    db_passphrase: str | None = None
+    freshness_worker: threading.Thread | None = None
 
 
 @dataclass(frozen=True)
@@ -1355,6 +1399,15 @@ def _source_funds_hooks() -> core_source_funds.SourceFundsHooks:
     )
 
 
+def _audit_package_hooks() -> core_audit_package.AuditPackageHooks:
+    report_hooks = _report_hooks()
+    return core_audit_package.AuditPackageHooks(
+        resolve_scope=resolve_scope,
+        resolve_transaction=resolve_transaction,
+        now_iso=report_hooks.now_iso,
+    )
+
+
 def _commercial_hooks() -> core_commercial.CommercialHooks:
     return core_commercial.CommercialHooks(
         resolve_scope=resolve_scope,
@@ -1672,6 +1725,8 @@ def _ui_source_funds_payload(
                 a.media_type,
                 a.size_bytes,
                 a.sha256,
+                a.copied_from_attachment_id,
+                a.copied_from_transaction_id,
                 a.created_at,
                 t.id AS transaction_id,
                 t.external_id,
@@ -1697,6 +1752,8 @@ def _ui_source_funds_payload(
                     "media_type": row["media_type"],
                     "size_bytes": row["size_bytes"],
                     "sha256": row["sha256"],
+                    "copied_from_attachment_id": row["copied_from_attachment_id"] or "",
+                    "copied_from_transaction_id": row["copied_from_transaction_id"] or "",
                     "created_at": row["created_at"],
                     "transaction_id": row["transaction_id"],
                     "external_id": row["external_id"],
@@ -1872,6 +1929,64 @@ def _ui_source_funds_payload(
     raise AppError(f"unsupported source-funds daemon export kind: {kind}", code="validation")
 
 
+def _optional_bool_arg(args: dict[str, Any], key: str, default: bool) -> bool:
+    value = args.get(key, default)
+    if not isinstance(value, bool):
+        raise AppError(
+            f"{key} must be a boolean",
+            code="validation",
+            details={"type": type(value).__name__},
+            retryable=False,
+        )
+    return value
+
+
+def _audit_package_transaction_refs(args: dict[str, Any]) -> list[str] | None:
+    transaction = _optional_str_arg(args, "transaction")
+    transactions = args.get("transactions")
+    if transaction and transactions is not None:
+        raise AppError(
+            "Use either transaction or transactions, not both",
+            code="validation",
+            retryable=False,
+        )
+    if transaction:
+        return [transaction]
+    if transactions is None:
+        return None
+    if (
+        not isinstance(transactions, list)
+        or not transactions
+        or not all(isinstance(item, str) and item.strip() for item in transactions)
+    ):
+        raise AppError(
+            "transactions must be a non-empty array of non-empty strings",
+            code="validation",
+            retryable=False,
+        )
+    return [item.strip() for item in transactions]
+
+
+def _audit_package_options(args: dict[str, Any]) -> dict[str, Any]:
+    transaction_refs = _audit_package_transaction_refs(args)
+    source_funds_case_ref = _optional_str_arg(args, "source_funds_case")
+    if transaction_refs and source_funds_case_ref:
+        raise AppError(
+            "Use either transaction(s) or source_funds_case, not both",
+            code="validation",
+            retryable=False,
+        )
+    return {
+        "transaction_refs": transaction_refs,
+        "source_funds_case_ref": source_funds_case_ref,
+        "include_copied_attachments": _optional_bool_arg(args, "include_copied_attachments", True),
+        "include_url_references": _optional_bool_arg(args, "include_url_references", True),
+        "include_journal_state": _optional_bool_arg(args, "include_journal_state", True),
+        "include_review_state": _optional_bool_arg(args, "include_review_state", True),
+        "include_edit_history": _optional_bool_arg(args, "include_edit_history", False),
+    }
+
+
 def _ui_report_export_payload(
     ctx: DaemonContext,
     kind: str,
@@ -1917,6 +2032,22 @@ def _ui_report_export_payload(
             }
         )
         return payload
+
+    if kind == "ui.reports.export_audit_package":
+        directory = _managed_report_export_path(
+            ctx.data_root,
+            "kassiber-audit-package",
+            "",
+        )
+        return core_audit_package.export_audit_package(
+            conn,
+            ctx.data_root,
+            None,
+            None,
+            directory,
+            _audit_package_hooks(),
+            **_audit_package_options(args),
+        )
 
     if kind == "ui.reports.export_summary_pdf":
         unknown = sorted(set(args) - {"start", "end", "wallets", "include_snapshot"})
@@ -2106,6 +2237,8 @@ def _open_daemon_connection(
     require_existing_schema: bool = False,
 ) -> sqlite3.Connection:
     if ctx.conn is not None:
+        _remember_unlocked_passphrase(ctx, passphrase)
+        _start_freshness_background_worker(ctx, passphrase=passphrase)
         return ctx.conn
     conn = open_db(
         ctx.data_root,
@@ -2114,6 +2247,8 @@ def _open_daemon_connection(
     )
     merge_db_backends(conn, ctx.runtime_config)
     ctx.conn = conn
+    _remember_unlocked_passphrase(ctx, passphrase)
+    _start_freshness_background_worker(ctx, passphrase=passphrase)
     return conn
 
 
@@ -2247,7 +2382,7 @@ def _rates_rebuild_payload(
     args: dict[str, Any],
 ) -> dict[str, Any]:
     source = str(
-        args.get("source") or core_rates.RATE_SOURCE_COINBASE_EXCHANGE
+        args.get("source") or core_rates.get_market_rate_provider(conn)
     ).strip().lower()
     pair_arg = args.get("pair")
     if pair_arg is not None and not isinstance(pair_arg, str):
@@ -2279,12 +2414,24 @@ def _rates_rebuild_payload(
             retryable=False,
         )
     reprice_transactions = bool(args.get("reprice_transactions", True))
+    active_profile = None
+    if pair is None:
+        _, active_profile = resolve_scope(conn, None, None)
+        pair = core_rates.transaction_rate_pair("BTC", active_profile["fiat_currency"])
+        if pair is None:
+            raise AppError(
+                "Active profile fiat currency is not supported for automatic BTC rate rebuild",
+                code="validation",
+                retryable=False,
+                details={"fiat_currency": active_profile["fiat_currency"]},
+            )
     profile_id = None
     journal_input_version_before = None
     if reprice_transactions:
-        _, profile = resolve_scope(conn, None, None)
-        profile_id = profile["id"]
-        journal_input_version_before = int(profile["journal_input_version"] or 0)
+        if active_profile is None:
+            _, active_profile = resolve_scope(conn, None, None)
+        profile_id = active_profile["id"]
+        journal_input_version_before = int(active_profile["journal_input_version"] or 0)
     rebuilt = core_rates.rebuild_rates_cache(
         conn,
         pair=pair,
@@ -2320,6 +2467,87 @@ def _rates_rebuild_payload(
         **rebuilt,
         "reprice": reprice,
         "journals": journals,
+    }
+
+
+def _market_rate_payload_from_rate(rate: dict[str, Any] | None) -> dict[str, Any] | None:
+    if rate is None:
+        return None
+    pair = str(rate.get("pair") or "")
+    asset, fiat_currency = core_rates.rate_pair_parts(pair)
+    return {
+        "asset": asset,
+        "fiatCurrency": fiat_currency,
+        "pair": pair,
+        "rate": float(rate["rate"]) if rate.get("rate") is not None else None,
+        "timestamp": rate.get("timestamp"),
+        "source": rate.get("source"),
+        "fetchedAt": rate.get("fetched_at"),
+        "granularity": rate.get("granularity"),
+        "method": rate.get("method"),
+    }
+
+
+def _rates_latest_payload(
+    conn: sqlite3.Connection,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    unknown = sorted(set(args) - {"pair", "source"})
+    if unknown:
+        raise AppError(
+            "ui.rates.latest received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    source_arg = args.get("source")
+    if source_arg is not None and not isinstance(source_arg, str):
+        raise AppError(
+            "ui.rates.latest source must be a string",
+            code="validation",
+            retryable=False,
+        )
+    source = (
+        core_rates.normalize_market_rate_provider(source_arg)
+        if isinstance(source_arg, str) and source_arg.strip()
+        else core_rates.get_market_rate_provider(conn)
+    )
+    pair_arg = args.get("pair")
+    if pair_arg is not None and not isinstance(pair_arg, str):
+        raise AppError(
+            "ui.rates.latest pair must be a string",
+            code="validation",
+            retryable=False,
+        )
+    if isinstance(pair_arg, str) and pair_arg.strip():
+        pair = core_rates.require_supported_pair(pair_arg)
+    else:
+        _, profile = resolve_scope(conn, None, None)
+        pair = core_rates.transaction_rate_pair("BTC", profile["fiat_currency"])
+        if pair is None:
+            raise AppError(
+                f"BTC market rates are not supported for {profile['fiat_currency']}",
+                code="validation",
+                retryable=False,
+            )
+
+    latest = core_rates.sync_latest_rates(
+        conn,
+        pair=pair,
+        source=source,
+        commit=True,
+    )
+    try:
+        rate = core_rates.get_latest_rate(conn, pair)
+    except AppError as exc:
+        if exc.code != "not_found":
+            raise
+        rate = None
+    return {
+        "source": source,
+        "pair": pair,
+        "latest": latest,
+        "marketRate": _market_rate_payload_from_rate(rate),
     }
 
 
@@ -2432,417 +2660,6 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
         "system_prompt_kind": system_prompt_kind,
         "system_prompt": system_prompt,
         "_desktop_secret_store_bridge": args.get("_desktop_secret_store_bridge"),
-    }
-
-
-def _coerce_wallets_sync_args(raw_args: dict[str, Any], *, strict: bool) -> dict[str, Any]:
-    if strict:
-        unknown = sorted(set(raw_args) - {"wallet", "all"})
-        if unknown:
-            raise AppError(
-                "ui.wallets.sync received unsupported arguments",
-                code="validation",
-                details={"unknown": unknown},
-                retryable=False,
-            )
-    wallet = raw_args.get("wallet")
-    if wallet is not None:
-        if not isinstance(wallet, str) or not wallet.strip():
-            raise AppError(
-                "ui.wallets.sync wallet must be a non-empty string",
-                code="validation",
-                details={"type": type(wallet).__name__},
-                retryable=False,
-            )
-        wallet = wallet.strip()
-    sync_all_raw = raw_args.get("all")
-    if sync_all_raw is not None and not isinstance(sync_all_raw, bool):
-        raise AppError(
-            "ui.wallets.sync all must be a boolean",
-            code="validation",
-            details={"type": type(sync_all_raw).__name__},
-            retryable=False,
-        )
-    sync_all = bool(sync_all_raw if sync_all_raw is not None else wallet is None)
-    if sync_all and wallet:
-        raise AppError(
-            "ui.wallets.sync wallet and all are mutually exclusive",
-            code="validation",
-            retryable=False,
-        )
-    return {"wallet": wallet, "all": sync_all}
-
-
-def _wallets_sync_payload(
-    conn: sqlite3.Connection,
-    runtime_config: dict[str, object],
-    raw_args: dict[str, Any],
-    *,
-    strict: bool,
-) -> dict[str, Any]:
-    args = _coerce_wallets_sync_args(raw_args, strict=strict)
-    context = current_context_snapshot(conn)
-    if not context["workspace_id"] or not context["profile_id"]:
-        return {"results": []}
-    payload = {
-        "results": sync_wallet(
-            conn,
-            runtime_config,
-            None,
-            None,
-            wallet_ref=args["wallet"],
-            sync_all=args["all"],
-        )
-    }
-    return _redact_sync_payload_for_ui(payload)
-
-
-def _redact_sync_payload_for_ui(value: Any) -> Any:
-    if isinstance(value, dict):
-        redacted: dict[str, Any] = {}
-        for key, item in value.items():
-            if key == "backend_url":
-                redacted["has_backend_url"] = bool(item)
-                continue
-            redacted[key] = _redact_sync_payload_for_ui(item)
-        if "results" in redacted:
-            redacted.setdefault("ok", not _sync_payload_has_errors(redacted))
-        return redacted
-    if isinstance(value, list):
-        return [_redact_sync_payload_for_ui(item) for item in value]
-    if isinstance(value, str):
-        return _redact_sync_text_for_ui(value)
-    return value
-
-
-_SYNC_URL_RE = re.compile(
-    r"\b[a-zA-Z][a-zA-Z0-9+.-]*://"
-    r"(?:\[[^\]\s]+\][^\s,;)\"'\]]*|[^\s,;)\"'\]]+)"
-)
-_SYNC_URL_TRAILING_PUNCTUATION = ":.!?"
-
-
-def _redact_sync_text_for_ui(value: str) -> str:
-    def replace(match: re.Match[str]) -> str:
-        url = match.group(0)
-        suffix = url[len(url.rstrip(_SYNC_URL_TRAILING_PUNCTUATION)) :]
-        return f"<backend-url>{suffix}"
-
-    return _SYNC_URL_RE.sub(replace, value)
-
-
-def _sync_error_rows(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
-    if not isinstance(payload, dict):
-        return []
-    results = payload.get("results")
-    if not isinstance(results, list):
-        return []
-    return [
-        row
-        for row in results
-        if isinstance(row, dict) and str(row.get("status") or "").lower() == "error"
-    ]
-
-
-def _sync_payload_has_errors(payload: dict[str, Any] | None) -> bool:
-    if not isinstance(payload, dict):
-        return False
-    return payload.get("ok") is False or bool(_sync_error_rows(payload))
-
-
-def _sync_failure_blocker(payload: dict[str, Any] | None) -> dict[str, Any] | None:
-    if not _sync_payload_has_errors(payload):
-        return None
-    errors = _sync_error_rows(payload)
-    detail = (
-        f"Automatic watch-only refresh failed for {len(errors)} source(s); reports may be stale."
-        if errors
-        else "Automatic watch-only refresh failed; reports may be stale."
-    )
-    return {
-        "id": "sync_failed",
-        "severity": "blocking",
-        "title": "Connection refresh failed",
-        "detail": detail,
-        "daemon_kind": "ui.wallets.sync",
-    }
-
-
-def _apply_sync_failure_blocker(
-    payload: dict[str, Any],
-    sync_payload: dict[str, Any] | None,
-) -> dict[str, Any]:
-    blocker = _sync_failure_blocker(sync_payload)
-    if blocker is None:
-        return payload
-    updated = dict(payload)
-    blockers = list(updated.get("blockers") or [])
-    if not any(isinstance(item, dict) and item.get("id") == blocker["id"] for item in blockers):
-        blockers.insert(0, blocker)
-    updated["blockers"] = blockers
-    updated["ready"] = False
-    return updated
-
-
-def _journals_process_payload(conn: sqlite3.Connection) -> dict[str, Any]:
-    return process_journals(conn, None, None)
-
-
-def _active_profile_row(conn: sqlite3.Connection) -> sqlite3.Row | None:
-    context = current_context_snapshot(conn)
-    profile_id = context.get("profile_id")
-    if not profile_id:
-        return None
-    return conn.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
-
-
-def _row_int(row: sqlite3.Row, key: str, default: int = 0) -> int:
-    try:
-        if key not in row.keys():
-            return default
-        value = row[key]
-    except (IndexError, KeyError):
-        return default
-    return int(value or default)
-
-
-def _auto_sync_setting_key(profile_id: str) -> str:
-    return f"ai.auto_sync_before_report_reads.profile.{profile_id}"
-
-
-def _setting_bool(conn: sqlite3.Connection, key: str, *, default: bool = False) -> bool:
-    value = get_setting(conn, key)
-    if value is None:
-        return default
-    return str(value).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _maintenance_settings_payload(conn: sqlite3.Connection) -> dict[str, Any]:
-    context = current_context_snapshot(conn)
-    profile = _active_profile_row(conn)
-    if profile is None:
-        return {
-            "workspace": context.get("workspace_label") or None,
-            "profile": None,
-            "settings": {"auto_sync_before_report_reads": False},
-        }
-    key = _auto_sync_setting_key(profile["id"])
-    return {
-        "workspace": context.get("workspace_label") or None,
-        "profile": {
-            "id": profile["id"],
-            "label": profile["label"],
-        },
-        "settings": {
-            "auto_sync_before_report_reads": _setting_bool(conn, key),
-            "setting_key": key,
-        },
-    }
-
-
-def _maintenance_configure_payload(
-    conn: sqlite3.Connection,
-    raw_args: dict[str, Any],
-) -> dict[str, Any]:
-    unknown = sorted(set(raw_args) - {"auto_sync_before_report_reads"})
-    if unknown:
-        raise AppError(
-            "ui.maintenance.configure received unsupported arguments",
-            code="validation",
-            details={"unknown": unknown},
-            retryable=False,
-        )
-    value = raw_args.get("auto_sync_before_report_reads")
-    if not isinstance(value, bool):
-        raise AppError(
-            "ui.maintenance.configure auto_sync_before_report_reads must be a boolean",
-            code="validation",
-            details={"type": type(value).__name__},
-            retryable=False,
-        )
-    profile = _active_profile_row(conn)
-    if profile is None:
-        raise AppError(
-            "ui.maintenance.configure requires an active profile",
-            code="validation",
-            retryable=False,
-        )
-    set_setting(conn, _auto_sync_setting_key(profile["id"]), "true" if value else "false")
-    conn.commit()
-    return _maintenance_settings_payload(conn)
-
-
-def _auto_process_journals_if_needed(conn: sqlite3.Connection) -> dict[str, Any] | None:
-    profile = _active_profile_row(conn)
-    if profile is None:
-        return None
-    profile_id = profile["id"]
-    active_count = conn.execute(
-        "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded = 0",
-        (profile_id,),
-    ).fetchone()["count"]
-    active_count = int(active_count or 0)
-    if active_count == 0:
-        return None
-    if (
-        profile["last_processed_at"]
-        and _row_int(profile, "last_processed_tx_count") == active_count
-        and _row_int(profile, "last_processed_input_version")
-        == _row_int(profile, "journal_input_version")
-    ):
-        return None
-    return _journals_process_payload(conn)
-
-
-def _auto_sync_wallets_if_enabled(
-    conn: sqlite3.Connection,
-    runtime_config: dict[str, object],
-    *,
-    state: dict[str, Any] | None = None,
-    force: bool = False,
-) -> dict[str, Any] | None:
-    state = state if state is not None else {}
-    if state.get("auto_sync_attempted") and not force:
-        return None
-    profile = _active_profile_row(conn)
-    if profile is None:
-        return None
-    enabled = _setting_bool(conn, _auto_sync_setting_key(profile["id"]))
-    if not enabled and not force:
-        return None
-    state["auto_sync_attempted"] = True
-    if not force:
-        now = time.monotonic()
-        with _AUTO_SYNC_PROFILE_LOCK:
-            last_attempt = _AUTO_SYNC_PROFILE_LAST_ATTEMPT.get(profile["id"])
-            if (
-                last_attempt is not None
-                and now - last_attempt < AUTO_SYNC_PROFILE_MIN_INTERVAL_SECONDS
-            ):
-                cached = _AUTO_SYNC_PROFILE_LAST_RESULT.get(profile["id"])
-                if cached is None:
-                    payload = {
-                        "ok": True,
-                        "status": "skipped",
-                        "reason": "auto_sync_rate_limited",
-                    }
-                else:
-                    payload = json.loads(json.dumps(cached))
-                    payload["status"] = "cached"
-                    payload["reason"] = "auto_sync_rate_limited"
-                payload["retry_after_seconds"] = int(
-                    AUTO_SYNC_PROFILE_MIN_INTERVAL_SECONDS - (now - last_attempt)
-                )
-                ok = not _sync_payload_has_errors(payload)
-                state["auto_sync"] = {"ok": ok, "payload": payload}
-                return payload
-            _AUTO_SYNC_PROFILE_LAST_ATTEMPT[profile["id"]] = now
-    try:
-        payload = _wallets_sync_payload(
-            conn,
-            runtime_config,
-            {"all": True},
-            strict=False,
-        )
-        payload = _redact_sync_payload_for_ui(payload)
-        ok = not _sync_payload_has_errors(payload)
-        payload["ok"] = ok
-        state["auto_sync"] = {"ok": ok, "payload": payload}
-        if not force:
-            with _AUTO_SYNC_PROFILE_LOCK:
-                _AUTO_SYNC_PROFILE_LAST_RESULT[profile["id"]] = dict(payload)
-        return payload
-    except AppError as exc:
-        payload = {
-            "ok": False,
-            "reason": exc.code or "sync_failed",
-            "message": str(exc),
-        }
-        state["auto_sync"] = payload
-        if not force:
-            with _AUTO_SYNC_PROFILE_LOCK:
-                _AUTO_SYNC_PROFILE_LAST_RESULT[profile["id"]] = dict(payload)
-        return payload
-
-
-def _auto_maintain_for_read(
-    conn: sqlite3.Connection,
-    runtime_config: dict[str, object],
-    *,
-    state: dict[str, Any] | None = None,
-    sync_if_enabled: bool = True,
-) -> dict[str, Any]:
-    metadata: dict[str, Any] = {}
-    if sync_if_enabled:
-        auto_sync = _auto_sync_wallets_if_enabled(conn, runtime_config, state=state)
-        if auto_sync is not None:
-            metadata["auto_sync"] = build_envelope("ui.wallets.sync", auto_sync)
-    auto_journal_process = _auto_process_journals_if_needed(conn)
-    if auto_journal_process is not None:
-        if state is not None:
-            state["auto_journal_process"] = auto_journal_process
-        metadata["auto_journal_process"] = build_envelope(
-            "ui.journals.process",
-            auto_journal_process,
-        )
-    return metadata
-
-
-def _maintenance_run_payload(
-    conn: sqlite3.Connection,
-    runtime_config: dict[str, object],
-    raw_args: dict[str, Any] | None = None,
-    *,
-    state: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    args = raw_args or {}
-    unknown = sorted(set(args) - {"sync"})
-    if unknown:
-        raise AppError(
-            "ui.maintenance.run received unsupported arguments",
-            code="validation",
-            details={"unknown": unknown},
-            retryable=False,
-        )
-    sync_mode = args.get("sync", "if_enabled")
-    if sync_mode not in {"never", "if_enabled", "always"}:
-        raise AppError(
-            "ui.maintenance.run sync must be never, if_enabled, or always",
-            code="validation",
-            details={"sync": sync_mode},
-            retryable=False,
-        )
-    metadata: dict[str, Any] = {}
-    sync_payload: dict[str, Any] | None = None
-    if sync_mode == "always":
-        auto_sync = _auto_sync_wallets_if_enabled(
-            conn,
-            runtime_config,
-            state=state,
-            force=True,
-        )
-        if auto_sync is not None:
-            sync_payload = auto_sync
-            metadata["sync"] = build_envelope("ui.wallets.sync", auto_sync)
-    elif sync_mode == "if_enabled":
-        auto_sync = _auto_sync_wallets_if_enabled(conn, runtime_config, state=state)
-        if auto_sync is not None:
-            sync_payload = auto_sync
-            metadata["sync"] = build_envelope("ui.wallets.sync", auto_sync)
-    journal_process = _auto_process_journals_if_needed(conn)
-    if journal_process is not None:
-        metadata["journals"] = build_envelope("ui.journals.process", journal_process)
-    blockers = _apply_sync_failure_blocker(
-        build_report_blockers_snapshot(conn),
-        sync_payload,
-    )
-    return {
-        "ready": blockers["ready"],
-        "sync_mode": sync_mode,
-        "maintenance": metadata,
-        "blockers": blockers["blockers"],
-        "health": blockers["health"],
-        "settings": _maintenance_settings_payload(conn)["settings"],
     }
 
 
@@ -3176,6 +2993,12 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                 payload = build_transactions_search_snapshot(conn, call.arguments)
             elif entry.daemon_kind == "ui.wallets.list":
                 payload = build_wallets_list_snapshot(conn, runtime.runtime_config)
+            elif entry.daemon_kind == "ui.wallets.utxos":
+                payload = build_wallet_utxos_snapshot_for_ai(
+                    conn,
+                    runtime.runtime_config,
+                    call.arguments,
+                )
             elif entry.daemon_kind == "ui.backends.list":
                 payload = build_backends_list_snapshot(conn, runtime.runtime_config)
             elif entry.daemon_kind == "ui.profiles.snapshot":
@@ -5175,6 +4998,7 @@ _UI_WALLET_SOURCE_FORMATS = {
     "21bitcoin_csv",
     "pocketbitcoin_csv",
     "strike_csv",
+    "wasabi_bundle",
 }
 
 
@@ -5259,22 +5083,70 @@ def _backend_options_payload(ctx: "DaemonContext") -> dict[str, Any]:
                 "label": "Built-in mempool.space Bitcoin backend",
                 "chain": "bitcoin",
                 "network": "mainnet",
-            }
+            },
+            {
+                "kind": "electrum",
+                "name": "liquid",
+                "label": "Built-in BullBitcoin Liquid Electrum backend",
+                "chain": "liquid",
+                "network": "liquidv1",
+            },
+            {
+                "kind": "electrum",
+                "name": "liquid-blockstream",
+                "label": "Built-in Blockstream Liquid Electrum backend",
+                "chain": "liquid",
+                "network": "liquidv1",
+            },
         ],
+    }
+
+
+def _backend_public_defaults_payload(ctx: "DaemonContext") -> dict[str, Any]:
+    bootstrap_names = list(ctx.runtime_config.get("bootstrap_backends", {}))
+    default_backend = str(ctx.runtime_config.get("default_backend") or "")
+    rows = []
+    for name in bootstrap_names:
+        backend = ctx.runtime_config.get("backends", {}).get(name)
+        if not backend:
+            continue
+        kind = str(backend.get("kind") or "")
+        url = str(backend.get("url") or "")
+        if kind not in {"electrum", "esplora", "liquid-esplora"} or not url:
+            continue
+        rows.append(
+            {
+                "name": str(backend.get("name") or name),
+                "kind": kind,
+                "chain": str(backend.get("chain") or ""),
+                "network": str(backend.get("network") or ""),
+                "url": redact_backend_url(url),
+                "source": str(backend.get("source") or ""),
+                "is_default": name == default_backend,
+            }
+        )
+    return {
+        "backends": rows,
+        "summary": {
+            "count": len(rows),
+            "default_backend": default_backend or None,
+        },
     }
 
 
 def _backend_settings_list_payload(ctx: "DaemonContext") -> dict[str, Any]:
     backends = core_accounts.list_backends(ctx.runtime_config)
+    default_backend = str(ctx.runtime_config.get("default_backend") or "")
     for backend in backends:
         name = backend.get("name")
         if isinstance(name, str) and name:
+            backend["is_default"] = name == default_backend
             backend["wallet_refs"] = wallet_backend_references(ctx.conn, name)
     return {
         "backends": backends,
         "summary": {
             "count": len(ctx.runtime_config.get("backends", {})),
-            "default_backend": str(ctx.runtime_config.get("default_backend") or "") or None,
+            "default_backend": default_backend or None,
         },
     }
 
@@ -5577,6 +5449,13 @@ def _delete_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[
     return payload
 
 
+def _set_default_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[str, Any]:
+    name = _required_str_arg(args, "name", "Backend name")
+    payload = core_accounts.set_default_backend(ctx.conn, ctx.runtime_config, name)
+    merge_db_backends(ctx.conn, ctx.runtime_config)
+    return payload
+
+
 def _create_wallet_payload(
     conn: sqlite3.Connection,
     args: dict[str, Any],
@@ -5656,6 +5535,36 @@ def _import_wallet_file_payload(
     conn: sqlite3.Connection,
     args: dict[str, Any],
 ) -> dict[str, Any]:
+    source_format = _required_str_arg(args, "source_format", "Source format")
+    source_bundle = args.get("source_bundle")
+    if source_bundle is not None:
+        if source_format != "wasabi_bundle":
+            raise AppError(
+                "Inline source_bundle is only supported for Wasabi imports",
+                code="validation",
+                retryable=False,
+            )
+        wallet_ref = _required_str_arg(args, "wallet", "Wallet")
+        _, profile = resolve_scope(conn, None, None)
+        wallet = core_resolve_wallet(conn, profile["id"], wallet_ref)
+        return core_imports.import_wasabi_bundle_payload_into_wallet(
+            conn,
+            profile,
+            wallet,
+            source_bundle,
+            core_imports.ImportCoordinatorHooks(
+                ensure_tag_row=lambda conn, workspace_id, profile_id, code, label: core_metadata.ensure_tag_row(
+                    conn,
+                    workspace_id,
+                    profile_id,
+                    code,
+                    label,
+                    _metadata_hooks(),
+                ),
+                invalidate_journals=invalidate_journals,
+            ),
+            source_label="inline:wasabi_bundle",
+        )
     source_file = _source_file_arg(args)
     if not source_file:
         raise AppError(
@@ -5664,7 +5573,6 @@ def _import_wallet_file_payload(
             hint="Choose the local export file to import.",
             retryable=False,
         )
-    source_format = _required_str_arg(args, "source_format", "Source format")
     if source_format not in _UI_WALLET_SOURCE_FORMATS:
         raise AppError(
             f"Unsupported source format '{source_format}'",
@@ -5726,6 +5634,62 @@ def _import_wallet_file_payload(
         )
     wallet_ref = _required_str_arg(args, "wallet", "Wallet")
     return import_into_wallet(conn, None, None, wallet_ref, source_file, source_format)
+
+
+def _import_samourai_payload(
+    conn: sqlite3.Connection,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    label = _required_str_arg(args, "label", "Connection label")
+    source_set_file = _optional_str_arg(args, "source_set_file")
+    source_set = args.get("source_set")
+    forbidden = sorted(
+        key
+        for key in (
+            "backup_file",
+            "backup_passphrase",
+            "mnemonic",
+            "mnemonic_passphrase",
+            "source_file",
+        )
+        if args.get(key) not in (None, "")
+    )
+    if forbidden:
+        raise AppError(
+            "Samourai imports accept only watch-only descriptor/xpub source sets",
+            code="validation",
+            hint="Paste public Deposit, Badbank, Premix, and Postmix descriptors or xpubs instead of backup or recovery material.",
+            details={"unsupported_fields": forbidden},
+            retryable=False,
+        )
+    if source_set is not None and not isinstance(source_set, dict):
+        raise AppError(
+            "source_set must be a JSON object",
+            code="validation",
+            retryable=False,
+        )
+    gap_limit = None
+    if args.get("gap_limit") not in (None, ""):
+        if not isinstance(args.get("gap_limit"), int):
+            raise AppError(
+                "gap_limit must be an integer",
+                code="validation",
+                details={"type": type(args.get("gap_limit")).__name__},
+                retryable=False,
+            )
+        gap_limit = int(args["gap_limit"])
+    return core_samourai.import_samourai_wallet_group(
+        conn,
+        None,
+        None,
+        label=label,
+        account_ref=_optional_str_arg(args, "account"),
+        backend=_optional_str_arg(args, "backend"),
+        network=_optional_str_arg(args, "network"),
+        gap_limit=gap_limit,
+        source_set_file=source_set_file,
+        source_set=source_set,
+    )
 
 
 def _slug_btcpay_backend_label(label: str) -> str:
@@ -6151,7 +6115,7 @@ def _handle_transaction_metadata_update(
         "pricing_external_ref",
     }
     review_tax_fields = {"review_status", "taxable", "at_regime", "at_category"}
-    allowed = {"transaction", "note", "tags", "excluded"} | pricing_fields | review_tax_fields
+    allowed = {"transaction", "note", "tags", "excluded", "source", "reason"} | pricing_fields | review_tax_fields
     unknown = sorted(set(args) - allowed)
     if unknown:
         raise AppError(
@@ -6161,6 +6125,8 @@ def _handle_transaction_metadata_update(
             retryable=False,
         )
     transaction = _required_str_arg(args, "transaction", "transaction id")
+    source = _optional_str_arg(args, "source") or "gui"
+    reason = _optional_str_arg(args, "reason")
     tags = args.get("tags") if "tags" in args else None
     pricing_update = None
     if any(field in args for field in pricing_fields):
@@ -6184,9 +6150,161 @@ def _handle_transaction_metadata_update(
         excluded=args.get("excluded") if "excluded" in args else None,
         pricing_update=pricing_update,
         review_status=args.get("review_status") if "review_status" in args else None,
+        review_status_set="review_status" in args,
         taxable=args.get("taxable") if "taxable" in args else None,
+        taxable_set="taxable" in args,
         at_regime=args.get("at_regime") if "at_regime" in args else None,
+        at_regime_set="at_regime" in args,
         at_category=args.get("at_category") if "at_category" in args else None,
+        at_category_set="at_category" in args,
+        source=source,
+        reason=reason,
+    )
+
+
+def _handle_transaction_history(
+    ctx: DaemonContext,
+    request: dict[str, Any],
+) -> dict[str, Any]:
+    if ctx.conn is None:
+        raise AppError("database is not open", code="unavailable", retryable=True)
+    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
+    allowed = {
+        "transaction",
+        "source",
+        "field_family",
+        "field",
+        "pricing_only",
+        "ai_only",
+        "stale_only",
+        "start",
+        "end",
+        "cursor",
+        "limit",
+        "include_stale",
+    }
+    unknown = sorted(set(args) - allowed)
+    if unknown:
+        raise AppError(
+            "ui.transactions.history received unsupported fields",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    return core_metadata.list_transaction_history(
+        ctx.conn,
+        None,
+        None,
+        _required_str_arg(args, "transaction", "transaction id"),
+        _metadata_hooks(),
+        source=_optional_str_arg(args, "source"),
+        field_family=_optional_str_arg(args, "field_family"),
+        field=_optional_str_arg(args, "field"),
+        pricing_only=_optional_bool_arg(args, "pricing_only", False),
+        ai_only=_optional_bool_arg(args, "ai_only", False),
+        stale_only=_optional_bool_arg(args, "stale_only", False),
+        start=_optional_str_arg(args, "start"),
+        end=_optional_str_arg(args, "end"),
+        cursor=_optional_str_arg(args, "cursor"),
+        limit=args.get("limit"),
+        include_stale=_optional_bool_arg(args, "include_stale", True),
+    )
+
+
+def _handle_activity_history(
+    ctx: DaemonContext,
+    request: dict[str, Any],
+) -> dict[str, Any]:
+    if ctx.conn is None:
+        raise AppError("database is not open", code="unavailable", retryable=True)
+    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
+    allowed = {
+        "transaction",
+        "wallet",
+        "source",
+        "field_family",
+        "field",
+        "pricing_only",
+        "ai_only",
+        "stale_only",
+        "start",
+        "end",
+        "cursor",
+        "limit",
+        "include_stale",
+    }
+    unknown = sorted(set(args) - allowed)
+    if unknown:
+        raise AppError(
+            "ui.activity.history received unsupported fields",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    return core_metadata.list_activity_history(
+        ctx.conn,
+        None,
+        None,
+        _metadata_hooks(),
+        transaction_ref=_optional_str_arg(args, "transaction"),
+        wallet_ref=_optional_str_arg(args, "wallet"),
+        source=_optional_str_arg(args, "source"),
+        field_family=_optional_str_arg(args, "field_family"),
+        field=_optional_str_arg(args, "field"),
+        pricing_only=_optional_bool_arg(args, "pricing_only", False),
+        ai_only=_optional_bool_arg(args, "ai_only", False),
+        stale_only=_optional_bool_arg(args, "stale_only", False),
+        start=_optional_str_arg(args, "start"),
+        end=_optional_str_arg(args, "end"),
+        cursor=_optional_str_arg(args, "cursor"),
+        limit=args.get("limit"),
+        include_stale=_optional_bool_arg(args, "include_stale", True),
+    )
+
+
+def _handle_activity_stale(
+    ctx: DaemonContext,
+    request: dict[str, Any],
+) -> dict[str, Any]:
+    if ctx.conn is None:
+        raise AppError("database is not open", code="unavailable", retryable=True)
+    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
+    if args:
+        raise AppError(
+            "ui.activity.stale does not accept arguments",
+            code="validation",
+            details={"unknown": sorted(args)},
+            retryable=False,
+        )
+    return core_metadata.stale_transaction_edit_summary(ctx.conn, None, None, _metadata_hooks())
+
+
+def _handle_transaction_history_revert(
+    ctx: DaemonContext,
+    request: dict[str, Any],
+) -> dict[str, Any]:
+    if ctx.conn is None:
+        raise AppError("database is not open", code="unavailable", retryable=True)
+    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
+    allowed = {"transaction", "event", "field", "source", "reason"}
+    unknown = sorted(set(args) - allowed)
+    if unknown:
+        raise AppError(
+            "ui.transactions.history.revert received unsupported fields",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    return core_metadata.revert_transaction_edit(
+        ctx.conn,
+        None,
+        None,
+        _required_str_arg(args, "transaction", "transaction id"),
+        _metadata_hooks(),
+        event_id=_required_str_arg(args, "event", "event id"),
+        field=_optional_str_arg(args, "field"),
+        source=_optional_str_arg(args, "source") or "gui",
+        reason=_optional_str_arg(args, "reason"),
     )
 
 
@@ -6226,6 +6344,42 @@ def _ui_attachment_payload(
             url=args.get("url"),
             label=args.get("label"),
             media_type=args.get("media_type"),
+        )
+    if kind == "ui.attachments.copy":
+        transaction = args.get("transaction") or args.get("target_transaction")
+        if not isinstance(transaction, str) or not transaction.strip():
+            raise AppError("ui.attachments.copy requires args.transaction", code="validation")
+        attachment_ids = args.get("attachments") or args.get("attachment_ids")
+        if not isinstance(attachment_ids, list):
+            raise AppError("ui.attachments.copy requires args.attachments", code="validation")
+        source_transaction = args.get("source_transaction")
+        if not isinstance(source_transaction, str) or not source_transaction.strip():
+            raise AppError("ui.attachments.copy requires args.source_transaction", code="validation")
+        return core_attachments.copy_attachments(
+            conn,
+            ctx.data_root,
+            None,
+            None,
+            transaction.strip(),
+            attachment_ids,
+            hooks,
+            source_tx_ref=source_transaction.strip(),
+        )
+    if kind == "ui.attachments.rename":
+        attachment_id = args.get("attachment") or args.get("attachment_id")
+        if not isinstance(attachment_id, str) or not attachment_id.strip():
+            raise AppError("ui.attachments.rename requires args.attachment", code="validation")
+        label = args.get("label")
+        if not isinstance(label, str) or not label.strip():
+            raise AppError("ui.attachments.rename requires args.label", code="validation")
+        return core_attachments.rename_attachment(
+            conn,
+            ctx.data_root,
+            None,
+            None,
+            attachment_id.strip(),
+            label,
+            hooks,
         )
     if kind == "ui.attachments.remove":
         attachment_id = args.get("attachment") or args.get("attachment_id")
@@ -6810,9 +6964,11 @@ def handle_request(
         )
 
     if kind == "daemon.lock":
+        _stop_freshness_background_worker(ctx, cancel_running=True)
         if ctx.conn is not None:
             ctx.conn.close()
             ctx.conn = None
+        _clear_unlocked_passphrase(ctx)
         return (
             _with_request_id(
                 build_envelope("daemon.lock", {"locked": True}),
@@ -6916,9 +7072,11 @@ def handle_request(
                 "database": str(db_path),
             }
         else:
+            _stop_freshness_background_worker(ctx, cancel_running=True)
             if ctx.conn is not None:
                 ctx.conn.close()
                 ctx.conn = None
+                _clear_unlocked_passphrase(ctx)
             if db_path.exists() and db_path.stat().st_size > 0:
                 migration = migrate_plaintext_to_encrypted(db_path, passphrase)
                 result = {
@@ -6995,8 +7153,10 @@ def handle_request(
                 False,
             )
         if ctx.conn is not None:
+            _stop_freshness_background_worker(ctx, cancel_running=True)
             ctx.conn.close()
             ctx.conn = None
+            _clear_unlocked_passphrase(ctx)
         db_path = resolve_database_path(resolve_effective_data_root(ctx.data_root))
         result = change_database_passphrase(db_path, current, new_passphrase)
         _open_daemon_connection(ctx, passphrase=new_passphrase)
@@ -7020,6 +7180,18 @@ def handle_request(
         return (
             _handle_ai_tool_call_consent(
                 ctx, request_id, _coerce_args_dict(request_id, request.get("args"))
+            ),
+            False,
+        )
+
+    if kind == "ui.backends.public_defaults":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.backends.public_defaults",
+                    _backend_public_defaults_payload(ctx),
+                ),
+                request_id,
             ),
             False,
         )
@@ -7064,6 +7236,18 @@ def handle_request(
         return (
             _with_request_id(
                 build_envelope("ui.overview.snapshot", build_overview_snapshot(ctx.conn)),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.workspace.overview.snapshot":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.workspace.overview.snapshot",
+                    build_workspace_overview_snapshot(ctx.conn, request.get("args")),
+                ),
                 request_id,
             ),
             False,
@@ -7129,9 +7313,59 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.transactions.history":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.transactions.history",
+                    _handle_transaction_history(ctx, request),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.activity.history":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.activity.history",
+                    _handle_activity_history(ctx, request),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.activity.stale":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.activity.stale",
+                    _handle_activity_stale(ctx, request),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.transactions.history.revert":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.transactions.history.revert",
+                    _handle_transaction_history_revert(ctx, request),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind in {
         "ui.attachments.list",
         "ui.attachments.add",
+        "ui.attachments.copy",
+        "ui.attachments.rename",
         "ui.attachments.remove",
         "ui.attachments.open",
     }:
@@ -7156,6 +7390,22 @@ def handle_request(
                 build_envelope(
                     "ui.wallets.list",
                     build_wallets_list_snapshot(ctx.conn, ctx.runtime_config),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.wallets.utxos":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.wallets.utxos",
+                    build_wallet_utxos_snapshot(
+                        ctx.conn,
+                        ctx.runtime_config,
+                        request.get("args"),
+                    ),
                 ),
                 request_id,
             ),
@@ -7241,6 +7491,21 @@ def handle_request(
                 request_id,
             ),
             True,
+        )
+
+    if kind == "ui.backends.set_default":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.backends.set_default",
+                    _set_default_backend_payload(
+                        ctx,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
         )
 
     if kind == "ui.backends.electrum.test":
@@ -7372,6 +7637,7 @@ def handle_request(
         "ui.reports.export_austrian_e1kv_pdf",
         "ui.reports.export_austrian_e1kv_xlsx",
         "ui.reports.export_austrian_e1kv_csv",
+        "ui.reports.export_audit_package",
     }:
         return (
             _with_request_id(
@@ -7635,6 +7901,21 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.rates.latest":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.rates.latest",
+                    _rates_latest_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.report.blockers":
         auto_sync_envelope = direct_maintenance_metadata.get("auto_sync")
         auto_sync_data = (
@@ -7664,6 +7945,38 @@ def handle_request(
                     build_audit_changes_since_last_answer_snapshot(
                         ctx.conn,
                         request.get("args"),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.audit.evidence.summary":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        options = _audit_package_options(args)
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.audit.evidence.summary",
+                    core_audit_package.build_evidence_summary(
+                        ctx.conn,
+                        ctx.data_root,
+                        None,
+                        None,
+                        _audit_package_hooks(),
+                        **{
+                            key: value
+                            for key, value in options.items()
+                            if key
+                            in {
+                                "transaction_refs",
+                                "source_funds_case_ref",
+                                "include_journal_state",
+                                "include_review_state",
+                                "include_edit_history",
+                            }
+                        },
                     ),
                 ),
                 request_id,
@@ -7708,6 +8021,100 @@ def handle_request(
                         ctx.runtime_config,
                         _coerce_args_dict(request_id, request.get("args")),
                         state={},
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.freshness.status":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.freshness.status",
+                    _freshness_status_payload(ctx.conn),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.freshness.configure":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.freshness.configure",
+                    _freshness_configure_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.freshness.run":
+        def _emit_freshness_progress(payload: Mapping[str, Any]) -> None:
+            out.write(
+                _with_request_id(
+                    build_envelope("ui.freshness.run.progress", dict(payload)),
+                    request_id,
+                )
+            )
+
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.freshness.run",
+                    _freshness_run_payload(
+                        ctx.conn,
+                        ctx.runtime_config,
+                        _coerce_args_dict(request_id, request.get("args")),
+                        progress_observer=_emit_freshness_progress,
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.workspace.freshness.run":
+        def _emit_workspace_freshness_progress(payload: Mapping[str, Any]) -> None:
+            out.write(
+                _with_request_id(
+                    build_envelope("ui.workspace.freshness.run.progress", dict(payload)),
+                    request_id,
+                )
+            )
+
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.workspace.freshness.run",
+                    _workspace_freshness_run_payload(
+                        ctx.conn,
+                        ctx.runtime_config,
+                        _coerce_args_dict(request_id, request.get("args")),
+                        progress_observer=_emit_workspace_freshness_progress,
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind in {"ui.freshness.cancel", "ui.freshness.pause", "ui.freshness.resume"}:
+        action = kind.rsplit(".", 1)[-1]
+        return (
+            _with_request_id(
+                build_envelope(
+                    kind,
+                    _freshness_control_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                        action=action,
                     ),
                 ),
                 request_id,
@@ -7907,6 +8314,21 @@ def handle_request(
             True,
         )
 
+    if kind == "ui.wallets.import_samourai":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.wallets.import_samourai",
+                    _import_samourai_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            True,
+        )
+
     if kind == "ui.wallets.preview_descriptor":
         return (
             _with_request_id(
@@ -8068,6 +8490,7 @@ def handle_request(
                 ctx.runtime_config,
                 args or {},
                 strict=False,
+                progress_observer=_emit_sync_progress,
             )
         finally:
             core_imports.sync_progress_emitter.reset(token)
@@ -8603,7 +9026,10 @@ def run(
         input_lines=input_lines,
         deferred_input_lines=[],
         out=out,
+        freshness_stop_event=threading.Event(),
     )
+    if conn is not None:
+        _start_freshness_background_worker(ctx)
 
     out.write(
         build_envelope(
@@ -8615,84 +9041,89 @@ def run(
         ),
     )
 
-    while True:
-        _drain_daemon_main_thread_tasks(ctx)
-        try:
-            line = _next_input_line(ctx, timeout=0.05)
-        except queue.Empty:
-            continue
-        if line == "":
-            break
-        if len(line) > MAX_REQUEST_LINE_CHARS:
-            while line and not line.endswith("\n"):
-                line = _next_input_line(ctx)
-            out.write(
-                _error_envelope(
-                    "request_too_large",
-                    "daemon request line is too large",
-                    request_id=None,
-                    details={"max_chars": MAX_REQUEST_LINE_CHARS},
-                    retryable=False,
-                ),
-            )
-            continue
-        raw = line.strip()
-        if not raw:
-            continue
-        try:
-            request = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            out.write(
-                _error_envelope(
-                    "invalid_json",
-                    "daemon request line is not valid JSON",
-                    request_id=None,
-                    details={"error": str(exc)},
-                    retryable=False,
-                ),
-            )
-            continue
-        if not isinstance(request, dict):
-            out.write(
-                _error_envelope(
-                    "validation",
-                    "daemon request must be a JSON object",
-                    request_id=None,
-                    details={"type": type(request).__name__},
-                    retryable=False,
-                ),
-            )
-            continue
-        if request.get("kind") == _SECRET_STORE_CONTROL_RESPONSE_KIND:
-            continue
+    try:
+        while True:
+            _drain_daemon_main_thread_tasks(ctx)
+            try:
+                line = _next_input_line(ctx, timeout=0.05)
+            except queue.Empty:
+                continue
+            if line == "":
+                break
+            if len(line) > MAX_REQUEST_LINE_CHARS:
+                while line and not line.endswith("\n"):
+                    line = _next_input_line(ctx)
+                out.write(
+                    _error_envelope(
+                        "request_too_large",
+                        "daemon request line is too large",
+                        request_id=None,
+                        details={"max_chars": MAX_REQUEST_LINE_CHARS},
+                        retryable=False,
+                    ),
+                )
+                continue
+            raw = line.strip()
+            if not raw:
+                continue
+            try:
+                request = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                out.write(
+                    _error_envelope(
+                        "invalid_json",
+                        "daemon request line is not valid JSON",
+                        request_id=None,
+                        details={"error": str(exc)},
+                        retryable=False,
+                    ),
+                )
+                continue
+            if not isinstance(request, dict):
+                out.write(
+                    _error_envelope(
+                        "validation",
+                        "daemon request must be a JSON object",
+                        request_id=None,
+                        details={"type": type(request).__name__},
+                        retryable=False,
+                    ),
+                )
+                continue
+            if request.get("kind") == _SECRET_STORE_CONTROL_RESPONSE_KIND:
+                continue
 
-        try:
-            response, should_shutdown = handle_request(ctx, request, out)
-        except AppError as exc:
-            response = _error_envelope(
-                exc.code or "app_error",
-                str(exc),
-                request_id=request.get("request_id"),
-                details=exc.details,
-                hint=exc.hint,
-                retryable=exc.retryable,
-            )
-            should_shutdown = False
-        except Exception as exc:
-            traceback.print_exc(file=sys.stderr)
-            sys.stderr.flush()
-            response = _error_envelope(
-                "internal_error",
-                str(exc) or exc.__class__.__name__,
-                request_id=request.get("request_id"),
-                retryable=False,
-            )
-            should_shutdown = False
+            try:
+                response, should_shutdown = handle_request(ctx, request, out)
+            except AppError as exc:
+                response = _error_envelope(
+                    exc.code or "app_error",
+                    str(exc),
+                    request_id=request.get("request_id"),
+                    details=exc.details,
+                    hint=exc.hint,
+                    retryable=exc.retryable,
+                )
+                should_shutdown = False
+            except Exception as exc:
+                traceback.print_exc(file=sys.stderr)
+                sys.stderr.flush()
+                response = _error_envelope(
+                    "internal_error",
+                    str(exc) or exc.__class__.__name__,
+                    request_id=request.get("request_id"),
+                    retryable=False,
+                )
+                should_shutdown = False
 
-        if response is not None:
-            out.write(response)
-        _drain_daemon_main_thread_tasks(ctx)
-        if should_shutdown:
-            return 0
+            if response is not None:
+                out.write(response)
+            _start_freshness_background_worker(ctx)
+            _drain_daemon_main_thread_tasks(ctx)
+            if should_shutdown:
+                return 0
+    finally:
+        _stop_freshness_background_worker(ctx, reset_event=False)
+        _clear_unlocked_passphrase(ctx)
 
     return 0

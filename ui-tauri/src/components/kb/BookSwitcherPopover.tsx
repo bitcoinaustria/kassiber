@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Loader2 } from "lucide-react";
+import { Eye, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -48,7 +48,7 @@ export function BookSwitcherPopover({
         <DialogHeader className="border-b px-4 py-3 sm:px-5">
           <DialogTitle className="text-base">Switch books</DialogTitle>
           <DialogDescription>
-            Pick the active book/profile for every screen in this window.
+            Pick the active book for every screen in this window.
           </DialogDescription>
         </DialogHeader>
 
@@ -128,6 +128,7 @@ function SwitcherBody({ snapshot, onClose }: SwitcherBodyProps) {
           activeId={activeId}
           pendingId={pendingId}
           switching={switchProfile.isPending}
+          onClose={onClose}
           onPick={handlePick}
         />
       ))}
@@ -147,6 +148,7 @@ interface WorkspaceBlockProps {
   activeId: string;
   pendingId: string | null;
   switching: boolean;
+  onClose: () => void;
   onPick: (profile: Profile) => void;
 }
 
@@ -155,17 +157,31 @@ function WorkspaceBlock({
   activeId,
   pendingId,
   switching,
+  onClose,
   onPick,
 }: WorkspaceBlockProps) {
   return (
     <Card className="gap-3 rounded-lg py-0">
       <CardHeader className="gap-2 px-3 py-3 sm:px-4">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <CardTitle className="min-w-0 truncate text-sm">
-            {workspace.name}
-          </CardTitle>
-          <Badge variant="outline">{workspace.jurisdiction}</Badge>
-          <Badge variant="secondary">{workspace.currency}</Badge>
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <CardTitle className="min-w-0 truncate text-sm">
+              {workspace.name}
+            </CardTitle>
+            <Badge variant="outline">{workspace.jurisdiction}</Badge>
+            <Badge variant="secondary">{workspace.currency}</Badge>
+          </div>
+          <Button variant="outline" size="sm" asChild>
+            <Link
+              to="/books/$workspaceId/birds-eye"
+              params={{ workspaceId: workspace.id }}
+              data-testid={`switcher-birds-eye-${workspace.id}`}
+              onClick={onClose}
+            >
+              <Eye className="size-3.5" aria-hidden="true" />
+              Book Set Overview
+            </Link>
+          </Button>
         </div>
       </CardHeader>
       <CardContent className="grid gap-2 px-3 pb-3 sm:grid-cols-2 sm:px-4">

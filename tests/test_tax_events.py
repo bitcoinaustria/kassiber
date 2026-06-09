@@ -15,6 +15,8 @@ def _row(
     fiat_rate=None,
     fiat_value=None,
     external_id=None,
+    raw_json=None,
+    privacy_boundary=None,
 ):
     return {
         "id": tx_id,
@@ -30,6 +32,8 @@ def _row(
         "description": tx_id,
         "note": None,
         "external_id": external_id or tx_id,
+        "privacy_boundary": privacy_boundary,
+        "raw_json": raw_json or "{}",
     }
 
 
@@ -174,6 +178,73 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         self.assertEqual(inputs.quarantines[0]["reason"], "unsupported_tax_direction")
         detail = json.loads(inputs.quarantines[0]["detail_json"])
         self.assertEqual(detail["direction"], "sideways")
+
+    def test_privacy_hop_evidence_quarantines_without_provenance(self):
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [
+                _row(
+                    "tx-coinjoin",
+                    "wallet-a",
+                    "outbound",
+                    100_000_000,
+                    fiat_rate=60_000,
+                    privacy_boundary="coinjoin",
+                    raw_json=json.dumps(
+                        {
+                            "source": "wasabi_gethistory",
+                            "islikelycoinjoin": True,
+                        }
+                    ),
+                )
+            ],
+            self.wallet_refs_by_id,
+            [],
+        )
+
+        self.assertEqual(inputs.events, [])
+        self.assertEqual(inputs.transfers, [])
+        self.assertEqual(len(inputs.quarantines), 1)
+        self.assertEqual(inputs.quarantines[0]["reason"], "privacy_hop_unresolved")
+        detail = json.loads(inputs.quarantines[0]["detail_json"])
+        self.assertEqual(detail["privacy_hop"], "coinjoin")
+        self.assertEqual(detail["privacy_boundary"], "coinjoin")
+        self.assertEqual(detail["required_for"], "explicit_user_owned_provenance")
+
+    def test_privacy_hop_evidence_blocks_transfer_pair_inference(self):
+        out_row = _row(
+            "tx-out",
+            "wallet-a",
+            "outbound",
+            50_000_000_000,
+            fee=100_000_000,
+            fiat_rate=65_000,
+            external_id="pair-privacy",
+            privacy_boundary="coinjoin",
+        )
+        in_row = _row(
+            "tx-in",
+            "wallet-b",
+            "inbound",
+            50_000_000_000,
+            external_id="pair-privacy",
+        )
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_row, in_row],
+            self.wallet_refs_by_id,
+            [{"out": out_row, "in": in_row}],
+        )
+
+        self.assertEqual(inputs.events, [])
+        self.assertEqual(inputs.transfers, [])
+        self.assertEqual(len(inputs.quarantines), 1)
+        self.assertEqual(inputs.quarantines[0]["reason"], "privacy_hop_unresolved")
+        detail = json.loads(inputs.quarantines[0]["detail_json"])
+        self.assertEqual(detail["privacy_boundary"], "coinjoin")
+        self.assertEqual(detail["direction"], "transfer")
 
 
 if __name__ == "__main__":

@@ -2,37 +2,40 @@ import {
   ChevronRight,
   Copy,
   Download,
-  Eye,
+  FileArchive,
   FileJson,
   FileText,
-  Regex,
-  Shield,
   Trash2,
 } from "lucide-react";
 import * as React from "react";
 
+import {
+  LogsTableControls,
+  type LogLevelFilter,
+} from "@/components/kb/LogsTableControls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import {
   APP_LOG_MAX_BYTES,
-  appLogLevels,
   clearAppLogRecords,
   exportLogRecords,
+  exportSupportBundleRecords,
   formatLogRecord,
   getAppLogBufferSize,
   getAppLogRecords,
@@ -41,8 +44,10 @@ import {
   redactLogRecord,
   setAppLogSubscriptionLevel,
   subscribeAppLogRecords,
+  supportBundleFilename,
   type AppLogField,
   type AppLogLevel,
+  type AppLogRedactionMode,
   type AppLogRecord,
 } from "@/lib/appLogs";
 import { isFilePickerAvailable, saveFile } from "@/lib/filePicker";
@@ -62,14 +67,16 @@ const LEVEL_CLASS: Record<AppLogLevel, string> = {
 
 const RENDER_STEP = 1000;
 const MAX_RENDERED_LINES = 8000;
+const SUPPORT_BUNDLE_PREVIEW_LINES = 30;
 const SEARCH_INPUT_ID = "kb-logs-search";
 
 export function Logs() {
   const addNotification = useUiStore((s) => s.addNotification);
   const records = useAppLogRecords();
-  const [level, setLevel] = React.useState<AppLogLevel>(
+  const [captureLevel, setCaptureLevel] = React.useState<AppLogLevel>(
     getAppLogSubscriptionLevel(),
   );
+  const [levelFilter, setLevelFilter] = React.useState<LogLevelFilter>("all");
   const [redacted, setRedacted] = React.useState(true);
   const [maskAmounts, setMaskAmounts] = React.useState(false);
   const [rawUntil, setRawUntil] = React.useState<number | null>(null);
@@ -80,6 +87,10 @@ export function Logs() {
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
   const [autoscroll, setAutoscroll] = React.useState(true);
   const [newWhilePaused, setNewWhilePaused] = React.useState(0);
+  const [supportBundleOpen, setSupportBundleOpen] = React.useState(false);
+  const [supportIssueDescription, setSupportIssueDescription] = React.useState("");
+  const [supportBundleMode, setSupportBundleMode] =
+    React.useState<AppLogRedactionMode>("high_signal");
   const viewportRef = React.useRef<HTMLDivElement | null>(null);
   const previousRecordCount = React.useRef(records.length);
   const bufferBytes = useAppLogBufferSize();
@@ -89,8 +100,8 @@ export function Logs() {
   );
 
   React.useEffect(() => {
-    setAppLogSubscriptionLevel(level);
-  }, [level]);
+    setAppLogSubscriptionLevel(captureLevel);
+  }, [captureLevel]);
 
   React.useEffect(() => {
     if (redacted) {
@@ -116,9 +127,9 @@ export function Logs() {
 
   React.useEffect(() => {
     if (autoscroll) scrollToBottom();
-  }, [autoscroll, renderLimit, query, moduleFilter, regex]);
+  }, [autoscroll, renderLimit, query, levelFilter, moduleFilter, regex]);
 
-  // Keyboard shortcuts: `/` focuses search, `Esc` clears search + module filter.
+  // Keyboard shortcuts: `/` focuses search, `Esc` clears active table filters.
   React.useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target;
@@ -132,23 +143,65 @@ export function Logs() {
         document.getElementById(SEARCH_INPUT_ID)?.focus();
         return;
       }
-      if (event.key === "Escape" && (query || moduleFilter)) {
+      if (event.key === "Escape" && (query || moduleFilter || levelFilter !== "all")) {
         setQuery("");
+        setLevelFilter("all");
         setModuleFilter(null);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [query, moduleFilter]);
+  }, [query, levelFilter, moduleFilter]);
 
-  const moduleCounts = React.useMemo(() => countByModule(records), [records]);
   const filteredRecords = React.useMemo(
-    () => filterRecords(records, query, regex, moduleFilter, { redacted, maskAmounts }),
-    [records, query, regex, moduleFilter, redacted, maskAmounts],
+    () =>
+      filterRecords(records, query, regex, levelFilter, moduleFilter, {
+        redacted,
+        maskAmounts,
+      }),
+    [records, query, regex, levelFilter, moduleFilter, redacted, maskAmounts],
   );
   const visibleRecords = filteredRecords.slice(
     Math.max(0, filteredRecords.length - Math.min(renderLimit, MAX_RENDERED_LINES)),
   );
+  const hasTableFilters = Boolean(query.trim()) || levelFilter !== "all" || Boolean(moduleFilter);
+  const isEmptyBecauseFilters = records.length > 0 && filteredRecords.length === 0;
+  const settingsActive = captureLevel !== "info" || regex || !redacted || maskAmounts;
+
+  const supportBundlePreview = React.useMemo(() => {
+    if (!supportBundleOpen) return "";
+    return buildSupportBundleContents({
+      records,
+      issueDescription: supportIssueDescription || "Preview issue description",
+      mode: supportBundleMode,
+      generatedAt: new Date().toISOString(),
+      captureLevel,
+      levelFilter,
+      moduleFilter,
+      query,
+      regex,
+    })
+      .split("\n")
+      .slice(0, SUPPORT_BUNDLE_PREVIEW_LINES)
+      .join("\n");
+  }, [
+    captureLevel,
+    levelFilter,
+    moduleFilter,
+    query,
+    records,
+    regex,
+    supportBundleMode,
+    supportBundleOpen,
+    supportIssueDescription,
+  ]);
+
+  const clearTableFilters = () => {
+    setQuery("");
+    setRegex(false);
+    setLevelFilter("all");
+    setModuleFilter(null);
+  };
 
   const exportFormat = async (format: "md" | "log" | "jsonl") => {
     if (!redacted && !window.confirm("Export raw logs? They may contain sensitive local data.")) {
@@ -168,7 +221,7 @@ export function Logs() {
         os: osLabel(),
         generatedAt: new Date().toISOString(),
         timeRange: timeRangeLabel(filteredRecords),
-        activeFilter: filterLabel(level, moduleFilter, query, regex),
+        activeFilter: filterLabel(captureLevel, levelFilter, moduleFilter, query, regex),
         redaction,
       },
     });
@@ -187,6 +240,52 @@ export function Logs() {
     } catch (error) {
       addNotification({
         title: "Could not export logs",
+        body: error instanceof Error ? error.message : String(error),
+        tone: "error",
+      });
+    }
+  };
+
+  const exportSupportBundle = async () => {
+    const description = supportIssueDescription.trim();
+    if (!description) {
+      addNotification({
+        title: "Support bundle not exported",
+        body: "Add a short issue description first.",
+        tone: "warning",
+      });
+      return;
+    }
+    const generatedAt = new Date().toISOString();
+    const filename = supportBundleFilename(new Date(generatedAt));
+    const contents = buildSupportBundleContents({
+      records,
+      issueDescription: description,
+      mode: supportBundleMode,
+      generatedAt,
+      captureLevel,
+      levelFilter,
+      moduleFilter,
+      query,
+      regex,
+    });
+    try {
+      if (isFilePickerAvailable) {
+        const destination = await saveFile({
+          title: "Export Kassiber support bundle",
+          defaultPath: filename,
+          filters: [{ name: "JSONL", extensions: ["jsonl"] }],
+        });
+        if (!destination) return;
+        await saveLogsExportAs(destination, contents);
+        setSupportBundleOpen(false);
+        return;
+      }
+      triggerBrowserDownload(filename, contents, "application/x-ndjson");
+      setSupportBundleOpen(false);
+    } catch (error) {
+      addNotification({
+        title: "Could not export support bundle",
         body: error instanceof Error ? error.message : String(error),
         tone: "error",
       });
@@ -272,6 +371,10 @@ export function Logs() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setSupportBundleOpen(true)}>
+                <FileArchive className="size-4" aria-hidden="true" />
+                Support bundle
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => void exportFormat("md")}>
                 <FileText className="size-4" aria-hidden="true" />
                 Markdown
@@ -299,78 +402,94 @@ export function Logs() {
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card">
-        <div className="flex flex-wrap items-center gap-2 border-b p-3">
-          <Select value={level} onValueChange={(value) => setLevel(value as AppLogLevel)}>
-            <SelectTrigger className="h-8 w-[122px] font-mono text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {appLogLevels().map((item) => (
-                <SelectItem key={item} value={item}>
-                  {item.toUpperCase()}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <div className="flex flex-wrap gap-1">
-            {Object.entries(moduleCounts).map(([module, count]) => (
-              <button
-                key={module}
-                type="button"
-                aria-pressed={moduleFilter === module}
-                onClick={() =>
-                  setModuleFilter((current) => (current === module ? null : module))
-                }
-                className={cn(
-                  "rounded-sm border px-2 py-1 font-mono text-xs text-muted-foreground transition-colors hover:bg-muted",
-                  moduleFilter === module && "border-primary bg-primary/10 text-primary",
-                )}
-              >
-                {module} {count}
-              </button>
-            ))}
+      <Dialog open={supportBundleOpen} onOpenChange={setSupportBundleOpen}>
+        <DialogContent className="grid max-h-[88vh] max-w-3xl grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0">
+          <DialogHeader className="border-b px-5 py-4 pr-12">
+            <DialogTitle>Export support bundle</DialogTitle>
+            <DialogDescription>
+              Review the generated JSONL before saving.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 space-y-4 overflow-auto px-5 py-4">
+            <label className="space-y-2 text-sm">
+              <span className="font-medium">Issue description</span>
+              <Textarea
+                value={supportIssueDescription}
+                onChange={(event) => setSupportIssueDescription(event.target.value)}
+                placeholder="What went wrong?"
+                className="min-h-24 resize-y"
+              />
+            </label>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Bundle mode</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <SupportBundleModeButton
+                  active={supportBundleMode === "high_signal"}
+                  title="High-signal"
+                  description="Keeps amounts, addresses, txids, paths, labels, URLs, and error text readable."
+                  onClick={() => setSupportBundleMode("high_signal")}
+                />
+                <SupportBundleModeButton
+                  active={supportBundleMode === "public_safe"}
+                  title="Public-safe"
+                  description="Masks operational fields and exact amounts after stripping wallet and credential material."
+                  onClick={() => setSupportBundleMode("public_safe")}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium">Preview</p>
+                <span className="text-xs text-muted-foreground">
+                  First {SUPPORT_BUNDLE_PREVIEW_LINES} lines
+                </span>
+              </div>
+              <pre className="max-h-80 overflow-auto rounded-md border bg-muted/40 p-3 font-mono text-xs whitespace-pre-wrap text-foreground">
+                {supportBundlePreview}
+              </pre>
+            </div>
           </div>
-          <div className="ml-auto flex items-center gap-1">
-            <Input
-              id={SEARCH_INPUT_ID}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search logs ( / )"
-              className="h-8 w-44 font-mono text-xs"
-            />
+          <DialogFooter className="border-t px-5 py-4">
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </DialogClose>
             <Button
               type="button"
-              size="icon"
-              variant={regex ? "default" : "outline"}
-              className="size-8"
-              onClick={() => setRegex((current) => !current)}
-              title="Regex search"
+              onClick={() => void exportSupportBundle()}
+              disabled={!supportIssueDescription.trim()}
             >
-              <Regex className="size-4" aria-hidden="true" />
+              Save bundle
             </Button>
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            variant={redacted ? "secondary" : "destructive"}
-            onClick={() => setRedacted((current) => !current)}
-          >
-            {redacted ? (
-              <Shield className="size-4" aria-hidden="true" />
-            ) : (
-              <Eye className="size-4" aria-hidden="true" />
-            )}
-            {redacted ? "Redacted" : "Raw"}
-          </Button>
-          <label className="flex h-8 items-center gap-2 rounded-md border px-2 text-xs text-muted-foreground">
-            <Checkbox
-              checked={maskAmounts}
-              onCheckedChange={(checked) => setMaskAmounts(Boolean(checked))}
-            />
-            Amounts
-          </label>
-        </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card">
+        <LogsTableControls
+          captureLevel={captureLevel}
+          hasTableFilters={hasTableFilters}
+          levelFilter={levelFilter}
+          maskAmounts={maskAmounts}
+          moduleFilter={moduleFilter}
+          query={query}
+          records={records}
+          redacted={redacted}
+          regex={regex}
+          searchInputId={SEARCH_INPUT_ID}
+          settingsActive={settingsActive}
+          onCaptureLevelChange={setCaptureLevel}
+          onClearFilters={clearTableFilters}
+          onLevelFilterChange={setLevelFilter}
+          onMaskAmountsChange={setMaskAmounts}
+          onModuleFilterChange={setModuleFilter}
+          onQueryChange={setQuery}
+          onRedactedChange={setRedacted}
+          onRegexChange={setRegex}
+        />
 
         {!redacted ? (
           <div className="border-b border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -401,9 +520,10 @@ export function Logs() {
           >
             {visibleRecords.length === 0 ? (
               <div className="flex h-full min-h-64 flex-col items-center justify-center gap-1 text-sm text-muted-foreground">
-                <span>Waiting for daemon traffic…</span>
+                <span>{isEmptyBecauseFilters ? "No matching log records" : "Waiting for daemon traffic…"}</span>
                 <span className="text-xs">
-                  Subscription ≥ {level.toUpperCase()}
+                  Capture ≥ {captureLevel.toUpperCase()}
+                  {levelFilter !== "all" ? ` · level ${levelFilter}` : ""}
                   {moduleFilter ? ` · module ${moduleFilter}` : ""}
                   {query ? ` · search "${query}"` : ""}
                 </span>
@@ -446,6 +566,78 @@ export function Logs() {
         </div>
       </div>
     </div>
+  );
+}
+
+function buildSupportBundleContents({
+  records,
+  issueDescription,
+  mode,
+  generatedAt,
+  captureLevel,
+  levelFilter,
+  moduleFilter,
+  query,
+  regex,
+}: {
+  records: AppLogRecord[];
+  issueDescription: string;
+  mode: AppLogRedactionMode;
+  generatedAt: string;
+  captureLevel: AppLogLevel;
+  levelFilter: LogLevelFilter;
+  moduleFilter: string | null;
+  query: string;
+  regex: boolean;
+}): string {
+  return exportSupportBundleRecords(records, {
+    issueDescription,
+    mode,
+    header: {
+      appVersion: appVersionLabel(),
+      os: osLabel(),
+      generatedAt,
+      timeRange: timeRangeLabel(records),
+      activeFilter: `support_bundle=all_records, ui_filter=(${filterLabel(
+        captureLevel,
+        levelFilter,
+        moduleFilter,
+        query,
+        regex,
+      )})`,
+      redaction: mode,
+    },
+  });
+}
+
+function SupportBundleModeButton({
+  active,
+  title,
+  description,
+  onClick,
+}: {
+  active: boolean;
+  title: string;
+  description: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      className={cn(
+        "min-h-24 rounded-md border px-3 py-2 text-left transition-colors",
+        active
+          ? "border-primary bg-primary/10 text-primary"
+          : "border-border bg-muted/20 text-foreground hover:bg-muted/50",
+      )}
+      onClick={onClick}
+    >
+      <span className="block text-sm font-semibold">{title}</span>
+      <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+        {description}
+      </span>
+    </button>
   );
 }
 
@@ -537,12 +729,14 @@ function filterRecords(
   records: AppLogRecord[],
   query: string,
   regex: boolean,
+  levelFilter: LogLevelFilter,
   moduleFilter: string | null,
   renderOptions: { redacted: boolean; maskAmounts: boolean },
 ): AppLogRecord[] {
   const needle = query.trim();
   const matcher = makeMatcher(needle, regex);
   return records.filter((record) => {
+    if (levelFilter !== "all" && record.level !== levelFilter) return false;
     if (moduleFilter && record.module !== moduleFilter) return false;
     if (!matcher) return true;
     const text = formatLogRecord(record, renderOptions);
@@ -562,13 +756,6 @@ function makeMatcher(query: string, regex: boolean): ((value: string) => boolean
   } catch {
     return () => false;
   }
-}
-
-function countByModule(records: AppLogRecord[]): Record<string, number> {
-  return records.reduce<Record<string, number>>((acc, record) => {
-    acc[record.module] = (acc[record.module] ?? 0) + 1;
-    return acc;
-  }, {});
 }
 
 function fieldsForScreen(fields: Record<string, AppLogField>): string {
@@ -602,13 +789,15 @@ function timeRangeLabel(records: AppLogRecord[]): string {
 }
 
 function filterLabel(
-  level: AppLogLevel,
+  captureLevel: AppLogLevel,
+  levelFilter: LogLevelFilter,
   moduleFilter: string | null,
   query: string,
   regex: boolean,
 ): string {
   return [
-    `subscription>=${level}`,
+    `capture>=${captureLevel}`,
+    levelFilter === "all" ? "level=all" : `level=${levelFilter}`,
     moduleFilter ? `module=${moduleFilter}` : "module=all",
     query ? `search=${regex ? "regex:" : ""}${query}` : "search=none",
   ].join(", ");

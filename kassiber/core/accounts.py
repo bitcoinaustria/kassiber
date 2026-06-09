@@ -22,6 +22,7 @@ from ..tax_policy import (
 )
 from ..time_utils import now_iso
 from ..wallet_descriptors import normalize_asset_code
+from . import output_inventory as core_output_inventory
 from .repo import invalidate_journals, resolve_profile, resolve_scope, resolve_workspace
 
 ACCOUNT_TYPES = {"asset", "liability", "equity", "income", "expense"}
@@ -444,7 +445,13 @@ def create_backend(
 
 
 def update_backend(conn, name, updates):
-    return redact_backend_for_output(_update_db_backend(conn, name, updates))
+    backend = _update_db_backend(conn, name, updates)
+    core_output_inventory.clear_backend_output_inventory(
+        conn,
+        backend["name"],
+        commit=True,
+    )
+    return redact_backend_for_output(backend)
 
 
 def delete_backend(conn, name):

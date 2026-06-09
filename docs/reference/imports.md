@@ -7,6 +7,7 @@ Kassiber can ingest transactions and metadata from several sources. Imported dat
 - generic JSON / CSV transaction files
 - BTCPay CSV / JSON exports
 - BTCPay Greenfield confirmed wallet history
+- Wasabi Wallet sanitized RPC/export bundles
 - Phoenix CSV exports
 - River Bitcoin Activity / Account Activity CSV exports
 - Bull Bitcoin order CSV exports
@@ -14,17 +15,30 @@ Kassiber can ingest transactions and metadata from several sources. Imported dat
 - 21bitcoin transaction CSV exports
 - Pocket Bitcoin account CSV exports
 - Strike CSV exports
+- Samourai/Whirlpool descriptor and account-xpub source sets
 - BIP329 JSONL labels
 
 Format references used by the dedicated importers:
 
 - BTCPay Greenfield API: <https://docs.btcpayserver.org/Development/GreenFieldExample/>
+- Wasabi RPC export methods: <https://docs.wasabiwallet.io/using-wasabi/RPC.html>
 - River Account Activity CSV: <https://support.river.com/hc/en-us/articles/45513824178963-How-do-I-download-my-account-activity>
 - Bull Bitcoin order CSV export from the Bull account order history
 - Coinfinity order CSV export from the Coinfinity account order history
 - 21bitcoin transaction CSV export from the 21bitcoin app
 - Pocket Bitcoin account CSV export
 - Strike CSV export from Strike transaction history
+- Samourai Whirlpool account docs: <https://samourai.kayako.com/article/82-understanding-deposit-premix-and-postmix-accounts>
+- Samourai Whirlpool pool-fee docs: <https://samourai.kayako.com/article/81-understanding-pools-and-pool-fees>
+- Samourai BIP44/BIP49/BIP84 docs: <https://samourai.kayako.com/article/65-bip-44-bip-49-and-bip84>
+- Drongo Samourai crypto/account helpers:
+  <https://raw.githubusercontent.com/sparrowwallet/drongo/master/src/main/java/com/sparrowwallet/drongo/crypto/SamouraiUtil.java>
+  and
+  <https://raw.githubusercontent.com/sparrowwallet/drongo/master/src/main/java/com/sparrowwallet/drongo/wallet/StandardAccount.java>
+- Historical Sparrow Whirlpool mix-status code:
+  <https://code.sparrowwallet.com/sparrowwallet/sparrow/src/commit/78f0721168f8035f418f0a01fb89ea8e942038c0/src/main/java/com/sparrowwallet/sparrow/control/MixStatusCell.java>
+  and
+  <https://code.sparrowwallet.com/sparrowwallet/sparrow/blame/commit/176e440195f975253cdfeab08636b1a897bf78a5/src/main/java/com/sparrowwallet/sparrow/wallet/UtxoEntry.java>
 - BIP329 labels JSONL: <https://bips.xyz/329>
 
 ## Generic transaction imports
@@ -68,6 +82,129 @@ For inbound transactions, explicit earn-like `kind` values such as `income`,
 `lending_interest`, and `routing_income` are preserved and later promoted into
 RP2 earn-like receipts during journal processing. Unlabeled inbound rows stay
 conservative and process as acquisitions.
+
+## Privacy-hop evidence
+
+Privacy-aware importers may mark a transaction with the typed
+`privacy_boundary` field. Supported values are `coinjoin`, `payjoin`,
+`payment_in_coinjoin`, and `sweep`. Generic imports also accept source spellings
+such as `privacy_hop`, `privacyHop`, `privacyBoundary`, and
+`islikelycoinjoin=true`; the import boundary normalizes those spellings into the
+stored `privacy_boundary` column so tax and source-funds logic do not depend on
+ad hoc `raw_json` parsing.
+
+Kassiber treats this marker as evidence of an opaque privacy boundary, not as
+proof of exact upstream ownership, round membership, participant mapping, or fee
+allocation. Journal normalization therefore emits `privacy_hop_unresolved` until
+explicit user-owned provenance, reviewed links, or protocol-specific same-owner
+recovery evidence resolves the boundary. Source-of-funds reports surface the
+same marker as a warning instead of walking through unrelated participant inputs
+or suggesting automatic same-transaction-id self-transfer links across it.
+
+## Samourai Wallet and Whirlpool
+
+`wallets import-samourai` is a local watch-only importer for historical
+Samourai Wallet activity. Kassiber accepts explicit public descriptors and
+account xpub-family keys for the relevant Samourai/Whirlpool accounts, then
+persists the redacted wallet configuration needed for ordinary descriptor sync.
+It does not accept encrypted backups, recovery words, BIP39 passphrases, private
+keys, or other secret-bearing wallet material. It does not connect to a
+Whirlpool coordinator, does not run an active mixing client, does not create or
+broadcast transactions, and does not expose descriptors, xpubs, PayNym secrets,
+backend URLs/tokens, or raw source-set files through daemon results, AI tools,
+diagnostics, docs, or tests.
+
+Source findings that shape the import:
+
+- Drongo's `StandardAccount` defines Whirlpool accounts as native segwit
+  account roots: Badbank `2147483644'`, Premix `2147483645'`, and Postmix
+  `2147483646'`; Postmix uses a minimum lookahead twice the normal default.
+- Samourai's Whirlpool docs define Deposit, Premix, and Postmix as segregated
+  address spaces in the same wallet. Deposit contains
+  unmixed bech32 UTXOs; Premix contains UTXOs prepared by Tx0 and pending their
+  first cycle; Postmix contains UTXOs that completed at least one cycle and may
+  remix for free.
+- Whirlpool pool docs describe Tx0 as splitting Deposit inputs into equal-sized
+  Premix outputs, a flat coordinator-fee output, and toxic change. Toxic change
+  belongs in Badbank / Do Not Spend review, not in the Postmix privacy set.
+- Historical Sparrow Whirlpool UI treated Postmix UTXOs without stored mix data
+  as at least one mix and showed exact stored mix counts when available. Kassiber
+  mirrors that distinction with `minimum_mix_count=1` and separate confidence
+  metadata instead of claiming exact sat lineage.
+- BIP47 / PayNym roots (`m/47'/coin_type'/identity'`) are not ordinary unilateral
+  receive descriptors. Kassiber records the recognized recovery root as a
+  privacy limitation and only scans BIP47-derived activity when the user supplies
+  explicit descriptors or already-imported transactions that prove the addresses.
+
+Samourai source roots are interpreted as follows. Mainnet uses coin type `0'`;
+testnet, signet, and regtest use coin type `1'`. The descriptor sync branches
+remain normal receive/change branches (`/0/*` and `/1/*`) under each account
+root.
+
+| Section | Mainnet root | Scripts |
+|---|---:|---|
+| Deposit | `m/44'/0'/0'`, `m/49'/0'/0'`, `m/84'/0'/0'` | P2PKH, P2SH-P2WPKH, P2WPKH |
+| Deposit PayNym | `m/47'/0'/0'` | Recognized, not scanned without explicit descriptors |
+| Badbank / Toxic Change | `m/84'/0'/2147483644'` | P2WPKH |
+| Premix | `m/84'/0'/2147483645'` | P2WPKH |
+| Postmix | `m/84'/0'/2147483646'` | P2WPKH |
+| Ricochet | `m/44'/0'/2147483647'`, `m/49'/0'/2147483647'`, `m/84'/0'/2147483647'` | P2PKH, P2SH-P2WPKH, P2WPKH |
+
+The importer creates one logical Samourai group and child wallet sources for the
+scannable sections. Child sources carry safe `samourai` metadata in their
+wallet config and in UTXO provenance: section, script type, root path, pool role,
+privacy boundary, minimum mix count, exact mix-count confidence when known, and
+safe warning state. Descriptor and xpub material remain behind the existing
+wallet redaction boundary and can only be revealed through the explicit
+`wallets reveal-descriptor` owner command.
+The desktop Add Connection flow asks for the four primary public account inputs
+directly: Deposit, Badbank / Toxic Change, Premix, and Postmix descriptors or
+account xpub-family keys. Internally those fields are converted into the same
+source-set structure accepted by the CLI and daemon.
+Explicit descriptor source-set imports must cover both Samourai descriptor
+branches for each scanned section: branch `0` receive and branch `1` change.
+Provide a separate `change_descriptor` or a descriptor expression that expands
+to both branches; single-branch descriptors are rejected because they can miss
+change history and understate balances, reports, and source-of-funds evidence.
+
+Accounting behavior is intentionally conservative:
+
+- Tx0, premix, first mix, and remix rows across the same Samourai group are
+  internal same-asset privacy movement. They are not modeled as taxable disposals
+  merely because public CoinJoin transactions contain unrelated participant
+  inputs and outputs.
+- Coordinator and miner fees remain visible on the imported/synced transaction
+  rows and, when priced, through fee-only privacy events. Multi-output Tx0 rows
+  are not collapsed into a fake one-to-one transfer because premix and toxic
+  change are separate local destinations.
+- Safe Whirlpool provenance (`pool_denomination_sat`, `target_mix_count`,
+  `mix_count`, confidence, and round txids) may be carried in wallet metadata or
+  UTXO `raw_json`. Kassiber drops participant graph fields and does not infer
+  exact fee allocation across unrelated CoinJoin participants.
+- External spends from Deposit, Postmix, Ricochet, or Badbank remain normal
+  reportable rows. Toxic-change spends keep Badbank warning metadata.
+- Postmix rows with no stored Whirlpool metadata are represented as "at least
+  one mix" with low confidence, not as an exact round count.
+- Missing prices, malformed same-asset movement, unsupported paths, or ambiguous
+  privacy transitions quarantine/report blockers with actionable hints instead
+  of zero-basis treatment.
+- Source-of-funds reports may use `coinjoin` / `payjoin` reviewed links as
+  privacy boundaries. They must not traverse, disclose, or use unrelated
+  participant inputs as proof of funds.
+
+Example CLI flows:
+
+```bash
+python3 -m kassiber wallets import-samourai \
+  --label "Samourai Watch-Only" \
+  --source-set-file /path/to/samourai-public-sources.json \
+  --backend mempool \
+  --gap-limit 80
+```
+
+After import, run wallet sync, review any warnings or source-funds privacy
+boundaries, sync/rebuild rates when pricing is missing, then run
+`journals process` before trusting reports.
 
 ## BTCPay
 
@@ -211,6 +348,69 @@ python3 -m kassiber wallets create \
   --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq \
   --source-file /path/to/btcpay-transactions.csv \
   --source-format btcpay_csv
+```
+
+## Wasabi Wallet
+
+Kassiber accepts a sanitized Wasabi JSON bundle as watch-only accounting
+evidence. The bundle can contain `gethistory`,
+`listcoins`/`listunspentcoins`, `getwalletinfo`, `listkeys`,
+`listpaymentsincoinjoin`, and optional `wallet_json` metadata. Kassiber does
+not control the wallet, does not persist raw `wallet.json`, and does not expose
+seeds, encrypted secrets, chain code, xpub/extpub/public keys, full key paths,
+backend URLs, or raw wallet blobs through UI, AI, diagnostics, or public report
+surfaces.
+
+The desktop Add Connection flow asks for the real Wasabi RPC outputs directly:
+paste `gethistory` JSON, optionally paste `listcoins` / `listunspentcoins` and
+`getwalletinfo`, and use the advanced additional-sections box for `listkeys`,
+`listpaymentsincoinjoin`, or `wallet_json`. The UI converts those pasted
+responses into the same sanitized bundle shape internally. A prebuilt local
+bundle file is still accepted for advanced/import-script workflows.
+Wasabi RPC is disabled by default, listens locally on `127.0.0.1:37128` when
+enabled, and may be anonymous or protected with `JsonRpcUser` /
+`JsonRpcPassword` Basic Auth in Wasabi's `Config.json`. If Basic Auth is
+enabled, pass `-u user:password` to the local `curl` command before pasting the
+result into Kassiber.
+
+Import directly:
+
+```bash
+python3 -m kassiber wallets import-wasabi \
+  --wallet wasabi \
+  --file /path/to/wasabi-sanitized-bundle.json
+```
+
+Behavior:
+
+- `gethistory` rows become wallet transactions using Wasabi's signed net wallet
+  effect, timestamp/block height, label, txid, and `islikelycoinjoin` evidence
+- `listcoins` / `listunspentcoins` refresh the durable Coins/UTXO inventory,
+  including amount, confirmations, address label, safe receive/change branch
+  and index, anonymity score, spent-by txid, CoinJoin exclusion, key state, and
+  sanitized anonymity history when present
+- `getwalletinfo`, `listkeys`, and `wallet_json` only enrich safe wallet
+  metadata such as anonymity-score target, AutoCoinJoin/RedCoinIsolation,
+  watch-only/hardware flags, gap limit, account-path hints, and key-state
+  counts
+- CoinJoin and PayJoin evidence is treated as a reviewed privacy boundary:
+  Kassiber preserves tx-level flags and coin-level anonymity evidence, but does
+  not fabricate round ids, participant mappings, upstream ownership, or exact
+  foreign-input fees
+- Journal/report readiness marks ambiguous CoinJoin, payment-in-CoinJoin,
+  PayJoin, or sweep evidence as `privacy_hop_unresolved` until the user adds
+  explicit user-owned provenance
+
+You can also create a wallet whose source file is a Wasabi bundle:
+
+```bash
+python3 -m kassiber wallets create \
+  --label wasabi \
+  --kind wasabi \
+  --source-file /path/to/wasabi-sanitized-bundle.json \
+  --source-format wasabi_bundle
+
+python3 -m kassiber wallets sync --wallet wasabi
 ```
 
 ## Phoenix
@@ -551,7 +751,14 @@ python3 -m kassiber metadata records get --transaction <TRANSACTION_ID>
 python3 -m kassiber metadata records note set --transaction <ID> --note "Cold storage move"
 python3 -m kassiber metadata records tag add --transaction <ID> --tag tax-lot
 python3 -m kassiber metadata records excluded set --transaction <ID>
+python3 -m kassiber metadata records history list --transaction <ID>
+python3 -m kassiber metadata records history activity --source ai_tool
 ```
+
+Metadata edits from the CLI, desktop, and approved AI tools write append-only
+history in the same local database transaction as the actual change. No-op
+saves do not create history rows, and `metadata records history revert` records
+an undo as a new forward edit rather than modifying the old event.
 
 For raw transaction ranking, sort in Kassiber before applying `--limit`:
 
@@ -571,6 +778,9 @@ Attachments can be added after import:
 ```bash
 python3 -m kassiber attachments add --transaction <ID> --file /path/to/receipt.pdf
 python3 -m kassiber attachments add --transaction <ID> --url https://example.com/receipt
+python3 -m kassiber attachments rename <ATTACHMENT_ID> --label "Accountant approval"
 ```
 
-File attachments are copied into Kassiber's managed attachment store. URL attachments are stored literally and are not fetched.
+File attachments are copied into Kassiber's managed attachment store. URL
+attachments are stored literally and are not fetched. Kassiber shows a display
+label derived from the URL, which you can edit without changing the URL target.

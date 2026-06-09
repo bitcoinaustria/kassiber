@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from dataclasses import dataclass
+import contextvars
+import time
+from dataclasses import dataclass, replace
 from typing import Any, Callable, Mapping, MutableMapping, Sequence
 
 from ..errors import AppError
@@ -19,6 +21,7 @@ BackendRecord = Mapping[str, Any]
 SyncTarget = Mapping[str, Any]
 HistoryEntry = Mapping[str, Any]
 HistoryCache = MutableMapping[str, Sequence[HistoryEntry]]
+ProgressCallback = Callable[[Mapping[str, Any]], None]
 ImportFile = Callable[[sqlite3.Connection, ProfileRow, WalletRow, str, str], SyncOutcome]
 InsertRecords = Callable[[sqlite3.Connection, ProfileRow, WalletRow, Sequence[BackendRecord], str], SyncOutcome]
 ResolveBackend = Callable[[RuntimeConfig, str | None], Mapping[str, Any]]
@@ -40,6 +43,17 @@ SyncCoreLightningWallet = Callable[
     [sqlite3.Connection, RuntimeConfig, ProfileRow, WalletRow],
     SyncOutcome,
 ]
+UpdateOutputInventory = Callable[
+    [
+        sqlite3.Connection,
+        ProfileRow,
+        WalletRow,
+        BackendRecord,
+        "WalletSyncState",
+        Sequence[Mapping[str, Any]],
+    ],
+    Mapping[str, Any],
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +65,7 @@ class WalletSyncState:
     targets: Sequence[SyncTarget]
     tracked_scripts: Mapping[str, SyncTarget]
     history_cache: HistoryCache
+    checkpoint: MutableMapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -64,6 +79,49 @@ class WalletSyncHooks:
     sync_btcpay_wallet: SyncBTCPayWallet | None = None
     enrich_btcpay_wallet: EnrichBTCPayWallet | None = None
     sync_core_lightning_wallet: SyncCoreLightningWallet | None = None
+    update_output_inventory: UpdateOutputInventory | None = None
+
+
+# Contextvar threaded by the daemon when it wants long-running source refreshes
+# to emit progress over the JSONL stream. The CLI leaves this empty so terminal
+# sync behavior stays unchanged.
+sync_progress_emitter: contextvars.ContextVar[ProgressCallback | None] = (
+    contextvars.ContextVar("kassiber.sync_progress_emitter", default=None)
+)
+
+
+def emit_sync_progress(payload: Mapping[str, Any]) -> None:
+    progress = sync_progress_emitter.get()
+    if progress is not None:
+        progress(payload)
+
+
+def _wallet_label(wallet: WalletRow) -> str:
+    try:
+        value = wallet["label"]
+    except (KeyError, IndexError, TypeError):
+        value = None
+    if value is None and isinstance(wallet, Mapping):
+        value = wallet.get("label")
+    return str(value or "Wallet")
+
+
+def _emit_wallet_sync_progress(wallet: WalletRow, payload: Mapping[str, Any]) -> None:
+    wallet_label = _wallet_label(wallet)
+    emit_sync_progress({"wallet": wallet_label, **dict(payload)})
+
+
+def _wrap_sync_progress_for_wallet(wallet: WalletRow):
+    progress = sync_progress_emitter.get()
+    if progress is None:
+        return None
+
+    wallet_label = _wallet_label(wallet)
+
+    def _progress(payload: Mapping[str, Any]) -> None:
+        progress({"wallet": wallet_label, **dict(payload)})
+
+    return sync_progress_emitter.set(_progress)
 
 
 def _merge_btcpay_enrichment(
@@ -105,24 +163,50 @@ def sync_wallet_from_backend(
     profile: ProfileRow,
     wallet: WalletRow,
     hooks: WalletSyncHooks,
+    checkpoint: Mapping[str, Any] | None = None,
+    *,
+    force_full: bool = False,
 ) -> SyncOutcome:
+    started = time.monotonic()
     config = json.loads(wallet["config_json"] or "{}")
     backend = hooks.resolve_backend(runtime_config, config.get("backend"))
-    sync_state = hooks.resolve_sync_state(backend, wallet)
-    if not sync_state.targets:
-        return {
-            "wallet": wallet["label"],
-            "status": "skipped",
-            "reason": "no addresses or descriptors configured for backend sync",
-        }
-    kind = normalize_backend_kind(backend["kind"])
-    adapter = hooks.backend_adapters.get(kind)
-    if adapter is None:
-        raise AppError(
-            f"Source refresh is not implemented for backend kind '{kind}'",
-            hint="Use an esplora, electrum, or bitcoinrpc backend for live refresh.",
+    effective_checkpoint = {} if force_full else checkpoint
+    resolver_wallet: WalletRow = (
+        {**dict(wallet), "_freshness_checkpoint": dict(effective_checkpoint)}
+        if effective_checkpoint is not None
+        else wallet
+    )
+    token = _wrap_sync_progress_for_wallet(wallet)
+    try:
+        _emit_wallet_sync_progress(wallet, {"phase": "discovery"})
+        sync_state = hooks.resolve_sync_state(backend, resolver_wallet)
+        if effective_checkpoint is not None:
+            sync_state = replace(sync_state, checkpoint=dict(effective_checkpoint))
+        if not sync_state.targets:
+            return {
+                "wallet": wallet["label"],
+                "status": "skipped",
+                "reason": "no addresses or descriptors configured for backend sync",
+                "elapsed_ms": int((time.monotonic() - started) * 1000),
+                **({"force_full": True} if force_full else {}),
+            }
+        kind = normalize_backend_kind(backend["kind"])
+        adapter = hooks.backend_adapters.get(kind)
+        if adapter is None:
+            raise AppError(
+                f"Source refresh is not implemented for backend kind '{kind}'",
+                hint="Use an esplora, electrum, or bitcoinrpc backend for live refresh.",
+            )
+        _emit_wallet_sync_progress(
+            wallet,
+            {"phase": "backend_fetch"},
         )
-    normalized_records, adapter_meta = adapter(backend, wallet, sync_state)
+        normalized_records, adapter_meta = adapter(backend, wallet, sync_state)
+    finally:
+        if token is not None:
+            sync_progress_emitter.reset(token)
+    adapter_meta = dict(adapter_meta or {})
+    observed_utxos = adapter_meta.pop("utxos", None)
     outcome = hooks.insert_records(
         conn,
         profile,
@@ -130,6 +214,17 @@ def sync_wallet_from_backend(
         normalized_records,
         f"backend:{backend['name']}",
     )
+    if observed_utxos is not None and hooks.update_output_inventory is not None:
+        outcome["output_inventory"] = dict(
+            hooks.update_output_inventory(
+                conn,
+                profile,
+                wallet,
+                backend,
+                sync_state,
+                observed_utxos,
+            )
+        )
     outcome["backend"] = backend["name"]
     outcome["backend_kind"] = kind
     outcome["backend_url"] = backend["url"]
@@ -137,6 +232,11 @@ def sync_wallet_from_backend(
     outcome["network"] = sync_state.network
     outcome["sync_mode"] = "descriptor" if sync_state.descriptor_plan else "addresses"
     outcome["target_count"] = len(sync_state.targets)
+    outcome["records_fetched"] = len(normalized_records)
+    if "updated" not in outcome and isinstance(outcome.get("updated_records"), list):
+        outcome["updated"] = len(outcome["updated_records"])
+    if force_full:
+        outcome["force_full"] = True
     if sync_state.descriptor_plan:
         outcome["gap_limit"] = sync_state.descriptor_plan.gap_limit
     else:
@@ -146,6 +246,12 @@ def sync_wallet_from_backend(
     if sync_state.policy_asset_id:
         outcome["policy_asset"] = sync_state.policy_asset_id
     outcome.update(dict(adapter_meta or {}))
+    scripts_changed = int(outcome.get("scripts_changed") or 0)
+    scripts_unchanged = int(outcome.get("scripts_unchanged") or 0)
+    if scripts_changed or scripts_unchanged:
+        outcome["scripts_checked"] = scripts_changed + scripts_unchanged
+    outcome["utxos_refreshed"] = observed_utxos is not None
+    outcome["elapsed_ms"] = int((time.monotonic() - started) * 1000)
     return outcome
 
 
@@ -155,10 +261,19 @@ def sync_wallets(
     profile: ProfileRow,
     wallets: Sequence[WalletRow],
     hooks: WalletSyncHooks,
+    checkpoints: Mapping[str, Mapping[str, Any]] | None = None,
+    *,
+    force_full: bool = False,
 ) -> list[SyncOutcome]:
     results = []
     for wallet in wallets:
-        config = json.loads(wallet["config_json"] or "{}")
+        wallet_checkpoint = {} if force_full else (checkpoints or {}).get(str(wallet["id"]))
+        sync_wallet: WalletRow = (
+            {**dict(wallet), "_freshness_checkpoint": dict(wallet_checkpoint)}
+            if wallet_checkpoint is not None
+            else wallet
+        )
+        config = json.loads(sync_wallet["config_json"] or "{}")
         btcpay_config = wallet_btcpay_sync_config(config)
         source_file = config.get("source_file")
         source_format = config.get("source_format")
@@ -167,29 +282,50 @@ def sync_wallets(
         if btcpay_config:
             if hooks.sync_btcpay_wallet is None:
                 raise AppError("BTCPay source refresh is not configured for this runtime")
-            outcome = hooks.sync_btcpay_wallet(conn, runtime_config, profile, wallet)
-            results.append({"wallet": wallet["label"], "status": "synced", **outcome})
+            token = _wrap_sync_progress_for_wallet(sync_wallet)
+            try:
+                _emit_wallet_sync_progress(sync_wallet, {"phase": "backend_fetch"})
+                outcome = hooks.sync_btcpay_wallet(conn, runtime_config, profile, sync_wallet)
+            finally:
+                if token is not None:
+                    sync_progress_emitter.reset(token)
+            results.append({"wallet": sync_wallet["label"], "status": "synced", **outcome})
             continue
-        if wallet["kind"] == "coreln" and config.get("backend"):
+        if sync_wallet["kind"] == "coreln" and config.get("backend"):
             if hooks.sync_core_lightning_wallet is None:
                 raise AppError("Core Lightning source refresh is not configured for this runtime")
-            outcome = hooks.sync_core_lightning_wallet(conn, runtime_config, profile, wallet)
-            results.append({"wallet": wallet["label"], **outcome})
+            token = _wrap_sync_progress_for_wallet(sync_wallet)
+            try:
+                _emit_wallet_sync_progress(sync_wallet, {"phase": "backend_fetch"})
+                outcome = hooks.sync_core_lightning_wallet(conn, runtime_config, profile, sync_wallet)
+            finally:
+                if token is not None:
+                    sync_progress_emitter.reset(token)
+            results.append({"wallet": sync_wallet["label"], **outcome})
             continue
         if source_file and source_format:
-            outcome = hooks.import_file(conn, profile, wallet, source_file, source_format)
+            outcome = hooks.import_file(conn, profile, sync_wallet, source_file, source_format)
             outcome = _merge_btcpay_enrichment(
                 conn,
                 runtime_config,
                 profile,
-                wallet,
+                sync_wallet,
                 hooks,
                 outcome,
             )
-            results.append({"wallet": wallet["label"], "status": "synced", **outcome})
+            results.append({"wallet": sync_wallet["label"], "status": "synced", **outcome})
             continue
         if addresses or has_descriptor:
-            outcome = sync_wallet_from_backend(conn, runtime_config, profile, wallet, hooks)
+            checkpoint = {} if force_full else (checkpoints or {}).get(str(wallet["id"]))
+            outcome = sync_wallet_from_backend(
+                conn,
+                runtime_config,
+                profile,
+                sync_wallet,
+                hooks,
+                checkpoint=checkpoint,
+                force_full=force_full,
+            )
             if outcome.get("status") == "skipped":
                 results.append(outcome)
             else:
@@ -197,15 +333,15 @@ def sync_wallets(
                     conn,
                     runtime_config,
                     profile,
-                    wallet,
+                    sync_wallet,
                     hooks,
                     outcome,
                 )
-                results.append({"wallet": wallet["label"], "status": "synced", **outcome})
+                results.append({"wallet": sync_wallet["label"], "status": "synced", **outcome})
             continue
         results.append(
             {
-                "wallet": wallet["label"],
+                "wallet": sync_wallet["label"],
                 "status": "skipped",
                 "reason": "no file source, descriptor, or backend addresses configured",
             }
@@ -216,7 +352,9 @@ def sync_wallets(
 __all__ = [
     "WalletSyncHooks",
     "WalletSyncState",
+    "emit_sync_progress",
     "normalize_backend_kind",
     "sync_wallet_from_backend",
+    "sync_progress_emitter",
     "sync_wallets",
 ]

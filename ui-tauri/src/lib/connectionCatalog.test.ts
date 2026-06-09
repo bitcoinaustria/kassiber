@@ -25,6 +25,7 @@ describe("connection catalog", () => {
       "btcpay",
       "bip329",
       "backend-settings",
+      "samourai",
     ]);
 
     for (const source of CONNECTION_SOURCES.filter(
@@ -41,6 +42,7 @@ describe("connection catalog", () => {
         "electrum",
         "esplora",
         "btcpay",
+        "samourai",
         "phoenix",
         "river",
         "bullbitcoin",
@@ -48,6 +50,27 @@ describe("connection catalog", () => {
         "strike",
       ]),
     );
+  });
+
+  it("keeps the Samourai Whirlpool setup watch-only in the catalog", () => {
+    const samouraiSources = CONNECTION_SOURCES.filter(
+      (source) => source.setupKind === "samourai",
+    );
+
+    expect(samouraiSources.map((source) => source.id)).toEqual(["samourai"]);
+    expect(samouraiSources[0]?.description).toMatch(/Whirlpool/i);
+    expect(JSON.stringify(samouraiSources)).not.toMatch(
+      /backup|mnemonic|seed|passphrase|recovery/i,
+    );
+  });
+
+  it("uses bundled official artwork for privacy-wallet imports", () => {
+    for (const id of ["samourai", "wasabi"]) {
+      const source = CONNECTION_SOURCES.find((candidate) => candidate.id === id);
+
+      expect(source?.image).toBeTruthy();
+      expect(source?.image).not.toContain("data:image/svg+xml");
+    }
   });
 
   it("uses bundled brand artwork for Core Lightning", () => {

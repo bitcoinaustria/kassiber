@@ -33,6 +33,18 @@ export interface AppNotification {
   createdAt: string;
 }
 
+export interface ActiveMaintenanceProgress {
+  id: string;
+  title: string;
+  body: string;
+  tone: NotificationTone;
+  progress: NotificationProgress;
+  details?: string[];
+  active: boolean;
+  startedAt: string;
+  updatedAt: string;
+}
+
 export interface AppLockPolicy {
   autoLockWhenIdle: boolean;
   idleMinutes: number;
@@ -140,6 +152,7 @@ export interface UiState {
   theme: ThemePreference;
   appScale: number;
   hideSensitive: boolean;
+  clearClipboard: boolean;
   explorerSettings: ExplorerSettings;
   appLockPolicy: AppLockPolicy;
   identity: Identity | null;
@@ -148,6 +161,7 @@ export interface UiState {
   assistantModelSelection: AiModelSelection | null;
   daemonSession: number;
   notifications: AppNotification[];
+  activeMaintenanceProgress: ActiveMaintenanceProgress | null;
   sourceFundsDrafts: Record<string, SourceFundsDraft>;
   deferredConnectionSetup: DeferredConnectionSetup | null;
   setLang: (lang: Lang) => void;
@@ -159,6 +173,7 @@ export interface UiState {
   decreaseAppScale: () => void;
   resetAppScale: () => void;
   setHideSensitive: (hideSensitive: boolean) => void;
+  setClearClipboard: (clearClipboard: boolean) => void;
   setExplorerSettings: (settings: Partial<ExplorerSettings>) => void;
   setAppLockPolicy: (policy: Partial<AppLockPolicy>) => void;
   setIdentity: (identity: Identity | null) => void;
@@ -173,6 +188,10 @@ export interface UiState {
     id: string,
     patch: Partial<Omit<AppNotification, "id" | "createdAt">>,
   ) => void;
+  setActiveMaintenanceProgress: (
+    progress: ActiveMaintenanceProgress | null,
+  ) => void;
+  clearActiveMaintenanceProgress: (id?: string) => void;
   clearNotification: (id: string) => void;
   clearNotifications: () => void;
   setSourceFundsDraft: (profileKey: string, draft: SourceFundsDraft) => void;
@@ -230,7 +249,9 @@ export function uiStatePartialForStorage(state: UiState) {
     lang: state.lang,
     currency: state.currency,
     dataMode: state.dataMode,
+    theme: state.theme,
     hideSensitive: state.hideSensitive,
+    clearClipboard: state.clearClipboard,
     appScale: state.appScale,
     explorerSettings: state.explorerSettings,
     appLockPolicy: state.appLockPolicy,
@@ -253,6 +274,7 @@ export const useUiStore = create<UiState>()(
       theme: "system",
       appScale: DEFAULT_APP_SCALE,
       hideSensitive: false,
+      clearClipboard: true,
       explorerSettings: DEFAULT_EXPLORER_SETTINGS,
       appLockPolicy: DEFAULT_APP_LOCK_POLICY,
       identity: null,
@@ -261,6 +283,7 @@ export const useUiStore = create<UiState>()(
       assistantModelSelection: null,
       daemonSession: 0,
       notifications: [],
+      activeMaintenanceProgress: null,
       sourceFundsDrafts: {},
       setLang: (lang) => set({ lang }),
       setCurrency: (currency) => set({ currency }),
@@ -278,6 +301,7 @@ export const useUiStore = create<UiState>()(
         })),
       resetAppScale: () => set({ appScale: DEFAULT_APP_SCALE }),
       setHideSensitive: (hideSensitive) => set({ hideSensitive }),
+      setClearClipboard: (clearClipboard) => set({ clearClipboard }),
       setExplorerSettings: (settings) =>
         set((state) => ({
           explorerSettings: { ...state.explorerSettings, ...settings },
@@ -344,6 +368,15 @@ export const useUiStore = create<UiState>()(
             notification.id === id ? { ...notification, ...patch } : notification,
           ),
         })),
+      setActiveMaintenanceProgress: (activeMaintenanceProgress) =>
+        set({ activeMaintenanceProgress }),
+      clearActiveMaintenanceProgress: (id) =>
+        set((state) => {
+          const current = state.activeMaintenanceProgress;
+          if (!current) return state;
+          if (id && current.id !== id) return state;
+          return { activeMaintenanceProgress: null };
+        }),
       clearNotification: (id) =>
         set((state) => ({
           notifications: state.notifications.filter(
@@ -389,6 +422,7 @@ export const useUiStore = create<UiState>()(
           ...current,
           ...restored,
           appScale: normalizeAppScale(restored.appScale ?? current.appScale),
+          clearClipboard: restored.clearClipboard ?? current.clearClipboard,
           explorerSettings: {
             ...DEFAULT_EXPLORER_SETTINGS,
             ...(restored.explorerSettings ?? current.explorerSettings),

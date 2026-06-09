@@ -13,6 +13,7 @@ from ..errors import AppError
 from ..importers import load_bip329_file
 from ..msat import dec, msat_to_btc
 from . import pricing
+from . import transaction_history
 
 DEFAULT_RECORDS_LIMIT = 100
 MAX_RECORDS_LIMIT = 1000
@@ -86,26 +87,85 @@ def ensure_tag_row(conn, workspace_id, profile_id, code, label, hooks: MetadataH
     return conn.execute("SELECT * FROM tags WHERE id = ?", (tag_id,)).fetchone(), True
 
 
-def set_transaction_note(conn, workspace_ref, profile_ref, tx_ref, note, hooks: MetadataHooks):
-    _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
-    tx = hooks.resolve_transaction(conn, profile["id"], tx_ref)
-    conn.execute("UPDATE transactions SET note = ? WHERE id = ?", (note, tx["id"]))
-    hooks.invalidate_journals(conn, profile["id"])
-    conn.commit()
-    return {"transaction_id": tx["id"], "note": note}
+def set_transaction_note(
+    conn,
+    workspace_ref,
+    profile_ref,
+    tx_ref,
+    note,
+    hooks: MetadataHooks,
+    *,
+    source="cli",
+    reason=None,
+):
+    record = update_transaction_metadata(
+        conn,
+        workspace_ref,
+        profile_ref,
+        tx_ref,
+        hooks,
+        note=note,
+        note_set=True,
+        source=source,
+        reason=reason,
+    )
+    return {
+        "transaction_id": record["transaction_id"],
+        "note": note,
+        "updated": record["updated"],
+        "history_event_id": record["history_event_id"],
+    }
 
 
-def clear_transaction_note(conn, workspace_ref, profile_ref, tx_ref, hooks: MetadataHooks):
-    return set_transaction_note(conn, workspace_ref, profile_ref, tx_ref, None, hooks)
+def clear_transaction_note(
+    conn,
+    workspace_ref,
+    profile_ref,
+    tx_ref,
+    hooks: MetadataHooks,
+    *,
+    source="cli",
+    reason=None,
+):
+    return set_transaction_note(
+        conn,
+        workspace_ref,
+        profile_ref,
+        tx_ref,
+        None,
+        hooks,
+        source=source,
+        reason=reason,
+    )
 
 
-def set_transaction_excluded(conn, workspace_ref, profile_ref, tx_ref, excluded, hooks: MetadataHooks):
-    _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
-    tx = hooks.resolve_transaction(conn, profile["id"], tx_ref)
-    conn.execute("UPDATE transactions SET excluded = ? WHERE id = ?", (1 if excluded else 0, tx["id"]))
-    hooks.invalidate_journals(conn, profile["id"])
-    conn.commit()
-    return {"transaction_id": tx["id"], "excluded": bool(excluded)}
+def set_transaction_excluded(
+    conn,
+    workspace_ref,
+    profile_ref,
+    tx_ref,
+    excluded,
+    hooks: MetadataHooks,
+    *,
+    source="cli",
+    reason=None,
+):
+    record = update_transaction_metadata(
+        conn,
+        workspace_ref,
+        profile_ref,
+        tx_ref,
+        hooks,
+        excluded=bool(excluded),
+        source=source,
+        reason=reason,
+    )
+    return {
+        "transaction_id": record["transaction_id"],
+        "excluded": bool(excluded),
+        "updated": record["updated"],
+        "history_event_id": record["history_event_id"],
+    }
 
 
 def _clean_transaction_note(note):
@@ -200,7 +260,18 @@ def _clean_optional_choice(value, field, choices):
     return cleaned
 
 
-def _transaction_pricing_payload(profile, tx, *, fiat_currency=None, fiat_rate=None, fiat_value=None, source_kind=None, quality=None, external_ref=None):
+def _transaction_pricing_payload(
+    profile,
+    tx,
+    *,
+    fiat_currency=None,
+    fiat_rate=None,
+    fiat_value=None,
+    source_kind=None,
+    quality=None,
+    external_ref=None,
+    method=None,
+):
     clean_source_kind = _clean_optional_string(source_kind, "pricing_source_kind", max_chars=64)
     clean_quality = _clean_optional_string(quality, "pricing_quality", max_chars=64)
     if clean_source_kind is not None and clean_source_kind not in SUPPORTED_PRICING_SOURCE_KINDS:
@@ -255,6 +326,7 @@ def _transaction_pricing_payload(profile, tx, *, fiat_currency=None, fiat_rate=N
         "pricing_external_ref",
         max_chars=MAX_PRICING_EXTERNAL_REF_CHARS,
     )
+    clean_method = _clean_optional_string(method, "pricing_method", max_chars=64) or "desktop_transaction_detail"
     provider = "manual" if clean_source_kind == pricing.SOURCE_MANUAL_OVERRIDE else None
     return {
         "fiat_currency": clean_currency,
@@ -268,10 +340,103 @@ def _transaction_pricing_payload(profile, tx, *, fiat_currency=None, fiat_rate=N
             pricing_timestamp=tx["confirmed_at"] or tx["occurred_at"],
             fetched_at=None,
             granularity="exact" if clean_quality == pricing.QUALITY_EXACT else None,
-            method="desktop_transaction_detail",
+            method=clean_method,
             external_ref=clean_external_ref,
         ),
     }
+
+
+def _current_profile_row(conn, profile_id):
+    return conn.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
+
+
+def _state_from_updates(before_state, state_updates, *, tags_set=False, tags=None):
+    after_state = dict(before_state)
+    if tags_set:
+        after_state["tags"] = transaction_history.value_for_tx_update("tags", tags)
+    for field, value in state_updates.items():
+        after_state[field] = transaction_history.value_for_tx_update(field, value)
+    return after_state
+
+
+def _apply_audited_transaction_update(
+    conn,
+    *,
+    workspace,
+    profile,
+    tx,
+    hooks: MetadataHooks,
+    tx_updates,
+    state_updates,
+    tags_set=False,
+    tags=None,
+    source="cli",
+    reason=None,
+    commit=True,
+):
+    source = transaction_history.normalize_source(source)
+    reason = transaction_history.clean_reason(reason)
+    before_tags = _tags_for_transaction(conn, tx["id"])
+    before_state = transaction_history.transaction_state(tx, before_tags)
+    after_state = _state_from_updates(
+        before_state,
+        state_updates,
+        tags_set=tags_set,
+        tags=tags,
+    )
+    requested_fields = sorted(
+        set(state_updates) | ({"tags"} if tags_set else set()),
+        key=lambda field: field,
+    )
+    changed_fields = [
+        field
+        for field in requested_fields
+        if transaction_history.values_differ(before_state.get(field), after_state.get(field))
+    ]
+    if changed_fields and all(field == "pricing_fetched_at" for field in changed_fields):
+        changed_fields = []
+    if not changed_fields:
+        return None, False
+
+    try:
+        if tags_set and "tags" in changed_fields:
+            tag_rows = [
+                ensure_tag_row(conn, workspace["id"], profile["id"], tag, tag, hooks)[0]
+                for tag in (tags or [])
+            ]
+            conn.execute("DELETE FROM transaction_tags WHERE transaction_id = ?", (tx["id"],))
+            conn.executemany(
+                "INSERT OR IGNORE INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
+                [(tx["id"], tag["id"]) for tag in tag_rows],
+            )
+
+        if tx_updates:
+            assignments = [f"{column} = ?" for column in tx_updates]
+            conn.execute(
+                f"UPDATE transactions SET {', '.join(assignments)} WHERE id = ?",
+                (*tx_updates.values(), tx["id"]),
+            )
+
+        fresh_profile = _current_profile_row(conn, profile["id"]) or profile
+        event_id = transaction_history.append_event(
+            conn,
+            workspace=workspace,
+            profile=fresh_profile,
+            tx=tx,
+            source=source,
+            reason=reason,
+            changed_at=hooks.now_iso(),
+            changed_fields=changed_fields,
+            before_state=before_state,
+            after_state=after_state,
+        )
+        hooks.invalidate_journals(conn, profile["id"])
+        if commit:
+            conn.commit()
+        return event_id, True
+    except Exception:
+        conn.rollback()
+        raise
 
 
 def update_transaction_metadata(
@@ -287,9 +452,16 @@ def update_transaction_metadata(
     excluded=None,
     pricing_update=None,
     review_status=None,
+    review_status_set=False,
     taxable=None,
+    taxable_set=False,
     at_regime=None,
+    at_regime_set=False,
     at_category=None,
+    at_category_set=False,
+    source="cli",
+    reason=None,
+    commit=True,
 ):
     workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     tx = hooks.resolve_transaction(conn, profile["id"], tx_ref)
@@ -297,21 +469,21 @@ def update_transaction_metadata(
     clean_tags = _clean_transaction_tags(tags)
     if excluded is not None and not isinstance(excluded, bool):
         raise AppError("excluded must be a boolean", code="validation", retryable=False)
-    if taxable is not None and not isinstance(taxable, bool):
+    if taxable_set and taxable is not None and not isinstance(taxable, bool):
         raise AppError("taxable must be a boolean", code="validation", retryable=False)
     clean_review_status = (
         _clean_optional_choice(review_status, "review_status", SUPPORTED_REVIEW_STATUSES)
-        if review_status is not None
+        if review_status_set and review_status is not None
         else None
     )
     clean_at_regime = (
         _clean_optional_choice(at_regime, "at_regime", SUPPORTED_AT_REGIME_OVERRIDES)
-        if at_regime is not None
+        if at_regime_set and at_regime is not None
         else None
     )
     clean_at_category = (
         _clean_optional_choice(at_category, "at_category", SUPPORTED_AT_CATEGORY_OVERRIDES)
-        if at_category is not None
+        if at_category_set and at_category is not None
         else None
     )
     clean_pricing = None
@@ -322,103 +494,88 @@ def update_transaction_metadata(
         if clean_pricing["pricing_source_kind"] is not None:
             clean_pricing["pricing_fetched_at"] = hooks.now_iso()
 
-    changed = False
+    tx_updates = {}
+    state_updates = {}
+    if note_set:
+        tx_updates["note"] = clean_note
+        state_updates["note"] = clean_note
 
-    try:
-        tx_assignments = []
-        tx_params = []
-        if note_set:
-            tx_assignments.append("note = ?")
-            tx_params.append(clean_note)
+    if excluded is not None:
+        tx_updates["excluded"] = 1 if excluded else 0
+        state_updates["excluded"] = excluded
 
-        if clean_tags is not None:
-            tag_rows = [
-                ensure_tag_row(conn, workspace["id"], profile["id"], tag, tag, hooks)[0]
-                for tag in clean_tags
-            ]
-            conn.execute("DELETE FROM transaction_tags WHERE transaction_id = ?", (tx["id"],))
-            conn.executemany(
-                "INSERT OR IGNORE INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
-                [(tx["id"], tag["id"]) for tag in tag_rows],
-            )
-            changed = True
+    if review_status_set:
+        tx_updates["review_status"] = clean_review_status
+        state_updates["review_status"] = clean_review_status
 
-        if excluded is not None:
-            tx_assignments.append("excluded = ?")
-            tx_params.append(1 if excluded else 0)
+    if taxable_set:
+        tx_updates["taxability_override"] = None if taxable is None else (1 if taxable else 0)
+        state_updates["taxable"] = taxable
 
-        if review_status is not None:
-            tx_assignments.append("review_status = ?")
-            tx_params.append(clean_review_status)
+    if at_regime_set:
+        tx_updates["at_regime_override"] = clean_at_regime
+        state_updates["at_regime"] = clean_at_regime
 
-        if taxable is not None:
-            tx_assignments.append("taxability_override = ?")
-            tx_params.append(1 if taxable else 0)
+    if at_category_set:
+        tx_updates["at_category_override"] = clean_at_category
+        state_updates["at_category"] = clean_at_category
 
-        if at_regime is not None:
-            tx_assignments.append("at_regime_override = ?")
-            tx_params.append(clean_at_regime)
+    if clean_pricing is not None:
+        tx_updates.update(
+            {
+                "fiat_currency": clean_pricing["fiat_currency"],
+                "fiat_rate": clean_pricing["fiat_rate"],
+                "fiat_value": clean_pricing["fiat_value"],
+                "fiat_price_source": clean_pricing["fiat_price_source"],
+                "fiat_rate_exact": clean_pricing["fiat_rate_exact"],
+                "fiat_value_exact": clean_pricing["fiat_value_exact"],
+                "pricing_source_kind": clean_pricing["pricing_source_kind"],
+                "pricing_provider": clean_pricing["pricing_provider"],
+                "pricing_pair": clean_pricing["pricing_pair"],
+                "pricing_timestamp": clean_pricing["pricing_timestamp"],
+                "pricing_fetched_at": clean_pricing["pricing_fetched_at"],
+                "pricing_granularity": clean_pricing["pricing_granularity"],
+                "pricing_method": clean_pricing["pricing_method"],
+                "pricing_external_ref": clean_pricing["pricing_external_ref"],
+                "pricing_quality": clean_pricing["pricing_quality"],
+            }
+        )
+        state_updates.update(
+            {
+                "fiat_currency": clean_pricing["fiat_currency"],
+                "fiat_rate": clean_pricing["fiat_rate_exact"],
+                "fiat_value": clean_pricing["fiat_value_exact"],
+                "fiat_price_source": clean_pricing["fiat_price_source"],
+                "pricing_source_kind": clean_pricing["pricing_source_kind"],
+                "pricing_provider": clean_pricing["pricing_provider"],
+                "pricing_pair": clean_pricing["pricing_pair"],
+                "pricing_timestamp": clean_pricing["pricing_timestamp"],
+                "pricing_fetched_at": clean_pricing["pricing_fetched_at"],
+                "pricing_granularity": clean_pricing["pricing_granularity"],
+                "pricing_method": clean_pricing["pricing_method"],
+                "pricing_external_ref": clean_pricing["pricing_external_ref"],
+                "pricing_quality": clean_pricing["pricing_quality"],
+            }
+        )
 
-        if at_category is not None:
-            tx_assignments.append("at_category_override = ?")
-            tx_params.append(clean_at_category)
-
-        if clean_pricing is not None:
-            tx_assignments.extend(
-                [
-                    "fiat_currency = ?",
-                    "fiat_rate = ?",
-                    "fiat_value = ?",
-                    "fiat_price_source = ?",
-                    "fiat_rate_exact = ?",
-                    "fiat_value_exact = ?",
-                    "pricing_source_kind = ?",
-                    "pricing_provider = ?",
-                    "pricing_pair = ?",
-                    "pricing_timestamp = ?",
-                    "pricing_fetched_at = ?",
-                    "pricing_granularity = ?",
-                    "pricing_method = ?",
-                    "pricing_external_ref = ?",
-                    "pricing_quality = ?",
-                ]
-            )
-            tx_params.extend(
-                [
-                    clean_pricing["fiat_currency"],
-                    clean_pricing["fiat_rate"],
-                    clean_pricing["fiat_value"],
-                    clean_pricing["fiat_price_source"],
-                    clean_pricing["fiat_rate_exact"],
-                    clean_pricing["fiat_value_exact"],
-                    clean_pricing["pricing_source_kind"],
-                    clean_pricing["pricing_provider"],
-                    clean_pricing["pricing_pair"],
-                    clean_pricing["pricing_timestamp"],
-                    clean_pricing["pricing_fetched_at"],
-                    clean_pricing["pricing_granularity"],
-                    clean_pricing["pricing_method"],
-                    clean_pricing["pricing_external_ref"],
-                    clean_pricing["pricing_quality"],
-                ]
-            )
-
-        if tx_assignments:
-            conn.execute(
-                f"UPDATE transactions SET {', '.join(tx_assignments)} WHERE id = ?",
-                (*tx_params, tx["id"]),
-            )
-            changed = True
-
-        if changed:
-            hooks.invalidate_journals(conn, profile["id"])
-            conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
+    event_id, changed = _apply_audited_transaction_update(
+        conn,
+        workspace=workspace,
+        profile=profile,
+        tx=tx,
+        hooks=hooks,
+        tx_updates=tx_updates,
+        state_updates=state_updates,
+        tags_set=clean_tags is not None,
+        tags=clean_tags,
+        source=source,
+        reason=reason,
+        commit=commit,
+    )
 
     record = get_transaction_record(conn, workspace_ref, profile_ref, tx["id"], hooks)
     record["updated"] = changed
+    record["history_event_id"] = event_id
     return record
 
 
@@ -453,30 +610,73 @@ def list_tags(conn, workspace_ref, profile_ref, hooks: MetadataHooks):
     return [dict(row) for row in rows]
 
 
-def add_tag_to_transaction(conn, workspace_ref, profile_ref, tx_ref, tag_ref, hooks: MetadataHooks):
+def add_tag_to_transaction(
+    conn,
+    workspace_ref,
+    profile_ref,
+    tx_ref,
+    tag_ref,
+    hooks: MetadataHooks,
+    *,
+    source="cli",
+    reason=None,
+):
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     tx = hooks.resolve_transaction(conn, profile["id"], tx_ref)
     tag = hooks.resolve_tag(conn, profile["id"], tag_ref)
-    conn.execute(
-        "INSERT OR IGNORE INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
-        (tx["id"], tag["id"]),
+    current_tags = [row["label"] for row in _tags_for_transaction(conn, tx["id"])]
+    record = update_transaction_metadata(
+        conn,
+        workspace_ref,
+        profile_ref,
+        tx["id"],
+        hooks,
+        tags=[*current_tags, tag["label"]],
+        source=source,
+        reason=reason,
     )
-    hooks.invalidate_journals(conn, profile["id"])
-    conn.commit()
-    return {"transaction_id": tx["id"], "tag": tag["code"], "status": "added"}
+    return {
+        "transaction_id": tx["id"],
+        "tag": tag["code"],
+        "status": "added" if record["updated"] else "unchanged",
+        "updated": record["updated"],
+        "history_event_id": record["history_event_id"],
+    }
 
 
-def remove_tag_from_transaction(conn, workspace_ref, profile_ref, tx_ref, tag_ref, hooks: MetadataHooks):
+def remove_tag_from_transaction(
+    conn,
+    workspace_ref,
+    profile_ref,
+    tx_ref,
+    tag_ref,
+    hooks: MetadataHooks,
+    *,
+    source="cli",
+    reason=None,
+):
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     tx = hooks.resolve_transaction(conn, profile["id"], tx_ref)
     tag = hooks.resolve_tag(conn, profile["id"], tag_ref)
-    conn.execute(
-        "DELETE FROM transaction_tags WHERE transaction_id = ? AND tag_id = ?",
-        (tx["id"], tag["id"]),
+    current_tags = [row["label"] for row in _tags_for_transaction(conn, tx["id"])]
+    next_tags = [label for label in current_tags if label.lower() != tag["label"].lower()]
+    record = update_transaction_metadata(
+        conn,
+        workspace_ref,
+        profile_ref,
+        tx["id"],
+        hooks,
+        tags=next_tags,
+        source=source,
+        reason=reason,
     )
-    hooks.invalidate_journals(conn, profile["id"])
-    conn.commit()
-    return {"transaction_id": tx["id"], "tag": tag["code"], "status": "removed"}
+    return {
+        "transaction_id": tx["id"],
+        "tag": tag["code"],
+        "status": "removed" if record["updated"] else "unchanged",
+        "updated": record["updated"],
+        "history_event_id": record["history_event_id"],
+    }
 
 
 def _tags_for_transaction(conn, tx_id):
@@ -669,6 +869,217 @@ def list_transaction_records(
         "next_cursor": next_cursor,
         "has_more": has_more,
         "limit": effective_limit,
+    }
+
+
+def list_transaction_history(
+    conn,
+    workspace_ref,
+    profile_ref,
+    tx_ref,
+    hooks: MetadataHooks,
+    *,
+    source=None,
+    field_family=None,
+    field=None,
+    pricing_only=False,
+    ai_only=False,
+    stale_only=False,
+    start=None,
+    end=None,
+    cursor=None,
+    limit=None,
+    include_stale=True,
+):
+    return transaction_history.list_history(
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks,
+        transaction_ref=tx_ref,
+        source=source,
+        field_family=field_family,
+        field=field,
+        pricing_only=pricing_only,
+        ai_only=ai_only,
+        stale_only=stale_only,
+        start=start,
+        end=end,
+        cursor=cursor,
+        limit=limit,
+        include_stale=include_stale,
+    )
+
+
+def list_activity_history(
+    conn,
+    workspace_ref,
+    profile_ref,
+    hooks: MetadataHooks,
+    *,
+    transaction_ref=None,
+    wallet_ref=None,
+    source=None,
+    field_family=None,
+    field=None,
+    pricing_only=False,
+    ai_only=False,
+    stale_only=False,
+    start=None,
+    end=None,
+    cursor=None,
+    limit=None,
+    include_stale=True,
+):
+    return transaction_history.list_history(
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks,
+        transaction_ref=transaction_ref,
+        wallet_ref=wallet_ref,
+        source=source,
+        field_family=field_family,
+        field=field,
+        pricing_only=pricing_only,
+        ai_only=ai_only,
+        stale_only=stale_only,
+        start=start,
+        end=end,
+        cursor=cursor,
+        limit=limit,
+        include_stale=include_stale,
+    )
+
+
+def stale_transaction_edit_summary(conn, workspace_ref, profile_ref, hooks: MetadataHooks):
+    _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    return transaction_history.stale_summary(conn, profile)
+
+
+def _tx_updates_for_revert_field(field, before_value):
+    if field == "note":
+        return {"note": before_value}, {"note": before_value}
+    if field == "excluded":
+        return {"excluded": 1 if before_value else 0}, {"excluded": bool(before_value)}
+    if field == "review_status":
+        return {"review_status": before_value}, {"review_status": before_value}
+    if field == "taxable":
+        return {
+            "taxability_override": None if before_value is None else (1 if before_value else 0)
+        }, {"taxable": before_value}
+    if field == "at_regime":
+        return {"at_regime_override": before_value}, {"at_regime": before_value}
+    if field == "at_category":
+        return {"at_category_override": before_value}, {"at_category": before_value}
+    if field == "fiat_rate":
+        return {
+            "fiat_rate": None if before_value is None else float(dec(before_value)),
+            "fiat_rate_exact": before_value,
+        }, {"fiat_rate": before_value}
+    if field == "fiat_value":
+        return {
+            "fiat_value": None if before_value is None else float(dec(before_value)),
+            "fiat_value_exact": before_value,
+        }, {"fiat_value": before_value}
+    column_fields = {
+        "fiat_currency",
+        "fiat_price_source",
+        "pricing_source_kind",
+        "pricing_provider",
+        "pricing_pair",
+        "pricing_timestamp",
+        "pricing_fetched_at",
+        "pricing_granularity",
+        "pricing_method",
+        "pricing_external_ref",
+        "pricing_quality",
+    }
+    if field in column_fields:
+        return {field: before_value}, {field: before_value}
+    raise AppError(
+        "history field cannot be reverted",
+        code="validation",
+        details={"field": field},
+        retryable=False,
+    )
+
+
+def revert_transaction_edit(
+    conn,
+    workspace_ref,
+    profile_ref,
+    tx_ref,
+    hooks: MetadataHooks,
+    *,
+    event_id,
+    field=None,
+    source="cli",
+    reason=None,
+):
+    workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    tx = hooks.resolve_transaction(conn, profile["id"], tx_ref)
+    loaded = transaction_history.load_event_for_revert(
+        conn,
+        profile_id=profile["id"],
+        transaction_id=tx["id"],
+        event_id=event_id,
+    )
+    fields = loaded["fields"]
+    if field:
+        if field not in transaction_history.SUPPORTED_FIELDS:
+            raise AppError(
+                "history field is not supported",
+                code="validation",
+                details={"field": field},
+                retryable=False,
+            )
+        fields = [row for row in fields if row["field"] == field]
+        if not fields:
+            raise AppError(
+                "history event did not change that field",
+                code="validation",
+                details={"event_id": event_id, "field": field},
+                retryable=False,
+            )
+    tx_updates = {}
+    state_updates = {}
+    tags_set = False
+    tags = None
+    reverted_fields = []
+    for item in fields:
+        edit_field = item["field"]
+        before_value = item["before_value"]
+        if edit_field == "tags":
+            tags_set = True
+            tags = before_value or []
+            reverted_fields.append(edit_field)
+            continue
+        next_tx_updates, next_state_updates = _tx_updates_for_revert_field(edit_field, before_value)
+        tx_updates.update(next_tx_updates)
+        state_updates.update(next_state_updates)
+        reverted_fields.append(edit_field)
+    event_reason = reason or f"Reverted transaction edit {event_id}"
+    new_event_id, changed = _apply_audited_transaction_update(
+        conn,
+        workspace=workspace,
+        profile=profile,
+        tx=tx,
+        hooks=hooks,
+        tx_updates=tx_updates,
+        state_updates=state_updates,
+        tags_set=tags_set,
+        tags=tags,
+        source=source,
+        reason=event_reason,
+    )
+    record = get_transaction_record(conn, workspace_ref, profile_ref, tx["id"], hooks)
+    return {
+        "transaction": record,
+        "updated": changed,
+        "reverted_event_id": event_id,
+        "history_event_id": new_event_id,
+        "reverted_fields": sorted(reverted_fields),
     }
 
 
@@ -930,10 +1341,14 @@ __all__ = [
     "get_transaction_record",
     "import_bip329_labels",
     "list_bip329_labels",
+    "list_activity_history",
+    "list_transaction_history",
     "list_tags",
     "list_transaction_records",
     "remove_tag_from_transaction",
+    "revert_transaction_edit",
     "set_transaction_excluded",
     "set_transaction_note",
+    "stale_transaction_edit_summary",
     "update_transaction_metadata",
 ]

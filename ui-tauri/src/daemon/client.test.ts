@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   daemonMutationKey,
+  invalidatedDaemonQueryKindsForMutation,
   mutationAdvancesDaemonSession,
   parseDaemonAuthRequiredEventDetail,
   shouldHandleDaemonAuthRequiredEvent,
@@ -72,6 +73,73 @@ describe("daemon mutation key", () => {
     expect(daemonMutationKey("real", "ui.journals.process")).not.toEqual(
       daemonMutationKey("real", "ui.wallets.sync"),
     );
+  });
+});
+
+describe("daemon mutation invalidation scope", () => {
+  it("limits attachment renames to attachment and evidence reads", () => {
+    expect(
+      invalidatedDaemonQueryKindsForMutation("ui.attachments.rename"),
+    ).toEqual([
+      "ui.attachments.list",
+      "ui.audit.evidence.summary",
+      "ui.source_funds.evidence.list",
+      "ui.source_funds.preview",
+    ]);
+  });
+
+  it("refreshes journal-derived reads after journal processing", () => {
+    expect(
+      invalidatedDaemonQueryKindsForMutation("ui.journals.process"),
+    ).toEqual(
+      expect.arrayContaining([
+        "ui.journals.events.list",
+        "ui.transactions.extremes",
+        "ui.transactions.list",
+        "ui.transactions.resolve",
+      ]),
+    );
+  });
+
+  it("refreshes node and lightning reads after sync and maintenance refreshes", () => {
+    for (const kind of ["ui.freshness.run", "ui.wallets.sync"]) {
+      expect(invalidatedDaemonQueryKindsForMutation(kind)).toEqual(
+        expect.arrayContaining([
+          "ui.connections.node.snapshot",
+          "ui.journals.events.list",
+          "ui.rates.coverage",
+          "ui.reports.lightning_profitability",
+          "ui.transactions.resolve",
+        ]),
+      );
+    }
+  });
+
+  it("does not invalidate daemon reads after read-only backend probes", () => {
+    expect(
+      invalidatedDaemonQueryKindsForMutation("ui.backends.electrum.test"),
+    ).toEqual([]);
+    expect(
+      invalidatedDaemonQueryKindsForMutation("ui.backends.http.test"),
+    ).toEqual([]);
+  });
+
+  it("refreshes backend default reads after changing the default backend", () => {
+    expect(
+      invalidatedDaemonQueryKindsForMutation("ui.backends.set_default"),
+    ).toEqual([
+      "status",
+      "ui.backends.list",
+      "ui.backends.options",
+      "ui.backends.public_defaults",
+      "ui.backends.settings.list",
+    ]);
+  });
+
+  it("keeps unaudited mutations on broad daemon invalidation", () => {
+    expect(
+      invalidatedDaemonQueryKindsForMutation("ui.transactions.metadata.update"),
+    ).toBeNull();
   });
 });
 

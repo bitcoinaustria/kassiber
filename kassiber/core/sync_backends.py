@@ -9,6 +9,7 @@ import json
 import socket
 import ssl
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from pathlib import Path
 from types import MappingProxyType
@@ -22,6 +23,7 @@ from ..db import APP_NAME
 from ..envelope import json_ready
 from ..errors import AppError
 from ..msat import SATS_PER_BTC, dec
+from ..retry import retry_after_seconds_from_http_error
 from ..time_utils import UNKNOWN_OCCURRED_AT, timestamp_to_iso
 from ..util import normalize_chain_value, normalize_network_value, parse_bool, parse_int
 from ..wallet_descriptors import (
@@ -34,7 +36,7 @@ from ..wallet_descriptors import (
     liquid_plan_can_unblind,
 )
 from . import htlc_parser
-from .sync import WalletSyncState, normalize_backend_kind
+from .sync import WalletSyncState, emit_sync_progress, normalize_backend_kind
 from .wallets import (
     load_wallet_descriptor_plan_from_config,
     normalize_addresses,
@@ -45,6 +47,19 @@ B58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 B58_INDEX = {char: index for index, char in enumerate(B58_ALPHABET)}
 BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
 BECH32_INDEX = {char: index for index, char in enumerate(BECH32_CHARSET)}
+
+
+def _emit_backend_progress(phase: str, **payload):
+    event = {"phase": phase, **payload}
+    if "processed" not in event:
+        processed = event.get("targets_checked", event.get("transactions_seen"))
+        if processed is not None:
+            event["processed"] = processed
+    if "total" not in event:
+        total = event.get("target_count", event.get("transactions_total"))
+        if total is not None:
+            event["total"] = total
+    emit_sync_progress(event)
 
 
 def http_get_json(url, timeout=30):
@@ -60,6 +75,13 @@ def http_get_json(url, timeout=30):
             return json.loads(response.read().decode("utf-8"))
     except urlerror.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
+        if exc.code == 429:
+            raise AppError(
+                f"Backend rate limited the request for {url} (HTTP 429)",
+                code="rate_limited",
+                retryable=True,
+                details={"retry_after_seconds": retry_after_seconds_from_http_error(exc)},
+            ) from exc
         raise AppError(f"HTTP {exc.code} from backend for {url}: {detail[:200]}") from exc
     except urlerror.URLError as exc:
         raise AppError(f"Failed to reach backend {url}: {exc.reason}") from exc
@@ -78,6 +100,13 @@ def http_get_text(url, timeout=30, accept="text/plain"):
             return response.read().decode("utf-8")
     except urlerror.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
+        if exc.code == 429:
+            raise AppError(
+                f"Backend rate limited the request for {url} (HTTP 429)",
+                code="rate_limited",
+                retryable=True,
+                details={"retry_after_seconds": retry_after_seconds_from_http_error(exc)},
+            ) from exc
         raise AppError(f"HTTP {exc.code} from backend for {url}: {detail[:200]}") from exc
     except urlerror.URLError as exc:
         raise AppError(f"Failed to reach backend {url}: {exc.reason}") from exc
@@ -100,6 +129,13 @@ def http_post_json(url, payload, headers=None, timeout=30):
             return json.loads(response.read().decode("utf-8"))
     except urlerror.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
+        if exc.code == 429:
+            raise AppError(
+                f"Backend rate limited the request for {url} (HTTP 429)",
+                code="rate_limited",
+                retryable=True,
+                details={"retry_after_seconds": retry_after_seconds_from_http_error(exc)},
+            ) from exc
         raise AppError(f"HTTP {exc.code} from backend for {url}: {detail[:200]}") from exc
     except urlerror.URLError as exc:
         raise AppError(f"Failed to reach backend {url}: {exc.reason}") from exc
@@ -477,6 +513,31 @@ def batched(items, batch_size):
         yield items[start : start + batch_size]
 
 
+def _bounded_http_workers(backend):
+    return max(1, min(8, backend_batch_size(backend)))
+
+
+def _map_bounded(items, worker, max_workers, on_result=None):
+    items = list(items)
+    if not items:
+        return []
+    if max_workers <= 1 or len(items) == 1:
+        results = []
+        for index, item in enumerate(items, start=1):
+            result = worker(item)
+            results.append(result)
+            if on_result is not None:
+                on_result(index, result, len(items))
+        return results
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        results = []
+        for index, result in enumerate(executor.map(worker, items), start=1):
+            results.append(result)
+            if on_result is not None:
+                on_result(index, result, len(items))
+        return results
+
+
 def electrum_call_many(client, requests, batch_size):
     if not requests:
         return []
@@ -525,6 +586,16 @@ def scriptpubkey_scripthash(script_pubkey_hex):
     return hashlib.sha256(bytes.fromhex(script_pubkey_hex)).digest()[::-1].hex()
 
 
+def _mapping_get(mapping, key, default=None):
+    try:
+        return mapping[key]
+    except (KeyError, IndexError, TypeError):
+        getter = getattr(mapping, "get", None)
+        if callable(getter):
+            return getter(key, default)
+        return default
+
+
 def validate_backend_for_wallet(backend, chain, network, has_descriptor=False):
     kind = normalize_backend_kind(backend["kind"])
     backend_chain = backend_value(backend, "chain")
@@ -552,7 +623,24 @@ def validate_backend_for_wallet(backend, chain, network, has_descriptor=False):
     return kind
 
 
-def scan_descriptor_targets(plan, target_used=None, target_used_batch=None, scan_batch_size=100):
+def _highest_used_branch_index(highest_used, branch_index):
+    if not isinstance(highest_used, dict):
+        return None
+    value = highest_used.get(str(branch_index), highest_used.get(branch_index))
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def scan_descriptor_targets(
+    plan,
+    target_used=None,
+    target_used_batch=None,
+    scan_batch_size=100,
+    highest_used=None,
+):
     limits = branch_limits(plan)
     targets = []
     for branch in plan.branches:
@@ -562,6 +650,18 @@ def scan_descriptor_targets(plan, target_used=None, target_used_batch=None, scan
             continue
         consecutive_unused = 0
         address_index = 0
+        known_highest = _highest_used_branch_index(highest_used, branch.branch_index)
+        if known_highest is not None:
+            targets.extend(
+                sync_target_from_derived(target)
+                for target in derive_descriptor_targets(
+                    plan,
+                    branch_index=branch.branch_index,
+                    start=0,
+                    end=known_highest + 1,
+                )
+            )
+            address_index = known_highest + 1
         while consecutive_unused < branch_gap_limit:
             if target_used_batch is not None:
                 batch_targets = [
@@ -587,6 +687,11 @@ def scan_descriptor_targets(plan, target_used=None, target_used_batch=None, scan
                     address_index += 1
                     if consecutive_unused >= branch_gap_limit:
                         break
+                _emit_backend_progress(
+                    "discovery",
+                    target_count=len(targets),
+                    branch_index=branch.branch_index,
+                )
                 continue
             target = sync_target_from_derived(derive_descriptor_target(plan, branch.branch_index, address_index))
             targets.append(target)
@@ -595,52 +700,117 @@ def scan_descriptor_targets(plan, target_used=None, target_used_batch=None, scan
             else:
                 consecutive_unused += 1
             address_index += 1
+            if address_index % 50 == 0:
+                _emit_backend_progress(
+                    "discovery",
+                    target_count=len(targets),
+                    branch_index=branch.branch_index,
+                )
     return targets
 
 
-def esplora_scripthash_has_history(base_url, script_pubkey_hex, timeout=30):
+def esplora_scripthash_stats(base_url, script_pubkey_hex, timeout=30):
     resource = append_url_path(base_url, f"scripthash/{scriptpubkey_scripthash(script_pubkey_hex)}")
-    payload = http_get_json(resource, timeout=timeout)
+    return http_get_json(resource, timeout=timeout)
+
+
+def esplora_stats_fingerprint(payload):
+    chain_stats = payload.get("chain_stats") or {}
+    mempool_stats = payload.get("mempool_stats") or {}
+    return hashlib.sha256(
+        json.dumps(
+            {
+                "chain": {
+                    "funded_txo_count": chain_stats.get("funded_txo_count"),
+                    "funded_txo_sum": chain_stats.get("funded_txo_sum"),
+                    "spent_txo_count": chain_stats.get("spent_txo_count"),
+                    "spent_txo_sum": chain_stats.get("spent_txo_sum"),
+                    "tx_count": chain_stats.get("tx_count"),
+                },
+                "mempool": {
+                    "funded_txo_count": mempool_stats.get("funded_txo_count"),
+                    "funded_txo_sum": mempool_stats.get("funded_txo_sum"),
+                    "spent_txo_count": mempool_stats.get("spent_txo_count"),
+                    "spent_txo_sum": mempool_stats.get("spent_txo_sum"),
+                    "tx_count": mempool_stats.get("tx_count"),
+                },
+            },
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def esplora_scripthash_has_history(base_url, script_pubkey_hex, timeout=30):
+    payload = esplora_scripthash_stats(base_url, script_pubkey_hex, timeout=timeout)
     chain_stats = payload.get("chain_stats") or {}
     mempool_stats = payload.get("mempool_stats") or {}
     return int(chain_stats.get("tx_count") or 0) + int(mempool_stats.get("tx_count") or 0) > 0
 
 
-def discover_descriptor_targets(backend, plan, kind):
+def discover_descriptor_targets(backend, plan, kind, checkpoint=None):
     timeout = backend_timeout(backend)
+    checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
     if kind == "esplora":
+        scan_batch_size = _bounded_http_workers(backend)
+        cached_stats = checkpoint.get("esplora_scripthashes") or {}
+
+        def target_used_single(target):
+            scripthash = scriptpubkey_scripthash(target["script_pubkey"])
+            cached = cached_stats.get(scripthash)
+            if isinstance(cached, dict) and "tx_count" in cached:
+                if int(cached.get("tx_count") or 0) > 0:
+                    return True
+            return esplora_scripthash_has_history(
+                backend["url"],
+                target["script_pubkey"],
+                timeout=timeout,
+            )
+
+        def target_used_batch(targets):
+            return _map_bounded(targets, target_used_single, scan_batch_size)
+
         return {
             "targets": scan_descriptor_targets(
                 plan,
-                lambda target: esplora_scripthash_has_history(
-                    backend["url"],
-                    target["script_pubkey"],
-                    timeout=timeout,
-                ),
+                target_used_batch=target_used_batch,
+                scan_batch_size=scan_batch_size,
+                highest_used=checkpoint.get("highest_used"),
             ),
             "history_cache": {},
         }
     if kind == "electrum":
         electrum_batch_size = backend_batch_size(backend)
+        cached_statuses = checkpoint.get("electrum_scripthash_statuses") or {}
         with ElectrumClient(backend) as client:
             history_cache = {}
 
             def target_used_batch(targets):
                 scripthashes = [scriptpubkey_scripthash(target["script_pubkey"]) for target in targets]
-                histories = electrum_call_many(
-                    client,
-                    [("blockchain.scripthash.get_history", [scripthash]) for scripthash in scripthashes],
-                    batch_size=electrum_batch_size,
-                )
-                for scripthash, history in zip(scripthashes, histories):
-                    history_cache[scripthash] = history or []
-                return [bool(history) for history in histories]
+                used_by_scripthash = {}
+                missing = [
+                    scripthash
+                    for scripthash in scripthashes
+                    if scripthash not in cached_statuses
+                    or cached_statuses.get(scripthash) is None
+                ]
+                if missing:
+                    statuses = electrum_call_many(
+                        client,
+                        [("blockchain.scripthash.subscribe", [scripthash]) for scripthash in missing],
+                        batch_size=electrum_batch_size,
+                    )
+                    for scripthash, status in zip(missing, statuses):
+                        cached_statuses[scripthash] = status
+                for scripthash in scripthashes:
+                    used_by_scripthash[scripthash] = cached_statuses.get(scripthash) is not None
+                return [used_by_scripthash[scripthash] for scripthash in scripthashes]
 
             return {
                 "targets": scan_descriptor_targets(
                     plan,
                     target_used_batch=target_used_batch,
                     scan_batch_size=electrum_batch_size,
+                    highest_used=checkpoint.get("highest_used"),
                 ),
                 "history_cache": history_cache,
             }
@@ -649,6 +819,7 @@ def discover_descriptor_targets(backend, plan, kind):
 
 def resolve_wallet_sync_targets(backend, wallet):
     config = json.loads(wallet["config_json"] or "{}")
+    checkpoint = _mapping_get(wallet, "_freshness_checkpoint", {}) or {}
     descriptor_plan = load_wallet_descriptor_plan_from_config(config) if config.get("descriptor") else None
     history_cache = {}
     if descriptor_plan:
@@ -659,7 +830,7 @@ def resolve_wallet_sync_targets(backend, wallet):
         if chain == "liquid" and not config.get("backend"):
             raise AppError("Liquid wallets must name a backend explicitly; no public Liquid default is built in")
         kind = validate_backend_for_wallet(backend, chain, network, has_descriptor=True)
-        discovery = discover_descriptor_targets(backend, descriptor_plan, kind)
+        discovery = discover_descriptor_targets(backend, descriptor_plan, kind, checkpoint=checkpoint)
         targets = discovery["targets"]
         history_cache = discovery.get("history_cache") or {}
     else:
@@ -740,8 +911,225 @@ def fetch_esplora_scripthash_transactions(
     )
 
 
+def fetch_esplora_scripthash_utxos(base_url, script_pubkey_hex, timeout=30):
+    return http_get_json(
+        append_url_path(
+            base_url,
+            f"scripthash/{scriptpubkey_scripthash(script_pubkey_hex)}/utxo",
+        ),
+        timeout=timeout,
+    )
+
+
+def _target_output_metadata(target):
+    branch_label = target.get("branch_label") or "address"
+    address_index = target.get("address_index")
+    if address_index is None:
+        label = branch_label
+    else:
+        label = f"{branch_label} #{address_index}"
+    return {
+        "address": target.get("address") or target.get("unconfidential_address") or "",
+        "address_label": label,
+        "branch_label": branch_label,
+        "branch_index": target.get("branch_index"),
+        "address_index": address_index,
+    }
+
+
+def _block_time_from_status(status):
+    if not isinstance(status, dict):
+        return None
+    return timestamp_to_iso(status.get("block_time"), default=None)
+
+
+def _confirmations_from_heights(block_height, tip_height):
+    if block_height in (None, "", 0, "0") or tip_height in (None, "", 0, "0"):
+        return None
+    try:
+        normalized_block_height = int(block_height)
+        normalized_tip_height = int(tip_height)
+    except (TypeError, ValueError):
+        return None
+    if normalized_block_height <= 0 or normalized_tip_height < normalized_block_height:
+        return None
+    return normalized_tip_height - normalized_block_height + 1
+
+
+def _esplora_tip_height(base_url, timeout=30):
+    try:
+        return int(
+            http_get_text(
+                append_url_path(base_url, "blocks/tip/height"),
+                timeout=timeout,
+            ).strip()
+        )
+    except (AppError, TypeError, ValueError):
+        return None
+
+
+def _block_height_from_status(status):
+    if not isinstance(status, dict):
+        return None
+    block_height = status.get("block_height")
+    if block_height in (None, "", 0, "0"):
+        return None
+    return int(block_height)
+
+
+def _esplora_bitcoin_utxo_record(raw_utxo, target, sync_state, tip_height=None):
+    status = raw_utxo.get("status") or {}
+    block_height = _block_height_from_status(status)
+    return {
+        "txid": raw_utxo.get("txid"),
+        "vout": raw_utxo.get("vout"),
+        "asset": "BTC",
+        "amount_sats": int(raw_utxo.get("value") or 0),
+        "confirmation_status": "confirmed" if block_height else "mempool",
+        "confirmations": _confirmations_from_heights(block_height, tip_height),
+        "block_height": block_height,
+        "block_time": _block_time_from_status(status),
+        "chain": sync_state.chain,
+        "network": sync_state.network,
+        **_target_output_metadata(target),
+        "raw": {
+            "source": "esplora_scripthash_utxo",
+            "confirmed": bool(status.get("confirmed")) if isinstance(status, dict) else False,
+        },
+    }
+
+
+def _liquid_utxo_record_from_output(
+    txid,
+    vout,
+    status,
+    decoded_tx,
+    target,
+    sync_state,
+    *,
+    source,
+    tip_height=None,
+):
+    if vout is None or int(vout) < 0 or int(vout) >= len(decoded_tx.vout):
+        raise AppError(f"Liquid UTXO output index {vout} is out of range for transaction {txid}")
+    output = decoded_tx.vout[int(vout)]
+    script_hex = output.script_pubkey.data.hex()
+    if script_hex != target["script_pubkey"]:
+        raise AppError(f"Liquid UTXO {txid}:{vout} did not match the tracked script")
+    value_sats, asset_id = liquid_output_amount_asset_id(
+        output,
+        sync_state.descriptor_plan,
+        target=target,
+    )
+    block_height = _block_height_from_status(status)
+    return {
+        "txid": txid,
+        "vout": int(vout),
+        "asset": liquid_asset_code(asset_id, sync_state.policy_asset_id),
+        "amount_sats": value_sats,
+        "confirmation_status": "confirmed" if block_height else "mempool",
+        "confirmations": _confirmations_from_heights(block_height, tip_height),
+        "block_height": block_height,
+        "block_time": _block_time_from_status(status),
+        "chain": sync_state.chain,
+        "network": sync_state.network,
+        **_target_output_metadata(target),
+        "raw": {
+            "source": source,
+            "asset_id": asset_id,
+            "confirmed": bool(status.get("confirmed")) if isinstance(status, dict) else False,
+        },
+    }
+
+
+def esplora_utxos_for_wallet(backend, sync_state: WalletSyncState):
+    timeout = backend_timeout(backend)
+    raw_tx_cache = {}
+    tip_height = _esplora_tip_height(backend["url"], timeout=timeout)
+
+    def liquid_tx(txid):
+        if txid not in raw_tx_cache:
+            raw_hex = http_get_text(
+                append_url_path(backend["url"], f"tx/{txid}/hex"),
+                timeout=timeout,
+            ).strip()
+            raw_tx_cache[txid] = decode_liquid_transaction(raw_hex)
+        return raw_tx_cache[txid]
+
+    outputs = []
+    for target_index, target in enumerate(sync_state.targets, start=1):
+        raw_utxos = fetch_esplora_scripthash_utxos(
+            backend["url"],
+            target["script_pubkey"],
+            timeout=timeout,
+        )
+        for raw_utxo in raw_utxos or []:
+            if sync_state.chain == "liquid":
+                outputs.append(
+                    _liquid_utxo_record_from_output(
+                        raw_utxo.get("txid"),
+                        raw_utxo.get("vout"),
+                        raw_utxo.get("status") or {},
+                        liquid_tx(raw_utxo.get("txid")),
+                        target,
+                        sync_state,
+                        source="liquid_esplora_scripthash_utxo",
+                        tip_height=tip_height,
+                    )
+                )
+            else:
+                outputs.append(
+                    _esplora_bitcoin_utxo_record(
+                        raw_utxo,
+                        target,
+                        sync_state,
+                        tip_height=tip_height,
+                    )
+                )
+        _emit_backend_progress(
+            "backend_fetch",
+            target_count=len(sync_state.targets),
+            targets_checked=target_index,
+            utxos_seen=len(outputs),
+        )
+    return outputs
+
+
 def sats_to_btc(value):
     return dec(value) / SATS_PER_BTC
+
+
+def _checkpoint_mapping(sync_state: WalletSyncState):
+    return dict(sync_state.checkpoint or {})
+
+
+def _backend_identity(backend, sync_state: WalletSyncState):
+    return {
+        "name": backend.get("name"),
+        "kind": normalize_backend_kind(backend.get("kind")),
+        "chain": sync_state.chain,
+        "network": sync_state.network,
+        "batch_size": backend_batch_size(backend),
+    }
+
+
+def _skip_unchanged_utxo_refresh(meta, sync_state: WalletSyncState):
+    if not sync_state.checkpoint:
+        return False
+    return (
+        int(meta.get("scripts_changed") or 0) == 0
+        and int(meta.get("scripts_unchanged") or 0) > 0
+    )
+
+
+def _merge_highest_used(previous, target, used):
+    highest = dict(previous or {})
+    if not used:
+        return highest
+    branch = str(target.get("branch_index", 0))
+    address_index = int(target.get("address_index") or 0)
+    highest[branch] = max(int(highest.get(branch) or -1), address_index)
+    return highest
 
 
 def _extract_payment_hash_from_witnesses(witness_lists):
@@ -1004,15 +1392,114 @@ def record_components_from_liquid_tx(
 def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
     max_pages = parse_int(backend_value(backend, "maxpages"), default=0) or None
     timeout = backend_timeout(backend)
+    worker_count = _bounded_http_workers(backend)
+    checkpoint = _checkpoint_mapping(sync_state)
+    previous_stats = checkpoint.get("esplora_scripthashes") or {}
+    next_stats = {}
+    highest_used = dict(checkpoint.get("highest_used") or {})
+    changed_targets = []
+    unchanged_scripts = 0
+
+    def fetch_stats(target):
+        scripthash = scriptpubkey_scripthash(target["script_pubkey"])
+        stats = esplora_scripthash_stats(backend["url"], target["script_pubkey"], timeout=timeout)
+        return target, scripthash, stats
+
+    def stats_fetch_progress(index, _result, total):
+        if index % max(1, worker_count) == 0 or index == total:
+            _emit_backend_progress(
+                "backend_fetch",
+                target_count=total,
+                targets_checked=index,
+            )
+
+    for stats_index, (target, scripthash, stats) in enumerate(
+        _map_bounded(
+            sync_state.targets,
+            fetch_stats,
+            worker_count,
+            on_result=stats_fetch_progress,
+        ),
+        start=1,
+    ):
+        chain_stats = stats.get("chain_stats") or {}
+        mempool_stats = stats.get("mempool_stats") or {}
+        tx_count = int(chain_stats.get("tx_count") or 0) + int(mempool_stats.get("tx_count") or 0)
+        mempool_tx_count = int(mempool_stats.get("tx_count") or 0)
+        fingerprint = esplora_stats_fingerprint(stats)
+        previous = previous_stats.get(scripthash) if isinstance(previous_stats, dict) else None
+        previous_dirty = isinstance(previous, dict) and bool(previous.get("mempool_dirty"))
+        unchanged = (
+            isinstance(previous, dict)
+            and previous.get("fingerprint") == fingerprint
+            and not previous_dirty
+        )
+        next_stats[scripthash] = {
+            "fingerprint": fingerprint,
+            "tx_count": tx_count,
+            "mempool_tx_count": mempool_tx_count,
+            "mempool_dirty": mempool_tx_count > 0,
+            "known_txids": (
+                sorted(previous.get("known_txids") or [])
+                if isinstance(previous, dict)
+                else []
+            ),
+        }
+        highest_used = _merge_highest_used(highest_used, target, tx_count > 0)
+        if unchanged:
+            unchanged_scripts += 1
+        else:
+            changed_targets.append((target, scripthash))
+        if stats_index % max(1, worker_count) == 0 or stats_index == len(sync_state.targets):
+            _emit_backend_progress(
+                "backend_fetch",
+                target_count=len(sync_state.targets),
+                targets_checked=stats_index,
+                scripts_changed=len(changed_targets),
+                scripts_unchanged=unchanged_scripts,
+            )
     transactions_by_txid = {}
-    for target in sync_state.targets:
+    def fetch_target_transactions(item):
+        target, scripthash = item
+        known_txids = set()
+        target_txs = []
         for tx in fetch_esplora_scripthash_transactions(
             backend["url"],
             target["script_pubkey"],
             max_pages=max_pages,
             timeout=timeout,
         ):
+            target_txs.append(tx)
+            known_txids.add(tx["txid"])
+        return scripthash, sorted(known_txids), target_txs
+
+    def history_fetch_progress(index, _result, total):
+        if index % max(1, worker_count) == 0 or index == total:
+            _emit_backend_progress(
+                "backend_fetch",
+                target_count=total,
+                targets_checked=index,
+            )
+
+    for history_index, (scripthash, known_txids, target_txs) in enumerate(
+        _map_bounded(
+            changed_targets,
+            fetch_target_transactions,
+            worker_count,
+            on_result=history_fetch_progress,
+        ),
+        start=1,
+    ):
+        for tx in target_txs:
             transactions_by_txid[tx["txid"]] = tx
+        next_stats[scripthash]["known_txids"] = sorted(known_txids)
+        if history_index % max(1, worker_count) == 0 or history_index == len(changed_targets):
+            _emit_backend_progress(
+                "backend_fetch",
+                target_count=len(changed_targets),
+                targets_checked=history_index,
+                known_txids=len(transactions_by_txid),
+            )
     records = []
     raw_tx_cache = {}
 
@@ -1028,10 +1515,11 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
             }
         return raw_tx_cache[txid]["decoded"]
 
-    for tx in sorted(
+    sorted_transactions = sorted(
         transactions_by_txid.values(),
         key=lambda item: (((item.get("status") or {}).get("block_time") or 0), item.get("txid", "")),
-    ):
+    )
+    for tx_index, tx in enumerate(sorted_transactions, start=1):
         if sync_state.chain == "liquid":
             raw_hex = http_get_text(
                 append_url_path(backend["url"], f"tx/{tx['txid']}/hex"),
@@ -1056,12 +1544,36 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
             normalized = record_from_bitcoin_esplora_tx(tx, sync_state.tracked_scripts, backend["name"])
             if normalized:
                 records.append(normalized)
-    return records
+        if tx_index % 100 == 0 or tx_index == len(sorted_transactions):
+            _emit_backend_progress(
+                "decode_enrich",
+                transactions_seen=tx_index,
+                transactions_total=len(sorted_transactions),
+                records=len(records),
+            )
+    checkpoint.update(
+        {
+            "backend": _backend_identity(backend, sync_state),
+            "esplora_scripthashes": dict(sorted(next_stats.items())),
+            "highest_used": dict(sorted(highest_used.items())),
+        }
+    )
+    return records, {
+        "freshness_checkpoint": checkpoint,
+        "scripts_changed": len(changed_targets),
+        "scripts_unchanged": unchanged_scripts,
+        "known_txids": len(transactions_by_txid),
+    }
 
 
 def esplora_sync_adapter(backend, wallet, sync_state):
     del wallet
-    return esplora_records_for_wallet(backend, sync_state), {}
+    records, meta = esplora_records_for_wallet(backend, sync_state)
+    if _skip_unchanged_utxo_refresh(meta, sync_state):
+        meta["utxos_skipped_unchanged"] = True
+    else:
+        meta["utxos"] = esplora_utxos_for_wallet(backend, sync_state)
+    return records, meta
 
 
 def bitcoinrpc_auth_headers(backend):
@@ -1178,7 +1690,47 @@ def bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses):
     return len(missing_addresses)
 
 
-def fetch_bitcoinrpc_wallet_transactions(backend, wallet_name, page_size=1000):
+def _bitcoinrpc_checkpoint_block(checkpoint):
+    if not isinstance(checkpoint, dict):
+        return None
+    value = checkpoint.get("bitcoinrpc_last_block")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def fetch_bitcoinrpc_wallet_transactions(backend, wallet_name, page_size=1000, checkpoint=None):
+    last_block = _bitcoinrpc_checkpoint_block(checkpoint)
+    fallback_reason = None
+    if last_block:
+        try:
+            payload = bitcoinrpc_call(
+                backend,
+                "listsinceblock",
+                [last_block, 1, True, True],
+                wallet_name=wallet_name,
+            )
+        except AppError as exc:
+            if "Bitcoin Core RPC listsinceblock failed" not in str(exc):
+                raise
+            fallback_reason = str(exc)
+        else:
+            if not isinstance(payload, dict):
+                fallback_reason = "Bitcoin Core RPC listsinceblock returned an unexpected payload"
+            else:
+                transactions = payload.get("transactions") or []
+                removed = payload.get("removed") or []
+                if not isinstance(transactions, list):
+                    fallback_reason = "Bitcoin Core RPC listsinceblock returned unexpected transactions"
+                elif removed:
+                    fallback_reason = "Bitcoin Core RPC listsinceblock reported removed transactions"
+                else:
+                    return list(transactions), {
+                        "bitcoinrpc_sync_mode": "sinceblock",
+                        "bitcoinrpc_last_block": payload.get("lastblock") or last_block,
+                        "bitcoinrpc_removed": 0,
+                    }
+
     transactions = []
     skip = 0
     while True:
@@ -1189,7 +1741,16 @@ def fetch_bitcoinrpc_wallet_transactions(backend, wallet_name, page_size=1000):
         if len(page) < page_size:
             break
         skip += page_size
-    return transactions
+    meta = {"bitcoinrpc_sync_mode": "full_scan"}
+    if fallback_reason:
+        meta["bitcoinrpc_sinceblock_fallback"] = fallback_reason
+    try:
+        last_block = bitcoinrpc_call(backend, "getbestblockhash")
+    except AppError:
+        last_block = None
+    if last_block:
+        meta["bitcoinrpc_last_block"] = last_block
+    return transactions, meta
 
 
 def record_from_bitcoinrpc_details(txid, details, backend_name):
@@ -1238,10 +1799,23 @@ def record_from_bitcoinrpc_details(txid, details, backend_name):
     }
 
 
-def bitcoinrpc_records_for_wallet(backend, wallet, addresses):
-    wallet_name = bitcoinrpc_ensure_watchonly_wallet(backend, wallet)
-    imported_count = bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses)
-    details = fetch_bitcoinrpc_wallet_transactions(backend, wallet_name)
+def bitcoinrpc_records_for_wallet(
+    backend,
+    wallet,
+    addresses,
+    wallet_name=None,
+    imported_count=None,
+    checkpoint=None,
+):
+    wallet_name = wallet_name or bitcoinrpc_ensure_watchonly_wallet(backend, wallet)
+    if imported_count is None:
+        imported_count = bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses)
+    transaction_checkpoint = checkpoint if not imported_count else None
+    details, fetch_meta = fetch_bitcoinrpc_wallet_transactions(
+        backend,
+        wallet_name,
+        checkpoint=transaction_checkpoint,
+    )
     grouped = defaultdict(list)
     for detail in details:
         txid = detail.get("txid")
@@ -1258,15 +1832,113 @@ def bitcoinrpc_records_for_wallet(backend, wallet, addresses):
         normalized = record_from_bitcoinrpc_details(txid, tx_details, backend["name"])
         if normalized:
             records.append(normalized)
-    return records, {"core_wallet": wallet_name, "imported_addresses": imported_count}
+    return records, {
+        "core_wallet": wallet_name,
+        "imported_addresses": imported_count,
+        **fetch_meta,
+    }
+
+
+def _bitcoinrpc_transaction_metadata(backend, wallet_name, txid):
+    try:
+        tx = bitcoinrpc_call(backend, "gettransaction", [txid, True], wallet_name=wallet_name)
+    except AppError:
+        return {"block_height": None, "block_time": None}
+    block_time = timestamp_to_iso(tx.get("blocktime") or tx.get("time"), default=None)
+    block_height = None
+    block_hash = tx.get("blockhash")
+    if block_hash:
+        try:
+            header = bitcoinrpc_call(backend, "getblockheader", [block_hash], wallet_name=None)
+            block_height = header.get("height")
+        except AppError:
+            block_height = None
+    return {"block_height": block_height, "block_time": block_time}
+
+
+def bitcoinrpc_utxos_for_wallet_name(backend, wallet_name, addresses, sync_state: WalletSyncState):
+    target_by_address = {
+        target["address"]: target
+        for target in sync_state.targets
+        if target.get("address")
+    }
+    target_by_script = {
+        target["script_pubkey"]: target
+        for target in sync_state.targets
+        if target.get("script_pubkey")
+    }
+    raw_utxos = bitcoinrpc_call(
+        backend,
+        "listunspent",
+        [0, 9999999, addresses, True],
+        wallet_name=wallet_name,
+    )
+    outputs = []
+    metadata_cache = {}
+    for raw_utxo in raw_utxos or []:
+        target = target_by_address.get(raw_utxo.get("address"))
+        if target is None:
+            target = target_by_script.get(str(raw_utxo.get("scriptPubKey") or "").lower())
+        if target is None:
+            continue
+        txid = raw_utxo.get("txid")
+        confirmations = int(raw_utxo.get("confirmations") or 0)
+        if txid not in metadata_cache:
+            metadata_cache[txid] = _bitcoinrpc_transaction_metadata(backend, wallet_name, txid)
+        metadata = metadata_cache[txid]
+        amount_sats = int((dec(raw_utxo.get("amount"), "0") * SATS_PER_BTC).to_integral_value())
+        outputs.append(
+            {
+                "txid": txid,
+                "vout": raw_utxo.get("vout"),
+                "asset": "BTC",
+                "amount_sats": amount_sats,
+                "confirmation_status": "confirmed" if confirmations > 0 else "mempool",
+                "confirmations": confirmations,
+                "block_height": metadata.get("block_height"),
+                "block_time": metadata.get("block_time"),
+                "chain": sync_state.chain,
+                "network": sync_state.network,
+                **_target_output_metadata(target),
+                "raw": {
+                    "source": "bitcoinrpc_listunspent",
+                    "confirmed": confirmations > 0,
+                    "safe": bool(raw_utxo.get("safe", True)),
+                },
+            }
+        )
+    return outputs
 
 
 def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
-    return bitcoinrpc_records_for_wallet(
+    addresses = [target["address"] for target in sync_state.targets if target.get("address")]
+    wallet_name = bitcoinrpc_ensure_watchonly_wallet(backend, wallet)
+    imported_count = bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses)
+    checkpoint = _checkpoint_mapping(sync_state)
+    records, meta = bitcoinrpc_records_for_wallet(
         backend,
         wallet,
-        [target["address"] for target in sync_state.targets if target.get("address")],
+        addresses,
+        wallet_name=wallet_name,
+        imported_count=imported_count,
+        checkpoint=checkpoint,
     )
+    if meta.get("bitcoinrpc_last_block"):
+        next_checkpoint = dict(checkpoint)
+        next_checkpoint.update(
+            {
+                "backend": _backend_identity(backend, sync_state),
+                "bitcoinrpc_last_block": meta["bitcoinrpc_last_block"],
+            }
+        )
+        meta["freshness_checkpoint"] = next_checkpoint
+    meta["utxos"] = bitcoinrpc_utxos_for_wallet_name(
+        backend,
+        wallet_name,
+        addresses,
+        sync_state,
+    )
+    return records, meta
 
 
 def read_varint(payload, offset):
@@ -1352,6 +2024,127 @@ def electrum_output_at_index(tx, index):
     return outputs[index]
 
 
+def _electrum_utxo_status(raw_utxo, header_timestamps):
+    height = raw_utxo.get("height")
+    if height in (None, "", 0, "0") or int(height) <= 0:
+        return {
+            "confirmed": False,
+            "block_height": None,
+            "block_time": None,
+        }
+    block_height = int(height)
+    return {
+        "confirmed": True,
+        "block_height": block_height,
+        "block_time": timestamp_to_iso(header_timestamps.get(block_height), default=None),
+    }
+
+
+def _electrum_tip_height(client):
+    try:
+        header = client.call("blockchain.headers.subscribe", [])
+    except AppError:
+        return None
+    if not isinstance(header, dict):
+        return None
+    try:
+        return int(header.get("height"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _electrum_bitcoin_utxo_record(raw_utxo, target, sync_state, header_timestamps, tip_height=None):
+    status = _electrum_utxo_status(raw_utxo, header_timestamps)
+    block_height = status["block_height"]
+    return {
+        "txid": raw_utxo.get("tx_hash"),
+        "vout": raw_utxo.get("tx_pos"),
+        "asset": "BTC",
+        "amount_sats": int(raw_utxo.get("value") or 0),
+        "confirmation_status": "confirmed" if block_height else "mempool",
+        "confirmations": _confirmations_from_heights(block_height, tip_height),
+        "block_height": block_height,
+        "block_time": status["block_time"],
+        "chain": sync_state.chain,
+        "network": sync_state.network,
+        **_target_output_metadata(target),
+        "raw": {
+            "source": "electrum_scripthash_listunspent",
+            "confirmed": bool(status["confirmed"]),
+        },
+    }
+
+
+def electrum_utxos_for_wallet(backend, sync_state: WalletSyncState):
+    outputs = []
+    batch_size = backend_batch_size(backend)
+    header_timestamps = {}
+    with ElectrumClient(backend) as client:
+        tip_height = _electrum_tip_height(client)
+        scripthashes = [scriptpubkey_scripthash(target["script_pubkey"]) for target in sync_state.targets]
+        target_by_scripthash = dict(zip(scripthashes, sync_state.targets))
+        raw_results = electrum_call_many(
+            client,
+            [("blockchain.scripthash.listunspent", [scripthash]) for scripthash in scripthashes],
+            batch_size=batch_size,
+        )
+        raw_by_target = []
+        heights = set()
+        for scripthash, raw_utxos in zip(scripthashes, raw_results):
+            target = target_by_scripthash[scripthash]
+            for raw_utxo in raw_utxos or []:
+                raw_by_target.append((target, raw_utxo))
+                height = raw_utxo.get("height")
+                if height not in (None, "", 0, "0") and int(height) > 0:
+                    heights.add(int(height))
+        if heights:
+            header_hexes = electrum_call_many(
+                client,
+                [("blockchain.block.header", [height]) for height in sorted(heights)],
+                batch_size=batch_size,
+            )
+            for height, header_hex in zip(sorted(heights), header_hexes):
+                header_timestamps[height] = block_header_timestamp(header_hex)
+        liquid_tx_cache = {}
+
+        def liquid_tx(txid):
+            if txid not in liquid_tx_cache:
+                raw_tx = client.call("blockchain.transaction.get", [txid])
+                liquid_tx_cache[txid] = decode_liquid_transaction(raw_tx)
+            return liquid_tx_cache[txid]
+
+        for target, raw_utxo in raw_by_target:
+            if sync_state.chain == "liquid":
+                status = _electrum_utxo_status(raw_utxo, header_timestamps)
+                outputs.append(
+                    _liquid_utxo_record_from_output(
+                        raw_utxo.get("tx_hash"),
+                        raw_utxo.get("tx_pos"),
+                        {
+                            "confirmed": bool(status["confirmed"]),
+                            "block_height": status["block_height"],
+                            "block_time": status["block_time"],
+                        },
+                        liquid_tx(raw_utxo.get("tx_hash")),
+                        target,
+                        sync_state,
+                        source="liquid_electrum_scripthash_listunspent",
+                        tip_height=tip_height,
+                    )
+                )
+                continue
+            outputs.append(
+                _electrum_bitcoin_utxo_record(
+                    raw_utxo,
+                    target,
+                    sync_state,
+                    header_timestamps,
+                    tip_height=tip_height,
+                )
+            )
+    return outputs
+
+
 def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_lookup):
     received_sats = Decimal("0")
     sent_sats = Decimal("0")
@@ -1416,7 +2209,6 @@ def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_
 
 def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
     transactions = {}
-    header_timestamps = {}
     records = []
     batch_size = backend_batch_size(backend)
     tracked_scripts = (
@@ -1424,27 +2216,71 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
         if sync_state.chain == "bitcoin"
         else sync_state.tracked_scripts
     )
+    checkpoint = _checkpoint_mapping(sync_state)
+    previous_statuses = checkpoint.get("electrum_scripthash_statuses") or {}
+    previous_dirty = set(checkpoint.get("electrum_dirty_scripthashes") or [])
+    previous_known_txids = checkpoint.get("electrum_known_txids") or {}
+    highest_used = dict(checkpoint.get("highest_used") or {})
+    header_timestamps = {
+        int(height): timestamp
+        for height, timestamp in (checkpoint.get("electrum_headers") or {}).items()
+        if str(height).isdigit()
+    }
+    next_statuses = {}
+    next_known_txids = {}
+    dirty_scripthashes = set()
+    unchanged_scripts = 0
+    changed_scripts = 0
+    header_cache_hits = 0
     with ElectrumClient(backend) as client:
         histories = []
-        history_cache = sync_state.history_cache or {}
-        uncached_scripthashes = []
+        target_by_scripthash = {}
+        scripthashes = []
         for target in sync_state.targets:
             scripthash = scriptpubkey_scripthash(target["script_pubkey"])
-            cached_history = history_cache.get(scripthash)
-            if cached_history is not None:
-                histories.extend(cached_history)
+            target_by_scripthash[scripthash] = target
+            scripthashes.append(scripthash)
+        statuses = electrum_call_many(
+            client,
+            [("blockchain.scripthash.subscribe", [scripthash]) for scripthash in scripthashes],
+            batch_size=batch_size,
+        )
+        history_scripthashes = []
+        for scripthash, status in zip(scripthashes, statuses):
+            next_statuses[scripthash] = status
+            target = target_by_scripthash[scripthash]
+            highest_used = _merge_highest_used(highest_used, target, status is not None)
+            if status is None and previous_statuses.get(scripthash) is None:
+                next_known_txids[scripthash] = []
+                unchanged_scripts += 1
                 continue
-            uncached_scripthashes.append(scripthash)
-        if uncached_scripthashes:
-            uncached_histories = electrum_call_many(
+            if status == previous_statuses.get(scripthash) and scripthash not in previous_dirty:
+                next_known_txids[scripthash] = sorted(previous_known_txids.get(scripthash) or [])
+                unchanged_scripts += 1
+                continue
+            history_scripthashes.append(scripthash)
+        if history_scripthashes:
+            changed_scripts = len(history_scripthashes)
+            fetched_histories = electrum_call_many(
                 client,
-                [("blockchain.scripthash.get_history", [scripthash]) for scripthash in uncached_scripthashes],
+                [
+                    ("blockchain.scripthash.get_history", [scripthash])
+                    for scripthash in history_scripthashes
+                ],
                 batch_size=batch_size,
             )
-            for scripthash, history in zip(uncached_scripthashes, uncached_histories):
+            for scripthash, history in zip(history_scripthashes, fetched_histories):
                 normalized_history = history or []
-                history_cache[scripthash] = normalized_history
                 histories.extend(normalized_history)
+                next_known_txids[scripthash] = sorted(
+                    {
+                        item.get("tx_hash")
+                        for item in normalized_history
+                        if isinstance(item, dict) and item.get("tx_hash")
+                    }
+                )
+                if any(int(item.get("height") or 0) <= 0 for item in normalized_history):
+                    dirty_scripthashes.add(scripthash)
 
         def lookup(txid):
             if txid not in transactions:
@@ -1519,13 +2355,16 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
             }
         )
         if heights:
-            header_hexes = electrum_call_many(
-                client,
-                [("blockchain.block.header", [height]) for height in heights],
-                batch_size=batch_size,
-            )
-            for height, header_hex in zip(heights, header_hexes):
-                header_timestamps[height] = block_header_timestamp(header_hex)
+            header_cache_hits = len([height for height in heights if height in header_timestamps])
+            missing_heights = [height for height in heights if height not in header_timestamps]
+            if missing_heights:
+                header_hexes = electrum_call_many(
+                    client,
+                    [("blockchain.block.header", [height]) for height in missing_heights],
+                    batch_size=batch_size,
+                )
+                for height, header_hex in zip(missing_heights, header_hexes):
+                    header_timestamps[height] = block_header_timestamp(header_hex)
         for txid, history in ordered_histories:
             occurred_at = timestamp_to_iso(height_to_timestamp(history.get("height")))
             if sync_state.chain == "liquid":
@@ -1556,12 +2395,35 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
             )
             if normalized:
                 records.append(normalized)
-    return records
+    checkpoint.update(
+        {
+            "backend": _backend_identity(backend, sync_state),
+            "electrum_dirty_scripthashes": sorted(dirty_scripthashes),
+            "electrum_headers": {
+                str(height): header_timestamps[height] for height in sorted(header_timestamps)
+            },
+            "electrum_known_txids": dict(sorted(next_known_txids.items())),
+            "electrum_scripthash_statuses": dict(sorted(next_statuses.items())),
+            "highest_used": dict(sorted(highest_used.items())),
+        }
+    )
+    return records, {
+        "freshness_checkpoint": checkpoint,
+        "scripts_changed": changed_scripts,
+        "scripts_unchanged": unchanged_scripts,
+        "known_txids": len({txid for txids in next_known_txids.values() for txid in txids}),
+        "header_cache_hits": header_cache_hits,
+    }
 
 
 def electrum_sync_adapter(backend, wallet, sync_state):
     del wallet
-    return electrum_records_for_wallet(backend, sync_state), {}
+    records, meta = electrum_records_for_wallet(backend, sync_state)
+    if _skip_unchanged_utxo_refresh(meta, sync_state):
+        meta["utxos_skipped_unchanged"] = True
+    else:
+        meta["utxos"] = electrum_utxos_for_wallet(backend, sync_state)
+    return records, meta
 
 
 SYNC_BACKEND_ADAPTERS = MappingProxyType(
@@ -1576,8 +2438,11 @@ SYNC_BACKEND_ADAPTERS = MappingProxyType(
 __all__ = [
     "SYNC_BACKEND_ADAPTERS",
     "bitcoinrpc_sync_adapter",
+    "bitcoinrpc_utxos_for_wallet_name",
     "electrum_sync_adapter",
+    "electrum_utxos_for_wallet",
     "esplora_sync_adapter",
+    "esplora_utxos_for_wallet",
     "resolve_wallet_sync_targets",
     "sync_target_from_address",
     "sync_target_from_derived",

@@ -32,7 +32,7 @@ wallets -> transactions -> journals -> reports
 - **account** — a wallet/reporting bucket that wallets can belong to.
 
 In the CLI and database these are still named `workspace` and `profile`.
-The desktop UI uses the friendlier names above: a workspace is a local books
+The desktop UI uses the friendlier names above: a workspace is a local book
 set, and a profile is a book. "My Books" might contain `private` and
 `business` books; a company or client should usually live in its own state
 root with one main set of BTC books plus buckets such as `events`,
@@ -162,13 +162,17 @@ round out the standard set. The desktop Reports screen exposes the Summary
 PDF with wallet scope controls and an optional live snapshot cover.
 
 For transaction pricing, the `rates` command tree maintains a local
-BTC-USD / BTC-EUR cache: Coinbase Exchange primary, CoinGecko fallback,
+BTC-USD / BTC-EUR cache: Coinbase Exchange and CoinGecko live providers,
 Kraken OHLCVT local archive (`rates sync --source kraken-csv --path ...`),
-and manual overrides (`rates set BTC-USD <ts> <rate>`).
+and manual overrides (`rates set BTC-USD <ts> <rate>`). Desktop maintenance
+can use the configured live market-rate provider for automatic latest-price
+refresh and default pricing-cache rebuilds; Coinbase Exchange remains the
+default when no provider is configured.
 The repository also ships a small BTC-only Kraken offline history bundle for
 EUR and USD daily values under `kassiber/data/rates/kraken/btc_daily`, which
-can be imported with the same `kraken-csv` path flow. Desktop Settings exposes
-this as `Kraken offline history: daily values` for offline fallback coverage.
+freshness/rate-coverage jobs seed automatically when missing. It can also be
+imported with the same `kraken-csv` path flow, and Desktop Settings exposes it
+as `Kraken offline history: daily values` for offline fallback coverage.
 Bundled daily values are stored at candle close timestamps and should be
 treated as prior-close coarse fallback pricing, not exact intraday pricing.
 

@@ -5,7 +5,7 @@
  * Connections and Overview screens.
  */
 
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import {
@@ -18,14 +18,21 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  RotateCcw,
   Trash2,
   Wallet,
 } from "lucide-react";
 
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { ConnectionStatusPill } from "@/components/kb/ConnectionStatusPill";
+import { CountBadge } from "@/components/kb/CountBadge";
 import { DetailRow } from "@/components/kb/DetailRow";
 import { MetricCard } from "@/components/kb/MetricCard";
+import {
+  UtxosInventoryPanel,
+  type WalletUtxosData,
+} from "@/components/kb/wallets";
+import { useOverviewTransactionDetail } from "@/components/overview-dashboard/useOverviewTransactionDetail";
 import { NodeConnectionDetail } from "./NodeConnectionDetail";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -177,7 +184,32 @@ type WalletListItem = {
     store_id: string;
     payment_method_id: string;
   }>;
+  samourai?: SamouraiWalletMetadata | null;
 };
+
+interface SamouraiWalletMetadata {
+  role?: string;
+  group_id?: string;
+  group_label?: string;
+  source?: string;
+  section?: string;
+  script_type?: string;
+  root_path?: string;
+  gap_limit?: number;
+  privacy_boundary?: boolean;
+  whirlpool?: boolean;
+  toxic_change?: boolean;
+  minimum_mix_count?: number;
+  mix_count?: number;
+  mix_count_confidence?: string;
+  target_mix_count?: number;
+  pool_denomination_sat?: number;
+  watch_only?: boolean;
+  bip47?: string;
+  paynym?: boolean;
+  scanned_without_explicit_descriptor?: boolean;
+  sections?: string[];
+}
 
 const syncModeLabels: Record<string, string> = {
   backend_descriptor: "Watch-only descriptor",
@@ -193,6 +225,24 @@ function formatBackendDetail(backend?: WalletListItem["backend"]) {
   const source =
     backend.source && backend.source !== "none" ? ` (${backend.source})` : "";
   return `${backend.name}${kind}${source}`;
+}
+
+function samouraiSectionLabel(value?: string) {
+  const labels: Record<string, string> = {
+    deposit: "Deposit",
+    badbank: "Badbank / Toxic Change",
+    premix: "Premix",
+    postmix: "Postmix",
+    ricochet: "Ricochet",
+  };
+  return labels[value ?? ""] ?? value ?? "Samourai group";
+}
+
+function samouraiSourceLabel(value?: string) {
+  const labels: Record<string, string> = {
+    source_set: "Descriptor/xpub set",
+  };
+  return labels[value ?? ""] ?? value ?? "Imported";
 }
 
 function backendOptionLabel(backend: { name: string; display_name?: string }) {
@@ -249,6 +299,7 @@ export function ConnectionDetail() {
   return (
     <ConnectionDetailView
       connection={connection}
+      snapshot={snapshot}
       priceEur={snapshot.priceEur}
       txs={snapshot.txs}
       hideSensitive={hideSensitive}
@@ -401,6 +452,7 @@ function NodeConnectionContainer({
 
 interface ConnectionDetailViewProps {
   connection: Connection;
+  snapshot: OverviewSnapshot;
   priceEur: number;
   txs: OverviewSnapshot["txs"];
   hideSensitive: boolean;
@@ -408,6 +460,7 @@ interface ConnectionDetailViewProps {
 
 function ConnectionDetailView({
   connection,
+  snapshot,
   priceEur,
   txs,
   hideSensitive,
@@ -418,6 +471,10 @@ function ConnectionDetailView({
   const addNotification = useUiStore((state) => state.addNotification);
   const updateNotification = useUiStore((state) => state.updateNotification);
   const identity = useUiStore((state) => state.identity);
+  const explorerSettings = useUiStore((state) => state.explorerSettings);
+  const currency = useUiStore((state) => state.currency);
+  const [pendingUtxoTransactionId, setPendingUtxoTransactionId] =
+    useState<string | null>(null);
   const syncNoticeIdRef = useRef<string | null>(null);
   const walletSyncMutationKey = daemonMutationKey(dataMode, "ui.wallets.sync");
   const walletSyncsInFlight = useIsMutating({
@@ -473,7 +530,35 @@ function ConnectionDetailView({
       (wallet.id && wallet.id === connection.id) ||
       wallet.label === connection.label,
   );
+  const coinsInventoryQuery = useDaemon<WalletUtxosData>(
+    "ui.wallets.utxos",
+    { wallet: connection.id },
+    { retry: false },
+  );
+  const utxoTransactionQuery = useDaemon<{
+    transaction?: OverviewSnapshot["txs"][number] | null;
+  }>(
+    "ui.transactions.resolve",
+    { query: pendingUtxoTransactionId ?? "" },
+    { enabled: Boolean(pendingUtxoTransactionId), retry: false },
+  );
+  const resolvedUtxoTransaction =
+    utxoTransactionQuery.data?.data?.transaction ?? null;
+  const { detailSheet, openTransactionDetail } = useOverviewTransactionDetail({
+    snapshot,
+    extraTransactions: resolvedUtxoTransaction
+      ? [resolvedUtxoTransaction]
+      : [],
+    hideSensitive,
+    currency,
+    explorerSettings,
+  });
+  const openUtxoTransaction = (transactionId: string) => {
+    setPendingUtxoTransactionId(transactionId);
+  };
   const walletProvenanceRoutes = walletDetail?.btcpay_provenance ?? [];
+  const samouraiMetadata = walletDetail?.samourai ?? null;
+  const samouraiInventory = coinsInventoryQuery.data?.data;
   const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -514,6 +599,45 @@ function ConnectionDetailView({
       return account === label || account.includes(label);
     })
     .slice(0, 6);
+
+  useEffect(() => {
+    if (!pendingUtxoTransactionId || utxoTransactionQuery.isLoading) return;
+    if (resolvedUtxoTransaction) {
+      openTransactionDetail(resolvedUtxoTransaction.id);
+      setPendingUtxoTransactionId(null);
+      return;
+    }
+    if (utxoTransactionQuery.error) {
+      addNotification({
+        title: "Transaction not opened",
+        body:
+          utxoTransactionQuery.error instanceof Error
+            ? utxoTransactionQuery.error.message
+            : "Kassiber could not resolve this UTXO transaction.",
+        tone: "warning",
+        dedupeKey: `utxo-transaction-open-${pendingUtxoTransactionId}`,
+      });
+      setPendingUtxoTransactionId(null);
+      return;
+    }
+    if (utxoTransactionQuery.data) {
+      addNotification({
+        title: "Transaction not found",
+        body: "This UTXO has no matching imported Kassiber transaction yet.",
+        tone: "warning",
+        dedupeKey: `utxo-transaction-missing-${pendingUtxoTransactionId}`,
+      });
+      setPendingUtxoTransactionId(null);
+    }
+  }, [
+    addNotification,
+    openTransactionDetail,
+    pendingUtxoTransactionId,
+    resolvedUtxoTransaction,
+    utxoTransactionQuery.data,
+    utxoTransactionQuery.error,
+    utxoTransactionQuery.isLoading,
+  ]);
   const txCount = connection.transactionCount ?? txsForConnection.length;
   const isWalletSyncRunning =
     syncWallet.isPending ||
@@ -521,7 +645,7 @@ function ConnectionDetailView({
     connection.status === "syncing";
   const refreshButtonLabel = isWalletSyncRunning ? "Refreshing" : "Refresh";
 
-  const onSync = () => {
+  const onSync = (options?: { forceFull?: boolean }) => {
     if (
       syncWallet.isPending ||
       queryClient.isMutating({ mutationKey: walletSyncMutationKey }) > 0
@@ -538,8 +662,12 @@ function ConnectionDetailView({
     setSyncProgress(null);
     progressValueRef.current = startingSyncProgress().value ?? 5;
     syncNoticeIdRef.current = addNotification({
-      title: "Connection refresh started",
-      body: `${connection.label} is scanning in watch-only mode.`,
+      title: options?.forceFull
+        ? "Connection rescan started"
+        : "Connection refresh started",
+      body: options?.forceFull
+        ? `${connection.label} is rescanning in watch-only mode.`
+        : `${connection.label} is scanning in watch-only mode.`,
       tone: "warning",
       dedupeKey: "wallet-sync",
       progress: startingSyncProgress(),
@@ -548,7 +676,7 @@ function ConnectionDetailView({
       `${connection.label} is still scanning. Large descriptors or slow backends can take a bit; Kassiber will update when the daemon returns.`,
     );
     syncWallet.mutate(
-      { wallet: connection.label },
+      { wallet: connection.label, force_full: Boolean(options?.forceFull) },
       {
         onSuccess: (envelope) => {
           const result = envelope.data?.results?.find(
@@ -591,6 +719,7 @@ function ConnectionDetailView({
           clearSyncNotice();
           syncNoticeIdRef.current = null;
           setSyncProgress(null);
+          void queryClient.invalidateQueries({ queryKey: ["daemon"] });
         },
       },
     );
@@ -815,7 +944,7 @@ function ConnectionDetailView({
               disabled={isWalletSyncRunning}
               aria-busy={isWalletSyncRunning}
               aria-label={`${refreshButtonLabel} ${connection.label}`}
-              onClick={onSync}
+              onClick={() => onSync()}
             >
               <RefreshCw
                 className={cn("size-4", isWalletSyncRunning && "animate-spin")}
@@ -838,6 +967,13 @@ function ConnectionDetailView({
                 <DropdownMenuItem onClick={openEditDialog}>
                   <Pencil className="size-4" aria-hidden="true" />
                   Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={isWalletSyncRunning}
+                  onClick={() => onSync({ forceFull: true })}
+                >
+                  <RotateCcw className="size-4" aria-hidden="true" />
+                  Full rescan
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -930,6 +1066,157 @@ function ConnectionDetailView({
         />
       </div>
 
+      <UtxosInventoryPanel
+        inventory={coinsInventoryQuery.data?.data}
+        isLoading={coinsInventoryQuery.isLoading}
+        errorMessage={
+          coinsInventoryQuery.error instanceof Error
+            ? coinsInventoryQuery.error.message
+            : null
+        }
+        hideSensitive={hideSensitive}
+        isRefreshing={isWalletSyncRunning}
+        explorerSettings={explorerSettings}
+        onRefresh={onSync}
+        onOpenTransaction={openUtxoTransaction}
+      />
+
+      {samouraiMetadata ? (
+        <Card>
+          <CardHeader className="border-b px-4 pb-3">
+            <CardTitle className="flex flex-wrap items-center gap-2 text-sm sm:text-base">
+              Samourai Wallet
+              <Badge variant="secondary">
+                {samouraiMetadata.role === "parent"
+                  ? "Group"
+                  : samouraiSectionLabel(samouraiMetadata.section)}
+              </Badge>
+              {samouraiMetadata.privacy_boundary ? (
+                <Badge variant="outline">Privacy boundary</Badge>
+              ) : null}
+              {samouraiMetadata.paynym ? (
+                <Badge variant="outline">BIP47</Badge>
+              ) : null}
+            </CardTitle>
+            <CardDescription>
+              Watch-only Samourai/Whirlpool import state.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 px-4 pt-4 md:grid-cols-2">
+            <DetailRow
+              label="Source"
+              value={samouraiSourceLabel(samouraiMetadata.source)}
+            />
+            <DetailRow
+              label="Group"
+              value={samouraiMetadata.group_label || connection.label}
+            />
+            {samouraiMetadata.role !== "parent" ? (
+              <>
+                <DetailRow
+                  label="Section"
+                  value={samouraiSectionLabel(samouraiMetadata.section)}
+                />
+                <DetailRow
+                  label="Script"
+                  value={samouraiMetadata.script_type || "—"}
+                />
+                <DetailRow
+                  label="Root"
+                  value={samouraiMetadata.root_path || "—"}
+                  mono
+                />
+                <DetailRow
+                  label="Gap"
+                  value={
+                    samouraiMetadata.gap_limit?.toLocaleString("en-US") ??
+                    connection.gap?.toLocaleString("en-US") ??
+                    "—"
+                  }
+                />
+              </>
+            ) : (
+              <DetailRow
+                label="Sections"
+                value={(samouraiMetadata.sections ?? [])
+                  .map(samouraiSectionLabel)
+                  .join(", ")}
+              />
+            )}
+            {samouraiMetadata.minimum_mix_count ? (
+              <DetailRow
+                label="Mix count"
+                value={`at least ${samouraiMetadata.minimum_mix_count.toLocaleString("en-US")} · ${samouraiMetadata.mix_count_confidence ?? "minimum"}`}
+              />
+            ) : null}
+            {samouraiMetadata.mix_count ? (
+              <DetailRow
+                label="Observed mixes"
+                value={`${samouraiMetadata.mix_count.toLocaleString("en-US")} · ${samouraiMetadata.mix_count_confidence ?? "imported"}`}
+              />
+            ) : null}
+            {samouraiMetadata.target_mix_count ? (
+              <DetailRow
+                label="Target mixes"
+                value={samouraiMetadata.target_mix_count.toLocaleString("en-US")}
+              />
+            ) : null}
+            {samouraiMetadata.pool_denomination_sat ? (
+              <DetailRow
+                label="Pool"
+                value={`${samouraiMetadata.pool_denomination_sat.toLocaleString("en-US")} sats`}
+              />
+            ) : null}
+            {samouraiMetadata.role !== "parent" ? (
+              <DetailRow
+                label="Coins"
+                value={
+                  samouraiInventory?.freshness.active_count?.toLocaleString(
+                    "en-US",
+                  ) ??
+                  samouraiInventory?.summary?.count?.toLocaleString("en-US") ??
+                  "—"
+                }
+              />
+            ) : null}
+          </CardContent>
+          <div className="space-y-2 border-t px-4 py-3 text-sm">
+            {samouraiMetadata.toxic_change ? (
+              <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+                Toxic-change spends remain reportable and need normal pricing
+                evidence.
+              </div>
+            ) : null}
+            {samouraiMetadata.section === "postmix" ? (
+              <div className="rounded-md border bg-background px-3 py-2 text-muted-foreground">
+                Postmix rows without exact Whirlpool metadata are shown as
+                having at least one mix; Kassiber does not claim exact sat
+                lineage through other participants.
+              </div>
+            ) : null}
+            {samouraiInventory?.freshness.stale ? (
+              <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+                Samourai inventory is stale. Refresh before relying on wallet
+                detail, reports, or source-of-funds readiness.
+              </div>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isWalletSyncRunning}
+              onClick={() => onSync()}
+            >
+              <RefreshCw
+                className={cn("size-4", isWalletSyncRunning && "animate-spin")}
+                aria-hidden="true"
+              />
+              {isWalletSyncRunning ? "Refreshing" : "Refresh Samourai source"}
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+
       {walletProvenanceRoutes.length > 0 ? (
         <Card>
           <CardHeader className="border-b px-4 pb-3">
@@ -975,9 +1262,7 @@ function ConnectionDetailView({
           <CardHeader className="border-b px-4 pb-3">
             <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
               Recent transactions
-              <span className="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-[10px] font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
-                {txsForConnection.length}
-              </span>
+              <CountBadge>{txsForConnection.length}</CountBadge>
             </CardTitle>
             <CardDescription>
               Recent transactions for this wallet source.
@@ -1003,7 +1288,7 @@ function ConnectionDetailView({
                     variant="outline"
                     size="sm"
                     disabled={isWalletSyncRunning}
-                    onClick={onSync}
+                    onClick={() => onSync()}
                   >
                     <RefreshCw
                       className={cn(
@@ -1358,6 +1643,7 @@ function ConnectionDetailView({
           </form>
         </DialogContent>
       </Dialog>
+      {detailSheet}
     </div>
   );
 }

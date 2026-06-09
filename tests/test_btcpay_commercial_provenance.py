@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from kassiber.core import commercial
-from kassiber.db import _migrate_nullable_attachment_transactions, open_db
+from kassiber.db import _migrate_attachment_table_shape, open_db
 from kassiber.errors import AppError
 from kassiber.msat import btc_to_msat
 from kassiber.sync_btcpay import fetch_btcpay_invoice_provenance
@@ -778,23 +778,109 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
         )
         self.conn.commit()
 
-        _migrate_nullable_attachment_transactions(self.conn)
+        _migrate_attachment_table_shape(self.conn)
 
         attachment = self.conn.execute(
-            "SELECT source_url FROM attachments WHERE id = ?",
+            "SELECT source_url, label FROM attachments WHERE id = ?",
             (result["attachment_id"],),
         ).fetchone()
         self.assertEqual(attachment["source_url"], "https://example.test/invoice")
+        self.assertIsNone(attachment["label"])
         for child_table in (
             "external_document_attachments",
             "source_funds_link_attachments",
             "source_funds_source_attachments",
         ):
             self.assertEqual(_attachment_fk_targets(self.conn, child_table), {"attachments"})
-        legacy = self.conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='attachments_legacy_notnull_tx'"
+        for legacy_name in ("attachments_legacy_shape", "attachments_legacy_notnull_tx"):
+            legacy = self.conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                (legacy_name,),
+            ).fetchone()
+            self.assertIsNone(legacy)
+
+    def test_attachment_migration_removes_copied_provenance_foreign_keys(self):
+        now = now_iso()
+        self.conn.execute("PRAGMA foreign_keys = OFF")
+        self.conn.execute("ALTER TABLE attachments RENAME TO attachments_current")
+        self.conn.execute(
+            """
+            CREATE TABLE attachments (
+                id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                transaction_id TEXT REFERENCES transactions(id) ON DELETE CASCADE,
+                attachment_type TEXT NOT NULL,
+                label TEXT NOT NULL,
+                original_filename TEXT,
+                stored_relpath TEXT,
+                source_url TEXT,
+                media_type TEXT,
+                size_bytes INTEGER,
+                sha256 TEXT,
+                copied_from_attachment_id TEXT REFERENCES attachments(id) ON DELETE SET NULL,
+                copied_from_transaction_id TEXT REFERENCES transactions(id) ON DELETE SET NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        self.conn.execute("DROP TABLE attachments_current")
+        self.conn.execute(
+            """
+            INSERT INTO attachments(
+                id, workspace_id, profile_id, transaction_id, attachment_type, label,
+                source_url, media_type, copied_from_attachment_id,
+                copied_from_transaction_id, created_at
+            ) VALUES(
+                'source-att', 'ws', 'prof', 'tx', 'url', 'Approval source',
+                'https://example.test/approval', 'text/uri-list', NULL, NULL, ?
+            )
+            """,
+            (now,),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO attachments(
+                id, workspace_id, profile_id, transaction_id, attachment_type, label,
+                source_url, media_type, copied_from_attachment_id,
+                copied_from_transaction_id, created_at
+            ) VALUES(
+                'copy-att', 'ws', 'prof', 'tx', 'url', 'Approval copy',
+                'https://example.test/approval', 'text/uri-list', 'source-att', 'tx', ?
+            )
+            """,
+            (now,),
+        )
+        self.conn.commit()
+        self.conn.execute("PRAGMA foreign_keys = ON")
+        copied_fk_columns = {
+            row["from"]
+            for row in self.conn.execute("PRAGMA foreign_key_list(attachments)").fetchall()
+            if row["from"] in {"copied_from_attachment_id", "copied_from_transaction_id"}
+        }
+        self.assertEqual(
+            copied_fk_columns,
+            {"copied_from_attachment_id", "copied_from_transaction_id"},
+        )
+
+        _migrate_attachment_table_shape(self.conn)
+
+        copied_fk_columns = {
+            row["from"]
+            for row in self.conn.execute("PRAGMA foreign_key_list(attachments)").fetchall()
+            if row["from"] in {"copied_from_attachment_id", "copied_from_transaction_id"}
+        }
+        self.assertEqual(copied_fk_columns, set())
+        self.conn.execute("DELETE FROM attachments WHERE id = 'source-att'")
+        copied = self.conn.execute(
+            """
+            SELECT copied_from_attachment_id, copied_from_transaction_id
+            FROM attachments
+            WHERE id = 'copy-att'
+            """
         ).fetchone()
-        self.assertIsNone(legacy)
+        self.assertEqual(copied["copied_from_attachment_id"], "source-att")
+        self.assertEqual(copied["copied_from_transaction_id"], "tx")
 
     def test_external_document_evidence_reuses_attachment_store_without_transaction(self):
         document = commercial.create_document(

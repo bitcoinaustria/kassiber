@@ -18,12 +18,16 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { formatBtc, MISSING_FIAT_LABEL, type Currency } from "@/lib/currency";
+import {
+  formatBtc,
+  formatFiatAmount,
+  MISSING_FIAT_LABEL,
+  type Currency,
+} from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
 import {
   blurClass,
-  currencyFormatter,
   formatSignedDisplayMoney,
   overviewFlowLabels,
   overviewFlowStyles,
@@ -38,16 +42,26 @@ import {
 
 export const RecentTransactionsTable = ({
   className,
+  title = "Recent Transactions",
   transactions,
   hideSensitive,
   currency,
   priceEur,
+  fiatCurrency = "EUR",
+  showAllLabel = "Show all",
+  showAllTo = "/transactions",
+  onOpenTransaction,
 }: {
   className?: string;
+  title?: string;
   transactions: Transaction[];
   hideSensitive: boolean;
   currency: Currency;
   priceEur: number;
+  fiatCurrency?: string;
+  showAllLabel?: string;
+  showAllTo?: "/transactions" | null;
+  onOpenTransaction?: (transaction: Transaction) => void;
 }) => {
   const [statusFilter, setStatusFilter] = React.useState<
     TransactionStatus | "all"
@@ -128,7 +142,7 @@ export const RecentTransactionsTable = ({
       <div className="flex items-center justify-between gap-3 px-3 pt-3 sm:px-4">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">
-            Recent Transactions
+            {title}
           </span>
           <span className="ml-1 inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-[10px] font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
             {filteredTransactions.length}
@@ -136,9 +150,11 @@ export const RecentTransactionsTable = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <Button asChild variant="ghost" size="sm" className="h-8 sm:h-9">
-            <Link to="/transactions">Show all</Link>
-          </Button>
+          {showAllTo ? (
+            <Button asChild variant="ghost" size="sm" className="h-8 sm:h-9">
+              <Link to={showAllTo}>{showAllLabel}</Link>
+            </Button>
+          ) : null}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -188,15 +204,21 @@ export const RecentTransactionsTable = ({
                     ? ArrowUpRight
                     : ArrowLeftRight;
               const amountBtc = transactionBtc(t, priceEur);
+              const rowFiatCurrency = t.fiatCurrency ?? fiatCurrency;
               const primaryAmount =
                 currency === "btc"
                   ? formatBtc(amountBtc, { sign: true })
-                  : formatSignedDisplayMoney(t.amount, priceEur, currency);
+                  : formatSignedDisplayMoney(
+                      t.amount,
+                      priceEur,
+                      currency,
+                      rowFiatCurrency,
+                    );
               const secondaryAmount =
                 currency === "btc"
                   ? t.amount === null
                     ? MISSING_FIAT_LABEL
-                    : currencyFormatter.format(Math.abs(t.amount))
+                    : formatFiatAmount(Math.abs(t.amount), rowFiatCurrency)
                   : formatBtc(amountBtc);
               const amountTone =
                 flow === "incoming"
@@ -206,12 +228,10 @@ export const RecentTransactionsTable = ({
                     : "text-muted-foreground";
               const primaryTag = t.tags[0] ?? overviewFlowLabels[flow];
               const extraTags = Math.max(0, t.tags.length - 1);
-              return (
-                <Link
-                  key={t.id}
-                  to={transactionDetailHref(t.id)}
-                  className="group flex min-w-0 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
+              const rowClassName =
+                "group flex min-w-0 items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+              const rowContent = (
+                <>
                   <span
                     className={cn(
                       "flex size-8 shrink-0 items-center justify-center rounded-md",
@@ -255,6 +275,16 @@ export const RecentTransactionsTable = ({
                       <span className="truncate text-[10px] text-muted-foreground">
                         {t.date}
                       </span>
+                      {t.scopeLabel ? (
+                        <span
+                          className={cn(
+                            "truncate text-[10px] font-medium text-muted-foreground",
+                            blurClass(hideSensitive),
+                          )}
+                        >
+                          {t.scopeLabel}
+                        </span>
+                      ) : null}
                     </span>
                     <span
                       className={cn(
@@ -284,6 +314,27 @@ export const RecentTransactionsTable = ({
                       {secondaryAmount}
                     </span>
                   </span>
+                </>
+              );
+              if (onOpenTransaction) {
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={cn(rowClassName, "w-full")}
+                    onClick={() => onOpenTransaction(t)}
+                  >
+                    {rowContent}
+                  </button>
+                );
+              }
+              return (
+                <Link
+                  key={t.id}
+                  to={transactionDetailHref(t.id)}
+                  className={rowClassName}
+                >
+                  {rowContent}
                 </Link>
               );
             })}

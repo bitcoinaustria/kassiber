@@ -21,6 +21,9 @@ export type SettingsSectionId =
   | "desktop-terminal"
   | "desktop-developer";
 
+export const PENDING_SETTINGS_BACKEND_EDIT_KEY =
+  "kassiber:settings-backend-edit";
+
 const SETTINGS_SECTION_FOR_SLUG: Record<string, SettingsSectionId> = {
   // General
   appearance: "general-appearance",

@@ -42,6 +42,10 @@ const Transactions = lazyRouteComponent(
   () => import("./routes/Transactions"),
   "Transactions",
 );
+const Activity = lazyRouteComponent(
+  () => import("./routes/Activity"),
+  "Activity",
+);
 const Reports = lazyRouteComponent(() => import("./routes/Reports"), "Reports");
 const SourceFunds = lazyRouteComponent(
   () => import("./routes/SourceFunds"),
@@ -61,6 +65,10 @@ const Quarantine = lazyRouteComponent(
 );
 const Logs = lazyRouteComponent(() => import("./routes/Logs"), "Logs");
 const Books = lazyRouteComponent(() => import("./routes/Books"), "Books");
+const BirdsEye = lazyRouteComponent(
+  () => import("./routes/BirdsEye"),
+  "BirdsEye",
+);
 const Connections = lazyRouteComponent(
   () => import("./routes/Connections"),
   "Connections",
@@ -136,6 +144,12 @@ const transactionsRoute = createRoute({
   component: Transactions,
 });
 
+const activityRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/activity",
+  component: Activity,
+});
+
 const reportsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/reports",
@@ -208,6 +222,12 @@ const booksRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/books",
   component: Books,
+});
+
+const birdsEyeRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/books/$workspaceId/birds-eye",
+  component: BirdsEye,
 });
 
 const profilesRoute = createRoute({
@@ -288,6 +308,7 @@ const routeTree = rootRoute.addChildren([
   appLayoutRoute.addChildren([
     overviewRoute,
     transactionsRoute,
+    activityRoute,
     reportsRoute,
     sourceFundsRoute,
     journalsRoute,
@@ -298,6 +319,7 @@ const routeTree = rootRoute.addChildren([
     logsRoute,
     diagnosticsRoute,
     booksRoute,
+    birdsEyeRoute,
     profilesRoute,
     connectionsRoute,
     connectionDetailRoute,

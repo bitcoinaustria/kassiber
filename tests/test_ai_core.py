@@ -59,6 +59,7 @@ from kassiber.ai.tools import (
 from kassiber.ai.providers import list_with_default
 from kassiber.db import open_db
 from kassiber.errors import AppError
+from kassiber.redaction import redact_secret_text, redact_secret_value
 
 
 class SseParserTest(unittest.TestCase):
@@ -136,6 +137,25 @@ class SseParserTest(unittest.TestCase):
 
 
 class ToolCatalogPromptTest(unittest.TestCase):
+    def test_shared_redaction_treats_recovery_material_as_secret(self):
+        text = redact_secret_text(
+            "mnemonic=abandon abandon abandon recovery_phrase=legal winner thank seed=letter"
+        )
+        self.assertNotIn("abandon", text)
+        self.assertNotIn("legal", text)
+        self.assertNotIn("winner", text)
+        self.assertNotIn("letter", text)
+        self.assertEqual(
+            redact_secret_value(
+                {
+                    "mnemonic": "abandon abandon abandon",
+                    "seed_words": "legal winner thank",
+                    "safe": "ok",
+                }
+            ),
+            {"mnemonic": "[redacted]", "seed_words": "[redacted]", "safe": "ok"},
+        )
+
     def test_tool_catalog_stability(self):
         expected_tool_names = {
             "status",
@@ -144,6 +164,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_transactions_extremes",
             "ui_transactions_search",
             "ui_wallets_list",
+            "ui_wallets_utxos",
             "ui_backends_list",
             "ui_profiles_snapshot",
             "ui_reports_capital_gains",
@@ -201,6 +222,8 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertEqual(get_tool("ui_transactions_extremes").name, "ui.transactions.extremes")
         self.assertEqual(get_tool("ui_transactions_search").name, "ui.transactions.search")
         self.assertEqual(get_tool("ui_wallets_list").kind_class, "read_only")
+        self.assertEqual(get_tool("ui_wallets_utxos").name, "ui.wallets.utxos")
+        self.assertEqual(get_tool("ui_wallets_utxos").kind_class, "read_only")
         self.assertEqual(get_tool("ui_backends_list").kind_class, "read_only")
         self.assertEqual(get_tool("ui_reports_summary").name, "ui.reports.summary")
         self.assertEqual(get_tool("ui_reports_summary").kind_class, "read_only")
@@ -299,7 +322,14 @@ class ToolCatalogPromptTest(unittest.TestCase):
                 configure_tool,
                 {"auto_sync_before_report_reads": True},
             ),
-            "Enable automatic watch-only refresh before report reads",
+            "Enable freshness refresh before report reads",
+        )
+        self.assertEqual(
+            summarize_tool_call(
+                configure_tool,
+                {"market_rate_provider": "coingecko"},
+            ),
+            "Set market-rate provider to coingecko",
         )
 
     def test_read_skill_reference_allowlist(self):

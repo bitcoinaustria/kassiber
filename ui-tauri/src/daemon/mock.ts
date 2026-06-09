@@ -20,10 +20,47 @@ import type {
   ProfileTaxCountry,
   Workspace,
 } from "@/mocks/profiles";
+import { mockWorkspaceOverviewSnapshot } from "@/mocks/workspaceOverview";
 import { MOCK_AI_CHAT_STREAM, fixtures } from "./fixtures";
 
 const SIMULATED_LATENCY_MS = 50;
 const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
+const MAX_ATTACHMENT_LABEL_LENGTH = 200;
+
+function mockUrlDisplayLabel(rawUrl?: string) {
+  if (!rawUrl) return "Link attachment";
+  try {
+    const parsed = new URL(rawUrl);
+    const host = parsed.hostname.replace(/^www\./i, "");
+    if (host === "docs.google.com") {
+      if (parsed.pathname.startsWith("/document/d/")) return "Google Doc";
+      if (parsed.pathname.startsWith("/spreadsheets/d/")) return "Google Sheet";
+      if (parsed.pathname.startsWith("/presentation/d/")) return "Google Slides deck";
+      return "Google Workspace link";
+    }
+    if (host === "drive.google.com") return "Google Drive link";
+    const pathParts = parsed.pathname.split("/").filter(Boolean);
+    const slug = pathParts.at(-1)?.replace(/\.[a-z0-9]{2,5}$/i, "");
+    if (slug && !/^[a-f0-9-]{16,}$/i.test(slug)) {
+      return `${host} - ${decodeURIComponent(slug).replace(/[-_+]+/g, " ")}`;
+    }
+    return host || "Link attachment";
+  } catch {
+    return "Link attachment";
+  }
+}
+
+function mockAttachmentDisplayLabel(attachment: {
+  attachment_type: "file" | "url";
+  label?: string | null;
+  original_filename?: string;
+  url?: string;
+}) {
+  const label = attachment.label?.trim();
+  if (label) return label;
+  if (attachment.attachment_type === "url") return mockUrlDisplayLabel(attachment.url);
+  return attachment.original_filename || "File attachment";
+}
 
 const cloneMockProfiles = () => ({
   activeWorkspaceId: MOCK_PROFILES.activeWorkspaceId,
@@ -40,23 +77,69 @@ type MockAttachment = {
   id: string;
   transaction_id: string;
   attachment_type: "file" | "url";
-  label: string;
+  label?: string | null;
+  display_label: string;
   original_filename?: string;
   url?: string;
   media_type?: string;
   size_bytes?: number | null;
   sha256?: string;
   stored_relpath?: string;
+  copied_from_attachment_id?: string;
+  copied_from_transaction_id?: string;
   exists?: boolean | null;
   created_at: string;
 };
 
+type MockTransactionHistoryField = {
+  id: string;
+  field: string;
+  label: string;
+  family: string;
+  before_value: unknown;
+  after_value: unknown;
+  before_label: string;
+  after_label: string;
+  diff: Record<string, unknown>;
+  redacted?: boolean;
+};
+
+type MockTransactionHistoryEvent = {
+  id: string;
+  transaction_id: string;
+  transaction_external_id: string;
+  transaction_occurred_at: string;
+  wallet_id: string;
+  wallet_label: string;
+  source: string;
+  source_label: string;
+  reason: string;
+  changed_at: string;
+  summary: string;
+  families: string[];
+  report_anchor: Record<string, unknown>;
+  transaction: Record<string, unknown>;
+  fields: MockTransactionHistoryField[];
+};
+
 let mockAttachments: MockAttachment[] = [
+  {
+    id: "att-tx2-1",
+    transaction_id: "tx2",
+    attachment_type: "url",
+    label: "Board approval reference",
+    display_label: "Board approval reference",
+    url: "https://docs.example.com/board/approval",
+    media_type: "text/uri-list",
+    exists: null,
+    created_at: "2026-03-31T09:00:00Z",
+  },
   {
     id: "att-tx1-1",
     transaction_id: "tx1",
     attachment_type: "file",
     label: "invoice-2026-04-18.pdf",
+    display_label: "invoice-2026-04-18.pdf",
     original_filename: "invoice-2026-04-18.pdf",
     media_type: "application/pdf",
     size_bytes: 248_000,
@@ -69,14 +152,228 @@ let mockAttachments: MockAttachment[] = [
     id: "att-tx1-2",
     transaction_id: "tx1",
     attachment_type: "url",
-    label: "btcpay.example.com/invoices/abc123",
+    label: null,
+    display_label: "btcpay.example.com - abc123",
     url: "https://btcpay.example.com/invoices/abc123",
     media_type: "text/uri-list",
     exists: null,
     created_at: "2026-04-18T14:23:00Z",
   },
 ];
+
+let mockTransactionHistory: MockTransactionHistoryEvent[] = [
+  {
+    id: "edit-mock-2",
+    transaction_id: "tx2",
+    transaction_external_id: "tx2",
+    transaction_occurred_at: "2026-04-17T09:08:00Z",
+    wallet_id: "wallet-home-node",
+    wallet_label: "Home Node (CLN)",
+    source: "ai_tool",
+    source_label: "Assistant",
+    reason: "Suggested hosting classification",
+    changed_at: "2026-04-18T08:12:00Z",
+    summary: "Updated Review status, Taxable",
+    families: ["tax"],
+    report_anchor: { stale_for_reports: true, journal_input_version_after: 8 },
+    transaction: {
+      id: "tx2",
+      external_id: "tx2",
+      occurred_at: "2026-04-17T09:08:00Z",
+      direction: "outbound",
+      asset: "BTC",
+      amount: 0.00120431,
+      amount_msat: 120_431_000,
+      fee: 0,
+      fee_msat: 0,
+      counterparty: "Server rental · Hetzner",
+    },
+    fields: [
+      {
+        id: "edit-field-mock-3",
+        field: "review_status",
+        label: "Review status",
+        family: "tax",
+        before_value: "review",
+        after_value: "completed",
+        before_label: "Needs review",
+        after_label: "Completed",
+        diff: {},
+      },
+      {
+        id: "edit-field-mock-4",
+        field: "taxable",
+        label: "Taxable",
+        family: "tax",
+        before_value: true,
+        after_value: false,
+        before_label: "Taxable",
+        after_label: "Not taxable",
+        diff: {},
+      },
+    ],
+  },
+  {
+    id: "edit-mock-1",
+    transaction_id: "tx1",
+    transaction_external_id: "tx1",
+    transaction_occurred_at: "2026-04-18T14:22:00Z",
+    wallet_id: "wallet-cold",
+    wallet_label: "Cold Storage",
+    source: "gui",
+    source_label: "Desktop",
+    reason: "Matched invoice evidence",
+    changed_at: "2026-04-18T07:42:00Z",
+    summary: "Pricing provenance updated",
+    families: ["pricing", "metadata"],
+    report_anchor: { stale_for_reports: true, journal_input_version_after: 7 },
+    transaction: {
+      id: "tx1",
+      external_id: "tx1",
+      occurred_at: "2026-04-18T14:22:00Z",
+      direction: "inbound",
+      asset: "BTC",
+      amount: 0.0245,
+      amount_msat: 2_450_000_000,
+      fee: 0,
+      fee_msat: 0,
+      counterparty: "Invoice · ACME GmbH",
+    },
+    fields: [
+      {
+        id: "edit-field-mock-1",
+        field: "tags",
+        label: "Tags",
+        family: "metadata",
+        before_value: ["Revenue"],
+        after_value: ["Invoice", "Revenue"],
+        before_label: "Revenue",
+        after_label: "Invoice, Revenue",
+        diff: { added: ["Invoice"], removed: [], before: ["Revenue"], after: ["Invoice", "Revenue"] },
+      },
+      {
+        id: "edit-field-mock-2",
+        field: "pricing_external_ref",
+        label: "Pricing evidence reference",
+        family: "pricing",
+        before_value: null,
+        after_value: "invoice=ACME-42 secret=[redacted]",
+        before_label: "Empty",
+        after_label: "invoice=ACME-42 secret=[redacted]",
+        diff: {},
+        redacted: true,
+      },
+    ],
+  },
+];
 let mockAttachmentCounter = 0;
+
+function mockAuditEvidenceSummary(transactionId: string) {
+  const direct = mockAttachments
+    .filter((attachment) => !transactionId || attachment.transaction_id === transactionId)
+    .map((attachment) => ({
+      id: attachment.id,
+      attachment_type: attachment.attachment_type,
+      label: attachment.label,
+      media_type: attachment.media_type ?? "",
+      size_bytes: attachment.size_bytes ?? null,
+      sha256: attachment.sha256 ?? "",
+      exists: attachment.exists ?? null,
+      copied_from_attachment_id: attachment.copied_from_attachment_id ?? "",
+      copied_from_transaction_id: attachment.copied_from_transaction_id ?? "",
+      url_host:
+        attachment.attachment_type === "url" && attachment.url
+          ? new URL(attachment.url).host
+          : "",
+    }));
+  const status = direct.length ? "warning" : "blocked";
+  return {
+    schema_version: 1,
+    workspace: { id: "mock-ws", label: "Mock workspace" },
+    profile: { id: "mock-profile", label: "Demo book" },
+    scope: { type: transactionId ? "transactions" : "active_profile" },
+    journal_freshness: {
+      status: "current",
+      needs_processing: false,
+      reason: "mock journals are current",
+    },
+    transactions: [
+      {
+        transaction: {
+          id: transactionId || "tx1",
+          external_id: transactionId || "tx1",
+          asset: "BTC",
+        },
+        readiness: {
+          status,
+          warnings: [
+            ...(direct.length
+              ? []
+              : [
+                  {
+                    code: "receipt_missing",
+                    severity: "blocker",
+                    message: "No direct receipt, note, file, or URL reference is attached to this transaction.",
+                    action: "Attach a local receipt file or a URL reference from transaction detail.",
+                  },
+                ]),
+            {
+              code: "source_link_unreviewed",
+              severity: "blocker",
+              message: "At least one source-of-funds suggestion is still unreviewed.",
+              action: "Accept, edit, or reject the suggested link.",
+            },
+            {
+              code: "sensitive_material_excluded",
+              severity: "info",
+              message: "Descriptors, xpubs, backend URLs, credentials, wallet files, logs, AI settings, and technical wallet evidence are excluded from this audit surface.",
+            },
+          ],
+        },
+        direct_attachments: direct,
+        source_funds_links: [
+          {
+            id: "mock-sof-link-1",
+            link_type: "manual_source",
+            state: "suggested",
+            confidence: "strong",
+            method: "mock_fixture",
+            asset: "BTC",
+            allocation_amount: 0.01,
+            allocation_policy: "explicit",
+            explanation: "Mock source-funds link for browser preview.",
+            attachments: [],
+            from_source: {
+              id: "mock-source-1",
+              source_type: "fiat_purchase",
+              label: "Exchange statement",
+              review_state: "reviewed",
+              attachments: [],
+            },
+          },
+        ],
+      },
+    ],
+    summary: {
+      transaction_count: 1,
+      ready_count: 0,
+      blocked_count: status === "blocked" ? 1 : 0,
+      warning_count: status === "warning" ? 1 : 0,
+    },
+    excluded_sensitive_material: [
+      "wallet descriptors",
+      "xpubs",
+      "backend credentials",
+      "backend URLs",
+      "raw wallet files",
+      "environment files",
+      "logs",
+      "AI settings",
+      "unrelated books",
+      "technical wallet evidence",
+    ],
+  };
+}
 
 type MockConnection = {
   id: string;
@@ -128,13 +425,23 @@ let mockBackendSettingsRows: MockBackendSettingsRow[] = [
   },
   {
     name: "liquid",
-    kind: "liquid-esplora",
+    kind: "electrum",
     chain: "liquid",
     network: "liquidv1",
-    url: "https://liquid.network/api",
+    url: "ssl://les.bullbitcoin.com:995",
     source: "mock",
     has_url: true,
-    display_name: "Liquid Network",
+    display_name: "BullBitcoin Liquid Electrum",
+  },
+  {
+    name: "liquid-blockstream",
+    kind: "electrum",
+    chain: "liquid",
+    network: "liquidv1",
+    url: "ssl://blockstream.info:995",
+    source: "mock",
+    has_url: true,
+    display_name: "Blockstream Liquid Electrum",
   },
 ];
 
@@ -146,6 +453,30 @@ const mockBackendSettingsPayload = () => ({
       mockBackendSettingsRows.find((row) => row.is_default)?.name ?? null,
   },
 });
+
+const mockBackendPublicDefaultsPayload = () => {
+  const backends = mockBackendSettingsRows
+    .filter((row) =>
+      ["electrum", "esplora", "liquid-esplora"].includes(row.kind),
+    )
+    .map((row) => ({
+      name: row.name,
+      kind: row.kind,
+      chain: row.chain,
+      network: row.network,
+      url: row.url,
+      source: row.source,
+      is_default: row.is_default,
+    }));
+  return {
+    backends,
+    summary: {
+      count: backends.length,
+      default_backend:
+        mockBackendSettingsRows.find((row) => row.is_default)?.name ?? null,
+    },
+  };
+};
 
 function mockBackendRowFromArgs(
   args: Record<string, unknown>,
@@ -296,6 +627,66 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.wallets.utxos") {
+      const overview = mockOverviewSnapshot();
+      const args = (req.args ?? {}) as { wallet?: unknown; connection?: unknown };
+      const walletRef =
+        typeof args.wallet === "string"
+          ? args.wallet
+          : typeof args.connection === "string"
+            ? args.connection
+            : "";
+      const connection =
+        overview.connections.find(
+          (item) => item.id === walletRef || item.label === walletRef,
+        ) ?? overview.connections[0];
+      const payload = JSON.parse(
+        JSON.stringify(fixtures["ui.wallets.utxos"]),
+      ) as {
+        wallet: { id: string; label: string };
+        utxos: unknown[];
+        totals: unknown[];
+        support: {
+          supported: boolean;
+          status: string;
+          reason: string;
+          message: string;
+        };
+        freshness: { status: string; stale: boolean; active_count: number };
+        summary: { count: number };
+      };
+      payload.wallet = {
+        id: connection?.id ?? "mock-wallet",
+        label: connection?.label ?? "Mock wallet",
+      };
+      const chainBacked =
+        connection?.kind === "xpub" ||
+        connection?.kind === "descriptor" ||
+        connection?.kind === "address";
+      if (!chainBacked) {
+        payload.utxos = [];
+        payload.totals = [];
+        payload.support = {
+          supported: false,
+          status: "unsupported_source",
+          reason: "not_chain_backed",
+          message: "This source is not a chain-backed watch-only wallet.",
+        };
+        payload.freshness = {
+          status: "unsupported_source",
+          stale: false,
+          active_count: 0,
+        };
+        payload.summary.count = 0;
+      }
+      return {
+        kind: "ui.wallets.utxos",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: payload as T,
+      };
+    }
+
     if (req.kind === "daemon.lock") {
       return {
         kind: "daemon.lock",
@@ -399,6 +790,81 @@ export const mockDaemon: DaemonTransport = {
         schema_version: 1,
         request_id: req.request_id,
         data: mockProfilesSnapshot as T,
+      };
+    }
+
+    if (req.kind === "ui.workspace.overview.snapshot") {
+      const args = (req.args ?? {}) as { workspace_id?: unknown };
+      const workspaceId =
+        typeof args.workspace_id === "string" && args.workspace_id.trim()
+          ? args.workspace_id.trim()
+          : mockProfilesSnapshot.activeWorkspaceId;
+      return {
+        kind: "ui.workspace.overview.snapshot",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: mockWorkspaceOverviewSnapshot(workspaceId) as T,
+      };
+    }
+
+    if (req.kind === "ui.workspace.freshness.run") {
+      const args = (req.args ?? {}) as { workspace_id?: unknown };
+      const workspaceId =
+        typeof args.workspace_id === "string" && args.workspace_id.trim()
+          ? args.workspace_id.trim()
+          : mockProfilesSnapshot.activeWorkspaceId;
+      const overview = mockWorkspaceOverviewSnapshot(workspaceId);
+      const books = overview.books.map((book) => ({
+        profile: { id: book.profile.id, label: book.profile.label },
+        results: book.connections.map((connection) => ({
+          wallet: connection.label,
+          status: "synced",
+          inserted: 0,
+          updated: 0,
+        })),
+        recovered: [],
+        enqueued: [],
+        completed: [
+          {
+            job_type: "journal_refresh",
+            source_label: "Journals",
+            source_type: "journals",
+            status: book.readiness.ready ? "done" : "rate_limited",
+          },
+        ],
+        attention: {
+          blockedReports: !book.readiness.ready,
+          rateLimited: !book.readiness.ready,
+          errors: 0,
+        },
+        sources: [],
+        jobs: [],
+        summary: {
+          sources: book.connections.length,
+          active_jobs: 0,
+          blocking_reports: book.readiness.ready ? 0 : 1,
+          rate_limited: book.readiness.ready ? 0 : 1,
+        },
+      }));
+      return {
+        kind: "ui.workspace.freshness.run",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          workspace: overview.workspace,
+          books,
+          summary: {
+            books: books.length,
+            enqueued: 0,
+            completed: books.length,
+            errors: 0,
+            rate_limited: books.filter((book) => book.attention.rateLimited).length,
+            blocked_books: books.filter((book) => book.attention.blockedReports).length,
+            synced_books: books.filter((book) => !book.attention.blockedReports).length,
+            ok: books.every((book) => !book.attention.blockedReports),
+            reports_blocked: books.filter((book) => book.attention.blockedReports).length,
+          },
+        } as T,
       };
     }
 
@@ -1421,6 +1887,139 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.transactions.history" || req.kind === "ui.activity.history") {
+      const args = (req.args ?? {}) as Record<string, unknown>;
+      const transaction =
+        typeof args.transaction === "string" ? args.transaction : "";
+      const source = typeof args.source === "string" ? args.source : "";
+      const family =
+        typeof args.field_family === "string" ? args.field_family : "";
+      const wallet = typeof args.wallet === "string" ? args.wallet : "";
+      const pricingOnly = args.pricing_only === true;
+      const aiOnly = args.ai_only === true;
+      const staleOnly = args.stale_only === true;
+      const includeStale = args.include_stale !== false;
+      const events = mockTransactionHistory.filter((event) => {
+        if (transaction && event.transaction_id !== transaction && event.transaction_external_id !== transaction) {
+          return false;
+        }
+        if (source && event.source !== source) return false;
+        if (aiOnly && event.source !== "ai_tool") return false;
+        if (wallet && event.wallet_label !== wallet && event.wallet_id !== wallet) return false;
+        if (family && !event.families.includes(family)) return false;
+        if (pricingOnly && !event.families.includes("pricing")) return false;
+        if (staleOnly && !event.report_anchor?.stale_for_reports) return false;
+        return true;
+      });
+      return {
+        kind: req.kind,
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          events,
+          next_cursor: null,
+          has_more: false,
+          limit: typeof args.limit === "number" ? args.limit : 50,
+          ...(includeStale
+            ? {
+                stale: {
+                  edit_count: mockTransactionHistory.filter(
+                    (event) => event.report_anchor?.stale_for_reports,
+                  ).length,
+                  latest_changed_at: mockTransactionHistory[0]?.changed_at ?? null,
+                  source_counts: { ai_tool: 1, gui: 1 },
+                  family_counts: { metadata: 1, pricing: 1, tax: 2 },
+                  field_counts: {
+                    pricing_external_ref: 1,
+                    review_status: 1,
+                    tags: 1,
+                    taxable: 1,
+                  },
+                  last_processed_at: "2026-04-17T22:00:00Z",
+                  last_processed_input_version: 6,
+                },
+              }
+            : {}),
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.activity.stale") {
+      return {
+        kind: "ui.activity.stale",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          edit_count: mockTransactionHistory.filter(
+            (event) => event.report_anchor?.stale_for_reports,
+          ).length,
+          latest_changed_at: mockTransactionHistory[0]?.changed_at ?? null,
+          source_counts: { ai_tool: 1, gui: 1 },
+          family_counts: { metadata: 1, pricing: 1, tax: 2 },
+          field_counts: {
+            pricing_external_ref: 1,
+            review_status: 1,
+            tags: 1,
+            taxable: 1,
+          },
+          last_processed_at: "2026-04-17T22:00:00Z",
+          last_processed_input_version: 6,
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.transactions.history.revert") {
+      const args = (req.args ?? {}) as Record<string, unknown>;
+      const transactionId = typeof args.transaction === "string" ? args.transaction : "tx1";
+      const eventId = typeof args.event === "string" ? args.event : "";
+      const fieldName = typeof args.field === "string" ? args.field : "";
+      const sourceEvent =
+        mockTransactionHistory.find((event) => event.id === eventId) ??
+        mockTransactionHistory.find((event) => event.transaction_id === transactionId);
+      const sourceField = fieldName
+        ? sourceEvent?.fields.find((field) => field.field === fieldName)
+        : undefined;
+      const fields = sourceField ? [sourceField] : sourceEvent?.fields ?? [];
+      const revertedFields = fields.map((field) => field.field);
+      const newEvent = {
+        id: `edit-mock-revert-${Date.now()}`,
+        transaction_id: transactionId,
+        transaction_external_id: transactionId,
+        transaction_occurred_at: sourceEvent?.transaction_occurred_at ?? "",
+        wallet_id: sourceEvent?.wallet_id ?? "",
+        wallet_label: sourceEvent?.wallet_label ?? "",
+        source: "gui",
+        source_label: "Desktop",
+        reason: typeof args.reason === "string" ? args.reason : "Reverted edit history event",
+        changed_at: new Date().toISOString(),
+        summary: sourceField ? `Updated ${sourceField.label}` : "Reverted edit history event",
+        families: Array.from(new Set(fields.map((field) => field.family))),
+        report_anchor: { stale_for_reports: true, journal_input_version_after: 9 },
+        transaction: sourceEvent?.transaction ?? { id: transactionId },
+        fields: fields.map((field) => ({
+          ...field,
+          id: `${field.id}-revert`,
+          before_value: field.after_value,
+          after_value: field.before_value,
+          before_label: field.after_label,
+          after_label: field.before_label,
+        })),
+      };
+      mockTransactionHistory = [newEvent, ...mockTransactionHistory];
+      return {
+        kind: "ui.transactions.history.revert",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          updated: true,
+          reverted_event_id: eventId,
+          history_event_id: newEvent.id,
+          reverted_fields: revertedFields,
+          transaction: { transaction_id: transactionId },
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.attachments.list") {
       const args = (req.args ?? {}) as { transaction?: unknown };
       const tx = typeof args.transaction === "string" ? args.transaction : "";
@@ -1467,25 +2066,144 @@ export const mockDaemon: DaemonTransport = {
         typeof args.label === "string" && args.label.trim()
           ? args.label.trim()
           : isUrl
-            ? source
+            ? null
             : source.split(/[\\/]/).pop() || "attachment.bin";
+      if (label && label.length > MAX_ATTACHMENT_LABEL_LENGTH) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: `Attachment label must be ${MAX_ATTACHMENT_LABEL_LENGTH} characters or fewer`,
+            retryable: false,
+          },
+        };
+      }
       const attachment: MockAttachment = {
         id: `att-mock-${(mockAttachmentCounter += 1)}`,
         transaction_id: transactionId,
         attachment_type: isUrl ? "url" : "file",
         label,
-        original_filename: isUrl ? undefined : label,
+        display_label: isUrl
+          ? label || mockUrlDisplayLabel(source)
+          : label || "attachment.bin",
+        original_filename: isUrl ? undefined : label || "attachment.bin",
         url: isUrl ? source : undefined,
         media_type: isUrl ? "text/uri-list" : "application/octet-stream",
         size_bytes: isUrl ? null : 1024,
         sha256: isUrl ? "" : "mock",
-        stored_relpath: isUrl ? "" : `mock/${label}`,
+        stored_relpath: isUrl ? "" : `mock/${label || "attachment.bin"}`,
         exists: isUrl ? null : true,
         created_at: new Date().toISOString(),
       };
       mockAttachments = [attachment, ...mockAttachments];
       return {
         kind: "ui.attachments.add",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: attachment as T,
+      };
+    }
+
+    if (req.kind === "ui.attachments.copy") {
+      const args = (req.args ?? {}) as {
+        transaction?: unknown;
+        target_transaction?: unknown;
+        source_transaction?: unknown;
+        attachments?: unknown;
+        attachment_ids?: unknown;
+      };
+      const transactionId =
+        typeof args.transaction === "string"
+          ? args.transaction
+          : typeof args.target_transaction === "string"
+            ? args.target_transaction
+            : "";
+      const sourceTransactionId =
+        typeof args.source_transaction === "string"
+          ? args.source_transaction
+          : "";
+      const attachmentIds = Array.isArray(args.attachments)
+        ? args.attachments
+        : Array.isArray(args.attachment_ids)
+          ? args.attachment_ids
+          : [];
+      const sourceAttachments = attachmentIds
+        .filter((id): id is string => typeof id === "string")
+        .map((id) => mockAttachments.find((attachment) => attachment.id === id))
+        .filter((attachment): attachment is MockAttachment => Boolean(attachment));
+      const copied = sourceAttachments.map((attachment) => {
+        const id = `att-mock-${(mockAttachmentCounter += 1)}`;
+        return {
+          ...attachment,
+          id,
+          transaction_id: transactionId,
+          stored_relpath:
+            attachment.attachment_type === "file"
+              ? `mock/${id}-${attachment.original_filename || attachment.label}`
+              : "",
+          copied_from_attachment_id: attachment.id,
+          copied_from_transaction_id:
+            sourceTransactionId || attachment.transaction_id,
+          created_at: new Date().toISOString(),
+        };
+      });
+      mockAttachments = [...copied, ...mockAttachments];
+      return {
+        kind: "ui.attachments.copy",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          copied: copied.length,
+          attachments: copied,
+          source_transaction_id: sourceTransactionId,
+          target_transaction_id: transactionId,
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.attachments.rename") {
+      const args = (req.args ?? {}) as {
+        attachment?: unknown;
+        attachment_id?: unknown;
+        label?: unknown;
+      };
+      const attachmentId =
+        typeof args.attachment === "string"
+          ? args.attachment
+          : typeof args.attachment_id === "string"
+            ? args.attachment_id
+            : "";
+      const label = typeof args.label === "string" ? args.label.trim() : "";
+      const attachment = mockAttachments.find((item) => item.id === attachmentId);
+      if (
+        !attachment ||
+        !label ||
+        label.length > MAX_ATTACHMENT_LABEL_LENGTH ||
+        attachment.attachment_type !== "url"
+      ) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: attachment ? "validation" : "not_found",
+            message: !attachment
+              ? `Attachment '${attachmentId}' not found`
+              : attachment.attachment_type !== "url"
+                ? "Only URL attachment link text can be renamed"
+                : label.length > MAX_ATTACHMENT_LABEL_LENGTH
+                  ? `Attachment label must be ${MAX_ATTACHMENT_LABEL_LENGTH} characters or fewer`
+                  : "ui.attachments.rename requires label",
+            retryable: false,
+          },
+        };
+      }
+      attachment.label = label;
+      attachment.display_label = mockAttachmentDisplayLabel(attachment);
+      return {
+        kind: "ui.attachments.rename",
         schema_version: 1,
         request_id: req.request_id,
         data: attachment as T,
@@ -1539,6 +2257,72 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.source_funds.links.list") {
+      return {
+        kind: "ui.source_funds.links.list",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          links: mockAuditEvidenceSummary(String(req.args?.target_transaction ?? "tx1"))
+            .transactions[0].source_funds_links,
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.source_funds.cases.list") {
+      return {
+        kind: "ui.source_funds.cases.list",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          cases: [
+            {
+              id: "mock-source-funds-case",
+              label: "Exchange sale handoff",
+              target_external_id: "tx1",
+              status: "blocked",
+              created_at: "2026-04-18T15:00:00Z",
+            },
+          ],
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.audit.evidence.summary") {
+      const transaction =
+        typeof req.args?.transaction === "string" ? req.args.transaction : "tx1";
+      return {
+        kind: "ui.audit.evidence.summary",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: mockAuditEvidenceSummary(transaction) as T,
+      };
+    }
+
+    if (req.kind === "ui.reports.export_audit_package") {
+      return {
+        kind: "ui.reports.export_audit_package",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          dir: "/tmp/kassiber-audit-package-mock",
+          manifest: "/tmp/kassiber-audit-package-mock/manifest.json",
+          format: "directory",
+          scope: "audit_package",
+          filename: "kassiber-audit-package-mock",
+          transaction_count: 1,
+          ready_count: 0,
+          blocked_count: 1,
+          evidence_file_count: mockAttachments.filter(
+            (attachment) => attachment.attachment_type === "file",
+          ).length,
+          url_reference_count: mockAttachments.filter(
+            (attachment) => attachment.attachment_type === "url",
+          ).length,
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.connections.sources") {
       return {
         kind: "ui.connections.sources",
@@ -1554,6 +2338,7 @@ export const mockDaemon: DaemonTransport = {
             { kind: "coinfinity", summary: "Coinfinity CSV importer." },
             { kind: "21bitcoin", summary: "21bitcoin CSV importer." },
             { kind: "strike", summary: "Strike CSV importer." },
+            { kind: "wasabi", summary: "Wasabi Wallet sanitized bundle importer." },
           ],
           source_formats: [
             "btcpay_csv",
@@ -1566,6 +2351,7 @@ export const mockDaemon: DaemonTransport = {
             "coinfinity_csv",
             "21bitcoin_csv",
             "strike_csv",
+            "wasabi_bundle",
           ],
         } as T,
       };
@@ -1942,6 +2728,14 @@ export const mockDaemon: DaemonTransport = {
         data: mockBackendSettingsPayload() as T,
       };
     }
+    if (req.kind === "ui.backends.public_defaults") {
+      return {
+        kind: "ui.backends.public_defaults",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: mockBackendPublicDefaultsPayload() as T,
+      };
+    }
 
     if (req.kind === "ui.backends.create") {
       const args = (req.args ?? {}) as Record<string, unknown>;
@@ -2035,6 +2829,33 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.backends.set_default") {
+      const args = (req.args ?? {}) as { name?: unknown };
+      const name = typeof args.name === "string" ? args.name.trim() : "";
+      if (!mockBackendSettingsRows.some((row) => row.name === name)) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "not_found",
+            message: `Backend '${name || "backend"}' not found`,
+            retryable: false,
+          },
+        };
+      }
+      mockBackendSettingsRows = mockBackendSettingsRows.map((row) => ({
+        ...row,
+        is_default: row.name === name,
+      }));
+      return {
+        kind: "ui.backends.set_default",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: { default_backend: name } as T,
+      };
+    }
+
     if (req.kind === "ui.wallets.delete") {
       const args = (req.args ?? {}) as {
         wallet?: unknown;
@@ -2122,13 +2943,36 @@ export const mockDaemon: DaemonTransport = {
     }
 
     if (req.kind === "ui.rates.rebuild") {
+      const args = (req.args ?? {}) as { pair?: unknown };
+      const overview = fixtures["ui.overview.snapshot"] as {
+        marketRate?: {
+          rate?: number | null;
+          pair?: string | null;
+          timestamp?: string | null;
+          fetchedAt?: string | null;
+          source?: string | null;
+        };
+      };
+      if (overview.marketRate) {
+        const now = new Date().toISOString();
+        overview.marketRate.pair =
+          typeof args.pair === "string" && args.pair.trim()
+            ? args.pair.trim().toUpperCase()
+            : overview.marketRate.pair;
+        overview.marketRate.timestamp = now;
+        overview.marketRate.fetchedAt = now;
+        overview.marketRate.source = "coinbase-exchange";
+      }
       return {
         kind: "ui.rates.rebuild",
         schema_version: 1,
         request_id: req.request_id,
         data: {
           source: "coinbase-exchange",
-          pair: null,
+          pair:
+            typeof args.pair === "string" && args.pair.trim()
+              ? args.pair.trim().toUpperCase()
+              : null,
           days: 30,
           reprice_transactions: true,
           deleted: {
@@ -2192,6 +3036,82 @@ export const mockDaemon: DaemonTransport = {
                 ? "ok"
                 : "missing",
           },
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.rates.latest") {
+      const args = (req.args ?? {}) as { pair?: unknown };
+      const overview = fixtures["ui.overview.snapshot"] as {
+        marketRate?: {
+          asset?: "BTC";
+          fiatCurrency?: string;
+          pair?: string | null;
+          rate?: number | null;
+          timestamp?: string | null;
+          fetchedAt?: string | null;
+          source?: string | null;
+          granularity?: string | null;
+          method?: string | null;
+        };
+        priceEur?: number;
+        priceUsd?: number;
+        fiat?: {
+          eurBalance?: number;
+          eurUnrealized?: number;
+        };
+      };
+      const pair =
+        typeof args.pair === "string" && args.pair.trim()
+          ? args.pair.trim().toUpperCase()
+          : overview.marketRate?.pair ?? "BTC-EUR";
+      const now = new Date().toISOString();
+      const previousRate = Number(overview.marketRate?.rate ?? 71_420.18);
+      const nextRate = Number((previousRate + 125.25).toFixed(2));
+      if (overview.marketRate) {
+        overview.marketRate.asset = "BTC";
+        overview.marketRate.pair = pair;
+        overview.marketRate.fiatCurrency = pair.includes("-")
+          ? pair.split("-")[1] ?? overview.marketRate.fiatCurrency ?? "EUR"
+          : overview.marketRate.fiatCurrency ?? "EUR";
+        overview.marketRate.rate = nextRate;
+        overview.marketRate.timestamp = now;
+        overview.marketRate.fetchedAt = now;
+        overview.marketRate.source = "coinbase-exchange";
+        overview.marketRate.granularity = "minute";
+        overview.marketRate.method = "product_candles";
+      }
+      if (pair === "BTC-EUR") overview.priceEur = nextRate;
+      if (pair === "BTC-USD") overview.priceUsd = nextRate;
+      if (overview.fiat?.eurBalance != null) {
+        const btcBalance =
+          previousRate > 0 ? overview.fiat.eurBalance / previousRate : 0;
+        const nextBalance = btcBalance * nextRate;
+        const delta = nextBalance - overview.fiat.eurBalance;
+        overview.fiat.eurBalance = nextBalance;
+        overview.fiat.eurUnrealized = (overview.fiat.eurUnrealized ?? 0) + delta;
+      }
+      return {
+        kind: "ui.rates.latest",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          source: "coinbase-exchange",
+          pair,
+          latest: [
+            {
+              pair,
+              source: "coinbase-exchange",
+              samples: 1,
+              granularity: "minute",
+              method: "product_candles",
+              mode: "latest_quote",
+              lookback_minutes: 5,
+              timestamp: now,
+              fetched_at: now,
+            },
+          ],
+          marketRate: overview.marketRate ?? null,
         } as T,
       };
     }
@@ -2283,6 +3203,12 @@ export const mockDaemon: DaemonTransport = {
     if (req.kind === "ui.wallets.sync") {
       return mockWalletsSyncStream<T, R>(req, options);
     }
+    if (req.kind === "ui.freshness.run") {
+      return mockFreshnessRunStream<T, R>(req, options);
+    }
+    if (req.kind === "ui.workspace.freshness.run") {
+      return mockWorkspaceFreshnessRunStream<T, R>(req, options);
+    }
     // Non-streaming kinds resolve straight through to invoke.
     return mockDaemon.invoke<T>(req);
   },
@@ -2318,6 +3244,93 @@ async function mockWalletsSyncStream<T, R>(
     });
   }
   return mockDaemon.invoke<T>(req);
+}
+
+async function mockFreshnessRunStream<T, R>(
+  req: DaemonRequest,
+  options?: DaemonStreamOptions<R>,
+): Promise<DaemonEnvelope<T>> {
+  const requestId =
+    req.request_id ?? `mock-freshness-${Math.random().toString(36).slice(2)}`;
+  const steps = [
+    {
+      phase: "discovery",
+      source_label: "Treasury watch-only",
+      source_type: "onchain_wallet",
+    },
+    {
+      phase: "backend_fetch",
+      source_label: "Treasury watch-only",
+      source_type: "onchain_wallet",
+      processed: 400,
+      total: 1200,
+    },
+    {
+      phase: "rate_coverage",
+      source_label: "Market-rate coverage",
+      source_type: "market_rates",
+    },
+    {
+      phase: "journal_refresh",
+      source_label: "Journals",
+      source_type: "journals",
+    },
+  ];
+  for (const data of steps) {
+    if (options?.signal?.aborted) break;
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    options?.onRecord?.({
+      kind: "ui.freshness.run.progress",
+      schema_version: 1,
+      request_id: requestId,
+      data: data as R,
+    });
+  }
+  return mockDaemon.invoke<T>({ ...req, request_id: requestId });
+}
+
+async function mockWorkspaceFreshnessRunStream<T, R>(
+  req: DaemonRequest,
+  options?: DaemonStreamOptions<R>,
+): Promise<DaemonEnvelope<T>> {
+  const requestId =
+    req.request_id ??
+    `mock-workspace-freshness-${Math.random().toString(36).slice(2)}`;
+  const args = (req.args ?? {}) as { workspace_id?: unknown };
+  const workspaceId =
+    typeof args.workspace_id === "string" && args.workspace_id.trim()
+      ? args.workspace_id.trim()
+      : mockProfilesSnapshot.activeWorkspaceId;
+  const overview = mockWorkspaceOverviewSnapshot(workspaceId);
+  for (const book of overview.books) {
+    const steps = [
+      {
+        workspace: overview.workspace,
+        profile: { id: book.profile.id, label: book.profile.label },
+        phase: "discovery",
+        source_label: `${book.profile.label} sources`,
+        source_type: "workspace_book",
+      },
+      {
+        workspace: overview.workspace,
+        profile: { id: book.profile.id, label: book.profile.label },
+        phase: "journal_refresh",
+        source_label: "Journals",
+        source_type: "journals",
+      },
+    ];
+    for (const data of steps) {
+      if (options?.signal?.aborted) break;
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      options?.onRecord?.({
+        kind: "ui.workspace.freshness.run.progress",
+        schema_version: 1,
+        request_id: requestId,
+        data: data as R,
+      });
+    }
+  }
+  return mockDaemon.invoke<T>({ ...req, request_id: requestId });
 }
 
 async function mockAiChatStream<T, R>(

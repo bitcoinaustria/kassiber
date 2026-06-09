@@ -128,6 +128,8 @@ export interface TerminalCommandStatus {
   message: string;
 }
 
+const IMPORT_PROJECT_BRIDGE_PATH = "/__kassiber__/import-project";
+
 let activeImportProjectSelection: ImportProjectSelection | null = null;
 let activeImportProjectActivation:
   | {
@@ -242,11 +244,17 @@ function booleanField(value: unknown): AppLogField {
   return { type: "boolean", value: Boolean(value) };
 }
 
+function requestWithId(req: DaemonRequest): DaemonRequest {
+  return req.request_id ? req : { ...req, request_id: makeDaemonRequestId() };
+}
+
 function summarizeRequestFields(req: DaemonRequest): Record<string, AppLogField> {
   const args = req.args ?? {};
+  const requestId = req.request_id ?? "";
   return {
     kind: textField(req.kind),
-    request_id: textField(req.request_id ?? ""),
+    request_id: textField(requestId),
+    trace_id: textField(requestId),
     arg_keys: textField(Object.keys(args).sort().join(",")),
   };
 }
@@ -254,29 +262,62 @@ function summarizeRequestFields(req: DaemonRequest): Record<string, AppLogField>
 function summarizeEnvelopeFields(
   envelope: DaemonEnvelope,
 ): Record<string, AppLogField> {
+  const requestId = envelope.request_id ?? "";
   const summary: Record<string, AppLogField> = {
     kind: textField(envelope.kind),
     schema_version: numberField(envelope.schema_version),
-    request_id: textField(envelope.request_id ?? ""),
+    request_id: textField(requestId),
+    trace_id: textField(requestId),
   };
   if (envelope.error) {
     summary.error_code = textField(envelope.error.code);
-    summary.error_message = {
-      type: "label",
-      value: envelope.error.message,
-    };
+    summary.error_message = textField(envelope.error.message);
     summary.retryable = booleanField(envelope.error.retryable);
     if (envelope.error.hint) {
-      summary.error_hint = { type: "label", value: envelope.error.hint };
+      summary.error_hint = textField(envelope.error.hint);
     }
   } else if (envelope.data && typeof envelope.data === "object") {
-    summary.data_keys = textField(
-      Object.keys(envelope.data as Record<string, unknown>).sort().join(","),
-    );
+    addDataSummaryFields(summary, envelope.data as Record<string, unknown>);
   } else if (envelope.data !== undefined) {
     summary.data_type = textField(typeof envelope.data);
   }
   return summary;
+}
+
+function addDataSummaryFields(
+  summary: Record<string, AppLogField>,
+  data: Record<string, unknown>,
+): void {
+  const keys = Object.keys(data).sort();
+  summary.data_keys = textField(keys.join(","));
+  const phase = data.phase;
+  if (typeof phase === "string") summary.phase = textField(phase);
+  const label = data.label;
+  if (typeof label === "string") summary.label = { type: "label", value: label };
+  const callId = data.call_id;
+  if (typeof callId === "string") summary.call_id = textField(callId);
+  const name = data.name;
+  if (typeof name === "string") summary.tool_name = textField(name);
+  const kindClass = data.kind_class;
+  if (typeof kindClass === "string") summary.kind_class = textField(kindClass);
+  if (typeof data.needs_consent === "boolean") {
+    summary.needs_consent = booleanField(data.needs_consent);
+  }
+  const finishReason = data.finish_reason;
+  if (typeof finishReason === "string") {
+    summary.finish_reason = textField(finishReason);
+  }
+  const model = data.model;
+  if (typeof model === "string") summary.model = textField(model);
+  const args = data.arguments;
+  if (args && typeof args === "object" && !Array.isArray(args)) {
+    summary.argument_keys = textField(
+      Object.keys(args as Record<string, unknown>).sort().join(","),
+    );
+  }
+  if (data.provenance && typeof data.provenance === "object") {
+    summary.has_provenance = booleanField(true);
+  }
 }
 
 function withDaemonLogging(
@@ -287,14 +328,15 @@ function withDaemonLogging(
     async invoke<T = unknown>(
       req: DaemonRequest,
     ): Promise<DaemonEnvelope<T>> {
+      const request = requestWithId(req);
       recordDaemonLog(
         "debug",
         source,
         "Daemon invoke started",
-        summarizeRequestFields(req),
+        summarizeRequestFields(request),
       );
       try {
-        const envelope = await transport.invoke<T>(req);
+        const envelope = await transport.invoke<T>(request);
         recordDaemonLog(
           envelopeLogLevel(envelope),
           source,
@@ -308,11 +350,10 @@ function withDaemonLogging(
           source,
           "Daemon invoke threw",
           {
-            kind: textField(req.kind),
-            error_message: {
-              type: "label",
-              value: error instanceof Error ? error.message : String(error),
-            },
+            ...summarizeRequestFields(request),
+            error_message: textField(
+              error instanceof Error ? error.message : String(error),
+            ),
           },
         );
         throw error;
@@ -322,14 +363,15 @@ function withDaemonLogging(
       req: DaemonRequest,
       options?: DaemonStreamOptions<R>,
     ): Promise<DaemonEnvelope<T>> {
+      const request = requestWithId(req);
       recordDaemonLog(
         "debug",
         source,
         "Daemon stream started",
-        summarizeRequestFields(req),
+        summarizeRequestFields(request),
       );
       try {
-        const envelope = await transport.stream<T, R>(req, {
+        const envelope = await transport.stream<T, R>(request, {
           ...options,
           onRecord: (record) => {
             recordDaemonLog(
@@ -354,11 +396,10 @@ function withDaemonLogging(
           source,
           "Daemon stream threw",
           {
-            kind: textField(req.kind),
-            error_message: {
-              type: "label",
-              value: error instanceof Error ? error.message : String(error),
-            },
+            ...summarizeRequestFields(request),
+            error_message: textField(
+              error instanceof Error ? error.message : String(error),
+            ),
           },
         );
         throw error;
@@ -438,31 +479,70 @@ export function canSaveExportedFiles(): boolean {
   return DAEMON_MODE === "tauri";
 }
 
+async function requestBridgeImportProject<T>(
+  body: Record<string, unknown>,
+): Promise<T> {
+  const response = await fetch(IMPORT_PROJECT_BRIDGE_PATH, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = (await response.json()) as Record<string, unknown>;
+  const error =
+    payload.error && typeof payload.error === "object"
+      ? (payload.error as { message?: string | null })
+      : null;
+  if (!response.ok || payload.kind === "error" || error) {
+    const message =
+      error?.message ?? `Project import failed with HTTP ${response.status}`;
+    throw new Error(message || "Project import failed.");
+  }
+  return payload as T;
+}
+
 export async function selectImportProjectDirectory(): Promise<ImportProjectSelection | null> {
+  if (DAEMON_MODE === "bridge") {
+    const response = await requestBridgeImportProject<{
+      selection: ImportProjectSelection | null;
+    }>({ action: "select" });
+    return response.selection;
+  }
   if (DAEMON_MODE !== "tauri") {
-    throw new Error("Project import is available in the desktop app.");
+    throw new Error("Project import is available in the desktop app or dev bridge.");
   }
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<ImportProjectSelection | null>("select_import_project_directory");
 }
 
+async function activateImportProjectViaMode(
+  dataRoot: string,
+): Promise<ImportProjectSelection> {
+  if (DAEMON_MODE === "bridge") {
+    const response = await requestBridgeImportProject<{
+      selection: ImportProjectSelection;
+    }>({ action: "activate", dataRoot });
+    return response.selection;
+  }
+  if (DAEMON_MODE !== "tauri") {
+    throw new Error("Project import is available in the desktop app or dev bridge.");
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<ImportProjectSelection>("activate_import_project", {
+    dataRoot,
+  });
+}
+
 export async function activateImportProject(
   dataRoot: string,
 ): Promise<ImportProjectSelection> {
-  if (DAEMON_MODE !== "tauri") {
-    throw new Error("Project import is available in the desktop app.");
-  }
   if (activeImportProjectSelection?.dataRoot === dataRoot) {
     return activeImportProjectSelection;
   }
   if (activeImportProjectActivation?.dataRoot === dataRoot) {
     return activeImportProjectActivation.promise;
   }
-  const { invoke } = await import("@tauri-apps/api/core");
   const generation = ++importProjectActivationGeneration;
-  const promise = invoke<ImportProjectSelection>("activate_import_project", {
-    dataRoot,
-  });
+  const promise = activateImportProjectViaMode(dataRoot);
   activeImportProjectActivation = { dataRoot, generation, promise };
   try {
     const selection = await promise;
@@ -485,13 +565,17 @@ export function isImportProjectActive(dataRoot: string): boolean {
 }
 
 export async function clearImportProject(): Promise<void> {
-  if (DAEMON_MODE !== "tauri") {
+  if (DAEMON_MODE === "mock") {
     return;
   }
-  const { invoke } = await import("@tauri-apps/api/core");
   importProjectActivationGeneration += 1;
   activeImportProjectActivation = null;
-  await invoke("clear_import_project");
+  if (DAEMON_MODE === "bridge") {
+    await requestBridgeImportProject<{ ok: boolean }>({ action: "clear" });
+  } else {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("clear_import_project");
+  }
   if (activeImportProjectSelection !== null) {
     activeImportProjectSelection = null;
     useUiStore.getState().bumpDaemonSession();
@@ -499,7 +583,7 @@ export async function clearImportProject(): Promise<void> {
 }
 
 export function canImportProjects(): boolean {
-  return DAEMON_MODE === "tauri";
+  return DAEMON_MODE === "tauri" || DAEMON_MODE === "bridge";
 }
 
 export function canUseTouchIdPassphraseUnlock(): boolean {

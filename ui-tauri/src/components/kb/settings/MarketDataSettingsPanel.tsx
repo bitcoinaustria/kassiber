@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -20,7 +21,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { useDaemonMutation } from "@/daemon/client";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { openExternalUrl } from "@/daemon/transport";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 import { cn } from "@/lib/utils";
@@ -30,6 +39,8 @@ import {
   formatKrakenRange,
   KRAKEN_MARKET_DATA_BLOG_URL,
   KRAKEN_OHLCVT_SUPPORT_URL,
+  type MaintenanceSettingsData,
+  type MarketRateProvider,
   rateRebuildJournalError,
   rateRebuildTransactionProgress,
   type Backend,
@@ -38,12 +49,24 @@ import {
   type RateRebuildData,
 } from "./SettingsModel";
 
+const MARKET_RATE_PROVIDER_LABELS: Record<MarketRateProvider, string> = {
+  "coinbase-exchange": "Coinbase Exchange",
+  coingecko: "CoinGecko",
+};
+
 export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
   const rateBackends = backends.filter((backend) => backend.net === "FX");
+  const maintenanceSettingsQuery = useDaemon<MaintenanceSettingsData>(
+    "ui.maintenance.settings",
+    undefined,
+    { refetchOnMount: "always" },
+  );
   const importKrakenRates = useDaemonMutation<KrakenRatesImportData>(
     "ui.rates.kraken_csv.import",
   );
   const rebuildRates = useDaemonMutation<RateRebuildData>("ui.rates.rebuild");
+  const configureMaintenance =
+    useDaemonMutation<MaintenanceSettingsData>("ui.maintenance.configure");
   const addNotification = useUiStore((state) => state.addNotification);
   const updateNotification = useUiStore((state) => state.updateNotification);
   const rebuildNoticeRef = React.useRef<string | null>(null);
@@ -164,6 +187,25 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
 
   const isImportingKraken = importKrakenRates.isPending;
   const isRebuildingRates = rebuildRates.isPending;
+  const maintenanceSettings = maintenanceSettingsQuery.data?.data ?? null;
+  const freshnessSettings = maintenanceSettings?.settings ?? null;
+  const autoMarketRatesEnabled = Boolean(
+    freshnessSettings?.background_enabled &&
+      freshnessSettings.source_classes?.market_rates,
+  );
+  const autoMarketRatesDisabled =
+    maintenanceSettingsQuery.isLoading ||
+    configureMaintenance.isPending ||
+    !maintenanceSettings?.profile;
+  const marketRateProvider: MarketRateProvider =
+    freshnessSettings?.market_rate_provider ?? "coinbase-exchange";
+  const marketRateProviderOptions: MarketRateProvider[] =
+    freshnessSettings?.market_rate_providers?.length
+      ? freshnessSettings.market_rate_providers
+      : ["coinbase-exchange", "coingecko"];
+  const marketRateProviderLabel =
+    MARKET_RATE_PROVIDER_LABELS[marketRateProvider] ?? marketRateProvider;
+  const activeRatePair = freshnessSettings?.active_rate_pair ?? "BTC-fiat";
   const rateRebuildProgress = rateRebuildTransactionProgress(rateRebuildResult);
   const rateRebuildSamples =
     rateRebuildResult?.sync.reduce(
@@ -176,7 +218,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
     setRateRebuildResult(null);
     rebuildNoticeRef.current = addNotification({
       title: "Pricing cache rebuild started",
-      body: "Kassiber is clearing provider-derived prices, fetching fresh Coinbase one-minute windows, and reprocessing journals.",
+      body: `Kassiber is clearing provider-derived prices, fetching fresh ${marketRateProviderLabel} market rates for ${activeRatePair}, and reprocessing journals.`,
       tone: "warning",
       progress: {
         indeterminate: true,
@@ -185,7 +227,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
     });
     try {
       const envelope = await rebuildRates.mutateAsync({
-        source: "coinbase-exchange",
+        source: marketRateProvider,
         reprice_transactions: true,
       });
       const payload = envelope.data ?? null;
@@ -205,7 +247,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
           ? `${formatCount(payload.deleted.transaction_prices)} cached transaction prices cleared; ${formatCount(
               fetchedRows,
             )} rate rows fetched.${journalBlocker ? ` ${journalBlocker}` : ""}`
-          : "Coinbase pricing cache was rebuilt.",
+          : `${marketRateProviderLabel} pricing cache was rebuilt.`,
         tone: journalBlocker ? "warning" : "success",
         progress: undefined,
       } as const;
@@ -233,6 +275,65 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       }
     }
   };
+  const setAutoMarketRates = async (enabled: boolean) => {
+    if (!freshnessSettings) return;
+    const sourceClasses = {
+      ...freshnessSettings.source_classes,
+      market_rates: enabled,
+    };
+    const anySourceClassEnabled = Object.values(sourceClasses).some(Boolean);
+    const backgroundEnabled = enabled
+      ? true
+      : Boolean(freshnessSettings.background_enabled && anySourceClassEnabled);
+    try {
+      await configureMaintenance.mutateAsync({
+        background_enabled: backgroundEnabled,
+        source_classes: sourceClasses,
+      });
+      addNotification({
+        title: enabled ? "Automatic price refresh enabled" : "Automatic price refresh disabled",
+        body: enabled
+          ? "Kassiber will refresh the latest BTC price while the app is open."
+          : "Kassiber will stop scheduling background BTC price refreshes.",
+        tone: "success",
+      });
+    } catch (error) {
+      addNotification({
+        title: "Could not update price refresh",
+        body:
+          error instanceof Error
+            ? error.message
+            : "Kassiber could not save the market-rate refresh setting.",
+        tone: "error",
+      });
+    }
+  };
+  const setMarketRateProvider = async (provider: MarketRateProvider) => {
+    if (provider === marketRateProvider) return;
+    try {
+      const envelope = await configureMaintenance.mutateAsync({
+        market_rate_provider: provider,
+      });
+      const selectedProvider =
+        envelope.data?.settings.market_rate_provider ?? provider;
+      const selectedLabel =
+        MARKET_RATE_PROVIDER_LABELS[selectedProvider] ?? selectedProvider;
+      addNotification({
+        title: "Market-rate provider updated",
+        body: `Automatic price refresh and default rebuilds will use ${selectedLabel}.`,
+        tone: "success",
+      });
+    } catch (error) {
+      addNotification({
+        title: "Could not update price provider",
+        body:
+          error instanceof Error
+            ? error.message
+            : "Kassiber could not save the market-rate provider.",
+        tone: "error",
+      });
+    }
+  };
   const importedPairs = krakenImportResult?.summary ?? [];
   const importedTotals = krakenImportResult?.totals;
   return (
@@ -243,6 +344,62 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
         every transaction. These lookups reveal pricing interest, not your
         wallet addresses.
       </p>
+
+      <div className="rounded-md border bg-background p-3">
+        <div className="mb-3 flex flex-col gap-2 border-b pb-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="grid gap-1">
+            <Label htmlFor="market-rate-provider">Price source</Label>
+            <p className="text-xs text-muted-foreground">
+              Used for automatic latest-price refresh and default pricing cache
+              rebuilds.
+            </p>
+          </div>
+          <Select
+            value={marketRateProvider}
+            disabled={autoMarketRatesDisabled}
+            onValueChange={(value) => {
+              void setMarketRateProvider(value as MarketRateProvider);
+            }}
+          >
+            <SelectTrigger id="market-rate-provider" className="w-full sm:w-56">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {marketRateProviderOptions.map((provider) => (
+                <SelectItem key={provider} value={provider}>
+                  {MARKET_RATE_PROVIDER_LABELS[provider] ?? provider}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-start gap-3">
+          <Checkbox
+            id="market-data-auto-refresh"
+            checked={autoMarketRatesEnabled}
+            disabled={autoMarketRatesDisabled}
+            onCheckedChange={(checked) => {
+              void setAutoMarketRates(checked === true);
+            }}
+          />
+          <Label
+            htmlFor="market-data-auto-refresh"
+            className="grid gap-1 text-sm leading-relaxed"
+          >
+            <span>Keep BTC price current while the app is open</span>
+            <span className="font-normal text-muted-foreground">
+              Fetches a small latest {marketRateProviderLabel} market window roughly hourly and
+              uses the existing rate-limit backoff if the provider asks Kassiber
+              to wait.
+            </span>
+          </Label>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Wallet/source refresh remains controlled from Connections; this setting
+          only updates market-rate cache rows used for fiat balance display and
+          missing transaction pricing coverage.
+        </p>
+      </div>
 
       <div className="space-y-2">
         <p className="text-sm font-medium">Rate providers</p>
@@ -283,9 +440,9 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
           <div className="min-w-0">
             <p className="text-sm font-medium">Rebuild pricing cache</p>
             <p className="text-xs text-muted-foreground">
-              Clear Coinbase provider samples, checked-empty minutes, and
+              Clear selected provider samples, checked-empty minutes, and
               cached provider-generated transaction prices, then fetch fresh
-              one-minute rates for the active books.
+              market rates for {activeRatePair}.
             </p>
           </div>
           <Button
@@ -362,6 +519,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
                     : "text-emerald-700/80 dark:text-emerald-300/80",
                 )}
               >
+                {rateRebuildResult.pair ?? activeRatePair} ·{" "}
                 {formatCount(rateRebuildSamples)} rate rows fetched
               </span>
             </div>
@@ -603,9 +761,8 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
           <DialogHeader>
             <DialogTitle>Rebuild pricing cache?</DialogTitle>
             <DialogDescription>
-              Kassiber will delete Coinbase provider cache rows and refetch
-              one-minute rates for missing transaction windows in the active
-              books.
+              Kassiber will delete {marketRateProviderLabel} provider cache rows
+              and refetch market rates for {activeRatePair}.
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">

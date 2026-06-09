@@ -1,7 +1,13 @@
 import { CheckCircle2, Clock, RotateCcw, XCircle } from "lucide-react";
 import type * as React from "react";
 
-import { formatBtc, MISSING_FIAT_LABEL, type Currency } from "@/lib/currency";
+import {
+  fiatFormatter,
+  formatBtc,
+  MISSING_FIAT_LABEL,
+  type Currency,
+} from "@/lib/currency";
+import { copyTextWithPolicy } from "@/lib/clipboard";
 import { formatShortDate } from "@/lib/date";
 import {
   explorerTargetForTransaction,
@@ -174,12 +180,15 @@ export type NewTransactionEvidence = {
 
 export const SATS_PER_BTC = 100_000_000;
 
-export const currencyFormatter = new Intl.NumberFormat("en-US", {
+// EUR amounts must read the same Austrian way everywhere (`€ 1.234,56`) — the
+// rest of the app uses de-AT via lib/currency.ts, so the accounting tables
+// match instead of rendering US grouping (`€1,234.56`).
+export const currencyFormatter = new Intl.NumberFormat("de-AT", {
   style: "currency",
   currency: "EUR",
 });
 
-export const compactCurrencyFormatter = new Intl.NumberFormat("en-US", {
+export const compactCurrencyFormatter = new Intl.NumberFormat("de-AT", {
   style: "currency",
   currency: "EUR",
   notation: "compact",
@@ -749,7 +758,9 @@ export function formatManualFiat(value: number) {
 
 export function formatDraftFiat(value: number, currencyCode: NewTransactionDraft["fiatCurrency"]) {
   if (!Number.isFinite(value)) return "-";
-  return `${currencyFormatter.format(value)} ${currencyCode}`;
+  // Manual entry can be in any chosen fiat, so format with that currency's
+  // own symbol + locale rather than the EUR-only display formatter.
+  return fiatFormatter(currencyCode).format(value);
 }
 
 export function formatManualPrice(value: number) {
@@ -944,5 +955,5 @@ export function signedNewTransactionBtc(draft: NewTransactionDraft) {
 
 export function copyText(value: string | undefined) {
   if (!value || typeof navigator === "undefined") return;
-  navigator.clipboard?.writeText(value);
+  void copyTextWithPolicy(value);
 }

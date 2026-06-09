@@ -87,6 +87,7 @@ _KIND_SUBCOMMAND_ATTRS = (
     "quarantine_resolve_command",
     "records_command",
     "records_note_command",
+    "history_command",
     "reports_command",
     "rates_command",
     "diagnostics_command",

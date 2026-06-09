@@ -43,4 +43,43 @@ describe("backend settings model", () => {
       display_name: "Desk Liquid indexer",
     });
   });
+
+  it("keeps a stored BTCPay API key when the edit field is left blank", () => {
+    const payload = backendPayload({
+      id: "shop-btcpay",
+      name: "Shop BTCPay",
+      url: "https://btcpay.example.com",
+      net: "BTC",
+      kind: "btcpay",
+      chain: "bitcoin",
+      network: "main",
+      health: "configured",
+      on: true,
+      auth: "apikey",
+    } satisfies Backend);
+
+    expect(payload.name).toBe("shop-btcpay");
+    expect(payload.kind).toBe("btcpay");
+    expect(payload).not.toHaveProperty("token");
+    expect(payload.clear).toEqual(["auth_header", "username", "password"]);
+  });
+
+  it("overwrites a BTCPay API key when a new value is entered", () => {
+    const payload = backendPayload({
+      id: "shop-btcpay",
+      name: "Shop BTCPay",
+      url: "https://btcpay.example.com",
+      net: "BTC",
+      kind: "btcpay",
+      chain: "bitcoin",
+      network: "main",
+      health: "configured",
+      on: true,
+      auth: "apikey",
+      token: "new-btcpay-key",
+    } satisfies Backend);
+
+    expect(payload.token).toBe("new-btcpay-key");
+    expect(payload.clear).toEqual(["auth_header", "username", "password"]);
+  });
 });

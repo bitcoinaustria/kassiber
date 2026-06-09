@@ -21,10 +21,12 @@ import liquidIcon from "@/assets/integrations/liquid.svg";
 import mempoolIcon from "@/assets/integrations/mempool-space.svg";
 import nunchukIcon from "@/assets/integrations/nunchuk.svg";
 import relaiIcon from "@/assets/integrations/relai.svg";
+import samouraiIcon from "@/assets/integrations/samourai.png";
 import sparrowIcon from "@/assets/integrations/sparrow.png";
 import strikeIcon from "@/assets/integrations/strike.jpg";
 import trezorIcon from "@/assets/integrations/trezor.svg";
 import twentyOneBitcoinIcon from "@/assets/integrations/21bitcoin.png";
+import wasabiIcon from "@/assets/integrations/wasabi.png";
 
 export type ConnectionCategory =
   | "wallets"
@@ -38,10 +40,22 @@ export type SetupKind =
   | "descriptor"
   | "file-wallet"
   | "file-enrichment"
+  | "samourai"
   | "btcpay"
   | "bip329"
   | "backend-settings"
   | "planned";
+
+export type ConnectionSourceFormat =
+  | "csv"
+  | "json"
+  | "phoenix_csv"
+  | "river_csv"
+  | "bullbitcoin_csv"
+  | "coinfinity_csv"
+  | "21bitcoin_csv"
+  | "strike_csv"
+  | "wasabi_bundle";
 
 export interface ConnectionSource {
   id: string;
@@ -58,7 +72,7 @@ export interface ConnectionSource {
   docsHref?: string;
   setupKind?: SetupKind;
   walletKind?: string;
-  sourceFormat?: "csv" | "json" | "phoenix_csv" | "river_csv" | "bullbitcoin_csv" | "coinfinity_csv" | "21bitcoin_csv" | "strike_csv";
+  sourceFormat?: ConnectionSourceFormat;
   chain?: "bitcoin" | "liquid";
   network?: string;
   details: string[];
@@ -148,6 +162,49 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     details: [
       "Paste one common Liquid wallet export or descriptor",
       "Requires a configured Liquid backend",
+    ],
+  },
+  {
+    id: "samourai",
+    title: "Samourai Wallet",
+    description: "Watch-only Samourai and Whirlpool account descriptor/xpub import.",
+    category: "wallets",
+    image: samouraiIcon,
+    imageClassName: "size-9",
+    status: "ready",
+    pathLabel: "Watch-only wallet group",
+    formatLabel: "Samourai/Whirlpool descriptors",
+    setupKind: "samourai",
+    walletKind: "samourai",
+    chain: "bitcoin",
+    network: "main",
+    details: [
+      "Creates child sources for pasted Deposit, Badbank, Premix, and Postmix accounts",
+      "Use Sparrow or another descriptor tool to export public account descriptors/xpubs",
+      "Stores only watch-only sync targets",
+      "Postmix discovery starts with a widened gap limit",
+    ],
+  },
+  {
+    id: "wasabi",
+    title: "Wasabi Wallet",
+    description: "Paste Wasabi RPC outputs with CoinJoin and anonymity evidence.",
+    category: "wallets",
+    image: wasabiIcon,
+    imageClassName: "size-9",
+    status: "ready",
+    pathLabel: "Wallet export",
+    formatLabel: "wasabi_bundle",
+    setupKind: "file-wallet",
+    walletKind: "wasabi",
+    sourceFormat: "wasabi_bundle",
+    chain: "bitcoin",
+    docsHref: "https://docs.wasabiwallet.io/using-wasabi/RPC.html",
+    details: [
+      "Load the wallet in Wasabi, then copy local RPC JSON from port 37128",
+      "Use Basic Auth in curl when JsonRpcUser and JsonRpcPassword are set",
+      "Paste gethistory plus listcoins/listunspentcoins for Coins anonymity state",
+      "CoinJoin evidence becomes review warnings, not fabricated provenance",
     ],
   },
   {

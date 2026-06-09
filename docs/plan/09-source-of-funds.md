@@ -65,7 +65,15 @@ Privacy techniques make this boundary more important:
   or a reviewed manual link.
 - A payjoin or coinjoin can be shown as a privacy-preserving hop, but the
   report must not claim exact upstream ownership unless the user adds reviewed
-  evidence.
+  evidence. Wallet-specific privacy importers may set the typed transaction
+  privacy-boundary marker when a transaction crossed an opaque boundary, but
+  that evidence alone must not be expanded into exact participant lineage.
+  Wasabi imports, for example, can mark likely CoinJoin transactions and current
+  payment-in-CoinJoin state, but those markers are not a completed round ledger
+  or participant ownership map.
+  Samourai/Whirlpool suggestions use this same boundary: Kassiber can show a
+  reviewed Deposit/Premix/Postmix transition, but it must not traverse or
+  disclose unrelated participant inputs.
 - If an exchange, broker, or old wallet export is missing, the report must show
   a missing-history node and tell the user what evidence is needed.
 
@@ -178,9 +186,11 @@ provider id that is no longer one-to-one remains `suggested` for manual review.
 
 Walkers must keep a visited set keyed by transaction and asset, enforce depth
 and node-count caps, and emit `path_truncated` instead of silently stopping.
-Coinjoin and payjoin nodes should collapse unrelated participant inputs into an
-opaque privacy-hop cluster. Kassiber must not list unrelated participant
-addresses or txids as if they were user-owned source parents.
+Coinjoin, payjoin, and wallet-specific privacy-boundary nodes should collapse
+unrelated participant inputs into an opaque privacy-hop cluster. Kassiber must
+not list unrelated participant addresses or txids as if they were user-owned
+source parents, and automatic same-transaction-id self-transfer suggestions
+must stop at the boundary.
 
 Every ambiguity becomes a data-quality item:
 
@@ -268,6 +278,26 @@ same immutable disclosure payload. It should also refuse when:
 Reviewed `missing_history` gaps may appear in the report, but they must be
 labeled as gaps with the evidence the user attached. They are not equivalent to
 fiat purchases, mining income, gifts, or exchange withdrawals.
+
+## Audit Package Handoff
+
+The Reports audit package export now reuses the same reviewed source-funds
+state for trusted auditor handoff. The package manifest is DB-backed and
+deterministic: it lists included transactions, direct attachments, source-funds
+links, link/root-source evidence, journal/review state when enabled, copied-file
+hashes, URL references, copied-evidence provenance, and missing-evidence
+warnings.
+
+This is not a source-funds PDF replacement and it does not mutate
+`transaction_pairs`. Tax/journal pairs can seed source-funds suggestions, but
+the audit package reads source-funds review state from `source_funds_links`,
+`source_funds_sources`, and their attachment join tables.
+
+AI/readiness summaries use the same persisted evidence query shape but redact
+raw URL values, managed storage paths, descriptors, xpubs, backend endpoints,
+credentials, raw wallet files, logs, AI settings, unrelated books, and
+technical wallet evidence. OCR, photo understanding, invoice parsing, remote
+document upload, automatic evidence pairing, and auto-review remain deferred.
 
 ## Privacy and Reveal Modes
 

@@ -30,11 +30,15 @@ unless you explicitly create the backend through the CLI.
 
 Without any user configuration, Kassiber currently ships these built-in names:
 
-- `mempool` -> `esplora` -> `https://mempool.bitcoin-austria.at/api`
 - `fulcrum` -> `electrum` -> `ssl://index.bitcoin-austria.at:50002`
+- `mempool` -> `esplora` -> `https://mempool.bitcoin-austria.at/api`
 - `liquid` -> `electrum` -> `ssl://les.bullbitcoin.com:995`
+- `liquid-blockstream` -> `electrum` -> `ssl://blockstream.info:995`
 
-`mempool` is the default for Bitcoin wallets.
+`fulcrum` is the default for Bitcoin wallet sync. `mempool` remains the
+built-in Esplora backend and the public explorer-link fallback. `liquid`
+is the preferred built-in Liquid sync backend, while `liquid-blockstream`
+is available as an alternate public Liquid Electrum endpoint.
 
 ## Useful commands
 
@@ -71,7 +75,7 @@ Point a wallet at a named backend:
 python3 -m kassiber wallets create \
   --label donations \
   --kind address \
-  --backend mempool \
+  --backend fulcrum \
   --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq
 ```
 
@@ -85,12 +89,22 @@ The key pattern is:
 Example:
 
 ```dotenv
-KASSIBER_DEFAULT_BACKEND=mempool
+KASSIBER_DEFAULT_BACKEND=fulcrum
+
+KASSIBER_BACKEND_FULCRUM_KIND=electrum
+KASSIBER_BACKEND_FULCRUM_CHAIN=bitcoin
+KASSIBER_BACKEND_FULCRUM_NETWORK=main
+KASSIBER_BACKEND_FULCRUM_URL=ssl://index.bitcoin-austria.at:50002
 
 KASSIBER_BACKEND_MEMPOOL_KIND=esplora
 KASSIBER_BACKEND_MEMPOOL_CHAIN=bitcoin
 KASSIBER_BACKEND_MEMPOOL_NETWORK=main
 KASSIBER_BACKEND_MEMPOOL_URL=https://mempool.bitcoin-austria.at/api
+
+KASSIBER_BACKEND_LIQUID_KIND=electrum
+KASSIBER_BACKEND_LIQUID_CHAIN=liquid
+KASSIBER_BACKEND_LIQUID_NETWORK=liquidv1
+KASSIBER_BACKEND_LIQUID_URL=ssl://les.bullbitcoin.com:995
 
 KASSIBER_BACKEND_CORE_KIND=bitcoinrpc
 KASSIBER_BACKEND_CORE_CHAIN=bitcoin
@@ -125,6 +139,10 @@ Current backend kinds:
 - `coreln`
 - `liquid-esplora`
 - `custom`
+
+`liquid-esplora` remains supported for explicit Explorer API backends, but
+the bundled Liquid defaults use Electrum because Liquid history refresh is
+faster through those servers.
 
 Common fields:
 
@@ -200,7 +218,10 @@ Use a Greenfield API key with wallet-history permissions for
 BTCPay payment into authoritative `btcpay_payment` pricing or a commercial
 transaction kind.
 
-Note: `bitcoinrpc` support is currently partial. Kassiber can use it for Bitcoin address-based wallets, but descriptor- and xpub-backed source refresh still require Esplora or Electrum.
+Note: `bitcoinrpc` support is currently partial. Kassiber can use it for
+Bitcoin address-based wallets, including the read-only UTXO inventory,
+but descriptor- and xpub-backed source refresh still require Esplora or
+Electrum.
 
 The backend CLI now accepts the common backend-specific knobs directly:
 
@@ -331,7 +352,9 @@ Use this when you run your own node.
 
 ## Descriptor and Liquid notes
 
-Descriptor wallets derive receive and change scripts locally and then refresh through an Esplora- or Electrum-backed backend.
+Descriptor wallets derive receive and change scripts locally and then refresh
+through an Esplora- or Electrum-backed backend. Source refresh also updates the
+durable local UTXO inventory shown in the desktop wallet detail view.
 The default gap limit is 40 unused addresses per branch, and Kassiber caps the configured gap limit at 5,000 to avoid accidental runaway scans.
 
 Example Bitcoin descriptor wallet:
@@ -366,6 +389,11 @@ bash -c 'python3 -m kassiber wallets create \
   3< <(printf '%s\n' 'ct(slip77(...),elwpkh(.../0/*))') \
   4< <(printf '%s\n' 'ct(slip77(...),elwpkh(.../1/*))')
 ```
+
+Liquid UTXO inventory is only populated when Kassiber can unblind the output
+locally from descriptor material. If private blinding keys are missing, the
+desktop UTXOs table shows a Liquid unblind blocker instead of guessing output
+amounts or assets.
 
 For Liquid:
 

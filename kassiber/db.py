@@ -46,6 +46,9 @@ LEGACY_XDG_DATA_ROOT = os.path.expanduser(f"~/.local/share/{APP_NAME}")
 LEGACY_DATA_ROOT = os.path.expanduser(f"~/.local/share/{LEGACY_APP_NAME}")
 DEFAULT_DB_FILENAME = f"{APP_NAME}.sqlite3"
 LEGACY_DB_FILENAME = f"{LEGACY_APP_NAME}.sqlite3"
+DB_BUSY_TIMEOUT_MS = 30_000
+DB_BUSY_TIMEOUT_SECONDS = DB_BUSY_TIMEOUT_MS / 1000
+DB_JOURNAL_MODE = "wal"
 
 
 SCHEMA = """
@@ -135,6 +138,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     taxability_override INTEGER,
     at_regime_override TEXT,
     at_category_override TEXT,
+    privacy_boundary TEXT,
     kind TEXT,
     description TEXT,
     counterparty TEXT,
@@ -164,6 +168,118 @@ CREATE TABLE IF NOT EXISTS transaction_tags (
 
 CREATE INDEX IF NOT EXISTS idx_transactions_profile_external_id
     ON transactions(profile_id, external_id) WHERE external_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_transactions_profile_active_time
+    ON transactions(profile_id, excluded, occurred_at, created_at, id);
+
+CREATE INDEX IF NOT EXISTS idx_transactions_wallet_external_match
+    ON transactions(wallet_id, external_id, direction, asset, amount, fee, created_at)
+    WHERE external_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_transactions_profile_economic_match
+    ON transactions(profile_id, direction, asset, amount, occurred_at, created_at);
+
+CREATE TABLE IF NOT EXISTS wallet_utxos (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+    backend_name TEXT,
+    backend_kind TEXT,
+    chain TEXT NOT NULL,
+    network TEXT NOT NULL,
+    asset TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    txid TEXT NOT NULL,
+    vout INTEGER NOT NULL,
+    outpoint TEXT NOT NULL,
+    confirmation_status TEXT NOT NULL,
+    confirmations INTEGER,
+    block_height INTEGER,
+    block_time TEXT,
+    address TEXT,
+    address_label TEXT,
+    branch_label TEXT,
+    branch_index INTEGER,
+    address_index INTEGER,
+    anonymity_score INTEGER,
+    spent_by TEXT,
+    excluded_from_coinjoin INTEGER,
+    key_state TEXT,
+    anon_history_json TEXT NOT NULL DEFAULT '[]',
+    first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    spent_at TEXT,
+    raw_json TEXT NOT NULL DEFAULT '{}',
+    UNIQUE (wallet_id, txid, vout)
+);
+
+CREATE INDEX IF NOT EXISTS idx_wallet_utxos_wallet_active
+    ON wallet_utxos(wallet_id, spent_at, asset, block_height, txid, vout);
+
+CREATE INDEX IF NOT EXISTS idx_wallet_utxos_profile_wallet
+    ON wallet_utxos(profile_id, wallet_id, asset);
+
+CREATE TABLE IF NOT EXISTS wallet_utxo_refreshes (
+    wallet_id TEXT PRIMARY KEY REFERENCES wallets(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    backend_name TEXT,
+    backend_kind TEXT,
+    chain TEXT NOT NULL,
+    network TEXT NOT NULL,
+    observed_count INTEGER NOT NULL DEFAULT 0,
+    active_count INTEGER NOT NULL DEFAULT 0,
+    last_seen_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_wallet_utxo_refreshes_profile
+    ON wallet_utxo_refreshes(profile_id, wallet_id);
+
+CREATE TABLE IF NOT EXISTS transaction_edit_events (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    wallet_id TEXT REFERENCES wallets(id) ON DELETE SET NULL,
+    transaction_external_id TEXT,
+    transaction_occurred_at TEXT,
+    source TEXT NOT NULL,
+    reason TEXT,
+    changed_at TEXT NOT NULL,
+    journal_input_version INTEGER NOT NULL DEFAULT 0,
+    journal_input_version_after INTEGER NOT NULL DEFAULT 0,
+    last_processed_input_version INTEGER NOT NULL DEFAULT 0,
+    last_processed_at TEXT,
+    last_processed_tx_count INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS transaction_edit_fields (
+    id TEXT PRIMARY KEY,
+    event_id TEXT NOT NULL REFERENCES transaction_edit_events(id) ON DELETE CASCADE,
+    field TEXT NOT NULL,
+    before_value TEXT,
+    after_value TEXT,
+    diff_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_transaction_edit_events_profile_changed
+    ON transaction_edit_events(profile_id, changed_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_transaction_edit_events_transaction_changed
+    ON transaction_edit_events(transaction_id, changed_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_transaction_edit_events_source_changed
+    ON transaction_edit_events(profile_id, source, changed_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_transaction_edit_events_wallet_changed
+    ON transaction_edit_events(profile_id, wallet_id, changed_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_transaction_edit_fields_event
+    ON transaction_edit_fields(event_id);
+
+CREATE INDEX IF NOT EXISTS idx_transaction_edit_fields_field
+    ON transaction_edit_fields(field, event_id);
 
 CREATE TABLE IF NOT EXISTS journal_entries (
     id TEXT PRIMARY KEY,
@@ -203,6 +319,74 @@ CREATE TABLE IF NOT EXISTS journal_quarantines (
     detail_json TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS journal_tax_summary (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    year INTEGER NOT NULL,
+    asset TEXT NOT NULL,
+    transaction_type TEXT NOT NULL,
+    capital_gains_type TEXT,
+    quantity INTEGER NOT NULL,
+    proceeds REAL NOT NULL DEFAULT 0,
+    cost_basis REAL NOT NULL DEFAULT 0,
+    gain_loss REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS journal_account_holdings (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL,
+    account_code TEXT,
+    account_label TEXT,
+    asset TEXT NOT NULL,
+    quantity INTEGER NOT NULL,
+    cost_basis REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS journal_wallet_holdings (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    wallet_id TEXT REFERENCES wallets(id) ON DELETE CASCADE,
+    wallet_label TEXT,
+    account_code TEXT,
+    asset TEXT NOT NULL,
+    quantity INTEGER NOT NULL,
+    cost_basis REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_journal_entries_profile_time
+    ON journal_entries(profile_id, occurred_at, created_at, id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_entries_profile_type_time
+    ON journal_entries(profile_id, entry_type, occurred_at, created_at, id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_entries_profile_wallet_time
+    ON journal_entries(profile_id, wallet_id, occurred_at, created_at, id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_entries_profile_account_time
+    ON journal_entries(profile_id, account_id, occurred_at, created_at, id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_entries_transaction
+    ON journal_entries(transaction_id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_quarantines_profile
+    ON journal_quarantines(profile_id, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_journal_tax_summary_profile_year
+    ON journal_tax_summary(profile_id, year, asset, transaction_type, capital_gains_type);
+
+CREATE INDEX IF NOT EXISTS idx_journal_account_holdings_profile_asset
+    ON journal_account_holdings(profile_id, asset, account_code, id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_wallet_holdings_profile_asset
+    ON journal_wallet_holdings(profile_id, asset, wallet_label, id);
 
 CREATE TABLE IF NOT EXISTS transaction_pairs (
     id TEXT PRIMARY KEY,
@@ -378,6 +562,64 @@ CREATE INDEX IF NOT EXISTS idx_lightning_node_records_profile_type_time
 CREATE INDEX IF NOT EXISTS idx_lightning_node_records_wallet_type_time
     ON lightning_node_records(wallet_id, record_type, occurred_at DESC);
 
+CREATE TABLE IF NOT EXISTS freshness_source_states (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    source_key TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    source_label TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'fresh',
+    state TEXT NOT NULL DEFAULT 'fresh',
+    stale_reason TEXT,
+    blocking_reports INTEGER NOT NULL DEFAULT 0,
+    paused INTEGER NOT NULL DEFAULT 0,
+    rate_limited_until TEXT,
+    cooldown_reason TEXT,
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    last_success_at TEXT,
+    last_error_at TEXT,
+    last_error_code TEXT,
+    last_error_message TEXT,
+    last_phase TEXT,
+    progress_json TEXT NOT NULL DEFAULT '{}',
+    checkpoint_json TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(profile_id, source_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_freshness_source_states_profile_status
+    ON freshness_source_states(profile_id, status, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS freshness_jobs (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    job_type TEXT NOT NULL,
+    source_key TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    source_label TEXT NOT NULL,
+    status TEXT NOT NULL,
+    phase TEXT,
+    priority INTEGER NOT NULL DEFAULT 100,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    progress_json TEXT NOT NULL DEFAULT '{}',
+    result_json TEXT NOT NULL DEFAULT '{}',
+    error_json TEXT NOT NULL DEFAULT '{}',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    cancel_requested INTEGER NOT NULL DEFAULT 0,
+    run_after TEXT,
+    cooldown_until TEXT,
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    finished_at TEXT,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_freshness_jobs_profile_status
+    ON freshness_jobs(profile_id, status, priority, created_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_freshness_jobs_singleflight
+    ON freshness_jobs(profile_id, source_key, job_type)
+    WHERE status IN ('queued', 'running', 'rate_limited');
+
 CREATE TABLE IF NOT EXISTS rates_cache (
     pair TEXT NOT NULL,
     timestamp TEXT NOT NULL,
@@ -423,13 +665,15 @@ CREATE TABLE IF NOT EXISTS attachments (
     profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     transaction_id TEXT REFERENCES transactions(id) ON DELETE CASCADE,
     attachment_type TEXT NOT NULL,
-    label TEXT NOT NULL,
+    label TEXT,
     original_filename TEXT,
     stored_relpath TEXT,
     source_url TEXT,
     media_type TEXT,
     size_bytes INTEGER,
     sha256 TEXT,
+    copied_from_attachment_id TEXT,
+    copied_from_transaction_id TEXT,
     created_at TEXT NOT NULL
 );
 
@@ -834,6 +1078,13 @@ def database_has_core_schema(conn):
     return True
 
 
+def _configure_connection_pragmas(conn):
+    """Apply connection settings used by daemon foreground/background writers."""
+    conn.execute(f"PRAGMA busy_timeout = {DB_BUSY_TIMEOUT_MS}")
+    conn.execute(f"PRAGMA journal_mode = {DB_JOURNAL_MODE}")
+    conn.execute("PRAGMA foreign_keys = ON")
+
+
 def open_db(data_root, *, passphrase=None, require_existing_schema=False):
     """Open (and lazily migrate) the SQLite store rooted at `data_root`.
 
@@ -872,21 +1123,24 @@ def open_db(data_root, *, passphrase=None, require_existing_schema=False):
                 hint="Use `kassiber --db-passphrase-fd <fd> <command>` or rely on the GUI unlock prompt.",
                 retryable=False,
             )
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(db_path, timeout=DB_BUSY_TIMEOUT_SECONDS)
         conn.row_factory = sqlite3.Row
-        if require_existing_schema and not database_has_core_schema(conn):
+        try:
+            if require_existing_schema and not database_has_core_schema(conn):
+                raise AppError(
+                    "database does not contain a Kassiber project schema",
+                    code="invalid_project_database",
+                    hint="Choose an existing Kassiber project database, not an empty or unrelated SQLite file.",
+                    details={"database": str(db_path)},
+                    retryable=False,
+                )
+            _configure_connection_pragmas(conn)
+            conn.executescript(SCHEMA)
+            ensure_schema_compat(conn)
+            return conn
+        except Exception:
             conn.close()
-            raise AppError(
-                "database does not contain a Kassiber project schema",
-                code="invalid_project_database",
-                hint="Choose an existing Kassiber project database, not an empty or unrelated SQLite file.",
-                details={"database": str(db_path)},
-                retryable=False,
-            )
-        conn.executescript(SCHEMA)
-        ensure_schema_compat(conn)
-        conn.execute("PRAGMA foreign_keys = ON")
-        return conn
+            raise
 
     if file_present and plaintext_header:
         raise AppError(
@@ -902,18 +1156,22 @@ def open_db(data_root, *, passphrase=None, require_existing_schema=False):
         passphrase,
         row_factory=secrets_sqlcipher.get_row_class(),
     )
-    if require_existing_schema and not database_has_core_schema(conn):
+    try:
+        if require_existing_schema and not database_has_core_schema(conn):
+            raise AppError(
+                "database does not contain a Kassiber project schema",
+                code="invalid_project_database",
+                hint="Choose an existing Kassiber project database, not an empty or unrelated SQLCipher file.",
+                details={"database": str(db_path)},
+                retryable=False,
+            )
+        _configure_connection_pragmas(conn)
+        conn.executescript(SCHEMA)
+        ensure_schema_compat(conn)
+        return conn
+    except Exception:
         conn.close()
-        raise AppError(
-            "database does not contain a Kassiber project schema",
-            code="invalid_project_database",
-            hint="Choose an existing Kassiber project database, not an empty or unrelated SQLCipher file.",
-            details={"database": str(db_path)},
-            retryable=False,
-        )
-    conn.executescript(SCHEMA)
-    ensure_schema_compat(conn)
-    return conn
+        raise
 
 
 def set_setting(conn, key, value):
@@ -934,12 +1192,19 @@ def get_setting(conn, key):
     return row["value"] if row else None
 
 
-def ensure_column(conn, table_name, column_name, definition):
+def _ensure_column_no_commit(conn, table_name, column_name, definition):
     """Idempotent `ALTER TABLE ... ADD COLUMN` — no-op when the column exists."""
     columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
     if column_name in columns:
-        return
+        return False
     conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
+    return True
+
+
+def ensure_column(conn, table_name, column_name, definition):
+    """Idempotent `ALTER TABLE ... ADD COLUMN` — no-op when the column exists."""
+    if not _ensure_column_no_commit(conn, table_name, column_name, definition):
+        return
     conn.commit()
 
 
@@ -971,11 +1236,19 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "transactions", "pricing_method", "TEXT")
     ensure_column(conn, "transactions", "pricing_external_ref", "TEXT")
     ensure_column(conn, "transactions", "pricing_quality", "TEXT")
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_transactions_wallet_pricing_ref
+            ON transactions(wallet_id, pricing_external_ref, direction, asset, amount, created_at)
+            WHERE pricing_external_ref IS NOT NULL
+        """
+    )
     ensure_column(conn, "transactions", "commercial_applied_link_id", "TEXT")
     ensure_column(conn, "transactions", "review_status", "TEXT")
     ensure_column(conn, "transactions", "taxability_override", "INTEGER")
     ensure_column(conn, "transactions", "at_regime_override", "TEXT")
     ensure_column(conn, "transactions", "at_category_override", "TEXT")
+    ensure_column(conn, "transactions", "privacy_boundary", "TEXT")
     ensure_column(conn, "journal_entries", "fiat_value_exact", "TEXT")
     ensure_column(conn, "journal_entries", "unit_cost_exact", "TEXT")
     ensure_column(conn, "journal_entries", "cost_basis_exact", "TEXT")
@@ -1004,14 +1277,22 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "source_funds_cases", "target_external_id", "TEXT")
     _backfill_source_funds_target_external_id(conn)
     ensure_column(conn, "source_funds_recipients", "active", "INTEGER NOT NULL DEFAULT 1")
+    ensure_column(conn, "wallet_utxos", "anonymity_score", "INTEGER")
+    ensure_column(conn, "wallet_utxos", "spent_by", "TEXT")
+    ensure_column(conn, "wallet_utxos", "excluded_from_coinjoin", "INTEGER")
+    ensure_column(conn, "wallet_utxos", "key_state", "TEXT")
+    ensure_column(conn, "wallet_utxos", "anon_history_json", "TEXT NOT NULL DEFAULT '[]'")
     _ensure_ai_provider_secret_refs_schema(conn)
     _drop_legacy_source_funds_recipients_unique(conn)
     _migrate_msat_columns(conn)
-    _migrate_nullable_attachment_transactions(conn)
+    _migrate_attachment_table_shape(conn)
+    ensure_column(conn, "attachments", "copied_from_attachment_id", "TEXT")
+    ensure_column(conn, "attachments", "copied_from_transaction_id", "TEXT")
     _backfill_liquid_asset_codes(conn)
     _ensure_swap_matching_schema(conn)
     _ensure_direct_swap_payout_schema(conn)
     _ensure_commercial_reconciliation_schema(conn)
+    _ensure_freshness_schema(conn)
 
 
 def _ensure_ai_provider_secret_refs_schema(conn):
@@ -1028,6 +1309,89 @@ def _ensure_ai_provider_secret_refs_schema(conn):
         )
         """
     )
+
+
+def _ensure_freshness_schema(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS freshness_source_states (
+            profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            source_key TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            source_label TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'fresh',
+            state TEXT NOT NULL DEFAULT 'fresh',
+            stale_reason TEXT,
+            blocking_reports INTEGER NOT NULL DEFAULT 0,
+            paused INTEGER NOT NULL DEFAULT 0,
+            rate_limited_until TEXT,
+            cooldown_reason TEXT,
+            retry_count INTEGER NOT NULL DEFAULT 0,
+            last_success_at TEXT,
+            last_error_at TEXT,
+            last_error_code TEXT,
+            last_error_message TEXT,
+            last_phase TEXT,
+            progress_json TEXT NOT NULL DEFAULT '{}',
+            checkpoint_json TEXT NOT NULL DEFAULT '{}',
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY(profile_id, source_key)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_freshness_source_states_profile_status
+            ON freshness_source_states(profile_id, status, updated_at DESC)
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS freshness_jobs (
+            id TEXT PRIMARY KEY,
+            profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            job_type TEXT NOT NULL,
+            source_key TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            source_label TEXT NOT NULL,
+            status TEXT NOT NULL,
+            phase TEXT,
+            priority INTEGER NOT NULL DEFAULT 100,
+            payload_json TEXT NOT NULL DEFAULT '{}',
+            progress_json TEXT NOT NULL DEFAULT '{}',
+            result_json TEXT NOT NULL DEFAULT '{}',
+            error_json TEXT NOT NULL DEFAULT '{}',
+            attempts INTEGER NOT NULL DEFAULT 0,
+            cancel_requested INTEGER NOT NULL DEFAULT 0,
+            run_after TEXT,
+            cooldown_until TEXT,
+            created_at TEXT NOT NULL,
+            started_at TEXT,
+            finished_at TEXT,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_freshness_jobs_profile_status
+            ON freshness_jobs(profile_id, status, priority, created_at)
+        """
+    )
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_freshness_jobs_singleflight
+            ON freshness_jobs(profile_id, source_key, job_type)
+            WHERE status IN ('queued', 'running', 'rate_limited')
+        """
+    )
+    for table in ("freshness_source_states", "freshness_jobs"):
+        for column, definition in (
+            ("source_type", "TEXT NOT NULL DEFAULT 'source'"),
+            ("source_label", "TEXT NOT NULL DEFAULT ''"),
+            ("updated_at", "TEXT NOT NULL DEFAULT ''"),
+        ):
+            ensure_column(conn, table, column, definition)
 
 
 def _ensure_commercial_reconciliation_schema(conn):
@@ -1214,15 +1578,34 @@ def _ensure_commercial_reconciliation_schema(conn):
     conn.commit()
 
 
-def _migrate_nullable_attachment_transactions(conn):
+def _migrate_attachment_table_shape(conn):
     table_sql = conn.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='attachments'"
     ).fetchone()
+    legacy_table = "attachments_legacy_shape"
     legacy_sql = conn.execute(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='attachments_legacy_notnull_tx'"
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+        (legacy_table,),
     ).fetchone()
+    if not legacy_sql:
+        legacy_table = "attachments_legacy_notnull_tx"
+        legacy_sql = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+            (legacy_table,),
+        ).fetchone()
     current_sql = (table_sql[0] if table_sql else "") or ""
-    if not legacy_sql and "transaction_id TEXT NOT NULL" not in current_sql:
+    copied_provenance_fk_columns = {
+        row["from"] if hasattr(row, "keys") else row[3]
+        for row in conn.execute("PRAGMA foreign_key_list(attachments)").fetchall()
+        if (row["from"] if hasattr(row, "keys") else row[3])
+        in {"copied_from_attachment_id", "copied_from_transaction_id"}
+    }
+    if (
+        not legacy_sql
+        and "transaction_id TEXT NOT NULL" not in current_sql
+        and "label TEXT NOT NULL" not in current_sql
+        and not copied_provenance_fk_columns
+    ):
         _repair_attachment_child_fks(conn)
         return
     previous_fk_state = conn.execute("PRAGMA foreign_keys").fetchone()[0]
@@ -1233,36 +1616,76 @@ def _migrate_nullable_attachment_transactions(conn):
     conn.execute("BEGIN IMMEDIATE")
     try:
         if not legacy_sql:
-            conn.execute("ALTER TABLE attachments RENAME TO attachments_legacy_notnull_tx")
+            conn.execute(f"ALTER TABLE attachments RENAME TO {legacy_table}")
+        else:
+            conn.execute("DROP TABLE IF EXISTS attachments")
         conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS attachments (
+            CREATE TABLE attachments (
                 id TEXT PRIMARY KEY,
                 workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
                 profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
                 transaction_id TEXT REFERENCES transactions(id) ON DELETE CASCADE,
                 attachment_type TEXT NOT NULL,
-                label TEXT NOT NULL,
+                label TEXT,
                 original_filename TEXT,
                 stored_relpath TEXT,
                 source_url TEXT,
                 media_type TEXT,
                 size_bytes INTEGER,
                 sha256 TEXT,
+                copied_from_attachment_id TEXT,
+                copied_from_transaction_id TEXT,
                 created_at TEXT NOT NULL
             )
             """
         )
+        _ensure_column_no_commit(
+            conn,
+            "attachments",
+            "copied_from_attachment_id",
+            "TEXT",
+        )
+        _ensure_column_no_commit(
+            conn,
+            "attachments",
+            "copied_from_transaction_id",
+            "TEXT",
+        )
+        legacy_columns = {
+            row["name"] if hasattr(row, "keys") else row[1]
+            for row in conn.execute(f"PRAGMA table_info({legacy_table})").fetchall()
+        }
+        copied_from_attachment_expr = (
+            "copied_from_attachment_id"
+            if "copied_from_attachment_id" in legacy_columns
+            else "NULL"
+        )
+        copied_from_transaction_expr = (
+            "copied_from_transaction_id"
+            if "copied_from_transaction_id" in legacy_columns
+            else "NULL"
+        )
         conn.execute(
-            """
-            INSERT OR IGNORE INTO attachments
-            SELECT id, workspace_id, profile_id, transaction_id, attachment_type, label,
+            f"""
+            INSERT OR IGNORE INTO attachments(
+                id, workspace_id, profile_id, transaction_id, attachment_type, label,
+                original_filename, stored_relpath, source_url, media_type,
+                size_bytes, sha256, copied_from_attachment_id,
+                copied_from_transaction_id, created_at
+            )
+            SELECT id, workspace_id, profile_id, transaction_id, attachment_type,
+                   CASE
+                       WHEN attachment_type = 'url' AND label = source_url THEN NULL
+                       ELSE label
+                   END AS label,
                    original_filename, stored_relpath, source_url, media_type,
-                   size_bytes, sha256, created_at
-            FROM attachments_legacy_notnull_tx
+                   size_bytes, sha256, {copied_from_attachment_expr},
+                   {copied_from_transaction_expr}, created_at
+            FROM {legacy_table}
             """
         )
-        conn.execute("DROP TABLE attachments_legacy_notnull_tx")
+        conn.execute(f"DROP TABLE {legacy_table}")
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_attachments_profile_tx_created "
             "ON attachments(profile_id, transaction_id, created_at DESC)"

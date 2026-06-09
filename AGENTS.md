@@ -19,10 +19,12 @@
   - [kassiber/secrets/](kassiber/secrets/) — SQLCipher keying helpers (`sqlcipher.py`), passphrase prompt/fd plumbing (`prompt.py`), plaintext→encrypted migration (`migration.py`), passphrase rotation (`passphrase.py`), dotenv→encrypted credential lift (`credentials.py`, exposes `kassiber secrets migrate-credentials`), `kassiber secrets {init,change-passphrase,verify,status,migrate-credentials}` CLI (`cli.py`), and the `--*-stdin` / `--*-fd` credential-input helpers (`cli_input.py`).
   - [kassiber/backup/](kassiber/backup/) — `tar | age` backup format: SQLCipher-aware export (`pack.py`), age subprocess + pyrage fallback (`age_cli.py`), strict tar member validation (`safe_tar.py`), and `kassiber backup {export,import}` CLI (`cli.py`).
   - [kassiber/core/attachments.py](kassiber/core/attachments.py) — transaction attachment storage, URL-reference handling, integrity verification, and orphan-file GC for the managed attachment tree.
+  - [kassiber/core/transaction_history.py](kassiber/core/transaction_history.py) — append-only transaction metadata provenance. It writes grouped edit events plus field-level before/after/diff rows for notes, tags, exclusion, review/tax status, Austrian overrides, and pricing provenance/value fields; read helpers power per-transaction history, global Activity, stale-report counts, redacted AI-safe reads, audit-package inclusion, and append-only revert.
   - [kassiber/core/engines/__init__.py](kassiber/core/engines/__init__.py) — tax-engine interface/resolver. Both the generic RP2 path and the Austrian (§ 27b EStG) path route through `GenericRP2TaxEngine`; AT profiles surface rp2's `rp2.plugin.country.at.AT` plugin directly so accounting methods and engine semantics come from rp2, while Kassiber keeps Austrian disposal bucketing / Kennzahl mapping on its side.
   - [kassiber/core/tax_events.py](kassiber/core/tax_events.py) — in-memory normalization seam between raw transaction rows and tax-engine inputs, including early quarantine classification for under-specified tax semantics.
   - [kassiber/core/sync.py](kassiber/core/sync.py) — wallet sync orchestration above backend-specific transport details.
   - [kassiber/core/sync_backends.py](kassiber/core/sync_backends.py) — descriptor target discovery plus `esplora`, `electrum`, and `bitcoinrpc` live-sync adapters.
+  - [kassiber/core/output_inventory.py](kassiber/core/output_inventory.py) — durable watch-only coin/UTXO inventory model updated by chain-backed wallet sync; stores current/spent outpoints, amounts, confirmation state, receive/change metadata, and source freshness without exposing descriptors, xpubs, backend URLs/tokens, raw wallet config, or raw wallet files through UI/AI surfaces.
   - [kassiber/core/reports.py](kassiber/core/reports.py) — extracted report builders, balance-history calculations, and PDF export assembly behind hookable journal/runtime dependencies. `reports tax-summary` rows include `row_type=swap_fees_year` / `swap_fees_total` summarising persisted `transaction_pairs.swap_fee_msat` and `direct_swap_payouts.swap_fee_msat`.
   - [kassiber/core/transfer_matching.py](kassiber/core/transfer_matching.py) — pure swap-candidate matcher with `payment_hash` (exact) and time + amount (strong) confidence bands, signed fee computation, conflict cluster ids, and pair/dismissal suppression. Defaults: 24h time window, fee tolerance `max(1%, 2500 sats)`.
   - [kassiber/core/lightning/](kassiber/core/lightning/) — read-only Lightning scaffold: typed `NodeSnapshot` / `NodeChannel` / `NodeForward` shapes, `LightningAdapter` Protocol, registry (`register_adapter` / `resolve_adapter` / `registered_kinds`), and the generic `build_profitability_report` / `profitability_csv_rows` helpers. Node adapters (LND, Core Lightning, NWC, …) live in sibling modules and register themselves with the registry; the daemon kinds `ui.connections.node.snapshot` and `ui.reports.lightning_profitability` plus the `reports lightning-profitability` / `reports export-lightning-profitability-csv` CLI commands dispatch through the registry. The desktop / CLI path returns the full payload (`snapshot_to_dict` / `LightningProfitabilityReport.to_envelope_payload`); the AI tool dispatch swaps in redacted variants (`snapshot_to_dict_for_ai` / `to_ai_envelope_payload`) that drop the Tier-3 identity graph (operator pubkey, channel funding outpoints, peer pubkeys / aliases, short channel ids on channels and forwards, per-channel covers-open-cost rows). Adapters MUST follow the discard policy in [docs/reference/lightning-opsec.md](docs/reference/lightning-opsec.md): drop preimages, payment_secrets, full encoded bolt11 strings, route hop pubkey lists, route hints from received invoices, and `failure_source_pubkey` at the adapter boundary; pass `None` for `NodeChannel.peer_pubkey` on private channels (enforced at construction by `__post_init__`). `NodeChannel.__post_init__` enforces the `None`-for-private rule on `peer_pubkey` and runs format-only checks on `short_channel_id` / `funding_outpoint` so smuggling fails at the dataclass boundary; `NodeForward.failure_reason` is a categorical `NodeForwardFailureReason` Literal so adapters cannot smuggle raw node error blobs.
@@ -30,6 +32,7 @@
   - [kassiber/core/htlc_parser.py](kassiber/core/htlc_parser.py) — pure parser for Boltz v1 P2WSH HTLC redeem scripts (submarine + reverse variants) and claim witnesses. Returns `payment_hash` when extractable; Boltz v2 Taproot cooperative spends fall through to heuristic by physics.
   - [kassiber/core/swap_rules.py](kassiber/core/swap_rules.py) — auto-pair rules engine with predicate matching, specificity sort, conflict-cluster skip, and a `detect_repeating_patterns` helper for "create rule from pattern" prompts.
   - [kassiber/core/saved_views.py](kassiber/core/saved_views.py) — generic saved-view CRUD (surface-discriminated). First consumer is the swap-candidate queue (`surface="swap_candidates"`).
+  - [kassiber/core/samourai.py](kassiber/core/samourai.py) — local-only Samourai/Whirlpool descriptor-source importer: accepts explicit public descriptor/xpub source sets for Deposit/Badbank/Premix/Postmix/Ricochet sources, creates a redacted logical wallet group, and rejects backup files, recovery words, passphrases, private keys, or other secret-bearing material.
   - [kassiber/tax_policy.py](kassiber/tax_policy.py) — profile tax-policy layer.
   - [kassiber/wallet_descriptors.py](kassiber/wallet_descriptors.py) — descriptor normalization, chain/network validation.
 - Packaging is defined in [pyproject.toml](pyproject.toml).
@@ -89,8 +92,10 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ui.connections.node.snapshot`, `ui.journals.snapshot`,
   `ui.journals.quarantine`, `ui.journals.transfers.list`, `ui.rates.summary`,
   `ui.rates.coverage`, `ui.report.blockers`,
-  `ui.audit.changes_since_last_answer`, `ui.maintenance.settings`,
-  `ui.workspace.health`, `ui.next_actions`, and virtual
+  `ui.audit.changes_since_last_answer`, `ui.audit.evidence.summary`,
+  `ui.transactions.history`, `ui.activity.history`, `ui.activity.stale`,
+  `ui.wallets.utxos`, `ui.maintenance.settings`, `ui.workspace.health`,
+  `ui.next_actions`, and virtual
   `read_skill_reference`. Lightning kinds require a registered adapter
   (`kassiber.core.lightning.register_adapter`); LND ships an adapter that
   registers itself on import, and Core Lightning / NWC adapters will
@@ -101,12 +106,19 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   compact in-app skill routing document; deeper references stay allowlisted.
   Desktop onboarding and connection setup use explicit mutating daemon kinds
   `ui.onboarding.complete`, `ui.wallets.create`, `ui.connections.btcpay.create`,
+  `ui.wallets.import_samourai`,
   `ui.connections.btcpay.discover`, and
   `ui.metadata.bip329.import`; transaction editor metadata saves use
-  `ui.transactions.metadata.update`; desktop Settings maintenance uses
+  `ui.transactions.metadata.update` and append grouped transaction edit
+  history rows in the same SQLite transaction when a real value changes;
+  `ui.transactions.history.revert` creates a new forward edit rather than
+  rewriting old history; transaction evidence reuse uses
+  `ui.attachments.copy` and must duplicate managed files under a new attachment
+  id rather than sharing `stored_relpath`; desktop Settings maintenance uses
   `ui.profiles.reset_data` for confirmed per-book testing resets and
   `ui.rates.kraken_csv.import` for local Kraken CSV/ZIP history backfills and
-  quarterly update archives. Do not model the Connections dialog as a
+  `ui.reports.export_audit_package` for DB-backed auditor handoff packages.
+  Do not model the Connections dialog as a
   command-template picker. Connection setup should select from configured
   chain/indexer backends via `ui.backends.options`; BTCPay setup can create a
   BTCPay instance inline from URL + API key, discover stores/payment methods,
@@ -154,11 +166,11 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `workspaces {list,create}`
 - `profiles {list,create,get,set}`
 - `accounts {list,create}`
-- `wallets {kinds,list,create,get,update,delete,reveal-descriptor,sync,sync-btcpay,derive,import-json,import-csv,import-btcpay,import-phoenix,import-river,import-bull,import-coinfinity,import-21bitcoin,import-strike}`
+- `wallets {kinds,list,create,get,update,delete,reveal-descriptor,sync,sync-btcpay,derive,import-json,import-csv,import-btcpay,import-phoenix,import-river,import-bull,import-coinfinity,import-21bitcoin,import-strike,import-samourai}`
 - `backends {kinds,list,get,create,update,delete,reveal-token,set-default,clear-default}`
 - `transactions {list}`
 - `attachments {add,list,remove,verify,gc}`
-- `metadata records {list,get,note {set,clear},tag {add,remove},excluded {set,clear}}`
+- `metadata records {list,get,note {set,clear},tag {add,remove},excluded {set,clear},history {list,activity,stale,revert}}`
 - `metadata bip329 {import,list,export}`
 - `journals {process,list,transfers {list},quarantined,events {list,get},quarantine {show,clear,resolve {price-override,exclude}}}`
 - `transfers {pair,list,unpair,payouts {list,create,delete},suggest,bulk-pair,dismiss,rules {list,create,apply,delete,enable,disable}}`

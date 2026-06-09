@@ -1,0 +1,729 @@
+import ast
+import json
+import queue
+import sqlite3
+import tempfile
+import threading
+import unittest
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from unittest.mock import patch
+
+from kassiber import daemon as daemon_runtime
+from kassiber import daemon_freshness
+from kassiber.core import freshness, rates as core_rates
+from kassiber.db import open_db, set_setting
+from kassiber.errors import AppError
+from kassiber.time_utils import now_iso
+
+
+def _minutes_ago(minutes: int) -> str:
+    return (
+        (datetime.now(timezone.utc) - timedelta(minutes=minutes))
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+
+def _seed_profile(conn: sqlite3.Connection) -> str:
+    conn.execute(
+        "INSERT INTO workspaces(id, label, created_at) VALUES('ws', 'Main', '2026-06-04T00:00:00Z')"
+    )
+    conn.execute(
+        """
+        INSERT INTO profiles(id, workspace_id, label, fiat_currency, created_at)
+        VALUES('profile', 'ws', 'Book', 'EUR', '2026-06-04T00:00:00Z')
+        """
+    )
+    conn.commit()
+    return "profile"
+
+
+class _Out:
+    def __init__(self):
+        self.payloads = []
+
+    def write(self, payload):
+        self.payloads.append(payload)
+
+
+class FreshnessTest(unittest.TestCase):
+    def _db(self):
+        tmp = tempfile.TemporaryDirectory(prefix="kassiber-freshness-")
+        self.addCleanup(tmp.cleanup)
+        conn = open_db(Path(tmp.name) / "data")
+        self.addCleanup(conn.close)
+        return conn
+
+    def test_module_docstring_is_visible_to_ast(self):
+        source = Path(freshness.__file__).read_text(encoding="utf-8")
+        self.assertEqual(
+            ast.get_docstring(ast.parse(source)),
+            "SQLite-backed source freshness and daemon job orchestration helpers.",
+        )
+
+    def test_rate_limited_source_keeps_other_jobs_moving_and_redacts(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        first = freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            job_type=freshness.JOB_ONCHAIN_WALLET,
+            source_key="onchain_wallet:cold",
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Cold wallet",
+            payload={"backend_url": "http://secret-node.local/path"},
+            priority=10,
+        )
+        second = freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            job_type=freshness.JOB_MARKET_RATES,
+            source_key=freshness.rate_source_key(profile_id),
+            source_type=freshness.SOURCE_RATES,
+            source_label="Market-rate coverage",
+            priority=20,
+        )
+        conn.commit()
+        self.assertEqual(first["status"], freshness.JOB_QUEUED)
+        self.assertEqual(second["status"], freshness.JOB_QUEUED)
+
+        calls = []
+
+        def limited(conn, job, progress, check_cancelled):
+            calls.append(job["source_key"])
+            progress({"phase": freshness.PHASE_BACKEND_FETCH, "backend_url": "http://secret-node.local/path"})
+            raise AppError(
+                "HTTP 429 from provider",
+                code="rate_limited",
+                retryable=True,
+                details={"retry_after_seconds": 90, "backend_url": "http://secret-node.local/path"},
+            )
+
+        def ok(conn, job, progress, check_cancelled):
+            calls.append(job["source_key"])
+            progress({"phase": freshness.PHASE_RATE_COVERAGE})
+            return {"status": "synced", "samples": 3}
+
+        results = freshness.run_due_jobs(
+            conn,
+            {
+                freshness.JOB_ONCHAIN_WALLET: limited,
+                freshness.JOB_MARKET_RATES: ok,
+            },
+            profile_id=profile_id,
+            limit=2,
+        )
+
+        self.assertEqual(calls, ["onchain_wallet:cold", freshness.rate_source_key(profile_id)])
+        self.assertEqual(results[0]["status"], freshness.JOB_RATE_LIMITED)
+        self.assertEqual(results[1]["status"], freshness.JOB_DONE)
+        snapshot = freshness.build_snapshot(conn, profile_id)
+        encoded = json.dumps(snapshot, sort_keys=True)
+        self.assertNotIn("secret-node.local", encoded)
+        self.assertNotIn("/path", encoded)
+        cold = freshness.get_source_state(conn, profile_id, "onchain_wallet:cold")
+        self.assertEqual(cold["status"], freshness.STATUS_RATE_LIMITED)
+        self.assertTrue(cold["blocking_reports"])
+        self.assertEqual(snapshot["summary"]["rate_limited"], 1)
+
+    def test_cancelled_job_leaves_blocking_partial_state(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        job = freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            job_type=freshness.JOB_BTCPAY_WALLET,
+            source_key="btcpay_wallet:store",
+            source_type=freshness.SOURCE_BTCPAY_WALLET,
+            source_label="BTCPay store",
+            priority=10,
+        )
+        cancelled = freshness.cancel_job(conn, job["id"])
+
+        self.assertEqual(cancelled["status"], freshness.JOB_CANCELLED)
+        state = freshness.get_source_state(conn, profile_id, "btcpay_wallet:store")
+        self.assertEqual(state["status"], freshness.STATUS_BLOCKING_REPORTS)
+        self.assertEqual(state["stale_reason"], "cancelled")
+        self.assertTrue(state["blocking_reports"])
+
+    def test_running_cancel_stays_single_flight_and_finishes_cancelled(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            job_type=freshness.JOB_ONCHAIN_WALLET,
+            source_key="onchain_wallet:cold",
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Cold wallet",
+            priority=10,
+        )
+        conn.commit()
+        seen = []
+
+        def cancellable(conn, running_job, progress, check_cancelled):
+            progress({"phase": freshness.PHASE_BACKEND_FETCH})
+            requested = freshness.cancel_job(conn, running_job["id"])
+            self.assertEqual(requested["status"], freshness.JOB_RUNNING)
+            self.assertTrue(requested["cancel_requested"])
+            duplicate = freshness.enqueue_job(
+                conn,
+                profile_id=profile_id,
+                job_type=freshness.JOB_ONCHAIN_WALLET,
+                source_key="onchain_wallet:cold",
+                source_type=freshness.SOURCE_ONCHAIN,
+                source_label="Cold wallet",
+                priority=10,
+            )
+            self.assertEqual(duplicate["id"], running_job["id"])
+            seen.append("cancel_requested")
+            check_cancelled()
+            raise AssertionError("cancelled job continued after check")
+
+        results = freshness.run_due_jobs(
+            conn,
+            {freshness.JOB_ONCHAIN_WALLET: cancellable},
+            profile_id=profile_id,
+            limit=1,
+        )
+
+        self.assertEqual(seen, ["cancel_requested"])
+        self.assertEqual(results[0]["status"], freshness.JOB_CANCELLED)
+        self.assertEqual(results[0]["error"], {})
+        state = freshness.get_source_state(conn, profile_id, "onchain_wallet:cold")
+        self.assertEqual(state["status"], freshness.STATUS_BLOCKING_REPORTS)
+        self.assertEqual(state["stale_reason"], "cancelled")
+        self.assertTrue(state["blocking_reports"])
+
+    def test_paused_queued_source_does_not_run_until_resumed(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        job = freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            job_type=freshness.JOB_ONCHAIN_WALLET,
+            source_key="onchain_wallet:cold",
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Cold wallet",
+            priority=10,
+        )
+        freshness.pause_source(conn, profile_id, "onchain_wallet:cold")
+        conn.commit()
+        calls = []
+
+        def ok(conn, running_job, progress, check_cancelled):
+            calls.append(running_job["id"])
+            return {"status": "synced"}
+
+        self.assertEqual(
+            freshness.run_due_jobs(
+                conn,
+                {freshness.JOB_ONCHAIN_WALLET: ok},
+                profile_id=profile_id,
+                limit=1,
+            ),
+            [],
+        )
+        self.assertEqual(calls, [])
+        queued = freshness.list_jobs(conn, profile_id, active_only=True)
+        self.assertEqual(queued[0]["id"], job["id"])
+        self.assertEqual(queued[0]["status"], freshness.JOB_QUEUED)
+
+        freshness.resume_source(conn, profile_id, "onchain_wallet:cold")
+        results = freshness.run_due_jobs(
+            conn,
+            {freshness.JOB_ONCHAIN_WALLET: ok},
+            profile_id=profile_id,
+            limit=1,
+        )
+
+        self.assertEqual(calls, [job["id"]])
+        self.assertEqual(results[0]["status"], freshness.JOB_DONE)
+
+    def test_recover_interrupted_running_job_requeues_with_checkpoint(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        job = freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            job_type=freshness.JOB_ONCHAIN_WALLET,
+            source_key="onchain_wallet:cold",
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Cold wallet",
+            priority=10,
+        )
+        freshness.upsert_source_state(
+            conn,
+            profile_id=profile_id,
+            source_key="onchain_wallet:cold",
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Cold wallet",
+            status=freshness.STATUS_SYNCING,
+            checkpoint={"tip_hash": "abc", "known_txids": ["tx1"]},
+        )
+        conn.execute(
+            "UPDATE freshness_jobs SET status = 'running', phase = ? WHERE id = ?",
+            (freshness.PHASE_IMPORT, job["id"]),
+        )
+        conn.commit()
+
+        recovered = freshness.recover_interrupted_jobs(conn, profile_id=profile_id)
+
+        self.assertEqual(len(recovered), 1)
+        self.assertEqual(recovered[0]["status"], freshness.JOB_QUEUED)
+        self.assertEqual(recovered[0]["error"]["code"], "worker_interrupted")
+        state = freshness.get_source_state(conn, profile_id, "onchain_wallet:cold")
+        self.assertEqual(state["status"], freshness.STATUS_BLOCKING_REPORTS)
+        self.assertEqual(state["stale_reason"], "worker_interrupted")
+        self.assertEqual(state["checkpoint"]["tip_hash"], "abc")
+
+    def test_policy_preserves_legacy_auto_sync_setting(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        conn.execute(
+            "INSERT INTO settings(key, value) VALUES(?, 'true')",
+            (freshness.legacy_auto_sync_setting_key(profile_id),),
+        )
+        conn.commit()
+
+        policy = freshness.get_policy(conn, profile_id)
+
+        self.assertTrue(policy.report_read_sync)
+        self.assertTrue(policy.source_classes[freshness.SOURCE_ONCHAIN])
+        self.assertTrue(policy.source_classes[freshness.SOURCE_RATES])
+        self.assertFalse(policy.background_enabled)
+
+    def test_market_rate_job_seeds_bundled_kraken_before_live_sync(self):
+        conn = self._db()
+        _seed_profile(conn)
+        calls = []
+
+        def fake_seed(conn_arg, commit=True):
+            self.assertIs(conn_arg, conn)
+            self.assertTrue(commit)
+            calls.append("seed")
+            return "memory://bundled-kraken", [
+                {"pair": "BTC-EUR", "samples": 2, "already_seeded": False}
+            ]
+
+        def fake_sync(
+            conn_arg,
+            source=core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+            commit=True,
+            warm_cache_when_idle=True,
+        ):
+            self.assertIs(conn_arg, conn)
+            self.assertEqual(source, core_rates.RATE_SOURCE_COINBASE_EXCHANGE)
+            self.assertTrue(commit)
+            self.assertFalse(warm_cache_when_idle)
+            calls.append("sync")
+            return [{"pair": "BTC-EUR", "samples": 0}]
+
+        def fake_latest(
+            conn_arg,
+            source=core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+            commit=True,
+        ):
+            self.assertIs(conn_arg, conn)
+            self.assertEqual(source, core_rates.RATE_SOURCE_COINBASE_EXCHANGE)
+            self.assertTrue(commit)
+            calls.append("latest")
+            return [{"pair": "BTC-EUR", "samples": 1, "mode": "latest_quote"}]
+
+        progress = []
+        handler = daemon_freshness._freshness_handlers({})[freshness.JOB_MARKET_RATES]
+        with patch(
+            "kassiber.daemon_freshness.core_rates.ensure_bundled_kraken_btc_daily_seed",
+            fake_seed,
+        ), patch("kassiber.daemon_freshness.core_rates.sync_latest_rates", fake_latest), patch(
+            "kassiber.daemon_freshness.core_rates.sync_rates",
+            fake_sync,
+        ):
+            result = handler(
+                conn,
+                {},
+                lambda payload: progress.append(dict(payload)),
+                lambda: None,
+            )
+
+        self.assertEqual(calls, ["seed", "latest", "sync"])
+        self.assertEqual(progress[0]["phase"], freshness.PHASE_RATE_COVERAGE)
+        self.assertEqual(result["provider"], core_rates.RATE_SOURCE_COINBASE_EXCHANGE)
+        self.assertEqual(result["bundled_seed"]["path"], "memory://bundled-kraken")
+        self.assertEqual(result["bundled_seed"]["summary"][0]["pair"], "BTC-EUR")
+        self.assertEqual(result["latest"][0]["mode"], "latest_quote")
+        self.assertEqual(result["sync"][0]["pair"], "BTC-EUR")
+
+    def test_market_rate_job_uses_configured_coingecko_provider_for_latest_sync(self):
+        conn = self._db()
+        _seed_profile(conn)
+        core_rates.set_market_rate_provider(
+            conn,
+            core_rates.RATE_SOURCE_COINGECKO,
+            commit=True,
+        )
+        calls = []
+
+        def fake_seed(conn_arg, commit=True):
+            self.assertIs(conn_arg, conn)
+            self.assertTrue(commit)
+            calls.append("seed")
+            return "memory://bundled-kraken", []
+
+        def fake_latest(
+            conn_arg,
+            source=core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+            commit=True,
+        ):
+            self.assertIs(conn_arg, conn)
+            self.assertEqual(source, core_rates.RATE_SOURCE_COINGECKO)
+            self.assertTrue(commit)
+            calls.append("latest")
+            return [{"pair": "BTC-EUR", "source": source, "samples": 1}]
+
+        progress = []
+        handler = daemon_freshness._freshness_handlers({})[freshness.JOB_MARKET_RATES]
+        with patch(
+            "kassiber.daemon_freshness.core_rates.ensure_bundled_kraken_btc_daily_seed",
+            fake_seed,
+        ), patch("kassiber.daemon_freshness.core_rates.sync_latest_rates", fake_latest), patch(
+            "kassiber.daemon_freshness.core_rates.sync_rates",
+        ) as sync_rates:
+            result = handler(
+                conn,
+                {},
+                lambda payload: progress.append(dict(payload)),
+                lambda: None,
+            )
+
+        sync_rates.assert_not_called()
+        self.assertEqual(calls, ["seed", "latest"])
+        self.assertEqual(progress[0]["phase"], freshness.PHASE_RATE_COVERAGE)
+        self.assertEqual(result["provider"], core_rates.RATE_SOURCE_COINGECKO)
+        self.assertEqual(result["latest"][0]["source"], core_rates.RATE_SOURCE_COINGECKO)
+        self.assertEqual(result["sync"], [])
+
+    def test_freshness_configure_persists_market_rate_provider(self):
+        conn = self._db()
+        _seed_profile(conn)
+        set_setting(conn, "context_workspace", "ws")
+        set_setting(conn, "context_profile", "profile")
+
+        payload = daemon_freshness._freshness_configure_payload(
+            conn,
+            {"market_rate_provider": core_rates.RATE_SOURCE_COINGECKO},
+        )
+
+        self.assertEqual(
+            payload["settings"]["market_rate_provider"],
+            core_rates.RATE_SOURCE_COINGECKO,
+        )
+        self.assertEqual(
+            core_rates.get_market_rate_provider(conn),
+            core_rates.RATE_SOURCE_COINGECKO,
+        )
+
+    def test_background_due_filter_skips_recent_fresh_sources(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        spec = {
+            "job_type": freshness.JOB_ONCHAIN_WALLET,
+            "source_key": "onchain_wallet:cold",
+            "source_type": freshness.SOURCE_ONCHAIN,
+            "source_label": "Cold wallet",
+        }
+        self.assertEqual(
+            daemon_freshness._filter_freshness_specs_for_background(conn, profile_id, [spec]),
+            [spec],
+        )
+
+        freshness.upsert_source_state(
+            conn,
+            profile_id=profile_id,
+            source_key=spec["source_key"],
+            source_type=spec["source_type"],
+            source_label=spec["source_label"],
+            status=freshness.STATUS_FRESH,
+            last_success_at=now_iso(),
+        )
+        conn.commit()
+        self.assertEqual(
+            daemon_freshness._filter_freshness_specs_for_background(conn, profile_id, [spec]),
+            [],
+        )
+
+        job = freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            job_type=freshness.JOB_ONCHAIN_WALLET,
+            source_key=spec["source_key"],
+            source_type=spec["source_type"],
+            source_label=spec["source_label"],
+        )
+        conn.commit()
+        self.assertEqual(job["status"], freshness.JOB_QUEUED)
+        freshness.upsert_source_state(
+            conn,
+            profile_id=profile_id,
+            source_key=spec["source_key"],
+            source_type=spec["source_type"],
+            source_label=spec["source_label"],
+            status=freshness.STATUS_FAILED,
+        )
+        conn.commit()
+        self.assertEqual(
+            daemon_freshness._filter_freshness_specs_for_background(conn, profile_id, [spec]),
+            [],
+        )
+
+    def test_background_due_filter_uses_hourly_market_rate_interval(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        onchain_spec = {
+            "job_type": freshness.JOB_ONCHAIN_WALLET,
+            "source_key": "onchain_wallet:cold",
+            "source_type": freshness.SOURCE_ONCHAIN,
+            "source_label": "Cold wallet",
+        }
+        rate_spec = {
+            "job_type": freshness.JOB_MARKET_RATES,
+            "source_key": freshness.rate_source_key(profile_id),
+            "source_type": freshness.SOURCE_RATES,
+            "source_label": "Market-rate coverage",
+        }
+        freshness.upsert_source_state(
+            conn,
+            profile_id=profile_id,
+            source_key=onchain_spec["source_key"],
+            source_type=onchain_spec["source_type"],
+            source_label=onchain_spec["source_label"],
+            status=freshness.STATUS_FRESH,
+            last_success_at=_minutes_ago(16),
+        )
+        freshness.upsert_source_state(
+            conn,
+            profile_id=profile_id,
+            source_key=rate_spec["source_key"],
+            source_type=rate_spec["source_type"],
+            source_label=rate_spec["source_label"],
+            status=freshness.STATUS_FRESH,
+            last_success_at=_minutes_ago(30),
+        )
+        conn.commit()
+
+        self.assertEqual(
+            daemon_freshness._filter_freshness_specs_for_background(
+                conn,
+                profile_id,
+                [onchain_spec, rate_spec],
+            ),
+            [onchain_spec],
+        )
+
+        freshness.upsert_source_state(
+            conn,
+            profile_id=profile_id,
+            source_key=rate_spec["source_key"],
+            source_type=rate_spec["source_type"],
+            source_label=rate_spec["source_label"],
+            status=freshness.STATUS_FRESH,
+            last_success_at=_minutes_ago(61),
+        )
+        conn.commit()
+
+        self.assertEqual(
+            daemon_freshness._filter_freshness_specs_for_background(
+                conn,
+                profile_id,
+                [rate_spec],
+            ),
+            [rate_spec],
+        )
+
+    def test_wallet_scoped_refresh_single_flights_inside_global_refresh(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        conn.execute("INSERT INTO settings(key, value) VALUES('context_workspace', 'ws')")
+        conn.execute("INSERT INTO settings(key, value) VALUES('context_profile', ?)", (profile_id,))
+        now = now_iso()
+        conn.executemany(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, account_id, label, kind, config_json, created_at
+            )
+            VALUES(?, 'ws', ?, NULL, ?, 'address', ?, ?)
+            """,
+            [
+                (
+                    "wallet-cold",
+                    profile_id,
+                    "Cold",
+                    json.dumps({"addresses": ["bc1qcold"], "chain": "bitcoin", "network": "mainnet"}),
+                    now,
+                ),
+                (
+                    "wallet-hot",
+                    profile_id,
+                    "Hot",
+                    json.dumps({"addresses": ["bc1qhot"], "chain": "bitcoin", "network": "mainnet"}),
+                    now,
+                ),
+            ],
+        )
+        conn.commit()
+        cold_key = freshness.source_key(freshness.SOURCE_ONCHAIN, "wallet-cold")
+        hot_key = freshness.source_key(freshness.SOURCE_ONCHAIN, "wallet-hot")
+
+        scoped = daemon_freshness._freshness_run_payload(
+            conn,
+            {},
+            {"wallet": "Cold", "all": False, "rates": False, "journals": False, "run": False},
+        )
+        self.assertEqual([job["source_key"] for job in scoped["enqueued"]], [cold_key])
+        scoped_active_keys = [
+            job["source_key"] for job in freshness.list_jobs(conn, profile_id, active_only=True)
+        ]
+        self.assertEqual(scoped_active_keys, [cold_key])
+
+        global_run = daemon_freshness._freshness_run_payload(
+            conn,
+            {},
+            {"all": True, "rates": True, "journals": True, "run": False},
+        )
+        active = freshness.list_jobs(conn, profile_id, active_only=True)
+        active_keys = [job["source_key"] for job in active]
+
+        self.assertIn(cold_key, [job["source_key"] for job in global_run["enqueued"]])
+        self.assertIn(hot_key, active_keys)
+        self.assertIn(freshness.rate_source_key(profile_id), active_keys)
+        self.assertIn(freshness.journal_source_key(profile_id), active_keys)
+        self.assertEqual(active_keys.count(cold_key), 1)
+
+    def test_background_worker_uses_remembered_unlock_passphrase(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        conn.execute("INSERT INTO settings(key, value) VALUES('context_workspace', 'ws')")
+        conn.execute("INSERT INTO settings(key, value) VALUES('context_profile', ?)", (profile_id,))
+        freshness.set_policy(conn, profile_id, background_enabled=True)
+        conn.commit()
+
+        ctx = daemon_runtime.DaemonContext(
+            conn=conn,
+            data_root="encrypted-data-root",
+            runtime_config={},
+            active_ai_chats=daemon_runtime.ActiveAiChats(),
+            main_thread_tasks=queue.Queue(),
+            auth_backoff=daemon_runtime.AuthAttemptBackoff(),
+            input_lines=queue.Queue(),
+            deferred_input_lines=[],
+            out=_Out(),
+            freshness_stop_event=threading.Event(),
+            db_passphrase="remembered-passphrase",
+        )
+        captured = []
+        opened = threading.Event()
+        closed = threading.Event()
+
+        class _WorkerConn:
+            def close(self):
+                closed.set()
+
+        def fake_open_db(data_root, *, passphrase=None, require_existing_schema=False):
+            del data_root, require_existing_schema
+            captured.append(passphrase)
+            opened.set()
+            return _WorkerConn()
+
+        try:
+            with (
+                patch.object(daemon_freshness, "open_db", side_effect=fake_open_db),
+                patch.object(daemon_freshness, "merge_db_backends"),
+                patch.object(daemon_freshness, "_freshness_background_tick"),
+            ):
+                daemon_freshness._start_freshness_background_worker(ctx)
+                self.assertTrue(opened.wait(timeout=2))
+                self.assertEqual(getattr(ctx.freshness_worker, "_args", ()), ())
+        finally:
+            ctx.freshness_stop_event.set()
+            if ctx.freshness_worker is not None:
+                ctx.freshness_worker.join(timeout=2)
+
+        self.assertEqual(captured, ["remembered-passphrase"])
+        self.assertTrue(closed.wait(timeout=2))
+
+    def test_daemon_lock_clears_remembered_background_passphrase(self):
+        conn = self._db()
+        _seed_profile(conn)
+        ctx = daemon_runtime.DaemonContext(
+            conn=conn,
+            data_root="encrypted-data-root",
+            runtime_config={},
+            active_ai_chats=daemon_runtime.ActiveAiChats(),
+            main_thread_tasks=queue.Queue(),
+            auth_backoff=daemon_runtime.AuthAttemptBackoff(),
+            input_lines=queue.Queue(),
+            deferred_input_lines=[],
+            out=_Out(),
+            freshness_stop_event=threading.Event(),
+            db_passphrase="remembered-passphrase",
+        )
+
+        response, should_shutdown = daemon_runtime.handle_request(
+            ctx,
+            {"request_id": "lock-1", "kind": "daemon.lock"},
+            ctx.out,
+        )
+
+        self.assertFalse(should_shutdown)
+        self.assertEqual(response["kind"], "daemon.lock")
+        self.assertIsNone(ctx.conn)
+        self.assertIsNone(ctx.db_passphrase)
+
+    def test_rekey_error_clears_remembered_background_passphrase(self):
+        conn = self._db()
+        _seed_profile(conn)
+        ctx = daemon_runtime.DaemonContext(
+            conn=conn,
+            data_root="encrypted-data-root",
+            runtime_config={},
+            active_ai_chats=daemon_runtime.ActiveAiChats(),
+            main_thread_tasks=queue.Queue(),
+            auth_backoff=daemon_runtime.AuthAttemptBackoff(),
+            input_lines=queue.Queue(),
+            deferred_input_lines=[],
+            out=_Out(),
+            freshness_stop_event=threading.Event(),
+            db_passphrase="current-passphrase",
+        )
+
+        with (
+            patch.object(daemon_runtime, "_database_file_is_encrypted", return_value=True),
+            patch.object(daemon_runtime, "_verify_passphrase_with_backoff", return_value=True),
+            patch.object(
+                daemon_runtime,
+                "change_database_passphrase",
+                side_effect=AppError("rotation failed", code="rotation_failed"),
+            ),
+        ):
+            with self.assertRaises(AppError):
+                daemon_runtime.handle_request(
+                    ctx,
+                    {
+                        "request_id": "rekey-1",
+                        "kind": "ui.secrets.change_passphrase",
+                        "args": {
+                            "auth_response": {"passphrase_secret": "current-passphrase"},
+                            "new_passphrase_secret": "new-passphrase-123",
+                        },
+                    },
+                    ctx.out,
+                )
+
+        self.assertIsNone(ctx.conn)
+        self.assertIsNone(ctx.db_passphrase)
+
+
+if __name__ == "__main__":
+    unittest.main()

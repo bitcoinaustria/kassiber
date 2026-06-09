@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import mimetypes
+import re
 import sqlite3
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from ..db import ensure_data_root, resolve_attachments_root
 from ..errors import AppError
@@ -15,6 +16,17 @@ from ..errors import AppError
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
 TransactionResolver = Callable[..., Mapping[str, Any]]
 NowIso = Callable[[], str]
+
+MAX_ATTACHMENT_LABEL_CHARS = 200
+_GOOGLE_WORKSPACE_ROUTES: tuple[tuple[str, str], ...] = (
+    ("/document/d/", "Google Doc"),
+    ("/spreadsheets/d/", "Google Sheet"),
+    ("/presentation/d/", "Google Slides deck"),
+    ("/forms/d/", "Google Form"),
+    ("/drawings/d/", "Google Drawing"),
+    ("/file/d/", "Google Drive file"),
+    ("/drive/folders/", "Google Drive folder"),
+)
 
 
 @dataclass(frozen=True)
@@ -76,6 +88,91 @@ def _hash_file(path: Path) -> tuple[int, str]:
     return size, digest.hexdigest()
 
 
+def _clean_label(value: str | None) -> str:
+    return re.sub(r"\s+", " ", value or "").strip()
+
+
+def _validate_label(value: str | None, *, empty_message: str) -> str:
+    label = _clean_label(value)
+    if not label:
+        raise AppError(empty_message, code="validation")
+    if len(label) > MAX_ATTACHMENT_LABEL_CHARS:
+        raise AppError(
+            f"Attachment label must be {MAX_ATTACHMENT_LABEL_CHARS} characters or fewer",
+            code="validation",
+            details={"max_length": MAX_ATTACHMENT_LABEL_CHARS},
+        )
+    return label
+
+
+def _optional_label(value: str | None) -> str | None:
+    label = _clean_label(value)
+    if not label:
+        return None
+    if len(label) > MAX_ATTACHMENT_LABEL_CHARS:
+        raise AppError(
+            f"Attachment label must be {MAX_ATTACHMENT_LABEL_CHARS} characters or fewer",
+            code="validation",
+            details={"max_length": MAX_ATTACHMENT_LABEL_CHARS},
+        )
+    return label
+
+
+def _url_host(parsed) -> str:
+    host = parsed.hostname or parsed.netloc or ""
+    return re.sub(r"^www\.", "", host, flags=re.IGNORECASE)
+
+
+def _path_title(pathname: str) -> str | None:
+    parts = [part.strip() for part in pathname.split("/") if part.strip()]
+    candidate = parts[-1] if parts else ""
+    if not candidate or re.fullmatch(r"[a-f0-9-]{16,}", candidate, re.IGNORECASE):
+        return None
+    title = unquote(candidate)
+    title = re.sub(r"\.[a-z0-9]{2,5}$", "", title, flags=re.IGNORECASE)
+    title = re.sub(r"[-_+]+", " ", title)
+    title = re.sub(r"\s+", " ", title).strip()
+    return title or None
+
+
+def _row_get(row: Mapping[str, Any], key: str, default: Any = None) -> Any:
+    if hasattr(row, "keys"):
+        return row[key] if key in row.keys() else default
+    return row.get(key, default)
+
+
+def derive_url_display_label(raw_url: str | None) -> str:
+    url = _clean_label(raw_url)
+    if not url:
+        return "Link attachment"
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        return "Link attachment"
+
+    host = _url_host(parsed)
+    if host in {"docs.google.com", "drive.google.com"}:
+        for prefix, label in _GOOGLE_WORKSPACE_ROUTES:
+            if parsed.path.startswith(prefix):
+                return label
+        return "Google Drive link" if host == "drive.google.com" else "Google Workspace link"
+
+    title = _path_title(parsed.path)
+    if title and title.lower() != host.lower():
+        return f"{host} - {title}"
+    return host or "Link attachment"
+
+
+def attachment_display_label(row: Mapping[str, Any]) -> str:
+    label = _clean_label(_row_get(row, "label"))
+    if label:
+        return label
+    if row["attachment_type"] == "url":
+        raw_url = _row_get(row, "source_url", _row_get(row, "url"))
+        return derive_url_display_label(raw_url)
+    original_filename = _row_get(row, "original_filename")
+    return _clean_label(original_filename) or "File attachment"
+
+
 def _resolve_stored_path(attachments_root: Path, stored_relpath: str | None) -> tuple[Path | None, bool]:
     raw = (stored_relpath or "").strip()
     if not raw:
@@ -105,15 +202,36 @@ def _attachment_row_to_dict(row: Mapping[str, Any], attachments_root: Path) -> d
         "asset": row["asset"] or "",
         "attachment_type": row["attachment_type"],
         "label": row["label"],
+        "display_label": attachment_display_label(row),
         "original_filename": row["original_filename"] or "",
         "url": row["source_url"] or "",
         "media_type": row["media_type"] or "",
         "size_bytes": int(row["size_bytes"]) if row["size_bytes"] is not None else None,
         "sha256": row["sha256"] or "",
         "stored_relpath": stored_relpath or "",
+        "copied_from_attachment_id": row["copied_from_attachment_id"] or "",
+        "copied_from_transaction_id": row["copied_from_transaction_id"] or "",
         "exists": exists,
         "created_at": row["created_at"],
     }
+
+
+def _select_attachment_row(conn, profile_id: str, attachment_id: str):
+    return conn.execute(
+        """
+        SELECT
+            a.*,
+            t.external_id,
+            t.occurred_at,
+            t.asset,
+            w.label AS wallet
+        FROM attachments a
+        LEFT JOIN transactions t ON t.id = a.transaction_id
+        LEFT JOIN wallets w ON w.id = t.wallet_id
+        WHERE a.profile_id = ? AND a.id = ?
+        """,
+        (profile_id, attachment_id),
+    ).fetchone()
 
 
 def add_attachment(
@@ -151,6 +269,10 @@ def add_attachment(
         if not source.is_file():
             raise AppError(f"Attachment path '{file_path}' is not a file", code="validation")
         original_filename = source.name
+        label = _validate_label(
+            label or original_filename,
+            empty_message="Attachment label cannot be empty",
+        )
         destination, stored_relpath = _attachment_storage_path(
             attachments_root,
             profile["id"],
@@ -160,13 +282,12 @@ def add_attachment(
         size_bytes, sha256 = _hash_and_copy_file(source, destination)
         inferred_media_type = mimetypes.guess_type(source.name)[0]
         media_type = media_type or inferred_media_type or "application/octet-stream"
-        label = label or original_filename
     else:
-        parsed = urlparse(url or "")
+        source_url = _clean_label(url)
+        parsed = urlparse(source_url)
         if not parsed.scheme:
             raise AppError("--url must include a scheme such as https://", code="validation")
-        source_url = str(url)
-        label = label or source_url
+        label = _optional_label(label)
         media_type = media_type or "text/uri-list"
 
     try:
@@ -203,22 +324,183 @@ def add_attachment(
                 pass
         raise
 
-    row = conn.execute(
-        """
-        SELECT
-            a.*,
-            t.external_id,
-            t.occurred_at,
-            t.asset,
-            w.label AS wallet
-        FROM attachments a
-        LEFT JOIN transactions t ON t.id = a.transaction_id
-        LEFT JOIN wallets w ON w.id = t.wallet_id
-        WHERE a.id = ?
-        """,
-        (attachment_id,),
-    ).fetchone()
+    row = _select_attachment_row(conn, profile["id"], attachment_id)
     return _attachment_row_to_dict(row, attachments_root)
+
+
+def copy_attachments(
+    conn,
+    data_root: str,
+    workspace_ref: str | None,
+    profile_ref: str | None,
+    target_tx_ref: str,
+    attachment_ids: list[str],
+    hooks: AttachmentHooks,
+    *,
+    source_tx_ref: str | None = None,
+):
+    if not attachment_ids:
+        raise AppError("Select at least one attachment to copy", code="validation")
+    workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    target_tx = hooks.resolve_transaction(conn, profile["id"], target_tx_ref)
+    source_tx = (
+        hooks.resolve_transaction(conn, profile["id"], source_tx_ref)
+        if source_tx_ref
+        else None
+    )
+    if source_tx and source_tx["id"] == target_tx["id"]:
+        raise AppError(
+            "Choose a different source transaction for evidence reuse",
+            code="validation",
+        )
+
+    cleaned_ids = []
+    seen = set()
+    for attachment_id in attachment_ids:
+        if not isinstance(attachment_id, str) or not attachment_id.strip():
+            raise AppError("attachment_ids must be non-empty strings", code="validation")
+        normalized = attachment_id.strip()
+        if normalized not in seen:
+            cleaned_ids.append(normalized)
+            seen.add(normalized)
+
+    placeholders = ",".join("?" for _ in cleaned_ids)
+    where = [
+        "a.profile_id = ?",
+        f"a.id IN ({placeholders})",
+        "a.transaction_id IS NOT NULL",
+    ]
+    params: list[Any] = [profile["id"], *cleaned_ids]
+    if source_tx:
+        where.append("a.transaction_id = ?")
+        params.append(source_tx["id"])
+    rows = conn.execute(
+        f"""
+        SELECT a.*
+        FROM attachments a
+        WHERE {' AND '.join(where)}
+        """,
+        params,
+    ).fetchall()
+    rows_by_id = {row["id"]: row for row in rows}
+    missing_ids = [
+        attachment_id
+        for attachment_id in cleaned_ids
+        if attachment_id not in rows_by_id
+    ]
+    if missing_ids:
+        raise AppError(
+            "One or more source attachments were not found",
+            code="not_found",
+            details={"attachment_ids": missing_ids},
+        )
+
+    attachments_root = _attachments_root(data_root)
+    created_paths: list[Path] = []
+    new_ids: list[str] = []
+    created_at = hooks.now_iso()
+    conn.execute("SAVEPOINT attachment_copy")
+    try:
+        for source in (rows_by_id[attachment_id] for attachment_id in cleaned_ids):
+            new_id = str(uuid.uuid4())
+            new_ids.append(new_id)
+            stored_relpath = None
+            size_bytes = source["size_bytes"]
+            sha256 = source["sha256"]
+            if source["attachment_type"] == "file":
+                source_path, path_valid = _resolve_stored_path(
+                    attachments_root,
+                    source["stored_relpath"],
+                )
+                if not path_valid or source_path is None:
+                    raise AppError(
+                        "Source attachment has an invalid managed storage path",
+                        code="validation",
+                        details={"attachment_id": source["id"]},
+                    )
+                if not source_path.exists():
+                    raise AppError(
+                        "Source attachment file is missing",
+                        code="not_found",
+                        details={"attachment_id": source["id"]},
+                    )
+                destination, stored_relpath = _attachment_storage_path(
+                    attachments_root,
+                    profile["id"],
+                    new_id,
+                    source["original_filename"] or source["label"],
+                )
+                size_bytes, sha256 = _hash_and_copy_file(source_path, destination)
+                created_paths.append(destination)
+                if (
+                    source["size_bytes"] is not None
+                    and int(source["size_bytes"]) != size_bytes
+                ):
+                    raise AppError(
+                        "Source attachment size does not match its stored metadata",
+                        code="validation",
+                        details={"attachment_id": source["id"]},
+                    )
+                if source["sha256"] and source["sha256"] != sha256:
+                    raise AppError(
+                        "Source attachment hash does not match its stored metadata",
+                        code="validation",
+                        details={"attachment_id": source["id"]},
+                    )
+            conn.execute(
+                """
+                INSERT INTO attachments(
+                    id, workspace_id, profile_id, transaction_id, attachment_type, label,
+                    original_filename, stored_relpath, source_url, media_type,
+                    size_bytes, sha256, copied_from_attachment_id,
+                    copied_from_transaction_id, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    new_id,
+                    workspace["id"],
+                    profile["id"],
+                    target_tx["id"],
+                    source["attachment_type"],
+                    source["label"],
+                    source["original_filename"],
+                    stored_relpath,
+                    source["source_url"],
+                    source["media_type"],
+                    size_bytes,
+                    sha256,
+                    source["id"],
+                    source["transaction_id"],
+                    created_at,
+                ),
+            )
+        conn.execute("RELEASE SAVEPOINT attachment_copy")
+        conn.commit()
+    except Exception:
+        conn.execute("ROLLBACK TO SAVEPOINT attachment_copy")
+        conn.execute("RELEASE SAVEPOINT attachment_copy")
+        for path in created_paths:
+            try:
+                path.unlink()
+                _prune_empty_dirs(attachments_root, path)
+            except OSError:
+                # Best-effort rollback cleanup must not mask the original copy error.
+                pass
+        raise
+
+    copied = [
+        _attachment_row_to_dict(
+            _select_attachment_row(conn, profile["id"], new_id),
+            attachments_root,
+        )
+        for new_id in new_ids
+    ]
+    return {
+        "source_transaction_id": source_tx["id"] if source_tx else "",
+        "target_transaction_id": target_tx["id"],
+        "attachments": copied,
+        "copied": len(copied),
+    }
 
 
 def list_attachments(
@@ -324,6 +606,37 @@ def remove_attachment(
     return attachment
 
 
+def rename_attachment(
+    conn,
+    data_root: str,
+    workspace_ref: str | None,
+    profile_ref: str | None,
+    attachment_id: str,
+    label: str,
+    hooks: AttachmentHooks,
+):
+    _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    clean_label = _validate_label(
+        label,
+        empty_message="Attachment label cannot be empty",
+    )
+    row = _select_attachment_row(conn, profile["id"], attachment_id)
+    if not row:
+        raise AppError(f"Attachment '{attachment_id}' not found", code="not_found")
+    if row["attachment_type"] != "url":
+        raise AppError(
+            "Only URL attachment link text can be renamed",
+            code="validation",
+        )
+    conn.execute(
+        "UPDATE attachments SET label = ? WHERE profile_id = ? AND id = ?",
+        (clean_label, profile["id"], attachment_id),
+    )
+    conn.commit()
+    updated = _select_attachment_row(conn, profile["id"], attachment_id)
+    return _attachment_row_to_dict(updated, _attachments_root(data_root))
+
+
 def verify_attachments(
     conn,
     data_root: str,
@@ -411,9 +724,14 @@ def gc_attachments(conn, data_root: str, *, dry_run: bool = False):
 
 __all__ = [
     "AttachmentHooks",
+    "MAX_ATTACHMENT_LABEL_CHARS",
     "add_attachment",
+    "attachment_display_label",
+    "copy_attachments",
+    "derive_url_display_label",
     "gc_attachments",
     "list_attachments",
+    "rename_attachment",
     "remove_attachment",
     "verify_attachments",
 ]

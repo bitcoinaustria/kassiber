@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 
 interface OnboardingStepHeaderProps {
   title: string;
-  eyebrow: string;
   stepIndex: number;
   totalSteps: number;
   goBack?: () => void;
@@ -15,11 +14,10 @@ interface OnboardingStepHeaderProps {
 
 export const OnboardingStepHeader = ({
   title,
-  eyebrow,
   stepIndex,
   totalSteps,
   goBack,
-  showProgress = true,
+  showProgress = false,
 }: OnboardingStepHeaderProps) => {
   return (
     <div className="flex items-start gap-2">
@@ -36,14 +34,37 @@ export const OnboardingStepHeader = ({
         </Button>
       )}
       <div>
-        <p className="font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-ink-3">
-          {eyebrow}
-          {showProgress ? ` · ${stepIndex + 1}/${totalSteps}` : null}
-        </p>
-        <h3 className="mt-2 text-2xl font-semibold tracking-normal text-ink md:whitespace-nowrap">
+        {showProgress && (
+          <p className="mb-2 font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-ink-3">
+            Step {stepIndex + 1}/{totalSteps}
+          </p>
+        )}
+        <h3 className="text-2xl font-semibold tracking-normal text-ink md:whitespace-nowrap">
           {title}
         </h3>
       </div>
+    </div>
+  );
+};
+
+/**
+ * Pins the primary step action to the bottom of the viewport while the form
+ * fields scroll, so "Continue" / "Open books" stays reachable on tall steps
+ * (e.g. the custom Electrum backend or the encrypted-database step). A short
+ * gradient mask fades scrolling content into the action bar.
+ */
+export const OnboardingStepActions = ({
+  children,
+}: {
+  children: ReactNode;
+}) => {
+  return (
+    <div className="sticky bottom-0 z-10 mt-2 bg-paper pt-4">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-t from-paper to-transparent"
+      />
+      {children}
     </div>
   );
 };
@@ -56,9 +77,49 @@ export const OnboardingStepFrame = ({ children }: { children: ReactNode }) => {
   );
 };
 
+/**
+ * Focused single-column card for steps that don't need a side explainer
+ * (naming the workspace, locking the database). Renders the standard step
+ * header plus its content in a centered, comfortably narrow column.
+ */
+export const OnboardingSingleColumnFrame = ({
+  title,
+  currentStep,
+  totalSteps,
+  goBack,
+  showProgress,
+  className,
+  children,
+}: {
+  title: string;
+  currentStep: number;
+  totalSteps: number;
+  children: ReactNode;
+  goBack?: () => void;
+  showProgress?: boolean;
+  className?: string;
+}) => {
+  return (
+    <div
+      className={cn(
+        "mx-auto flex w-full max-w-xl flex-col gap-6 rounded-lg border border-line bg-paper px-6 py-8 sm:px-10 sm:py-10",
+        className,
+      )}
+    >
+      <OnboardingStepHeader
+        title={title}
+        stepIndex={currentStep}
+        totalSteps={totalSteps}
+        goBack={goBack}
+        showProgress={showProgress}
+      />
+      {children}
+    </div>
+  );
+};
+
 export const OnboardingStepLeftWrapper = ({
   title,
-  eyebrow,
   currentStep,
   totalSteps,
   goBack,
@@ -66,7 +127,6 @@ export const OnboardingStepLeftWrapper = ({
   children,
 }: {
   title: string;
-  eyebrow: string;
   currentStep: number;
   totalSteps: number;
   children: ReactNode;
@@ -74,11 +134,10 @@ export const OnboardingStepLeftWrapper = ({
   showProgress?: boolean;
 }) => {
   return (
-    <div className="flex flex-1/2 justify-center px-5 py-6 sm:px-10 sm:py-10 md:py-16 lg:justify-start lg:pl-20">
+    <div className="flex flex-1/2 justify-center px-5 py-6 sm:px-10 sm:py-8 md:py-10 lg:justify-start lg:pl-20">
       <div className="flex h-full w-full max-w-md shrink-0 flex-col gap-6">
         <OnboardingStepHeader
           title={title}
-          eyebrow={eyebrow}
           stepIndex={currentStep}
           totalSteps={totalSteps}
           goBack={goBack}

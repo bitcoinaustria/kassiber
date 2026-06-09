@@ -22,6 +22,7 @@ import {
   useDaemonStreamMutation,
 } from "@/daemon/client";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
+import { copyTextWithPolicy } from "@/lib/clipboard";
 import { useUiStore, type DeferredConnectionSetup } from "@/store/ui";
 import { cn } from "@/lib/utils";
 import {
@@ -29,8 +30,17 @@ import {
   CONNECTION_SOURCES,
   type ConnectionCategory,
   type ConnectionSource,
+  type ConnectionSourceFormat,
 } from "@/lib/connectionCatalog";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
+import {
+  buildSamouraiSourceSet,
+  type SamouraiSection,
+} from "@/lib/samouraiSourceSet";
+import {
+  buildWasabiBundle,
+  type WasabiImportMode,
+} from "@/lib/wasabiBundle";
 import { detectWalletMaterial } from "@/lib/walletMaterialFormat";
 
 const WalletMaterialScannerDialog = React.lazy(() =>
@@ -57,7 +67,16 @@ interface SetupFormState {
   gapLimit: string;
   targetWallet: string;
   sourceFile: string;
-  sourceFormat: "csv" | "json" | "phoenix_csv" | "river_csv" | "bullbitcoin_csv" | "coinfinity_csv" | "21bitcoin_csv" | "strike_csv";
+  samouraiDeposit: string;
+  samouraiBadbank: string;
+  samouraiPremix: string;
+  samouraiPostmix: string;
+  wasabiImportMode: WasabiImportMode;
+  wasabiHistory: string;
+  wasabiCoins: string;
+  wasabiWalletInfo: string;
+  wasabiAdditional: string;
+  sourceFormat: ConnectionSourceFormat;
   bullImportMode: "relevant" | "full";
   btcpayStoreId: string;
   btcpayPaymentMethodId: string;
@@ -87,6 +106,11 @@ interface SyncResult {
   coinfinity_rows?: number;
   twentyonebitcoin_rows?: number;
   strike_rows?: number;
+  wasabi_transactions?: number;
+  wasabi_coins_observed?: number;
+  wasabi_coins_active?: number;
+  wasabi_coins_marked_spent?: number;
+  wasabi_payments_in_coinjoin?: number;
   inserted_records?: ImportChangeRecord[];
   updated_records?: ImportChangeRecord[];
   reconciliation_records?: ImportChangeRecord[];
@@ -177,15 +201,71 @@ interface ImportFileResult {
   coinfinity_rows?: number;
   twentyonebitcoin_rows?: number;
   strike_rows?: number;
+  wasabi_transactions?: number;
+  wasabi_coins_observed?: number;
+  wasabi_coins_active?: number;
+  wasabi_coins_marked_spent?: number;
+  wasabi_payments_in_coinjoin?: number;
   inserted_records?: ImportChangeRecord[];
   updated_records?: ImportChangeRecord[];
   reconciliation_records?: ImportChangeRecord[];
+}
+
+interface SamouraiImportResult {
+  group: { label: string };
+  children: Array<{ label: string }>;
+  warnings?: Array<{ code: string; message: string }>;
 }
 
 type DialogStep = "source" | "setup";
 const DESCRIPTOR_BACKEND_KINDS = new Set(["esplora", "electrum"]);
 const DEFAULT_BTCPAY_PAYMENT_METHOD_ID = "BTC-CHAIN";
 const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
+type SamouraiFormKey =
+  | "samouraiDeposit"
+  | "samouraiBadbank"
+  | "samouraiPremix"
+  | "samouraiPostmix";
+
+const SAMOURAI_SOURCE_FIELDS: Array<{
+  section: SamouraiSection;
+  key: SamouraiFormKey;
+  id: string;
+  label: string;
+  helper: string;
+}> = [
+  {
+    section: "deposit",
+    key: "samouraiDeposit",
+    id: "connection-samourai-deposit",
+    label: "Deposit descriptor or xpub",
+    helper:
+      "Paste the Deposit account descriptor, ypub, or zpub. Bare xpub is ambiguous for Deposit; use a descriptor when unsure.",
+  },
+  {
+    section: "badbank",
+    key: "samouraiBadbank",
+    id: "connection-samourai-badbank",
+    label: "Badbank descriptor or xpub",
+    helper:
+      "Paste the Badbank / Toxic Change account descriptor or account xpub.",
+  },
+  {
+    section: "premix",
+    key: "samouraiPremix",
+    id: "connection-samourai-premix",
+    label: "Premix descriptor or xpub",
+    helper: "Paste the Premix account descriptor or account xpub.",
+  },
+  {
+    section: "postmix",
+    key: "samouraiPostmix",
+    id: "connection-samourai-postmix",
+    label: "Postmix descriptor or xpub",
+    helper:
+      "Paste the Postmix account descriptor or account xpub; Postmix scans may need a higher gap limit.",
+  },
+];
 
 function supportsDescriptorSync(backend: BackendOption) {
   return DESCRIPTOR_BACKEND_KINDS.has(backend.kind);
@@ -197,6 +277,34 @@ function isExchangeEvidenceFormat(sourceFormat?: string) {
     sourceFormat === "coinfinity_csv" ||
     sourceFormat === "21bitcoin_csv"
   );
+}
+
+function samouraiFieldKey(section: SamouraiSection) {
+  return SAMOURAI_SOURCE_FIELDS.find((field) => field.section === section)
+    ?.key;
+}
+
+function samouraiSourceFields(form: SetupFormState) {
+  return {
+    deposit: form.samouraiDeposit,
+    badbank: form.samouraiBadbank,
+    premix: form.samouraiPremix,
+    postmix: form.samouraiPostmix,
+  };
+}
+
+function fileWalletSourceField(source: ConnectionSource) {
+  if (source.sourceFormat === "wasabi_bundle") {
+    return {
+      label: "Wasabi JSON bundle path",
+      helper:
+        "Choose a sanitized local bundle with Wasabi gethistory plus listcoins/listunspentcoins data. Kassiber imports it as watch-only accounting evidence.",
+    };
+  }
+  return {
+    label: "Export file path",
+    helper: undefined,
+  };
 }
 
 function sourceFileFilters(source: ConnectionSource) {
@@ -217,6 +325,12 @@ function sourceFileFilters(source: ConnectionSource) {
   }
   if (source.sourceFormat === "strike_csv") {
     return [{ name: "Strike CSV", extensions: ["csv"] }];
+  }
+  if (source.sourceFormat === "wasabi_bundle") {
+    return [{ name: "Wasabi JSON bundle", extensions: ["json"] }];
+  }
+  if (source.setupKind === "samourai") {
+    return [{ name: "Samourai descriptor source set", extensions: ["json"] }];
   }
   if (source.id === "csv") {
     return [{ name: "CSV or JSON", extensions: ["csv", "json"] }];
@@ -243,6 +357,15 @@ const formDefaultsFor = (source: ConnectionSource): SetupFormState => {
     gapLimit: "40",
     targetWallet: "",
     sourceFile: "",
+    samouraiDeposit: "",
+    samouraiBadbank: "",
+    samouraiPremix: "",
+    samouraiPostmix: "",
+    wasabiImportMode: source.sourceFormat === "wasabi_bundle" ? "rpc" : "bundle-file",
+    wasabiHistory: "",
+    wasabiCoins: "",
+    wasabiWalletInfo: "",
+    wasabiAdditional: "",
     sourceFormat: "csv",
     bullImportMode: "relevant",
     btcpayStoreId: "",
@@ -272,11 +395,32 @@ function SetupField({
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
       {children}
-      {helper && !error ? (
-        <p className="text-xs text-muted-foreground">{helper}</p>
-      ) : null}
+      {helper && !error ? renderSetupHelper(helper) : null}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>
+  );
+}
+
+function renderSetupHelper(helper: React.ReactNode) {
+  if (typeof helper === "string") {
+    return <p className="text-xs text-muted-foreground">{helper}</p>;
+  }
+  return <div className="text-xs text-muted-foreground">{helper}</div>;
+}
+
+function InlineCode({ children }: { children: React.ReactNode }) {
+  return (
+    <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
+      {children}
+    </code>
+  );
+}
+
+function CommandSnippet({ children }: { children: React.ReactNode }) {
+  return (
+    <code className="block overflow-x-auto rounded border bg-background px-2 py-1.5 font-mono text-[11px] leading-relaxed text-foreground">
+      {children}
+    </code>
   );
 }
 
@@ -328,6 +472,8 @@ export function AddConnectionDialog({
     useDaemonMutation<{ wallet: { label: string } }>("ui.wallets.create");
   const importFile =
     useDaemonMutation<ImportFileResult>("ui.wallets.import_file");
+  const importSamourai =
+    useDaemonMutation<SamouraiImportResult>("ui.wallets.import_samourai");
   const createBtcpay = useDaemonMutation<{
     backend: { name: string };
     wallet: { label: string };
@@ -415,7 +561,7 @@ export function AddConnectionDialog({
   const [copiedAddress, setCopiedAddress] = React.useState<string | null>(null);
   const copyAddress = React.useCallback(async (address: string) => {
     try {
-      await navigator.clipboard?.writeText(address);
+      await copyTextWithPolicy(address);
       setCopiedAddress(address);
       window.setTimeout(
         () =>
@@ -520,17 +666,20 @@ export function AddConnectionDialog({
   const isSubmitting =
     createWallet.isPending ||
     importFile.isPending ||
+    importSamourai.isPending ||
     createBtcpay.isPending ||
     discoverBtcpay.isPending ||
     importBip329.isPending ||
     syncWallet.isPending;
-  const requiresBackend = setupKind === "descriptor";
+  const requiresBackend = setupKind === "descriptor" || setupKind === "samourai";
   const missingBackend = requiresBackend && selectedBackendOptions.length === 0;
   const submitLabel =
     setupKind === "backend-settings"
       ? "Open backend settings"
       : syncWallet.isPending
         ? "Refreshing…"
+        : importSamourai.isPending
+          ? "Importing Samourai…"
         : importFile.isPending
           ? "Importing…"
         : importBip329.isPending
@@ -574,12 +723,19 @@ export function AddConnectionDialog({
   }, [initialSourceId, open]);
 
   React.useEffect(() => {
-    if (!open) setScannerOpen(false);
-  }, [open]);
+    if (open) return;
+    setScannerOpen(false);
+    setForm(formDefaultsFor(selected));
+    setFieldErrors({});
+    setSetupError(null);
+    setLastImportResult(null);
+    setPreviewAddresses(null);
+    setPreviewError(null);
+  }, [open, selected]);
 
   React.useEffect(() => {
     if (!defaultBackendName) return;
-    if (setupKind !== "descriptor") return;
+    if (setupKind !== "descriptor" && setupKind !== "samourai") return;
     setForm((current) =>
       current.backend ? current : { ...current, backend: defaultBackendName },
     );
@@ -621,6 +777,14 @@ export function AddConnectionDialog({
     setForm((current) => ({ ...current, [key]: value }));
     if (
       key === "sourceFile" ||
+      key === "samouraiDeposit" ||
+      key === "samouraiBadbank" ||
+      key === "samouraiPremix" ||
+      key === "samouraiPostmix" ||
+      key === "wasabiHistory" ||
+      key === "wasabiCoins" ||
+      key === "wasabiWalletInfo" ||
+      key === "wasabiAdditional" ||
       key === "targetWallet" ||
       key === "sourceFormat" ||
       key === "bullImportMode"
@@ -662,6 +826,7 @@ export function AddConnectionDialog({
     if (
       setupKind === "descriptor" ||
       setupKind === "file-wallet" ||
+      setupKind === "samourai" ||
       setupKind === "btcpay"
     ) {
       if (!form.label.trim()) {
@@ -687,8 +852,57 @@ export function AddConnectionDialog({
         errors.backend = "Choose a backend.";
       }
     }
-    if (setupKind === "file-wallet" && !form.sourceFile.trim()) {
-      errors.sourceFile = "Pick the export file.";
+    if (setupKind === "samourai") {
+      const gapLimit = Number.parseInt(form.gapLimit, 10);
+      if (!Number.isFinite(gapLimit) || gapLimit <= 0) {
+        errors.gapLimit = "Gap limit must be a positive integer.";
+      } else if (gapLimit > MAX_DESCRIPTOR_GAP_LIMIT) {
+        errors.gapLimit = `Gap limit must be ${MAX_DESCRIPTOR_GAP_LIMIT.toLocaleString()} or lower.`;
+      }
+      if (descriptorBackendOptions.length > 0 && !form.backend.trim()) {
+        errors.backend = "Choose a backend.";
+      }
+      const sourceSetResult = buildSamouraiSourceSet(
+        samouraiSourceFields(form),
+        selected.network,
+      );
+      for (const [section, message] of Object.entries(
+        sourceSetResult.errors,
+      )) {
+        const fieldKey = samouraiFieldKey(section as SamouraiSection);
+        if (fieldKey) errors[fieldKey] = message;
+      }
+      if (
+        sourceSetResult.sourceSet.children.length === 0 &&
+        sourceSetResult.sourceSet.xpubs.length === 0 &&
+        Object.keys(sourceSetResult.errors).length === 0
+      ) {
+        errors.samouraiDeposit =
+          "Paste at least one Samourai descriptor or xpub.";
+      }
+    }
+    if (setupKind === "file-wallet") {
+      if (
+        selected.sourceFormat === "wasabi_bundle" &&
+        form.wasabiImportMode === "rpc"
+      ) {
+        const { errors: wasabiErrors } = buildWasabiBundle({
+          history: form.wasabiHistory,
+          coins: form.wasabiCoins,
+          walletInfo: form.wasabiWalletInfo,
+          additional: form.wasabiAdditional,
+        });
+        if (wasabiErrors.history) errors.wasabiHistory = wasabiErrors.history;
+        if (wasabiErrors.coins) errors.wasabiCoins = wasabiErrors.coins;
+        if (wasabiErrors.walletInfo) {
+          errors.wasabiWalletInfo = wasabiErrors.walletInfo;
+        }
+        if (wasabiErrors.additional) {
+          errors.wasabiAdditional = wasabiErrors.additional;
+        }
+      } else if (!form.sourceFile.trim()) {
+        errors.sourceFile = "Pick the export file.";
+      }
     }
     if (setupKind === "file-enrichment") {
       if (!isExchangeEvidenceFormat(selected.sourceFormat) && !form.targetWallet.trim()) {
@@ -793,16 +1007,78 @@ export function AddConnectionDialog({
           body: `${label} is configured.`,
           tone: "success",
         });
+      } else if (setupKind === "samourai") {
+        const gapLimit = Number.parseInt(form.gapLimit, 10);
+        const { sourceSet } = buildSamouraiSourceSet(
+          samouraiSourceFields(form),
+          selected.network,
+        );
+        const envelope = await importSamourai.mutateAsync({
+          label,
+          backend: form.backend.trim() || undefined,
+          network: selected.network,
+          gap_limit: Number.isFinite(gapLimit) ? gapLimit : undefined,
+          source_set: sourceSet,
+        });
+        const childLabels = envelope.data?.children.map((child) => child.label) ?? [];
+        if (form.syncAfterCreate && childLabels.length > 0) {
+          startSyncNotice(
+            `${label} is scanning Samourai watch-only sources. Postmix discovery may take longer on old wallets.`,
+          );
+          try {
+            for (const childLabel of childLabels) {
+              await syncWallet.mutateAsync({ wallet: childLabel });
+            }
+          } finally {
+            clearSyncNotice();
+          }
+        }
+        addNotification({
+          title: "Samourai import added",
+          body: `${label} created ${childLabels.length.toLocaleString("en-US")} watch-only sources${form.syncAfterCreate ? " and started scanning" : ""}.`,
+          tone: "success",
+        });
+        setForm((current) => ({
+          ...current,
+          samouraiDeposit: "",
+          samouraiBadbank: "",
+          samouraiPremix: "",
+          samouraiPostmix: "",
+        }));
       } else if (setupKind === "file-wallet") {
         const sourceFormat =
           selected.id === "csv" ? form.sourceFormat : selected.sourceFormat;
         await createWallet.mutateAsync({
           label,
           kind: selected.walletKind ?? "custom",
-          source_file: form.sourceFile.trim(),
+          ...(selected.sourceFormat === "wasabi_bundle" &&
+          form.wasabiImportMode === "rpc"
+            ? {}
+            : { source_file: form.sourceFile.trim() }),
           source_format: sourceFormat,
         });
-        if (form.syncAfterCreate) {
+        if (
+          selected.sourceFormat === "wasabi_bundle" &&
+          form.wasabiImportMode === "rpc"
+        ) {
+          const { bundle } = buildWasabiBundle({
+            history: form.wasabiHistory,
+            coins: form.wasabiCoins,
+            walletInfo: form.wasabiWalletInfo,
+            additional: form.wasabiAdditional,
+          });
+          startSyncNotice(`${label} is importing pasted Wasabi RPC output.`);
+          try {
+            const envelope = await importFile.mutateAsync({
+              wallet: label,
+              source_format: "wasabi_bundle",
+              source_bundle: bundle,
+            });
+            setLastImportResult(envelope.data ?? null);
+          } finally {
+            clearSyncNotice();
+          }
+        } else if (form.syncAfterCreate) {
           startSyncNotice(
             `${label} is still importing from the selected file. Large exports can take a bit; Kassiber will update when the daemon finishes.`,
           );
@@ -1083,6 +1359,43 @@ export function AddConnectionDialog({
   };
 
   const renderSetupFields = () => {
+    const sourceFileField = fileWalletSourceField(selected);
+    const renderSourceFileSetup = (syncLabel?: string) => (
+      <>
+        <SetupField
+          id="connection-source-file"
+          label={sourceFileField.label}
+          error={fieldErrors.sourceFile}
+          helper={sourceFileField.helper}
+        >
+          <div className="flex gap-2">
+            <Input
+              id="connection-source-file"
+              value={form.sourceFile}
+              onChange={(event) => updateForm("sourceFile", event.target.value)}
+              required
+            />
+            {isFilePickerAvailable ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={async () => {
+                  const picked = await pickFile({
+                    title: `Select ${selected.title} export file`,
+                    filters: sourceFileFilters(selected),
+                  });
+                  if (picked) updateForm("sourceFile", picked);
+                }}
+              >
+                Browse…
+              </Button>
+            ) : null}
+          </div>
+        </SetupField>
+        {syncLabel ? renderSyncAfterCreate(syncLabel) : null}
+      </>
+    );
+
     if (setupKind === "descriptor") {
       return (
         <>
@@ -1182,7 +1495,216 @@ export function AddConnectionDialog({
       );
     }
 
+    if (setupKind === "samourai") {
+      return (
+        <>
+          {renderConnectionLabelField()}
+          {renderBackendSelect(
+            "connection-backend",
+            "Backend",
+            descriptorBackendOptions,
+          )}
+          <div className="space-y-3">
+            <div className="rounded-md border bg-muted/25 p-3 text-xs text-muted-foreground">
+              Import public Samourai account material only. Empty accounts are
+              skipped; use all four when available so Kassiber can scan the full
+              Whirlpool history. Get these from Sparrow or another descriptor
+              tool after it has recovered the Samourai accounts; paste only the
+              public descriptors or account xpub-family keys.
+            </div>
+            {SAMOURAI_SOURCE_FIELDS.map((field) => (
+              <SetupField
+                key={field.key}
+                id={field.id}
+                label={field.label}
+                error={fieldErrors[field.key]}
+                helper={field.helper}
+              >
+                <Textarea
+                  id={field.id}
+                  className="min-h-20 font-mono text-xs"
+                  value={form[field.key]}
+                  onChange={(event) =>
+                    updateForm(field.key, event.target.value)
+                  }
+                />
+              </SetupField>
+            ))}
+          </div>
+          <SetupField
+            id="connection-samourai-gap-limit"
+            label="Gap limit"
+            error={fieldErrors.gapLimit}
+            helper="Postmix keeps at least 40 unused addresses per branch. Raise this for old wallets with long unused-address runs, up to 5,000."
+          >
+            <Input
+              id="connection-samourai-gap-limit"
+              type="number"
+              min={1}
+              max={MAX_DESCRIPTOR_GAP_LIMIT}
+              value={form.gapLimit}
+              onChange={(event) => updateForm("gapLimit", event.target.value)}
+            />
+          </SetupField>
+          {renderSyncAfterCreate("Scan imported sources after setup")}
+        </>
+      );
+    }
+
     if (setupKind === "file-wallet") {
+      if (selected.sourceFormat === "wasabi_bundle") {
+        return (
+          <>
+            {renderConnectionLabelField()}
+            <SetupField id="connection-wasabi-mode" label="Import source">
+              <div className="grid grid-cols-2 gap-2">
+                {(
+                  [
+                    ["rpc", "Paste RPC outputs"],
+                    ["bundle-file", "Bundle file"],
+                  ] as const
+                ).map(([value, text]) => (
+                  <Button
+                    key={value}
+                    type="button"
+                    variant={
+                      form.wasabiImportMode === value ? "secondary" : "outline"
+                    }
+                    onClick={() => {
+                      updateForm("wasabiImportMode", value);
+                      setLastImportResult(null);
+                    }}
+                  >
+                    {text}
+                  </Button>
+                ))}
+              </div>
+            </SetupField>
+            {form.wasabiImportMode === "rpc" ? (
+              <div className="space-y-3">
+                <div className="space-y-2 rounded-md border bg-muted/25 p-3 text-xs text-muted-foreground">
+                  <p>
+                    Start Wasabi, load the wallet, then copy JSON from the local
+                    RPC endpoint. Default RPC is{" "}
+                    <InlineCode>http://127.0.0.1:37128/WalletName</InlineCode>;
+                    replace <InlineCode>WalletName</InlineCode> with the loaded
+                    Wasabi wallet name.
+                  </p>
+                  <p>
+                    If <InlineCode>JsonRpcUser</InlineCode> and{" "}
+                    <InlineCode>JsonRpcPassword</InlineCode> are set in Wasabi,
+                    add <InlineCode>-u user:password</InlineCode> to the curl
+                    command. Kassiber stores the pasted snapshot, not a live
+                    Wasabi RPC connection.
+                  </p>
+                </div>
+                <SetupField
+                  id="connection-wasabi-history"
+                  label="gethistory JSON"
+                  error={fieldErrors.wasabiHistory}
+                  helper={
+                    <div className="space-y-1.5">
+                      <p>
+                        Required. Accepts the raw result array or a JSON-RPC
+                        response object with result.
+                      </p>
+                      <CommandSnippet>
+                        curl -s --data-binary
+                        {' \'{"jsonrpc":"2.0","id":"1","method":"gethistory","params":[]}\''}{" "}
+                        http://127.0.0.1:37128/WalletName | jq
+                      </CommandSnippet>
+                    </div>
+                  }
+                >
+                  <Textarea
+                    id="connection-wasabi-history"
+                    className="min-h-28 font-mono text-xs"
+                    value={form.wasabiHistory}
+                    onChange={(event) =>
+                      updateForm("wasabiHistory", event.target.value)
+                    }
+                    required
+                  />
+                </SetupField>
+                <SetupField
+                  id="connection-wasabi-coins"
+                  label="listcoins or listunspentcoins JSON"
+                  error={fieldErrors.wasabiCoins}
+                  helper={
+                    <div className="space-y-1.5">
+                      <p>Recommended for Coins/UTXO anonymity state.</p>
+                      <CommandSnippet>
+                        curl -s --data-binary
+                        {' \'{"jsonrpc":"2.0","id":"1","method":"listcoins","params":[]}\''}{" "}
+                        http://127.0.0.1:37128/WalletName | jq
+                      </CommandSnippet>
+                    </div>
+                  }
+                >
+                  <Textarea
+                    id="connection-wasabi-coins"
+                    className="min-h-24 font-mono text-xs"
+                    value={form.wasabiCoins}
+                    onChange={(event) =>
+                      updateForm("wasabiCoins", event.target.value)
+                    }
+                  />
+                </SetupField>
+                <SetupField
+                  id="connection-wasabi-wallet-info"
+                  label="getwalletinfo JSON"
+                  error={fieldErrors.wasabiWalletInfo}
+                  helper={
+                    <div className="space-y-1.5">
+                      <p>Optional safe wallet metadata.</p>
+                      <CommandSnippet>
+                        curl -s --data-binary
+                        {' \'{"jsonrpc":"2.0","id":"1","method":"getwalletinfo","params":[]}\''}{" "}
+                        http://127.0.0.1:37128/WalletName | jq
+                      </CommandSnippet>
+                    </div>
+                  }
+                >
+                  <Textarea
+                    id="connection-wasabi-wallet-info"
+                    className="min-h-20 font-mono text-xs"
+                    value={form.wasabiWalletInfo}
+                    onChange={(event) =>
+                      updateForm("wasabiWalletInfo", event.target.value)
+                    }
+                  />
+                </SetupField>
+                <SetupField
+                  id="connection-wasabi-additional"
+                  label="Additional Wasabi sections"
+                  error={fieldErrors.wasabiAdditional}
+                  helper={
+                    <span>
+                      Optional JSON object with{" "}
+                      <InlineCode>listkeys</InlineCode>,{" "}
+                      <InlineCode>listpaymentsincoinjoin</InlineCode>, or{" "}
+                      <InlineCode>wallet_json</InlineCode> sections. Run those
+                      Wasabi RPC methods the same way and paste the responses
+                      under matching keys.
+                    </span>
+                  }
+                >
+                  <Textarea
+                    id="connection-wasabi-additional"
+                    className="min-h-20 font-mono text-xs"
+                    value={form.wasabiAdditional}
+                    onChange={(event) =>
+                      updateForm("wasabiAdditional", event.target.value)
+                    }
+                  />
+                </SetupField>
+              </div>
+            ) : (
+              renderSourceFileSetup("Import after setup")
+            )}
+          </>
+        );
+      }
       return (
         <>
           {renderConnectionLabelField()}
@@ -1201,36 +1723,7 @@ export function AddConnectionDialog({
               </select>
             </SetupField>
           ) : null}
-          <SetupField
-            id="connection-source-file"
-            label="Export file path"
-            error={fieldErrors.sourceFile}
-          >
-            <div className="flex gap-2">
-              <Input
-                id="connection-source-file"
-                value={form.sourceFile}
-                onChange={(event) => updateForm("sourceFile", event.target.value)}
-                required
-              />
-              {isFilePickerAvailable ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={async () => {
-                    const picked = await pickFile({
-                      title: `Select ${selected.title} export file`,
-                      filters: sourceFileFilters(selected),
-                    });
-                    if (picked) updateForm("sourceFile", picked);
-                  }}
-                >
-                  Browse…
-                </Button>
-              ) : null}
-            </div>
-          </SetupField>
-          {renderSyncAfterCreate("Import after setup")}
+          {renderSourceFileSetup("Import after setup")}
         </>
       );
     }
@@ -2025,6 +2518,11 @@ export function AddConnectionDialog({
       coinfinity_rows: result.coinfinity_rows,
       twentyonebitcoin_rows: result.twentyonebitcoin_rows,
       strike_rows: result.strike_rows,
+      wasabi_transactions: result.wasabi_transactions,
+      wasabi_coins_observed: result.wasabi_coins_observed,
+      wasabi_coins_active: result.wasabi_coins_active,
+      wasabi_coins_marked_spent: result.wasabi_coins_marked_spent,
+      wasabi_payments_in_coinjoin: result.wasabi_payments_in_coinjoin,
       inserted_records: result.inserted_records,
       updated_records: result.updated_records,
       reconciliation_records: result.reconciliation_records,
@@ -2044,6 +2542,7 @@ export function AddConnectionDialog({
       lastImportResult.coinfinity_rows ??
       lastImportResult.twentyonebitcoin_rows ??
       lastImportResult.strike_rows ??
+      lastImportResult.wasabi_transactions ??
       lastImportResult.imported + lastImportResult.skipped;
     const isBookWide = lastImportResult.scope === "book";
     const changedCount =
@@ -2056,6 +2555,15 @@ export function AddConnectionDialog({
     ];
     if (lastImportResult.matched !== undefined) {
       metrics.push(["Matched", lastImportResult.matched]);
+    }
+    if (lastImportResult.wasabi_coins_observed !== undefined) {
+      metrics.push(["Coins observed", lastImportResult.wasabi_coins_observed]);
+    }
+    if (lastImportResult.wasabi_coins_active !== undefined) {
+      metrics.push(["Active coins", lastImportResult.wasabi_coins_active]);
+    }
+    if (lastImportResult.wasabi_payments_in_coinjoin !== undefined) {
+      metrics.push(["Payments in CoinJoin", lastImportResult.wasabi_payments_in_coinjoin]);
     }
     if (lastImportResult.skipped_unmatched !== undefined) {
       metrics.push(["Unmatched", lastImportResult.skipped_unmatched]);

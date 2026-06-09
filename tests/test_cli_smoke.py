@@ -376,6 +376,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(rows["bench"]["batch_size"], 40)
         self.assertEqual(rows["fulcrum"]["batch_size"], 100)
         self.assertEqual(rows["liquid"]["batch_size"], 100)
+        self.assertEqual(rows["liquid-blockstream"]["batch_size"], 100)
 
     def test_01b_ai_providers_roundtrip(self):
         # Seeded local Ollama row should be present with the local-default
@@ -626,14 +627,54 @@ class CliSmokeTest(unittest.TestCase):
             "--workspace", "Main",
             "--profile", "Default",
             "--transaction", tx_ref,
-            "--url", "https://example.com/tx/notes/1",
-            "--label", "Support ticket",
+            "--url", "https://docs.google.com/spreadsheets/d/abc123/edit?usp=sharing",
         )
         self._assert_kind(payload, "attachments.add")
         url_attachment = payload["data"]
         self.assertEqual(url_attachment["attachment_type"], "url")
-        self.assertEqual(url_attachment["url"], "https://example.com/tx/notes/1")
+        self.assertIsNone(url_attachment["label"])
+        self.assertEqual(url_attachment["display_label"], "Google Sheet")
+        self.assertEqual(
+            url_attachment["url"],
+            "https://docs.google.com/spreadsheets/d/abc123/edit?usp=sharing",
+        )
         self.assertFalse(url_attachment["stored_relpath"])
+
+        payload, code = _run(
+            self.data_root,
+            "attachments", "rename",
+            "--workspace", "Main",
+            "--profile", "Default",
+            file_attachment["id"],
+            "--label", "Receipt copy",
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(payload["kind"], "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+
+        payload, code = _run(
+            self.data_root,
+            "attachments", "rename",
+            "--workspace", "Main",
+            "--profile", "Default",
+            url_attachment["id"],
+            "--label", "x" * 201,
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(payload["kind"], "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+        self.assertEqual(payload["error"]["details"]["max_length"], 200)
+
+        payload = self._cli(
+            "attachments", "rename",
+            "--workspace", "Main",
+            "--profile", "Default",
+            url_attachment["id"],
+            "--label", "Support ticket",
+        )
+        self._assert_kind(payload, "attachments.rename")
+        self.assertEqual(payload["data"]["label"], "Support ticket")
+        self.assertEqual(payload["data"]["display_label"], "Support ticket")
 
         payload = self._cli(
             "attachments", "list",
@@ -645,6 +686,8 @@ class CliSmokeTest(unittest.TestCase):
         rows = payload["data"]
         self.assertEqual(len(rows), 2)
         self.assertEqual(sorted(row["attachment_type"] for row in rows), ["file", "url"])
+        by_type = {row["attachment_type"]: row for row in rows}
+        self.assertEqual(by_type["url"]["display_label"], "Support ticket")
 
         payload = self._cli(
             "attachments", "verify",

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { copyTextWithPolicy } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 
 export function PlannedBadge({ className }: { className?: string }) {
@@ -30,7 +31,7 @@ export function CopyButton({
   const [copied, setCopied] = React.useState(false);
   const onCopy = async () => {
     try {
-      await navigator.clipboard?.writeText(value);
+      await copyTextWithPolicy(value);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {

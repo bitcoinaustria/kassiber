@@ -57,6 +57,7 @@ export interface BackendSettingsRow {
   network?: string;
   url?: string;
   source?: string;
+  default?: string;
   is_default?: boolean;
   has_url?: boolean;
   has_auth_header?: boolean;
@@ -161,10 +162,65 @@ export interface RateRebuildData {
     | null;
 }
 
+export interface RateLatestData {
+  source: MarketRateProvider;
+  pair: string;
+  latest: Array<{
+    pair: string;
+    source: MarketRateProvider;
+    samples?: number;
+    granularity?: string;
+    method?: string;
+    mode?: string;
+    lookback_minutes?: number;
+    timestamp?: string | null;
+    fetched_at?: string | null;
+  }>;
+  marketRate?: {
+    asset: "BTC";
+    fiatCurrency: string;
+    pair: string | null;
+    rate: number | null;
+    timestamp: string | null;
+    source: string | null;
+    fetchedAt: string | null;
+    granularity: string | null;
+    method: string | null;
+  } | null;
+}
+
 export interface RateRebuildJournalResult {
   entries_created?: number;
   quarantined?: number;
   auto_priced?: number;
+}
+
+export type FreshnessSourceClass =
+  | "onchain_wallet"
+  | "btcpay_wallet"
+  | "btcpay_provenance"
+  | "market_rates"
+  | "journals";
+
+export type MarketRateProvider = "coinbase-exchange" | "coingecko";
+
+export interface MaintenanceFreshnessSettings {
+  background_enabled: boolean;
+  report_read_sync: boolean;
+  source_classes: Partial<Record<FreshnessSourceClass, boolean>>;
+  market_rate_provider: MarketRateProvider;
+  market_rate_providers?: MarketRateProvider[];
+  active_rate_pair?: string | null;
+  auto_sync_before_report_reads?: boolean;
+  setting_key?: string;
+}
+
+export interface MaintenanceSettingsData {
+  workspace: string | null;
+  profile: { id: string; label: string } | null;
+  settings: MaintenanceFreshnessSettings;
+  freshness?: unknown;
+  configured?: MaintenanceFreshnessSettings;
 }
 
 export interface DaemonErrorPayload {
@@ -275,11 +331,11 @@ export const DEFAULT_BACKENDS: Backend[] = [
   },
   {
     id: "b2",
-    name: "Liquid Network",
-    url: "https://liquid.network/api",
+    name: "BullBitcoin Liquid Electrum",
+    url: "ssl://les.bullbitcoin.com:995",
     net: "LIQUID",
-    kind: "liquid-esplora",
-    health: "Explorer API",
+    kind: "electrum",
+    health: "Electrum / Fulcrum",
     on: true,
     auth: "none",
   },
@@ -312,6 +368,13 @@ export function backendNetFromRow(row: BackendSettingsRow): Net {
   const kind = (row.kind ?? "").toLowerCase();
   if (kind === "lnd" || kind === "coreln") return "LN";
   if (chain === "liquid" || kind === "liquid-esplora") return "LIQUID";
+  if (
+    chain === "fx" ||
+    chain === "market" ||
+    ["coinbase-exchange", "coingecko", "kraken-csv"].includes(kind)
+  ) {
+    return "FX";
+  }
   return "BTC";
 }
 
@@ -353,6 +416,7 @@ export function backendRowToSettingsBackend(row: BackendSettingsRow): Backend {
   const net = backendNetFromRow(row);
   const id = row.name || "backend";
   const name = row.display_name?.trim() || id;
+  const isDefault = row.is_default === true || row.default === "yes";
   return {
     id,
     name,
@@ -361,9 +425,9 @@ export function backendRowToSettingsBackend(row: BackendSettingsRow): Backend {
     kind: row.kind,
     chain: row.chain,
     network: row.network,
-    health: row.is_default ? "default" : row.source || row.kind || "configured",
+    health: isDefault ? "default" : row.source || row.kind || "configured",
     on: row.has_url !== false,
-    isDefault: row.is_default === true,
+    isDefault,
     auth: backendAuthLabel(row),
     commandoPeerId: row.has_commando_peer_id
       ? CLN_PRESENCE_SENTINEL_COMMANDO_PEER
@@ -547,6 +611,8 @@ export function backendProtocolLabel(backend: Backend): string {
       return "Electrum / Fulcrum";
     case "bitcoinrpc":
       return "Bitcoin Core RPC";
+    case "btcpay":
+      return "BTCPay";
     case "liquid-esplora":
       return "Explorer API";
     case "lnd":
