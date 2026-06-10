@@ -99,6 +99,34 @@ class MarkdownStreamRendererTest(unittest.TestCase):
         self.assertIn("│", out)
         self.assertIn("1", out)
 
+    def test_table_with_trailing_newline_renders_on_flush(self):
+        # The common "answer ends with a table" shape: rows complete, stream
+        # ends right after the final newline.
+        out = _render("| a | b |\n| --- | --- |\n| 1 | 2 |\n")
+        self.assertIn("│", out)
+        self.assertIn("1", out)
+        for chunk_size in (1, 3):
+            self.assertEqual(
+                _render("| a | b |\n| --- | --- |\n| 1 | 2 |\n", chunk_size), out
+            )
+
+    def test_fence_closer_must_be_bare_backticks(self):
+        out = _render("```\nUse:\n```python\nx = 1\n```\nend.\n")
+        # Nested opener and code stay fenced content; prose resumes after
+        # the bare closer.
+        self.assertIn(f"  {CODE}```python{CODE_OFF}\n", out)
+        self.assertIn(f"  {CODE}x = 1{CODE_OFF}\n", out)
+        self.assertTrue(out.endswith("end.\n"))
+
+    def test_fence_closer_with_trailing_text_is_content(self):
+        out = _render("```\ncode\n``` trailing\n")
+        self.assertIn(f"  {CODE}code{CODE_OFF}\n", out)
+        self.assertIn("``` trailing", out)
+
+    def test_crlf_input_normalizes(self):
+        self.assertEqual(_render("text\r\nnext\r\n"), "text\nnext\n")
+        self.assertIn("─" * 8, _render("---\r\n"))
+
     def test_open_styles_close_at_newline(self):
         out = _render("**unclosed\nnext\n")
         self.assertEqual(out, f"{BOLD}unclosed{BOLD_OFF}\nnext\n")

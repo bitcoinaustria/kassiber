@@ -154,13 +154,17 @@ class MarkdownStreamRenderer:
         out: list[str] = []
         if self._state == _LINE_START and self._hold:
             out.append(self._resolve_line_start_hold(final=True))
-        if self._state == _TABLE:
-            if self._table_current:
-                self._table_lines.append(self._table_current)
-                self._table_current = ""
-            out.append(self._render_table_buffer())
+        if self._table_current:
+            self._table_lines.append(self._table_current)
+            self._table_current = ""
+        # A finished table parks its rows until the next character shows the
+        # block ended; at end-of-stream there is no next character.
+        out.append(self._render_table_buffer())
         if self._state == _FENCE and self._hold:
-            out.append(self._emit_fence_line(self._hold))
+            if self._fence_info_pending:
+                self._fence_info_pending = False
+            else:
+                out.append(self._emit_fence_line(self._hold))
             self._hold = ""
         out.append(self._resolve_pending_stars())
         out.append(self._close_styles())
@@ -169,6 +173,9 @@ class MarkdownStreamRenderer:
     # -- per-character machine ----------------------------------------------
 
     def _feed_char(self, char: str) -> str:
+        if char == "\r":
+            # Models occasionally emit CRLF; terminals need only the LF.
+            return ""
         if self._state == _FENCE:
             return self._feed_fence(char)
         if self._state == _TABLE:
@@ -332,7 +339,9 @@ class MarkdownStreamRenderer:
             # Remainder of the opener line (the ```lang info string).
             self._fence_info_pending = False
             return ""
-        if line.strip().startswith("```"):
+        if line.strip() == "```":
+            # A closing fence is bare backticks only; ```lang lines inside a
+            # fence are content (e.g. markdown being quoted).
             self._state = _LINE_START
             return ""
         return self._emit_fence_line(line) + "\n"

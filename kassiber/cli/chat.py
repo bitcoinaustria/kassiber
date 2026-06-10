@@ -609,6 +609,46 @@ def _run_turn(
     pretty = render and out.isatty() and not getattr(args, "plain", False)
     markdown = MarkdownStreamRenderer() if pretty else None
     try:
+        return _stream_turn_records(
+            client,
+            args,
+            request_id,
+            content_parts,
+            tool_calls,
+            control_requests,
+            stdin=stdin,
+            out=out,
+            chrome=chrome,
+            render=render,
+            stream_out=stream_out,
+            session_allowed=session_allowed,
+            markdown=markdown,
+        )
+    except BaseException:
+        # An abnormal exit mid-stream must not leak open ANSI styles (or a
+        # buffered table) into the next prompt or the user's shell.
+        if markdown is not None:
+            _write(markdown.flush(), out)
+        raise
+
+
+def _stream_turn_records(
+    client: _DaemonChatClient,
+    args: Any,
+    request_id: str,
+    content_parts: list[str],
+    tool_calls: dict[str, dict[str, Any]],
+    control_requests: set[str],
+    *,
+    stdin: TextIO,
+    out: TextIO,
+    chrome: TextIO,
+    render: bool,
+    stream_out: TextIO | None,
+    session_allowed: set[str] | None,
+    markdown: MarkdownStreamRenderer | None,
+) -> ChatTurnResult:
+    try:
         while True:
             record = client.read()
             kind = record.get("kind")
@@ -720,7 +760,7 @@ def _run_turn(
                     if render and not data.get("ok") and data.get("reason"):
                         _write(f"\nTool result: {data['reason']}\n", chrome)
                     if (
-                        pretty
+                        markdown is not None
                         and chrome.isatty()
                         and data.get("ok")
                         and isinstance(data.get("envelope"), dict)
