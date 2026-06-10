@@ -1964,6 +1964,26 @@ def sync_wallet(
         raise AppError("--wallet and --all are mutually exclusive", code="validation")
     if sync_all:
         wallets = conn.execute("SELECT * FROM wallets WHERE profile_id = ? ORDER BY label ASC", (profile["id"],)).fetchall()
+        hooks = _wallet_sync_hooks(commit=False)
+        # Run the network-only fetch for backend-synced wallets concurrently
+        # before the serial write loop. DB writes and the per-wallet savepoint
+        # isolation below are unchanged — only the fetch is parallelized, and the
+        # per-host limiter keeps total concurrency against any one host within a
+        # single wallet's existing budget. AppErrors are captured per wallet and
+        # re-raised under that wallet's savepoint, preserving rollback isolation.
+        backend_wallets = [
+            wallet
+            for wallet in wallets
+            if core_sync.classify_wallet_sync(wallet, hooks.normalize_addresses) == "backend"
+        ]
+        prefetched = core_sync.prefetch_wallets_backend(
+            runtime_config,
+            profile,
+            backend_wallets,
+            hooks,
+            checkpoints=freshness_checkpoints,
+            force_full=force_full,
+        )
         results = []
         for idx, wallet in enumerate(wallets):
             savepoint = f"wallet_sync_{idx}"
@@ -1974,9 +1994,10 @@ def sync_wallet(
                     runtime_config,
                     profile,
                     [wallet],
-                    _wallet_sync_hooks(commit=False),
+                    hooks,
                     checkpoints=freshness_checkpoints,
                     force_full=force_full,
+                    prefetched=prefetched,
                 )
                 _mark_wallet_synced_from_results(conn, wallet, wallet_results)
                 results.extend(wallet_results)

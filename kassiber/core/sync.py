@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import sqlite3
 import contextvars
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from typing import Any, Callable, Mapping, MutableMapping, Sequence
 
@@ -82,6 +84,31 @@ class WalletSyncHooks:
     update_output_inventory: UpdateOutputInventory | None = None
 
 
+@dataclass(frozen=True)
+class WalletBackendFetch:
+    """Result of the network-only fetch phase for one backend-synced wallet.
+
+    Produced by `fetch_wallet_backend` (no DB access, safe on a worker thread)
+    and consumed by `sync_wallet_from_backend`'s DB write phase. `skip_outcome`
+    is set instead of fetch data when the wallet has no sync targets.
+    """
+
+    backend: Mapping[str, Any]
+    sync_state: "WalletSyncState | None"
+    normalized_records: Sequence[BackendRecord]
+    adapter_meta: Mapping[str, Any]
+    kind: str
+    started: float
+    force_full: bool
+    skip_outcome: Mapping[str, Any] | None = None
+
+
+# Modest cap on concurrent per-wallet fetches. The per-host HTTP limiter already
+# bounds network concurrency against any single host, so this only limits total
+# thread count for the common case of a handful of distinct backends.
+WALLET_FETCH_FANOUT = 4
+
+
 # Contextvar threaded by the daemon when it wants long-running source refreshes
 # to emit progress over the JSONL stream. The CLI leaves this empty so terminal
 # sync behavior stays unchanged.
@@ -89,11 +116,17 @@ sync_progress_emitter: contextvars.ContextVar[ProgressCallback | None] = (
     contextvars.ContextVar("kassiber.sync_progress_emitter", default=None)
 )
 
+# Serializes progress-callback invocation so concurrent fetch workers (within a
+# wallet and, for cross-wallet parallel fetch, across wallets) cannot interleave
+# writes into a shared sink such as the daemon's JSONL stream.
+_progress_emit_lock = threading.Lock()
+
 
 def emit_sync_progress(payload: Mapping[str, Any]) -> None:
     progress = sync_progress_emitter.get()
     if progress is not None:
-        progress(payload)
+        with _progress_emit_lock:
+            progress(payload)
 
 
 def _wallet_label(wallet: WalletRow) -> str:
@@ -157,8 +190,7 @@ def normalize_backend_kind(kind: Any) -> str:
     return aliases.get(value, value)
 
 
-def sync_wallet_from_backend(
-    conn: sqlite3.Connection,
+def fetch_wallet_backend(
     runtime_config: RuntimeConfig,
     profile: ProfileRow,
     wallet: WalletRow,
@@ -166,7 +198,15 @@ def sync_wallet_from_backend(
     checkpoint: Mapping[str, Any] | None = None,
     *,
     force_full: bool = False,
-) -> SyncOutcome:
+) -> WalletBackendFetch:
+    """Run the network-only fetch phase for a backend-synced wallet.
+
+    Touches no database connection — `resolve_backend` is an in-memory lookup,
+    and discovery plus the adapter are network/compute only — so this is safe to
+    run on a worker thread for cross-wallet parallel fetch. The DB write phase
+    stays in `sync_wallet_from_backend` on the owning connection's thread.
+    """
+    del profile  # not needed to fetch; kept for call-shape symmetry with apply
     started = time.monotonic()
     config = json.loads(wallet["config_json"] or "{}")
     backend = hooks.resolve_backend(runtime_config, config.get("backend"))
@@ -183,13 +223,23 @@ def sync_wallet_from_backend(
         if effective_checkpoint is not None:
             sync_state = replace(sync_state, checkpoint=dict(effective_checkpoint))
         if not sync_state.targets:
-            return {
+            skip_outcome = {
                 "wallet": wallet["label"],
                 "status": "skipped",
                 "reason": "no addresses or descriptors configured for backend sync",
                 "elapsed_ms": int((time.monotonic() - started) * 1000),
                 **({"force_full": True} if force_full else {}),
             }
+            return WalletBackendFetch(
+                backend=backend,
+                sync_state=None,
+                normalized_records=(),
+                adapter_meta={},
+                kind="",
+                started=started,
+                force_full=force_full,
+                skip_outcome=skip_outcome,
+            )
         kind = normalize_backend_kind(backend["kind"])
         adapter = hooks.backend_adapters.get(kind)
         if adapter is None:
@@ -205,7 +255,47 @@ def sync_wallet_from_backend(
     finally:
         if token is not None:
             sync_progress_emitter.reset(token)
-    adapter_meta = dict(adapter_meta or {})
+    return WalletBackendFetch(
+        backend=backend,
+        sync_state=sync_state,
+        normalized_records=normalized_records,
+        adapter_meta=dict(adapter_meta or {}),
+        kind=kind,
+        started=started,
+        force_full=force_full,
+    )
+
+
+def sync_wallet_from_backend(
+    conn: sqlite3.Connection,
+    runtime_config: RuntimeConfig,
+    profile: ProfileRow,
+    wallet: WalletRow,
+    hooks: WalletSyncHooks,
+    checkpoint: Mapping[str, Any] | None = None,
+    *,
+    force_full: bool = False,
+    prefetched: "WalletBackendFetch | BaseException | None" = None,
+) -> SyncOutcome:
+    # `prefetched` lets the caller run the network fetch ahead of time (e.g. in
+    # parallel across wallets). When omitted, fetch inline as before. A captured
+    # AppError is re-raised here so it surfaces under this wallet's own savepoint.
+    if prefetched is None:
+        prefetched = fetch_wallet_backend(
+            runtime_config, profile, wallet, hooks, checkpoint, force_full=force_full
+        )
+    if isinstance(prefetched, BaseException):
+        raise prefetched
+    fetch = prefetched
+    if fetch.skip_outcome is not None:
+        return dict(fetch.skip_outcome)
+    started = fetch.started
+    force_full = fetch.force_full
+    backend = fetch.backend
+    sync_state = fetch.sync_state
+    normalized_records = fetch.normalized_records
+    kind = fetch.kind
+    adapter_meta = dict(fetch.adapter_meta or {})
     observed_utxos = adapter_meta.pop("utxos", None)
     outcome = hooks.insert_records(
         conn,
@@ -255,6 +345,70 @@ def sync_wallet_from_backend(
     return outcome
 
 
+def classify_wallet_sync(wallet: WalletRow, normalize_addresses: NormalizeAddresses) -> str:
+    """Bucket a wallet by how `sync_wallets` will dispatch it.
+
+    Returns one of ``btcpay`` / ``coreln`` / ``file`` / ``backend`` / ``none``.
+    Only ``backend`` wallets are eligible for parallel network prefetch.
+    """
+    config = json.loads(wallet["config_json"] or "{}")
+    if wallet_btcpay_sync_config(config):
+        return "btcpay"
+    if wallet["kind"] == "coreln" and config.get("backend"):
+        return "coreln"
+    if config.get("source_file") and config.get("source_format"):
+        return "file"
+    addresses = normalize_addresses(config.get("addresses"))
+    if addresses or bool(str_or_none(config.get("descriptor"))):
+        return "backend"
+    return "none"
+
+
+def prefetch_wallets_backend(
+    runtime_config: RuntimeConfig,
+    profile: ProfileRow,
+    wallets: Sequence[WalletRow],
+    hooks: WalletSyncHooks,
+    checkpoints: Mapping[str, Mapping[str, Any]] | None = None,
+    *,
+    force_full: bool = False,
+    max_workers: int = WALLET_FETCH_FANOUT,
+) -> dict[str, "WalletBackendFetch | BaseException"]:
+    """Run the network-only fetch for several backend wallets concurrently.
+
+    Returns ``{wallet_id: WalletBackendFetch | AppError}``. Per-wallet AppErrors
+    are captured (mirroring the serial path's per-wallet AppError isolation) and
+    re-raised when applied under that wallet's savepoint; any non-AppError
+    propagates, as it would have on the serial path. Each fetch runs inside a
+    copy of this thread's context so the per-wallet progress emitter propagates
+    to the worker.
+    """
+    wallets = list(wallets)
+    if not wallets:
+        return {}
+
+    def _fetch(wallet: WalletRow):
+        checkpoint = {} if force_full else (checkpoints or {}).get(str(wallet["id"]))
+        try:
+            return fetch_wallet_backend(
+                runtime_config, profile, wallet, hooks, checkpoint, force_full=force_full
+            )
+        except AppError as exc:
+            return exc
+
+    if len(wallets) == 1 or max_workers <= 1:
+        return {str(wallet["id"]): _fetch(wallet) for wallet in wallets}
+    results: dict[str, Any] = {}
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(wallets))) as executor:
+        futures = {
+            str(wallet["id"]): executor.submit(contextvars.copy_context().run, _fetch, wallet)
+            for wallet in wallets
+        }
+        for wallet_id, future in futures.items():
+            results[wallet_id] = future.result()
+    return results
+
+
 def sync_wallets(
     conn: sqlite3.Connection,
     runtime_config: RuntimeConfig,
@@ -264,6 +418,7 @@ def sync_wallets(
     checkpoints: Mapping[str, Mapping[str, Any]] | None = None,
     *,
     force_full: bool = False,
+    prefetched: Mapping[str, "WalletBackendFetch | BaseException"] | None = None,
 ) -> list[SyncOutcome]:
     results = []
     for wallet in wallets:
@@ -325,6 +480,7 @@ def sync_wallets(
                 hooks,
                 checkpoint=checkpoint,
                 force_full=force_full,
+                prefetched=(prefetched or {}).get(str(wallet["id"])),
             )
             if outcome.get("status") == "skipped":
                 results.append(outcome)
@@ -350,10 +506,15 @@ def sync_wallets(
 
 
 __all__ = [
+    "WalletBackendFetch",
     "WalletSyncHooks",
     "WalletSyncState",
+    "WALLET_FETCH_FANOUT",
+    "classify_wallet_sync",
     "emit_sync_progress",
+    "fetch_wallet_backend",
     "normalize_backend_kind",
+    "prefetch_wallets_backend",
     "sync_wallet_from_backend",
     "sync_progress_emitter",
     "sync_wallets",

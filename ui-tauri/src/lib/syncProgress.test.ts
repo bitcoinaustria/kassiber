@@ -96,6 +96,44 @@ describe("sync progress notifications", () => {
     });
   });
 
+  it("surfaces a rate-limit backoff without nudging the bar forward", () => {
+    // A 429/503 backoff is a wait: the label must read as "rate limited,
+    // retrying" rather than freezing silently, and the bar must hold steady.
+    const progress = syncProgressNotification(
+      {
+        wallet: "Cold",
+        phase: "rate_limited",
+        retry_attempt: 1,
+        retry_max: 2,
+        wait_seconds: 2,
+      },
+      46,
+    );
+
+    expect(progress.value).toBe(46);
+    expect(progress.progress.label).toBe("Cold: Waiting out rate limit");
+
+    const card = activeSyncMaintenanceProgress(
+      {
+        source_label: "Cold",
+        source_type: "onchain_wallet",
+        phase: "rate_limited",
+        retry_attempt: 1,
+        retry_max: 2,
+        wait_seconds: 2,
+      },
+      46,
+      {
+        startedAt: "2026-06-06T10:00:00.000Z",
+        updatedAt: "2026-06-06T10:01:00.000Z",
+      },
+    );
+
+    expect(card.title).toBe("Waiting out rate limit");
+    expect(card.progress.value).toBe(46);
+    expect(card.details).toContain("Rate limited — retry 1/2 in 2s");
+  });
+
   it("builds active maintenance card details from sync progress", () => {
     const progress = activeSyncMaintenanceProgress(
       {
