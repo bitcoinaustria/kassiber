@@ -1181,6 +1181,16 @@ export const fixtures: Record<string, unknown> = {
     links: [],
     privacy_warning: "No chain backend was queried.",
   },
+  "ui.source_funds.assemble": {
+    target_transaction_id: "tx19",
+    passes: 2,
+    inserted: 3,
+    auto_reviewed: 2,
+    awaiting_manual_review: 1,
+    methods: { payment_hash: 1, utxo_spend: 1 },
+    policy:
+      "Assembly derives exact edges from synced transaction inputs/outputs and Lightning payment hashes, plus deterministic platform-id and reviewed-pair matches. Weak hints, chain observations, privacy boundaries, and root-source evidence remain manual review items.",
+  },
   "ui.source_funds.evidence.list": {
     attachments: [
       {

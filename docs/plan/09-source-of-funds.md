@@ -165,14 +165,62 @@ Deterministic suggestions should run in this order:
 1. Existing same-asset self-transfer detection by shared external transaction
    id across owned wallets.
 2. Existing manual `transaction_pairs`, including cross-asset swap links.
-3. Provider/import evidence such as trade ids, order ids, payment ids, or
+3. Transaction input/output structure (`utxo_spend`): chain-synced rows store
+   their vin outpoints in `raw_json` (esplora/electrum) and `wallet_utxos`
+   records the outputs each owned wallet controls (plus `spent_by` from
+   Wasabi imports). Joining a spend's inputs against owned outputs proves,
+   exactly: which earlier owned transaction funded this spend inside one
+   wallet (consolidation/change chaining), and which wallet received which
+   share of a multi-wallet transaction the 1:1 external-id heuristic
+   refuses. Works identically for Bitcoin and Liquid (`wallet_utxos.chain`).
+4. Lightning payment hashes (`payment_hash`): exactly one outbound and one
+   inbound owned row sharing a payment hash are two legs of one payment —
+   covering LN transfers between own wallets and on-chain HTLC legs whose
+   hash was extracted at import.
+5. Provider/import evidence such as trade ids, order ids, payment ids, or
    exchange ledger ids when stored in `raw_json`.
-4. Tight time and amount matches across owned wallets, as opt-in broad hints.
-5. Chain observations from configured Esplora, Electrum, or Bitcoin Core
+6. Tight time and amount matches across owned wallets, as opt-in broad hints.
+7. Chain observations from configured Esplora, Electrum, or Bitcoin Core
    backends, stored as evidence only unless the ownership link is reviewed.
    Public Esplora or third-party Electrum usage must show a privacy warning
    because the queried txids reveal the report target and investigation path to
    that backend.
+
+The `utxo_spend` and `payment_hash` derivers read only first-party wallet
+state that sync already imported — they never query a backend — so they sit
+outside the chain-observation manual-review policy and are deterministic
+bulk-review methods (re-derived from the live database before promotion,
+like every other deterministic method). One pair of transactions carries at
+most one non-rejected link regardless of method: parallel edges would
+double-allocate a hop into an `ambiguous_allocation` blocker, so the first
+method to claim a pair wins and stronger evidence may only re-suggest pairs
+whose earlier link was rejected.
+
+### Automatic assembly
+
+`source-funds assemble --target-transaction X` (daemon:
+`ui.source_funds.assemble`) is the one-call path from "target picked" to
+"everything provable is reviewed": it alternates target-scoped suggestion
+derivation with deterministic bulk review until the graph stops growing, so
+multi-hop chains assemble transitively — each reviewed hop extends the BFS
+frontier the next pass derives from. Privacy boundaries are never crossed,
+root sources are never invented, and what remains afterwards is exactly the
+user's work: root-source evidence, attested gaps, and weak hints.
+
+The scaling property is the product: every wallet, connection type, and
+layer added to a book (descriptor/xpub chain sync, Liquid, Lightning node
+adapters and CSV exports, platform imports) feeds more joins, so the
+assembled flow graph gets more complete without any new user effort. Gap
+findings stay the inverse signal — a hop Kassiber cannot prove is a hint
+that a counterparty wallet or connection is missing from the book, or that
+evidence must be attached by hand.
+
+Long-term UI direction: the desktop workflow is assemble-first and
+gap-driven. One primary action per step (pick target → Assemble History →
+fix the surfaced gaps → disclose and export); enriched findings render as
+actionable gap cards whose `next_step.action` dispatches straight to the
+fix (document gap, review link, open transaction); the manual link editor
+remains as the advanced escape hatch, not the main path.
 
 When a target transaction is supplied, suggestion writes are target-scoped:
 Kassiber only persists candidate links that touch the target or transactions

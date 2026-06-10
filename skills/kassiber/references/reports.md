@@ -250,6 +250,11 @@ kassiber source-funds sources create --type fiat_purchase --label "Bank purchase
 kassiber source-funds links create --from-source <source-id> \
   --to-transaction <txid-or-id> --type manual_source \
   --allocation-amount 0.10000000 --allocation-policy explicit
+# One call: derive + auto-review everything provable from local evidence
+# (tx inputs/outputs, payment hashes, platform ids, reviewed pairs).
+kassiber source-funds assemble --target-transaction <txid-or-id>
+
+# Manual equivalents when finer control is needed:
 kassiber source-funds suggest --target-transaction <txid-or-id>
 kassiber source-funds links bulk-review --target-transaction <txid-or-id>
 

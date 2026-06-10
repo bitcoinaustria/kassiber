@@ -1619,6 +1619,16 @@ def build_parser() -> argparse.ArgumentParser:
     sf_suggest.add_argument("--include-broad-hints", action="store_true")
     sf_suggest.add_argument("--max-suggestions", type=int, default=core_source_funds.SUGGESTION_WRITE_CAP)
 
+    sf_assemble = source_funds_sub.add_parser(
+        "assemble",
+        help="Auto-assemble the reviewed flow graph behind a target from local evidence (tx inputs/outputs, payment hashes, platform ids).",
+    )
+    sf_assemble.add_argument("--workspace")
+    sf_assemble.add_argument("--profile")
+    sf_assemble.add_argument("--target-transaction", required=True)
+    sf_assemble.add_argument("--include-broad-hints", action="store_true")
+    sf_assemble.add_argument("--max-passes", type=int, default=8)
+
     sf_cases = source_funds_sub.add_parser("cases")
     sf_cases_sub = sf_cases.add_subparsers(dest="source_funds_cases_command", required=True)
     sf_cases_list = sf_cases_sub.add_parser("list")
@@ -3322,6 +3332,19 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     target_transaction_ref=args.target_transaction,
                     include_broad_hints=args.include_broad_hints,
                     max_suggestions=args.max_suggestions,
+                ),
+            )
+        if args.source_funds_command == "assemble":
+            return emit(
+                args,
+                core_source_funds.assemble_history(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    source_funds_hooks,
+                    target_transaction_ref=args.target_transaction,
+                    include_broad_hints=args.include_broad_hints,
+                    max_passes=args.max_passes,
                 ),
             )
         if args.source_funds_command == "cases":

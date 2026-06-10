@@ -158,12 +158,17 @@ type SourceFundsFinding = {
   severity?: string;
   message: string;
   ref?: string;
+  amount?: number | null;
+  amount_msat?: number | null;
+  asset?: string;
   next_step?: SourceFundsFindingNextStep;
 };
 
 const BULK_REVIEWABLE_METHODS = new Set([
   "same_external_id",
   "transaction_pair",
+  "utxo_spend",
+  "payment_hash",
   "provider_trade_id",
   "provider_order_id",
   "provider_payment_id",
@@ -1017,6 +1022,13 @@ export function SourceFunds() {
   const suggestLinks = useDaemonMutation<{ inserted: number }>(
     "ui.source_funds.suggest",
   );
+  const assembleLinks = useDaemonMutation<{
+    passes: number;
+    inserted: number;
+    auto_reviewed: number;
+    awaiting_manual_review: number;
+    methods: Record<string, number>;
+  }>("ui.source_funds.assemble");
   const bulkReviewLinks = useDaemonMutation<{
     reviewed: number;
     skipped: number;
@@ -1138,7 +1150,7 @@ export function SourceFunds() {
     const next = WIZARD_STEPS[Math.min(WIZARD_STEPS.length - 1, stepIndex + 1)]?.id ?? "export";
     setCurrentStep(next);
     if (currentStep === "setup" && next === "review" && selectedTarget) {
-      void runSuggestions(false);
+      void runAssembly(false);
     }
   };
 
@@ -1228,6 +1240,25 @@ export function SourceFunds() {
         title: showNotification ? "Suggestions updated" : "Evidence matched",
         body: `${inserted} new source-funds link${inserted === 1 ? "" : "s"}.`,
         tone: inserted > 0 ? "success" : "info",
+      });
+    }
+  }
+
+  async function runAssembly(showNotification = true) {
+    if (!selectedTarget) return;
+    const envelope = await assembleLinks.mutateAsync({
+      target_transaction: selectedTarget,
+    });
+    const summary = envelope.data;
+    const reviewed = summary?.auto_reviewed ?? 0;
+    const manual = summary?.awaiting_manual_review ?? 0;
+    if (showNotification || reviewed > 0) {
+      addNotification({
+        title: reviewed > 0 ? "History assembled" : "Nothing new to assemble",
+        body:
+          `${reviewed} hop${reviewed === 1 ? "" : "s"} proven from local evidence` +
+          (manual > 0 ? `; ${manual} suggestion${manual === 1 ? "" : "s"} left for manual review.` : "."),
+        tone: reviewed > 0 ? "success" : "info",
       });
     }
   }
@@ -1640,25 +1671,11 @@ export function SourceFunds() {
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
-                  variant="outline"
-                  onClick={() => void runSuggestions()}
-                  disabled={!selectedTarget || suggestLinks.isPending}
-                >
-                  <RefreshCw className="mr-2 size-4" aria-hidden="true" />
-                  Find Links
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void bulkReviewDeterministicLinks()}
-                  disabled={
-                    !selectedTarget ||
-                    bulkReviewLinks.isPending ||
-                    bulkReviewableSuggestions.length === 0
-                  }
+                  onClick={() => void runAssembly()}
+                  disabled={!selectedTarget || assembleLinks.isPending}
                 >
                   <GitBranch className="mr-2 size-4" aria-hidden="true" />
-                  Review Deterministic Hops
+                  {assembleLinks.isPending ? "Assembling…" : "Assemble History"}
                 </Button>
                 <Button
                   type="button"
@@ -1680,6 +1697,27 @@ export function SourceFunds() {
                   <AlertTriangle className="mr-2 size-4" aria-hidden="true" />
                   Mark Gap
                 </Button>
+                <div className="basis-full text-xs text-muted-foreground">
+                  Kassiber assembles every hop it can prove from local
+                  evidence: transaction inputs/outputs of synced wallets
+                  (Bitcoin and Liquid), Lightning payment hashes, platform
+                  ids, and reviewed pairs. The more wallets and connections
+                  this book has, the more complete the assembled flow. You
+                  document only what remains.
+                </div>
+                {assembleLinks.data?.data && (
+                  <div className="basis-full rounded-md border bg-muted/30 px-3 py-2 text-xs">
+                    <span className="font-medium">
+                      {assembleLinks.data.data.auto_reviewed} hop
+                      {assembleLinks.data.data.auto_reviewed === 1 ? "" : "s"} proven
+                    </span>{" "}
+                    <span className="text-muted-foreground">
+                      {Object.entries(assembleLinks.data.data.methods)
+                        .map(([method, count]) => `${pretty(method)} ×${count}`)
+                        .join(" · ") || "no new evidence this run"}
+                    </span>
+                  </div>
+                )}
                 {manualSuggestionCount > 0 && (
                   <div className="basis-full rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
                     {manualSuggestionCount} weak or chain-observation suggestion
@@ -1771,8 +1809,34 @@ export function SourceFunds() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 p-4">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void runSuggestions()}
+                    disabled={!selectedTarget || suggestLinks.isPending}
+                  >
+                    <RefreshCw className="mr-2 size-4" aria-hidden="true" />
+                    Find Links
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void bulkReviewDeterministicLinks()}
+                    disabled={
+                      !selectedTarget ||
+                      bulkReviewLinks.isPending ||
+                      bulkReviewableSuggestions.length === 0
+                    }
+                  >
+                    <Check className="mr-2 size-4" aria-hidden="true" />
+                    Review Deterministic Hops
+                  </Button>
+                </div>
                 {reviewQueueLinks.length === 0 ? (
-                  <EmptyState text="No matched links yet. Kassiber will look for same-id transfers, reviewed pairs, provider ids, and tight amount/time hints." />
+                  <EmptyState text="No matched links yet. Assemble History looks for transaction input/output structure, payment hashes, same-id transfers, reviewed pairs, and provider ids." />
                 ) : (
                   reviewQueueLinks.map((link) => (
                     <button
@@ -2219,6 +2283,43 @@ export function SourceFunds() {
                       ? () => openTxDetailById(finding.ref as string)
                       : undefined
                   }
+                  onAction={(action, gap) => {
+                    if (action === "open_source_creator") {
+                      setSourceForm((current) => ({
+                        ...current,
+                        source_type: "missing_history",
+                        link_type: "missing_history",
+                        label: current.label || "Reviewed missing history",
+                        // Quantified gaps prefill their unexplained amount,
+                        // not the whole target.
+                        amount:
+                          typeof gap.amount === "number"
+                            ? gap.amount.toFixed(8)
+                            : current.amount || selectedTargetAmount,
+                        to_transaction:
+                          gap.ref && txById.has(gap.ref)
+                            ? gap.ref
+                            : current.to_transaction,
+                        description:
+                          current.description ||
+                          "Prior history is missing and has been reviewed as a disclosure gap.",
+                      }));
+                      setShowAdvancedReview(true);
+                      return;
+                    }
+                    if (action === "open_link_review") {
+                      if (gap.ref) setSelectedLinkId(gap.ref);
+                      setShowAdvancedReview(true);
+                      return;
+                    }
+                    if (action === "open_review_queue") {
+                      setShowAdvancedReview(true);
+                      return;
+                    }
+                    if (action === "open_transaction" && gap.ref && txById.has(gap.ref)) {
+                      openTxDetailById(gap.ref);
+                    }
+                  }}
                 />
               ))}
               {report && blockers.length === 0 && warnings.length === 0 && (
@@ -3295,16 +3396,28 @@ function RecipientPreferenceAdvisory({
   );
 }
 
+const GAP_ACTION_LABELS: Record<string, string> = {
+  open_source_creator: "Document this gap",
+  open_link_review: "Review this link",
+  open_review_queue: "Open review queue",
+  open_transaction: "Open transaction",
+};
+
 function GateRow({
   finding,
   onOpenTransaction,
+  onAction,
 }: {
   finding: SourceFundsFinding;
   onOpenTransaction?: () => void;
+  /** Dispatches the finding's next_step.action; gap cards become one-click fixes. */
+  onAction?: (action: string, finding: SourceFundsFinding) => void;
 }) {
   const blocker = finding.severity === "blocker";
   const headline = finding.next_step?.headline?.trim();
   const docAnchor = finding.next_step?.doc_anchor?.trim();
+  const action = finding.next_step?.action?.trim();
+  const actionLabel = action ? GAP_ACTION_LABELS[action] : undefined;
   return (
     <div
       className={[
@@ -3324,16 +3437,28 @@ function GateRow({
           )}
         </div>
       )}
-      {onOpenTransaction && (
-        <button
-          type="button"
-          className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[var(--color-accent)] hover:underline"
-          onClick={onOpenTransaction}
-        >
-          <Eye className="size-3.5" aria-hidden="true" />
-          Open transaction to fix
-        </button>
-      )}
+      <div className="flex flex-wrap gap-3">
+        {onAction && action && actionLabel && (
+          <button
+            type="button"
+            className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[var(--color-accent)] hover:underline"
+            onClick={() => onAction(action, finding)}
+          >
+            <ArrowRight className="size-3.5" aria-hidden="true" />
+            {actionLabel}
+          </button>
+        )}
+        {onOpenTransaction && (
+          <button
+            type="button"
+            className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[var(--color-accent)] hover:underline"
+            onClick={onOpenTransaction}
+          >
+            <Eye className="size-3.5" aria-hidden="true" />
+            Open transaction to fix
+          </button>
+        )}
+      </div>
     </div>
   );
 }

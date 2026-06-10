@@ -154,7 +154,9 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `asset`, `wallet`, `since`, `sort`, and `order`. `ui.backends.list` is
   scoped to the active profile and exposes URL presence metadata, not exact
   endpoint URLs. `ui.source_funds.*` exposes the reviewed source-of-funds
-  workstation: source/link/evidence listing, suggestion seeding, explicit link
+  workstation: source/link/evidence listing, suggestion seeding, one-call
+  history assembly (`ui.source_funds.assemble`, local-evidence only — it
+  never contacts a backend), explicit link
   review, report preview, gated PDF export, and gated evidence-bundle export
   (`ui.source_funds.export_bundle`) without adding generic CLI dispatch. Report
   preview/save embed on-device-rendered diagram SVGs (`include_diagrams`) so the
@@ -201,7 +203,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `journals {process,list,transfers {list},quarantined,events {list,get},quarantine {show,clear,resolve {price-override,exclude}}}`
 - `transfers {pair,list,unpair,payouts {list,create,delete},suggest,bulk-pair,dismiss,rules {list,create,apply,delete,enable,disable}}`
 - `views {list,create,delete}` — generic saved-view CRUD; ``swap_candidates`` is the first surface consumer
-- `source-funds {sources {list,create,attach},links {list,create,review,attach,bulk-review},suggest,cases {list}}`
+- `source-funds {sources {list,create,attach},links {list,create,review,attach,bulk-review},suggest,assemble,cases {list},coverage,recipients {list,create,update,delete}}` — `assemble` auto-builds the reviewed flow graph behind a target from local evidence only (transaction input/output structure of synced Bitcoin/Liquid wallets, Lightning payment hashes, platform ids, reviewed pairs), looping suggest + deterministic bulk review until convergence; it never contacts a backend.
 - `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,lightning-profitability,source-funds,austrian-e1kv,austrian-tax-summary,export-pdf,export-summary-pdf,export-csv,export-xlsx,export-lightning-profitability-csv,export-source-funds-pdf,export-source-funds-bundle,export-austrian,export-austrian-e1kv-pdf,export-austrian-e1kv-xlsx,export-austrian-e1kv-csv}`
 - `rates {pairs,sync,rebuild,latest,range,set}`
 - `diagnostics {collect}`

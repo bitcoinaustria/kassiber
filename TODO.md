@@ -261,6 +261,16 @@ top of the monolith.
   detail table, contents list on the cover, a missing-history section with
   unexplained amounts, and a disclosure-footprint summary (wallets named +
   common-ownership note) in payload, PDF, and desktop preview.
+- [x] Auto-assemble the flow graph from real transaction structure across
+  layers: `utxo_spend` deriver joins vin outpoints (esplora/electrum
+  `raw_json`) and Wasabi `spent_by` against owned `wallet_utxos` for exact
+  same-wallet parent chaining and multi-wallet leg funding (Bitcoin and
+  Liquid); `payment_hash` deriver links Lightning legs; both are
+  deterministic bulk-review methods; one-pair-one-link guard prevents
+  cross-method double allocation; `source-funds assemble` /
+  `ui.source_funds.assemble` loop suggest + bulk review to convergence
+  (local evidence only, no network); desktop review step is assemble-first
+  with actionable gap cards dispatching `next_step.action`.
 - [ ] Add graph visualization polish for dense source-funds cases after real-user feedback; keep the current editor workflow as the source of truth
 - [ ] Add optional configured-backend chain observations with an explicit public-backend privacy warning; keep them weak suggestions unless reviewed
 - [ ] Add optional OCR/photo/invoice extraction after the evidence review and

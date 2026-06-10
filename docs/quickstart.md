@@ -249,6 +249,11 @@ python3 -m kassiber source-funds recipients create \
   --label "Relationship bank" --kind bank \
   --default-reveal-mode standard
 
+# Auto-assemble everything provable from local evidence (tx inputs/outputs
+# of synced wallets, Lightning payment hashes, platform ids, reviewed pairs).
+python3 -m kassiber source-funds assemble \
+  --target-transaction <target-txid-or-id>
+
 # Preview gates and disclosure; save an immutable case before export.
 python3 -m kassiber --machine reports source-funds \
   --target-transaction <target-txid-or-id> \
