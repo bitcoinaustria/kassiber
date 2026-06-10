@@ -36,6 +36,8 @@ export type ConnectionKind =
 export interface Connection {
   id: string;
   kind: ConnectionKind;
+  /** Wallet chain ("bitcoin" | "liquid") from the daemon snapshot. */
+  chain?: string;
   label: string;
   last: string;
   lastSyncAt?: string | null;
