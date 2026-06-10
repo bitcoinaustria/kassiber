@@ -47,7 +47,9 @@ tools for the chat session. `--machine` emits a single final `chat` envelope;
 `--stream-json` emits the raw daemon stream records as NDJSON (both one-shot
 only); `chat -` reads the one-shot prompt from stdin. Neither machine mode
 ever prompts for consent; unapproved mutating tool requests are denied and
-fed back to the model. With piped stdout the answer is the only thing on
+fed back to the model. On a TTY, markdown renders with ANSI styling and tool
+results draw deterministic tables from the daemon envelope (`--plain`
+disables both). With piped stdout the raw answer is the only thing on
 stdout (chrome moves to stderr), so `kassiber chat "..." > answer.txt` is
 clean. Use `--no-tools` for a provider-only exchange without the tool loop,
 and `--transcript <path>` to keep a plaintext NDJSON audit log of the

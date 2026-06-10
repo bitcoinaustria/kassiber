@@ -43,6 +43,8 @@ run py -m unittest tests.test_homebrew_cask -v
 run py -m unittest tests.test_btcpay_commercial_provenance -v
 run py -m unittest tests.test_core_maintenance -v
 run py -m unittest tests.test_cli_chat -v
+run py -m unittest tests.test_termrender -v
+run py -m unittest tests.test_ai_core -v
 run py -m unittest tests.test_cli_smoke -v
 run py -m unittest tests.test_rp2_packaging -v
 run py -m unittest tests.test_source_funds_cli -v

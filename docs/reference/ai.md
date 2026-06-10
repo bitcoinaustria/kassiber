@@ -174,9 +174,15 @@ re-sends it for that tool.
 
 Output modes cover scripting:
 
-- default rendered text for humans. With piped stdout, the answer text is the
-  only thing on stdout — progress labels, tool announcements, consent UI, and
-  the provenance footer move to stderr;
+- default rendered text for humans. On a TTY, the model's markdown is
+  rendered with ANSI styling — bold, inline code, headers, bullets, fenced
+  code, and pipe tables re-drawn as box-aligned tables — while preserving
+  token streaming, and successful tool results draw a compact deterministic
+  table straight from the daemon envelope, so tabular numbers on screen never
+  depend on the model retyping them correctly. `--plain` turns both off.
+  With piped stdout, the raw answer text is the only thing on stdout —
+  progress labels, tool announcements, tool tables, consent UI, and the
+  provenance footer move to stderr;
 - `--machine` / `--format json` (one-shot only) emits a single `chat` envelope
   with the final message, `finish_reason`, provenance, and tool-call summary;
 - `--stream-json` (one-shot only, mutually exclusive with `--machine`) emits
