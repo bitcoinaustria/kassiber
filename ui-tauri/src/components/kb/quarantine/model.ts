@@ -30,6 +30,9 @@ export function quarantineItemToRow(
     evidenceHint: evidenceHint(reason, item.detail),
     nextAction: nextAction(reason),
     metricFilterIds: quarantineReasonFilterIds(reason),
+    href: item.transaction_id
+      ? `/transactions?tx=${encodeURIComponent(item.transaction_id)}&tab=classify`
+      : undefined,
   };
 }
 

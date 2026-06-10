@@ -45,6 +45,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
+import { useDaemonMutation } from "@/daemon/client";
+import { useUiStore } from "@/store/ui";
 import { cn } from "@/lib/utils";
 import { type Currency } from "@/lib/currency";
 import { type ExplorerSettings } from "@/lib/explorer";
@@ -138,6 +140,9 @@ const TransactionsTable = ({
   deepLinkedTransactionId?: string | null;
   deepLinkedTransactionTab?: string;
 }) => {
+  const excludeTransaction = useDaemonMutation(
+    "ui.transactions.metadata.update",
+  );
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
   const [dateFilter, setDateFilter] = React.useState<string>("all");
   const [flowFilter, setFlowFilter] = React.useState<string>("all");
@@ -1080,9 +1085,20 @@ const TransactionsTable = ({
                             onSelect={(event: Event) => {
                               event.preventDefault();
                               if (typeof window === "undefined") return;
-                              window.confirm(
-                                "Void this transaction? This cannot be undone.",
+                              const confirmed = window.confirm(
+                                "Exclude this transaction from journals and reports? You can re-include it from the transaction's Classify tab.",
                               );
+                              if (!confirmed) return;
+                              void excludeTransaction.mutateAsync({
+                                transaction: txn.id,
+                                excluded: true,
+                              });
+                              useUiStore.getState().addNotification({
+                                title: "Transaction excluded",
+                                body: "Reprocess journals before trusting reports again.",
+                                tone: "info",
+                                dedupeKey: `tx-exclude-${txn.id}`,
+                              });
                             }}
                           >
                             <X className="mr-2 size-4" aria-hidden="true" />

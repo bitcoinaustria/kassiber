@@ -26,15 +26,15 @@ import { useSupportedReasoningEffort } from "@/components/ai/useReasoningEffortS
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-interface ScreenAssistantMockupProps {
+interface AssistantDockProps {
   className?: string;
   collapsed?: boolean;
 }
 
-export function ScreenAssistantMockup({
+export function AssistantDock({
   className,
   collapsed = false,
-}: ScreenAssistantMockupProps) {
+}: AssistantDockProps) {
   const [isInteracting, setIsInteracting] = React.useState(false);
   const [isThreadCollapsed, setIsThreadCollapsed] = React.useState(false);
   const {

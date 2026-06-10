@@ -28,6 +28,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Link } from "@tanstack/react-router";
+
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
@@ -49,6 +51,8 @@ export interface ReviewTableRow {
   evidenceHint?: string;
   nextAction?: string;
   metricFilterIds?: string[];
+  /** Deep link opening the underlying record (e.g. the transaction). */
+  href?: string;
 }
 
 export interface ReviewMetric {
@@ -632,6 +636,14 @@ function ReviewWorklistRow({
         <span className="font-mono text-xs text-muted-foreground">
           {row.date}
         </span>
+        {row.href && (
+          <Link
+            to={row.href}
+            className="mt-1 block text-xs font-medium text-[var(--color-accent)] underline-offset-2 hover:underline"
+          >
+            Open transaction
+          </Link>
+        )}
       </TableCell>
     </TableRow>
   );
