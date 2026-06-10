@@ -539,6 +539,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     chat.add_argument(
+        "--plain",
+        action="store_true",
+        help=(
+            "Disable terminal markdown rendering and deterministic "
+            "tool-result tables; print the raw model output."
+        ),
+    )
+    chat.add_argument(
         "--incognito",
         action="store_true",
         help="Do not persist this chat to the database, regardless of the history setting.",

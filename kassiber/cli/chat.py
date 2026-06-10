@@ -11,6 +11,7 @@ from typing import Any, Iterable, TextIO
 from ..ai.client import CLI_DEFAULT_MODEL, is_cli_provider_locator
 from ..ai.tools import TOOL_CATALOG
 from ..errors import AppError
+from .termrender import MarkdownStreamRenderer, render_envelope_table
 
 
 _CONSENT_DECISIONS = {"allow_once", "allow_session", "deny"}
@@ -605,6 +606,8 @@ def _run_turn(
     content_parts: list[str] = []
     tool_calls: dict[str, dict[str, Any]] = {}
     control_requests: set[str] = set()
+    pretty = render and out.isatty() and not getattr(args, "plain", False)
+    markdown = MarkdownStreamRenderer() if pretty else None
     try:
         while True:
             record = client.read()
@@ -634,7 +637,9 @@ def _run_turn(
                 visible = delta.get("content")
                 if isinstance(visible, str) and visible:
                     content_parts.append(visible)
-                    if render:
+                    if markdown is not None:
+                        _write(markdown.feed(visible), out)
+                    elif render:
                         _write(visible, out)
             elif kind == "ai.chat.tool_call":
                 call_id = data.get("call_id")
@@ -714,7 +719,21 @@ def _run_turn(
                     existing["ok"] = bool(data.get("ok"))
                     if render and not data.get("ok") and data.get("reason"):
                         _write(f"\nTool result: {data['reason']}\n", chrome)
+                    if (
+                        pretty
+                        and chrome.isatty()
+                        and data.get("ok")
+                        and isinstance(data.get("envelope"), dict)
+                        and not call_id.startswith("auto_read")
+                    ):
+                        # Deterministic data display: the numbers come from
+                        # the daemon envelope, not from the model's retelling.
+                        table = render_envelope_table(data["envelope"])
+                        if table:
+                            _write(table + "\n", chrome)
             elif kind == "ai.chat":
+                if markdown is not None:
+                    _write(markdown.flush(), out)
                 if render and (content_parts or out.isatty()):
                     _write("\n", out)
                 return ChatTurnResult(
@@ -734,6 +753,8 @@ def _run_turn(
             raise _error_from_envelope(terminal, message="chat failed", code="chat_failed")
         if stream_out is not None:
             _write(json.dumps(terminal, separators=(",", ":")) + "\n", stream_out)
+        if markdown is not None:
+            _write(markdown.flush(), out)
         if render and (content_parts or out.isatty()):
             _write("\n", out)
         return ChatTurnResult(

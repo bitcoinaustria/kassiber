@@ -810,6 +810,73 @@ class _FakeTtyInput(io.StringIO):
         return True
 
 
+class _FakeTtyOutput(io.StringIO):
+    def isatty(self):
+        return True
+
+
+def _chat_namespace(data_root, **overrides):
+    values = dict(
+        data_root=str(data_root),
+        env_file=None,
+        db_passphrase_fd=None,
+        format=None,
+        prompt=None,
+        prompt_text=None,
+        provider="tool-local",
+        model=None,
+        system=None,
+        temperature=None,
+        max_tokens=None,
+        reasoning_effort="auto",
+        tool_loop_max_iterations=8,
+        no_tools=False,
+        yes=False,
+        allow_tool=None,
+        stream_json=False,
+        transcript=None,
+        incognito=False,
+        continue_session=False,
+        session=None,
+        plain=False,
+    )
+    values.update(overrides)
+    return argparse.Namespace(**values)
+
+
+class CliChatRenderTest(unittest.TestCase):
+    def _run_tty_chat(self, content, **overrides):
+        from kassiber.cli.chat import run_chat_command
+
+        server = _start_tool_chat_server(
+            [_chat_completion_response({"role": "assistant", "content": content})]
+        )
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+                data_root = Path(tmp) / "data"
+                _seed_provider(data_root, f"http://127.0.0.1:{server.server_port}/v1")
+                args = _chat_namespace(data_root, prompt="hello", **overrides)
+                stdout = _FakeTtyOutput()
+                session = run_chat_command(
+                    args, stdin=io.StringIO(""), stdout=stdout
+                )
+        finally:
+            _stop_server(server)
+        return session, stdout.getvalue()
+
+    def test_tty_output_renders_markdown(self):
+        session, output = self._run_tty_chat("**Ready** to `help`.")
+        self.assertIn("\x1b[1mReady\x1b[22m", output)
+        self.assertIn("\x1b[36mhelp\x1b[39m", output)
+        # The conversation history keeps the raw markdown, not ANSI.
+        self.assertEqual(session.turns[0].content, "**Ready** to `help`.")
+
+    def test_plain_disables_markdown_rendering(self):
+        _, output = self._run_tty_chat("**Ready** to help.", plain=True)
+        self.assertIn("**Ready**", output)
+        self.assertNotIn("\x1b[1m", output)
+
+
 class CliChatReplTest(unittest.TestCase):
     def test_repl_commands_and_turn(self):
         from kassiber.cli.chat import run_chat_command
