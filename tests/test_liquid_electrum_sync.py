@@ -237,7 +237,7 @@ class LiquidElectrumSyncTest(unittest.TestCase):
                         raise AssertionError(f"Unexpected batched call: {key!r}")
                 return responses
 
-        def fake_scan(plan, target_used=None, target_used_batch=None, scan_batch_size=None):
+        def fake_scan(plan, target_used=None, target_used_batch=None, scan_batch_size=None, highest_used=None):
             self.assertIsNone(target_used)
             self.assertEqual(scan_batch_size, 1)
             self.assertEqual(target_used_batch([first_target, second_target]), [True, False])

@@ -49,6 +49,20 @@ LEGACY_DB_FILENAME = f"{LEGACY_APP_NAME}.sqlite3"
 DB_BUSY_TIMEOUT_MS = 30_000
 DB_BUSY_TIMEOUT_SECONDS = DB_BUSY_TIMEOUT_MS / 1000
 DB_JOURNAL_MODE = "wal"
+# `NORMAL` is the standard, crash-safe pairing for WAL: it only drops an fsync
+# per commit (a power-loss can lose the last transaction, never corrupt the DB),
+# which removes the dominant cost from write-heavy refresh paths (per-row sync
+# inserts, the journal delete+rebuild, UTXO inventory writes).
+DB_SYNCHRONOUS = "NORMAL"
+# Spill temp B-trees/sort runs to RAM instead of disk during reports/journaling.
+DB_TEMP_STORE = "MEMORY"
+# Negative cache_size is in KiB (here ~16 MiB) rather than pages, so the page
+# cache size is independent of the page size.
+DB_CACHE_SIZE_KIB = -16_000
+# Memory-map up to 256 MiB of the database for faster reads. This is a no-op on
+# SQLCipher connections (mmap is disabled there for security), so it only helps
+# the plaintext store and never interferes with the cipher keying sequence.
+DB_MMAP_SIZE_BYTES = 268_435_456
 
 
 SCHEMA = """
@@ -1078,10 +1092,20 @@ def database_has_core_schema(conn):
     return True
 
 
-def _configure_connection_pragmas(conn):
-    """Apply connection settings used by daemon foreground/background writers."""
+def _configure_connection_pragmas(conn, *, encrypted=False):
+    """Apply connection settings used by daemon foreground/background writers.
+
+    `encrypted` skips `mmap_size` on SQLCipher connections: memory-mapping must
+    only ever expose ciphertext pages, so we keep the encrypted store off the
+    mmap path entirely rather than rely on the codec to intercept it.
+    """
     conn.execute(f"PRAGMA busy_timeout = {DB_BUSY_TIMEOUT_MS}")
     conn.execute(f"PRAGMA journal_mode = {DB_JOURNAL_MODE}")
+    conn.execute(f"PRAGMA synchronous = {DB_SYNCHRONOUS}")
+    conn.execute(f"PRAGMA temp_store = {DB_TEMP_STORE}")
+    conn.execute(f"PRAGMA cache_size = {DB_CACHE_SIZE_KIB}")
+    if not encrypted:
+        conn.execute(f"PRAGMA mmap_size = {DB_MMAP_SIZE_BYTES}")
     conn.execute("PRAGMA foreign_keys = ON")
 
 
@@ -1165,7 +1189,7 @@ def open_db(data_root, *, passphrase=None, require_existing_schema=False):
                 details={"database": str(db_path)},
                 retryable=False,
             )
-        _configure_connection_pragmas(conn)
+        _configure_connection_pragmas(conn, encrypted=True)
         conn.executescript(SCHEMA)
         ensure_schema_compat(conn)
         return conn

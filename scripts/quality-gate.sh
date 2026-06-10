@@ -49,6 +49,11 @@ run py -m unittest tests.test_daemon_smoke -v
 run py -m unittest tests.test_secrets_smoke -v
 run py -m unittest tests.test_rates_kraken_csv -v
 run py -m unittest tests.test_review_regressions -v
+run py -m unittest tests.test_sync_backends -v
+run py -m unittest tests.test_sync_htlc_enrichment -v
+run py -m unittest tests.test_sync_btcpay_incremental -v
+run py -m unittest tests.test_freshness -v
+run py -m unittest tests.test_liquid_electrum_sync -v
 
 echo
 SMOKE_HOME="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-quality-gate-home.XXXXXX")"

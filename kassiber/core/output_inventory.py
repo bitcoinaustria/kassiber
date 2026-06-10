@@ -327,50 +327,50 @@ def update_wallet_output_inventory(
     if samourai_metadata:
         for row in normalized:
             row["raw_json"] = _with_samourai_raw_json(row["raw_json"], samourai_metadata)
-    for row in normalized:
-        conn.execute(
-            """
-            INSERT INTO wallet_utxos(
-                id, workspace_id, profile_id, wallet_id, backend_name, backend_kind,
-                chain, network, asset, amount, txid, vout, outpoint,
-                confirmation_status, confirmations, block_height, block_time,
-                address, address_label, branch_label, branch_index, address_index,
-                anonymity_score, spent_by, excluded_from_coinjoin, key_state,
-                anon_history_json, first_seen_at, last_seen_at, spent_at, raw_json
-            ) VALUES(
-                ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?,
-                ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?,
-                ?, ?, ?, ?
-            )
-            ON CONFLICT(wallet_id, txid, vout) DO UPDATE SET
-                backend_name = excluded.backend_name,
-                backend_kind = excluded.backend_kind,
-                chain = excluded.chain,
-                network = excluded.network,
-                asset = excluded.asset,
-                amount = excluded.amount,
-                outpoint = excluded.outpoint,
-                confirmation_status = excluded.confirmation_status,
-                confirmations = excluded.confirmations,
-                block_height = excluded.block_height,
-                block_time = excluded.block_time,
-                address = excluded.address,
-                address_label = excluded.address_label,
-                branch_label = excluded.branch_label,
-                branch_index = excluded.branch_index,
-                address_index = excluded.address_index,
-                anonymity_score = excluded.anonymity_score,
-                spent_by = excluded.spent_by,
-                excluded_from_coinjoin = excluded.excluded_from_coinjoin,
-                key_state = excluded.key_state,
-                anon_history_json = excluded.anon_history_json,
-                last_seen_at = excluded.last_seen_at,
-                spent_at = excluded.spent_at,
-                raw_json = excluded.raw_json
-            """,
+    conn.executemany(
+        """
+        INSERT INTO wallet_utxos(
+            id, workspace_id, profile_id, wallet_id, backend_name, backend_kind,
+            chain, network, asset, amount, txid, vout, outpoint,
+            confirmation_status, confirmations, block_height, block_time,
+            address, address_label, branch_label, branch_index, address_index,
+            anonymity_score, spent_by, excluded_from_coinjoin, key_state,
+            anon_history_json, first_seen_at, last_seen_at, spent_at, raw_json
+        ) VALUES(
+            ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?
+        )
+        ON CONFLICT(wallet_id, txid, vout) DO UPDATE SET
+            backend_name = excluded.backend_name,
+            backend_kind = excluded.backend_kind,
+            chain = excluded.chain,
+            network = excluded.network,
+            asset = excluded.asset,
+            amount = excluded.amount,
+            outpoint = excluded.outpoint,
+            confirmation_status = excluded.confirmation_status,
+            confirmations = excluded.confirmations,
+            block_height = excluded.block_height,
+            block_time = excluded.block_time,
+            address = excluded.address,
+            address_label = excluded.address_label,
+            branch_label = excluded.branch_label,
+            branch_index = excluded.branch_index,
+            address_index = excluded.address_index,
+            anonymity_score = excluded.anonymity_score,
+            spent_by = excluded.spent_by,
+            excluded_from_coinjoin = excluded.excluded_from_coinjoin,
+            key_state = excluded.key_state,
+            anon_history_json = excluded.anon_history_json,
+            last_seen_at = excluded.last_seen_at,
+            spent_at = excluded.spent_at,
+            raw_json = excluded.raw_json
+        """,
+        [
             (
                 row["id"],
                 profile["workspace_id"],
@@ -403,8 +403,10 @@ def update_wallet_output_inventory(
                 timestamp,
                 row["spent_at"],
                 row["raw_json"],
-            ),
-        )
+            )
+            for row in normalized
+        ],
+    )
     if active_outpoints:
         placeholders = ", ".join("?" for _ in active_outpoints)
         spent_cursor = conn.execute(

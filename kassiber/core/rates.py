@@ -9,14 +9,13 @@ from pathlib import Path
 import tempfile
 import zipfile
 from datetime import datetime, timedelta, timezone
-from urllib import error as urlerror
 from urllib import parse as urlparse
 from urllib import request as urlrequest
 
 from .. import __version__
+from .. import http_client
 from ..db import APP_NAME, get_setting, set_setting
 from ..errors import AppError
-from ..retry import retry_after_seconds_from_http_error
 from . import pricing
 from ..time_utils import _iso_z, _parse_iso_datetime
 
@@ -171,29 +170,29 @@ def transaction_price_missing_sql_unqualified():
     return _transaction_price_missing_sql("")
 
 
-def http_get_json(url, timeout=30):
-    request = urlrequest.Request(
-        url,
-        headers={
-            "Accept": "application/json",
-            "User-Agent": f"{APP_NAME}/{__version__}",
-        },
-    )
-    try:
+def http_get_json(url, timeout=30, *, _sleeper=None, _rng=None, _max_attempts=None):
+    # Shares the per-host concurrency limiter and bounded 429/503 retry used by
+    # chain sync — rate providers (Coinbase, CoinGecko) throttle public traffic
+    # too. ``_sleeper``/``_rng``/``_max_attempts`` are injectable for tests.
+    def _opener():
+        request = urlrequest.Request(
+            url,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": f"{APP_NAME}/{__version__}",
+            },
+        )
         with urlrequest.urlopen(request, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))
-    except urlerror.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        if exc.code == 429:
-            raise AppError(
-                f"Rate provider rate limited the request for {url} (HTTP 429)",
-                code="rate_limited",
-                retryable=True,
-                details={"retry_after_seconds": retry_after_seconds_from_http_error(exc)},
-            ) from exc
-        raise AppError(f"HTTP {exc.code} from backend for {url}: {detail[:200]}") from exc
-    except urlerror.URLError as exc:
-        raise AppError(f"Failed to reach backend {url}: {exc.reason}") from exc
+
+    return http_client.request_with_retry(
+        url,
+        _opener,
+        source_label="Rate provider",
+        sleeper=_sleeper,
+        rng=_rng,
+        max_attempts=_max_attempts,
+    )
 
 
 def _float_from_exact(value):

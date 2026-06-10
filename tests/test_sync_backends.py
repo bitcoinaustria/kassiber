@@ -1,12 +1,20 @@
 import io
 import json
+import random
 import unittest
+from email.message import Message
 from unittest.mock import patch
+from urllib import error as urlerror
 
+from kassiber.core import sync_backends as sb
 from kassiber.core.sync import (
+    WalletBackendFetch,
     WalletSyncHooks,
     WalletSyncState,
+    classify_wallet_sync,
     emit_sync_progress,
+    fetch_wallet_backend,
+    prefetch_wallets_backend,
     sync_progress_emitter,
     sync_wallet_from_backend,
     sync_wallets,
@@ -21,6 +29,7 @@ from kassiber.core.sync_backends import (
     discover_descriptor_targets,
     electrum_sync_adapter,
     esplora_sync_adapter,
+    esplora_utxos_for_wallet,
     record_from_bitcoin_esplora_tx,
     record_from_bitcoinrpc_details,
     scan_descriptor_targets,
@@ -1031,6 +1040,376 @@ class Socks5HelpersTest(unittest.TestCase):
                     timeout=5,
                 )
         self.assertTrue(fake.closed)
+
+
+class _FakeHttpResponse:
+    def __init__(self, body):
+        self._body = body if isinstance(body, bytes) else body.encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+    def read(self):
+        return self._body
+
+
+def _http_error(code, retry_after=None, body=b"throttled"):
+    headers = Message()
+    if retry_after is not None:
+        headers["Retry-After"] = str(retry_after)
+    return urlerror.HTTPError(
+        "https://esplora.example/x", code, "err", headers, io.BytesIO(body)
+    )
+
+
+class HttpRetryAndLimiterTest(unittest.TestCase):
+    def _patched_urlopen(self, scripted):
+        queue = list(scripted)
+
+        def fake_urlopen(request, timeout=30):
+            item = queue.pop(0)
+            if isinstance(item, urlerror.HTTPError):
+                raise item
+            return _FakeHttpResponse(item)
+
+        return patch.object(sb.urlrequest, "urlopen", side_effect=fake_urlopen)
+
+    def test_http_get_json_retries_on_429_then_succeeds(self):
+        sleeps = []
+        scripted = [
+            _http_error(429, retry_after=2),
+            _http_error(429, retry_after=1),
+            '{"ok": true}',
+        ]
+        with self._patched_urlopen(scripted):
+            result = sb.http_get_json(
+                "https://esplora.example/x",
+                _sleeper=sleeps.append,
+                _rng=random.Random(0),
+                _max_attempts=3,
+            )
+        self.assertEqual(result, {"ok": True})
+        # Retry-After header is honored verbatim for the backoff delays.
+        self.assertEqual(sleeps, [2.0, 1.0])
+
+    def test_http_get_text_retries_on_503_then_succeeds(self):
+        sleeps = []
+        scripted = [_http_error(503), _http_error(503), "tip-height-body"]
+        with self._patched_urlopen(scripted):
+            result = sb.http_get_text(
+                "https://esplora.example/x",
+                _sleeper=sleeps.append,
+                _rng=random.Random(0),
+                _max_attempts=3,
+            )
+        self.assertEqual(result, "tip-height-body")
+        # No Retry-After -> exponential backoff with jitter; two sleeps occurred.
+        self.assertEqual(len(sleeps), 2)
+        self.assertTrue(all(delay > 0 for delay in sleeps))
+
+    def test_retry_exhaustion_reraises_rate_limited(self):
+        sleeps = []
+        scripted = [_http_error(429, retry_after=1), _http_error(429, retry_after=1)]
+        with self._patched_urlopen(scripted):
+            with self.assertRaises(AppError) as ctx:
+                sb.http_get_json(
+                    "https://esplora.example/x",
+                    _sleeper=sleeps.append,
+                    _rng=random.Random(0),
+                    _max_attempts=2,
+                )
+        self.assertEqual(ctx.exception.code, "rate_limited")
+        self.assertTrue(ctx.exception.retryable)
+        # The scheduler's outer backoff still sees the server-suggested delay.
+        self.assertEqual(ctx.exception.details["retry_after_seconds"], 1)
+        # Only one sleep happened before the final attempt exhausted.
+        self.assertEqual(sleeps, [1.0])
+
+    def test_503_exhaustion_reraises_rate_limited(self):
+        # 503 is net-new retryable behavior (previously an immediate failure);
+        # pin that exhaustion still surfaces the retryable rate_limited contract
+        # so the freshness scheduler's outer backoff fires.
+        sleeps = []
+        scripted = [_http_error(503), _http_error(503)]
+        with self._patched_urlopen(scripted):
+            with self.assertRaises(AppError) as ctx:
+                sb.http_get_json(
+                    "https://esplora.example/x",
+                    _sleeper=sleeps.append,
+                    _rng=random.Random(0),
+                    _max_attempts=2,
+                )
+        self.assertEqual(ctx.exception.code, "rate_limited")
+        self.assertTrue(ctx.exception.retryable)
+        self.assertIn("HTTP 503", str(ctx.exception))
+        self.assertEqual(len(sleeps), 1)
+
+    def test_huge_retry_after_is_clamped_and_deferred_without_sleeping(self):
+        sleeps = []
+        scripted = [_http_error(429, retry_after=86_400), '{"ok": true}']
+        with self._patched_urlopen(scripted):
+            with self.assertRaises(AppError) as ctx:
+                sb.http_get_json(
+                    "https://esplora.example/x",
+                    _sleeper=sleeps.append,
+                    _rng=random.Random(0),
+                    _max_attempts=3,
+                )
+        self.assertEqual(ctx.exception.code, "rate_limited")
+        # A Retry-After beyond the cumulative cap must not block the sync; it is
+        # re-raised immediately so the freshness scheduler owns the long cooldown.
+        self.assertEqual(sleeps, [])
+
+    def test_non_retryable_http_error_raises_immediately(self):
+        sleeps = []
+        scripted = [_http_error(404, body=b"missing")]
+        with self._patched_urlopen(scripted):
+            with self.assertRaises(AppError) as ctx:
+                sb.http_get_json(
+                    "https://esplora.example/x",
+                    _sleeper=sleeps.append,
+                    _max_attempts=3,
+                )
+        self.assertNotEqual(ctx.exception.code, "rate_limited")
+        self.assertIn("HTTP 404", str(ctx.exception))
+        self.assertEqual(sleeps, [])
+
+    def test_host_limiter_is_shared_per_host(self):
+        from kassiber import http_client
+
+        first = http_client.host_limiter("https://shared.example/a")
+        again = http_client.host_limiter("https://shared.example/b?q=1")
+        other = http_client.host_limiter("https://other.example/a")
+        self.assertIs(first, again)
+        self.assertIsNot(first, other)
+
+    def test_http_get_json_recovers_from_real_429(self):
+        # Closest analog to a throttling public backend: a real loopback server
+        # that returns HTTP 429 (Retry-After) once, then a 200 JSON body. Proves
+        # the genuine urlopen -> HTTPError -> retry -> success path end to end.
+        import threading
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+
+        state = {"hits": 0}
+
+        class _ThrottleHandler(BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def do_GET(self):
+                state["hits"] += 1
+                if state["hits"] == 1:
+                    self.send_response(429)
+                    self.send_header("Retry-After", "0")
+                    self.end_headers()
+                    self.wfile.write(b"slow down")
+                    return
+                body = b'{"ok": true}'
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        server = HTTPServer(("127.0.0.1", 0), _ThrottleHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            host, port = server.server_address
+            result = sb.http_get_json(
+                f"http://{host}:{port}/scripthash/abc",
+                _sleeper=lambda _delay: None,
+                _max_attempts=3,
+            )
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(state["hits"], 2)
+
+
+class EsploraUtxoParallelTest(unittest.TestCase):
+    def test_utxos_preserve_target_order_under_parallel_fetch(self):
+        targets = [
+            {"address": f"bc1qaddr{index}", "script_pubkey": "0014" + f"{index:02x}" * 20}
+            for index in range(5)
+        ]
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=targets,
+            tracked_scripts={t["script_pubkey"]: t for t in targets},
+            history_cache={},
+        )
+
+        def fake_utxos(base_url, script_pubkey_hex, timeout=30):
+            # Encode the target's position in the UTXO value so the output order
+            # is verifiable independent of which worker finishes first.
+            index = next(i for i, t in enumerate(targets) if t["script_pubkey"] == script_pubkey_hex)
+            return [{"txid": f"{index:02x}" * 32, "vout": 0, "value": 1000 + index, "status": {"block_height": 100 + index}}]
+
+        with patch(
+            "kassiber.core.sync_backends._esplora_tip_height", return_value=200
+        ), patch(
+            "kassiber.core.sync_backends.fetch_esplora_scripthash_utxos",
+            side_effect=fake_utxos,
+        ):
+            outputs = esplora_utxos_for_wallet(
+                {"name": "esplora", "kind": "esplora", "url": "https://esplora.example", "batch_size": 8},
+                sync_state,
+            )
+        self.assertEqual([o["amount_sats"] for o in outputs], [1000, 1001, 1002, 1003, 1004])
+        self.assertEqual(
+            [o["address"] for o in outputs],
+            [t["address"] for t in targets],
+        )
+
+
+def _backend_sync_wallet(wallet_id, label, address):
+    return {
+        "id": wallet_id,
+        "label": label,
+        "kind": "single",
+        "config_json": json.dumps({"addresses": [address]}),
+    }
+
+
+def _sync_state_with_target(address, script):
+    target = {"address": address, "script_pubkey": script}
+    return WalletSyncState(
+        chain="bitcoin",
+        network="bitcoin",
+        descriptor_plan=None,
+        policy_asset_id="",
+        targets=[target],
+        tracked_scripts={script: target},
+        history_cache={},
+    )
+
+
+class HttpBackoffProgressTest(unittest.TestCase):
+    def _patched_urlopen(self, scripted):
+        queue = list(scripted)
+
+        def fake_urlopen(request, timeout=30):
+            item = queue.pop(0)
+            if isinstance(item, urlerror.HTTPError):
+                raise item
+            return _FakeHttpResponse(item)
+
+        return patch.object(sb.urlrequest, "urlopen", side_effect=fake_urlopen)
+
+    def test_backoff_emits_rate_limited_progress_event(self):
+        # The silent-backoff fix: a 429 wait must surface as a progress event so
+        # the UI can show "rate limited, retrying" instead of a frozen bar.
+        progress = []
+        scripted = [_http_error(429, retry_after=2), '{"ok": true}']
+        token = sync_progress_emitter.set(lambda payload: progress.append(dict(payload)))
+        try:
+            with self._patched_urlopen(scripted):
+                result = sb.http_get_json(
+                    "https://esplora.example/x",
+                    _sleeper=lambda _delay: None,
+                    _rng=random.Random(0),
+                    _max_attempts=3,
+                )
+        finally:
+            sync_progress_emitter.reset(token)
+        self.assertEqual(result, {"ok": True})
+        rate_limited = [item for item in progress if item.get("phase") == "rate_limited"]
+        self.assertEqual(len(rate_limited), 1)
+        self.assertEqual(rate_limited[0]["retry_attempt"], 1)
+        self.assertEqual(rate_limited[0]["retry_max"], 2)
+        self.assertEqual(rate_limited[0]["wait_seconds"], 2.0)
+
+    def test_map_bounded_propagates_progress_context_to_workers(self):
+        # Without per-worker context propagation, emit_sync_progress() inside a
+        # worker would read a default (None) emitter and silently drop the event.
+        progress = []
+        token = sync_progress_emitter.set(lambda payload: progress.append(dict(payload)))
+
+        def worker(item):
+            emit_sync_progress({"phase": "worker", "item": item})
+            return item * 10
+
+        try:
+            results = sb._map_bounded([1, 2, 3], worker, max_workers=3)
+        finally:
+            sync_progress_emitter.reset(token)
+        self.assertEqual(results, [10, 20, 30])
+        self.assertEqual(sorted(item["item"] for item in progress), [1, 2, 3])
+
+
+class CrossWalletPrefetchTest(unittest.TestCase):
+    def _hooks(self, *, fail_ids=()):
+        def resolve_sync_state(backend, wallet):
+            if wallet["id"] in fail_ids:
+                raise AppError(f"discovery failed for {wallet['id']}", code="discovery")
+            address = json.loads(wallet["config_json"])["addresses"][0]
+            return _sync_state_with_target(address, "0014" + "11" * 20)
+
+        return WalletSyncHooks(
+            import_file=lambda *a, **k: {},
+            insert_records=lambda *a, **k: {"imported": 1, "skipped": 0},
+            resolve_backend=lambda runtime_config, backend_name: {
+                "name": "default",
+                "kind": "esplora",
+                "url": "https://esplora.example",
+            },
+            resolve_sync_state=resolve_sync_state,
+            normalize_addresses=lambda values: list(values or []),
+            backend_adapters={"esplora": lambda backend, wallet, sync_state: ([], {})},
+        )
+
+    def test_classify_wallet_sync_buckets(self):
+        normalize = lambda values: list(values or [])
+        backend = _backend_sync_wallet("w1", "A", "bc1qaddr")
+        self.assertEqual(classify_wallet_sync(backend, normalize), "backend")
+        empty = {"id": "w2", "label": "B", "kind": "single", "config_json": "{}"}
+        self.assertEqual(classify_wallet_sync(empty, normalize), "none")
+        file_wallet = {
+            "id": "w3",
+            "label": "C",
+            "kind": "single",
+            "config_json": json.dumps({"source_file": "/tmp/x.csv", "source_format": "river_csv"}),
+        }
+        self.assertEqual(classify_wallet_sync(file_wallet, normalize), "file")
+
+    def test_prefetch_returns_fetch_per_wallet_and_captures_apperror(self):
+        wallets = [
+            _backend_sync_wallet("w-good", "Good", "bc1qgood"),
+            _backend_sync_wallet("w-bad", "Bad", "bc1qbad"),
+        ]
+        hooks = self._hooks(fail_ids={"w-bad"})
+        prefetched = prefetch_wallets_backend({}, {}, wallets, hooks)
+        self.assertIsInstance(prefetched["w-good"], WalletBackendFetch)
+        self.assertEqual(prefetched["w-good"].kind, "esplora")
+        self.assertIsInstance(prefetched["w-bad"], AppError)
+        self.assertEqual(prefetched["w-bad"].code, "discovery")
+
+    def test_sync_wallets_applies_prefetch_and_reraises_captured_error(self):
+        hooks = self._hooks()
+        good = _backend_sync_wallet("w-good", "Good", "bc1qgood")
+        good_fetch = fetch_wallet_backend({}, {}, good, hooks)
+        # A captured fetch is applied without re-running the network fetch.
+        results = sync_wallets(
+            None, {}, {}, [good], hooks, prefetched={"w-good": good_fetch}
+        )
+        self.assertEqual(results[0]["status"], "synced")
+        self.assertEqual(results[0]["backend_kind"], "esplora")
+        # A captured AppError surfaces when applied (under the caller's savepoint).
+        bad = _backend_sync_wallet("w-bad", "Bad", "bc1qbad")
+        with self.assertRaises(AppError) as ctx:
+            sync_wallets(
+                None, {}, {}, [bad], hooks, prefetched={"w-bad": AppError("boom", code="x")}
+            )
+        self.assertEqual(ctx.exception.code, "x")
 
 
 if __name__ == "__main__":

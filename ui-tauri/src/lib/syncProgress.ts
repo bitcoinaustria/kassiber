@@ -17,6 +17,11 @@ export type WalletSyncProgress = {
   total?: number;
   imported?: number;
   skipped?: number;
+  // Emitted with phase "rate_limited" while a backend 429/503 backoff is waiting,
+  // so the UI shows "rate limited, retrying" instead of a frozen progress bar.
+  retry_attempt?: number;
+  retry_max?: number;
+  wait_seconds?: number;
 };
 
 export const BOOK_REFRESH_PROGRESS_ID = "book-refresh";
@@ -56,6 +61,7 @@ const PHASE_LABELS: Record<string, string> = {
   importing: "Importing transactions",
   rate_coverage: "Checking market-rate coverage",
   journal_refresh: "Refreshing journals",
+  rate_limited: "Waiting out rate limit",
   done: "Refresh complete",
   error: "Refresh needs attention",
 };
@@ -114,6 +120,11 @@ function computeProgressValue(
   progress: WalletSyncProgress,
   previousValue: number,
 ) {
+  // A rate-limit backoff is a wait, not forward progress — hold the bar steady
+  // (rather than nudging it) so the "waiting" state reads as paused, not stalled.
+  if (progress.phase === "rate_limited") {
+    return clampProgress(previousValue);
+  }
   const { processed, total } = progressNumbers(progress);
   const { index, total: jobTotal } = jobNumbers(progress);
   if (processed !== null && total !== null && total > 0) {
@@ -184,6 +195,19 @@ function jobProgressLabel(progress: WalletSyncProgress) {
   return `Source ${current} of ${total.toLocaleString()}`;
 }
 
+function backoffLabel(progress: WalletSyncProgress) {
+  if (progress.phase !== "rate_limited") return null;
+  const attempt =
+    typeof progress.retry_attempt === "number" ? progress.retry_attempt : null;
+  const max = typeof progress.retry_max === "number" ? progress.retry_max : null;
+  const wait =
+    typeof progress.wait_seconds === "number" ? progress.wait_seconds : null;
+  const retry =
+    attempt !== null && max !== null ? `retry ${attempt}/${max}` : "retrying";
+  const waitText = wait !== null ? ` in ${wait}s` : "";
+  return `Rate limited — ${retry}${waitText}`;
+}
+
 export function startingSyncProgress(): NotificationProgress {
   return {
     value: STARTING_SYNC_PROGRESS_VALUE,
@@ -225,6 +249,9 @@ export function syncProgressNotification(
 }
 
 function activeSyncTitle(progress: WalletSyncProgress) {
+  if (progress.phase === "rate_limited") {
+    return "Waiting out rate limit";
+  }
   if (
     progress.source_type === "journals" ||
     progress.phase === "journal_refresh"
@@ -260,6 +287,7 @@ export function activeSyncMaintenanceProgress(
   const details = [
     jobProgressLabel(progress),
     source ? source : sourceType,
+    backoffLabel(progress),
     rowProgressLabel(progress),
     importOutcomeLabel(progress),
   ].filter((item): item is string => Boolean(item));

@@ -10,14 +10,15 @@ import socket
 import ssl
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from decimal import Decimal
 from pathlib import Path
 from types import MappingProxyType
-from urllib import error as urlerror
 from urllib import parse as urlparse
 from urllib import request as urlrequest
 
 from .. import __version__
+from .. import http_client
 from ..backends import backend_batch_size, backend_timeout, backend_value
 from ..db import APP_NAME
 from ..envelope import json_ready
@@ -62,83 +63,86 @@ def _emit_backend_progress(phase: str, **payload):
     emit_sync_progress(event)
 
 
-def http_get_json(url, timeout=30):
-    request = urlrequest.Request(
-        url,
-        headers={
-            "Accept": "application/json",
-            "User-Agent": f"{APP_NAME}/{__version__}",
-        },
+def _emit_http_backoff(retry_number, max_retries, wait_seconds):
+    """Surface a 429/503 backoff wait as sync progress so it does not look like a
+    hang. Routed through the per-wallet progress emitter (when one is active in
+    this context), so the event carries the wallet label like other phases."""
+    _emit_backend_progress(
+        "rate_limited",
+        retry_attempt=int(retry_number),
+        retry_max=int(max_retries),
+        wait_seconds=round(float(wait_seconds), 2),
     )
-    try:
+
+
+def http_get_json(url, timeout=30, *, _sleeper=None, _rng=None, _max_attempts=None):
+    def _opener():
+        request = urlrequest.Request(
+            url,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": f"{APP_NAME}/{__version__}",
+            },
+        )
         with urlrequest.urlopen(request, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))
-    except urlerror.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        if exc.code == 429:
-            raise AppError(
-                f"Backend rate limited the request for {url} (HTTP 429)",
-                code="rate_limited",
-                retryable=True,
-                details={"retry_after_seconds": retry_after_seconds_from_http_error(exc)},
-            ) from exc
-        raise AppError(f"HTTP {exc.code} from backend for {url}: {detail[:200]}") from exc
-    except urlerror.URLError as exc:
-        raise AppError(f"Failed to reach backend {url}: {exc.reason}") from exc
 
-
-def http_get_text(url, timeout=30, accept="text/plain"):
-    request = urlrequest.Request(
+    return http_client.request_with_retry(
         url,
-        headers={
-            "Accept": accept,
-            "User-Agent": f"{APP_NAME}/{__version__}",
-        },
+        _opener,
+        sleeper=_sleeper,
+        rng=_rng,
+        max_attempts=_max_attempts,
+        on_retry=_emit_http_backoff,
     )
-    try:
+
+
+def http_get_text(url, timeout=30, accept="text/plain", *, _sleeper=None, _rng=None, _max_attempts=None):
+    def _opener():
+        request = urlrequest.Request(
+            url,
+            headers={
+                "Accept": accept,
+                "User-Agent": f"{APP_NAME}/{__version__}",
+            },
+        )
         with urlrequest.urlopen(request, timeout=timeout) as response:
             return response.read().decode("utf-8")
-    except urlerror.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        if exc.code == 429:
-            raise AppError(
-                f"Backend rate limited the request for {url} (HTTP 429)",
-                code="rate_limited",
-                retryable=True,
-                details={"retry_after_seconds": retry_after_seconds_from_http_error(exc)},
-            ) from exc
-        raise AppError(f"HTTP {exc.code} from backend for {url}: {detail[:200]}") from exc
-    except urlerror.URLError as exc:
-        raise AppError(f"Failed to reach backend {url}: {exc.reason}") from exc
 
-
-def http_post_json(url, payload, headers=None, timeout=30):
-    request = urlrequest.Request(
+    return http_client.request_with_retry(
         url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "User-Agent": f"{APP_NAME}/{__version__}",
-            **(headers or {}),
-        },
-        method="POST",
+        _opener,
+        sleeper=_sleeper,
+        rng=_rng,
+        max_attempts=_max_attempts,
+        on_retry=_emit_http_backoff,
     )
-    try:
+
+
+def http_post_json(url, payload, headers=None, timeout=30, *, _sleeper=None, _rng=None, _max_attempts=None):
+    def _opener():
+        request = urlrequest.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "User-Agent": f"{APP_NAME}/{__version__}",
+                **(headers or {}),
+            },
+            method="POST",
+        )
         with urlrequest.urlopen(request, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))
-    except urlerror.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        if exc.code == 429:
-            raise AppError(
-                f"Backend rate limited the request for {url} (HTTP 429)",
-                code="rate_limited",
-                retryable=True,
-                details={"retry_after_seconds": retry_after_seconds_from_http_error(exc)},
-            ) from exc
-        raise AppError(f"HTTP {exc.code} from backend for {url}: {detail[:200]}") from exc
-    except urlerror.URLError as exc:
-        raise AppError(f"Failed to reach backend {url}: {exc.reason}") from exc
+
+    return http_client.request_with_retry(
+        url,
+        _opener,
+        sleeper=_sleeper,
+        rng=_rng,
+        max_attempts=_max_attempts,
+        on_retry=_emit_http_backoff,
+    )
 
 
 def append_url_path(base_url, extra_path):
@@ -529,9 +533,17 @@ def _map_bounded(items, worker, max_workers, on_result=None):
             if on_result is not None:
                 on_result(index, result, len(items))
         return results
+    # Each worker runs inside a copy of the submit-time context so the per-wallet
+    # ``sync_progress_emitter`` ContextVar (set on the calling thread) reaches the
+    # worker — otherwise a 429/503 backoff inside a worker would emit no progress
+    # and look like a hang. Iterating futures in submission order preserves input
+    # order and surfaces the first worker exception at its position, matching the
+    # previous ``executor.map`` semantics. ``on_result`` still runs on this thread.
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(copy_context().run, worker, item) for item in items]
         results = []
-        for index, result in enumerate(executor.map(worker, items), start=1):
+        for index, future in enumerate(futures, start=1):
+            result = future.result()
             results.append(result)
             if on_result is not None:
                 on_result(index, result, len(items))
@@ -1044,33 +1056,75 @@ def _liquid_utxo_record_from_output(
 
 def esplora_utxos_for_wallet(backend, sync_state: WalletSyncState):
     timeout = backend_timeout(backend)
-    raw_tx_cache = {}
+    worker_count = _bounded_http_workers(backend)
     tip_height = _esplora_tip_height(backend["url"], timeout=timeout)
 
-    def liquid_tx(txid):
-        if txid not in raw_tx_cache:
-            raw_hex = http_get_text(
-                append_url_path(backend["url"], f"tx/{txid}/hex"),
-                timeout=timeout,
-            ).strip()
-            raw_tx_cache[txid] = decode_liquid_transaction(raw_hex)
-        return raw_tx_cache[txid]
-
-    outputs = []
-    for target_index, target in enumerate(sync_state.targets, start=1):
+    # Phase 1: fetch each tracked script's UTXO set concurrently, bounded by the
+    # same per-wallet worker budget used for stats/history. This phase runs after
+    # those phases finish, so peak concurrency against the host does not rise.
+    def fetch_target_utxos(target):
         raw_utxos = fetch_esplora_scripthash_utxos(
             backend["url"],
             target["script_pubkey"],
             timeout=timeout,
         )
-        for raw_utxo in raw_utxos or []:
+        return target, list(raw_utxos or [])
+
+    raw_seen = {"count": 0}
+
+    def utxo_fetch_progress(index, result, total):
+        raw_seen["count"] += len(result[1])
+        if index % max(1, worker_count) == 0 or index == total:
+            _emit_backend_progress(
+                "backend_fetch",
+                target_count=total,
+                targets_checked=index,
+                utxos_seen=raw_seen["count"],
+            )
+
+    fetched = _map_bounded(
+        sync_state.targets,
+        fetch_target_utxos,
+        worker_count,
+        on_result=utxo_fetch_progress,
+    )
+
+    # Phase 2 (Liquid only): pre-fetch and decode each referenced raw transaction
+    # concurrently into a cache before the serial record build. Populating the
+    # cache from _map_bounded's main-thread result iteration keeps it race-free.
+    decoded_by_txid = {}
+    if sync_state.chain == "liquid":
+        needed_txids = []
+        seen_txids = set()
+        for _target, raw_utxos in fetched:
+            for raw_utxo in raw_utxos:
+                txid = raw_utxo.get("txid")
+                if txid and txid not in seen_txids:
+                    seen_txids.add(txid)
+                    needed_txids.append(txid)
+
+        def fetch_liquid_decode(txid):
+            raw_hex = http_get_text(
+                append_url_path(backend["url"], f"tx/{txid}/hex"),
+                timeout=timeout,
+            ).strip()
+            return txid, decode_liquid_transaction(raw_hex)
+
+        for txid, decoded in _map_bounded(needed_txids, fetch_liquid_decode, worker_count):
+            decoded_by_txid[txid] = decoded
+
+    # Phase 3: build records serially in tracked-script order (executor.map keeps
+    # `fetched` in input order, and each UTXO list keeps the backend's order).
+    outputs = []
+    for target, raw_utxos in fetched:
+        for raw_utxo in raw_utxos:
             if sync_state.chain == "liquid":
                 outputs.append(
                     _liquid_utxo_record_from_output(
                         raw_utxo.get("txid"),
                         raw_utxo.get("vout"),
                         raw_utxo.get("status") or {},
-                        liquid_tx(raw_utxo.get("txid")),
+                        decoded_by_txid[raw_utxo.get("txid")],
                         target,
                         sync_state,
                         source="liquid_esplora_scripthash_utxo",
@@ -1086,12 +1140,6 @@ def esplora_utxos_for_wallet(backend, sync_state: WalletSyncState):
                         tip_height=tip_height,
                     )
                 )
-        _emit_backend_progress(
-            "backend_fetch",
-            target_count=len(sync_state.targets),
-            targets_checked=target_index,
-            utxos_seen=len(outputs),
-        )
     return outputs
 
 
@@ -1519,13 +1567,33 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
         transactions_by_txid.values(),
         key=lambda item: (((item.get("status") or {}).get("block_time") or 0), item.get("txid", "")),
     )
+    if sync_state.chain == "liquid":
+        # Pre-fetch and decode each wallet transaction's raw hex concurrently
+        # (bounded by the per-wallet worker budget) before the serial record
+        # build. Populating the shared cache from _map_bounded's main-thread
+        # result iteration keeps it race-free; prevout lookups during record
+        # building still fall back to the same cache serially on the main thread.
+        main_txids = [
+            tx["txid"] for tx in sorted_transactions if tx["txid"] not in raw_tx_cache
+        ]
+
+        def fetch_liquid_main_tx(txid):
+            raw_hex = http_get_text(
+                append_url_path(backend["url"], f"tx/{txid}/hex"),
+                timeout=timeout,
+            ).strip()
+            return txid, raw_hex
+
+        for txid, raw_hex in _map_bounded(main_txids, fetch_liquid_main_tx, worker_count):
+            raw_tx_cache[txid] = {
+                "raw_hex": raw_hex,
+                "decoded": decode_liquid_transaction(raw_hex),
+            }
     for tx_index, tx in enumerate(sorted_transactions, start=1):
         if sync_state.chain == "liquid":
-            raw_hex = http_get_text(
-                append_url_path(backend["url"], f"tx/{tx['txid']}/hex"),
-                timeout=backend_timeout(backend),
-            ).strip()
-            decoded_tx = decode_liquid_transaction(raw_hex)
+            cached_tx = raw_tx_cache[tx["txid"]]
+            raw_hex = cached_tx["raw_hex"]
+            decoded_tx = cached_tx["decoded"]
             records.extend(
                 record_components_from_liquid_tx(
                     tx["txid"],
