@@ -699,6 +699,33 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   (`importlib.metadata.version("kassiber")`) so it stops being a fifth
   place the version drifts. Drift test already catches divergence; this
   removes the cause.
+- [x] Rate-limit-safe sync refresh speedups (shipped): WAL-tuned SQLite
+  pragmas (`synchronous=NORMAL`, `temp_store=MEMORY`, `cache_size`, plaintext
+  `mmap_size`) in `kassiber/db.py`; a shared per-host HTTP concurrency semaphore
+  plus bounded 429/503 backoff honoring (and clamping) `Retry-After` in
+  `kassiber/http_client.py`, used by both `kassiber/core/sync_backends.py` and
+  `kassiber/core/rates.py`; parallelized within-wallet esplora UTXO + Liquid
+  raw-tx fetches; cross-wallet parallel network fetch (`prefetch_wallets_backend`
+  + the `fetch_wallet_backend`/apply split, DB writes still serial under the
+  per-wallet savepoint loop, progress ContextVar propagated to workers via
+  `copy_context`); a `rate_limited` sync-progress phase surfaced through to the
+  desktop progress UI so a backoff no longer looks like a hang; and an
+  `executemany` UTXO inventory write.
+- [ ] Sync/refresh performance follow-ups still open:
+  - Parallelize the daemon's background refresh itself: `run_due_jobs`
+    (`kassiber/core/freshness.py`) syncs one wallet per serial job, so it does
+    not benefit from `core_sync.sync_wallets` cross-wallet parallelism. Speeding
+    up background refresh means running due jobs concurrently with one DB
+    connection per worker plus single-flight handling — a separate, larger
+    change.
+  - Batch `auto_price_transactions_from_rates_cache` (currently one
+    `get_cached_rate_at_or_before` SELECT + one UPDATE per unpriced transaction,
+    run at the start of every `journals process`) into a set-based join +
+    `executemany`. Different subsystem (journal pricing), kept separate.
+  - Add a `throttled` `ConnectionHealthStatus`
+    (`ui-tauri/src/lib/connectionHealth.ts`) so a rate-limiting-but-alive backend
+    is not shown as healthy/green, and a live `rate_limited_until` countdown in
+    the freshness/sync-results UI.
 
 ## Verification checklist
 
