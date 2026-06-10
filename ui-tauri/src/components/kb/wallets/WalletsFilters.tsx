@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import type { ConnectionStatus } from "@/mocks/seed";
 
 const kindFilterOptions = Array.from(
-  new Set(Object.values(connectionKindCategoryLabels)),
+  new Set([...Object.values(connectionKindCategoryLabels), "Liquid"]),
 );
 
 const statusFilterOptions: ConnectionStatus[] = [
