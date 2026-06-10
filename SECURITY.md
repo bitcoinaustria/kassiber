@@ -73,6 +73,15 @@ that itself contacts a remote service.
 - `~/.kassiber/data/kassiber.sqlite3` — default SQLite DB. Contains
   descriptors, xpubs, addresses, transactions, metadata, rates cache,
   backend definitions/defaults, and any stored backend credentials.
+- Persisted AI chat sessions also live inside that database
+  (`ai_chat_sessions` / `ai_chat_messages`) — never as separate plaintext
+  files. The default `auto` policy persists only when the database is
+  SQLCipher-encrypted; `kassiber chats config --history off` disables it,
+  `kassiber chat --incognito` skips one session, and `kassiber chats
+  delete/clear` remove stored sessions. Diagnostics reports and audit
+  packages do not include chat content. The opt-in `kassiber chat
+  --transcript <path>` file is the one plaintext chat artifact, written only
+  where the user points it.
 - `~/.kassiber/config/backends.env` — default backend config file. May contain
   Bitcoin Core RPC credentials and backend tokens.
 - `~/.kassiber/config/settings.json` — managed state manifest for the active

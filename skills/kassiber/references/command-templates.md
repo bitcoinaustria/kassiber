@@ -30,6 +30,10 @@ kassiber chat --stream-json "List my largest outbound transactions."
 kassiber --machine chat "How many transactions are missing prices?"
 printf 'Explain these journal blockers:\n%s\n' "$BLOCKERS" | kassiber chat -
 kassiber chat --transcript /tmp/chat-audit.ndjson "Why is my tax summary stale?"
+kassiber chat --continue "And what about the year before?"
+kassiber chat --incognito "One-off question, do not store this."
+kassiber --machine chats list
+kassiber chats config --history on
 ```
 
 `kassiber chat` is the only chat command. It mirrors the desktop Assistant and

@@ -81,6 +81,13 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ai.chat.cancel` and `ai.tool_call.consent` take
   `args.target_request_id` so the control request keeps its own routing
   `request_id`; cancelled chats finish with `finish_reason: "cancelled"`.
+  `ai.chat` accepts `persist: true|false|"auto"` (absent = false) and
+  `session_id`; persisted exchanges land in `ai_chat_sessions` /
+  `ai_chat_messages` inside the SQLCipher boundary, the terminal record
+  carries `session_id`, and session management is exposed via
+  `ui.chat.sessions.{list,get,delete,clear}`. Chat history is not an AI
+  tool — the model cannot read prior sessions — and diagnostics/audit
+  packages exclude it.
 - In-app AI read tools are explicit daemon kinds, not generic CLI or daemon
   dispatch. Current read-only AI kinds are `status`,
   `ui.overview.snapshot`, `ui.transactions.list`,
@@ -161,6 +168,8 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 ## Command surface
 
 - `init`, `status`, `daemon`, `chat`, `context {show,current,set}`
+- `chats {list,show,delete,clear,config}` — persisted AI chat sessions
+  (stored in the SQLCipher DB; `auto` policy persists only when encrypted)
 - `secrets {init,init-resume,change-passphrase,verify,status,migrate-credentials}`
 - `backup {export,import}`
 - `workspaces {list,create}`
@@ -350,6 +359,7 @@ uv run python -m kassiber reports balance-history --help
 uv run python -m kassiber rates --help
 uv run python -m kassiber diagnostics collect --help
 uv run python -m kassiber chat --help
+uv run python -m kassiber chats --help
 uv run python -m kassiber ai --help
 uv run python -m kassiber ai providers --help
 uv run python -m kassiber ai providers create --help

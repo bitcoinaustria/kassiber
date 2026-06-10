@@ -197,6 +197,43 @@ tool. Machine and `--stream-json` runs never prompt interactively even on a
 TTY; there, and without a TTY in rendered mode, unapproved mutating tools are
 denied and the denial is fed back to the model as `user_denied`.
 
+## Chat history
+
+Chat sessions can persist — inside the SQLite/SQLCipher database, next to the
+data the answers were derived from, never as separate plaintext files. The
+policy setting `ai_chat_history` has three values, managed via
+`kassiber chats config [--history auto|on|off]`:
+
+- `auto` (default) — persist only when the database file is
+  SQLCipher-encrypted. A plaintext database stays ephemeral; running
+  `kassiber secrets init` is what unlocks history.
+- `on` — persist regardless of encryption (an explicit user choice).
+- `off` — never persist.
+
+`kassiber chat --incognito` skips persistence for one session regardless of
+the setting. `kassiber chat --continue` resumes the most recently updated
+session (the stored messages are replayed to the model as context);
+`--session <id>` resumes a specific one. In the REPL, `/new` starts a fresh
+session. Stored exchanges keep the user prompt, the assistant answer, the
+`finish_reason`, and the answer provenance — not full tool result envelopes,
+which remain reproducible from the database (use `--transcript` for
+full-fidelity capture).
+
+Manage stored sessions with `kassiber chats list`, `chats show <id>`,
+`chats delete <id>`, and `chats clear`. Machine chat envelopes and the
+terminal `ai.chat` record carry `session_id` (null when nothing persisted).
+
+On the wire, persistence is per request: `ai.chat` accepts
+`persist: true | false | "auto"` (absent means false, so existing clients are
+unchanged) plus `session_id` to append to an existing session; unknown session
+ids fail before streaming starts. Session management is exposed as the daemon
+kinds `ui.chat.sessions.list`, `ui.chat.sessions.get`,
+`ui.chat.sessions.delete`, and `ui.chat.sessions.clear`, profile-scoped like
+the rest of the UI surface. Chat history is intentionally **not** an AI tool:
+the model cannot read prior sessions, which keeps prompt-injection from
+propagating across conversations. Diagnostics reports and audit packages do
+not include chat content.
+
 Provider API-key entry supports `--api-key-stdin` and `--api-key-fd FD`. The
 legacy `--api-key <value>` form still works as a warning-on-use compatibility
 shim, but docs and tests avoid it because argv can land in shell history and

@@ -86,6 +86,7 @@ smoke_py -m kassiber reports balance-history --help >/dev/null
 smoke_py -m kassiber rates --help >/dev/null
 smoke_py -m kassiber diagnostics collect --help >/dev/null
 smoke_py -m kassiber chat --help >/dev/null
+smoke_py -m kassiber chats --help >/dev/null
 smoke_py -m kassiber ai --help >/dev/null
 smoke_py -m kassiber ai providers --help >/dev/null
 smoke_py -m kassiber ai providers create --help >/dev/null

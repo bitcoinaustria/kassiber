@@ -361,6 +361,16 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   worker-pool model and one SQLite connection per worker when read-only tools
   or longer-running UI actions need daemon-side concurrency beyond the
   supervisor demux.
+- [ ] Desktop Assistant chat-history sidebar: wire the GUI to the persisted
+  chat sessions that shipped with `kassiber chat` — send
+  `persist: "auto"` + round-trip `session_id` on `ai.chat`, list/resume/delete
+  sessions via `ui.chat.sessions.{list,get,delete,clear}`, and expose the
+  `ai_chat_history` policy plus incognito toggle in Settings next to the
+  trust/privacy controls. The daemon contract is finished and documented in
+  docs/reference/ai.md; only client wiring is left.
+- [ ] Chat-history retention: optional cap (keep last N sessions or days) on
+  persisted `ai_chat_sessions`, enforced at append time, surfaced in
+  `chats config` and desktop Settings.
 - [x] Overview screen now uses `@shadcnblocks/dashboard5` as the first
   dashboard screen, keeping Export -> Reports, Add connection modal, and
   Show all transactions wiring
