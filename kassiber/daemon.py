@@ -314,6 +314,7 @@ SUPPORTED_KINDS = (
     "ui.source_funds.links.bulk_review",
     "ui.source_funds.links.attach",
     "ui.source_funds.suggest",
+    "ui.source_funds.assemble",
     "ui.source_funds.evidence.list",
     "ui.source_funds.export_pdf",
     "ui.source_funds.export_bundle",
@@ -1891,6 +1892,23 @@ def _ui_source_funds_payload_from_conn(
             target_transaction_ref=target.strip() if isinstance(target, str) and target.strip() else None,
             include_broad_hints=_optional_bool_arg(args, "include_broad_hints", False),
             max_suggestions=int(args.get("max_suggestions") or core_source_funds.SUGGESTION_WRITE_CAP),
+        )
+
+    if kind == "ui.source_funds.assemble":
+        target = args.get("target_transaction")
+        if not isinstance(target, str) or not target.strip():
+            raise AppError(
+                "ui.source_funds.assemble requires args.target_transaction",
+                code="validation",
+            )
+        return core_source_funds.assemble_history(
+            conn,
+            None,
+            None,
+            hooks,
+            target_transaction_ref=target.strip(),
+            include_broad_hints=bool(args.get("include_broad_hints")),
+            max_passes=int(args.get("max_passes") or 8),
         )
 
     if kind == "ui.source_funds.evidence.list":
@@ -8938,6 +8956,7 @@ def handle_request(
         "ui.source_funds.links.bulk_review",
         "ui.source_funds.links.attach",
         "ui.source_funds.suggest",
+        "ui.source_funds.assemble",
         "ui.source_funds.evidence.list",
         "ui.source_funds.export_pdf",
         "ui.source_funds.export_bundle",

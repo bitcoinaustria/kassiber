@@ -1205,6 +1205,298 @@ class SourceFundsCliTest(unittest.TestCase):
         self.assertEqual(preview["wallets_named"], ["Gran Parent", "Gran Target"])
         self.assertIn("common ownership", preview["ownership_note"])
 
+    P_TXID = "aa" * 32
+    T_TXID = "bb" * 32
+
+    def _seed_utxo_chain(self):
+        """On-chain shaped fixture: P funds T inside wallet Chain A, and T
+        pays wallet Chain B. raw_json carries T's vin outpoints (as esplora/
+        electrum sync stores them) and wallet_utxos carries the owned
+        outputs, so assembly can prove both hops without any heuristics."""
+        self._init_default_workspace()
+        self._write_csv(
+            "chain-a.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            f"2026-05-01T09:00:00Z,{self.P_TXID},inbound,BTC,0.30000000,0,50000,Funding deposit\n"
+            f"2026-05-02T09:00:00Z,{self.T_TXID},outbound,BTC,0.20000000,0.00001000,50000,Spend to Chain B\n",
+        )
+        self._write_csv(
+            "chain-b.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            f"2026-05-02T09:00:00Z,{self.T_TXID},inbound,BTC,0.20000000,0,50000,Received from Chain A\n",
+        )
+        self._create_wallet_and_import("Chain A", "chain-a.csv")
+        self._create_wallet_and_import("Chain B", "chain-b.csv")
+        conn = self._db()
+        try:
+            ids = {
+                row["label"]: (row["id"], row["workspace_id"], row["profile_id"])
+                for row in conn.execute(
+                    "SELECT w.id, w.label, w.workspace_id, w.profile_id FROM wallets w"
+                ).fetchall()
+            }
+            wallet_a, workspace_id, profile_id = ids["Chain A"]
+            wallet_b = ids["Chain B"][0]
+            # T's inputs, as chain sync stores them on every leg's raw_json.
+            vin_json = json.dumps({"vin": [{"txid": self.P_TXID, "vout": 0}]})
+            conn.execute(
+                "UPDATE transactions SET raw_json = ? WHERE external_id = ?",
+                (vin_json, self.T_TXID),
+            )
+            for utxo_id, wallet_id, txid, vout, amount_msat in (
+                ("utxo-p0", wallet_a, self.P_TXID, 0, 30_000_000_000),
+                ("utxo-t0", wallet_b, self.T_TXID, 0, 20_000_000_000),
+            ):
+                conn.execute(
+                    """
+                    INSERT INTO wallet_utxos(
+                        id, workspace_id, profile_id, wallet_id, chain, network,
+                        asset, amount, txid, vout, outpoint, confirmation_status,
+                        first_seen_at, last_seen_at
+                    ) VALUES(?, ?, ?, ?, 'bitcoin', 'main', 'BTC', ?, ?, ?, ?, 'confirmed',
+                             '2026-05-02T10:00:00Z', '2026-05-02T10:00:00Z')
+                    """,
+                    (
+                        utxo_id,
+                        workspace_id,
+                        profile_id,
+                        wallet_id,
+                        amount_msat,
+                        txid,
+                        vout,
+                        f"{txid}:{vout}",
+                    ),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def test_assemble_builds_utxo_proven_chain_transitively(self):
+        self._seed_utxo_chain()
+        target_id = self._tx_id("Chain B", self.T_TXID)
+        result = self.cli(
+            "source-funds",
+            "assemble",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            target_id,
+        )["data"]
+        self.assertEqual(result["auto_reviewed"], 2)
+        # The same-txid leg hop may be claimed by same_external_id (equally
+        # exact, runs first); the parent hop is only provable from the UTXO
+        # structure.
+        self.assertEqual(sum(result["methods"].values()), 2)
+        self.assertGreaterEqual(result["methods"].get("utxo_spend", 0), 1)
+        self.assertGreaterEqual(result["passes"], 2)
+        links = self.cli(
+            "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
+        )["data"]
+        self.assertEqual({link["state"] for link in links}, {"reviewed"})
+        self.assertEqual({link["confidence"] for link in links}, {"exact"})
+        # Documenting the root source makes the whole chain exportable: the
+        # parent hop demands the gross 0.3 BTC input that fed the spend.
+        source = self.cli(
+            "source-funds",
+            "sources",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--type",
+            "fiat_purchase",
+            "--label",
+            "Chain root purchase",
+            "--asset",
+            "BTC",
+            "--amount",
+            "0.30000000",
+        )["data"]
+        self.cli(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-source",
+            source["id"],
+            "--to-transaction",
+            self.P_TXID,
+            "--type",
+            "manual_source",
+            "--allocation-amount",
+            "0.30000000",
+            "--allocation-policy",
+            "explicit",
+        )
+        report = self._source_funds_report_for_target(target=target_id, amount="0.20000000")
+        self.assertTrue(report["explain_gates"]["exportable"], report["explain_gates"]["blockers"])
+        self.assertEqual(len(report["flow_levels"]), 4)
+
+    def test_assemble_links_lightning_legs_by_payment_hash(self):
+        self._init_default_workspace()
+        payment_hash = "cd" * 32
+        self._write_csv(
+            "ln-a.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            "2026-05-03T09:00:00Z,ln-send-1,outbound,BTC,0.01000000,0.00000100,50000,LN payment out\n",
+        )
+        self._write_csv(
+            "ln-b.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            "2026-05-03T09:00:05Z,ln-recv-1,inbound,BTC,0.01000000,0,50000,LN invoice settled\n",
+        )
+        self._create_wallet_and_import("LN A", "ln-a.csv")
+        self._create_wallet_and_import("LN B", "ln-b.csv")
+        conn = self._db()
+        try:
+            conn.execute(
+                "UPDATE transactions SET payment_hash = ?, payment_hash_source = 'import' "
+                "WHERE external_id IN ('ln-send-1', 'ln-recv-1')",
+                (payment_hash,),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        result = self.cli(
+            "source-funds",
+            "assemble",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            "ln-recv-1",
+        )["data"]
+        self.assertEqual(result["auto_reviewed"], 1)
+        self.assertEqual(result["methods"], {"payment_hash": 1})
+        links = self.cli(
+            "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
+        )["data"]
+        self.assertEqual(len(links), 1)
+        self.assertEqual(links[0]["method"], "payment_hash")
+        self.assertEqual(links[0]["state"], "reviewed")
+        self.assertEqual(links[0]["confidence"], "exact")
+
+    def test_assemble_does_not_cross_privacy_boundaries(self):
+        self._seed_utxo_chain()
+        conn = self._db()
+        try:
+            conn.execute(
+                "UPDATE transactions SET privacy_boundary = 'coinjoin' WHERE external_id = ?",
+                (self.T_TXID,),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        target_id = self._tx_id("Chain B", self.T_TXID)
+        result = self.cli(
+            "source-funds",
+            "assemble",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            target_id,
+        )["data"]
+        self.assertEqual(result["inserted"], 0)
+        self.assertEqual(result["auto_reviewed"], 0)
+
+    def test_assemble_skips_pairs_already_linked_by_any_method(self):
+        self._seed_utxo_chain()
+        out_leg = self._tx_id("Chain A", self.T_TXID)
+        in_leg = self._tx_id("Chain B", self.T_TXID)
+        self.cli(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-transaction",
+            out_leg,
+            "--to-transaction",
+            in_leg,
+            "--type",
+            "self_transfer",
+            "--allocation-amount",
+            "0.20000000",
+            "--from-amount",
+            "0.20000000",
+            "--allocation-policy",
+            "explicit",
+        )
+        result = self.cli(
+            "source-funds",
+            "assemble",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            in_leg,
+        )["data"]
+        # Only the parent hop is added; the manually linked leg pair is not
+        # duplicated into a double allocation.
+        self.assertEqual(result["methods"], {"utxo_spend": 1})
+        links = self.cli(
+            "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
+        )["data"]
+        pair_links = [
+            link
+            for link in links
+            if link["from_transaction_id"] == out_leg and link["to_transaction_id"] == in_leg
+        ]
+        self.assertEqual(len(pair_links), 1)
+        self.assertEqual(pair_links[0]["method"], "manual")
+
+    def test_bulk_review_skips_utxo_suggestion_when_inventory_changes(self):
+        self._seed_utxo_chain()
+        target_id = self._tx_id("Chain B", self.T_TXID)
+        suggested = self.cli(
+            "source-funds",
+            "suggest",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            target_id,
+        )["data"]
+        self.assertGreaterEqual(suggested["inserted"], 1)
+        conn = self._db()
+        try:
+            # Isolate the utxo_spend suggestions, then invalidate the
+            # evidence they were derived from.
+            conn.execute("DELETE FROM source_funds_links WHERE method != 'utxo_spend'")
+            conn.execute("DELETE FROM wallet_utxos")
+            conn.execute("UPDATE transactions SET raw_json = '{}'")
+            conn.commit()
+        finally:
+            conn.close()
+        result = self.cli(
+            "source-funds",
+            "links",
+            "bulk-review",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            # Scope to the spend leg: the surviving utxo_spend suggestion is
+            # the parent hop feeding it.
+            self._tx_id("Chain A", self.T_TXID),
+        )["data"]
+        self.assertEqual(result["reviewed"], 0)
+        self.assertGreaterEqual(result["skipped"], 1)
+
     def test_wallet_data_provenance_mapping(self):
         from kassiber.core.source_funds import _wallet_data_provenance
 

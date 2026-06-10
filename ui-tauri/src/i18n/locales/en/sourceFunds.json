@@ -109,7 +109,13 @@
   "actionsBar": {
     "findLinks": "Find Links",
     "reviewDeterministic": "Review Deterministic Hops",
+    "assemble": "Assemble History",
+    "assembling": "Assembling…",
     "markGap": "Mark Gap",
+    "assembleHint": "Kassiber assembles every hop it can prove from local evidence: transaction inputs/outputs of synced wallets (Bitcoin and Liquid), Lightning payment hashes, platform ids, and reviewed pairs. The more wallets and connections this book has, the more complete the assembled flow. You document only what remains.",
+    "assembleResult_one": "{{count}} hop proven",
+    "assembleResult_other": "{{count}} hops proven",
+    "assembleResultEmpty": "no new evidence this run",
     "manualReviewHint_one": "{{count}} weak or chain-observation suggestion still needs manual review.",
     "manualReviewHint_other": "{{count}} weak or chain-observation suggestions still need manual review."
   },

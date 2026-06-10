@@ -17,6 +17,11 @@ from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
 from ..wallet_descriptors import normalize_asset_code, normalize_chain, normalize_network
 from .attachments import attachment_display_label
 from .privacy_hops import privacy_hop_type_from_row
+from .source_funds_assembly import (
+    build_owned_outpoint_index,
+    derive_payment_hash_pairs,
+    derive_utxo_spend_pairs,
+)
 from .source_funds_hints import enrich_findings_with_next_steps
 
 
@@ -68,6 +73,13 @@ DETERMINISTIC_BULK_REVIEW_METHODS = {
     "provider_payment_id",
     "provider_exchange_order_id",
     "provider_ledger_id",
+    # Assembly derivers: re-verified against transaction input/output
+    # structure and payment-hash groupings at bulk-review time. These read
+    # only locally synced wallet data — first-party wallet state, not
+    # chain observations fetched about third-party transactions — so they
+    # stay outside the uses_chain_observation manual-review policy.
+    "utxo_spend",
+    "payment_hash",
 }
 PROVIDER_UNIQUE_KEYS = (
     "trade_id",
@@ -1234,6 +1246,62 @@ def _provider_key_still_deterministic(
     return False
 
 
+def _skip_assembly_row(row: Mapping[str, Any]) -> bool:
+    """Rows the assembly derivers must never assert lineage through.
+
+    Privacy-boundary rows (CoinJoin/PayJoin/sweeps) keep their deferred
+    semantics, and Samourai group wallets keep the dedicated Whirlpool
+    boundary handling instead of raw input/output edges.
+    """
+    if _raw_privacy_hop(row):
+        return True
+    return _samourai_metadata_from_wallet_config(row["wallet_config_json"]) is not None
+
+
+def _utxo_spend_still_deterministic(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    row: Mapping[str, Any],
+    from_tx: Mapping[str, Any] | None,
+    to_tx: Mapping[str, Any],
+) -> bool:
+    if not from_tx:
+        return False
+    owned_index = build_owned_outpoint_index(conn, profile_id)
+    if not owned_index:
+        return False
+    pairs = derive_utxo_spend_pairs(
+        _active_transaction_rows(conn, profile_id),
+        owned_index,
+        skip_row=_skip_assembly_row,
+    )
+    return any(
+        pair["from_row"]["id"] == row["from_transaction_id"]
+        and pair["to_row"]["id"] == row["to_transaction_id"]
+        for pair in pairs
+    )
+
+
+def _payment_hash_still_deterministic(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    row: Mapping[str, Any],
+    from_tx: Mapping[str, Any] | None,
+    to_tx: Mapping[str, Any],
+) -> bool:
+    if not from_tx:
+        return False
+    pairs = derive_payment_hash_pairs(
+        _active_transaction_rows(conn, profile_id),
+        skip_row=_skip_assembly_row,
+    )
+    return any(
+        pair["from_row"]["id"] == row["from_transaction_id"]
+        and pair["to_row"]["id"] == row["to_transaction_id"]
+        for pair in pairs
+    )
+
+
 def _suggestion_still_deterministic(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -1246,6 +1314,10 @@ def _suggestion_still_deterministic(
         return _same_external_id_still_deterministic(conn, profile_id, row, from_tx, to_tx)
     if method == "transaction_pair":
         return _transaction_pair_still_deterministic(conn, profile_id, row, from_tx, to_tx)
+    if method == "utxo_spend":
+        return _utxo_spend_still_deterministic(conn, profile_id, row, from_tx, to_tx)
+    if method == "payment_hash":
+        return _payment_hash_still_deterministic(conn, profile_id, row, from_tx, to_tx)
     if method.startswith("provider_"):
         return _provider_key_still_deterministic(conn, profile_id, row, from_tx, to_tx)
     return False
@@ -1366,6 +1438,81 @@ def bulk_review_suggestions(
     }
 
 
+# Convergence backstop for assemble_history. Each pass can only extend the
+# frontier by reviewing new deterministic edges, so real chains converge in
+# a handful of passes; the cap guards against pathological data.
+_MAX_ASSEMBLE_PASSES = 16
+
+
+def assemble_history(
+    conn: sqlite3.Connection,
+    workspace_ref: str | None,
+    profile_ref: str | None,
+    hooks: SourceFundsHooks,
+    *,
+    target_transaction_ref: str,
+    include_broad_hints: bool = False,
+    max_passes: int = 8,
+) -> dict[str, Any]:
+    """Automatically assemble the reviewed flow graph behind a target.
+
+    Alternates suggestion derivation and deterministic bulk review until the
+    graph stops growing. Each reviewed edge extends the target-scoped BFS
+    frontier, so multi-hop chains assemble transitively in one call:
+    transaction input/output structure and Lightning payment hashes yield
+    exact auto-reviewed hops; platform ids and reviewed pairs fill in where
+    no chain structure exists. Reads only local data — assembly never
+    contacts a backend. What remains afterwards is exactly the user's work:
+    root-source evidence, privacy boundaries, and attested gaps.
+    """
+    if max_passes <= 0:
+        raise AppError("--max-passes must be positive", code="validation")
+    max_passes = min(max_passes, _MAX_ASSEMBLE_PASSES)
+    passes = 0
+    total_inserted = 0
+    total_reviewed = 0
+    total_skipped = 0
+    methods: dict[str, int] = defaultdict(int)
+    while passes < max_passes:
+        passes += 1
+        suggested = suggest_links(
+            conn,
+            workspace_ref,
+            profile_ref,
+            hooks,
+            target_transaction_ref=target_transaction_ref,
+            include_broad_hints=include_broad_hints,
+        )
+        reviewed = bulk_review_suggestions(
+            conn,
+            workspace_ref,
+            profile_ref,
+            hooks,
+            target_transaction_ref=target_transaction_ref,
+        )
+        total_inserted += suggested["inserted"]
+        total_reviewed += reviewed["reviewed"]
+        total_skipped = reviewed["skipped"]
+        for link in reviewed["links"]:
+            methods[str(link.get("method") or "")] += 1
+        if suggested["inserted"] == 0 and reviewed["reviewed"] == 0:
+            break
+    return {
+        "target_transaction_id": reviewed["target_transaction_id"],
+        "passes": passes,
+        "inserted": total_inserted,
+        "auto_reviewed": total_reviewed,
+        "awaiting_manual_review": total_skipped,
+        "methods": dict(sorted(methods.items())),
+        "policy": (
+            "Assembly derives exact edges from synced transaction inputs/outputs and "
+            "Lightning payment hashes, plus deterministic platform-id and reviewed-pair "
+            "matches. Weak hints, chain observations, privacy boundaries, and root-source "
+            "evidence remain manual review items."
+        ),
+    }
+
+
 def _active_transaction_rows(conn: sqlite3.Connection, profile_id: str):
     return conn.execute(
         """
@@ -1404,6 +1551,22 @@ def _insert_suggestion(
         link_type=link_type,
     )
     if existing:
+        return None
+    # A pair that already carries any non-rejected link (manual or another
+    # method) must not get a parallel suggestion: two reviewed links on one
+    # hop double-allocate it straight into an ambiguous_allocation blocker.
+    # Rejected links stay method-scoped (handled above) so stronger evidence
+    # may re-suggest a pair the user rejected under a weaker method.
+    already_linked = conn.execute(
+        """
+        SELECT 1 FROM source_funds_links
+        WHERE profile_id = ? AND from_transaction_id = ? AND to_transaction_id = ?
+          AND state != 'rejected'
+        LIMIT 1
+        """,
+        (profile_id, from_tx["id"], to_tx["id"]),
+    ).fetchone()
+    if already_linked:
         return None
     created_at = _now()
     link_id = str(uuid.uuid4())
@@ -1642,6 +1805,56 @@ def suggest_links(
             allocation_msat=int(in_tx["amount"]),
             from_allocation_msat=int(out_tx["amount"]),
             explanation=f"Existing reviewed transaction_pair ({pair['kind']}, {pair['policy']}) links these rows.",
+        )
+        remember(link)
+
+    # Assembly derivers: exact edges from real transaction structure
+    # (inputs/outputs joined against owned outputs, Bitcoin and Liquid
+    # alike) and from Lightning payment hashes. Local reads only — the
+    # privacy_warning below stays true. Pairs that already carry any
+    # active link are skipped so assembly composes with manual review
+    # and the other derivers instead of double-allocating hops.
+    owned_index = build_owned_outpoint_index(conn, profile["id"])
+    if owned_index:
+        for pair in derive_utxo_spend_pairs(rows, owned_index, skip_row=_skip_assembly_row):
+            out_tx, in_tx = pair["from_row"], pair["to_row"]
+            if not in_scope(out_tx, in_tx):
+                continue
+            if int(pair["allocation_msat"]) <= 0:
+                continue
+            link = _insert_suggestion(
+                conn,
+                workspace["id"],
+                profile["id"],
+                from_tx=out_tx,
+                to_tx=in_tx,
+                link_type="self_transfer",
+                method="utxo_spend",
+                confidence="exact",
+                allocation_msat=int(pair["allocation_msat"]),
+                from_allocation_msat=int(pair["from_allocation_msat"]),
+                explanation=pair["explanation"],
+            )
+            remember(link)
+
+    for pair in derive_payment_hash_pairs(rows, skip_row=_skip_assembly_row):
+        out_tx, in_tx = pair["from_row"], pair["to_row"]
+        if not in_scope(out_tx, in_tx):
+            continue
+        if int(pair["allocation_msat"]) <= 0:
+            continue
+        link = _insert_suggestion(
+            conn,
+            workspace["id"],
+            profile["id"],
+            from_tx=out_tx,
+            to_tx=in_tx,
+            link_type="self_transfer",
+            method="payment_hash",
+            confidence="exact",
+            allocation_msat=int(pair["allocation_msat"]),
+            from_allocation_msat=int(pair["from_allocation_msat"]),
+            explanation=pair["explanation"],
         )
         remember(link)
 

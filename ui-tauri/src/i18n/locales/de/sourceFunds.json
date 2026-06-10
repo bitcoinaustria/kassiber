@@ -109,7 +109,13 @@
   "actionsBar": {
     "findLinks": "Verknüpfungen finden",
     "reviewDeterministic": "Deterministische Hops prüfen",
+    "assemble": "Historie zusammenstellen",
+    "assembling": "Historie wird zusammengestellt…",
     "markGap": "Lücke markieren",
+    "assembleHint": "Kassiber stellt jeden Hop zusammen, den es aus lokalen Nachweisen belegen kann: Transaktions-Inputs/-Outputs synchronisierter Wallets (Bitcoin und Liquid), Lightning-Zahlungshashes, Plattform-IDs und geprüfte Paare. Je mehr Wallets und Verbindungen dieses Buch hat, desto vollständiger wird der zusammengestellte Fluss. Du dokumentierst nur, was übrig bleibt.",
+    "assembleResult_one": "{{count}} Hop belegt",
+    "assembleResult_other": "{{count}} Hops belegt",
+    "assembleResultEmpty": "in diesem Lauf keine neuen Nachweise",
     "manualReviewHint_one": "{{count}} schwacher Vorschlag bzw. Vorschlag aus On-chain-Beobachtung braucht noch eine manuelle Prüfung.",
     "manualReviewHint_other": "{{count}} schwache Vorschläge bzw. Vorschläge aus On-chain-Beobachtung brauchen noch eine manuelle Prüfung."
   },
