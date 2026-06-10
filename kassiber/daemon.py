@@ -361,6 +361,7 @@ SUPPORTED_KINDS = (
     "ui.chat.sessions.get",
     "ui.chat.sessions.delete",
     "ui.chat.sessions.clear",
+    "ui.chat.history.configure",
     "wallets.reveal_descriptor",
     "backends.reveal_token",
     "daemon.shutdown",
@@ -4098,6 +4099,18 @@ def _ui_chat_sessions_payload(
         }
     if kind == "ui.chat.sessions.clear":
         return core_chat_history.clear_sessions(ctx.conn, profile["id"])
+    if kind == "ui.chat.history.configure":
+        history = args.get("history")
+        if history is not None:
+            core_chat_history.set_history_mode(ctx.conn, str(history))
+        return {
+            "history": core_chat_history.history_mode(ctx.conn),
+            "history_enabled": core_chat_history.history_enabled(
+                ctx.conn,
+                database_encrypted=_database_file_is_encrypted(ctx),
+            ),
+            "database_encrypted": _database_file_is_encrypted(ctx),
+        }
     session_id = args.get("session_id")
     if not isinstance(session_id, str) or not session_id:
         raise AppError(f"{kind} requires session_id", code="validation")
@@ -9023,6 +9036,7 @@ def handle_request(
         "ui.chat.sessions.get",
         "ui.chat.sessions.delete",
         "ui.chat.sessions.clear",
+        "ui.chat.history.configure",
     ):
         return (
             _with_request_id(

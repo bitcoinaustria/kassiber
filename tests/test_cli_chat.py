@@ -790,6 +790,68 @@ class CliChatPersistenceTest(unittest.TestCase):
         finally:
             _stop_server(server)
 
+    def test_daemon_history_configure_kind_round_trips(self):
+        # The GUI Settings control: set the policy through the daemon and
+        # read the effective state back.
+        with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+            data_root = Path(tmp) / "data"
+            _run_json(data_root, "init")
+            _run_json(data_root, "workspaces", "create", "Demo")
+            _run_json(data_root, "profiles", "create", "Main")
+            daemon = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-m",
+                    "kassiber",
+                    "--data-root",
+                    str(data_root),
+                    "daemon",
+                ],
+                cwd=ROOT,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+            )
+            try:
+                self.assertEqual(
+                    json.loads(daemon.stdout.readline())["kind"], "daemon.ready"
+                )
+                daemon.stdin.write(
+                    json.dumps(
+                        {
+                            "kind": "ui.chat.history.configure",
+                            "request_id": "cfg-1",
+                            "args": {"history": "on"},
+                        }
+                    )
+                    + "\n"
+                )
+                daemon.stdin.flush()
+                record = json.loads(daemon.stdout.readline())
+                self.assertEqual(record["data"]["history"], "on")
+                self.assertTrue(record["data"]["history_enabled"])
+                daemon.stdin.write(
+                    json.dumps(
+                        {
+                            "kind": "ui.chat.history.configure",
+                            "request_id": "cfg-2",
+                            "args": {"history": "bogus"},
+                        }
+                    )
+                    + "\n"
+                )
+                daemon.stdin.flush()
+                record = json.loads(daemon.stdout.readline())
+                self.assertEqual(record["kind"], "error")
+                self.assertEqual(record["error"]["code"], "validation")
+            finally:
+                daemon.stdin.close()
+                daemon.wait(timeout=10)
+                daemon.stdout.close()
+                daemon.stderr.close()
+
     def test_chats_config_round_trip(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
             data_root = Path(tmp) / "data"
