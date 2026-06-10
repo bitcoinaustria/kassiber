@@ -560,6 +560,161 @@ class CliChatTest(unittest.TestCase):
         )
 
 
+class CliChatPersistenceTest(unittest.TestCase):
+    def _chat(self, data_root, *extra, prompt="hello"):
+        return _run_json(data_root, "chat", "--provider", "tool-local", *extra, prompt)
+
+    def test_chat_persists_when_history_on(self):
+        server = _start_tool_chat_server(
+            [_chat_completion_response({"role": "assistant", "content": "stored answer"})]
+        )
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+                data_root = Path(tmp) / "data"
+                _seed_provider(data_root, f"http://127.0.0.1:{server.server_port}/v1")
+                config = _run_json(data_root, "chats", "config", "--history", "on")
+                self.assertEqual(config["data"]["history"], "on")
+                self.assertTrue(config["data"]["history_enabled"])
+
+                payload = self._chat(data_root, prompt="What changed this week?")
+                session_id = payload["data"]["session_id"]
+                self.assertIsInstance(session_id, str)
+
+                listed = _run_json(data_root, "chats", "list")
+                self.assertEqual(listed["kind"], "chats.list")
+                sessions = listed["data"]["sessions"]
+                self.assertEqual(len(sessions), 1)
+                self.assertEqual(sessions[0]["id"], session_id)
+                self.assertEqual(sessions[0]["title"], "What changed this week?")
+                self.assertEqual(sessions[0]["message_count"], 2)
+
+                shown = _run_json(data_root, "chats", "show", session_id)
+                messages = shown["data"]["messages"]
+                self.assertEqual(messages[0]["role"], "user")
+                self.assertEqual(messages[0]["content"], "What changed this week?")
+                self.assertEqual(messages[1]["role"], "assistant")
+                self.assertEqual(messages[1]["content"], "stored answer")
+                self.assertEqual(messages[1]["finish_reason"], "stop")
+                self.assertIsInstance(messages[1]["provenance"], dict)
+        finally:
+            _stop_server(server)
+
+    def test_chat_auto_policy_skips_plaintext_database(self):
+        server = _start_tool_chat_server(
+            [_chat_completion_response({"role": "assistant", "content": "ok"})]
+        )
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+                data_root = Path(tmp) / "data"
+                _seed_provider(data_root, f"http://127.0.0.1:{server.server_port}/v1")
+                payload = self._chat(data_root)
+                self.assertIsNone(payload["data"]["session_id"])
+                listed = _run_json(data_root, "chats", "list")
+                self.assertEqual(listed["data"]["sessions"], [])
+                self.assertEqual(listed["data"]["history_mode"], "auto")
+        finally:
+            _stop_server(server)
+
+    def test_chat_incognito_skips_persistence(self):
+        server = _start_tool_chat_server(
+            [_chat_completion_response({"role": "assistant", "content": "ok"})]
+        )
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+                data_root = Path(tmp) / "data"
+                _seed_provider(data_root, f"http://127.0.0.1:{server.server_port}/v1")
+                _run_json(data_root, "chats", "config", "--history", "on")
+                payload = self._chat(data_root, "--incognito")
+                self.assertIsNone(payload["data"]["session_id"])
+                listed = _run_json(data_root, "chats", "list")
+                self.assertEqual(listed["data"]["sessions"], [])
+        finally:
+            _stop_server(server)
+
+    def test_chat_continue_appends_to_existing_session(self):
+        server = _start_tool_chat_server(
+            [
+                _chat_completion_response({"role": "assistant", "content": "answer one"}),
+                _chat_completion_response({"role": "assistant", "content": "answer two"}),
+            ]
+        )
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+                data_root = Path(tmp) / "data"
+                _seed_provider(data_root, f"http://127.0.0.1:{server.server_port}/v1")
+                _run_json(data_root, "chats", "config", "--history", "on")
+                first = self._chat(data_root, prompt="first question")
+                second = self._chat(
+                    data_root, "--continue", prompt="second question"
+                )
+                self.assertEqual(
+                    first["data"]["session_id"], second["data"]["session_id"]
+                )
+
+                listed = _run_json(data_root, "chats", "list")
+                self.assertEqual(len(listed["data"]["sessions"]), 1)
+                self.assertEqual(listed["data"]["sessions"][0]["message_count"], 4)
+
+                # The continued turn carried the stored history back to the model.
+                contents = [
+                    message.get("content")
+                    for message in server.requests[1]["messages"]  # type: ignore[attr-defined]
+                ]
+                self.assertIn("first question", contents)
+                self.assertIn("answer one", contents)
+                self.assertIn("second question", contents)
+        finally:
+            _stop_server(server)
+
+    def test_chats_delete_and_clear(self):
+        server = _start_tool_chat_server(
+            [
+                _chat_completion_response({"role": "assistant", "content": "one"}),
+                _chat_completion_response({"role": "assistant", "content": "two"}),
+            ]
+        )
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+                data_root = Path(tmp) / "data"
+                _seed_provider(data_root, f"http://127.0.0.1:{server.server_port}/v1")
+                _run_json(data_root, "chats", "config", "--history", "on")
+                first = self._chat(data_root, prompt="first chat")
+                self._chat(data_root, prompt="second chat")
+
+                listed = _run_json(data_root, "chats", "list")
+                self.assertEqual(len(listed["data"]["sessions"]), 2)
+
+                deleted = _run_json(
+                    data_root, "chats", "delete", first["data"]["session_id"]
+                )
+                self.assertEqual(
+                    deleted["data"]["deleted"], first["data"]["session_id"]
+                )
+                listed = _run_json(data_root, "chats", "list")
+                self.assertEqual(len(listed["data"]["sessions"]), 1)
+
+                cleared = _run_json(data_root, "chats", "clear")
+                self.assertEqual(cleared["data"]["deleted"], 1)
+                listed = _run_json(data_root, "chats", "list")
+                self.assertEqual(listed["data"]["sessions"], [])
+        finally:
+            _stop_server(server)
+
+    def test_chats_config_round_trip(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+            data_root = Path(tmp) / "data"
+            _run_json(data_root, "init")
+            _run_json(data_root, "workspaces", "create", "Demo")
+            _run_json(data_root, "profiles", "create", "Main")
+            shown = _run_json(data_root, "chats", "config")
+            self.assertEqual(shown["data"]["history"], "auto")
+            self.assertFalse(shown["data"]["history_enabled"])
+            self.assertFalse(shown["data"]["database_encrypted"])
+            updated = _run_json(data_root, "chats", "config", "--history", "on")
+            self.assertEqual(updated["data"]["history"], "on")
+            self.assertTrue(updated["data"]["history_enabled"])
+
+
 class _FakeTtyInput(io.StringIO):
     def isatty(self):
         return True

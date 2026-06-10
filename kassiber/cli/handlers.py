@@ -37,6 +37,7 @@ from ..core import imports as core_imports
 from ..core.lightning import cln as core_lightning_cln
 from ..core import metadata as core_metadata
 from ..core import output_inventory as core_output_inventory
+from ..core import chat_history as core_chat_history
 from ..core import pricing
 from ..core import rates as core_rates
 from ..core import reports as core_reports
@@ -1356,6 +1357,41 @@ def create_saved_view_cli(
 def delete_saved_view_cli(conn, workspace_ref, profile_ref, view_id):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     return core_saved_views.delete_view(conn, profile["id"], view_id)
+
+
+def list_chat_sessions_cli(conn, workspace_ref, profile_ref, *, limit=50):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    return {
+        "sessions": core_chat_history.list_sessions(conn, profile["id"], limit=limit),
+        "history_mode": core_chat_history.history_mode(conn),
+    }
+
+
+def show_chat_session_cli(conn, workspace_ref, profile_ref, session_id):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    return core_chat_history.get_session(conn, profile["id"], session_id)
+
+
+def delete_chat_session_cli(conn, workspace_ref, profile_ref, session_id):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    return core_chat_history.delete_session(conn, profile["id"], session_id)
+
+
+def clear_chat_sessions_cli(conn, workspace_ref, profile_ref):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    return core_chat_history.clear_sessions(conn, profile["id"])
+
+
+def chat_history_config_cli(conn, *, history=None, database_encrypted):
+    if history is not None:
+        core_chat_history.set_history_mode(conn, history)
+    return {
+        "history": core_chat_history.history_mode(conn),
+        "history_enabled": core_chat_history.history_enabled(
+            conn, database_encrypted=database_encrypted
+        ),
+        "database_encrypted": database_encrypted,
+    }
 
 
 def delete_transaction_pair(conn, workspace_ref, profile_ref, pair_id):

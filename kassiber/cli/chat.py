@@ -63,6 +63,7 @@ class ChatSessionResult:
             },
             "finish_reason": terminal_data.get("finish_reason") if last else None,
             "provenance": terminal_data.get("provenance") if last else None,
+            "session_id": terminal_data.get("session_id") if last else None,
             "tool_calls": last.tool_calls if last else [],
         }
 
@@ -224,7 +225,12 @@ def _resolve_prompt(args: Any) -> str | None:
     return prompt_flag if prompt_flag is not None else prompt
 
 
-def _build_chat_args(args: Any, messages: list[dict[str, str]]) -> dict[str, Any]:
+def _build_chat_args(
+    args: Any,
+    messages: list[dict[str, str]],
+    *,
+    session_id: str | None = None,
+) -> dict[str, Any]:
     tools_enabled = not getattr(args, "no_tools", False)
     payload: dict[str, Any] = {
         "provider": getattr(args, "provider", None),
@@ -232,6 +238,8 @@ def _build_chat_args(args: Any, messages: list[dict[str, str]]) -> dict[str, Any
         "messages": messages,
         "tools_enabled": tools_enabled,
         "tool_loop_max_iterations": getattr(args, "tool_loop_max_iterations", 8),
+        "persist": False if getattr(args, "incognito", False) else "auto",
+        "session_id": session_id,
     }
     system = getattr(args, "system", None)
     if system:
@@ -277,6 +285,51 @@ def _read_control_response(client: _DaemonChatClient, request_id: str) -> dict[s
                 record, message="daemon request failed", code="daemon_request_failed"
             )
         return record
+
+
+def _resolve_continuation(
+    client: _DaemonChatClient, args: Any
+) -> tuple[str | None, list[dict[str, str]], dict[str, Any] | None]:
+    """Resolve --continue / --session into (session_id, prior messages, session)."""
+    requested = getattr(args, "session", None)
+    if not requested and not getattr(args, "continue_session", False):
+        return None, [], None
+    if requested is None:
+        request_id = f"chat-sessions-list-{uuid.uuid4().hex}"
+        client.send(
+            {
+                "request_id": request_id,
+                "kind": "ui.chat.sessions.list",
+                "args": {"limit": 1},
+            }
+        )
+        response = _read_control_response(client, request_id)
+        data = response.get("data") if isinstance(response.get("data"), dict) else {}
+        sessions = data.get("sessions") or []
+        if not sessions:
+            raise AppError(
+                "no persisted chat sessions to continue",
+                code="not_found",
+                hint="Run a chat with history enabled first, or pass --session <id>.",
+                retryable=False,
+            )
+        requested = sessions[0]["id"]
+    request_id = f"chat-sessions-get-{uuid.uuid4().hex}"
+    client.send(
+        {
+            "request_id": request_id,
+            "kind": "ui.chat.sessions.get",
+            "args": {"session_id": requested},
+        }
+    )
+    response = _read_control_response(client, request_id)
+    session = response.get("data") if isinstance(response.get("data"), dict) else {}
+    messages = [
+        {"role": message["role"], "content": message["content"]}
+        for message in session.get("messages") or []
+        if message.get("role") in {"user", "assistant"} and message.get("content")
+    ]
+    return requested, messages, session
 
 
 def _resolve_default_model(client: _DaemonChatClient, args: Any) -> None:
@@ -539,13 +592,14 @@ def _run_turn(
     render: bool,
     stream_out: TextIO | None = None,
     session_allowed: set[str] | None = None,
+    session_id: str | None = None,
 ) -> ChatTurnResult:
     request_id = f"chat-{uuid.uuid4().hex}"
     client.send(
         {
             "request_id": request_id,
             "kind": "ai.chat",
-            "args": _build_chat_args(args, messages),
+            "args": _build_chat_args(args, messages, session_id=session_id),
         }
     )
     content_parts: list[str] = []
@@ -712,6 +766,14 @@ def run_chat_command(
             code="validation",
             retryable=False,
         )
+    if getattr(args, "incognito", False) and (
+        getattr(args, "continue_session", False) or getattr(args, "session", None)
+    ):
+        raise AppError(
+            "--incognito cannot continue a persisted session",
+            code="validation",
+            retryable=False,
+        )
     if one_shot_prompt is None and not input_stream.isatty():
         raise AppError(
             "interactive chat requires a TTY; pass a prompt for one-shot mode",
@@ -747,8 +809,14 @@ def run_chat_command(
             provider=getattr(args, "provider", None),
             model=args.model,
         )
-        messages: list[dict[str, str]] = []
         render = not machine and not stream_json
+        chat_session_id, messages, stored_session = _resolve_continuation(client, args)
+        if render and stored_session is not None:
+            _write(
+                f"Continuing: {stored_session.get('title', chat_session_id)} "
+                f"({len(messages)} messages)\n",
+                output_stream,
+            )
         if one_shot_prompt is not None:
             # Piped stdout gets only the answer text; progress, tool
             # announcements, consent UI, and provenance move to stderr.
@@ -763,6 +831,7 @@ def run_chat_command(
                 chrome=chrome,
                 render=render,
                 stream_out=output_stream if stream_json else None,
+                session_id=chat_session_id,
             )
             session.turns.append(result)
             if render:
@@ -776,6 +845,7 @@ def run_chat_command(
             messages,
             input_stream=input_stream,
             output_stream=output_stream,
+            chat_session_id=chat_session_id,
         )
         return session
     finally:
@@ -792,6 +862,7 @@ def _run_repl(
     *,
     input_stream: TextIO,
     output_stream: TextIO,
+    chat_session_id: str | None = None,
 ) -> None:
     _write("Kassiber chat. /help for commands, /exit to quit.\n", output_stream)
     session_allowed: set[str] = set()
@@ -826,6 +897,7 @@ def _run_repl(
                 _render_allowed(args, session_allowed, output_stream)
             elif command == "/new":
                 messages.clear()
+                chat_session_id = None
                 _write("Started a new conversation.\n", output_stream)
             else:
                 _write(
@@ -844,6 +916,7 @@ def _run_repl(
                 chrome=output_stream,
                 render=True,
                 session_allowed=session_allowed,
+                session_id=chat_session_id,
             )
         except AppError as exc:
             # Keep the REPL session (and its history) alive across
@@ -856,6 +929,13 @@ def _run_repl(
                 _write(f"Hint: {exc.hint}\n", sys.stderr)
             continue
         session.turns.append(result)
+        terminal_data = (
+            result.terminal.get("data")
+            if isinstance(result.terminal.get("data"), dict)
+            else {}
+        )
+        if isinstance(terminal_data.get("session_id"), str):
+            chat_session_id = terminal_data["session_id"]
         _render_turn_footer(result.terminal, output_stream)
         if result.content:
             messages.append({"role": "assistant", "content": result.content})

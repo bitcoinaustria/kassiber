@@ -25,6 +25,7 @@ from ..ai.client import ai_client_for_locator
 from ..ai.providers import (
     list_with_default as list_ai_providers_with_default,
 )
+from ..core import chat_history as core_chat_history
 from .handlers import (
     APP_NAME,
     BACKEND_CLEAR_FIELD_ALIASES,
@@ -52,15 +53,20 @@ from .handlers import (
     apply_transfer_rules,
     bulk_pair_transfers,
     create_direct_swap_payout,
+    chat_history_config_cli,
+    clear_chat_sessions_cli,
     create_saved_view_cli,
     create_transaction_pair,
     create_transfer_rule,
+    delete_chat_session_cli,
     delete_direct_swap_payout,
     delete_saved_view_cli,
     delete_transaction_pair,
     delete_transfer_rule,
     dismiss_transfer_candidate,
+    list_chat_sessions_cli,
     list_saved_views_cli,
+    show_chat_session_cli,
     list_transfer_rules,
     set_transfer_rule_enabled,
     suggest_transfer_candidates,
@@ -532,6 +538,52 @@ def build_parser() -> argparse.ArgumentParser:
             "prompts and redacted tool results."
         ),
     )
+    chat.add_argument(
+        "--incognito",
+        action="store_true",
+        help="Do not persist this chat to the database, regardless of the history setting.",
+    )
+    chat.add_argument(
+        "--continue",
+        dest="continue_session",
+        action="store_true",
+        help="Continue the most recently updated persisted chat session.",
+    )
+    chat.add_argument(
+        "--session",
+        metavar="SESSION_ID",
+        help="Continue a specific persisted chat session (see `kassiber chats list`).",
+    )
+
+    chats = sub.add_parser(
+        "chats",
+        description=(
+            "Manage persisted AI chat sessions. History is stored in the "
+            "(SQLCipher-encrypted) database; the `auto` policy persists only "
+            "when the database is encrypted."
+        ),
+    )
+    chats_sub = chats.add_subparsers(dest="chats_command", required=True)
+    chats_list = chats_sub.add_parser("list")
+    chats_list.add_argument("--workspace")
+    chats_list.add_argument("--profile")
+    chats_list.add_argument("--limit", type=int, default=50)
+    chats_show = chats_sub.add_parser("show")
+    chats_show.add_argument("session_id")
+    chats_show.add_argument("--workspace")
+    chats_show.add_argument("--profile")
+    chats_delete = chats_sub.add_parser("delete")
+    chats_delete.add_argument("session_id")
+    chats_delete.add_argument("--workspace")
+    chats_delete.add_argument("--profile")
+    chats_clear = chats_sub.add_parser("clear")
+    chats_clear.add_argument("--workspace")
+    chats_clear.add_argument("--profile")
+    chats_config = chats_sub.add_parser(
+        "config",
+        description="Show or set the chat history policy (auto persists only on encrypted databases).",
+    )
+    chats_config.add_argument("--history", choices=("auto", "on", "off"))
 
     add_secrets_parser(sub)
     add_backup_parser(sub)
@@ -2949,6 +3001,43 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         if args.views_command == "delete":
             return emit(
                 args, delete_saved_view_cli(conn, args.workspace, args.profile, args.view_id)
+            )
+    if args.command == "chats":
+        if args.chats_command == "list":
+            return emit(
+                args,
+                list_chat_sessions_cli(
+                    conn, args.workspace, args.profile, limit=args.limit
+                ),
+            )
+        if args.chats_command == "show":
+            return emit(
+                args,
+                show_chat_session_cli(
+                    conn, args.workspace, args.profile, args.session_id
+                ),
+            )
+        if args.chats_command == "delete":
+            return emit(
+                args,
+                delete_chat_session_cli(
+                    conn, args.workspace, args.profile, args.session_id
+                ),
+            )
+        if args.chats_command == "clear":
+            return emit(
+                args, clear_chat_sessions_cli(conn, args.workspace, args.profile)
+            )
+        if args.chats_command == "config":
+            return emit(
+                args,
+                chat_history_config_cli(
+                    conn,
+                    history=args.history,
+                    database_encrypted=core_chat_history.database_file_is_encrypted(
+                        args.data_root
+                    ),
+                ),
             )
     if args.command == "btcpay":
         commercial_hooks = _commercial_hooks()
