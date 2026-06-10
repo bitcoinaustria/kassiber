@@ -4,16 +4,24 @@ This module turns data Kassiber already holds locally into provable funding
 edges between transaction rows, so the source-of-funds graph can be
 assembled automatically instead of hand-linked:
 
-- ``utxo_spend``: real Bitcoin/Liquid transaction structure. Chain-synced
-  rows store their inputs (``raw_json`` vin outpoints from esplora/electrum),
-  and ``wallet_utxos`` records which outputs the user's wallets own (plus
-  ``spent_by`` for Wasabi imports). Joining a transaction's inputs against
-  owned outputs proves, per wallet: which earlier owned transaction funded
-  this spend (same-wallet parent chaining through change/consolidation),
-  and which wallet received which share of a multi-wallet transaction.
+- ``utxo_spend``: real transaction structure. Chain-synced rows store their
+  inputs (``raw_json`` vin outpoints), and ``wallet_utxos`` records which
+  outputs the user's wallets own (plus ``spent_by`` for Wasabi imports).
+  Joining a transaction's inputs against owned outputs proves, per wallet:
+  which earlier owned transaction funded this spend (same-wallet parent
+  chaining through change/consolidations, including net-zero in-wallet
+  consolidation hops, which are resolved transparently to their own
+  parents), and which wallet received which share of a multi-wallet
+  transaction.
 - ``payment_hash``: Lightning evidence. Two owned rows sharing one payment
   hash (an LN payment between own wallets, or an on-chain HTLC leg whose
   hash was extracted at import) are two legs of the same transfer.
+
+Allocation semantics follow the engine's exact-cover rule: the parent edges
+feeding one spend leg are sized as a group so they sum to exactly
+``min(total contributed, spend leg amount)`` — per-edge capping would
+over-cover multi-input consolidations by the fee and trip the
+``ambiguous_allocation`` export gate.
 
 Everything here is pure derivation over already-imported rows: no network
 access, ever. More synced wallets and connection types mean more joins and
@@ -21,7 +29,10 @@ a more complete assembled graph — that scaling property is the point.
 
 The module stays free of back-edges into ``source_funds``: it consumes
 plain row mappings and returns candidate-pair dicts; the caller owns link
-insertion, dedupe, privacy/samourai skip policy, and review semantics.
+insertion, dedupe, and review semantics. The caller's ``skip_row``
+predicate carries privacy/samourai policy and is applied per TRANSACTION:
+one flagged leg poisons every leg of that txid, so lineage is never
+asserted through a privacy boundary via an unflagged sibling row.
 """
 
 from __future__ import annotations
@@ -31,7 +42,13 @@ import sqlite3
 from collections import defaultdict
 from typing import Any, Callable, Mapping, Sequence
 
+from ..wallet_descriptors import normalize_asset_code
+
 _COINBASE_TXID = "0" * 64
+# In-wallet consolidations net to ~0 and cannot carry allocation demand;
+# resolving through more than this many of them in a row means the chain
+# shape is unexpected and manual review is the right answer.
+_MAX_PASSTHROUGH_DEPTH = 8
 
 
 def _safe_json_loads(value: Any) -> Any:
@@ -46,15 +63,19 @@ def _safe_json_loads(value: Any) -> Any:
 def parse_vin_outpoints(raw_json: Any) -> list[tuple[str, int]]:
     """Extract input outpoints ``(prev_txid_lower, vout)`` from a stored tx.
 
-    Handles both stored shapes: esplora's upstream tx JSON and electrum's
-    locally-decoded transaction (both carry ``vin`` entries with ``txid`` +
-    ``vout``). Rows without chain structure (CSV imports, bitcoinrpc sync)
-    yield an empty list.
+    Handles the stored shapes that carry structured inputs: esplora's
+    upstream tx JSON, electrum's locally-decoded transaction, and Liquid
+    component records (all carry ``vin`` entries with ``txid`` + ``vout``).
+    Rows without chain structure (CSV imports, bitcoinrpc sync) yield an
+    empty list.
     """
     payload = _safe_json_loads(raw_json)
     if not isinstance(payload, dict):
         return []
     vin = payload.get("vin")
+    if not isinstance(vin, list):
+        nested = payload.get("tx")
+        vin = nested.get("vin") if isinstance(nested, dict) else None
     if not isinstance(vin, list):
         return []
     outpoints: list[tuple[str, int]] = []
@@ -101,7 +122,7 @@ def build_owned_outpoint_index(
             "amount_msat": int(row["amount"] or 0),
             "branch_label": str(row["branch_label"] or ""),
             "spent_by": str(row["spent_by"] or "").strip().lower(),
-            "asset": str(row["asset"] or ""),
+            "asset": normalize_asset_code(str(row["asset"] or "")),
         }
     return index
 
@@ -111,6 +132,10 @@ def _short_outpoints(outpoints: Sequence[tuple[str, int]], limit: int = 3) -> st
     if len(outpoints) > limit:
         rendered.append(f"+{len(outpoints) - limit} more")
     return ", ".join(rendered)
+
+
+def _event_time(row: Mapping[str, Any]) -> str:
+    return str(row["occurred_at"] or "")
 
 
 def derive_utxo_spend_pairs(
@@ -124,16 +149,14 @@ def derive_utxo_spend_pairs(
     Two edge kinds come out of one pass:
 
     - ``parent_spend``: within one wallet, spend transaction T consumes
-      outputs created by earlier owned transaction P (consolidations and
-      change chains). Evidence: T's vin outpoints (or P-outputs'
-      ``spent_by``) match owned outputs created by P in the same wallet.
+      outputs created by earlier owned transactions (consolidations and
+      change chains). Net-zero in-wallet consolidation legs are resolved
+      transparently: their own parents become the edge sources, so chains
+      like P -> consolidation -> S link P directly to S.
     - ``leg_funding``: across wallets, the outbound leg of T in the paying
       wallet funds the inbound leg of T in a receiving wallet that owns
       outputs of T. This resolves multi-wallet transactions that the 1:1
       same-external-id heuristic refuses.
-
-    ``skip_row`` carries the caller's privacy/samourai policy: edges never
-    assert lineage through rows the caller wants left alone.
     """
     rows_by_external: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for row in rows:
@@ -141,8 +164,14 @@ def derive_utxo_spend_pairs(
         if external:
             rows_by_external[external].append(row)
 
-    # Owned outputs grouped by the transaction that created them, so the
-    # receiving side of a tx and the parents of a spend resolve in O(1).
+    # Privacy/samourai policy applies per transaction: any flagged leg
+    # poisons every leg of the same txid.
+    blocked_externals = {
+        str(row["external_id"] or "").strip().lower()
+        for row in rows
+        if row["external_id"] and skip_row(row)
+    }
+
     owned_outputs_by_txid: dict[str, list[tuple[tuple[str, int], Mapping[str, Any]]]] = defaultdict(list)
     spenders_of_outpoint: dict[str, list[tuple[tuple[str, int], Mapping[str, Any]]]] = defaultdict(list)
     for outpoint, info in owned_index.items():
@@ -150,37 +179,142 @@ def derive_utxo_spend_pairs(
         if info.get("spent_by"):
             spenders_of_outpoint[str(info["spent_by"])].append((outpoint, info))
 
-    pairs: list[dict[str, Any]] = []
-    seen: set[tuple[str, str]] = set()
+    def leg(
+        external: str,
+        wallet_id: str,
+        direction: str,
+        asset: str | None = None,
+    ) -> Mapping[str, Any] | None:
+        for row in rows_by_external.get(external, []):
+            if row["wallet_id"] != wallet_id or row["direction"] != direction:
+                continue
+            if asset is not None and normalize_asset_code(str(row["asset"])) != asset:
+                continue
+            return row
+        return None
 
-    def leg(external: str, wallet_id: str, direction: str) -> Mapping[str, Any] | None:
-        candidates = [
-            row
-            for row in rows_by_external.get(external, [])
-            if row["wallet_id"] == wallet_id and row["direction"] == direction
-        ]
-        return candidates[0] if candidates else None
+    def tx_inputs(external: str) -> list[tuple[str, int]]:
+        vin_outpoints: list[tuple[str, int]] = []
+        seen: set[tuple[str, int]] = set()
+        for row in rows_by_external.get(external, []):
+            for outpoint in parse_vin_outpoints(row["raw_json"]):
+                if outpoint not in seen:
+                    seen.add(outpoint)
+                    vin_outpoints.append(outpoint)
+        for outpoint, _info in spenders_of_outpoint.get(external, []):
+            if outpoint not in seen:
+                seen.add(outpoint)
+                vin_outpoints.append(outpoint)
+        return vin_outpoints
+
+    def resolve_parents(
+        external: str,
+        wallet_id: str,
+        asset: str,
+        *,
+        depth: int = 0,
+        visited: set[str] | None = None,
+    ) -> dict[str, dict[str, Any]]:
+        """Owned inputs of ``external`` for one wallet, grouped by the
+        parent transaction whose leg can carry the link.
+
+        Net-zero parent legs (in-wallet consolidations) cannot satisfy any
+        allocation demand, so they are resolved transparently into THEIR
+        owned parents, recording the passthrough txids for the explanation.
+        """
+        visited = visited or set()
+        if external in visited or depth > _MAX_PASSTHROUGH_DEPTH:
+            return {}
+        visited.add(external)
+        groups: dict[str, dict[str, Any]] = {}
+        for outpoint in tx_inputs(external):
+            info = owned_index.get(outpoint)
+            if not info or str(info["wallet_id"]) != wallet_id:
+                continue
+            if info["asset"] != asset:
+                continue
+            parent_txid = outpoint[0]
+            if parent_txid in blocked_externals:
+                continue
+            amount = int(info["amount_msat"] or 0)
+            if amount <= 0:
+                continue
+            parent_leg = leg(parent_txid, wallet_id, "inbound", asset) or leg(
+                parent_txid, wallet_id, "outbound", asset
+            )
+            if parent_leg is not None and int(parent_leg["amount"]) <= 0:
+                # Net-zero passthrough: attribute this input to the
+                # consolidation's own parents instead.
+                for key, nested in resolve_parents(
+                    parent_txid, wallet_id, asset, depth=depth + 1, visited=visited
+                ).items():
+                    group = groups.setdefault(
+                        key,
+                        {
+                            "parent_leg": nested["parent_leg"],
+                            "contributed_msat": 0,
+                            "outpoints": [],
+                            "via": [],
+                        },
+                    )
+                    group["contributed_msat"] += nested["contributed_msat"]
+                    group["outpoints"].extend(nested["outpoints"])
+                    via = [*nested["via"], parent_txid]
+                    group["via"] = sorted(set(group["via"]) | set(via))
+                continue
+            if parent_leg is None:
+                continue
+            group = groups.setdefault(
+                parent_txid,
+                {
+                    "parent_leg": parent_leg,
+                    "contributed_msat": 0,
+                    "outpoints": [],
+                    "via": [],
+                },
+            )
+            group["contributed_msat"] += amount
+            group["outpoints"].append(outpoint)
+        return groups
+
+    pairs: list[dict[str, Any]] = []
+    seen_pairs: set[tuple[str, str]] = set()
 
     def emit(
         from_row: Mapping[str, Any],
         to_row: Mapping[str, Any],
         kind: str,
-        contributed_msat: int,
+        allocation_msat: int,
+        from_allocation_msat: int,
         outpoints: list[tuple[str, int]],
+        *,
+        via: Sequence[str] = (),
     ) -> None:
         if from_row["id"] == to_row["id"]:
             return
-        if skip_row(from_row) or skip_row(to_row):
+        if allocation_msat <= 0:
+            return
+        if normalize_asset_code(str(from_row["asset"])) != normalize_asset_code(str(to_row["asset"])):
+            return
+        if _event_time(from_row) > _event_time(to_row):
+            # A link the chronology gate would reject forever is noise, not
+            # a suggestion.
             return
         key = (from_row["id"], to_row["id"])
-        if key in seen:
+        if key in seen_pairs:
             return
-        seen.add(key)
+        seen_pairs.add(key)
         if kind == "parent_spend":
             explanation = (
                 f"Spend consumes {len(outpoints)} owned output"
                 f"{'' if len(outpoints) == 1 else 's'} of this parent transaction "
-                f"({_short_outpoints(outpoints)}); derived locally from synced wallet data."
+                f"({_short_outpoints(outpoints)})"
+                + (
+                    f" via in-wallet consolidation {_short_outpoints([(txid, 0) for txid in via])[:64]}"
+                    if via
+                    else ""
+                )
+                + "; derived locally from synced wallet data."
             )
         else:
             explanation = (
@@ -193,85 +327,98 @@ def derive_utxo_spend_pairs(
                 "from_row": from_row,
                 "to_row": to_row,
                 "kind": kind,
-                "allocation_msat": min(int(contributed_msat), int(to_row["amount"])),
-                "from_allocation_msat": min(int(contributed_msat), int(from_row["amount"])),
+                "allocation_msat": int(allocation_msat),
+                "from_allocation_msat": int(from_allocation_msat),
                 "outpoints": list(outpoints),
                 "explanation": explanation,
             }
         )
 
     for external, legs in rows_by_external.items():
-        # Inputs of this transaction, from any leg that carries chain
-        # structure (esplora/electrum store the same tx per wallet) plus
-        # spent_by back-references (Wasabi).
-        vin_outpoints: list[tuple[str, int]] = []
-        seen_outpoints: set[tuple[str, int]] = set()
-        for row in legs:
-            for outpoint in parse_vin_outpoints(row["raw_json"]):
-                if outpoint not in seen_outpoints:
-                    seen_outpoints.add(outpoint)
-                    vin_outpoints.append(outpoint)
-        for outpoint, _info in spenders_of_outpoint.get(external, []):
-            if outpoint not in seen_outpoints:
-                seen_outpoints.add(outpoint)
-                vin_outpoints.append(outpoint)
+        if external in blocked_externals:
+            continue
+        vin_outpoints = tx_inputs(external)
 
-        # Owned inputs grouped by (spending wallet, parent txid).
-        contributed_by_wallet: dict[str, int] = defaultdict(int)
-        by_wallet_parent: dict[tuple[str, str], list[tuple[tuple[str, int], int]]] = defaultdict(list)
+        spending_wallets: set[str] = set()
         for outpoint in vin_outpoints:
             info = owned_index.get(outpoint)
-            if not info:
-                continue
-            wallet_id = str(info["wallet_id"])
-            amount = int(info["amount_msat"] or 0)
-            contributed_by_wallet[wallet_id] += amount
-            by_wallet_parent[(wallet_id, outpoint[0])].append((outpoint, amount))
+            if info:
+                spending_wallets.add(str(info["wallet_id"]))
 
-        # parent_spend edges: parent tx row -> outbound leg, same wallet.
-        for (wallet_id, parent_txid), spent in by_wallet_parent.items():
-            out_leg = leg(external, wallet_id, "outbound")
-            if out_leg is None:
-                continue
-            parent_leg = leg(parent_txid, wallet_id, "inbound") or leg(
-                parent_txid, wallet_id, "outbound"
-            )
-            if parent_leg is None:
-                continue
-            contributed = sum(amount for _outpoint, amount in spent)
-            emit(
-                parent_leg,
-                out_leg,
-                "parent_spend",
-                contributed,
-                [outpoint for outpoint, _amount in spent],
-            )
+        # parent_spend edges, sized as a group so they sum to exactly
+        # min(total contributed, spend leg amount).
+        for wallet_id in spending_wallets:
+            out_legs = [
+                row
+                for row in legs
+                if row["wallet_id"] == wallet_id and row["direction"] == "outbound"
+            ]
+            for out_leg in out_legs:
+                if int(out_leg["amount"]) <= 0:
+                    # Net-zero consolidation legs carry no demand; their
+                    # children resolve through them transparently.
+                    continue
+                asset = normalize_asset_code(str(out_leg["asset"]))
+                groups = resolve_parents(external, wallet_id, asset)
+                if not groups:
+                    continue
+                ordered = sorted(groups.items())
+                total = sum(group["contributed_msat"] for _key, group in ordered)
+                if total <= 0:
+                    continue
+                target_sum = min(total, int(out_leg["amount"]))
+                allocations: list[int] = []
+                if total <= target_sum:
+                    allocations = [group["contributed_msat"] for _key, group in ordered]
+                else:
+                    remainders = []
+                    floor_sum = 0
+                    for _key, group in ordered:
+                        exact = group["contributed_msat"] * target_sum
+                        floor_value = exact // total
+                        allocations.append(floor_value)
+                        floor_sum += floor_value
+                        remainders.append(exact % total)
+                    for index in sorted(
+                        range(len(ordered)),
+                        key=lambda position: (-remainders[position], position),
+                    )[: target_sum - floor_sum]:
+                        allocations[index] += 1
+                for (_key, group), allocation in zip(ordered, allocations):
+                    emit(
+                        group["parent_leg"],
+                        out_leg,
+                        "parent_spend",
+                        allocation,
+                        min(group["contributed_msat"], int(group["parent_leg"]["amount"])),
+                        group["outpoints"],
+                        via=group["via"],
+                    )
 
         # leg_funding edges: outbound leg of the spending wallet -> inbound
         # leg of each receiving wallet that owns outputs of this tx.
-        if not contributed_by_wallet:
+        if not spending_wallets:
             continue
-        received_by_wallet: dict[str, list[tuple[tuple[str, int], int]]] = defaultdict(list)
+        received_by_wallet: dict[tuple[str, str], list[tuple[tuple[str, int], int]]] = defaultdict(list)
         for outpoint, info in owned_outputs_by_txid.get(external, []):
-            received_by_wallet[str(info["wallet_id"])].append(
+            received_by_wallet[(str(info["wallet_id"]), str(info["asset"]))].append(
                 (outpoint, int(info["amount_msat"] or 0))
             )
-        for spender_wallet in contributed_by_wallet:
-            out_leg = leg(external, spender_wallet, "outbound")
-            if out_leg is None:
-                continue
-            for receiver_wallet, received in received_by_wallet.items():
+        for spender_wallet in spending_wallets:
+            for (receiver_wallet, asset), received in received_by_wallet.items():
                 if receiver_wallet == spender_wallet:
                     continue
-                in_leg = leg(external, receiver_wallet, "inbound")
-                if in_leg is None:
+                out_leg = leg(external, spender_wallet, "outbound", asset)
+                in_leg = leg(external, receiver_wallet, "inbound", asset)
+                if out_leg is None or in_leg is None:
                     continue
                 received_total = sum(amount for _outpoint, amount in received)
                 emit(
                     out_leg,
                     in_leg,
                     "leg_funding",
-                    received_total,
+                    min(received_total, int(in_leg["amount"])),
+                    min(received_total, int(out_leg["amount"])),
                     [outpoint for outpoint, _amount in received],
                 )
 
@@ -306,9 +453,11 @@ def derive_payment_hash_pairs(
         out_tx, in_tx = outs[0], ins[0]
         if out_tx["wallet_id"] == in_tx["wallet_id"]:
             continue
-        if out_tx["asset"] != in_tx["asset"]:
+        if normalize_asset_code(str(out_tx["asset"])) != normalize_asset_code(str(in_tx["asset"])):
             continue
         if skip_row(out_tx) or skip_row(in_tx):
+            continue
+        if _event_time(out_tx) > _event_time(in_tx):
             continue
         pairs.append(
             {
