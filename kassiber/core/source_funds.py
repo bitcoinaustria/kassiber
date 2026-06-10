@@ -62,6 +62,7 @@ LINK_TYPES = (
 )
 LINK_STATES = ("suggested", "reviewed", "rejected")
 CONFIDENCE_LEVELS = ("exact", "strong", "weak", "unknown")
+_CONFIDENCE_RANK = {"unknown": 0, "weak": 1, "strong": 2, "exact": 3}
 ALLOCATION_POLICIES = ("explicit", "heuristic", "unknown")
 PRIVACY_LINK_TYPES = {"coinjoin", "payjoin"}
 ATTESTATION_SOURCE_TYPES = {"missing_history", "opening_balance_attestation"}
@@ -1352,6 +1353,27 @@ def _target_scoped_link_rows(
     return list(by_id.values())
 
 
+def _pair_has_rejected_link(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    from_transaction_id: str | None,
+    to_transaction_id: str,
+) -> bool:
+    if not from_transaction_id:
+        return False
+    return bool(
+        conn.execute(
+            """
+            SELECT 1 FROM source_funds_links
+            WHERE profile_id = ? AND from_transaction_id = ? AND to_transaction_id = ?
+              AND state = 'rejected'
+            LIMIT 1
+            """,
+            (profile_id, from_transaction_id, to_transaction_id),
+        ).fetchone()
+    )
+
+
 def _validated_bulk_review_candidates(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -1360,6 +1382,11 @@ def _validated_bulk_review_candidates(
     candidates: list[Mapping[str, Any]] = []
     for row in rows:
         if not _is_bulk_reviewable_suggestion(row):
+            continue
+        # A pair the user explicitly rejected never auto-reviews again, even
+        # when a different method re-suggests it with stronger evidence —
+        # the re-suggestion stays a manual review item.
+        if _pair_has_rejected_link(conn, profile_id, row["from_transaction_id"], row["to_transaction_id"]):
             continue
         to_tx = _transaction_by_id(conn, profile_id, row["to_transaction_id"])
         if not to_tx:
@@ -1397,10 +1424,12 @@ def bulk_review_suggestions(
 ) -> dict[str, Any]:
     """Accept deterministic source-funds suggestions as user-reviewed links.
 
-    This is intentionally narrow: exact external-id matches, already-reviewed
-    transaction_pairs, and one-to-one provider/import ids can be accepted in
-    bulk. Broad account ids, weak time/amount guesses, and chain-observation
-    hints stay manual.
+    This is intentionally narrow: exact external-id matches, transaction
+    input/output structure (utxo_spend), Lightning payment hashes,
+    already-reviewed transaction_pairs, and one-to-one provider/import ids
+    can be accepted in bulk, each re-verified against the live database.
+    Broad account ids, weak time/amount guesses, chain-observation hints,
+    and pairs the user previously rejected stay manual.
     """
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     target = hooks.resolve_transaction(conn, profile["id"], target_transaction_ref)
@@ -1432,8 +1461,10 @@ def bulk_review_suggestions(
         "links": [_link_row_to_dict(conn, row) for row in reviewed_rows if row],
         "policy": (
             "Bulk review only accepts exact/strong deterministic suggestions from same external ids, "
-            "existing transaction_pairs, or one-to-one per-transaction provider/import ids. "
-            "Weak time/amount matches, broad provider ids, and chain observations remain manual review items."
+            "transaction input/output structure, Lightning payment hashes, existing transaction_pairs, "
+            "or one-to-one per-transaction provider/import ids, re-verified against the live database. "
+            "Weak time/amount matches, broad provider ids, chain observations, and pairs the user "
+            "previously rejected remain manual review items."
         ),
     }
 
@@ -1555,19 +1586,34 @@ def _insert_suggestion(
     # A pair that already carries any non-rejected link (manual or another
     # method) must not get a parallel suggestion: two reviewed links on one
     # hop double-allocate it straight into an ambiguous_allocation blocker.
-    # Rejected links stay method-scoped (handled above) so stronger evidence
-    # may re-suggest a pair the user rejected under a weaker method.
-    already_linked = conn.execute(
+    # Reviewed links always win. Pending suggestions only block
+    # equal-or-stronger confidence; a stronger deriver supersedes a weaker
+    # pending suggestion in place. Rejected links stay method-scoped
+    # (handled above) so stronger evidence may re-suggest a pair the user
+    # rejected — those re-suggestions never bulk-review (see
+    # _validated_bulk_review_candidates).
+    existing_pair_rows = conn.execute(
         """
-        SELECT 1 FROM source_funds_links
+        SELECT id, state, confidence FROM source_funds_links
         WHERE profile_id = ? AND from_transaction_id = ? AND to_transaction_id = ?
           AND state != 'rejected'
-        LIMIT 1
         """,
         (profile_id, from_tx["id"], to_tx["id"]),
-    ).fetchone()
-    if already_linked:
+    ).fetchall()
+    if any(row["state"] != "suggested" for row in existing_pair_rows):
         return None
+    if existing_pair_rows:
+        new_rank = _CONFIDENCE_RANK.get(confidence, 0)
+        best_existing = max(
+            _CONFIDENCE_RANK.get(str(row["confidence"] or ""), 0)
+            for row in existing_pair_rows
+        )
+        if new_rank <= best_existing:
+            return None
+        conn.executemany(
+            "DELETE FROM source_funds_links WHERE id = ?",
+            [(row["id"],) for row in existing_pair_rows],
+        )
     created_at = _now()
     link_id = str(uuid.uuid4())
     conn.execute(
@@ -2974,6 +3020,18 @@ def build_report(
                     else:
                         tx_depths[from_tx_id] = max(tx_depths[from_tx_id], depth + 1)
                 from_id = f"tx:{from_tx_id}"
+            edge_explanation = _public_explanation(link["explanation"], mode)
+            # Per-node "hide" overrides must also cover edge explanations:
+            # machine-derived ones embed outpoint/payment-hash prefixes that
+            # would otherwise leak the hidden transaction's identifiers.
+            edge_endpoint_ids = [tx_id]
+            if from_id.startswith("tx:"):
+                edge_endpoint_ids.append(from_id[3:])
+            if edge_explanation and any(
+                reveal_overrides.get(endpoint_id) == "hide"
+                for endpoint_id in edge_endpoint_ids
+            ):
+                edge_explanation = "Reviewed link; details withheld for a hidden transaction."
             edges.append(
                 {
                     "id": link["id"],
@@ -2990,7 +3048,7 @@ def build_report(
                     "from_allocation_amount": _btc_value(link["from_allocation_amount"]),
                     "from_allocation_amount_msat": link["from_allocation_amount"],
                     "allocation_policy": link["allocation_policy"],
-                    "explanation": _public_explanation(link["explanation"], mode),
+                    "explanation": edge_explanation,
                     "attachments": [_attachment_summary(attachment, mode) for attachment in attachment_rows],
                 }
             )

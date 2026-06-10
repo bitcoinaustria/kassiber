@@ -1530,6 +1530,14 @@ def record_components_from_liquid_tx(
             continue
         value_sats, asset_id = liquid_output_amount_asset_id(output, descriptor_plan, target=target)
         net_sats[asset_id] += value_sats
+    # Structured input outpoints for the stored record so source-of-funds
+    # assembly can join Liquid spends against owned outputs offline, the
+    # same way esplora/electrum bitcoin records allow.
+    vin_outpoints = [
+        {"txid": liquid_input_txid(vin), "vout": getattr(vin, "vout", None)}
+        for vin in tx.vin
+        if getattr(vin, "vout", None) is not None
+    ]
     for vin in tx.vin:
         prev_txid = liquid_input_txid(vin)
         prev_vout = getattr(vin, "vout", None)
@@ -1601,6 +1609,7 @@ def record_components_from_liquid_tx(
                         {
                             **(raw_json_context or {}),
                             "txid": txid,
+                            "vin": vin_outpoints,
                             "component": {
                                 "asset_id": asset_id,
                                 "asset": asset_code,

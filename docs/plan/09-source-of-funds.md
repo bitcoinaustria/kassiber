@@ -138,8 +138,9 @@ Each link should carry:
 
 - `state`: `suggested`, `reviewed`, `rejected`
 - `confidence`: `exact`, `strong`, `weak`, `unknown`
-- `method`: deterministic source such as `same_external_id`,
-  `transaction_pair`, `provider_trade_id`, `manual`, or `chain_observation`
+- `method`: deterministic source such as `same_external_id`, `utxo_spend`,
+  `payment_hash`, `transaction_pair`, `provider_trade_id`, `manual`, or
+  `chain_observation`
 - `allocation_policy`: `explicit`, `heuristic`, or `unknown`
 - `explanation`: short human-readable reason
 

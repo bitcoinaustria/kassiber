@@ -252,7 +252,8 @@ python3 -m kassiber --machine reports source-funds \
 python3 -m kassiber source-funds suggest \
   --target-transaction <txid-or-id>
 
-# Bulk-accept deterministic links (same-external-id hops, reviewed
+# Bulk-accept deterministic links (transaction input/output structure,
+# Lightning payment hashes, same-external-id hops, reviewed
 # transaction_pairs, one-to-one per-transaction provider/import ids) for
 # this target path; broad and weak matches stay manual.
 python3 -m kassiber source-funds links bulk-review \

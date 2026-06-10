@@ -1338,6 +1338,183 @@ class SourceFundsCliTest(unittest.TestCase):
         self.assertTrue(report["explain_gates"]["exportable"], report["explain_gates"]["blockers"])
         self.assertEqual(len(report["flow_levels"]), 4)
 
+    def _insert_utxos(self, conn, rows):
+        ids = {
+            row["label"]: (row["id"], row["workspace_id"], row["profile_id"])
+            for row in conn.execute(
+                "SELECT w.id, w.label, w.workspace_id, w.profile_id FROM wallets w"
+            ).fetchall()
+        }
+        for index, (wallet_label, txid, vout, amount_msat) in enumerate(rows):
+            wallet_id, workspace_id, profile_id = ids[wallet_label]
+            conn.execute(
+                """
+                INSERT INTO wallet_utxos(
+                    id, workspace_id, profile_id, wallet_id, chain, network,
+                    asset, amount, txid, vout, outpoint, confirmation_status,
+                    first_seen_at, last_seen_at
+                ) VALUES(?, ?, ?, ?, 'bitcoin', 'main', 'BTC', ?, ?, ?, ?, 'confirmed',
+                         '2026-05-02T10:00:00Z', '2026-05-02T10:00:00Z')
+                """,
+                (
+                    f"utxo-x{index}",
+                    workspace_id,
+                    profile_id,
+                    wallet_id,
+                    amount_msat,
+                    txid,
+                    vout,
+                    f"{txid}:{vout}",
+                ),
+            )
+
+    def test_assemble_multi_parent_consolidation_covers_exactly(self):
+        """Two parents feeding one spend must be sized as a group: per-edge
+        capping would over-cover the spend leg by the fee and block export
+        with ambiguous_allocation."""
+        p1, p2, tt = "11" * 32, "22" * 32, "33" * 32
+        self._init_default_workspace()
+        self._write_csv(
+            "multi-a.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            f"2026-05-01T09:00:00Z,{p1},inbound,BTC,0.30000000,0,50000,Parent one\n"
+            f"2026-05-01T10:00:00Z,{p2},inbound,BTC,0.50000000,0,50000,Parent two\n"
+            f"2026-05-02T09:00:00Z,{tt},outbound,BTC,0.79900000,0.00100000,50000,Consolidated spend\n",
+        )
+        self._write_csv(
+            "multi-b.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            f"2026-05-02T09:00:00Z,{tt},inbound,BTC,0.79900000,0,50000,Received\n",
+        )
+        self._create_wallet_and_import("Multi A", "multi-a.csv")
+        self._create_wallet_and_import("Multi B", "multi-b.csv")
+        conn = self._db()
+        try:
+            vin_json = json.dumps({"vin": [{"txid": p1, "vout": 0}, {"txid": p2, "vout": 0}]})
+            conn.execute("UPDATE transactions SET raw_json = ? WHERE external_id = ?", (vin_json, tt))
+            self._insert_utxos(
+                conn,
+                [
+                    ("Multi A", p1, 0, 30_000_000_000),
+                    ("Multi A", p2, 0, 50_000_000_000),
+                    ("Multi B", tt, 0, 79_900_000_000),
+                ],
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        target_id = self._tx_id("Multi B", tt)
+        result = self.cli(
+            "source-funds", "assemble", "--workspace", "Sof", "--profile", "Default",
+            "--target-transaction", target_id,
+        )["data"]
+        self.assertEqual(result["auto_reviewed"], 3)
+        links = self.cli(
+            "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
+        )["data"]
+        parent_allocs = sorted(
+            link["allocation_amount"]
+            for link in links
+            if link["method"] == "utxo_spend" and link["to_transaction_id"] == self._tx_id("Multi A", tt)
+        )
+        # 0.799 split pro-rata over 0.3 + 0.5 contributed: exact-sum group sizing.
+        self.assertEqual(parent_allocs, [0.2996250, 0.4993750])
+        self.assertAlmostEqual(sum(parent_allocs), 0.799, places=8)
+        source = self.cli(
+            "source-funds", "sources", "create", "--workspace", "Sof", "--profile", "Default",
+            "--type", "fiat_purchase", "--label", "Multi root", "--asset", "BTC",
+            "--amount", "0.80000000",
+        )["data"]
+        for parent_txid, amount in ((p1, "0.30000000"), (p2, "0.50000000")):
+            self.cli(
+                "source-funds", "links", "create", "--workspace", "Sof", "--profile", "Default",
+                "--from-source", source["id"], "--to-transaction", parent_txid,
+                "--type", "manual_source", "--allocation-amount", amount,
+                "--allocation-policy", "explicit",
+            )
+        report = self._source_funds_report_for_target(target=target_id, amount="0.79900000")
+        self.assertTrue(report["explain_gates"]["exportable"], report["explain_gates"]["blockers"])
+
+    def test_assemble_resolves_through_net_zero_consolidation(self):
+        """An in-wallet consolidation nets to a 0-amount row that cannot carry
+        allocation demand; assembly must link its parents directly to the
+        following spend instead of producing unfixable 0-amount edges."""
+        pp, cc, ss = "44" * 32, "55" * 32, "66" * 32
+        self._init_default_workspace()
+        self._write_csv(
+            "cons-a.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            f"2026-05-01T09:00:00Z,{pp},inbound,BTC,0.30000000,0,50000,Funding deposit\n"
+            f"2026-05-01T12:00:00Z,{cc},outbound,BTC,0.00000001,0.00010000,50000,In-wallet consolidation\n"
+            f"2026-05-02T09:00:00Z,{ss},outbound,BTC,0.25000000,0.00001000,50000,Spend to B\n",
+        )
+        self._write_csv(
+            "cons-b.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            f"2026-05-02T09:00:00Z,{ss},inbound,BTC,0.25000000,0,50000,Received\n",
+        )
+        self._create_wallet_and_import("Cons A", "cons-a.csv")
+        self._create_wallet_and_import("Cons B", "cons-b.csv")
+        conn = self._db()
+        try:
+            # The consolidation nets to zero (all outputs back to the wallet).
+            conn.execute("UPDATE transactions SET amount = 0 WHERE external_id = ?", (cc,))
+            conn.execute(
+                "UPDATE transactions SET raw_json = ? WHERE external_id = ?",
+                (json.dumps({"vin": [{"txid": pp, "vout": 0}]}), cc),
+            )
+            conn.execute(
+                "UPDATE transactions SET raw_json = ? WHERE external_id = ?",
+                (json.dumps({"vin": [{"txid": cc, "vout": 0}]}), ss),
+            )
+            self._insert_utxos(
+                conn,
+                [
+                    ("Cons A", pp, 0, 30_000_000_000),
+                    ("Cons A", cc, 0, 29_990_000_000),
+                    ("Cons B", ss, 0, 25_000_000_000),
+                ],
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        target_id = self._tx_id("Cons B", ss)
+        result = self.cli(
+            "source-funds", "assemble", "--workspace", "Sof", "--profile", "Default",
+            "--target-transaction", target_id,
+        )["data"]
+        self.assertGreaterEqual(result["auto_reviewed"], 2)
+        links = self.cli(
+            "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
+        )["data"]
+        cons_leg = self._tx_id("Cons A", cc)
+        self.assertFalse(
+            [link for link in links if cons_leg in (link["from_transaction_id"], link["to_transaction_id"])],
+            "net-zero consolidation leg must be bypassed, not linked",
+        )
+        parent_links = [
+            link
+            for link in links
+            if link["from_transaction_id"] == self._tx_id("Cons A", pp)
+            and link["to_transaction_id"] == self._tx_id("Cons A", ss)
+        ]
+        self.assertEqual(len(parent_links), 1)
+        self.assertEqual(parent_links[0]["state"], "reviewed")
+        self.assertIn("via in-wallet consolidation", parent_links[0]["explanation"])
+        source = self.cli(
+            "source-funds", "sources", "create", "--workspace", "Sof", "--profile", "Default",
+            "--type", "fiat_purchase", "--label", "Cons root", "--asset", "BTC",
+            "--amount", "0.30000000",
+        )["data"]
+        self.cli(
+            "source-funds", "links", "create", "--workspace", "Sof", "--profile", "Default",
+            "--from-source", source["id"], "--to-transaction", pp,
+            "--type", "manual_source", "--allocation-amount", "0.30000000",
+            "--allocation-policy", "explicit",
+        )
+        report = self._source_funds_report_for_target(target=target_id, amount="0.25000000")
+        self.assertTrue(report["explain_gates"]["exportable"], report["explain_gates"]["blockers"])
+
     def test_assemble_links_lightning_legs_by_payment_hash(self):
         self._init_default_workspace()
         payment_hash = "cd" * 32

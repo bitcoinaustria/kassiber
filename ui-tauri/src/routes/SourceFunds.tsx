@@ -1213,6 +1213,8 @@ export function SourceFunds() {
 
   useEffect(() => {
     if (!selectedTarget) return;
+    // The assembled-hops summary belongs to one target; drop it on switch.
+    assembleLinks.reset();
     setSourceForm((current) =>
       current.to_transaction === selectedTarget
         ? current
@@ -1223,6 +1225,7 @@ export function SourceFunds() {
         ? current
         : { ...current, to_transaction: selectedTarget },
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mutation object identity changes per render; reset only on target switch.
   }, [selectedTarget]);
 
   useEffect(() => {
@@ -2355,12 +2358,19 @@ export function SourceFunds() {
                       : undefined
                   }
                   onAction={(action, gap) => {
+                    // The Advanced editor only mounts on the review step, so
+                    // actions dispatched from the export step jump back first.
+                    const openAdvanced = () => {
+                      if (currentStep !== "review") setCurrentStep("review");
+                      setShowAdvancedReview(true);
+                    };
                     if (action === "open_source_creator") {
                       setSourceForm((current) => ({
                         ...current,
                         source_type: "missing_history",
                         link_type: "missing_history",
                         label: current.label || "Reviewed missing history",
+                        asset: gap.asset || current.asset,
                         // Quantified gaps prefill their unexplained amount,
                         // not the whole target.
                         amount:
@@ -2375,16 +2385,22 @@ export function SourceFunds() {
                           current.description ||
                           "Prior history is missing and has been reviewed as a disclosure gap.",
                       }));
-                      setShowAdvancedReview(true);
+                      openAdvanced();
                       return;
                     }
                     if (action === "open_link_review") {
-                      if (gap.ref) setSelectedLinkId(gap.ref);
-                      setShowAdvancedReview(true);
+                      // finding.ref may be a link id or a transaction id
+                      // depending on the finding code.
+                      if (gap.ref && links.some((link) => link.id === gap.ref)) {
+                        setSelectedLinkId(gap.ref);
+                      } else if (gap.ref && txById.has(gap.ref)) {
+                        openTxDetailById(gap.ref);
+                      }
+                      openAdvanced();
                       return;
                     }
-                    if (action === "open_review_queue") {
-                      setShowAdvancedReview(true);
+                    if (action === "open_review_queue" || action === "open_source") {
+                      openAdvanced();
                       return;
                     }
                     if (action === "open_transaction" && gap.ref && txById.has(gap.ref)) {
@@ -3526,6 +3542,7 @@ const GAP_ACTION_LABELS: Record<string, string> = {
   open_source_creator: "Document this gap",
   open_link_review: "Review this link",
   open_review_queue: "Open review queue",
+  open_source: "Open sources",
   open_transaction: "Open transaction",
 };
 
