@@ -413,7 +413,7 @@ export function NetworkStatusIndicator({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="w-[35rem] max-w-[calc(100vw-1rem)]"
+        className="w-[42rem] max-w-[calc(100vw-1rem)] sm:w-[46rem]"
       >
         <div className="flex items-center justify-between gap-2 px-2 py-1.5">
           <DropdownMenuLabel className="p-0">
@@ -453,11 +453,11 @@ export function NetworkStatusIndicator({
               No outbound connections configured.
             </div>
           ) : (
-            <Table>
+            <Table className="table-fixed">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-8">State</TableHead>
-                  <TableHead>Connection</TableHead>
+                  <TableHead className="w-[42%]">Connection</TableHead>
                   <TableHead className="hidden sm:table-cell">Endpoint</TableHead>
                 </TableRow>
               </TableHeader>
@@ -491,7 +491,7 @@ export function NetworkStatusIndicator({
                           </span>
                         </button>
                       </TableCell>
-                      <TableCell className="hidden max-w-[16rem] sm:table-cell">
+                      <TableCell className="hidden min-w-0 sm:table-cell">
                         <button
                           type="button"
                           className="block max-w-full truncate text-left font-mono text-xs text-muted-foreground hover:text-primary focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
