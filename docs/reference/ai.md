@@ -224,9 +224,12 @@ Manage stored sessions with `kassiber chats list`, `chats show <id>`,
 terminal `ai.chat` record carry `session_id` (null when nothing persisted).
 
 On the wire, persistence is per request: `ai.chat` accepts
-`persist: true | false | "auto"` (absent means false, so existing clients are
-unchanged) plus `session_id` to append to an existing session; unknown session
-ids fail before streaming starts. Session management is exposed as the daemon
+`persist: true | false | "auto"` plus `session_id` to append to an existing
+session; unknown session ids fail before streaming starts. A request opts in
+by sending `persist` true/`"auto"` or a `session_id`; with neither, nothing
+persists, so existing clients are unchanged. The stored policy stays
+authoritative over every write — `off` never persists and `auto` persists
+only on encrypted databases, even for continuations of an existing session. Session management is exposed as the daemon
 kinds `ui.chat.sessions.list`, `ui.chat.sessions.get`,
 `ui.chat.sessions.delete`, and `ui.chat.sessions.clear`, profile-scoped like
 the rest of the UI surface. Chat history is intentionally **not** an AI tool:

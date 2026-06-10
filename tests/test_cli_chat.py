@@ -700,6 +700,96 @@ class CliChatPersistenceTest(unittest.TestCase):
         finally:
             _stop_server(server)
 
+    def test_chat_history_off_blocks_continuation_writes(self):
+        server = _start_tool_chat_server(
+            [
+                _chat_completion_response({"role": "assistant", "content": "answer one"}),
+                _chat_completion_response({"role": "assistant", "content": "answer two"}),
+            ]
+        )
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+                data_root = Path(tmp) / "data"
+                _seed_provider(data_root, f"http://127.0.0.1:{server.server_port}/v1")
+                _run_json(data_root, "chats", "config", "--history", "on")
+                first = self._chat(data_root, prompt="first question")
+                _run_json(data_root, "chats", "config", "--history", "off")
+
+                # Continuation still replays stored context to the model, but
+                # the off policy blocks any new write.
+                second = self._chat(data_root, "--continue", prompt="second question")
+                self.assertIsNone(second["data"]["session_id"])
+                shown = _run_json(
+                    data_root, "chats", "show", first["data"]["session_id"]
+                )
+                self.assertEqual(len(shown["data"]["messages"]), 2)
+        finally:
+            _stop_server(server)
+
+    def test_daemon_request_without_persist_intent_stays_ephemeral(self):
+        # Pins the GUI-shaped contract: an ai.chat request carrying neither
+        # `persist` nor `session_id` never writes history, even with the
+        # policy set to `on`.
+        server = _start_tool_chat_server(
+            [_chat_completion_response({"role": "assistant", "content": "ok"})]
+        )
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+                data_root = Path(tmp) / "data"
+                _seed_provider(data_root, f"http://127.0.0.1:{server.server_port}/v1")
+                _run_json(data_root, "chats", "config", "--history", "on")
+                daemon = subprocess.Popen(
+                    [
+                        sys.executable,
+                        "-m",
+                        "kassiber",
+                        "--data-root",
+                        str(data_root),
+                        "daemon",
+                    ],
+                    cwd=ROOT,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    bufsize=1,
+                )
+                try:
+                    self.assertEqual(
+                        json.loads(daemon.stdout.readline())["kind"], "daemon.ready"
+                    )
+                    daemon.stdin.write(
+                        json.dumps(
+                            {
+                                "kind": "ai.chat",
+                                "request_id": "gui-1",
+                                "args": {
+                                    "model": "test-model",
+                                    "messages": [
+                                        {"role": "user", "content": "hello"}
+                                    ],
+                                },
+                            }
+                        )
+                        + "\n"
+                    )
+                    daemon.stdin.flush()
+                    while True:
+                        record = json.loads(daemon.stdout.readline())
+                        if record.get("kind") == "ai.chat":
+                            self.assertIsNone(record["data"]["session_id"])
+                            break
+                        self.assertNotEqual(record.get("kind"), "error", record)
+                finally:
+                    daemon.stdin.close()
+                    daemon.wait(timeout=10)
+                    daemon.stdout.close()
+                    daemon.stderr.close()
+                listed = _run_json(data_root, "chats", "list")
+                self.assertEqual(listed["data"]["sessions"], [])
+        finally:
+            _stop_server(server)
+
     def test_chats_config_round_trip(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
             data_root = Path(tmp) / "data"

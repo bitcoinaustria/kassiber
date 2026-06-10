@@ -4127,8 +4127,8 @@ def _persist_ai_chat_exchange(
     session_id = validated.get("session_id")
     if persist_arg is False:
         return None
-    explicit = persist_arg is True or session_id is not None
-    if not explicit and persist_arg != "auto":
+    opted_in = persist_arg in (True, "auto") or session_id is not None
+    if not opted_in:
         return None
     user_content = next(
         (
@@ -4147,9 +4147,10 @@ def _persist_ai_chat_exchange(
     encrypted = _data_root_database_is_encrypted(runtime.data_root)
 
     def _persist(conn: sqlite3.Connection) -> str | None:
-        if not explicit and not core_chat_history.history_enabled(
-            conn, database_encrypted=encrypted
-        ):
+        # The stored policy is authoritative even for continuations and
+        # explicit persist requests: "off" never writes, and "auto" writes
+        # only when the database file is encrypted.
+        if not core_chat_history.history_enabled(conn, database_encrypted=encrypted):
             return None
         workspace, profile = resolve_scope(conn, None, None)
         target_session_id = session_id
