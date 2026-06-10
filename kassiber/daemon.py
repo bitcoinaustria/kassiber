@@ -80,6 +80,7 @@ from .cli.handlers import (
     sync_btcpay_commercial_provenance,
 )
 from .core import audit_package as core_audit_package
+from .core import chat_history as core_chat_history
 from .core import commercial as core_commercial
 from .core import attachments as core_attachments
 from .core import lightning as core_lightning
@@ -356,6 +357,10 @@ SUPPORTED_KINDS = (
     "ai.chat",
     "ai.chat.cancel",
     "ai.tool_call.consent",
+    "ui.chat.sessions.list",
+    "ui.chat.sessions.get",
+    "ui.chat.sessions.delete",
+    "ui.chat.sessions.clear",
     "wallets.reveal_descriptor",
     "backends.reveal_token",
     "daemon.shutdown",
@@ -2650,6 +2655,18 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
             "ai.chat system_prompt is only accepted when system_prompt_kind is raw",
             code="validation",
         )
+    session_id = args.get("session_id")
+    if session_id is not None and (not isinstance(session_id, str) or not session_id):
+        raise AppError(
+            "ai.chat session_id must be a non-empty string",
+            code="validation",
+        )
+    persist = args.get("persist")
+    if persist not in (None, True, False, "auto"):
+        raise AppError(
+            "ai.chat persist must be true, false, or \"auto\"",
+            code="validation",
+        )
     return {
         "provider": provider,
         "model": model.strip(),
@@ -2659,6 +2676,8 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
         "tool_loop_max_iterations": tool_loop_max_iterations,
         "system_prompt_kind": system_prompt_kind,
         "system_prompt": system_prompt,
+        "session_id": session_id,
+        "persist": persist,
         "_desktop_secret_store_bridge": args.get("_desktop_secret_store_bridge"),
     }
 
@@ -4052,6 +4071,120 @@ def _stream_ai_chat_tool_turn(
     return tool_calls, "".join(content_parts), "".join(reasoning_parts), finish_reason
 
 
+def _ui_chat_sessions_payload(
+    ctx: "DaemonContext",
+    kind: str,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    _, profile = resolve_scope(ctx.conn, None, None)
+    if kind == "ui.chat.sessions.list":
+        raw_limit = args.get("limit", 50)
+        try:
+            limit = int(raw_limit)
+        except (TypeError, ValueError):
+            raise AppError(
+                "ui.chat.sessions.list limit must be an integer",
+                code="validation",
+            ) from None
+        return {
+            "sessions": core_chat_history.list_sessions(
+                ctx.conn, profile["id"], limit=limit
+            ),
+            "history_mode": core_chat_history.history_mode(ctx.conn),
+            "history_enabled": core_chat_history.history_enabled(
+                ctx.conn,
+                database_encrypted=_database_file_is_encrypted(ctx),
+            ),
+        }
+    if kind == "ui.chat.sessions.clear":
+        return core_chat_history.clear_sessions(ctx.conn, profile["id"])
+    session_id = args.get("session_id")
+    if not isinstance(session_id, str) or not session_id:
+        raise AppError(f"{kind} requires session_id", code="validation")
+    if kind == "ui.chat.sessions.get":
+        return core_chat_history.get_session(ctx.conn, profile["id"], session_id)
+    if kind == "ui.chat.sessions.delete":
+        return core_chat_history.delete_session(ctx.conn, profile["id"], session_id)
+    raise AppError(f"Unsupported chat-session kind '{kind}'", code="validation")
+
+
+def _persist_ai_chat_exchange(
+    runtime: AiToolRuntime,
+    provider_snapshot: dict[str, Any],
+    validated: dict[str, Any],
+    *,
+    finish_reason: str | None,
+    assistant_content: str,
+    provenance: dict[str, Any],
+) -> str | None:
+    """Persist this exchange when the request opted in; returns the session id.
+
+    Best-effort by design: a chat that already produced an answer must never
+    fail because history could not be written, so storage errors are logged
+    to stderr and swallowed.
+    """
+    persist_arg = validated.get("persist")
+    session_id = validated.get("session_id")
+    if persist_arg is False:
+        return None
+    explicit = persist_arg is True or session_id is not None
+    if not explicit and persist_arg != "auto":
+        return None
+    user_content = next(
+        (
+            message.get("content")
+            for message in reversed(validated["messages"])
+            if message.get("role") == "user"
+        ),
+        None,
+    )
+    if not isinstance(user_content, str) or not user_content:
+        return None
+    if not assistant_content and session_id is None:
+        # Nothing answered yet (e.g. cancelled before output): don't create
+        # an empty session for it.
+        return None
+    encrypted = _data_root_database_is_encrypted(runtime.data_root)
+
+    def _persist(conn: sqlite3.Connection) -> str | None:
+        if not explicit and not core_chat_history.history_enabled(
+            conn, database_encrypted=encrypted
+        ):
+            return None
+        workspace, profile = resolve_scope(conn, None, None)
+        target_session_id = session_id
+        if target_session_id is None:
+            target_session_id = core_chat_history.create_session(
+                conn,
+                workspace["id"],
+                profile["id"],
+                title=core_chat_history.session_title_from_prompt(user_content),
+                provider=provider_snapshot["name"],
+                model=validated["model"],
+                commit=False,
+            )["id"]
+        core_chat_history.append_exchange(
+            conn,
+            profile["id"],
+            target_session_id,
+            user_content=user_content,
+            assistant_content=assistant_content,
+            provenance=provenance,
+            finish_reason=finish_reason,
+            provider=provider_snapshot["name"],
+            model=validated["model"],
+            commit=True,
+        )
+        return target_session_id
+
+    try:
+        return _run_on_daemon_main_thread(runtime, _persist)
+    except Exception:
+        traceback.print_exc(file=sys.stderr)
+        sys.stderr.flush()
+        return None
+
+
 def _write_ai_chat_terminal(
     out: _OutputChannel,
     request_id: object,
@@ -4059,7 +4192,21 @@ def _write_ai_chat_terminal(
     validated: dict[str, Any],
     finish_reason: str | None,
     runtime: AiToolRuntime,
+    assistant_content: str = "",
 ) -> None:
+    provenance = _ai_answer_provenance(
+        provider_snapshot,
+        validated,
+        runtime,
+    )
+    session_id = _persist_ai_chat_exchange(
+        runtime,
+        provider_snapshot,
+        validated,
+        finish_reason=finish_reason,
+        assistant_content=assistant_content,
+        provenance=provenance,
+    )
     out.write(
         _with_request_id(
             build_envelope(
@@ -4068,11 +4215,8 @@ def _write_ai_chat_terminal(
                     "provider": provider_snapshot["name"],
                     "model": validated["model"],
                     "finish_reason": finish_reason,
-                    "provenance": _ai_answer_provenance(
-                        provider_snapshot,
-                        validated,
-                        runtime,
-                    ),
+                    "provenance": provenance,
+                    "session_id": session_id,
                 },
             ),
             request_id,
@@ -4105,6 +4249,7 @@ def _run_ai_chat_tool_loop(
         cancel_event=cancel_event,
     )
     finish_reason = None
+    content = ""
     for _iteration in range(validated["tool_loop_max_iterations"]):
         if cancel_event.is_set():
             finish_reason = "cancelled"
@@ -4248,6 +4393,7 @@ def _run_ai_chat_tool_loop(
         validated,
         finish_reason,
         runtime,
+        assistant_content=content or "",
     )
 
 
@@ -4265,6 +4411,7 @@ def _run_ai_chat_stream(
     cancel_event = active_chat.cancel_event
     try:
         finish_reason = None
+        content_parts: list[str] = []
         if not cancel_event.is_set():
             _write_ai_chat_status(
                 out,
@@ -4313,6 +4460,10 @@ def _run_ai_chat_stream(
                     finish_reason = "cancelled"
                     break
                 delta_payload = {"delta": chunk.delta}
+                if isinstance(chunk.delta, dict) and isinstance(
+                    chunk.delta.get("content"), str
+                ):
+                    content_parts.append(chunk.delta["content"])
                 if chunk.finish_reason is not None:
                     finish_reason = chunk.finish_reason
                 out.write(
@@ -4333,6 +4484,7 @@ def _run_ai_chat_stream(
             validated,
             finish_reason,
             runtime,
+            assistant_content="".join(content_parts),
         )
     except AppError as exc:
         out.write(
@@ -6863,13 +7015,12 @@ def _delete_wallet_payload(
     )
 
 
+def _data_root_database_is_encrypted(data_root: str) -> bool:
+    return core_chat_history.database_file_is_encrypted(data_root)
+
+
 def _database_file_is_encrypted(ctx: "DaemonContext") -> bool:
-    db_path = resolve_database_path(resolve_effective_data_root(ctx.data_root))
-    return (
-        db_path.exists()
-        and db_path.stat().st_size > 0
-        and not looks_like_plaintext_sqlite(db_path)
-    )
+    return _data_root_database_is_encrypted(ctx.data_root)
 
 
 def _handle_ai_chat_cancel(
@@ -8821,6 +8972,15 @@ def handle_request(
     if kind == "ai.chat":
         # Validate eagerly so syntax errors surface synchronously.
         validated = _ai_chat_args(_coerce_args_dict(request_id, request.get("args")))
+        if validated["session_id"] is not None and validated["persist"] is not False:
+            # Fail fast on unknown sessions before any streaming starts.
+            _, _session_profile = resolve_scope(ctx.conn, None, None)
+            core_chat_history.get_session(
+                ctx.conn,
+                _session_profile["id"],
+                validated["session_id"],
+                include_messages=False,
+            )
         # Resolve the provider + record acknowledgement on the main thread —
         # the worker thread never touches SQLite (sqlite3 connections are
         # bound to the thread that opened them).
@@ -8856,6 +9016,27 @@ def handle_request(
         )
         thread.start()
         return (None, False)
+
+    if kind in (
+        "ui.chat.sessions.list",
+        "ui.chat.sessions.get",
+        "ui.chat.sessions.delete",
+        "ui.chat.sessions.clear",
+    ):
+        return (
+            _with_request_id(
+                build_envelope(
+                    kind,
+                    _ui_chat_sessions_payload(
+                        ctx,
+                        kind,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
 
     if kind == "wallets.reveal_descriptor":
         return _handle_reveal_request(
