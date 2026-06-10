@@ -2,7 +2,7 @@
   "book": {
     "overview": "Overview",
     "transactions": "Transactions",
-    "ledger": "Ledger",
+    "ledger": "Journals",
     "quarantine": "Quarantine",
     "wallets": "Wallets",
     "reports": "Reports",
@@ -22,7 +22,7 @@
   "badge": {
     "quarantine": "Quarantine: {{count}} awaiting review",
     "swaps": "Swaps & transfers: {{count}} to review",
-    "journals": "Ledger needs processing"
+    "journals": "Journals need processing"
   },
   "openBook": {
     "title": "Active book changed",

@@ -33,7 +33,8 @@
     "support": {
       "title": "Support",
       "bugReport": "Bug report",
-      "donateSats": "Donate sats"
+      "donateSats": "Donate sats",
+      "discussions": "Discussions"
     },
     "extras": {
       "title": "Extras",

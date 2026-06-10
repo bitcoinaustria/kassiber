@@ -33,7 +33,8 @@
     "support": {
       "title": "Support",
       "bugReport": "Fehlerbericht",
-      "donateSats": "Sats spenden"
+      "donateSats": "Sats spenden",
+      "discussions": "Diskussionen"
     },
     "extras": {
       "title": "Extras",
