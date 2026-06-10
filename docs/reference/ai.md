@@ -238,7 +238,12 @@ authoritative over every write — `off` never persists and `auto` persists
 only on encrypted databases, even for continuations of an existing session. Session management is exposed as the daemon
 kinds `ui.chat.sessions.list`, `ui.chat.sessions.get`,
 `ui.chat.sessions.delete`, and `ui.chat.sessions.clear`, profile-scoped like
-the rest of the UI surface. Chat history is intentionally **not** an AI tool:
+the rest of the UI surface, plus `ui.chat.history.configure` for reading or
+setting the policy (the desktop Settings control). The desktop Assistant
+sends `persist: "auto"`, round-trips `session_id`, and surfaces history in
+its toolbar; these kinds stay usable while the AI runtime toggle is off,
+because seeing and deleting stored history is a privacy control, not an AI
+feature. Chat history is intentionally **not** an AI tool:
 the model cannot read prior sessions, which keeps prompt-injection from
 propagating across conversations. Diagnostics reports and audit packages do
 not include chat content.

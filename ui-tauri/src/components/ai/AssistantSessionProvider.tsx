@@ -46,6 +46,7 @@ export function AssistantSessionProvider({
     reset,
     sessionId,
     loadConversation,
+    forgetSession,
   } = useAiChatStream();
   const dataMode = useUiStore((state) => state.dataMode);
   const [queuedPrompts, setQueuedPrompts] = React.useState<string[]>([]);
@@ -163,11 +164,13 @@ export function AssistantSessionProvider({
       abort,
       reset: clearChat,
       resumeSession,
+      forgetSession,
     }),
     [
       abort,
       clearChat,
       error,
+      forgetSession,
       incognito,
       isStreaming,
       messages,

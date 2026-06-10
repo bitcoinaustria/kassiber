@@ -1,6 +1,7 @@
 import * as React from "react";
 import { MessagesSquare, Trash2 } from "lucide-react";
 
+import { AssistantSessionContext } from "@/components/ai/assistantSession";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -38,10 +39,14 @@ export function ChatHistorySettingsCard() {
   const sessionsQuery = useDaemon<ChatSessionsListShape>(
     "ui.chat.sessions.list",
     { limit: 200 },
+    { staleTime: 0 },
   );
   const configure = useDaemonMutation("ui.chat.history.configure");
   const clearSessions = useDaemonMutation("ui.chat.sessions.clear");
   const [confirmingClear, setConfirmingClear] = React.useState(false);
+  // Optional: when the Assistant provider is mounted, clearing storage must
+  // also detach the live conversation from its (now deleted) session.
+  const assistantSession = React.useContext(AssistantSessionContext);
 
   const config = configQuery.data?.data ?? {};
   const mode = config.history ?? "auto";
@@ -114,6 +119,7 @@ export function ChatHistorySettingsCard() {
               size="sm"
               onClick={() => {
                 clearSessions.mutate({});
+                assistantSession?.forgetSession();
                 setConfirmingClear(false);
               }}
             >

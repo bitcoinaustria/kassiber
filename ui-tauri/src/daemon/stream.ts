@@ -201,6 +201,8 @@ export interface UseAiChatStreamResult {
     entries: StoredChatEntry[],
     sessionId: string | null,
   ) => void;
+  /** Drop the session binding (all sessions, or only when it matches id). */
+  forgetSession: (id?: string) => void;
 }
 
 function makeId(): string {
@@ -626,6 +628,11 @@ export function useAiChatStream(): UseAiChatStreamResult {
         if (envelope.kind === "error" || envelope.error) {
           const code = envelope.error?.code ?? "unknown_error";
           const message = envelope.error?.message ?? "AI chat failed";
+          if (code === "not_found") {
+            // The persisted session backing this conversation is gone
+            // (deleted elsewhere); detach so the next turn starts fresh.
+            setSessionId(null);
+          }
           setError({ code, message });
           updateAssistant((current) => ({
             ...current,
@@ -650,11 +657,15 @@ export function useAiChatStream(): UseAiChatStreamResult {
           }
         }
 
-        setSessionId(
-          typeof envelope.data?.session_id === "string"
-            ? envelope.data.session_id
-            : null,
-        );
+        if (request.persist !== false) {
+          // Incognito turns keep the existing session binding: skipping
+          // storage for one exchange must not fork the conversation.
+          setSessionId(
+            typeof envelope.data?.session_id === "string"
+              ? envelope.data.session_id
+              : null,
+          );
+        }
         updateAssistant((current) => ({
           ...current,
           status: terminalAiChatStatus(finishReason, controller.signal.aborted),
@@ -791,6 +802,12 @@ export function useAiChatStream(): UseAiChatStreamResult {
     setSessionId(null);
   }, [cancelActiveRequest]);
 
+  const forgetSession = React.useCallback((id?: string) => {
+    setSessionId((current) =>
+      id === undefined || current === id ? null : current,
+    );
+  }, []);
+
   const loadConversation = React.useCallback(
     (entries: StoredChatEntry[], nextSessionId: string | null) => {
       if (abortRef.current) return;
@@ -821,5 +838,6 @@ export function useAiChatStream(): UseAiChatStreamResult {
     abort,
     reset,
     loadConversation,
+    forgetSession,
   };
 }

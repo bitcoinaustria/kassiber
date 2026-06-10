@@ -48,6 +48,8 @@ export interface AssistantSessionContextValue {
   reset: () => void;
   /** Load a persisted session into the conversation. */
   resumeSession: (sessionId: string) => Promise<void>;
+  /** Drop the session binding (all sessions, or only when it matches id). */
+  forgetSession: (id?: string) => void;
 }
 
 export const AssistantSessionContext =

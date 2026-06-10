@@ -285,3 +285,43 @@ describe("mock daemon chat sessions", () => {
     expect(restored.data?.history).toBe("auto");
   });
 });
+
+describe("mock daemon chat session fidelity", () => {
+  it("fails ai.chat fast on unknown session ids like the real daemon", async () => {
+    const records: DaemonStreamRecord[] = [];
+    const envelope = await mockDaemon.stream(
+      {
+        kind: "ai.chat",
+        request_id: "chat-mock-unknown-session",
+        args: {
+          model: "mock-model",
+          messages: [{ role: "user", content: "hello" }],
+          persist: "auto",
+          session_id: "deleted-session",
+        },
+      },
+      {
+        onRecord(record) {
+          records.push(record);
+        },
+      },
+    );
+    expect(envelope.kind).toBe("error");
+    expect(envelope.error?.code).toBe("not_found");
+    expect(records).toHaveLength(0);
+  });
+
+  it("rejects invalid history modes and unknown deletes", async () => {
+    const invalid = await mockDaemon.invoke({
+      kind: "ui.chat.history.configure",
+      args: { history: "bogus" },
+    });
+    expect(invalid.error?.code).toBe("validation");
+
+    const missing = await mockDaemon.invoke({
+      kind: "ui.chat.sessions.delete",
+      args: { session_id: "nope" },
+    });
+    expect(missing.error?.code).toBe("not_found");
+  });
+});

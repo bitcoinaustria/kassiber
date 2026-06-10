@@ -714,7 +714,18 @@ export const mockDaemon: DaemonTransport = {
       const sessionId = (req.args ?? ({} as Record<string, unknown>))
         .session_id as string | undefined;
       const index = mockChatSessions.findIndex((row) => row.id === sessionId);
-      if (index >= 0) mockChatSessions.splice(index, 1);
+      if (index < 0) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "not_found",
+            message: "chat session not found for the active profile",
+          },
+        } as DaemonEnvelope<T>;
+      }
+      mockChatSessions.splice(index, 1);
       return {
         kind: "ui.chat.sessions.delete",
         schema_version: 1,
@@ -739,6 +750,16 @@ export const mockDaemon: DaemonTransport = {
         .history as string | undefined;
       if (history === "auto" || history === "on" || history === "off") {
         mockChatHistoryMode = history;
+      } else if (history !== undefined) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "chat history mode must be one of auto, on, off",
+          },
+        } as DaemonEnvelope<T>;
       }
       return {
         kind: "ui.chat.history.configure",
@@ -3500,6 +3521,22 @@ async function mockAiChatStream<T, R>(
     persist?: boolean | "auto";
     session_id?: string;
   };
+  if (
+    typeof args.session_id === "string" &&
+    args.persist !== false &&
+    !mockChatSessions.some((row) => row.id === args.session_id)
+  ) {
+    // Mirror the real daemon: unknown session ids fail before streaming.
+    return {
+      kind: "error",
+      schema_version: 1,
+      request_id: requestId,
+      error: {
+        code: "not_found",
+        message: "chat session not found for the active profile",
+      },
+    } as DaemonEnvelope<T>;
+  }
   options?.onRecord?.({
     kind: "ai.chat.status",
     schema_version: 1,

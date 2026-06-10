@@ -36,7 +36,8 @@ function formatUpdatedAt(value: string): string {
 }
 
 export function ChatHistoryPanel() {
-  const { isStreaming, resumeSession, sessionId } = useAssistantSession();
+  const { isStreaming, resumeSession, sessionId, forgetSession } =
+    useAssistantSession();
   const [open, setOpen] = React.useState(false);
   const [resumeError, setResumeError] = React.useState<string | null>(null);
   const list = useDaemon<ChatSessionsListShape>(
@@ -116,6 +117,9 @@ export function ChatHistoryPanel() {
                 event.preventDefault();
                 event.stopPropagation();
                 deleteSession.mutate({ session_id: session.id });
+                // Deleting the conversation's own session must detach it,
+                // or the next turn would target a missing session.
+                forgetSession(session.id);
               }}
             >
               <Trash2 className="size-3.5" aria-hidden="true" />
