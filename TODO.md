@@ -361,13 +361,12 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   worker-pool model and one SQLite connection per worker when read-only tools
   or longer-running UI actions need daemon-side concurrency beyond the
   supervisor demux.
-- [ ] Desktop Assistant chat-history sidebar: wire the GUI to the persisted
-  chat sessions that shipped with `kassiber chat` — send
-  `persist: "auto"` + round-trip `session_id` on `ai.chat`, list/resume/delete
-  sessions via `ui.chat.sessions.{list,get,delete,clear}`, and expose the
-  `ai_chat_history` policy plus incognito toggle in Settings next to the
-  trust/privacy controls. The daemon contract is finished and documented in
-  docs/reference/ai.md; only client wiring is left.
+- [x] Desktop Assistant chat history: the GUI sends `persist: "auto"` and
+  round-trips `session_id` on `ai.chat`, the Assistant toolbar has a History
+  panel (list/resume/delete via `ui.chat.sessions.*`) plus an incognito
+  toggle, and Settings → AI providers exposes the `ai_chat_history` policy
+  (`ui.chat.history.configure`) with a clear-stored-chats action. The mock
+  daemon mirrors the persistence semantics for browser dev.
 - [ ] Chat-history retention: optional cap (keep last N sessions or days) on
   persisted `ai_chat_sessions`, enforced at append time, surfaced in
   `chats config` and desktop Settings.

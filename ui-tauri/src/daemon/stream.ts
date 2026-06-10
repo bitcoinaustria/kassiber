@@ -81,6 +81,37 @@ export interface AiChatRequest {
   toolLoopMaxIterations?: number;
   systemPromptKind?: "kassiber" | "raw" | null;
   systemPrompt?: string;
+  /** Append this exchange to an existing persisted session. */
+  sessionId?: string | null;
+  /**
+   * Persistence intent: "auto" follows the stored ai_chat_history policy
+   * (off / on / encrypted-only), false skips persistence (incognito).
+   * Absent means no persistence, which keeps legacy callers unchanged.
+   */
+  persist?: boolean | "auto";
+}
+
+/** One stored exchange row from ui.chat.sessions.get. */
+export interface StoredChatEntry {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export function buildAiChatStreamArgs(
+  request: AiChatRequest,
+): Record<string, unknown> {
+  return {
+    provider: request.provider,
+    model: request.model,
+    messages: request.messages,
+    options: request.options,
+    tools_enabled: request.toolsEnabled,
+    tool_loop_max_iterations: request.toolLoopMaxIterations,
+    system_prompt_kind: request.systemPromptKind,
+    system_prompt: request.systemPrompt,
+    session_id: request.sessionId ?? undefined,
+    persist: request.persist,
+  };
 }
 
 export interface AiToolConsentRequest {
@@ -116,6 +147,7 @@ interface AiChatTerminalShape {
   model?: string;
   finish_reason?: string | null;
   provenance?: AiAnswerProvenance;
+  session_id?: string | null;
 }
 
 export interface AiChatToolCallShape {
@@ -158,10 +190,17 @@ export interface UseAiChatStreamResult {
   isStreaming: boolean;
   error: { code: string; message: string } | null;
   pendingConsent: AiToolConsentRequest | null;
+  /** Persisted session backing this conversation, if any. */
+  sessionId: string | null;
   send: (request: AiChatRequest, userMessageContent: string) => Promise<void>;
   sendConsent: (decision: AiToolConsentDecision) => Promise<void>;
   abort: () => void;
   reset: () => void;
+  /** Replace the conversation with a stored session's messages. */
+  loadConversation: (
+    entries: StoredChatEntry[],
+    sessionId: string | null,
+  ) => void;
 }
 
 function makeId(): string {
@@ -414,6 +453,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
   );
   const [pendingConsent, setPendingConsent] =
     React.useState<AiToolConsentRequest | null>(null);
+  const [sessionId, setSessionId] = React.useState<string | null>(null);
   const abortRef = React.useRef<AbortController | null>(null);
   const parserRef = React.useRef<ThinkParser | null>(null);
   const assistantIdRef = React.useRef<string | null>(null);
@@ -576,16 +616,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
           {
             kind: "ai.chat",
             request_id: requestId,
-            args: {
-              provider: request.provider,
-              model: request.model,
-              messages: request.messages,
-              options: request.options,
-              tools_enabled: request.toolsEnabled,
-              tool_loop_max_iterations: request.toolLoopMaxIterations,
-              system_prompt_kind: request.systemPromptKind,
-              system_prompt: request.systemPrompt,
-            },
+            args: buildAiChatStreamArgs(request),
           },
           { onRecord, signal: controller.signal },
         )) as DaemonEnvelope<AiChatTerminalShape>;
@@ -619,6 +650,11 @@ export function useAiChatStream(): UseAiChatStreamResult {
           }
         }
 
+        setSessionId(
+          typeof envelope.data?.session_id === "string"
+            ? envelope.data.session_id
+            : null,
+        );
         updateAssistant((current) => ({
           ...current,
           status: terminalAiChatStatus(finishReason, controller.signal.aborted),
@@ -752,16 +788,38 @@ export function useAiChatStream(): UseAiChatStreamResult {
     setIsStreaming(false);
     setError(null);
     setPendingConsent(null);
+    setSessionId(null);
   }, [cancelActiveRequest]);
+
+  const loadConversation = React.useCallback(
+    (entries: StoredChatEntry[], nextSessionId: string | null) => {
+      if (abortRef.current) return;
+      setMessages(
+        entries.map((entry) => ({
+          id: makeId(),
+          role: entry.role,
+          content: entry.content,
+          status: "done" as const,
+        })),
+      );
+      setIsStreaming(false);
+      setError(null);
+      setPendingConsent(null);
+      setSessionId(nextSessionId);
+    },
+    [],
+  );
 
   return {
     messages,
     isStreaming,
     error,
     pendingConsent,
+    sessionId,
     send,
     sendConsent,
     abort,
     reset,
+    loadConversation,
   };
 }

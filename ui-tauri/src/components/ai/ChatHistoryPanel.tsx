@@ -1,0 +1,133 @@
+import * as React from "react";
+import { History, Trash2 } from "lucide-react";
+
+import { useAssistantSession } from "@/components/ai/assistantSession";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useDaemon, useDaemonMutation } from "@/daemon/client";
+
+interface ChatSessionRow {
+  id: string;
+  title: string;
+  updated_at: string;
+  message_count?: number;
+}
+
+interface ChatSessionsListShape {
+  sessions?: ChatSessionRow[];
+  history_mode?: string;
+  history_enabled?: boolean;
+}
+
+function formatUpdatedAt(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+export function ChatHistoryPanel() {
+  const { isStreaming, resumeSession, sessionId } = useAssistantSession();
+  const [open, setOpen] = React.useState(false);
+  const [resumeError, setResumeError] = React.useState<string | null>(null);
+  const list = useDaemon<ChatSessionsListShape>(
+    "ui.chat.sessions.list",
+    { limit: 30 },
+    { enabled: open, staleTime: 0 },
+  );
+  const deleteSession = useDaemonMutation("ui.chat.sessions.delete");
+
+  const sessions = list.data?.data?.sessions ?? [];
+  const historyEnabled = list.data?.data?.history_enabled ?? false;
+
+  const onResume = React.useCallback(
+    (id: string) => {
+      setResumeError(null);
+      setOpen(false);
+      void resumeSession(id).catch((caught: unknown) => {
+        setResumeError(
+          caught instanceof Error ? caught.message : String(caught),
+        );
+        setOpen(true);
+      });
+    },
+    [resumeSession],
+  );
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" variant="ghost" size="sm" className="gap-2">
+          <History className="size-4" aria-hidden="true" />
+          History
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-80">
+        <DropdownMenuLabel>Saved chats</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {list.isLoading ? (
+          <div className="px-2 py-3 text-sm text-muted-foreground">
+            Loading…
+          </div>
+        ) : null}
+        {!list.isLoading && sessions.length === 0 ? (
+          <div className="px-2 py-3 text-sm text-muted-foreground">
+            {historyEnabled
+              ? "No saved chats yet."
+              : "Chat history is off for this book - see Settings, AI assistant."}
+          </div>
+        ) : null}
+        {sessions.map((session) => (
+          <DropdownMenuItem
+            key={session.id}
+            disabled={isStreaming}
+            onSelect={(event) => {
+              event.preventDefault();
+              onResume(session.id);
+            }}
+            className="flex items-start gap-2"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-medium">
+                {session.title}
+                {session.id === sessionId ? " (current)" : ""}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {formatUpdatedAt(session.updated_at)} ·{" "}
+                {session.message_count ?? 0} messages
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
+              aria-label={`Delete chat "${session.title}"`}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                deleteSession.mutate({ session_id: session.id });
+              }}
+            >
+              <Trash2 className="size-3.5" aria-hidden="true" />
+            </Button>
+          </DropdownMenuItem>
+        ))}
+        {resumeError ? (
+          <div className="px-2 py-2 text-xs text-destructive">
+            {resumeError}
+          </div>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
