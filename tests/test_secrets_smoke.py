@@ -44,7 +44,13 @@ from kassiber.backup.safe_tar import (
     UnsafeTarMember,
     inspect_tar_members,
 )
-from kassiber.db import DB_BUSY_TIMEOUT_MS, DB_JOURNAL_MODE, open_db
+from kassiber.db import (
+    DB_BUSY_TIMEOUT_MS,
+    DB_CACHE_SIZE_KIB,
+    DB_JOURNAL_MODE,
+    DB_MMAP_SIZE_BYTES,
+    open_db,
+)
 from kassiber.errors import AppError
 from kassiber.secrets.migration import migrate_plaintext_to_encrypted
 from kassiber.secrets.passphrase import change_database_passphrase
@@ -120,6 +126,23 @@ class OpenDbPlaintextTests(unittest.TestCase):
                 self.assertGreaterEqual(
                     primary.execute("PRAGMA busy_timeout").fetchone()[0],
                     DB_BUSY_TIMEOUT_MS,
+                )
+                # synchronous=NORMAL (1) is the crash-safe WAL pairing that
+                # removes an fsync per commit from the write-heavy refresh paths.
+                self.assertEqual(
+                    primary.execute("PRAGMA synchronous").fetchone()[0], 1
+                )
+                # temp_store=MEMORY (2) keeps report/journal temp B-trees in RAM.
+                self.assertEqual(
+                    primary.execute("PRAGMA temp_store").fetchone()[0], 2
+                )
+                self.assertEqual(
+                    primary.execute("PRAGMA cache_size").fetchone()[0],
+                    DB_CACHE_SIZE_KIB,
+                )
+                self.assertEqual(
+                    primary.execute("PRAGMA mmap_size").fetchone()[0],
+                    DB_MMAP_SIZE_BYTES,
                 )
 
                 ready = threading.Event()
@@ -287,6 +310,21 @@ class OpenDbEncryptedTests(unittest.TestCase):
                 self.assertGreaterEqual(
                     primary.execute("PRAGMA busy_timeout").fetchone()[0],
                     DB_BUSY_TIMEOUT_MS,
+                )
+                self.assertEqual(
+                    primary.execute("PRAGMA synchronous").fetchone()[0], 1
+                )
+                self.assertEqual(
+                    primary.execute("PRAGMA temp_store").fetchone()[0], 2
+                )
+                self.assertEqual(
+                    primary.execute("PRAGMA cache_size").fetchone()[0],
+                    DB_CACHE_SIZE_KIB,
+                )
+                # mmap is disabled under SQLCipher for security, so issuing the
+                # pragma is a harmless no-op: it must not error and reports 0.
+                self.assertEqual(
+                    primary.execute("PRAGMA mmap_size").fetchone()[0], 0
                 )
 
                 ready = threading.Event()
