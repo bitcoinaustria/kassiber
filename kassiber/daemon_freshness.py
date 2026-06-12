@@ -575,6 +575,10 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
             commit=True,
         )
         check_cancelled()
+        transaction_sync_providers = {
+            core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+            core_rates.RATE_SOURCE_MEMPOOL,
+        }
         summary = (
             core_rates.sync_rates(
                 conn,
@@ -582,7 +586,7 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
                 commit=True,
                 warm_cache_when_idle=False,
             )
-            if provider == core_rates.RATE_SOURCE_COINBASE_EXCHANGE
+            if provider in transaction_sync_providers
             else []
         )
         return {

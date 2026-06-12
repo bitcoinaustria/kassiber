@@ -989,6 +989,49 @@ class KrakenCsvRatesTest(unittest.TestCase):
         self.assertEqual(row["granularity"], "daily")
         self.assertEqual(row["method"], "historical_price")
 
+    def test_socks_proxy_http_errors_keep_retry_status(self):
+        class _FakeResponse:
+            def __init__(self, status, body, headers=None):
+                self.status = status
+                self.reason = "Too Many Requests" if status == 429 else "OK"
+                self.headers = headers or {}
+                self._body = body
+
+            def read(self):
+                return self._body
+
+        responses = [
+            _FakeResponse(429, b"slow down", {"Retry-After": "0"}),
+            _FakeResponse(200, b'{"ok": true}'),
+        ]
+        requests = []
+
+        def fake_request(connection, method, target, headers=None):
+            requests.append((method, target, headers))
+
+        def fake_getresponse(_connection):
+            return responses.pop(0)
+
+        with patch.object(
+            core_rates.http.client.HTTPConnection,
+            "request",
+            fake_request,
+        ), patch.object(
+            core_rates.http.client.HTTPConnection,
+            "getresponse",
+            fake_getresponse,
+        ):
+            result = core_rates.http_get_json(
+                "http://rates.example/v1/prices",
+                proxy_url="socks5h://127.0.0.1:9050",
+                _sleeper=lambda _delay: None,
+                _max_attempts=2,
+            )
+
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual([request[0] for request in requests], ["GET", "GET"])
+        self.assertEqual(responses, [])
+
     def test_desktop_latest_payload_preserves_historical_rate_cache(self):
         conn = open_db(str(self.data_root))
         self.addCleanup(conn.close)

@@ -405,6 +405,72 @@ class FreshnessTest(unittest.TestCase):
         self.assertEqual(result["latest"][0]["source"], core_rates.RATE_SOURCE_COINGECKO)
         self.assertEqual(result["sync"], [])
 
+    def test_market_rate_job_uses_mempool_for_transaction_backfill(self):
+        conn = self._db()
+        _seed_profile(conn)
+        core_rates.set_market_rate_provider(
+            conn,
+            core_rates.RATE_SOURCE_MEMPOOL,
+            commit=True,
+        )
+        calls = []
+
+        def fake_seed(conn_arg, commit=True):
+            self.assertIs(conn_arg, conn)
+            self.assertTrue(commit)
+            calls.append("seed")
+            return "memory://bundled-kraken", []
+
+        def fake_latest(
+            conn_arg,
+            source=core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+            commit=True,
+        ):
+            self.assertIs(conn_arg, conn)
+            self.assertEqual(source, core_rates.RATE_SOURCE_MEMPOOL)
+            self.assertTrue(commit)
+            calls.append("latest")
+            return [{"pair": "BTC-EUR", "source": source, "samples": 1}]
+
+        def fake_sync(
+            conn_arg,
+            source=core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+            commit=True,
+            warm_cache_when_idle=True,
+        ):
+            self.assertIs(conn_arg, conn)
+            self.assertEqual(source, core_rates.RATE_SOURCE_MEMPOOL)
+            self.assertTrue(commit)
+            self.assertFalse(warm_cache_when_idle)
+            calls.append("sync")
+            return [
+                {
+                    "pair": "BTC-EUR",
+                    "source": core_rates.RATE_SOURCE_MEMPOOL,
+                    "mode": "transaction_need",
+                }
+            ]
+
+        handler = daemon_freshness._freshness_handlers({})[freshness.JOB_MARKET_RATES]
+        with patch(
+            "kassiber.daemon_freshness.core_rates.ensure_bundled_kraken_btc_daily_seed",
+            fake_seed,
+        ), patch("kassiber.daemon_freshness.core_rates.sync_latest_rates", fake_latest), patch(
+            "kassiber.daemon_freshness.core_rates.sync_rates",
+            fake_sync,
+        ):
+            result = handler(
+                conn,
+                {},
+                lambda _payload: None,
+                lambda: None,
+            )
+
+        self.assertEqual(calls, ["seed", "latest", "sync"])
+        self.assertEqual(result["provider"], core_rates.RATE_SOURCE_MEMPOOL)
+        self.assertEqual(result["latest"][0]["source"], core_rates.RATE_SOURCE_MEMPOOL)
+        self.assertEqual(result["sync"][0]["source"], core_rates.RATE_SOURCE_MEMPOOL)
+
     def test_freshness_configure_persists_market_rate_provider(self):
         conn = self._db()
         _seed_profile(conn)

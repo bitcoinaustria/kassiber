@@ -220,8 +220,8 @@ class _SocksUrlResponse:
         timeout = self._timeout
 
         class SocksHTTPConnection(http.client.HTTPConnection):
-            def connect(self_inner):
-                self_inner.sock = _connect_via_socks5(
+            def connect(self):
+                self.sock = _connect_via_socks5(
                     proxy_url,
                     parsed.hostname,
                     port,
@@ -229,7 +229,7 @@ class _SocksUrlResponse:
                 )
 
         class SocksHTTPSConnection(http.client.HTTPSConnection):
-            def connect(self_inner):
+            def connect(self):
                 raw_sock = _connect_via_socks5(
                     proxy_url,
                     parsed.hostname,
@@ -237,7 +237,7 @@ class _SocksUrlResponse:
                     timeout,
                 )
                 context = ssl.create_default_context()
-                self_inner.sock = context.wrap_socket(raw_sock, server_hostname=parsed.hostname)
+                self.sock = context.wrap_socket(raw_sock, server_hostname=parsed.hostname)
 
         connection_class = SocksHTTPSConnection if parsed.scheme == "https" else SocksHTTPConnection
         self._connection = connection_class(parsed.hostname, port, timeout=timeout)
@@ -253,6 +253,9 @@ class _SocksUrlResponse:
                     self._response.headers,
                     io.BytesIO(body),
                 )
+        except urlerror.HTTPError:
+            self.close()
+            raise
         except OSError as exc:
             self.close()
             raise urlerror.URLError(exc) from exc
