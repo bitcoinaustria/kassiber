@@ -325,6 +325,8 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const backends = React.useMemo<Backend[]>(() => {
     const syncRows = backendSettingsQuery.data?.data?.backends ?? [];
     const syncBackends = syncRows.map(backendRowToSettingsBackend);
+    const hasFxRows = syncBackends.some((backend) => backend.net === "FX");
+    if (hasFxRows) return syncBackends;
     return [
       ...syncBackends,
       ...marketRateBackends(
