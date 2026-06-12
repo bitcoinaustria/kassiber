@@ -5,9 +5,11 @@ import sys
 import tempfile
 import unittest
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
+from kassiber.backends import create_db_backend
 from kassiber.core import rates as core_rates
 from kassiber.core import pricing
 from kassiber.core.rates import get_cached_rate_at_or_before
@@ -97,6 +99,21 @@ class KrakenCsvRatesTest(unittest.TestCase):
         conn.row_factory = sqlite3.Row
         self.addCleanup(conn.close)
         return conn
+
+    def _seed_mempool_backend(self, conn):
+        create_db_backend(
+            conn,
+            "own-mempool",
+            "mempool",
+            "http://127.0.0.1:3006/api",
+            chain="bitcoin",
+            network="main",
+            timeout=17,
+            tor_proxy="socks5h://127.0.0.1:9050",
+            commit=False,
+        )
+        set_setting(conn, "default_backend", "own-mempool")
+        conn.commit()
 
     def _seed_transaction_needing_rate(
         self,
@@ -780,6 +797,24 @@ class KrakenCsvRatesTest(unittest.TestCase):
             all((end - start).total_seconds() <= 300 * 60 for start, end in windows)
         )
 
+    def test_coinbase_missing_minute_windows_use_coarse_utc_blocks(self):
+        windows = core_rates._coinbase_windows_for_close_minutes(
+            [
+                "2024-05-01T10:00:00Z",
+                "2024-05-01T10:01:00Z",
+                "2024-05-01T12:34:00Z",
+            ],
+            now=datetime(2024, 5, 1, 20, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(
+            [(start.isoformat(), end.isoformat()) for start, end in windows],
+            [
+                ("2024-05-01T05:00:00+00:00", "2024-05-01T10:00:00+00:00"),
+                ("2024-05-01T10:00:00+00:00", "2024-05-01T15:00:00+00:00"),
+            ],
+        )
+
     def test_coinbase_latest_rate_sync_fetches_only_recent_quote(self):
         conn = open_db(str(self.data_root))
         self.addCleanup(conn.close)
@@ -867,6 +902,92 @@ class KrakenCsvRatesTest(unittest.TestCase):
         self.assertEqual(row["source"], core_rates.RATE_SOURCE_COINGECKO)
         self.assertEqual(row["granularity"], "five_minute")
         self.assertEqual(row["method"], "market_chart")
+
+    def test_mempool_latest_rate_sync_uses_configured_backend_and_proxy(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+        self._seed_mempool_backend(conn)
+        calls = []
+
+        def fake_http(url, timeout=30, proxy_url=None):
+            calls.append((url, timeout, proxy_url))
+            return {"EUR": "60010.50", "time": 1714566900}
+
+        with patch.object(core_rates, "http_get_json", side_effect=fake_http):
+            summary = core_rates.sync_latest_rates(
+                conn,
+                pair="BTC-EUR",
+                source=core_rates.RATE_SOURCE_MEMPOOL,
+            )
+
+        self.assertEqual(
+            calls,
+            [
+                (
+                    "http://127.0.0.1:3006/api/v1/prices",
+                    17,
+                    "socks5h://127.0.0.1:9050",
+                )
+            ],
+        )
+        self.assertEqual(summary[0]["source"], core_rates.RATE_SOURCE_MEMPOOL)
+        self.assertEqual(summary[0]["mode"], "latest_quote")
+        self.assertEqual(summary[0]["samples"], 1)
+        row = conn.execute(
+            """
+            SELECT timestamp, rate_exact, source, granularity, method
+            FROM rates_cache
+            WHERE pair = 'BTC-EUR' AND source = 'mempool'
+            """
+        ).fetchone()
+        self.assertEqual(row["timestamp"], "2024-05-01T12:35:00Z")
+        self.assertEqual(row["rate_exact"], "60010.50")
+        self.assertEqual(row["granularity"], "latest")
+        self.assertEqual(row["method"], "mempool_prices")
+
+    def test_mempool_sync_fetches_missing_transaction_minute_from_backend(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+        self._seed_mempool_backend(conn)
+        self._seed_transaction_needing_rate(conn)
+        calls = []
+
+        def fake_http(url, timeout=30, proxy_url=None):
+            calls.append((url, timeout, proxy_url))
+            return {"prices": [{"time": 1714566840, "EUR": "60010.25"}]}
+
+        with patch.object(core_rates, "http_get_json", side_effect=fake_http):
+            summary = core_rates.sync_rates(
+                conn,
+                pair="BTC-EUR",
+                source=core_rates.RATE_SOURCE_MEMPOOL,
+                days=1,
+            )
+
+        self.assertEqual(len(calls), 1)
+        url, timeout, proxy_url = calls[0]
+        self.assertEqual(timeout, 17)
+        self.assertEqual(proxy_url, "socks5h://127.0.0.1:9050")
+        self.assertTrue(
+            url.startswith("http://127.0.0.1:3006/api/v1/historical-price?")
+        )
+        self.assertIn("currency=EUR", url)
+        self.assertIn("timestamp=1714566840", url)
+        self.assertEqual(summary[0]["source"], core_rates.RATE_SOURCE_MEMPOOL)
+        self.assertEqual(summary[0]["mode"], "transaction_need")
+        self.assertEqual(summary[0]["needed_minutes"], 1)
+        self.assertEqual(summary[0]["missing_minutes"], 1)
+        row = conn.execute(
+            """
+            SELECT timestamp, rate_exact, source, granularity, method
+            FROM rates_cache
+            WHERE pair = 'BTC-EUR' AND source = 'mempool'
+            """
+        ).fetchone()
+        self.assertEqual(row["timestamp"], "2024-05-01T12:34:00Z")
+        self.assertEqual(row["rate_exact"], "60010.25")
+        self.assertEqual(row["granularity"], "daily")
+        self.assertEqual(row["method"], "historical_price")
 
     def test_desktop_latest_payload_preserves_historical_rate_cache(self):
         conn = open_db(str(self.data_root))
@@ -1060,8 +1181,8 @@ class KrakenCsvRatesTest(unittest.TestCase):
         pair, start, end, granularity = windows[0]
         self.assertEqual(pair, "BTC-EUR")
         self.assertEqual(granularity, 60)
-        self.assertEqual(start.isoformat(), "2024-05-01T12:33:00+00:00")
-        self.assertEqual(end.isoformat(), "2024-05-01T17:33:00+00:00")
+        self.assertEqual(start.isoformat(), "2024-05-01T10:00:00+00:00")
+        self.assertEqual(end.isoformat(), "2024-05-01T15:00:00+00:00")
 
         rate_row = conn.execute(
             """

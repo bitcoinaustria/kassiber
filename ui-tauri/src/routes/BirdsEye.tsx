@@ -292,7 +292,7 @@ export function BirdsEyeView({
       progress: { indeterminate: true, label: "Starting" },
     });
     refreshWorkspace.mutate(
-      { workspace_id: workspaceId, rates: true, journals: true, run: true },
+      { workspace_id: workspaceId, journals: true, run: true },
       {
         onSuccess: (envelope) => {
           setRefreshSummary(envelope.data?.summary ?? null);

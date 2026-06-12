@@ -110,6 +110,7 @@ from ..diagnostics import (
     write_error_diagnostics,
 )
 from ..backup.cli import add_backup_parser, dispatch_backup
+from ..backends import preferred_explorer_base
 from ..errors import AppError
 from ..secrets.cli import add_secrets_parser, dispatch_secrets
 from ..secrets.cli_input import (
@@ -381,6 +382,7 @@ def _source_funds_hooks() -> core_source_funds.SourceFundsHooks:
         resolve_scope=resolve_scope,
         resolve_transaction=resolve_transaction,
         format_table=report_hooks.format_table,
+        explorer_base=preferred_explorer_base,
     )
 
 

@@ -425,6 +425,60 @@ class FreshnessTest(unittest.TestCase):
             core_rates.RATE_SOURCE_COINGECKO,
         )
 
+    def test_freshness_run_honors_market_rate_source_class_off(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        set_setting(conn, "context_workspace", "ws")
+        set_setting(conn, "context_profile", profile_id)
+        freshness.set_policy(
+            conn,
+            profile_id,
+            source_classes={freshness.SOURCE_RATES: False},
+        )
+        conn.commit()
+
+        payload = daemon_freshness._freshness_run_payload(
+            conn,
+            {},
+            {"all": True, "rates": True, "journals": True, "run": False},
+        )
+
+        self.assertNotIn(
+            freshness.SOURCE_RATES,
+            {job["source_type"] for job in payload["enqueued"]},
+        )
+
+    def test_workspace_freshness_run_honors_each_book_market_rate_policy(self):
+        conn = self._db()
+        first_profile = _seed_profile(conn)
+        conn.execute(
+            """
+            INSERT INTO profiles(id, workspace_id, label, fiat_currency, created_at)
+            VALUES('second-profile', 'ws', 'Second Book', 'EUR', '2026-06-04T00:00:00Z')
+            """
+        )
+        freshness.set_policy(
+            conn,
+            first_profile,
+            source_classes={freshness.SOURCE_RATES: False},
+        )
+        conn.commit()
+
+        payload = daemon_freshness._workspace_freshness_run_payload(
+            conn,
+            {},
+            {"workspace_id": "ws", "rates": True, "journals": True, "run": False},
+        )
+
+        rates_by_profile = {
+            book["profile"]["id"]: [
+                job for job in book["enqueued"] if job["source_type"] == freshness.SOURCE_RATES
+            ]
+            for book in payload["books"]
+        }
+        self.assertEqual(rates_by_profile[first_profile], [])
+        self.assertEqual(len(rates_by_profile["second-profile"]), 1)
+
     def test_background_due_filter_skips_recent_fresh_sources(self):
         conn = self._db()
         profile_id = _seed_profile(conn)

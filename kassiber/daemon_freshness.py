@@ -1044,6 +1044,19 @@ def _sync_results_from_freshness_jobs(jobs: list[dict[str, Any]]) -> list[dict[s
     return results
 
 
+def _source_class_included_for_run(
+    args: Mapping[str, Any],
+    arg_name: str,
+    policy: core_freshness.FreshnessPolicy,
+    source_type: str,
+) -> bool:
+    policy_enabled = bool(policy.source_classes.get(source_type, False))
+    requested = args.get(arg_name)
+    if requested is None:
+        return policy_enabled
+    return bool(requested) and policy_enabled
+
+
 def _freshness_run_payload(
     conn: sqlite3.Connection,
     runtime_config: dict[str, object],
@@ -1067,8 +1080,19 @@ def _freshness_run_payload(
     if wallet is not None and (not isinstance(wallet, str) or not wallet.strip()):
         raise AppError("ui.freshness.run wallet must be a non-empty string", code="validation", retryable=False)
     sync_all = bool(args.get("all", wallet is None))
-    include_rates = bool(args.get("rates", True))
-    include_journals = bool(args.get("journals", True))
+    policy = core_freshness.get_policy(conn, profile["id"])
+    include_rates = _source_class_included_for_run(
+        args,
+        "rates",
+        policy,
+        core_freshness.SOURCE_RATES,
+    )
+    include_journals = _source_class_included_for_run(
+        args,
+        "journals",
+        policy,
+        core_freshness.SOURCE_JOURNALS,
+    )
     force_full = args.get("force_full")
     if force_full is not None and not isinstance(force_full, bool):
         raise AppError("ui.freshness.run force_full must be a boolean", code="validation", retryable=False)
@@ -1179,8 +1203,6 @@ def _workspace_freshness_run_payload(
         """,
         (workspace["id"],),
     ).fetchall()
-    include_rates = bool(args.get("rates", True))
-    include_journals = bool(args.get("journals", True))
     run_now = bool(args.get("run", True))
     requested_limit = args.get("limit")
     books: list[dict[str, Any]] = []
@@ -1195,6 +1217,19 @@ def _workspace_freshness_run_payload(
     }
     handlers = _freshness_handlers(runtime_config)
     for profile in profile_rows:
+        policy = core_freshness.get_policy(conn, profile["id"])
+        include_rates = _source_class_included_for_run(
+            args,
+            "rates",
+            policy,
+            core_freshness.SOURCE_RATES,
+        )
+        include_journals = _source_class_included_for_run(
+            args,
+            "journals",
+            policy,
+            core_freshness.SOURCE_JOURNALS,
+        )
         recovered = core_freshness.recover_interrupted_jobs(
             conn,
             profile_id=profile["id"],
