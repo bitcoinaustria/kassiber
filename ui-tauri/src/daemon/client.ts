@@ -253,6 +253,12 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
   ],
   "ui.backends.electrum.test": [],
   "ui.backends.http.test": [],
+  "ui.chat.history.configure": [
+    "ui.chat.history.configure",
+    "ui.chat.sessions.list",
+  ],
+  "ui.chat.sessions.delete": ["ui.chat.sessions.list"],
+  "ui.chat.sessions.clear": ["ui.chat.sessions.list"],
   "ui.freshness.run": [
     "ui.activity.history",
     "ui.activity.stale",

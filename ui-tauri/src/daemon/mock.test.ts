@@ -196,3 +196,132 @@ describe("mock daemon streams", () => {
     expect(records[0]?.request_id).toBe("freshness-mock-1");
   });
 });
+
+describe("mock daemon chat sessions", () => {
+  it("lists seeded sessions with history state", async () => {
+    const list = await mockDaemon.invoke<{
+      sessions: Array<{ id: string; message_count: number }>;
+      history_enabled: boolean;
+    }>({ kind: "ui.chat.sessions.list" });
+    expect(list.data?.history_enabled).toBe(true);
+    expect(list.data?.sessions.length).toBeGreaterThanOrEqual(2);
+    expect(list.data?.sessions[0]?.message_count).toBeGreaterThan(0);
+  });
+
+  it("errors on unknown session ids", async () => {
+    const missing = await mockDaemon.invoke({
+      kind: "ui.chat.sessions.get",
+      args: { session_id: "nope" },
+    });
+    expect(missing.kind).toBe("error");
+    expect(missing.error?.code).toBe("not_found");
+  });
+
+  it("persists an ai.chat exchange and round-trips it", async () => {
+    const terminal = await mockDaemon.stream<{ session_id?: string | null }>(
+      {
+        kind: "ai.chat",
+        request_id: "chat-mock-persist",
+        args: {
+          model: "mock-model",
+          messages: [{ role: "user", content: "How many BTC moved today?" }],
+          persist: "auto",
+        },
+      },
+      { onRecord() {} },
+    );
+    const sessionId = terminal.data?.session_id;
+    expect(typeof sessionId).toBe("string");
+
+    const stored = await mockDaemon.invoke<{
+      messages: Array<{ role: string; content: string }>;
+    }>({ kind: "ui.chat.sessions.get", args: { session_id: sessionId } });
+    expect(stored.data?.messages[0]?.content).toBe("How many BTC moved today?");
+    expect(stored.data?.messages[1]?.role).toBe("assistant");
+
+    const deleted = await mockDaemon.invoke<{ deleted?: string }>({
+      kind: "ui.chat.sessions.delete",
+      args: { session_id: sessionId },
+    });
+    expect(deleted.data?.deleted).toBe(sessionId);
+  });
+
+  it("keeps requests without persist intent ephemeral and honors off", async () => {
+    const noIntent = await mockDaemon.stream<{ session_id?: string | null }>(
+      {
+        kind: "ai.chat",
+        request_id: "chat-mock-ephemeral",
+        args: {
+          model: "mock-model",
+          messages: [{ role: "user", content: "ephemeral question" }],
+        },
+      },
+      { onRecord() {} },
+    );
+    expect(noIntent.data?.session_id ?? null).toBeNull();
+
+    await mockDaemon.invoke({
+      kind: "ui.chat.history.configure",
+      args: { history: "off" },
+    });
+    const blocked = await mockDaemon.stream<{ session_id?: string | null }>(
+      {
+        kind: "ai.chat",
+        request_id: "chat-mock-blocked",
+        args: {
+          model: "mock-model",
+          messages: [{ role: "user", content: "blocked question" }],
+          persist: "auto",
+        },
+      },
+      { onRecord() {} },
+    );
+    expect(blocked.data?.session_id ?? null).toBeNull();
+
+    const restored = await mockDaemon.invoke<{ history?: string }>({
+      kind: "ui.chat.history.configure",
+      args: { history: "auto" },
+    });
+    expect(restored.data?.history).toBe("auto");
+  });
+});
+
+describe("mock daemon chat session fidelity", () => {
+  it("fails ai.chat fast on unknown session ids like the real daemon", async () => {
+    const records: DaemonStreamRecord[] = [];
+    const envelope = await mockDaemon.stream(
+      {
+        kind: "ai.chat",
+        request_id: "chat-mock-unknown-session",
+        args: {
+          model: "mock-model",
+          messages: [{ role: "user", content: "hello" }],
+          persist: "auto",
+          session_id: "deleted-session",
+        },
+      },
+      {
+        onRecord(record) {
+          records.push(record);
+        },
+      },
+    );
+    expect(envelope.kind).toBe("error");
+    expect(envelope.error?.code).toBe("not_found");
+    expect(records).toHaveLength(0);
+  });
+
+  it("rejects invalid history modes and unknown deletes", async () => {
+    const invalid = await mockDaemon.invoke({
+      kind: "ui.chat.history.configure",
+      args: { history: "bogus" },
+    });
+    expect(invalid.error?.code).toBe("validation");
+
+    const missing = await mockDaemon.invoke({
+      kind: "ui.chat.sessions.delete",
+      args: { session_id: "nope" },
+    });
+    expect(missing.error?.code).toBe("not_found");
+  });
+});

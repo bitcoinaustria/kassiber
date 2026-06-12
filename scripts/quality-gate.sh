@@ -42,6 +42,9 @@ run py -m unittest tests.test_report_contract_drift -v
 run py -m unittest tests.test_homebrew_cask -v
 run py -m unittest tests.test_btcpay_commercial_provenance -v
 run py -m unittest tests.test_core_maintenance -v
+run py -m unittest tests.test_cli_chat -v
+run py -m unittest tests.test_termrender -v
+run py -m unittest tests.test_ai_core -v
 run py -m unittest tests.test_cli_smoke -v
 run py -m unittest tests.test_rp2_packaging -v
 run py -m unittest tests.test_source_funds_cli -v
@@ -89,10 +92,11 @@ smoke_py -m kassiber reports export-source-funds-pdf --help >/dev/null
 smoke_py -m kassiber reports balance-history --help >/dev/null
 smoke_py -m kassiber rates --help >/dev/null
 smoke_py -m kassiber diagnostics collect --help >/dev/null
+smoke_py -m kassiber chat --help >/dev/null
+smoke_py -m kassiber chats --help >/dev/null
 smoke_py -m kassiber ai --help >/dev/null
 smoke_py -m kassiber ai providers --help >/dev/null
 smoke_py -m kassiber ai providers create --help >/dev/null
-smoke_py -m kassiber ai chat --help >/dev/null
 smoke_py -m kassiber secrets --help >/dev/null
 smoke_py -m kassiber secrets init --help >/dev/null
 smoke_py -m kassiber secrets change-passphrase --help >/dev/null

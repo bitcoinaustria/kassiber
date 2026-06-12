@@ -23,6 +23,71 @@ import type {
 import { mockWorkspaceOverviewSnapshot } from "@/mocks/workspaceOverview";
 import { MOCK_AI_CHAT_STREAM, fixtures } from "./fixtures";
 
+interface MockChatSession {
+  id: string;
+  title: string;
+  provider: string;
+  model: string;
+  created_at: string;
+  updated_at: string;
+  entries: { role: "user" | "assistant"; content: string }[];
+}
+
+// Mock chat history uses "encrypted database" semantics: the auto policy
+// persists, mirroring a real install after `secrets init`.
+let mockChatHistoryMode: "auto" | "on" | "off" = "auto";
+const mockChatSessions: MockChatSession[] = [
+  {
+    id: "mock-chat-session-1",
+    title: "Largest outbound BTC transactions this quarter",
+    provider: "ollama",
+    model: "mock-model",
+    created_at: "2026-06-08T09:12:00Z",
+    updated_at: "2026-06-09T16:40:00Z",
+    entries: [
+      {
+        role: "user",
+        content:
+          "What were my largest outbound BTC transactions this quarter?",
+      },
+      {
+        role: "assistant",
+        content:
+          "Your largest outbound transaction was 0.85 BTC from Cold storage on 2026-05-14, followed by 0.32 BTC from the Lightning sweep wallet on 2026-04-02.",
+      },
+    ],
+  },
+  {
+    id: "mock-chat-session-2",
+    title: "Why is my tax summary stale?",
+    provider: "ollama",
+    model: "mock-model",
+    created_at: "2026-06-05T18:03:00Z",
+    updated_at: "2026-06-05T18:05:00Z",
+    entries: [
+      { role: "user", content: "Why is my tax summary stale?" },
+      {
+        role: "assistant",
+        content:
+          "Journals have not been reprocessed since the last BTC import. Run journal processing and the tax summary will refresh.",
+      },
+    ],
+  },
+];
+
+function mockChatHistoryEnabled(): boolean {
+  return mockChatHistoryMode !== "off";
+}
+
+function mockChatSessionSummaries() {
+  return [...mockChatSessions]
+    .sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1))
+    .map(({ entries, ...rest }) => ({
+      ...rest,
+      message_count: entries.length,
+    }));
+}
+
 const SIMULATED_LATENCY_MS = 50;
 const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
 const MAX_ATTACHMENT_LABEL_LENGTH = 200;
@@ -596,6 +661,115 @@ export const mockDaemon: DaemonTransport = {
         schema_version: 1,
         request_id: req.request_id,
         data: { recorded: true } as T,
+      };
+    }
+
+    if (req.kind === "ui.chat.sessions.list") {
+      return {
+        kind: "ui.chat.sessions.list",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          sessions: mockChatSessionSummaries(),
+          history_mode: mockChatHistoryMode,
+          history_enabled: mockChatHistoryEnabled(),
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.chat.sessions.get") {
+      const sessionId = (req.args ?? ({} as Record<string, unknown>))
+        .session_id as string | undefined;
+      const session = mockChatSessions.find((row) => row.id === sessionId);
+      if (!session) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "not_found",
+            message: "chat session not found for the active profile",
+          },
+        } as DaemonEnvelope<T>;
+      }
+      const { entries, ...rest } = session;
+      return {
+        kind: "ui.chat.sessions.get",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          ...rest,
+          message_count: entries.length,
+          messages: entries.map((entry, index) => ({
+            id: `${session.id}-m${index}`,
+            seq: index,
+            role: entry.role,
+            content: entry.content,
+          })),
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.chat.sessions.delete") {
+      const sessionId = (req.args ?? ({} as Record<string, unknown>))
+        .session_id as string | undefined;
+      const index = mockChatSessions.findIndex((row) => row.id === sessionId);
+      if (index < 0) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "not_found",
+            message: "chat session not found for the active profile",
+          },
+        } as DaemonEnvelope<T>;
+      }
+      mockChatSessions.splice(index, 1);
+      return {
+        kind: "ui.chat.sessions.delete",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: { deleted: sessionId } as T,
+      };
+    }
+
+    if (req.kind === "ui.chat.sessions.clear") {
+      const deleted = mockChatSessions.length;
+      mockChatSessions.length = 0;
+      return {
+        kind: "ui.chat.sessions.clear",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: { deleted } as T,
+      };
+    }
+
+    if (req.kind === "ui.chat.history.configure") {
+      const history = (req.args ?? ({} as Record<string, unknown>))
+        .history as string | undefined;
+      if (history === "auto" || history === "on" || history === "off") {
+        mockChatHistoryMode = history;
+      } else if (history !== undefined) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "chat history mode must be one of auto, on, off",
+          },
+        } as DaemonEnvelope<T>;
+      }
+      return {
+        kind: "ui.chat.history.configure",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          history: mockChatHistoryMode,
+          history_enabled: mockChatHistoryEnabled(),
+          database_encrypted: true,
+        } as T,
       };
     }
 
@@ -3385,7 +3559,26 @@ async function mockAiChatStream<T, R>(
     model?: string;
     provider?: string;
     tools_enabled?: boolean;
+    messages?: { role?: string; content?: string }[];
+    persist?: boolean | "auto";
+    session_id?: string;
   };
+  if (
+    typeof args.session_id === "string" &&
+    args.persist !== false &&
+    !mockChatSessions.some((row) => row.id === args.session_id)
+  ) {
+    // Mirror the real daemon: unknown session ids fail before streaming.
+    return {
+      kind: "error",
+      schema_version: 1,
+      request_id: requestId,
+      error: {
+        code: "not_found",
+        message: "chat session not found for the active profile",
+      },
+    } as DaemonEnvelope<T>;
+  }
   options?.onRecord?.({
     kind: "ai.chat.status",
     schema_version: 1,
@@ -3440,6 +3633,41 @@ async function mockAiChatStream<T, R>(
     };
     options?.onRecord?.(record);
   }
+  const assistantContent = MOCK_AI_CHAT_STREAM.map(
+    (chunk) => chunk.content ?? "",
+  ).join("");
+  let sessionId: string | null = null;
+  const optedIn = args.persist === true || args.persist === "auto" ||
+    typeof args.session_id === "string";
+  if (args.persist !== false && optedIn && mockChatHistoryEnabled()) {
+    const lastUser = [...(args.messages ?? [])]
+      .reverse()
+      .find((message) => message.role === "user");
+    const userContent =
+      typeof lastUser?.content === "string" ? lastUser.content : "";
+    if (userContent) {
+      const now = new Date().toISOString();
+      let session = mockChatSessions.find((row) => row.id === args.session_id);
+      if (!session) {
+        session = {
+          id: `mock-chat-session-${Math.random().toString(36).slice(2, 8)}`,
+          title: userContent.slice(0, 80),
+          provider: args.provider ?? "ollama",
+          model: args.model ?? "mock-model",
+          created_at: now,
+          updated_at: now,
+          entries: [],
+        };
+        mockChatSessions.push(session);
+      }
+      session.entries.push(
+        { role: "user", content: userContent },
+        { role: "assistant", content: assistantContent },
+      );
+      session.updated_at = now;
+      sessionId = session.id;
+    }
+  }
   return {
     kind: "ai.chat",
     schema_version: 1,
@@ -3448,6 +3676,7 @@ async function mockAiChatStream<T, R>(
       provider: args.provider ?? "ollama",
       model: args.model ?? "mock-model",
       finish_reason: cancelled ? "cancelled" : "stop",
+      session_id: sessionId,
     } as T,
   };
 }

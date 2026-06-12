@@ -35,12 +35,21 @@ export interface AssistantSessionContextValue {
   selection: AssistantModelSelection | null;
   thinkingEffort: AssistantThinkingEffort;
   returnPath: AssistantReturnPath;
+  /** Persisted session backing this conversation, if any. */
+  sessionId: string | null;
+  /** When true, turns are sent with persist=false (nothing stored). */
+  incognito: boolean;
   setSelection: (next: AssistantModelSelection | null) => void;
   setThinkingEffort: (next: AssistantThinkingEffort) => void;
+  setIncognito: (next: boolean) => void;
   sendPrompt: (prompt: string) => void;
   sendConsent: (decision: AiToolConsentDecision) => Promise<void>;
   abort: () => void;
   reset: () => void;
+  /** Load a persisted session into the conversation. */
+  resumeSession: (sessionId: string) => Promise<void>;
+  /** Drop the session binding (all sessions, or only when it matches id). */
+  forgetSession: (id?: string) => void;
 }
 
 export const AssistantSessionContext =
