@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   backendPayload,
   backendRowToSettingsBackend,
+  marketRateBackends,
   type Backend,
 } from "./SettingsModel";
 import { backendTypeIdForSettingsBackend } from "./SyncBackendSettingsModel";
@@ -108,5 +109,44 @@ describe("backend settings model", () => {
     });
 
     expect(backendTypeIdForSettingsBackend(backend)).toBe("liquid");
+  });
+
+  it("shows the local mempool backend as the active market-price endpoint", () => {
+    const backends = [
+      backendRowToSettingsBackend({
+        name: "mempool",
+        kind: "mempool",
+        chain: "bitcoin",
+        network: "main",
+        url: "https://mempool.bitcoin-austria.at/api",
+        is_default: true,
+        has_url: true,
+      }),
+      backendRowToSettingsBackend({
+        name: "desk-mempool",
+        kind: "mempool",
+        chain: "bitcoin",
+        network: "main",
+        url: "http://127.0.0.1:3006/api",
+        infrastructure_owner: "self",
+        has_url: true,
+      }),
+    ];
+
+    const [marketBackend] = marketRateBackends(
+      {
+        background_enabled: true,
+        report_read_sync: false,
+        source_classes: { market_rates: true },
+        market_rate_provider: "mempool",
+        market_rate_providers: ["mempool"],
+      },
+      backends,
+    );
+
+    expect(marketBackend.url).toBe("http://127.0.0.1:3006/api");
+    expect(marketBackend.health).toBe("via desk-mempool");
+    expect(marketBackend.infrastructureOwner).toBe("self");
+    expect(marketBackend.on).toBe(true);
   });
 });

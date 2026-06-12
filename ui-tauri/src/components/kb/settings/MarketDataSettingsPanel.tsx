@@ -41,6 +41,7 @@ import {
   KRAKEN_OHLCVT_SUPPORT_URL,
   type MaintenanceSettingsData,
   type MarketRateProvider,
+  marketRateProviderLabel,
   rateRebuildJournalError,
   rateRebuildTransactionProgress,
   type Backend,
@@ -48,11 +49,6 @@ import {
   type KrakenRatesImportOperation,
   type RateRebuildData,
 } from "./SettingsModel";
-
-const MARKET_RATE_PROVIDER_LABELS: Record<MarketRateProvider, string> = {
-  "coinbase-exchange": "Coinbase Exchange",
-  coingecko: "CoinGecko",
-};
 
 export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
   const rateBackends = backends.filter((backend) => backend.net === "FX");
@@ -202,9 +198,8 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
   const marketRateProviderOptions: MarketRateProvider[] =
     freshnessSettings?.market_rate_providers?.length
       ? freshnessSettings.market_rate_providers
-      : ["coinbase-exchange", "coingecko"];
-  const marketRateProviderLabel =
-    MARKET_RATE_PROVIDER_LABELS[marketRateProvider] ?? marketRateProvider;
+      : ["coinbase-exchange", "coingecko", "mempool"];
+  const marketRateProviderLabelText = marketRateProviderLabel(marketRateProvider);
   const activeRatePair = freshnessSettings?.active_rate_pair ?? "BTC-fiat";
   const rateRebuildProgress = rateRebuildTransactionProgress(rateRebuildResult);
   const rateRebuildSamples =
@@ -218,7 +213,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
     setRateRebuildResult(null);
     rebuildNoticeRef.current = addNotification({
       title: "Pricing cache rebuild started",
-      body: `Kassiber is clearing provider-derived prices, fetching fresh ${marketRateProviderLabel} market rates for ${activeRatePair}, and reprocessing journals.`,
+      body: `Kassiber is clearing provider-derived prices, fetching fresh ${marketRateProviderLabelText} market rates for ${activeRatePair}, and reprocessing journals.`,
       tone: "warning",
       progress: {
         indeterminate: true,
@@ -247,7 +242,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
           ? `${formatCount(payload.deleted.transaction_prices)} cached transaction prices cleared; ${formatCount(
               fetchedRows,
             )} rate rows fetched.${journalBlocker ? ` ${journalBlocker}` : ""}`
-          : `${marketRateProviderLabel} pricing cache was rebuilt.`,
+          : `${marketRateProviderLabelText} pricing cache was rebuilt.`,
         tone: journalBlocker ? "warning" : "success",
         progress: undefined,
       } as const;
@@ -316,8 +311,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       });
       const selectedProvider =
         envelope.data?.settings.market_rate_provider ?? provider;
-      const selectedLabel =
-        MARKET_RATE_PROVIDER_LABELS[selectedProvider] ?? selectedProvider;
+      const selectedLabel = marketRateProviderLabel(selectedProvider);
       addNotification({
         title: "Market-rate provider updated",
         body: `Automatic price refresh and default rebuilds will use ${selectedLabel}.`,
@@ -367,7 +361,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
             <SelectContent>
               {marketRateProviderOptions.map((provider) => (
                 <SelectItem key={provider} value={provider}>
-                  {MARKET_RATE_PROVIDER_LABELS[provider] ?? provider}
+                  {marketRateProviderLabel(provider)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -388,7 +382,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
           >
             <span>Keep BTC price current while the app is open</span>
             <span className="font-normal text-muted-foreground">
-              Fetches a small latest {marketRateProviderLabel} market window roughly hourly and
+              Fetches a small latest {marketRateProviderLabelText} market window roughly hourly and
               uses the existing rate-limit backoff if the provider asks Kassiber
               to wait.
             </span>
@@ -761,7 +755,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
           <DialogHeader>
             <DialogTitle>Rebuild pricing cache?</DialogTitle>
             <DialogDescription>
-              Kassiber will delete {marketRateProviderLabel} provider cache rows
+              Kassiber will delete {marketRateProviderLabelText} provider cache rows
               and refetch market rates for {activeRatePair}.
             </DialogDescription>
           </DialogHeader>

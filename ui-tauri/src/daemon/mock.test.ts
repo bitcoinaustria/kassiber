@@ -179,7 +179,7 @@ describe("mock daemon streams", () => {
       {
         kind: "ui.freshness.run",
         request_id: "freshness-mock-1",
-        args: { all: true, rates: true, journals: true, run: true },
+        args: { all: true, journals: true, run: true },
       },
       {
         onRecord(record) {

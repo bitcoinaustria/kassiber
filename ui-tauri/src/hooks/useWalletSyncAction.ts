@@ -97,11 +97,11 @@ export function useWalletSyncAction() {
         id: BOOK_REFRESH_PROGRESS_ID,
         title: options?.forceFull ? "Rescanning book" : "Refreshing book",
         body: options?.forceFull
-          ? "Kassiber is rescanning sources, market rates, and journals."
-          : "Kassiber is refreshing sources, market rates, and journals.",
+          ? "Kassiber is rescanning configured sources and journals."
+          : "Kassiber is refreshing configured sources and journals.",
         tone: "warning",
         progress: startingSyncProgress(),
-        details: ["Sources queued", "Rates and journals included"],
+        details: ["Configured sources queued", "Journals included"],
         active: true,
         startedAt,
         updatedAt: startedAt,
@@ -109,8 +109,8 @@ export function useWalletSyncAction() {
       noticeIdRef.current = addNotification({
         title: options?.forceFull ? "Book rescan started" : "Book refresh started",
         body: options?.forceFull
-          ? "Kassiber is rescanning sources, market rates, and journals."
-          : "Kassiber is refreshing sources, market rates, and journals.",
+          ? "Kassiber is rescanning configured sources and journals."
+          : "Kassiber is refreshing configured sources and journals.",
         tone: "warning",
         dedupeKey: "book-refresh",
         progress: startingSyncProgress(),
@@ -118,7 +118,6 @@ export function useWalletSyncAction() {
       refreshBook.mutate(
         {
           all: true,
-          rates: true,
           journals: true,
           run: true,
           force_full: Boolean(options?.forceFull),

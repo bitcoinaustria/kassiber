@@ -18,6 +18,7 @@ from urllib import error as urlerror
 from urllib import request as urlrequest
 
 from . import __version__
+from .backends import preferred_explorer_base
 from .ai import (
     create_db_ai_provider,
     delete_db_ai_provider,
@@ -1396,6 +1397,7 @@ def _source_funds_hooks() -> core_source_funds.SourceFundsHooks:
         resolve_scope=resolve_scope,
         resolve_transaction=resolve_transaction,
         format_table=report_hooks.format_table,
+        explorer_base=preferred_explorer_base,
     )
 
 
