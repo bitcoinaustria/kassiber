@@ -87,8 +87,9 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   carries `session_id`, and session management is exposed via
   `ui.chat.sessions.{list,get,delete,clear}` plus
   `ui.chat.history.configure` for the GUI policy control. Chat history is
-  not an AI tool — the model cannot read prior sessions — and
-  diagnostics/audit packages exclude it.
+  not an AI tool — the model cannot browse/search prior sessions unless the
+  user explicitly resumes one as chat context — and diagnostics/audit packages
+  exclude it.
 - In-app AI read tools are explicit daemon kinds, not generic CLI or daemon
   dispatch. Current read-only AI kinds are `status`,
   `ui.overview.snapshot`, `ui.transactions.list`,

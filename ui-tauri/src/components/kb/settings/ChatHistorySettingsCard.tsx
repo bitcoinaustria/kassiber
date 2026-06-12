@@ -70,9 +70,10 @@ export function ChatHistorySettingsCard() {
         <div className="min-w-0 flex-1 space-y-1">
           <h3 className="text-sm font-semibold">Chat history</h3>
           <p className="text-sm text-muted-foreground">
-            Stored chats live inside the database — never as plaintext files —
-            and never leave this machine. Diagnostics and audit exports do not
-            include them, and the assistant cannot read past conversations.
+            Stored chats live inside the database, never as plaintext files.
+            Diagnostics and audit exports do not include them. Resuming a chat
+            replays that conversation as model context; otherwise past chats
+            are not exposed as an assistant tool.
           </p>
         </div>
       </div>

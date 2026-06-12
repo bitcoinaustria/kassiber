@@ -510,6 +510,7 @@ def _read_repl_line(input_stream: TextIO, out: TextIO) -> str:
         try:
             import readline  # noqa: F401  # line editing + in-session history
         except ImportError:
+            # readline is optional; fall back to plain input without line editing.
             pass
         try:
             return input("> ") + "\n"

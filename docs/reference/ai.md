@@ -244,9 +244,10 @@ sends `persist: "auto"`, round-trips `session_id`, and surfaces history in
 its toolbar; these kinds stay usable while the AI runtime toggle is off,
 because seeing and deleting stored history is a privacy control, not an AI
 feature. Chat history is intentionally **not** an AI tool:
-the model cannot read prior sessions, which keeps prompt-injection from
-propagating across conversations. Diagnostics reports and audit packages do
-not include chat content.
+the model cannot browse or search prior sessions on its own. Only a session
+the user explicitly resumes is replayed as normal chat context, so
+prompt-injection risk stays scoped to the resumed conversation. Diagnostics
+reports and audit packages do not include chat content.
 
 Provider API-key entry supports `--api-key-stdin` and `--api-key-fd FD`. The
 legacy `--api-key <value>` form still works as a warning-on-use compatibility

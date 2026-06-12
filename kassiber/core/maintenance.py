@@ -238,6 +238,22 @@ def reset_current_profile_data(
             "source_funds_recipients",
             profile_id,
         ),
+        "ai_chat_sessions": _count_profile_rows(
+            conn,
+            "ai_chat_sessions",
+            profile_id,
+        ),
+        "ai_chat_messages": _count_sql(
+            conn,
+            """
+            SELECT COUNT(*)
+            FROM ai_chat_messages
+            WHERE session_id IN (
+                SELECT id FROM ai_chat_sessions WHERE profile_id = ?
+            )
+            """,
+            (profile_id,),
+        ),
         "rates_cache": rates_cache_count if clear_shared_rates else 0,
         "rates_checked_minutes": (
             rates_checked_minutes_count if clear_shared_rates else 0
@@ -274,11 +290,21 @@ def reset_current_profile_data(
             """,
             (profile_id,),
         )
+        conn.execute(
+            """
+            DELETE FROM ai_chat_messages
+            WHERE session_id IN (
+                SELECT id FROM ai_chat_sessions WHERE profile_id = ?
+            )
+            """,
+            (profile_id,),
+        )
         for table in (
             "source_funds_links",
             "source_funds_cases",
             "source_funds_sources",
             "source_funds_recipients",
+            "ai_chat_sessions",
             "saved_views",
             "swap_matching_rules",
             "transaction_pair_dismissals",
