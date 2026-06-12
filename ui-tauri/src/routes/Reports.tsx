@@ -84,17 +84,6 @@ import { useUiStore } from "@/store/ui";
 
 const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
-const COST_BASIS_METHODS: Array<{
-  k: CostBasisMethod;
-  name: string;
-  desc: string;
-}> = [
-  { k: "fifo", name: "FIFO", desc: "First-in, first-out" },
-  { k: "lifo", name: "LIFO", desc: "Last-in, first-out" },
-  { k: "hifo", name: "HIFO", desc: "Highest-in, first-out" },
-  { k: "lofo", name: "LOFO", desc: "Lowest-in, first-out" },
-];
-
 const METHOD_LABELS: Record<
   CostBasisMethod,
   { name: string; desc: string; fullName?: string }
@@ -368,9 +357,9 @@ function ReportsView({
     .sort((a, b) => b - a);
   const jurisdiction =
     JURISDICTIONS[report.jurisdictionCode] ?? JURISDICTIONS.AT;
-  const [method, setMethod] = useState<CostBasisMethod>(
-    normalizeReportMethod(report.method, jurisdiction),
-  );
+  // The cost-basis method is the book's configured gains algorithm; the
+  // report was computed with it, so the UI treats it as a fact, not a knob.
+  const method = normalizeReportMethod(report.method, jurisdiction);
   const [exportStatus, setExportStatus] = useState<ReportExportStatus | null>(
     null,
   );
@@ -753,7 +742,6 @@ function ReportsView({
           <ReportPolicyPanel
             jurisdiction={jurisdiction}
             method={method}
-            setMethod={setMethod}
           />
         </div>
       </div>
@@ -979,14 +967,12 @@ function KennzahlOverviewPanel({
     <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
       <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
         <div className="flex min-w-0 items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-8 shrink-0"
-            aria-label="Tax fields overview"
+          <span
+            aria-hidden="true"
+            className="flex size-8 shrink-0 items-center justify-center rounded-md border"
           >
             <Landmark className="size-4 text-muted-foreground" aria-hidden="true" />
-          </Button>
+          </span>
           <div className="min-w-0">
             <h2 className="truncate text-sm font-medium sm:text-base">
               Tax fields overview
@@ -1102,14 +1088,12 @@ function SummaryPdfPanel({
     <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
       <div className="flex items-start justify-between gap-3 px-4 pt-4 sm:px-5">
         <div className="flex min-w-0 items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-8 shrink-0"
-            aria-label="Summary PDF"
+          <span
+            aria-hidden="true"
+            className="flex size-8 shrink-0 items-center justify-center rounded-md border"
           >
             <PieChart className="size-4 text-muted-foreground" aria-hidden="true" />
-          </Button>
+          </span>
           <div className="min-w-0">
             <h2 className="truncate text-sm font-medium sm:text-base">
               Summary PDF
@@ -1216,14 +1200,12 @@ function ReportFilesPanel({
     <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
       <div className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-5">
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-8 shrink-0"
-            aria-label="Tax advisor report"
+          <span
+            aria-hidden="true"
+            className="flex size-8 shrink-0 items-center justify-center rounded-md border"
           >
             <FolderOpen className="size-4 text-muted-foreground" />
-          </Button>
+          </span>
           <div>
             <h2 className="text-sm font-medium sm:text-base">
               Tax advisor report
@@ -1341,7 +1323,9 @@ function HandoffScopePanel({
   onIncludeEditHistoryChange: (value: boolean) => void;
   onExport: (format: ReportExportFormatId) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  // Open by default: the audit-package export is a real, available action,
+  // not informational copy — burying it cost discoverability.
+  const [expanded, setExpanded] = useState(true);
   const auditExportDisabled =
     Boolean(activeExport) ||
     (auditScope === "source_funds_case" && !auditCaseId);
@@ -1752,11 +1736,9 @@ function ReportFileRow({
 function ReportPolicyPanel({
   jurisdiction,
   method,
-  setMethod,
 }: {
   jurisdiction: (typeof JURISDICTIONS)[string];
   method: CostBasisMethod;
-  setMethod: (method: CostBasisMethod) => void;
 }) {
   const methodLabel = METHOD_LABELS[method] ?? METHOD_LABELS[jurisdiction.defaultMethod];
   const methodFullName = methodLabel.fullName ?? methodLabel.name;
@@ -1766,14 +1748,12 @@ function ReportPolicyPanel({
     <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
       <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5">
         <div className="flex min-w-0 items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-8 shrink-0"
-            aria-label="Profile rules"
+          <span
+            aria-hidden="true"
+            className="flex size-8 shrink-0 items-center justify-center rounded-md border"
           >
             <ShieldAlert className="size-4 text-muted-foreground" />
-          </Button>
+          </span>
           <div className="min-w-0">
             <h2 className="truncate text-sm font-medium sm:text-base">
               Profile rules
@@ -1836,37 +1816,13 @@ function ReportPolicyPanel({
           </div>
 
           {!jurisdiction.methodLocked ? (
-            <div className="grid gap-2">
-              {COST_BASIS_METHODS.map(({ k, name, desc }) => {
-                const active = method === k;
-                return (
-                  <button
-                    key={k}
-                    type="button"
-                    onClick={() => setMethod(k)}
-                    className={cn(
-                      "rounded-lg border p-3 text-left transition-colors",
-                      active
-                        ? "border-primary bg-primary/5"
-                        : "bg-background hover:bg-muted/50",
-                    )}
-                  >
-                    <span className="flex items-center gap-2">
-                      <span
-                        className={cn(
-                          "size-2 rounded-full",
-                          active ? "bg-primary" : "bg-muted-foreground/40",
-                        )}
-                      />
-                      <span className="font-medium">{name}</span>
-                    </span>
-                    <span className="mt-1 block text-xs text-muted-foreground">
-                      {desc}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            <p className="rounded-lg border bg-background/50 px-3 py-2.5 text-xs text-muted-foreground">
+              Lots on this page were computed with the book's configured
+              cost-basis method ({methodFullName}). To change it, update the
+              book's gains algorithm in its profile settings, then reprocess
+              journals — switching it here would silently disagree with the
+              exported reports.
+            </p>
           ) : null}
         </div>
       ) : null}
@@ -1913,14 +1869,12 @@ function LotAuditPanel({
         )}
       >
         <div className="flex min-w-0 items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-8 shrink-0"
-            aria-label="Disposed lot audit"
+          <span
+            aria-hidden="true"
+            className="flex size-8 shrink-0 items-center justify-center rounded-md border"
           >
             <Sigma className="size-4 text-muted-foreground" />
-          </Button>
+          </span>
           <div className="min-w-0">
             <h2 className="truncate text-sm font-medium sm:text-base">
               Disposed lot audit
@@ -2050,14 +2004,12 @@ function NeutralSwapAuditPanel({
         )}
       >
         <div className="flex min-w-0 items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-8 shrink-0"
-            aria-label="Tax-neutral swap audit"
+          <span
+            aria-hidden="true"
+            className="flex size-8 shrink-0 items-center justify-center rounded-md border"
           >
             <RefreshCw className="size-4 text-muted-foreground" />
-          </Button>
+          </span>
           <div className="min-w-0">
             <h2 className="truncate text-sm font-medium sm:text-base">
               Tax-neutral swap audit
