@@ -293,6 +293,25 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     if (onboarding.kind === "error" || onboarding.error) {
       throw new Error(onboarding.error?.message ?? t("shell.finishError"));
     }
+    // Best-effort: persist the AI provider the assistant step configured.
+    // Non-fatal — onboarding already succeeded, and the provider can be
+    // added later from Settings -> Assistant; before this call the step's
+    // collected config was silently dropped.
+    if (form.aiSetupMode !== "disabled" && form.aiBaseUrl.trim()) {
+      try {
+        await getTransport("real").invoke({
+          kind: "ai.providers.create",
+          args: {
+            name: form.aiProviderName.trim() || form.aiProviderKind,
+            base_url: form.aiBaseUrl.trim(),
+            kind: form.aiProviderKind,
+            acknowledged: form.aiRemoteAcknowledged,
+          },
+        });
+      } catch {
+        // Swallow: assistant setup stays optional and repeatable post-setup.
+      }
+    }
     const identity: Identity = {
       name: form.profile.trim() || "Private",
       workspace: form.workspace.trim() || "My Books",
