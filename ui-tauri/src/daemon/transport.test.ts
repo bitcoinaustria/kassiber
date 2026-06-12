@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  envelopeLogLevel,
   normalizeExternalBrowserUrl,
   readBridgeNdjsonStream,
+  summarizeEnvelopeFields,
   type DaemonStreamRecord,
 } from "./transport";
 
@@ -75,6 +77,67 @@ describe("bridge NDJSON stream reader", () => {
     expect(records).toEqual([]);
     expect(terminal.kind).toBe("auth_required");
     expect(terminal.data).toEqual({ scope: "unlock_database" });
+  });
+});
+
+describe("daemon envelope logging summaries", () => {
+  it("marks failed wallet sync result rows as error-level with useful context", () => {
+    const summary = summarizeEnvelopeFields({
+      kind: "ui.wallets.sync",
+      schema_version: 1,
+      request_id: "sync-1",
+      data: {
+        ok: false,
+        results: [
+          {
+            wallet: "Satoshi-Liquid",
+            status: "error",
+            code: "backend_sync_failed",
+            message:
+              "Source refresh failed for Satoshi-Liquid during backend_fetch: invalid literal for int() with base 10: '2026-04-14T10:17:10Z'",
+            hint: "Test the selected sync backend in Settings, then retry refresh.",
+            retryable: true,
+            details: {
+              backend: "liquid",
+              backend_kind: "electrum",
+              chain: "liquid",
+              network: "liquidv1",
+              phase: "backend_fetch",
+              error_type: "ValueError",
+              has_backend_url: true,
+            },
+          },
+        ],
+      },
+    });
+
+    expect(
+      envelopeLogLevel({
+        kind: "ui.wallets.sync",
+        schema_version: 1,
+        data: { results: [{ status: "error" }] },
+      }),
+    ).toBe("error");
+    expect(summary.sync_error_wallet).toEqual({
+      type: "label",
+      value: "Satoshi-Liquid",
+    });
+    expect(summary.sync_error_code).toEqual({
+      type: "text",
+      value: "backend_sync_failed",
+    });
+    expect(summary.sync_error_phase).toEqual({
+      type: "text",
+      value: "backend_fetch",
+    });
+    expect(summary.sync_error_backend_kind).toEqual({
+      type: "text",
+      value: "electrum",
+    });
+    expect(summary.sync_error_has_backend_url).toEqual({
+      type: "boolean",
+      value: true,
+    });
   });
 });
 

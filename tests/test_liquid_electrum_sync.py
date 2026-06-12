@@ -207,6 +207,87 @@ class LiquidElectrumSyncTest(unittest.TestCase):
         self.assertIn(("blockchain.transaction.get", (prev_txid,)), calls)
         self.assertIn(("blockchain.block.header", (123,)), calls)
 
+    def test_electrum_records_accept_liquid_history_timestamp_height(self):
+        policy_asset_id = default_policy_asset_id("liquidv1")
+        tracked_script = "0014c54c073c10cf177cf5157e0861757586f4029b96"
+        target = {
+            "branch_index": 0,
+            "branch_label": "receive",
+            "address_index": 0,
+            "address": "lq1test",
+            "script_pubkey": tracked_script,
+        }
+        current_txid = "c1" * 32
+        prev_txid = "ea" * 32
+        current_tx = _FakeTx(
+            vin=[_FakeInput(prev_txid, 0)],
+            vout=[
+                _FakeOutput("", 19, policy_asset_id),
+                _FakeOutput(tracked_script, 20901, policy_asset_id),
+            ],
+        )
+        prev_tx = _FakeTx(vin=[], vout=[_FakeOutput("51", 50000, policy_asset_id)])
+        raw_map = {
+            "current-raw": current_tx,
+            "prev-raw": prev_tx,
+        }
+        calls = []
+        scripthash = scriptpubkey_scripthash(tracked_script)
+        history = [{"tx_hash": current_txid, "height": "2026-04-14T10:17:10Z"}]
+        responses = {
+            ("blockchain.scripthash.subscribe", (scripthash,)): "status-1",
+            ("blockchain.scripthash.get_history", (scripthash,)): history,
+            ("blockchain.transaction.get", (current_txid,)): "current-raw",
+            ("blockchain.transaction.get", (prev_txid,)): "prev-raw",
+        }
+
+        class FakeElectrumClient:
+            def __init__(self, backend):
+                self.backend = backend
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def call(self, method, params=None):
+                key = (method, tuple(params or ()))
+                calls.append(key)
+                if key not in responses:
+                    raise AssertionError(f"Unexpected Electrum call: {key!r}")
+                return responses[key]
+
+        with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient), patch(
+            "kassiber.core.sync_backends.decode_liquid_transaction",
+            side_effect=lambda raw_hex: raw_map[raw_hex],
+        ), patch(
+            "kassiber.core.sync_backends.liquid_output_amount_asset_id",
+            side_effect=lambda output, plan, target=None: (output.fake_value_sats, output.fake_asset_id),
+        ):
+            records, meta = electrum_records_for_wallet(
+                {"name": "liquid", "kind": "electrum", "url": "ssl://liquid.example:995"},
+                WalletSyncState(
+                    chain="liquid",
+                    network="liquidv1",
+                    descriptor_plan=object(),
+                    policy_asset_id=policy_asset_id,
+                    targets=[target],
+                    tracked_scripts={tracked_script: target},
+                    history_cache={},
+                ),
+            )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(meta["scripts_changed"], 1)
+        self.assertEqual(records[0]["occurred_at"], "2026-04-14T10:17:10Z")
+        self.assertEqual(records[0]["confirmed_at"], "2026-04-14T10:17:10Z")
+        self.assertNotIn(("blockchain.block.header", (123,)), calls)
+        self.assertFalse(
+            any(method == "blockchain.block.header" for method, _params in calls),
+            calls,
+        )
+
     def test_discover_descriptor_targets_uses_subscription_status_with_backend_batch_size(self):
         first_target = {"script_pubkey": "0014feedface"}
         second_target = {"script_pubkey": "0014deadbeef"}

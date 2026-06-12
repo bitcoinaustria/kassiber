@@ -139,6 +139,40 @@ def _wallet_label(wallet: WalletRow) -> str:
     return str(value or "Wallet")
 
 
+def _backend_sync_failure_error(
+    exc: Exception,
+    wallet: WalletRow,
+    backend: Mapping[str, Any] | None,
+    phase: str,
+) -> AppError:
+    details: dict[str, Any] = {
+        "wallet": _wallet_label(wallet),
+        "phase": phase,
+        "error_type": exc.__class__.__name__,
+    }
+    if backend is not None:
+        details.update(
+            {
+                "backend": backend.get("name"),
+                "backend_kind": backend.get("kind"),
+                "chain": backend.get("chain"),
+                "network": backend.get("network"),
+                "has_backend_url": bool(backend.get("url")),
+            }
+        )
+    return AppError(
+        f"Source refresh failed for {_wallet_label(wallet)} during {phase}: "
+        f"{str(exc) or exc.__class__.__name__}",
+        code="backend_sync_failed",
+        hint=(
+            "Test the selected sync backend in Settings, then retry refresh. "
+            "If it still fails, include this error's details from Logs."
+        ),
+        details=details,
+        retryable=True,
+    )
+
+
 def _emit_wallet_sync_progress(wallet: WalletRow, payload: Mapping[str, Any]) -> None:
     wallet_label = _wallet_label(wallet)
     emit_sync_progress({"wallet": wallet_label, **dict(payload)})
@@ -209,7 +243,6 @@ def fetch_wallet_backend(
     del profile  # not needed to fetch; kept for call-shape symmetry with apply
     started = time.monotonic()
     config = json.loads(wallet["config_json"] or "{}")
-    backend = hooks.resolve_backend(runtime_config, config.get("backend"))
     effective_checkpoint = {} if force_full else checkpoint
     resolver_wallet: WalletRow = (
         {**dict(wallet), "_freshness_checkpoint": dict(effective_checkpoint)}
@@ -217,7 +250,11 @@ def fetch_wallet_backend(
         else wallet
     )
     token = _wrap_sync_progress_for_wallet(wallet)
+    backend: Mapping[str, Any] | None = None
+    phase = "resolve_backend"
     try:
+        backend = hooks.resolve_backend(runtime_config, config.get("backend"))
+        phase = "discovery"
         _emit_wallet_sync_progress(wallet, {"phase": "discovery"})
         sync_state = hooks.resolve_sync_state(backend, resolver_wallet)
         if effective_checkpoint is not None:
@@ -251,7 +288,12 @@ def fetch_wallet_backend(
             wallet,
             {"phase": "backend_fetch"},
         )
+        phase = "backend_fetch"
         normalized_records, adapter_meta = adapter(backend, wallet, sync_state)
+    except AppError:
+        raise
+    except Exception as exc:
+        raise _backend_sync_failure_error(exc, wallet, backend, phase) from exc
     finally:
         if token is not None:
             sync_progress_emitter.reset(token)

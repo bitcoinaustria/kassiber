@@ -761,7 +761,12 @@ class DaemonFreshnessForceFullTest(unittest.TestCase):
                     "status": "failed",
                     "source_label": "Cold on-chain history",
                     "payload": {"wallet_id": "wallet-1", "wallet_label": "Cold"},
-                    "error": {"code": "backend_timeout", "message": "Timed out"},
+                    "error": {
+                        "code": "backend_timeout",
+                        "message": "Timed out",
+                        "details": {"phase": "backend_fetch"},
+                        "retryable": True,
+                    },
                 }
             ]
         )
@@ -769,6 +774,8 @@ class DaemonFreshnessForceFullTest(unittest.TestCase):
         self.assertEqual(results[0]["wallet"], "Cold")
         self.assertEqual(results[0]["status"], "error")
         self.assertEqual(results[0]["code"], "backend_timeout")
+        self.assertEqual(results[0]["details"], {"phase": "backend_fetch"})
+        self.assertTrue(results[0]["retryable"])
 
 
 class DaemonSmokeTest(unittest.TestCase):

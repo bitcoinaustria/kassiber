@@ -80,6 +80,48 @@ class SyncBackendsTest(unittest.TestCase):
             sync_wallet_from_backend(None, {}, {}, wallet, hooks)
         self.assertIn("not implemented", str(exc.exception))
 
+    def test_sync_wallet_from_backend_wraps_unexpected_backend_shape(self):
+        wallet = {"label": "Cold", "config_json": "{}"}
+        target = {"address": "bc1qwatch", "script_pubkey": "0014watch"}
+
+        def adapter(backend, wallet, sync_state):
+            raise ValueError("invalid literal for int() with base 10: '2026-04-14T10:17:10Z'")
+
+        hooks = WalletSyncHooks(
+            import_file=lambda *args, **kwargs: {},
+            insert_records=lambda *args, **kwargs: {},
+            resolve_backend=lambda runtime_config, backend_name: {
+                "name": "liquid",
+                "kind": "electrum",
+                "chain": "liquid",
+                "network": "liquidv1",
+                "url": "ssl://liquid.example:995",
+            },
+            resolve_sync_state=lambda backend, wallet: WalletSyncState(
+                chain="liquid",
+                network="liquidv1",
+                descriptor_plan=object(),
+                policy_asset_id="",
+                targets=[target],
+                tracked_scripts={target["script_pubkey"]: target},
+                history_cache={},
+            ),
+            normalize_addresses=lambda values: list(values or []),
+            backend_adapters={"electrum": adapter},
+        )
+
+        with self.assertRaises(AppError) as exc:
+            sync_wallet_from_backend(None, {}, {}, wallet, hooks)
+
+        self.assertEqual(exc.exception.code, "backend_sync_failed")
+        self.assertTrue(exc.exception.retryable)
+        self.assertIn("Cold", str(exc.exception))
+        self.assertEqual(exc.exception.details["wallet"], "Cold")
+        self.assertEqual(exc.exception.details["backend"], "liquid")
+        self.assertEqual(exc.exception.details["phase"], "backend_fetch")
+        self.assertEqual(exc.exception.details["error_type"], "ValueError")
+        self.assertTrue(exc.exception.details["has_backend_url"])
+
     def test_sync_wallet_from_backend_attaches_wallet_to_backend_progress(self):
         wallet = {"label": "Cold", "config_json": "{}"}
         target = {"address": "bc1qwatch", "script_pubkey": "0014watch"}

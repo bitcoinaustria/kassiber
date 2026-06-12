@@ -25,7 +25,7 @@ from ..envelope import json_ready
 from ..errors import AppError
 from ..msat import SATS_PER_BTC, dec
 from ..retry import retry_after_seconds_from_http_error
-from ..time_utils import UNKNOWN_OCCURRED_AT, timestamp_to_iso
+from ..time_utils import UNKNOWN_OCCURRED_AT, parse_iso_datetime_or_none, timestamp_to_iso
 from ..util import normalize_chain_value, normalize_network_value, parse_bool, parse_int
 from ..wallet_descriptors import (
     branch_limits,
@@ -952,7 +952,7 @@ def _target_output_metadata(target):
 def _block_time_from_status(status):
     if not isinstance(status, dict):
         return None
-    return timestamp_to_iso(status.get("block_time"), default=None)
+    return _backend_time_to_iso(status.get("block_time"), default=None)
 
 
 def _confirmations_from_heights(block_height, tip_height):
@@ -983,21 +983,19 @@ def _esplora_tip_height(base_url, timeout=30):
 def _block_height_from_status(status):
     if not isinstance(status, dict):
         return None
-    block_height = status.get("block_height")
-    if block_height in (None, "", 0, "0"):
-        return None
-    return int(block_height)
+    return _positive_electrum_height(status.get("block_height"))
 
 
 def _esplora_bitcoin_utxo_record(raw_utxo, target, sync_state, tip_height=None):
     status = raw_utxo.get("status") or {}
     block_height = _block_height_from_status(status)
+    confirmed = bool(status.get("confirmed")) if isinstance(status, dict) else bool(block_height)
     return {
         "txid": raw_utxo.get("txid"),
         "vout": raw_utxo.get("vout"),
         "asset": "BTC",
         "amount_sats": int(raw_utxo.get("value") or 0),
-        "confirmation_status": "confirmed" if block_height else "mempool",
+        "confirmation_status": "confirmed" if confirmed else "mempool",
         "confirmations": _confirmations_from_heights(block_height, tip_height),
         "block_height": block_height,
         "block_time": _block_time_from_status(status),
@@ -1006,7 +1004,7 @@ def _esplora_bitcoin_utxo_record(raw_utxo, target, sync_state, tip_height=None):
         **_target_output_metadata(target),
         "raw": {
             "source": "esplora_scripthash_utxo",
-            "confirmed": bool(status.get("confirmed")) if isinstance(status, dict) else False,
+            "confirmed": confirmed,
         },
     }
 
@@ -1034,12 +1032,13 @@ def _liquid_utxo_record_from_output(
         target=target,
     )
     block_height = _block_height_from_status(status)
+    confirmed = bool(status.get("confirmed")) if isinstance(status, dict) else bool(block_height)
     return {
         "txid": txid,
         "vout": int(vout),
         "asset": liquid_asset_code(asset_id, sync_state.policy_asset_id),
         "amount_sats": value_sats,
-        "confirmation_status": "confirmed" if block_height else "mempool",
+        "confirmation_status": "confirmed" if confirmed else "mempool",
         "confirmations": _confirmations_from_heights(block_height, tip_height),
         "block_height": block_height,
         "block_time": _block_time_from_status(status),
@@ -1049,7 +1048,7 @@ def _liquid_utxo_record_from_output(
         "raw": {
             "source": source,
             "asset_id": asset_id,
-            "confirmed": bool(status.get("confirmed")) if isinstance(status, dict) else False,
+            "confirmed": confirmed,
         },
     }
 
@@ -2085,6 +2084,67 @@ def block_header_timestamp(header_hex):
     return int.from_bytes(header[68:72], "little")
 
 
+def _positive_electrum_height(value):
+    if value in (None, "", 0, "0"):
+        return None
+    try:
+        height = int(value)
+    except (TypeError, ValueError):
+        return None
+    return height if height > 0 else None
+
+
+def _backend_time_to_iso(value, default=UNKNOWN_OCCURRED_AT):
+    parsed = parse_iso_datetime_or_none(value)
+    if parsed is not None:
+        return (
+            parsed.replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+    return timestamp_to_iso(value, default=default)
+
+
+def _history_explicit_time_iso(history):
+    for key in ("confirmed_at", "timestamp", "time", "blocktime", "height"):
+        value = history.get(key)
+        parsed = parse_iso_datetime_or_none(value)
+        if parsed is not None:
+            return (
+                parsed.replace(microsecond=0)
+                .isoformat()
+                .replace("+00:00", "Z")
+            )
+        if key != "height" and value not in (None, "", 0, "0"):
+            try:
+                return timestamp_to_iso(value)
+            except (TypeError, ValueError, OSError, OverflowError):
+                continue
+    return None
+
+
+def _history_needs_recheck(history):
+    if _positive_electrum_height(history.get("height")) is not None:
+        return False
+    if _history_explicit_time_iso(history) is not None:
+        return False
+    return True
+
+
+def _history_occurred_at(history, height_to_timestamp):
+    height = _positive_electrum_height(history.get("height"))
+    if height is not None:
+        return timestamp_to_iso(height_to_timestamp(height))
+    return _history_explicit_time_iso(history) or UNKNOWN_OCCURRED_AT
+
+
+def _history_sort_key(txid, history):
+    height = _positive_electrum_height(history.get("height"))
+    if height is not None:
+        return (0, height, txid)
+    return (1, _history_explicit_time_iso(history) or UNKNOWN_OCCURRED_AT, txid)
+
+
 def electrum_output_at_index(tx, index):
     outputs = tx.get("vout") or []
     if index is None or index < 0 or index >= len(outputs):
@@ -2093,18 +2153,18 @@ def electrum_output_at_index(tx, index):
 
 
 def _electrum_utxo_status(raw_utxo, header_timestamps):
-    height = raw_utxo.get("height")
-    if height in (None, "", 0, "0") or int(height) <= 0:
+    height = _positive_electrum_height(raw_utxo.get("height"))
+    if height is None:
+        block_time = _history_explicit_time_iso(raw_utxo)
         return {
-            "confirmed": False,
+            "confirmed": block_time is not None,
             "block_height": None,
-            "block_time": None,
+            "block_time": block_time,
         }
-    block_height = int(height)
     return {
         "confirmed": True,
-        "block_height": block_height,
-        "block_time": timestamp_to_iso(header_timestamps.get(block_height), default=None),
+        "block_height": height,
+        "block_time": timestamp_to_iso(header_timestamps.get(height), default=None),
     }
 
 
@@ -2129,7 +2189,7 @@ def _electrum_bitcoin_utxo_record(raw_utxo, target, sync_state, header_timestamp
         "vout": raw_utxo.get("tx_pos"),
         "asset": "BTC",
         "amount_sats": int(raw_utxo.get("value") or 0),
-        "confirmation_status": "confirmed" if block_height else "mempool",
+        "confirmation_status": "confirmed" if status["confirmed"] else "mempool",
         "confirmations": _confirmations_from_heights(block_height, tip_height),
         "block_height": block_height,
         "block_time": status["block_time"],
@@ -2162,9 +2222,9 @@ def electrum_utxos_for_wallet(backend, sync_state: WalletSyncState):
             target = target_by_scripthash[scripthash]
             for raw_utxo in raw_utxos or []:
                 raw_by_target.append((target, raw_utxo))
-                height = raw_utxo.get("height")
-                if height not in (None, "", 0, "0") and int(height) > 0:
-                    heights.add(int(height))
+                height = _positive_electrum_height(raw_utxo.get("height"))
+                if height is not None:
+                    heights.add(height)
         if heights:
             header_hexes = electrum_call_many(
                 client,
@@ -2252,7 +2312,7 @@ def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_
         amount = sats_to_btc(amount_sats)
         fee = sats_to_btc(fee_sats)
         kind = "withdrawal" if amount > 0 else "fee"
-    occurred_at = timestamp_to_iso(height)
+    occurred_at = _backend_time_to_iso(height)
     confirmed_at = None if occurred_at == UNKNOWN_OCCURRED_AT else occurred_at
     payment_hash = _extract_payment_hash_from_witnesses(
         _esplora_witness_items(vin) for vin in tx.get("vin", [])
@@ -2347,7 +2407,7 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
                         if isinstance(item, dict) and item.get("tx_hash")
                     }
                 )
-                if any(int(item.get("height") or 0) <= 0 for item in normalized_history):
+                if any(_history_needs_recheck(item) for item in normalized_history):
                     dirty_scripthashes.add(scripthash)
 
         def lookup(txid):
@@ -2363,9 +2423,9 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
             return transactions[txid]
 
         def height_to_timestamp(height):
-            if height in (None, 0) or int(height) <= 0:
+            normalized_height = _positive_electrum_height(height)
+            if normalized_height is None:
                 return None
-            normalized_height = int(height)
             if normalized_height not in header_timestamps:
                 header_hex = client.call("blockchain.block.header", [normalized_height])
                 header_timestamps[normalized_height] = block_header_timestamp(header_hex)
@@ -2374,7 +2434,10 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
         txids = {}
         for history in histories:
             txids[history["tx_hash"]] = history
-        ordered_histories = sorted(txids.items(), key=lambda item: (item[1].get("height", 0), item[0]))
+        ordered_histories = sorted(
+            txids.items(),
+            key=lambda item: _history_sort_key(item[0], item[1]),
+        )
         ordered_txids = [txid for txid, _ in ordered_histories]
         if ordered_txids:
             raw_transactions = electrum_call_many(
@@ -2417,9 +2480,10 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
                     transactions[txid] = decode_raw_transaction(raw_tx)
         heights = sorted(
             {
-                int(history.get("height"))
+                height
                 for history in txids.values()
-                if history.get("height") is not None and int(history.get("height")) > 0
+                for height in [_positive_electrum_height(history.get("height"))]
+                if height is not None
             }
         )
         if heights:
@@ -2434,7 +2498,7 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
                 for height, header_hex in zip(missing_heights, header_hexes):
                     header_timestamps[height] = block_header_timestamp(header_hex)
         for txid, history in ordered_histories:
-            occurred_at = timestamp_to_iso(height_to_timestamp(history.get("height")))
+            occurred_at = _history_occurred_at(history, height_to_timestamp)
             if sync_state.chain == "liquid":
                 current_tx = lookup(txid)
                 records.extend(
@@ -2456,7 +2520,7 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
             normalized = record_from_electrum_tx(
                 txid,
                 tx,
-                height_to_timestamp(history.get("height")),
+                occurred_at,
                 tracked_scripts,
                 backend["name"],
                 lookup,

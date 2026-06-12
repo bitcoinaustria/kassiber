@@ -5,6 +5,8 @@ export interface SyncResult {
   message?: string;
   reason?: string;
   hint?: string;
+  details?: Record<string, unknown> | null;
+  retryable?: boolean;
   imported?: number;
   updated?: number;
   unchanged?: number;

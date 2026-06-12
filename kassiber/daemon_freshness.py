@@ -1037,6 +1037,8 @@ def _sync_results_from_freshness_jobs(jobs: list[dict[str, Any]]) -> list[dict[s
                 "code": error.get("code") or job.get("status"),
                 "message": error.get("message") or "Refresh did not finish.",
                 "hint": error.get("hint"),
+                "details": error.get("details"),
+                "retryable": bool(error.get("retryable")),
             }
         )
     return results

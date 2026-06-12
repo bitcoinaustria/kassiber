@@ -226,8 +226,23 @@ function recordDaemonLog(
   });
 }
 
-function envelopeLogLevel(envelope: DaemonEnvelope): "info" | "warning" | "error" {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function syncErrorRows(data: unknown): Record<string, unknown>[] {
+  if (!isRecord(data) || !Array.isArray(data.results)) return [];
+  return data.results.filter(
+    (row): row is Record<string, unknown> =>
+      isRecord(row) && String(row.status ?? "").toLowerCase() === "error",
+  );
+}
+
+export function envelopeLogLevel(
+  envelope: DaemonEnvelope,
+): "info" | "warning" | "error" {
   if (envelope.kind === "error" || envelope.error) return "error";
+  if (syncErrorRows(envelope.data).length > 0) return "error";
   if (envelope.kind === "auth_required") return "warning";
   return "info";
 }
@@ -259,7 +274,7 @@ function summarizeRequestFields(req: DaemonRequest): Record<string, AppLogField>
   };
 }
 
-function summarizeEnvelopeFields(
+export function summarizeEnvelopeFields(
   envelope: DaemonEnvelope,
 ): Record<string, AppLogField> {
   const requestId = envelope.request_id ?? "";
@@ -317,6 +332,61 @@ function addDataSummaryFields(
   }
   if (data.provenance && typeof data.provenance === "object") {
     summary.has_provenance = booleanField(true);
+  }
+  addSyncErrorSummaryFields(summary, data);
+}
+
+function addSyncErrorSummaryFields(
+  summary: Record<string, AppLogField>,
+  data: Record<string, unknown>,
+): void {
+  const errors = syncErrorRows(data);
+  const first = errors[0];
+  if (!first) return;
+
+  summary.sync_error_count = numberField(errors.length);
+  const wallet = first.wallet;
+  if (typeof wallet === "string") {
+    summary.sync_error_wallet = { type: "label", value: wallet };
+  }
+  const code = first.code;
+  if (typeof code === "string") summary.sync_error_code = textField(code);
+  const message = first.message;
+  if (typeof message === "string") {
+    summary.sync_error_message = textField(message);
+  }
+  const hint = first.hint;
+  if (typeof hint === "string" && hint) {
+    summary.sync_error_hint = textField(hint);
+  }
+  if (typeof first.retryable === "boolean") {
+    summary.sync_error_retryable = booleanField(first.retryable);
+  }
+
+  const details = first.details;
+  if (!isRecord(details)) return;
+  const phase = details.phase;
+  if (typeof phase === "string") summary.sync_error_phase = textField(phase);
+  const errorType = details.error_type;
+  if (typeof errorType === "string") {
+    summary.sync_error_type = textField(errorType);
+  }
+  const backend = details.backend;
+  if (typeof backend === "string") {
+    summary.sync_error_backend = { type: "label", value: backend };
+  }
+  const backendKind = details.backend_kind;
+  if (typeof backendKind === "string") {
+    summary.sync_error_backend_kind = textField(backendKind);
+  }
+  const chain = details.chain;
+  if (typeof chain === "string") summary.sync_error_chain = textField(chain);
+  const network = details.network;
+  if (typeof network === "string") {
+    summary.sync_error_network = textField(network);
+  }
+  if (typeof details.has_backend_url === "boolean") {
+    summary.sync_error_has_backend_url = booleanField(details.has_backend_url);
   }
 }
 
