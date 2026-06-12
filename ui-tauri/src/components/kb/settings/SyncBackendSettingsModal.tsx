@@ -34,7 +34,6 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDaemonMutation } from "@/daemon/client";
-import type { DeferredConnectionSetup } from "@/store/ui";
 import {
   CLN_PRESENCE_SENTINEL_COMMANDO_PEER,
   CLN_PRESENCE_SENTINEL_LIGHTNING_DIR,
@@ -53,6 +52,10 @@ import {
   type Backend,
   type Net,
 } from "./SettingsModel";
+import {
+  backendTypeIdForSettingsBackend,
+  type SyncBackendTypeId,
+} from "./SyncBackendSettingsModel";
 
 export function NetworkBadge({ net }: { net: Net }) {
   const classes: Record<Net, string> = {
@@ -181,7 +184,7 @@ export interface SyncBackendPreset {
 }
 
 export interface SyncBackendNetwork {
-  id: "bitcoin" | "liquid" | "coreln" | "lnd";
+  id: SyncBackendTypeId;
   label: string;
   net: Net;
   desc: string;
@@ -383,21 +386,6 @@ export const AUTH_MODES: Array<{ id: string; label: string }> = [
   { id: "bearer", label: "Bearer token" },
 ];
 
-export function normalizedBackendKind(kind: string | null | undefined): string {
-  return (kind ?? "").toLowerCase().replace(/-/g, "");
-}
-
-export function backendTypeIdForConnectionSetup(
-  intent: DeferredConnectionSetup | null,
-): SyncBackendNetwork["id"] | undefined {
-  const kind = normalizedBackendKind(intent?.backendKind);
-  if (kind === "coreln") return "coreln";
-  if (kind === "lnd") return "lnd";
-  if (intent?.sourceId === "core-ln") return "coreln";
-  if (intent?.sourceId === "lnd") return "lnd";
-  return undefined;
-}
-
 export type TestState = "idle" | "testing" | "ok" | "fail";
 export type BackendSourceMode = "preset" | "custom";
 
@@ -593,15 +581,10 @@ export function SyncBackendSettingsModal({
     if (!open) return;
     if (initial) {
       const parsedElectrum = parseElectrumEndpoint(initial.url);
-      const initialKind = normalizedBackendKind(initial.kind);
       const initialType =
-        SYNC_BACKEND_NETWORKS.find((candidate) =>
-          candidate.presets.some(
-            (preset) => normalizedBackendKind(preset.protocol) === initialKind,
-          ),
-        ) ??
-        SYNC_BACKEND_NETWORKS.find((candidate) => candidate.net === initial.net) ??
-        SYNC_BACKEND_NETWORKS[0];
+        SYNC_BACKEND_NETWORKS.find(
+          (candidate) => candidate.id === backendTypeIdForSettingsBackend(initial),
+        ) ?? SYNC_BACKEND_NETWORKS[0];
       const initialPreset =
         initialType.presets.find((candidate) => candidate.url === initial.url) ??
         (initial.url.match(/^(ssl|tcp):\/\//i)

@@ -5,6 +5,7 @@ import {
   backendRowToSettingsBackend,
   type Backend,
 } from "./SettingsModel";
+import { backendTypeIdForSettingsBackend } from "./SyncBackendSettingsModel";
 
 describe("backend settings model", () => {
   it("keeps the stable backend id separate from the editable display name", () => {
@@ -81,5 +82,31 @@ describe("backend settings model", () => {
 
     expect(payload.token).toBe("new-btcpay-key");
     expect(payload.clear).toEqual(["auth_header", "username", "password"]);
+  });
+
+  it("opens stored Liquid Electrum backends in the Liquid edit path", () => {
+    const backend = backendRowToSettingsBackend({
+      name: "desk-liquid",
+      kind: "electrum",
+      chain: "liquid",
+      network: "liquidv1",
+      url: "ssl://liquid.example:995",
+      has_url: true,
+    });
+
+    expect(backendTypeIdForSettingsBackend(backend)).toBe("liquid");
+  });
+
+  it("lets the built-in liquid backend recover from an accidental bitcoin chain", () => {
+    const backend = backendRowToSettingsBackend({
+      name: "liquid",
+      kind: "electrum",
+      chain: "bitcoin",
+      network: "main",
+      url: "ssl://les.bullbitcoin.com:995",
+      has_url: true,
+    });
+
+    expect(backendTypeIdForSettingsBackend(backend)).toBe("liquid");
   });
 });

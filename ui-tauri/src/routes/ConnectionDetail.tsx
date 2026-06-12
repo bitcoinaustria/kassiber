@@ -140,6 +140,7 @@ const fmtShortTxid = (value?: string) =>
 
 const PLAINTEXT_CHANGE_ACK = "CHANGE LOCAL DATA";
 const PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA";
+const CLEAR_BACKEND_SELECTION = "__kassiber_clear_backend__";
 
 interface UpdateWalletResult {
   wallet: {
@@ -185,6 +186,15 @@ type WalletListItem = {
     payment_method_id: string;
   }>;
   samourai?: SamouraiWalletMetadata | null;
+};
+
+type BackendOption = {
+  name: string;
+  display_name?: string;
+  kind: string;
+  chain?: string;
+  network?: string;
+  is_default?: boolean;
 };
 
 interface SamouraiWalletMetadata {
@@ -248,6 +258,30 @@ function samouraiSourceLabel(value?: string) {
 function backendOptionLabel(backend: { name: string; display_name?: string }) {
   const label = backend.display_name?.trim() || backend.name;
   return label === backend.name ? label : `${label} (${backend.name})`;
+}
+
+function backendOptionChain(backend: Pick<BackendOption, "name" | "chain">) {
+  const chain = backend.chain?.trim().toLowerCase();
+  if (chain) return chain;
+  const name = backend.name.trim().toLowerCase();
+  return name === "liquid" || name === "liquid-blockstream"
+    ? "liquid"
+    : "bitcoin";
+}
+
+function isWalletLiveBackendSource(
+  connection: Pick<Connection, "kind" | "syncMode">,
+  wallet?: Pick<WalletListItem, "sync_mode">,
+) {
+  const syncMode = wallet?.sync_mode || connection.syncMode || "";
+  return (
+    syncMode === "backend_descriptor" ||
+    syncMode === "backend_addresses" ||
+    connection.kind === "descriptor" ||
+    connection.kind === "xpub" ||
+    connection.kind === "address" ||
+    connection.kind === "samourai"
+  );
 }
 
 export function ConnectionDetail() {
@@ -480,11 +514,6 @@ function ConnectionDetailView({
   const walletSyncsInFlight = useIsMutating({
     mutationKey: walletSyncMutationKey,
   });
-  const [syncProgress, setSyncProgress] = useState<{
-    wallet: string;
-    processed: number;
-    total: number;
-  } | null>(null);
   const progressValueRef = useRef(startingSyncProgress().value ?? 5);
   const syncWallet = useDaemonStreamMutation<
     { results: SyncResult[] },
@@ -492,11 +521,6 @@ function ConnectionDetailView({
   >("ui.wallets.sync", {
     onProgress: (record) => {
       const wallet = record.wallet ?? connection.label;
-      setSyncProgress({
-        wallet,
-        processed: record.processed ?? 0,
-        total: record.total ?? 0,
-      });
       if (syncNoticeIdRef.current) {
         const nextProgress = syncProgressNotification(
           { ...record, wallet },
@@ -515,12 +539,7 @@ function ConnectionDetailView({
   const deleteWallet =
     useDaemonMutation<DeleteWalletResult>("ui.wallets.delete");
   const backendOptionsQuery = useDaemon<{
-    backends: Array<{
-      name: string;
-      display_name?: string;
-      kind: string;
-      is_default?: boolean;
-    }>;
+    backends: BackendOption[];
   }>("ui.backends.options");
   const walletsListQuery = useDaemon<{
     wallets: WalletListItem[];
@@ -560,7 +579,7 @@ function ConnectionDetailView({
   const samouraiMetadata = walletDetail?.samourai ?? null;
   const samouraiInventory = coinsInventoryQuery.data?.data;
   const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
-  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [syncErrorMessage, setSyncErrorMessage] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editLabel, setEditLabel] = useState(connection.label);
   const [editPassphrase, setEditPassphrase] = useState("");
@@ -658,8 +677,7 @@ function ConnectionDetailView({
       });
       return;
     }
-    setSyncMessage(null);
-    setSyncProgress(null);
+    setSyncErrorMessage(null);
     progressValueRef.current = startingSyncProgress().value ?? 5;
     syncNoticeIdRef.current = addNotification({
       title: options?.forceFull
@@ -684,7 +702,9 @@ function ConnectionDetailView({
           );
           const status = result?.status ?? "synced";
           const message = describeWalletSyncResult(result, connection.label);
-          setSyncMessage(message);
+          if (status === "error") {
+            setSyncErrorMessage(message);
+          }
           const notification = {
             title: status === "error" ? "Connection refresh failed" : "Connection refresh finished",
             body: message,
@@ -701,7 +721,7 @@ function ConnectionDetailView({
         onError: (error) => {
           const message =
             error instanceof Error ? error.message : "Connection refresh failed.";
-          setSyncMessage(message);
+          setSyncErrorMessage(message);
           const notification = {
             title: "Connection refresh failed",
             body: message,
@@ -718,7 +738,6 @@ function ConnectionDetailView({
         onSettled: () => {
           clearSyncNotice();
           syncNoticeIdRef.current = null;
-          setSyncProgress(null);
           void queryClient.invalidateQueries({ queryKey: ["daemon"] });
         },
       },
@@ -744,6 +763,17 @@ function ConnectionDetailView({
   const btcpayBackendOptions = allBackendOptions.filter(
     (backend) => backend.kind === "btcpay",
   );
+  const walletChain = (walletDetail?.chain || "bitcoin").toLowerCase();
+  const canEditLiveBackend = isWalletLiveBackendSource(connection, walletDetail);
+  const liveBackendOptions = allBackendOptions.filter((backend) => {
+    const kind = backend.kind.trim().toLowerCase();
+    if (kind === "btcpay" || kind === "coreln" || kind === "lnd") return false;
+    return backendOptionChain(backend) === walletChain;
+  });
+  const canClearLiveBackend =
+    canEditLiveBackend &&
+    walletChain !== "liquid" &&
+    walletDetail?.backend?.source === "explicit";
 
   const editConfigKind = editConfigKindForConnection(connection);
 
@@ -788,6 +818,7 @@ function ConnectionDetailView({
     const backend = editBackend.trim();
     const sourceFile = editSourceFile.trim();
     const configChanges: Record<string, unknown> = {};
+    const clearFields: string[] = [];
     if (editConfigKind === "descriptor" && walletMaterial) {
       const detection = detectWalletMaterial(walletMaterial);
       if (detection.kind === "bare-xpub" || detection.kind === "unknown") {
@@ -817,10 +848,20 @@ function ConnectionDetailView({
       if (paymentMethodId) configChanges.payment_method_id = paymentMethodId;
       if (backend) configChanges.backend = backend;
     }
+    if (canEditLiveBackend && editConfigKind !== "btcpay") {
+      if (backend === CLEAR_BACKEND_SELECTION) {
+        clearFields.push("backend");
+      } else if (
+        backend &&
+        (backend !== walletDetail?.backend?.name ||
+          walletDetail?.backend?.source !== "explicit")
+      ) {
+        configChanges.backend = backend;
+      }
+    }
     if (editConfigKind === "file-wallet" && sourceFile) {
       configChanges.source_file = sourceFile;
     }
-    const clearFields: string[] = [];
     if (editClearProvenance && walletProvenanceRoutes.length > 0) {
       clearFields.push("btcpay_provenance");
     }
@@ -987,47 +1028,13 @@ function ConnectionDetailView({
             </DropdownMenu>
           </div>
         </CardContent>
-        {syncProgress && syncWallet.isPending ? (
-          <div className="px-4 pt-3">
-            <div className="space-y-1 rounded-md border bg-background px-3 py-2 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">
-                  Importing {syncProgress.wallet}…
-                </span>
-                <span className="font-medium tabular-nums">
-                  {syncProgress.processed.toLocaleString()} /{" "}
-                  {syncProgress.total.toLocaleString()} transactions
-                </span>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full bg-primary transition-all"
-                  style={{
-                    width:
-                      syncProgress.total > 0
-                        ? `${Math.min(
-                            100,
-                            (syncProgress.processed / syncProgress.total) * 100,
-                          )}%`
-                        : "0%",
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        ) : null}
-        {syncMessage && (
+        {syncErrorMessage && (
           <div className="px-4 pt-3">
             <div
-              className={cn(
-                "rounded-md border px-3 py-2 text-sm",
-                syncWallet.isError
-                  ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
-                  : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300",
-              )}
+              className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
               role="status"
             >
-              {syncMessage}
+              {syncErrorMessage}
             </div>
           </div>
         )}
@@ -1384,6 +1391,41 @@ function ConnectionDetailView({
                 onChange={(event) => setEditLabel(event.target.value)}
               />
             </div>
+            {canEditLiveBackend && editConfigKind !== "btcpay" ? (
+              <div className="space-y-2">
+                <Label htmlFor="connection-edit-backend">Sync backend</Label>
+                <select
+                  id="connection-edit-backend"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={editBackend}
+                  onChange={(event) => setEditBackend(event.target.value)}
+                >
+                  <option value="">
+                    Keep current backend
+                    {walletDetail?.backend?.name
+                      ? ` (${walletDetail.backend.name})`
+                      : ""}
+                  </option>
+                  {canClearLiveBackend ? (
+                    <option value={CLEAR_BACKEND_SELECTION}>
+                      Use default Bitcoin backend
+                    </option>
+                  ) : null}
+                  {liveBackendOptions.map((backend) => (
+                    <option key={backend.name} value={backend.name}>
+                      {backendOptionLabel(backend)}
+                      {backend.network ? ` · ${backend.network}` : ""}
+                      {backend.is_default ? " (default)" : ""}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  {walletChain === "liquid"
+                    ? "Liquid wallet sources require an explicit Liquid backend."
+                    : "Choose a backend for only this wallet source."}
+                </p>
+              </div>
+            ) : null}
             {editConfigKind === "descriptor" ? (
               <div className="space-y-2">
                 <Label htmlFor="connection-edit-material">

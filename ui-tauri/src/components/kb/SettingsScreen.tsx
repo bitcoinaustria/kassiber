@@ -44,7 +44,8 @@ import {
 } from "./settingsSections";
 import { AppearanceSettingsPanel } from "./settings/AppearanceSettingsPanel";
 import { AiProvidersSettingsPanel } from "./settings/AiProvidersSettingsPanel";
-import { SyncBackendSettingsModal, backendTypeIdForConnectionSetup, type SyncBackendNetwork } from "./settings/SyncBackendSettingsModal";
+import { SyncBackendSettingsModal, type SyncBackendNetwork } from "./settings/SyncBackendSettingsModal";
+import { backendTypeIdForConnectionSetup } from "./settings/SyncBackendSettingsModel";
 import { DataStorageSettingsPanel } from "./settings/DataStorageSettingsPanel";
 import { DeveloperToolsSettingsPanel } from "./settings/DeveloperToolsSettingsPanel";
 import { MarketDataSettingsPanel } from "./settings/MarketDataSettingsPanel";

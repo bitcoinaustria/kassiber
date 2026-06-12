@@ -615,6 +615,24 @@ export const mockDaemon: DaemonTransport = {
               connection.label.toLowerCase().includes("l-btc")
                 ? "liquid"
                 : "bitcoin",
+            network:
+              connection.label.toLowerCase().includes("liquid") ||
+              connection.label.toLowerCase().includes("l-btc")
+                ? "liquidv1"
+                : "main",
+            backend: {
+              name:
+                connection.label.toLowerCase().includes("liquid") ||
+                connection.label.toLowerCase().includes("l-btc")
+                  ? "liquid"
+                  : "mempool",
+              source: "explicit",
+              kind:
+                connection.label.toLowerCase().includes("liquid") ||
+                connection.label.toLowerCase().includes("l-btc")
+                  ? "electrum"
+                  : "esplora",
+            },
             sync_mode: connection.syncMode ?? "descriptor",
             sync_source: connection.syncSource ?? "",
             transaction_count: 1,
@@ -1335,6 +1353,8 @@ export const mockDaemon: DaemonTransport = {
         wallet_material?: unknown;
         source_file?: unknown;
         gap_limit?: unknown;
+        backend?: unknown;
+        clear?: unknown;
       };
       const walletRef = typeof args.wallet === "string" ? args.wallet : "";
       const label = typeof args.label === "string" ? args.label.trim() : "";
@@ -1348,7 +1368,9 @@ export const mockDaemon: DaemonTransport = {
           args.wallet_material.trim().length > 0) ||
         (typeof args.source_file === "string" &&
           args.source_file.trim().length > 0) ||
-        typeof args.gap_limit === "number";
+        typeof args.gap_limit === "number" ||
+        (typeof args.backend === "string" && args.backend.trim().length > 0) ||
+        (Array.isArray(args.clear) && args.clear.length > 0);
       if (!connection || (!label && !hasConfigChange)) {
         return {
           kind: "error",
@@ -2716,6 +2738,26 @@ export const mockDaemon: DaemonTransport = {
             "Simulated content-type: application/json",
             "Simulated body: 256 bytes sampled",
           ],
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.backends.options") {
+      return {
+        kind: "ui.backends.options",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          backends: mockBackendSettingsRows.map((row) => ({
+            name: row.name,
+            display_name: row.display_name,
+            kind: row.kind,
+            chain: row.chain,
+            network: row.network,
+            is_default: row.is_default,
+            has_url: row.has_url,
+          })),
+          summary: mockBackendSettingsPayload().summary,
         } as T,
       };
     }
