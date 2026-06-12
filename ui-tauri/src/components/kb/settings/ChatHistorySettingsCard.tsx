@@ -53,7 +53,9 @@ export function ChatHistorySettingsCard() {
   const sessionCount = sessionsQuery.data?.data?.sessions?.length ?? 0;
 
   const effectiveLine = config.history_enabled
-    ? "Chats are currently stored inside the (encrypted) database."
+    ? config.database_encrypted
+      ? "Chats are currently stored inside the encrypted database."
+      : "Chats are currently stored inside the unencrypted database because history is set to on."
     : config.database_encrypted
       ? "Chats are not stored."
       : mode === "auto"
