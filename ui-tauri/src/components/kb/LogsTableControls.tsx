@@ -20,7 +20,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
-  appLogLevels,
   type AppLogLevel,
   type AppLogRecord,
 } from "@/lib/appLogs";
@@ -31,7 +30,6 @@ const LEVEL_FILTER_ORDER: AppLogLevel[] = ["error", "warning", "info", "debug", 
 export type LogLevelFilter = AppLogLevel | "all";
 
 interface LogsTableControlsProps {
-  captureLevel: AppLogLevel;
   hasTableFilters: boolean;
   levelFilter: LogLevelFilter;
   maskAmounts: boolean;
@@ -42,7 +40,6 @@ interface LogsTableControlsProps {
   regex: boolean;
   searchInputId: string;
   settingsActive: boolean;
-  onCaptureLevelChange: (level: AppLogLevel) => void;
   onClearFilters: () => void;
   onLevelFilterChange: (level: LogLevelFilter) => void;
   onMaskAmountsChange: (maskAmounts: boolean) => void;
@@ -53,7 +50,6 @@ interface LogsTableControlsProps {
 }
 
 export function LogsTableControls({
-  captureLevel,
   hasTableFilters,
   levelFilter,
   maskAmounts,
@@ -64,7 +60,6 @@ export function LogsTableControls({
   regex,
   searchInputId,
   settingsActive,
-  onCaptureLevelChange,
   onClearFilters,
   onLevelFilterChange,
   onMaskAmountsChange,
@@ -144,12 +139,10 @@ export function LogsTableControls({
           onModuleFilterChange={onModuleFilterChange}
         />
         <LogSettingsMenu
-          captureLevel={captureLevel}
           maskAmounts={maskAmounts}
           redacted={redacted}
           regex={regex}
           settingsActive={settingsActive}
-          onCaptureLevelChange={onCaptureLevelChange}
           onMaskAmountsChange={onMaskAmountsChange}
           onRedactedChange={onRedactedChange}
           onRegexChange={onRegexChange}
@@ -252,22 +245,18 @@ function LogFilterMenu({
 }
 
 function LogSettingsMenu({
-  captureLevel,
   maskAmounts,
   redacted,
   regex,
   settingsActive,
-  onCaptureLevelChange,
   onMaskAmountsChange,
   onRedactedChange,
   onRegexChange,
 }: {
-  captureLevel: AppLogLevel;
   maskAmounts: boolean;
   redacted: boolean;
   regex: boolean;
   settingsActive: boolean;
-  onCaptureLevelChange: (level: AppLogLevel) => void;
   onMaskAmountsChange: (maskAmounts: boolean) => void;
   onRedactedChange: (redacted: boolean) => void;
   onRegexChange: (regex: boolean) => void;
@@ -289,19 +278,6 @@ function LogSettingsMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>Log settings</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="font-mono text-xs text-muted-foreground">
-          Capture level
-        </DropdownMenuLabel>
-        {appLogLevels().map((item) => (
-          <DropdownMenuCheckboxItem
-            key={item}
-            checked={captureLevel === item}
-            onCheckedChange={() => onCaptureLevelChange(item)}
-          >
-            {item.toUpperCase()}
-          </DropdownMenuCheckboxItem>
-        ))}
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="font-mono text-xs text-muted-foreground">
           Search

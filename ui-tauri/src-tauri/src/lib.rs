@@ -283,6 +283,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.documents.list",
     "ui.documents.create",
     "ui.documents.attach",
+    "ui.logs.snapshot",
 ];
 
 /// Kinds that may emit intermediate stream records (kind = "<request_kind>.delta",
@@ -520,6 +521,18 @@ fn attach_secret_store_policy_status(response: &mut Value) {
 }
 
 #[tauri::command]
+fn daemon_lifecycle_snapshot(
+    state: State<'_, Arc<DaemonSupervisor>>,
+    after_id: u64,
+) -> Result<Value, String> {
+    let (records, last_id) = state.lifecycle_snapshot(after_id);
+    Ok(json!({
+        "records": records,
+        "lastId": last_id,
+    }))
+}
+
+#[tauri::command]
 fn open_exported_file(path: String) -> Result<(), String> {
     let requested = PathBuf::from(path);
     if !requested.is_absolute() {
@@ -734,7 +747,8 @@ fn copy_report_export_directory(source: &Path, destination: &Path) -> Result<(),
     for entry in std::fs::read_dir(source)
         .map_err(|error| format!("Could not read managed report export: {error}"))?
     {
-        let entry = entry.map_err(|error| format!("Could not read report export entry: {error}"))?;
+        let entry =
+            entry.map_err(|error| format!("Could not read report export entry: {error}"))?;
         let source_path = entry.path();
         let destination_path = destination.join(entry.file_name());
         let entry_metadata = entry
@@ -1858,6 +1872,7 @@ pub fn run() {
         .on_menu_event(handle_app_menu_event)
         .invoke_handler(tauri::generate_handler![
             daemon_invoke,
+            daemon_lifecycle_snapshot,
             open_exported_file,
             open_attachment_file,
             save_exported_file_as,
@@ -2394,8 +2409,8 @@ mod tests {
     use super::{
         copy_report_export_directory, database_is_encrypted,
         ensure_export_destination_outside_managed_root, inspect_import_project_directory,
-        inspect_terminal_command, is_managed_report_export_path,
-        is_supported_audit_package_dir, is_supported_austrian_csv_bundle_dir, is_supported_export_file,
+        inspect_terminal_command, is_managed_report_export_path, is_supported_audit_package_dir,
+        is_supported_austrian_csv_bundle_dir, is_supported_export_file,
         is_supported_report_export_target, menu_action, menu_action_for_deep_link,
         menu_action_for_id, navigate_action, open_settings_action, path_is_on_path,
         terminal_command_contents, terminal_command_path_hint, validated_attachment_file_path,
@@ -2683,6 +2698,19 @@ mod tests {
             "ui.attachments.remove",
             "ui.attachments.open",
         ];
+        for kind in required {
+            assert!(
+                ALLOWED_DAEMON_KINDS.contains(kind),
+                "daemon kind missing from Tauri allowlist: {kind}"
+            );
+        }
+    }
+
+    #[test]
+    fn logs_daemon_kinds_are_in_allowlist() {
+        // The Logs screen polls the daemon ring through this read-only kind;
+        // packaged desktop mode rejects any unlisted kind.
+        let required: &[&str] = &["ui.logs.snapshot"];
         for kind in required {
             assert!(
                 ALLOWED_DAEMON_KINDS.contains(kind),

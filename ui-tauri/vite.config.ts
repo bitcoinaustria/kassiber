@@ -31,6 +31,7 @@ const NODE_MODULES_REALPATH = (() => {
 })();
 const ALLOWED_BRIDGE_KINDS = new Set([
   "status",
+  "ui.logs.snapshot",
   "ui.overview.snapshot",
   "ui.workspace.overview.snapshot",
   "ui.transactions.list",

@@ -262,6 +262,17 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
             "and ui-tauri/vite.config.ts).",
         )
 
+    def test_logs_snapshot_kind_is_allowed_by_desktop_boundaries(self):
+        """The RAM-only log bridge polls ``ui.logs.snapshot`` from both desktop
+        shells. It must stay in the daemon's supported kinds and both forwarding
+        allowlists or the Logs screen silently loses the daemon/supervisor layers
+        (``kind_not_allowed`` in packaged mode, HTTP 403 in dev-browser mode).
+        """
+
+        self.assertIn("ui.logs.snapshot", set(SUPPORTED_KINDS))
+        self.assertIn("ui.logs.snapshot", self._rust_allowlist())
+        self.assertIn("ui.logs.snapshot", self._vite_allowlist())
+
     def test_refresh_kinds_are_stream_capable_in_desktop_boundaries(self):
         tauri_streaming = re.search(
             r"STREAMING_DAEMON_KINDS[^=]*=\s*&\[(?P<body>.*?)\];",

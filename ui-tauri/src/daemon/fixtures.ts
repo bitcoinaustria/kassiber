@@ -40,6 +40,14 @@ export const fixtures: Record<string, unknown> = {
     workspace: null,
     profile: null,
   },
+  "ui.logs.snapshot": {
+    records: [],
+    last_id: 0,
+    gap: false,
+    started_at: "mock",
+    buffer_bytes: 0,
+    max_bytes: 4194304,
+  },
   "ui.overview.snapshot": MOCK_OVERVIEW,
   "ui.workspace.overview.snapshot": MOCK_WORKSPACE_OVERVIEW,
   "ui.connections.node.snapshot": {

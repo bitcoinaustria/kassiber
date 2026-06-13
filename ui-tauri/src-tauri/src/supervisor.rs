@@ -2,8 +2,9 @@ use crate::secret_store::{
     current_ai_provider_secret_store_policy, current_secret_store_platform,
     native_store_id_for_platform, NativeSecretStore, SecretStore, STORE_ID_SQLCIPHER_INLINE,
 };
+use serde::Serialize;
 use serde_json::{json, Map, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::env;
 use std::io::{BufRead, BufReader, Read, Write};
 #[cfg(target_os = "windows")]
@@ -14,7 +15,7 @@ use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
     mpsc, Arc, Mutex,
 };
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 
 // Packaged one-file Python sidecars can take longer than a development checkout
@@ -26,6 +27,7 @@ const DAEMON_INVOKE_TIMEOUT: Duration = Duration::from_secs(15);
 /// as the daemon keeps producing output within the window.
 const DAEMON_STREAM_INACTIVITY_TIMEOUT: Duration = Duration::from_secs(90);
 const STDERR_TAIL_LIMIT: usize = 16 * 1024;
+const LIFECYCLE_RING_CAPACITY: usize = 64;
 
 #[cfg(target_os = "windows")]
 fn hide_console_window(command: &mut Command) {
@@ -57,7 +59,23 @@ pub struct DaemonSupervisor {
     data_root: Mutex<Option<PathBuf>>,
     next_request_id: AtomicU64,
     secret_store: SharedSecretStore,
+    lifecycle: Mutex<VecDeque<LifecycleRecord>>,
+    next_lifecycle_id: AtomicU64,
     event_sink: SharedEventSink,
+}
+
+/// Daemon lifecycle event kept for the diagnostics screen. `detail` and
+/// `stderr_tail` are secret-floor redacted at insert so raw daemon stderr
+/// never sits in the ring.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LifecycleRecord {
+    pub id: u64,
+    pub ts_ms: u64,
+    pub event: &'static str,
+    pub detail: String,
+    pub stderr_tail: String,
+    pub source: &'static str,
 }
 
 struct DaemonProcess {
@@ -294,6 +312,8 @@ impl DaemonSupervisor {
             data_root: Mutex::new(None),
             next_request_id: AtomicU64::new(1),
             secret_store: Arc::new(NativeSecretStore),
+            lifecycle: Mutex::new(VecDeque::new()),
+            next_lifecycle_id: AtomicU64::new(1),
             event_sink: Arc::new(Mutex::new(None)),
         }
     }
@@ -306,6 +326,8 @@ impl DaemonSupervisor {
             data_root: Mutex::new(None),
             next_request_id: AtomicU64::new(1),
             secret_store: Arc::new(NativeSecretStore),
+            lifecycle: Mutex::new(VecDeque::new()),
+            next_lifecycle_id: AtomicU64::new(1),
             event_sink: Arc::new(Mutex::new(None)),
         }
     }
@@ -321,6 +343,8 @@ impl DaemonSupervisor {
             data_root: Mutex::new(None),
             next_request_id: AtomicU64::new(1),
             secret_store,
+            lifecycle: Mutex::new(VecDeque::new()),
+            next_lifecycle_id: AtomicU64::new(1),
             event_sink: Arc::new(Mutex::new(None)),
         }
     }
@@ -364,18 +388,87 @@ impl DaemonSupervisor {
         if *configured == data_root {
             return Ok(());
         }
-        let replacement = Arc::new(DaemonProcess::spawn(
-            self.resource_dir.as_deref(),
-            data_root.clone(),
-            Arc::clone(&self.secret_store),
-            Arc::clone(&self.event_sink),
-        )?);
+        let replacement = self.spawn_daemon(data_root.clone())?;
         if let Some(process) = slot.replace(replacement) {
+            let stderr_tail = process.stderr_tail();
             process.mark_broken();
             process.kill();
+            self.record_lifecycle("replaced", "data root changed", &stderr_tail, "");
         }
         *configured = data_root;
         Ok(())
+    }
+
+    fn spawn_daemon(
+        &self,
+        data_root: Option<PathBuf>,
+    ) -> Result<Arc<DaemonProcess>, SupervisorError> {
+        let mut args = Vec::new();
+        if let Some(data_root) = &data_root {
+            args.push("--data-root".into());
+            args.push(data_root.to_string_lossy().to_string());
+        }
+        args.push("daemon".into());
+        let command = kassiber_command(self.resource_dir.as_deref(), args);
+        let source = command.source;
+        match DaemonProcess::spawn_command_with_secret_store(
+            command,
+            Arc::clone(&self.secret_store),
+            Arc::clone(&self.event_sink),
+        ) {
+            Ok(process) => {
+                self.record_lifecycle("spawned", "daemon ready", "", source);
+                Ok(Arc::new(process))
+            }
+            Err(error) => {
+                self.record_lifecycle(
+                    "spawn_failed",
+                    &error.message,
+                    &error_stderr_tail(&error),
+                    source,
+                );
+                Err(error)
+            }
+        }
+    }
+
+    fn record_lifecycle(
+        &self,
+        event: &'static str,
+        detail: &str,
+        stderr_tail: &str,
+        source: &'static str,
+    ) {
+        let record = LifecycleRecord {
+            id: self.next_lifecycle_id.fetch_add(1, Ordering::SeqCst),
+            ts_ms: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|elapsed| elapsed.as_millis() as u64)
+                .unwrap_or(0),
+            event,
+            detail: redact_sensitive_text(detail),
+            stderr_tail: redact_sensitive_text(stderr_tail),
+            source,
+        };
+        if let Ok(mut ring) = self.lifecycle.lock() {
+            if ring.len() == LIFECYCLE_RING_CAPACITY {
+                ring.pop_front();
+            }
+            ring.push_back(record);
+        }
+    }
+
+    pub fn lifecycle_snapshot(&self, after_id: u64) -> (Vec<LifecycleRecord>, u64) {
+        let Ok(ring) = self.lifecycle.lock() else {
+            return (Vec::new(), 0);
+        };
+        let last_id = ring.back().map(|record| record.id).unwrap_or(0);
+        let records = ring
+            .iter()
+            .filter(|record| record.id > after_id)
+            .cloned()
+            .collect();
+        (records, last_id)
     }
 
     pub fn invoke(
@@ -430,7 +523,9 @@ impl DaemonSupervisor {
             process.unregister_request(&request_id);
             process.mark_broken();
             process.kill();
-            return Err(error.with_stderr_tail(process.stderr_tail()));
+            let stderr_tail = process.stderr_tail();
+            self.record_lifecycle("killed", error.code, &stderr_tail, "");
+            return Err(error.with_stderr_tail(stderr_tail));
         }
 
         // For streaming kinds we use a per-record inactivity timeout so a slow
@@ -454,6 +549,8 @@ impl DaemonSupervisor {
                 Err(mpsc::RecvTimeoutError::Timeout) => {
                     process.mark_broken();
                     process.kill();
+                    let stderr_tail = process.stderr_tail();
+                    self.record_lifecycle("killed", "daemon_timeout", &stderr_tail, "");
                     break Err(SupervisorError::new(
                         "daemon_timeout",
                         format!(
@@ -461,17 +558,19 @@ impl DaemonSupervisor {
                             remaining.as_secs()
                         ),
                     )
-                    .with_stderr_tail(process.stderr_tail())
+                    .with_stderr_tail(stderr_tail)
                     .retryable());
                 }
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
                     process.mark_broken();
                     process.kill();
+                    let stderr_tail = process.stderr_tail();
+                    self.record_lifecycle("killed", "daemon_exited", &stderr_tail, "");
                     break Err(SupervisorError::new(
                         "daemon_exited",
                         "Python daemon stdout reader stopped",
                     )
-                    .with_stderr_tail(process.stderr_tail())
+                    .with_stderr_tail(stderr_tail)
                     .retryable());
                 }
             };
@@ -487,8 +586,11 @@ impl DaemonSupervisor {
             {
                 process.mark_broken();
                 process.kill();
-                break Err(request_id_mismatch(&request_id, &response)
-                    .with_stderr_tail(process.stderr_tail()));
+                let stderr_tail = process.stderr_tail();
+                self.record_lifecycle("killed", "daemon_request_id_mismatch", &stderr_tail, "");
+                break Err(
+                    request_id_mismatch(&request_id, &response).with_stderr_tail(stderr_tail)
+                );
             }
 
             if response_kind == kind || response_kind == "error" || response_kind == "auth_required"
@@ -510,6 +612,8 @@ impl DaemonSupervisor {
 
             process.mark_broken();
             process.kill();
+            let stderr_tail = process.stderr_tail();
+            self.record_lifecycle("killed", "daemon_protocol_error", &stderr_tail, "");
             break Err(SupervisorError::new(
                 "daemon_protocol_error",
                 "Python daemon emitted a non-terminal record for a non-streaming request",
@@ -518,7 +622,7 @@ impl DaemonSupervisor {
                 "request_id": request_id,
                 "kind": response_kind,
             }))
-            .with_stderr_tail(process.stderr_tail()));
+            .with_stderr_tail(stderr_tail));
         };
         process.unregister_request(&request_id);
         result
@@ -537,7 +641,9 @@ impl DaemonSupervisor {
         let should_restart = match slot.as_ref() {
             Some(process) => {
                 if process.is_broken() {
+                    let stderr_tail = process.stderr_tail();
                     process.kill();
+                    self.record_lifecycle("killed", "daemon marked broken", &stderr_tail, "");
                     *slot = None;
                     true
                 } else {
@@ -545,6 +651,7 @@ impl DaemonSupervisor {
                         Ok(Some(status)) => {
                             let stderr_tail = process.stderr_tail();
                             *slot = None;
+                            self.record_lifecycle("exited", &status.to_string(), &stderr_tail, "");
                             return Err(SupervisorError::new(
                                 "daemon_exited",
                                 format!(
@@ -582,12 +689,7 @@ impl DaemonSupervisor {
                     .retryable()
                 })?
                 .clone();
-            *slot = Some(Arc::new(DaemonProcess::spawn(
-                self.resource_dir.as_deref(),
-                data_root,
-                Arc::clone(&self.secret_store),
-                Arc::clone(&self.event_sink),
-            )?));
+            *slot = Some(self.spawn_daemon(data_root)?);
         }
 
         slot.as_ref().cloned().ok_or_else(|| {
@@ -597,25 +699,6 @@ impl DaemonSupervisor {
 }
 
 impl DaemonProcess {
-    fn spawn(
-        resource_dir: Option<&Path>,
-        data_root: Option<PathBuf>,
-        secret_store: SharedSecretStore,
-        event_sink: SharedEventSink,
-    ) -> Result<Self, SupervisorError> {
-        let mut args = Vec::new();
-        if let Some(data_root) = data_root {
-            args.push("--data-root".into());
-            args.push(data_root.to_string_lossy().to_string());
-        }
-        args.push("daemon".into());
-        Self::spawn_command_with_secret_store(
-            kassiber_command(resource_dir, args),
-            secret_store,
-            event_sink,
-        )
-    }
-
     #[cfg(test)]
     fn spawn_command(command: DaemonCommand) -> Result<Self, SupervisorError> {
         Self::spawn_command_with_secret_store(
@@ -1374,6 +1457,16 @@ fn request_id_value_key(value: &Value) -> Option<&str> {
     value.as_str()
 }
 
+fn error_stderr_tail(error: &SupervisorError) -> String {
+    error
+        .details
+        .as_ref()
+        .and_then(|details| details.get("stderr_tail"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string()
+}
+
 fn attach_stderr_tail_to_internal_error(response: &mut Value, stderr_tail: String) {
     if stderr_tail.is_empty()
         || response.get("kind").and_then(Value::as_str) != Some("error")
@@ -1567,6 +1660,69 @@ mod tests {
         assert!(encoded.contains("[redacted]"));
     }
 
+    #[test]
+    fn lifecycle_ring_caps_at_64_records() {
+        let supervisor = DaemonSupervisor::new(None);
+        for index in 0..70u64 {
+            supervisor.record_lifecycle("spawn_failed", &format!("failure {index}"), "", "");
+        }
+        let (records, last_id) = supervisor.lifecycle_snapshot(0);
+        assert_eq!(records.len(), LIFECYCLE_RING_CAPACITY);
+        assert_eq!(last_id, 70);
+        assert_eq!(records.first().map(|record| record.id), Some(7));
+        assert_eq!(records.last().map(|record| record.id), Some(70));
+    }
+
+    #[test]
+    fn lifecycle_records_are_redacted_at_insert() {
+        let supervisor = DaemonSupervisor::new(None);
+        // 24-word mnemonic assignment: first word in the assignment, 23 tail words.
+        let stderr_tail = format!(
+            "api_key=sk-test-secret mnemonic=abandon{} art",
+            " abandon".repeat(22)
+        );
+        supervisor.record_lifecycle(
+            "killed",
+            "daemon rejected api_key=sk-test-secret",
+            &stderr_tail,
+            "env_python",
+        );
+        let (records, _) = supervisor.lifecycle_snapshot(0);
+        let record = records.first().expect("lifecycle record");
+        assert!(!record.detail.contains("sk-test-secret"));
+        assert!(record.detail.contains("[redacted]"));
+        assert!(!record.stderr_tail.contains("sk-test-secret"));
+        assert!(!record.stderr_tail.contains("abandon"));
+        assert!(!record.stderr_tail.contains("art"));
+        assert!(record.stderr_tail.contains("[redacted]"));
+        let encoded = serde_json::to_string(record).expect("record json");
+        assert!(encoded.contains("\"tsMs\""));
+        assert!(encoded.contains("\"stderrTail\""));
+        assert!(encoded.contains("\"source\":\"env_python\""));
+    }
+
+    #[test]
+    fn lifecycle_snapshot_filters_by_cursor() {
+        let supervisor = DaemonSupervisor::new(None);
+        let (records, last_id) = supervisor.lifecycle_snapshot(0);
+        assert!(records.is_empty());
+        assert_eq!(last_id, 0);
+
+        for index in 0..3u64 {
+            supervisor.record_lifecycle("spawned", &format!("spawn {index}"), "", "env_python");
+        }
+        let (records, last_id) = supervisor.lifecycle_snapshot(1);
+        assert_eq!(last_id, 3);
+        assert_eq!(
+            records.iter().map(|record| record.id).collect::<Vec<_>>(),
+            vec![2, 3]
+        );
+
+        let (records, last_id) = supervisor.lifecycle_snapshot(3);
+        assert!(records.is_empty());
+        assert_eq!(last_id, 3);
+    }
+
     #[cfg(unix)]
     fn response_pid(response: &Value) -> i64 {
         response
@@ -1607,6 +1763,9 @@ def emit(payload):
     with write_lock:
         sys.stdout.write(json.dumps(payload, separators=(",", ":")) + "\n")
         sys.stdout.flush()
+
+sys.stderr.write("stub-daemon startup api_key=sk-stub-stderr-secret\n")
+sys.stderr.flush()
 
 emit({"kind":"daemon.ready","schema_version":1,"data":{"version":"test","supported_kinds":["slow","fast","locked","secret-get","emit-event","daemon.shutdown"]}})
 
@@ -1747,11 +1906,10 @@ for line in sys.stdin:
     fn forwards_unsolicited_event_records_to_event_sink() {
         let (dir, script) = write_stub_daemon();
         let (event_tx, event_rx) = mpsc::channel();
-        let event_sink: SharedEventSink = Arc::new(Mutex::new(Some(Box::new(
-            move |record: &Value| {
+        let event_sink: SharedEventSink =
+            Arc::new(Mutex::new(Some(Box::new(move |record: &Value| {
                 let _ = event_tx.send(record.clone());
-            },
-        ) as EventSink)));
+            }) as EventSink)));
         let process = DaemonProcess::spawn_command_with_event_sink(
             DaemonCommand {
                 program: script,
@@ -1765,7 +1923,13 @@ for line in sys.stdin:
         let supervisor = DaemonSupervisor::new_with_process(process);
 
         let response = supervisor
-            .invoke_inner("emit-event", None, false, Some(json!("emit-event-1")), |_| {})
+            .invoke_inner(
+                "emit-event",
+                None,
+                false,
+                Some(json!("emit-event-1")),
+                |_| {},
+            )
             .expect("emit-event response despite preceding unsolicited event");
         assert_eq!(
             response.get("kind").and_then(Value::as_str),
@@ -1975,6 +2139,68 @@ for line in sys.stdin:
 
     #[test]
     #[cfg(unix)]
+    fn set_data_root_records_replaced_with_dying_process_tail() {
+        let (dir, script) = write_stub_daemon();
+        let sidecar = dir.join(sidecar_filename().expect("sidecar name"));
+        fs::rename(&script, &sidecar).expect("install stub sidecar");
+        let supervisor = DaemonSupervisor::new(Some(dir.clone()));
+        let first_root = dir.join("first-root");
+        fs::create_dir_all(&first_root).expect("create first root");
+        supervisor
+            .set_data_root(first_root)
+            .expect("spawn first daemon");
+
+        // The stub writes its stderr line at startup but the tail thread reads
+        // it asynchronously; wait for it so the dying process's tail is
+        // guaranteed to be non-empty when the replacement lands.
+        let first_process = supervisor
+            .process
+            .lock()
+            .expect("process slot")
+            .as_ref()
+            .cloned()
+            .expect("first daemon process");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !first_process.stderr_tail().contains("stub-daemon startup") {
+            assert!(
+                Instant::now() < deadline,
+                "stub daemon stderr tail was not captured"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+
+        let second_root = dir.join("second-root");
+        fs::create_dir_all(&second_root).expect("create second root");
+        supervisor
+            .set_data_root(second_root)
+            .expect("replace daemon");
+
+        let (records, last_id) = supervisor.lifecycle_snapshot(0);
+        assert_eq!(
+            records
+                .iter()
+                .map(|record| record.event)
+                .collect::<Vec<_>>(),
+            vec!["spawned", "spawned", "replaced"]
+        );
+        assert_eq!(last_id, 3);
+        let replaced = records.last().expect("replaced record");
+        assert!(replaced.stderr_tail.contains("stub-daemon startup"));
+        assert!(!replaced.stderr_tail.contains("sk-stub-stderr-secret"));
+        assert!(replaced.stderr_tail.contains("api_key=[redacted]"));
+
+        let _ = supervisor.invoke_inner(
+            "daemon.shutdown",
+            None,
+            false,
+            Some(json!("shutdown-replaced-record")),
+            |_| {},
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
     fn set_data_root_same_root_reuses_existing_daemon() {
         let (dir, script) = write_stub_daemon();
         let sidecar = dir.join(sidecar_filename().expect("sidecar name"));
@@ -2045,6 +2271,8 @@ for line in sys.stdin:
             data_root: Mutex::new(None),
             next_request_id: AtomicU64::new(1),
             secret_store: Arc::new(NativeSecretStore),
+            lifecycle: Mutex::new(VecDeque::new()),
+            next_lifecycle_id: AtomicU64::new(1),
             event_sink: Arc::new(Mutex::new(None)),
         };
 

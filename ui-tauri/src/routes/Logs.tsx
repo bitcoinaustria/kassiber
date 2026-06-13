@@ -39,10 +39,8 @@ import {
   formatLogRecord,
   getAppLogBufferSize,
   getAppLogRecords,
-  getAppLogSubscriptionLevel,
   logFilename,
   redactLogRecord,
-  setAppLogSubscriptionLevel,
   subscribeAppLogRecords,
   supportBundleFilename,
   type AppLogField,
@@ -73,9 +71,6 @@ const SEARCH_INPUT_ID = "kb-logs-search";
 export function Logs() {
   const addNotification = useUiStore((s) => s.addNotification);
   const records = useAppLogRecords();
-  const [captureLevel, setCaptureLevel] = React.useState<AppLogLevel>(
-    getAppLogSubscriptionLevel(),
-  );
   const [levelFilter, setLevelFilter] = React.useState<LogLevelFilter>("all");
   const [redacted, setRedacted] = React.useState(true);
   const [maskAmounts, setMaskAmounts] = React.useState(false);
@@ -98,10 +93,6 @@ export function Logs() {
     100,
     Math.round((bufferBytes / APP_LOG_MAX_BYTES) * 100),
   );
-
-  React.useEffect(() => {
-    setAppLogSubscriptionLevel(captureLevel);
-  }, [captureLevel]);
 
   React.useEffect(() => {
     if (redacted) {
@@ -166,7 +157,7 @@ export function Logs() {
   );
   const hasTableFilters = Boolean(query.trim()) || levelFilter !== "all" || Boolean(moduleFilter);
   const isEmptyBecauseFilters = records.length > 0 && filteredRecords.length === 0;
-  const settingsActive = captureLevel !== "info" || regex || !redacted || maskAmounts;
+  const settingsActive = regex || !redacted || maskAmounts;
 
   const supportBundlePreview = React.useMemo(() => {
     if (!supportBundleOpen) return "";
@@ -175,7 +166,6 @@ export function Logs() {
       issueDescription: supportIssueDescription || "Preview issue description",
       mode: supportBundleMode,
       generatedAt: new Date().toISOString(),
-      captureLevel,
       levelFilter,
       moduleFilter,
       query,
@@ -185,7 +175,6 @@ export function Logs() {
       .slice(0, SUPPORT_BUNDLE_PREVIEW_LINES)
       .join("\n");
   }, [
-    captureLevel,
     levelFilter,
     moduleFilter,
     query,
@@ -221,7 +210,7 @@ export function Logs() {
         os: osLabel(),
         generatedAt: new Date().toISOString(),
         timeRange: timeRangeLabel(filteredRecords),
-        activeFilter: filterLabel(captureLevel, levelFilter, moduleFilter, query, regex),
+        activeFilter: filterLabel(levelFilter, moduleFilter, query, regex),
         redaction,
       },
     });
@@ -263,7 +252,6 @@ export function Logs() {
       issueDescription: description,
       mode: supportBundleMode,
       generatedAt,
-      captureLevel,
       levelFilter,
       moduleFilter,
       query,
@@ -470,7 +458,6 @@ export function Logs() {
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card">
         <LogsTableControls
-          captureLevel={captureLevel}
           hasTableFilters={hasTableFilters}
           levelFilter={levelFilter}
           maskAmounts={maskAmounts}
@@ -481,7 +468,6 @@ export function Logs() {
           regex={regex}
           searchInputId={SEARCH_INPUT_ID}
           settingsActive={settingsActive}
-          onCaptureLevelChange={setCaptureLevel}
           onClearFilters={clearTableFilters}
           onLevelFilterChange={setLevelFilter}
           onMaskAmountsChange={setMaskAmounts}
@@ -521,12 +507,17 @@ export function Logs() {
             {visibleRecords.length === 0 ? (
               <div className="flex h-full min-h-64 flex-col items-center justify-center gap-1 text-sm text-muted-foreground">
                 <span>{isEmptyBecauseFilters ? "No matching log records" : "Waiting for daemon traffic…"}</span>
-                <span className="text-xs">
-                  Capture ≥ {captureLevel.toUpperCase()}
-                  {levelFilter !== "all" ? ` · level ${levelFilter}` : ""}
-                  {moduleFilter ? ` · module ${moduleFilter}` : ""}
-                  {query ? ` · search "${query}"` : ""}
-                </span>
+                {hasTableFilters ? (
+                  <span className="text-xs">
+                    {[
+                      levelFilter !== "all" ? `level ${levelFilter}` : null,
+                      moduleFilter ? `module ${moduleFilter}` : null,
+                      query ? `search "${query}"` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                ) : null}
               </div>
             ) : (
               <div className="min-w-[960px]">
@@ -574,7 +565,6 @@ function buildSupportBundleContents({
   issueDescription,
   mode,
   generatedAt,
-  captureLevel,
   levelFilter,
   moduleFilter,
   query,
@@ -584,7 +574,6 @@ function buildSupportBundleContents({
   issueDescription: string;
   mode: AppLogRedactionMode;
   generatedAt: string;
-  captureLevel: AppLogLevel;
   levelFilter: LogLevelFilter;
   moduleFilter: string | null;
   query: string;
@@ -599,7 +588,6 @@ function buildSupportBundleContents({
       generatedAt,
       timeRange: timeRangeLabel(records),
       activeFilter: `support_bundle=all_records, ui_filter=(${filterLabel(
-        captureLevel,
         levelFilter,
         moduleFilter,
         query,
@@ -789,14 +777,12 @@ function timeRangeLabel(records: AppLogRecord[]): string {
 }
 
 function filterLabel(
-  captureLevel: AppLogLevel,
   levelFilter: LogLevelFilter,
   moduleFilter: string | null,
   query: string,
   regex: boolean,
 ): string {
   return [
-    `capture>=${captureLevel}`,
     levelFilter === "all" ? "level=all" : `level=${levelFilter}`,
     moduleFilter ? `module=${moduleFilter}` : "module=all",
     query ? `search=${regex ? "regex:" : ""}${query}` : "search=none",
