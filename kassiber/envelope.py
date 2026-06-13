@@ -74,6 +74,7 @@ _KIND_SUBCOMMAND_ATTRS = (
     "payouts_command",
     "transfers_rules_command",
     "views_command",
+    "chats_command",
     "btcpay_command",
     "btcpay_provenance_command",
     "documents_command",
@@ -132,6 +133,18 @@ def build_envelope(kind, data, envelope_meta=None):
     envelope = {"kind": kind, "schema_version": SCHEMA_VERSION, "data": json_ready(data)}
     envelope.update(_normalized_envelope_meta(envelope_meta))
     return envelope
+
+
+def build_event_envelope(kind, data):
+    """Build an unsolicited daemon→UI event envelope.
+
+    Event envelopes carry a top-level `event: true` marker and never a
+    `request_id`. The desktop supervisor forwards them to the
+    `daemon://event` channel instead of routing them as request
+    responses; any other post-ready record without a `request_id` is a
+    fatal protocol error there.
+    """
+    return build_envelope(kind, data, envelope_meta={"event": True})
 
 
 def build_error_envelope(code, message, details=None, hint=None, retryable=False, debug=None):

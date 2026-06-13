@@ -41,6 +41,7 @@ import {
   KRAKEN_OHLCVT_SUPPORT_URL,
   type MaintenanceSettingsData,
   type MarketRateProvider,
+  marketRateProviderLabel,
   rateRebuildJournalError,
   rateRebuildTransactionProgress,
   type Backend,
@@ -48,11 +49,6 @@ import {
   type KrakenRatesImportOperation,
   type RateRebuildData,
 } from "./SettingsModel";
-
-const MARKET_RATE_PROVIDER_LABELS: Record<MarketRateProvider, string> = {
-  "coinbase-exchange": "Coinbase Exchange",
-  coingecko: "CoinGecko",
-};
 
 export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
   const rateBackends = backends.filter((backend) => backend.net === "FX");
@@ -189,12 +185,9 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
   const isRebuildingRates = rebuildRates.isPending;
   const maintenanceSettings = maintenanceSettingsQuery.data?.data ?? null;
   const freshnessSettings = maintenanceSettings?.settings ?? null;
-  // The market_rates source class governs every live provider contact: the
-  // background hourly refresh and the rate portion of a manual book refresh.
-  // Derive the toggle from the class alone so disabling it here actually stops
-  // Coinbase/CoinGecko contact on refresh, not just background polling.
   const autoMarketRatesEnabled = Boolean(
-    freshnessSettings?.source_classes?.market_rates,
+    freshnessSettings?.background_enabled &&
+      freshnessSettings.source_classes?.market_rates,
   );
   const autoMarketRatesDisabled =
     maintenanceSettingsQuery.isLoading ||
@@ -205,9 +198,8 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
   const marketRateProviderOptions: MarketRateProvider[] =
     freshnessSettings?.market_rate_providers?.length
       ? freshnessSettings.market_rate_providers
-      : ["coinbase-exchange", "coingecko"];
-  const marketRateProviderLabel =
-    MARKET_RATE_PROVIDER_LABELS[marketRateProvider] ?? marketRateProvider;
+      : ["coinbase-exchange", "coingecko", "mempool"];
+  const marketRateProviderLabelText = marketRateProviderLabel(marketRateProvider);
   const activeRatePair = freshnessSettings?.active_rate_pair ?? "BTC-fiat";
   const rateRebuildProgress = rateRebuildTransactionProgress(rateRebuildResult);
   const rateRebuildSamples =
@@ -221,7 +213,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
     setRateRebuildResult(null);
     rebuildNoticeRef.current = addNotification({
       title: "Pricing cache rebuild started",
-      body: `Kassiber is clearing provider-derived prices, fetching fresh ${marketRateProviderLabel} market rates for ${activeRatePair}, and reprocessing journals.`,
+      body: `Kassiber is clearing provider-derived prices, fetching fresh ${marketRateProviderLabelText} market rates for ${activeRatePair}, and reprocessing journals.`,
       tone: "warning",
       progress: {
         indeterminate: true,
@@ -250,7 +242,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
           ? `${formatCount(payload.deleted.transaction_prices)} cached transaction prices cleared; ${formatCount(
               fetchedRows,
             )} rate rows fetched.${journalBlocker ? ` ${journalBlocker}` : ""}`
-          : `${marketRateProviderLabel} pricing cache was rebuilt.`,
+          : `${marketRateProviderLabelText} pricing cache was rebuilt.`,
         tone: journalBlocker ? "warning" : "success",
         progress: undefined,
       } as const;
@@ -294,10 +286,10 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
         source_classes: sourceClasses,
       });
       addNotification({
-        title: enabled ? "Live market rates enabled" : "Live market rates disabled",
+        title: enabled ? "Automatic price refresh enabled" : "Automatic price refresh disabled",
         body: enabled
-          ? `Kassiber will fetch BTC market rates from ${marketRateProviderLabel} hourly and during a manual book refresh.`
-          : `Kassiber will stop contacting ${marketRateProviderLabel}; book refresh and reports will use only the offline price cache.`,
+          ? "Kassiber will refresh the latest BTC price while the app is open."
+          : "Kassiber will stop scheduling background BTC price refreshes.",
         tone: "success",
       });
     } catch (error) {
@@ -319,8 +311,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       });
       const selectedProvider =
         envelope.data?.settings.market_rate_provider ?? provider;
-      const selectedLabel =
-        MARKET_RATE_PROVIDER_LABELS[selectedProvider] ?? selectedProvider;
+      const selectedLabel = marketRateProviderLabel(selectedProvider);
       addNotification({
         title: "Market-rate provider updated",
         body: `Automatic price refresh and default rebuilds will use ${selectedLabel}.`,
@@ -370,7 +361,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
             <SelectContent>
               {marketRateProviderOptions.map((provider) => (
                 <SelectItem key={provider} value={provider}>
-                  {MARKET_RATE_PROVIDER_LABELS[provider] ?? provider}
+                  {marketRateProviderLabel(provider)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -389,21 +380,18 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
             htmlFor="market-data-auto-refresh"
             className="grid gap-1 text-sm leading-relaxed"
           >
-            <span>Refresh BTC market rates from {marketRateProviderLabel}</span>
+            <span>Keep BTC price current while the app is open</span>
             <span className="font-normal text-muted-foreground">
-              When on, Kassiber fetches a small latest {marketRateProviderLabel}{" "}
-              window roughly hourly and includes live market rates in a manual
-              book refresh, using the existing rate-limit backoff if the provider
-              asks Kassiber to wait. When off, refreshes and reports use only the
-              offline price cache and never contact {marketRateProviderLabel}.
+              Fetches a small latest {marketRateProviderLabelText} market window roughly hourly and
+              uses the existing rate-limit backoff if the provider asks Kassiber
+              to wait.
             </span>
           </Label>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          Wallet/source refresh remains controlled from Connections. Turn this
-          off to refresh sources and journals without any market-rate provider
-          connection; reports then rely on the bundled daily values and any
-          imported Kraken minute data.
+          Wallet/source refresh remains controlled from Connections; this setting
+          only updates market-rate cache rows used for fiat balance display and
+          missing transaction pricing coverage.
         </p>
       </div>
 
@@ -767,7 +755,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
           <DialogHeader>
             <DialogTitle>Rebuild pricing cache?</DialogTitle>
             <DialogDescription>
-              Kassiber will delete {marketRateProviderLabel} provider cache rows
+              Kassiber will delete {marketRateProviderLabelText} provider cache rows
               and refetch market rates for {activeRatePair}.
             </DialogDescription>
           </DialogHeader>

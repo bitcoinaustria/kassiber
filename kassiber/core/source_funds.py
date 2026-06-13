@@ -98,6 +98,10 @@ _MAX_BUILD_REPORT_EDGES = 5_000
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
 TransactionResolver = Callable[..., Mapping[str, Any]]
 FormatTable = Callable[..., list[str]]
+ExplorerBaseResolver = Callable[
+    [sqlite3.Connection, str, str],
+    Mapping[str, Any] | None,
+]
 
 
 @dataclass(frozen=True)
@@ -105,6 +109,7 @@ class SourceFundsHooks:
     resolve_scope: ScopeResolver
     resolve_transaction: TransactionResolver
     format_table: FormatTable
+    explorer_base: ExplorerBaseResolver | None = None
 
 
 def _now() -> str:
@@ -295,6 +300,8 @@ def _samourai_metadata_from_wallet_config(config_json: Any) -> dict[str, str] | 
 
 
 def _public_explorer_link(
+    conn: sqlite3.Connection,
+    hooks: SourceFundsHooks,
     txid: str,
     asset: Any,
     wallet_config_json: Any = None,
@@ -302,10 +309,17 @@ def _public_explorer_link(
     if not _PUBLIC_TXID_RE.fullmatch(str(txid or "").strip()):
         return None
     chain, network = _wallet_chain_network(wallet_config_json, asset)
-    explorer = _PUBLIC_EXPLORER_BASES.get((chain, network))
-    if not explorer:
+    configured = hooks.explorer_base(conn, chain, network) if hooks.explorer_base else None
+    if configured:
+        label = str(configured.get("label") or "Configured explorer")
+        base_url = str(configured.get("base_url") or "").rstrip("/")
+    else:
+        explorer = _PUBLIC_EXPLORER_BASES.get((chain, network))
+        if not explorer:
+            return None
+        label, base_url = explorer
+    if not base_url:
         return None
-    label, base_url = explorer
     return {
         "txid": txid,
         "asset": normalize_asset_code(str(asset or "")) or "BTC",
@@ -2170,6 +2184,8 @@ def build_report(
         if disclosed_txid:
             disclosure_txids.add(disclosed_txid)
             explorer_link = _public_explorer_link(
+                conn,
+                hooks,
                 disclosed_txid,
                 tx["asset"],
                 tx["wallet_config_json"],

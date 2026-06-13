@@ -1,22 +1,27 @@
 from __future__ import annotations
 
 import csv
+import http.client
 from importlib import resources
 import io
 import json
 import logging
 from pathlib import Path
+import ssl
 import tempfile
 import zipfile
 from datetime import datetime, timedelta, timezone
+from urllib import error as urlerror
 from urllib import parse as urlparse
 from urllib import request as urlrequest
 
 from .. import __version__
 from .. import http_client
+from ..backends import preferred_mempool_api_backend
 from ..db import APP_NAME, get_setting, set_setting
 from ..errors import AppError
 from . import pricing
+from .sync_backends import _connect_via_socks5
 from ..time_utils import _iso_z, _parse_iso_datetime
 
 logger = logging.getLogger(__name__)
@@ -24,20 +29,24 @@ logger = logging.getLogger(__name__)
 SUPPORTED_RATE_PAIRS = ("BTC-USD", "BTC-EUR")
 RATE_SOURCE_COINBASE_EXCHANGE = "coinbase-exchange"
 RATE_SOURCE_COINGECKO = "coingecko"
+RATE_SOURCE_MEMPOOL = "mempool"
 RATE_SOURCE_KRAKEN_CSV = "kraken-csv"
 SUPPORTED_RATE_SOURCES = (
     RATE_SOURCE_COINBASE_EXCHANGE,
+    RATE_SOURCE_MEMPOOL,
     RATE_SOURCE_KRAKEN_CSV,
     RATE_SOURCE_COINGECKO,
 )
 LIVE_MARKET_RATE_SOURCES = (
     RATE_SOURCE_COINBASE_EXCHANGE,
     RATE_SOURCE_COINGECKO,
+    RATE_SOURCE_MEMPOOL,
 )
 MARKET_RATE_PROVIDER_SETTING = "market_rate_provider"
 _COINGECKO_VS = {"USD": "usd", "EUR": "eur"}
 _COINGECKO_COIN = {"BTC": "bitcoin"}
 _COINBASE_EXCHANGE_PRODUCT = {"BTC-USD": "BTC-USD", "BTC-EUR": "BTC-EUR"}
+_MEMPOOL_PRICE_QUOTES = {"USD", "EUR"}
 _RATE_ASSET_ALIASES = {"LBTC": "BTC"}
 _KRAKEN_STABLECOIN_QUOTES = {"DAI", "USDC", "USDT"}
 _KRAKEN_SUPPORTED_QUOTES = {"EUR", "USD"}
@@ -170,7 +179,112 @@ def transaction_price_missing_sql_unqualified():
     return _transaction_price_missing_sql("")
 
 
-def http_get_json(url, timeout=30, *, _sleeper=None, _rng=None, _max_attempts=None):
+def _urlopen_with_proxy(request, url, timeout, proxy_url=None):
+    proxy = str(proxy_url or "").strip()
+    if not proxy:
+        return urlrequest.urlopen(request, timeout=timeout)
+    scheme = urlparse.urlsplit(proxy).scheme.lower()
+    if scheme in {"http", "https"}:
+        opener = urlrequest.build_opener(
+            urlrequest.ProxyHandler({"http": proxy, "https": proxy})
+        )
+        return opener.open(request, timeout=timeout)
+    if scheme not in {"socks5", "socks5h"}:
+        raise AppError(
+            f"Unsupported rate-provider proxy transport '{scheme or proxy}'",
+            code="validation",
+            hint="Use http://, https://, socks5://, or socks5h:// for market-rate proxy settings.",
+        )
+    return _SocksUrlResponse(url, proxy, timeout, dict(request.header_items()))
+
+
+class _SocksUrlResponse:
+    def __init__(self, url, proxy_url, timeout, headers):
+        self._url = url
+        self._proxy_url = proxy_url
+        self._timeout = timeout
+        self._headers = headers
+        self._connection = None
+        self._response = None
+
+    def __enter__(self):
+        parsed = urlparse.urlsplit(self._url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise AppError(
+                f"Unsupported rate-provider URL for proxy fetch: {self._url}",
+                code="validation",
+            )
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        target = urlparse.urlunsplit(("", "", parsed.path or "/", parsed.query, ""))
+        proxy_url = self._proxy_url
+        timeout = self._timeout
+
+        class SocksHTTPConnection(http.client.HTTPConnection):
+            def connect(self):
+                self.sock = _connect_via_socks5(
+                    proxy_url,
+                    parsed.hostname,
+                    port,
+                    timeout,
+                )
+
+        class SocksHTTPSConnection(http.client.HTTPSConnection):
+            def connect(self):
+                raw_sock = _connect_via_socks5(
+                    proxy_url,
+                    parsed.hostname,
+                    port,
+                    timeout,
+                )
+                context = ssl.create_default_context()
+                self.sock = context.wrap_socket(raw_sock, server_hostname=parsed.hostname)
+
+        connection_class = SocksHTTPSConnection if parsed.scheme == "https" else SocksHTTPConnection
+        self._connection = connection_class(parsed.hostname, port, timeout=timeout)
+        try:
+            self._connection.request("GET", target, headers=self._headers)
+            self._response = self._connection.getresponse()
+            if self._response.status >= 400:
+                body = self._response.read()
+                raise urlerror.HTTPError(
+                    self._url,
+                    self._response.status,
+                    self._response.reason,
+                    self._response.headers,
+                    io.BytesIO(body),
+                )
+        except urlerror.HTTPError:
+            self.close()
+            raise
+        except OSError as exc:
+            self.close()
+            raise urlerror.URLError(exc) from exc
+        return self
+
+    def read(self):
+        if self._response is None:
+            return b""
+        return self._response.read()
+
+    def close(self):
+        if self._connection is not None:
+            self._connection.close()
+            self._connection = None
+
+    def __exit__(self, exc_type, exc, traceback):
+        self.close()
+        return False
+
+
+def http_get_json(
+    url,
+    timeout=30,
+    *,
+    proxy_url=None,
+    _sleeper=None,
+    _rng=None,
+    _max_attempts=None,
+):
     # Shares the per-host concurrency limiter and bounded 429/503 retry used by
     # chain sync — rate providers (Coinbase, CoinGecko) throttle public traffic
     # too. ``_sleeper``/``_rng``/``_max_attempts`` are injectable for tests.
@@ -182,7 +296,7 @@ def http_get_json(url, timeout=30, *, _sleeper=None, _rng=None, _max_attempts=No
                 "User-Agent": f"{APP_NAME}/{__version__}",
             },
         )
-        with urlrequest.urlopen(request, timeout=timeout) as response:
+        with _urlopen_with_proxy(request, url, timeout, proxy_url=proxy_url) as response:
             return json.loads(response.read().decode("utf-8"))
 
     return http_client.request_with_retry(
@@ -570,6 +684,135 @@ def _sync_rates_coingecko(
     return summary
 
 
+def _mempool_provider_backend(conn):
+    backend = preferred_mempool_api_backend(conn, chain="bitcoin", network="main")
+    if backend is None:
+        raise AppError(
+            "No HTTP mempool/esplora Bitcoin backend is configured for market prices",
+            code="config_error",
+            hint="Create a Bitcoin mempool/esplora backend that points at your mempool instance before selecting the mempool price source.",
+            retryable=False,
+        )
+    return backend
+
+
+def _mempool_url(api_base_url, path, query=None):
+    base = str(api_base_url or "").rstrip("/")
+    suffix = path.lstrip("/")
+    url = f"{base}/{suffix}"
+    if query:
+        return f"{url}?{urlparse.urlencode(query)}"
+    return url
+
+
+def _mempool_price_from_payload(payload, fiat, *, default_timestamp):
+    quote = fiat.upper()
+
+    def row_price(row):
+        if not isinstance(row, dict):
+            return None
+        value = row.get(quote)
+        if value is None:
+            value = row.get(quote.lower())
+        if value is None:
+            return None
+        timestamp_value = row.get("time") or row.get("timestamp")
+        timestamp = default_timestamp
+        if timestamp_value is not None:
+            try:
+                timestamp = _iso_z(
+                    datetime.fromtimestamp(int(timestamp_value), tz=timezone.utc)
+                )
+            except (TypeError, ValueError, OSError):
+                timestamp = default_timestamp
+        return timestamp, str(value)
+
+    if isinstance(payload, dict):
+        prices = payload.get("prices")
+        if isinstance(prices, list):
+            for row in reversed(prices):
+                sample = row_price(row)
+                if sample is not None:
+                    return sample
+        direct = row_price(payload)
+        if direct is not None:
+            return direct
+    raise AppError(
+        f"mempool prices response did not contain a {quote} BTC price",
+        code="upstream_error",
+        retryable=True,
+    )
+
+
+def _fetch_mempool_latest_price(conn, pair):
+    normalized = require_supported_pair(pair)
+    _, fiat = rate_pair_parts(normalized)
+    if fiat not in _MEMPOOL_PRICE_QUOTES:
+        raise AppError(
+            f"Pair '{normalized}' has no mempool price mapping",
+            code="validation",
+            hint=f"Supported pairs: {', '.join(SUPPORTED_RATE_PAIRS)}",
+        )
+    backend = _mempool_provider_backend(conn)
+    fetched_at = _iso_z(datetime.now(timezone.utc))
+    payload = http_get_json(
+        _mempool_url(backend["api_base_url"], "v1/prices"),
+        timeout=backend.get("timeout") or 30,
+        proxy_url=backend.get("tor_proxy"),
+    )
+    timestamp, rate = _mempool_price_from_payload(
+        payload,
+        fiat,
+        default_timestamp=fetched_at,
+    )
+    return {
+        "timestamp": timestamp,
+        "rate": rate,
+        "fetched_at": fetched_at,
+        "backend": backend["name"],
+    }
+
+
+def _fetch_mempool_historical_price(conn, pair, timestamp):
+    normalized = require_supported_pair(pair)
+    _, fiat = rate_pair_parts(normalized)
+    if fiat not in _MEMPOOL_PRICE_QUOTES:
+        raise AppError(
+            f"Pair '{normalized}' has no mempool price mapping",
+            code="validation",
+            hint=f"Supported pairs: {', '.join(SUPPORTED_RATE_PAIRS)}",
+        )
+    pricing_dt = _parse_iso_datetime(timestamp, "rate_timestamp").replace(
+        second=0,
+        microsecond=0,
+    )
+    backend = _mempool_provider_backend(conn)
+    fetched_at = _iso_z(datetime.now(timezone.utc))
+    payload = http_get_json(
+        _mempool_url(
+            backend["api_base_url"],
+            "v1/historical-price",
+            {
+                "currency": fiat,
+                "timestamp": str(int(pricing_dt.timestamp())),
+            },
+        ),
+        timeout=backend.get("timeout") or 30,
+        proxy_url=backend.get("tor_proxy"),
+    )
+    _, rate = _mempool_price_from_payload(
+        payload,
+        fiat,
+        default_timestamp=_iso_z(pricing_dt),
+    )
+    return {
+        "timestamp": _iso_z(pricing_dt),
+        "rate": rate,
+        "fetched_at": fetched_at,
+        "backend": backend["name"],
+    }
+
+
 _COINBASE_GRANULARITIES = {60, 300, 900, 3600, 21600, 86400}
 
 
@@ -737,10 +980,16 @@ def _existing_rate_minutes(conn, pair, timestamps):
               AND timestamp IN ({placeholders})
               AND (
                 granularity = 'minute'
-                OR source IN ('manual', ?, ?)
+                OR source IN ('manual', ?, ?, ?)
               )
             """,
-            [pair, *chunk, RATE_SOURCE_COINBASE_EXCHANGE, RATE_SOURCE_KRAKEN_CSV],
+            [
+                pair,
+                *chunk,
+                RATE_SOURCE_COINBASE_EXCHANGE,
+                RATE_SOURCE_KRAKEN_CSV,
+                RATE_SOURCE_MEMPOOL,
+            ],
         ).fetchall()
         existing.update(row["timestamp"] for row in rows)
     return existing
@@ -765,7 +1014,7 @@ def _checked_rate_minutes(conn, pair, timestamps, source=RATE_SOURCE_COINBASE_EX
     return checked
 
 
-def _filter_missing_coinbase_minutes(conn, pair, timestamps):
+def _filter_missing_coinbase_minutes(conn, pair, timestamps, source=RATE_SOURCE_COINBASE_EXCHANGE):
     needed = set(timestamps)
     if not needed:
         return {
@@ -774,7 +1023,7 @@ def _filter_missing_coinbase_minutes(conn, pair, timestamps):
             "checked": set(),
         }
     cached = _existing_rate_minutes(conn, pair, needed)
-    checked = _checked_rate_minutes(conn, pair, needed - cached)
+    checked = _checked_rate_minutes(conn, pair, needed - cached, source=source)
     return {
         "missing": needed - cached - checked,
         "cached": cached,
@@ -787,24 +1036,23 @@ def _coinbase_windows_for_close_minutes(minutes, granularity=60, now=None):
     delta = timedelta(seconds=granularity_seconds)
     step = delta * _COINBASE_MAX_CANDLES
     now_dt = (now or datetime.now(timezone.utc)).replace(second=0, microsecond=0)
-    close_times = sorted(
-        dt
-        for dt in (
-            _parse_iso_datetime(minute, "rate_timestamp").replace(second=0, microsecond=0)
-            for minute in minutes
+    windows = set()
+    for minute in minutes:
+        close_dt = _parse_iso_datetime(minute, "rate_timestamp").replace(
+            second=0,
+            microsecond=0,
         )
-        if dt <= now_dt
-    )
-    windows = []
-    index = 0
-    while index < len(close_times):
-        close_start = close_times[index]
-        close_end = min(close_start + step - delta, now_dt)
-        windows.append((close_start - delta, close_end))
-        index += 1
-        while index < len(close_times) and close_times[index] <= close_end:
-            index += 1
-    return windows
+        if close_dt > now_dt:
+            continue
+        day_start = close_dt.replace(hour=0, minute=0)
+        seconds_since_midnight = int((close_dt - day_start).total_seconds())
+        block_index = (seconds_since_midnight - granularity_seconds) // int(
+            step.total_seconds()
+        )
+        block_start = day_start + (step * block_index)
+        block_end = min(block_start + step, now_dt)
+        windows.add((block_start, block_end))
+    return sorted(windows)
 
 
 def _coinbase_checked_minutes_for_window(start, end, granularity=60):
@@ -1167,6 +1415,24 @@ def sync_latest_rates(
             granularity = "minute"
             method = "product_candles"
             lookback = minutes
+        elif normalized_source == RATE_SOURCE_MEMPOOL:
+            latest = _fetch_mempool_latest_price(conn, normalized_pair)
+            upsert_rate(
+                conn,
+                normalized_pair,
+                latest["timestamp"],
+                latest["rate"],
+                normalized_source,
+                fetched_at=latest["fetched_at"],
+                granularity="latest",
+                method="mempool_prices",
+            )
+            inserted = 1
+            timestamp = latest["timestamp"]
+            fetched_at = latest["fetched_at"]
+            granularity = "latest"
+            method = "mempool_prices"
+            lookback = 0
         else:
             samples = fetch_rates_coingecko(normalized_pair, days=1)
             latest = samples[-1] if samples else None
@@ -1200,6 +1466,97 @@ def sync_latest_rates(
                 "mode": "latest_quote",
                 "lookback_minutes": lookback,
                 "timestamp": timestamp,
+                "fetched_at": fetched_at,
+            }
+        )
+    return summary
+
+
+def _sync_rates_mempool(
+    conn,
+    pair=None,
+    days=30,
+    source=RATE_SOURCE_MEMPOOL,
+    commit=True,
+    warm_cache_when_idle=True,
+):
+    if int(days) <= 0:
+        raise AppError("--days must be positive", code="validation")
+    if pair:
+        pairs = [require_supported_pair(pair)]
+    else:
+        pairs = list(SUPPORTED_RATE_PAIRS)
+    fetched_at = _iso_z(datetime.now(timezone.utc))
+    needed_by_pair = _collect_coinbase_needed_minutes(conn, pairs)
+    has_any_needed_minutes = any(needed_by_pair.get(pair) for pair in pairs)
+    summary = []
+    for normalized_pair in pairs:
+        needed_minutes = needed_by_pair.get(normalized_pair, set())
+        filter_result = _filter_missing_coinbase_minutes(
+            conn,
+            normalized_pair,
+            needed_minutes,
+            source=source,
+        )
+        missing_minutes = sorted(filter_result["missing"])
+        inserted = 0
+        checked_minutes = 0
+        mode = "transaction_need"
+        if needed_minutes:
+            for minute in missing_minutes:
+                sample = _fetch_mempool_historical_price(
+                    conn,
+                    normalized_pair,
+                    minute,
+                )
+                upsert_rate(
+                    conn,
+                    normalized_pair,
+                    sample["timestamp"],
+                    sample["rate"],
+                    source,
+                    fetched_at=sample["fetched_at"],
+                    granularity="daily",
+                    method="historical_price",
+                )
+                inserted += 1
+            if inserted:
+                _invalidate_profile_journals_for_pair(conn, normalized_pair)
+            if commit:
+                conn.commit()
+        elif not has_any_needed_minutes and warm_cache_when_idle:
+            mode = "latest_quote"
+            sample = _fetch_mempool_latest_price(conn, normalized_pair)
+            upsert_rate(
+                conn,
+                normalized_pair,
+                sample["timestamp"],
+                sample["rate"],
+                source,
+                fetched_at=sample["fetched_at"],
+                granularity="latest",
+                method="mempool_prices",
+            )
+            inserted = 1
+            if commit:
+                conn.commit()
+        elif not has_any_needed_minutes:
+            mode = "idle_no_missing_minutes"
+        summary.append(
+            {
+                "pair": normalized_pair,
+                "source": source,
+                "samples": inserted,
+                "days": int(days),
+                "granularity": "daily" if needed_minutes else "latest",
+                "method": "historical_price" if needed_minutes else "mempool_prices",
+                "mode": mode,
+                "needed_minutes": len(needed_minutes),
+                "cached_minutes": len(filter_result["cached"]),
+                "already_checked_minutes": len(filter_result["checked"]),
+                "missing_minutes": len(missing_minutes),
+                "windows": 0,
+                "checked_minutes": checked_minutes,
                 "fetched_at": fetched_at,
             }
         )
@@ -1700,6 +2057,20 @@ def sync_rates(
             source=normalized_source,
             commit=commit,
         )
+    if normalized_source == RATE_SOURCE_MEMPOOL:
+        if path:
+            raise AppError(
+                "--path is only supported for --source kraken-csv",
+                code="validation",
+            )
+        return _sync_rates_mempool(
+            conn,
+            pair=pair,
+            days=days,
+            source=normalized_source,
+            commit=commit,
+            warm_cache_when_idle=warm_cache_when_idle,
+        )
     if normalized_source == RATE_SOURCE_KRAKEN_CSV:
         return _sync_rates_kraken_csv(conn, pair=pair, path=path, commit=commit)
     raise AppError(
@@ -1740,6 +2111,7 @@ __all__ = [
     "RATE_SOURCE_COINBASE_EXCHANGE",
     "RATE_SOURCE_COINGECKO",
     "RATE_SOURCE_KRAKEN_CSV",
+    "RATE_SOURCE_MEMPOOL",
     "SUPPORTED_RATE_PAIRS",
     "SUPPORTED_RATE_SOURCES",
     "ensure_bundled_kraken_btc_daily_seed",

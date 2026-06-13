@@ -1,5 +1,9 @@
 import { normalizeExplorerBaseUrl, type ExplorerSettings } from "@/lib/explorer";
-import { backendTrustFromEndpoint, type InfrastructureOwnership } from "@/lib/backendTrust";
+import {
+  backendTrustFromEndpoint,
+  inferredInfrastructureOwnership,
+  type InfrastructureOwnership,
+} from "@/lib/backendTrust";
 import type { AiModelRow } from "@/lib/aiCapabilities";
 import {
   CLN_PRESENCE_SENTINEL_COMMANDO_PEER,
@@ -202,7 +206,17 @@ export type FreshnessSourceClass =
   | "market_rates"
   | "journals";
 
-export type MarketRateProvider = "coinbase-exchange" | "coingecko";
+export type MarketRateProvider = "coinbase-exchange" | "coingecko" | "mempool";
+
+export const MARKET_RATE_PROVIDER_LABELS: Record<MarketRateProvider, string> = {
+  "coinbase-exchange": "Coinbase Exchange",
+  coingecko: "CoinGecko",
+  mempool: "Configured mempool backend",
+};
+
+export function marketRateProviderLabel(provider: MarketRateProvider | string) {
+  return MARKET_RATE_PROVIDER_LABELS[provider as MarketRateProvider] ?? provider;
+}
 
 export interface MaintenanceFreshnessSettings {
   background_enabled: boolean;
@@ -362,6 +376,97 @@ export const DEFAULT_BACKENDS: Backend[] = [
 export const DEFAULT_RATE_BACKENDS: Backend[] = DEFAULT_BACKENDS.filter(
   (backend) => backend.net === "FX",
 );
+
+function isHttpEndpoint(url: string) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function configuredBitcoinPriceBackend(backends: Backend[]): Backend | null {
+  const candidates = backends.filter((backend) => {
+    const kind = (backend.kind ?? "").toLowerCase();
+    return (
+      backend.net === "BTC" &&
+      ["esplora", "mempool"].includes(kind || "esplora") &&
+      isHttpEndpoint(backend.url)
+    );
+  });
+  if (!candidates.length) return null;
+  return [...candidates].sort((a, b) => {
+    const aSelf =
+      a.infrastructureOwner === "self" ||
+      inferredInfrastructureOwnership(a.url) === "self"
+        ? 0
+        : 1;
+    const bSelf =
+      b.infrastructureOwner === "self" ||
+      inferredInfrastructureOwnership(b.url) === "self"
+        ? 0
+        : 1;
+    if (aSelf !== bSelf) return aSelf - bSelf;
+    const aDefault = a.isDefault ? 0 : 1;
+    const bDefault = b.isDefault ? 0 : 1;
+    if (aDefault !== bDefault) return aDefault - bDefault;
+    return a.id.localeCompare(b.id);
+  })[0];
+}
+
+export function marketRateBackends(
+  settings: MaintenanceFreshnessSettings | null | undefined,
+  configuredBackends: Backend[],
+): Backend[] {
+  const selectedProvider = settings?.market_rate_provider ?? "coinbase-exchange";
+  const autoMarketRatesEnabled = Boolean(
+    settings?.background_enabled && settings.source_classes?.market_rates,
+  );
+  const providers = settings?.market_rate_providers?.length
+    ? settings.market_rate_providers
+    : (["coinbase-exchange", "coingecko", "mempool"] as MarketRateProvider[]);
+  const mempoolBackend = configuredBitcoinPriceBackend(configuredBackends);
+  return providers.map((provider): Backend => {
+    const on = autoMarketRatesEnabled && selectedProvider === provider;
+    if (provider === "mempool") {
+      const owner =
+        mempoolBackend?.infrastructureOwner ??
+        (mempoolBackend
+          ? inferredInfrastructureOwnership(mempoolBackend.url)
+          : undefined);
+      return {
+        id: "market-mempool",
+        name: MARKET_RATE_PROVIDER_LABELS.mempool,
+        url: mempoolBackend?.url ?? "No HTTP mempool backend configured",
+        net: "FX",
+        kind: "mempool",
+        chain: "market",
+        network: "main",
+        health: mempoolBackend ? `via ${mempoolBackend.name}` : "configure backend",
+        on: on && Boolean(mempoolBackend),
+        auth: "none",
+        proxy: mempoolBackend?.proxy ?? null,
+        infrastructureOwner: owner,
+      };
+    }
+    return {
+      id: `market-${provider}`,
+      name: MARKET_RATE_PROVIDER_LABELS[provider],
+      url:
+        provider === "coinbase-exchange"
+          ? "https://api.exchange.coinbase.com"
+          : "https://api.coingecko.com/api/v3",
+      net: "FX",
+      kind: provider,
+      chain: "market",
+      network: "main",
+      health: on ? "selected" : "available",
+      on,
+      auth: "none",
+    };
+  });
+}
 
 export function backendNetFromRow(row: BackendSettingsRow): Net {
   const chain = (row.chain ?? "").toLowerCase();

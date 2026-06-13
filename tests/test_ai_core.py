@@ -163,6 +163,8 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_transactions_list",
             "ui_transactions_extremes",
             "ui_transactions_search",
+            "ui_transactions_history",
+            "ui_activity_history",
             "ui_wallets_list",
             "ui_wallets_utxos",
             "ui_backends_list",

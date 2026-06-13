@@ -389,6 +389,25 @@ the request supplied one. Malformed JSON and non-object requests cannot carry
 a caller request id, so they return `request_id: null`. `daemon.shutdown`
 asks the daemon to write a final shutdown envelope and exit cleanly.
 
+Unsolicited daemon→UI events (records with no originating request, e.g. the
+background freshness worker's `ui.freshness.progress`,
+`ui.freshness.background`, and `ui.freshness.worker` records) use a dedicated
+event envelope class: a top-level `event: true` marker and never a
+`request_id`. They are built with `build_event_envelope` in
+[`kassiber/envelope.py`](../../kassiber/envelope.py).
+
+```json
+{"kind":"ui.freshness.background","schema_version":1,"data":{},"event":true}
+```
+
+The Tauri supervisor forwards event records to the `daemon://event` channel
+(separate from per-request `daemon://stream` records) instead of routing them
+by `request_id`. Apart from the startup `daemon.ready` handshake, any other
+post-ready record without a `request_id` — including an event record that
+wrongly carries one — is a fatal supervisor protocol error that marks the
+daemon broken. The Vite dev bridge has no push channel to the browser, so it
+logs event records in the dev-server terminal instead.
+
 `status`, the `ui.*` snapshots, report export kinds, `ui.wallets.sync`,
 `ui.freshness.*`, and `ui.journals.process` are backed by real data today.
 Report export kinds write files under the managed `exports/reports/` state
@@ -430,25 +449,15 @@ Job types are separate so partial success stays usable:
 - `journal_refresh` for follow-up local journal processing.
 
 Market-rate jobs first seed the bundled Kraken BTC daily BTC-EUR/BTC-USD
-archive into `rates_cache` when missing. The bundled seed is an offline,
-idempotent local-cache fill and always runs. Live provider refresh is then
-gated on the `market_rates` source class: when it is enabled the job fetches a
-small latest quote from the configured live market-rate provider for current
-BTC price display; when it is disabled the job returns after seeding without
-contacting any provider (`live_refresh: false`,
-`skipped_reason: market_rates_disabled`). This gate lives in the job handler
-itself, so every enqueue path honors it — the foreground `ui.freshness.run`,
-`ui.workspace.freshness.run`, the background worker, and report-read auto-sync.
-A user who disables market-rate refresh can therefore refresh sources and
-journals (which hit their own infrastructure) without any connection to the
-hardcoded rate providers. Coinbase Exchange is the default provider when none is
-configured; CoinGecko is also supported for live latest-price refresh. When the
-configured provider is Coinbase Exchange and live refresh is enabled, the job
-also performs the existing live incremental minute-coverage pass for exact
-transaction timestamps. Background jobs skip the manual 30-day warm-cache
-fallback when no transaction minute is missing, so hourly price refresh stays
-provider-light. Kraken CSV remains an offline archive/import path because it
-needs a local file or bundled archive.
+archive into `rates_cache` when missing, then fetch a small latest quote from
+the configured live market-rate provider for current BTC price display.
+Coinbase Exchange is the default provider when none is configured; CoinGecko is
+also supported for live latest-price refresh. When the configured provider is
+Coinbase Exchange, the job also performs the existing live incremental
+minute-coverage pass for exact transaction timestamps. Background jobs skip the
+manual 30-day warm-cache fallback when no transaction minute is missing, so
+hourly price refresh stays provider-light. Kraken CSV remains an offline
+archive/import path because it needs a local file or bundled archive.
 
 Source states are `fresh`, `queued`, `syncing`, `paused`, `rate_limited`,
 `partially_stale`, `failed`, and `blocking_reports`. Report reads are blocked
@@ -483,7 +492,11 @@ When `background_enabled` is true, the daemon starts an opt-in freshness worker
 while the app is running. The worker opens its own SQLite connection, enqueues
 only policy-enabled sources that are missing, stale, failed, or past the refresh
 interval, and drains one due job per pass so manual requests can still observe
-and cancel jobs through the same tables. Wallet and journal sources use the
+and cancel jobs through the same tables. Because background passes have no
+originating request, the worker reports through unsolicited event envelopes
+(`event: true`, no `request_id`): `ui.freshness.progress` per job phase,
+`ui.freshness.background` after a pass that enqueued or completed work, and
+`ui.freshness.worker` for worker lifecycle errors. Wallet and journal sources use the
 general 15-minute background interval; market-rate sources use an hourly
 interval by default. Kassiber opens local databases in WAL mode with an explicit
 busy timeout so the daemon foreground connection and the freshness worker can

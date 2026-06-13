@@ -7,7 +7,7 @@ import threading
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from kassiber import daemon as daemon_runtime
 from kassiber import daemon_freshness
@@ -46,6 +46,29 @@ class _Out:
 
     def write(self, payload):
         self.payloads.append(payload)
+
+
+class BackgroundFreshnessEventEnvelopeTest(unittest.TestCase):
+    def test_background_emissions_use_event_envelope_without_request_id(self):
+        out = _Out()
+        daemon_freshness._emit_background_freshness_event(
+            out,
+            "ui.freshness.worker",
+            {
+                "status": "error",
+                "backend_url": "http://secret-node.local/path",
+            },
+        )
+        self.assertEqual(len(out.payloads), 1)
+        envelope = out.payloads[0]
+        self.assertEqual(envelope["kind"], "ui.freshness.worker")
+        self.assertIn("schema_version", envelope)
+        # The desktop supervisor routes on this marker; a post-ready record
+        # without it and without a request_id kills the daemon.
+        self.assertIs(envelope["event"], True)
+        self.assertNotIn("request_id", envelope)
+        self.assertNotIn("backend_url", envelope["data"])
+        self.assertTrue(envelope["data"]["has_backend_url"])
 
 
 class FreshnessTest(unittest.TestCase):
@@ -405,109 +428,71 @@ class FreshnessTest(unittest.TestCase):
         self.assertEqual(result["latest"][0]["source"], core_rates.RATE_SOURCE_COINGECKO)
         self.assertEqual(result["sync"], [])
 
-    def test_market_rate_job_skips_live_provider_when_policy_disables_rates(self):
+    def test_market_rate_job_uses_mempool_for_transaction_backfill(self):
         conn = self._db()
-        profile_id = _seed_profile(conn)
-        freshness.set_policy(
+        _seed_profile(conn)
+        core_rates.set_market_rate_provider(
             conn,
-            profile_id,
-            source_classes={freshness.SOURCE_RATES: False},
+            core_rates.RATE_SOURCE_MEMPOOL,
+            commit=True,
         )
-        conn.commit()
+        calls = []
 
         def fake_seed(conn_arg, commit=True):
             self.assertIs(conn_arg, conn)
             self.assertTrue(commit)
-            return "memory://bundled-kraken", [
-                {"pair": "BTC-EUR", "samples": 2, "already_seeded": False},
-                {"pair": "BTC-USD", "samples": 2, "already_seeded": False},
+            calls.append("seed")
+            return "memory://bundled-kraken", []
+
+        def fake_latest(
+            conn_arg,
+            source=core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+            commit=True,
+        ):
+            self.assertIs(conn_arg, conn)
+            self.assertEqual(source, core_rates.RATE_SOURCE_MEMPOOL)
+            self.assertTrue(commit)
+            calls.append("latest")
+            return [{"pair": "BTC-EUR", "source": source, "samples": 1}]
+
+        def fake_sync(
+            conn_arg,
+            source=core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+            commit=True,
+            warm_cache_when_idle=True,
+        ):
+            self.assertIs(conn_arg, conn)
+            self.assertEqual(source, core_rates.RATE_SOURCE_MEMPOOL)
+            self.assertTrue(commit)
+            self.assertFalse(warm_cache_when_idle)
+            calls.append("sync")
+            return [
+                {
+                    "pair": "BTC-EUR",
+                    "source": core_rates.RATE_SOURCE_MEMPOOL,
+                    "mode": "transaction_need",
+                }
             ]
 
-        latest = Mock()
-        sync = Mock()
-        progress = []
         handler = daemon_freshness._freshness_handlers({})[freshness.JOB_MARKET_RATES]
         with patch(
             "kassiber.daemon_freshness.core_rates.ensure_bundled_kraken_btc_daily_seed",
             fake_seed,
-        ), patch(
-            "kassiber.daemon_freshness.core_rates.sync_latest_rates", latest
-        ), patch(
-            "kassiber.daemon_freshness.core_rates.sync_rates", sync
+        ), patch("kassiber.daemon_freshness.core_rates.sync_latest_rates", fake_latest), patch(
+            "kassiber.daemon_freshness.core_rates.sync_rates",
+            fake_sync,
         ):
             result = handler(
                 conn,
-                {"profile_id": profile_id},
-                lambda payload: progress.append(dict(payload)),
+                {},
+                lambda _payload: None,
                 lambda: None,
             )
 
-        # Live providers (Coinbase Exchange / CoinGecko) must not be reached when
-        # the market_rates source class is disabled, but the offline bundled
-        # Kraken seed still runs so fiat coverage stays available.
-        latest.assert_not_called()
-        sync.assert_not_called()
-        self.assertEqual(result["status"], "synced")
-        self.assertFalse(result["live_refresh"])
-        self.assertEqual(result["skipped_reason"], "market_rates_disabled")
-        self.assertEqual(result["latest"], [])
-        self.assertEqual(result["sync"], [])
-        self.assertEqual(result["bundled_seed"]["path"], "memory://bundled-kraken")
-        self.assertEqual(progress[0]["phase"], freshness.PHASE_RATE_COVERAGE)
-
-    def test_foreground_run_with_rates_skips_provider_when_policy_disables_rates(self):
-        conn = self._db()
-        profile_id = _seed_profile(conn)
-        conn.execute("INSERT INTO settings(key, value) VALUES('context_workspace', 'ws')")
-        conn.execute(
-            "INSERT INTO settings(key, value) VALUES('context_profile', ?)",
-            (profile_id,),
-        )
-        freshness.set_policy(
-            conn,
-            profile_id,
-            source_classes={freshness.SOURCE_RATES: False},
-        )
-        conn.commit()
-
-        def fake_seed(conn_arg, commit=True):
-            return "memory://bundled-kraken", []
-
-        latest = Mock()
-        sync = Mock()
-        with patch(
-            "kassiber.daemon_freshness.core_rates.ensure_bundled_kraken_btc_daily_seed",
-            fake_seed,
-        ), patch(
-            "kassiber.daemon_freshness.core_rates.sync_latest_rates", latest
-        ), patch(
-            "kassiber.daemon_freshness.core_rates.sync_rates", sync
-        ):
-            payload = daemon_freshness._freshness_run_payload(
-                conn,
-                {},
-                {"all": True, "rates": True, "journals": False, "run": True},
-            )
-
-        # A foreground "Refresh book" still asks for rates=True, but the disabled
-        # market_rates policy means zero provider contact on the way through.
-        latest.assert_not_called()
-        sync.assert_not_called()
-        market_jobs = [
-            job
-            for job in payload["completed"]
-            if job.get("job_type") == freshness.JOB_MARKET_RATES
-        ]
-        self.assertEqual(len(market_jobs), 1)
-        self.assertEqual(market_jobs[0]["status"], freshness.JOB_DONE)
-        self.assertFalse(market_jobs[0]["result"]["live_refresh"])
-        rate_source = freshness.get_source_state(
-            conn,
-            profile_id,
-            freshness.rate_source_key(profile_id),
-        )
-        self.assertEqual(rate_source["status"], freshness.STATUS_FRESH)
-        self.assertFalse(rate_source["blocking_reports"])
+        self.assertEqual(calls, ["seed", "latest", "sync"])
+        self.assertEqual(result["provider"], core_rates.RATE_SOURCE_MEMPOOL)
+        self.assertEqual(result["latest"][0]["source"], core_rates.RATE_SOURCE_MEMPOOL)
+        self.assertEqual(result["sync"][0]["source"], core_rates.RATE_SOURCE_MEMPOOL)
 
     def test_freshness_configure_persists_market_rate_provider(self):
         conn = self._db()
@@ -528,6 +513,60 @@ class FreshnessTest(unittest.TestCase):
             core_rates.get_market_rate_provider(conn),
             core_rates.RATE_SOURCE_COINGECKO,
         )
+
+    def test_freshness_run_honors_market_rate_source_class_off(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        set_setting(conn, "context_workspace", "ws")
+        set_setting(conn, "context_profile", profile_id)
+        freshness.set_policy(
+            conn,
+            profile_id,
+            source_classes={freshness.SOURCE_RATES: False},
+        )
+        conn.commit()
+
+        payload = daemon_freshness._freshness_run_payload(
+            conn,
+            {},
+            {"all": True, "rates": True, "journals": True, "run": False},
+        )
+
+        self.assertNotIn(
+            freshness.SOURCE_RATES,
+            {job["source_type"] for job in payload["enqueued"]},
+        )
+
+    def test_workspace_freshness_run_honors_each_book_market_rate_policy(self):
+        conn = self._db()
+        first_profile = _seed_profile(conn)
+        conn.execute(
+            """
+            INSERT INTO profiles(id, workspace_id, label, fiat_currency, created_at)
+            VALUES('second-profile', 'ws', 'Second Book', 'EUR', '2026-06-04T00:00:00Z')
+            """
+        )
+        freshness.set_policy(
+            conn,
+            first_profile,
+            source_classes={freshness.SOURCE_RATES: False},
+        )
+        conn.commit()
+
+        payload = daemon_freshness._workspace_freshness_run_payload(
+            conn,
+            {},
+            {"workspace_id": "ws", "rates": True, "journals": True, "run": False},
+        )
+
+        rates_by_profile = {
+            book["profile"]["id"]: [
+                job for job in book["enqueued"] if job["source_type"] == freshness.SOURCE_RATES
+            ]
+            for book in payload["books"]
+        }
+        self.assertEqual(rates_by_profile[first_profile], [])
+        self.assertEqual(len(rates_by_profile["second-profile"]), 1)
 
     def test_background_due_filter_skips_recent_fresh_sources(self):
         conn = self._db()

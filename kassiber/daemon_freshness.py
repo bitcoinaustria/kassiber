@@ -25,7 +25,7 @@ from .core.repo import current_context_snapshot
 from .core.sync import sync_progress_emitter
 from .core.ui_snapshot import build_report_blockers_snapshot
 from .db import open_db
-from .envelope import build_envelope
+from .envelope import build_envelope, build_event_envelope
 from .errors import AppError
 from .time_utils import now_iso, parse_iso_datetime_or_none
 from .util import str_or_none
@@ -560,49 +560,25 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
         progress: Callable[[Mapping[str, Any]], None],
         check_cancelled: Callable[[], None],
     ) -> Mapping[str, Any]:
+        del job
         progress({"phase": core_freshness.PHASE_RATE_COVERAGE})
         check_cancelled()
-        # The bundled Kraken daily seed is an offline, idempotent local-cache
-        # fill, so it always runs regardless of the market-rate policy.
         archive_path, seed_summary = core_rates.ensure_bundled_kraken_btc_daily_seed(
             conn,
             commit=True,
         )
         check_cancelled()
         provider = core_rates.get_market_rate_provider(conn)
-        bundled_seed = {
-            "source": core_rates.RATE_SOURCE_KRAKEN_CSV,
-            "path": archive_path,
-            "summary": seed_summary,
-        }
-        # Live provider refresh (Coinbase Exchange / CoinGecko) is gated on the
-        # per-profile market_rates source class so foreground refreshes honor a
-        # user who disabled market-rate refresh. Every enqueue path (foreground
-        # ui.freshness.run, ui.workspace.freshness.run, the background worker,
-        # and report-read auto-sync) funnels through this handler, so this is
-        # the single point that decides whether a hardcoded provider is reached.
-        profile_id = job.get("profile_id") if isinstance(job, Mapping) else None
-        policy = (
-            core_freshness.get_policy(conn, str(profile_id))
-            if profile_id
-            else core_freshness.default_policy()
-        )
-        if not policy.source_classes.get(core_freshness.SOURCE_RATES, False):
-            return {
-                "status": "synced",
-                "provider": provider,
-                "live_refresh": False,
-                "skipped_reason": "market_rates_disabled",
-                "bundled_seed": bundled_seed,
-                "latest": [],
-                "sync": [],
-            }
         latest_summary = core_rates.sync_latest_rates(
             conn,
             source=provider,
             commit=True,
         )
         check_cancelled()
+        transaction_sync_providers = {
+            core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+            core_rates.RATE_SOURCE_MEMPOOL,
+        }
         summary = (
             core_rates.sync_rates(
                 conn,
@@ -610,14 +586,17 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
                 commit=True,
                 warm_cache_when_idle=False,
             )
-            if provider == core_rates.RATE_SOURCE_COINBASE_EXCHANGE
+            if provider in transaction_sync_providers
             else []
         )
         return {
             "status": "synced",
             "provider": provider,
-            "live_refresh": True,
-            "bundled_seed": bundled_seed,
+            "bundled_seed": {
+                "source": core_rates.RATE_SOURCE_KRAKEN_CSV,
+                "path": archive_path,
+                "summary": seed_summary,
+            },
             "latest": latest_summary,
             "sync": summary,
         }
@@ -870,7 +849,11 @@ def _emit_background_freshness_event(
     kind: str,
     payload: Mapping[str, Any],
 ) -> None:
-    out.write(build_envelope(kind, core_freshness.redact_freshness_payload(dict(payload))))
+    # The background worker has no originating request, so these records
+    # must use the `event: true` envelope class — the desktop supervisor
+    # kills the daemon over any other post-ready record without a
+    # request_id.
+    out.write(build_event_envelope(kind, core_freshness.redact_freshness_payload(dict(payload))))
 
 
 def _freshness_background_tick(
@@ -1069,6 +1052,19 @@ def _sync_results_from_freshness_jobs(jobs: list[dict[str, Any]]) -> list[dict[s
     return results
 
 
+def _source_class_included_for_run(
+    args: Mapping[str, Any],
+    arg_name: str,
+    policy: core_freshness.FreshnessPolicy,
+    source_type: str,
+) -> bool:
+    policy_enabled = bool(policy.source_classes.get(source_type, False))
+    requested = args.get(arg_name)
+    if requested is None:
+        return policy_enabled
+    return bool(requested) and policy_enabled
+
+
 def _freshness_run_payload(
     conn: sqlite3.Connection,
     runtime_config: dict[str, object],
@@ -1092,8 +1088,19 @@ def _freshness_run_payload(
     if wallet is not None and (not isinstance(wallet, str) or not wallet.strip()):
         raise AppError("ui.freshness.run wallet must be a non-empty string", code="validation", retryable=False)
     sync_all = bool(args.get("all", wallet is None))
-    include_rates = bool(args.get("rates", True))
-    include_journals = bool(args.get("journals", True))
+    policy = core_freshness.get_policy(conn, profile["id"])
+    include_rates = _source_class_included_for_run(
+        args,
+        "rates",
+        policy,
+        core_freshness.SOURCE_RATES,
+    )
+    include_journals = _source_class_included_for_run(
+        args,
+        "journals",
+        policy,
+        core_freshness.SOURCE_JOURNALS,
+    )
     force_full = args.get("force_full")
     if force_full is not None and not isinstance(force_full, bool):
         raise AppError("ui.freshness.run force_full must be a boolean", code="validation", retryable=False)
@@ -1204,8 +1211,6 @@ def _workspace_freshness_run_payload(
         """,
         (workspace["id"],),
     ).fetchall()
-    include_rates = bool(args.get("rates", True))
-    include_journals = bool(args.get("journals", True))
     run_now = bool(args.get("run", True))
     requested_limit = args.get("limit")
     books: list[dict[str, Any]] = []
@@ -1220,6 +1225,19 @@ def _workspace_freshness_run_payload(
     }
     handlers = _freshness_handlers(runtime_config)
     for profile in profile_rows:
+        policy = core_freshness.get_policy(conn, profile["id"])
+        include_rates = _source_class_included_for_run(
+            args,
+            "rates",
+            policy,
+            core_freshness.SOURCE_RATES,
+        )
+        include_journals = _source_class_included_for_run(
+            args,
+            "journals",
+            policy,
+            core_freshness.SOURCE_JOURNALS,
+        )
         recovered = core_freshness.recover_interrupted_jobs(
             conn,
             profile_id=profile["id"],

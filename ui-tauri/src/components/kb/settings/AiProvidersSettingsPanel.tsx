@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { AiProviderForm, type ExistingAiProvider } from "@/components/kb/AiProviderForm";
+import { ChatHistorySettingsCard } from "@/components/kb/settings/ChatHistorySettingsCard";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import type { AiModelsListData } from "@/lib/aiCapabilities";
 import { cn } from "@/lib/utils";
@@ -293,6 +294,8 @@ export function AiProvidersSettingsPanel({
           })}
         </div>
       )}
+
+      <ChatHistorySettingsCard />
 
       <AiProviderForm
         open={addOpen}
