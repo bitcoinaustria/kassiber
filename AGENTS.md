@@ -81,6 +81,15 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ai.chat.cancel` and `ai.tool_call.consent` take
   `args.target_request_id` so the control request keeps its own routing
   `request_id`; cancelled chats finish with `finish_reason: "cancelled"`.
+  Unsolicited daemon→UI records (e.g. the background freshness worker's
+  `ui.freshness.progress` / `ui.freshness.background` /
+  `ui.freshness.worker`) use a dedicated event envelope class — top-level
+  `event: true`, never a `request_id`, built via
+  `build_event_envelope` in [kassiber/envelope.py](kassiber/envelope.py) —
+  which the supervisor forwards on the `daemon://event` channel. Any other
+  post-ready record without a `request_id` is a fatal supervisor protocol
+  error, so new daemon-side worker threads must emit through
+  `build_event_envelope`, not `build_envelope`.
 - In-app AI read tools are explicit daemon kinds, not generic CLI or daemon
   dispatch. Current read-only AI kinds are `status`,
   `ui.overview.snapshot`, `ui.transactions.list`,

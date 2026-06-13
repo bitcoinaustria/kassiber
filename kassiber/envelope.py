@@ -134,6 +134,18 @@ def build_envelope(kind, data, envelope_meta=None):
     return envelope
 
 
+def build_event_envelope(kind, data):
+    """Build an unsolicited daemon→UI event envelope.
+
+    Event envelopes carry a top-level `event: true` marker and never a
+    `request_id`. The desktop supervisor forwards them to the
+    `daemon://event` channel instead of routing them as request
+    responses; any other post-ready record without a `request_id` is a
+    fatal protocol error there.
+    """
+    return build_envelope(kind, data, envelope_meta={"event": True})
+
+
 def build_error_envelope(code, message, details=None, hint=None, retryable=False, debug=None):
     error_body = {
         "code": code,

@@ -48,6 +48,29 @@ class _Out:
         self.payloads.append(payload)
 
 
+class BackgroundFreshnessEventEnvelopeTest(unittest.TestCase):
+    def test_background_emissions_use_event_envelope_without_request_id(self):
+        out = _Out()
+        daemon_freshness._emit_background_freshness_event(
+            out,
+            "ui.freshness.worker",
+            {
+                "status": "error",
+                "backend_url": "http://secret-node.local/path",
+            },
+        )
+        self.assertEqual(len(out.payloads), 1)
+        envelope = out.payloads[0]
+        self.assertEqual(envelope["kind"], "ui.freshness.worker")
+        self.assertIn("schema_version", envelope)
+        # The desktop supervisor routes on this marker; a post-ready record
+        # without it and without a request_id kills the daemon.
+        self.assertIs(envelope["event"], True)
+        self.assertNotIn("request_id", envelope)
+        self.assertNotIn("backend_url", envelope["data"])
+        self.assertTrue(envelope["data"]["has_backend_url"])
+
+
 class FreshnessTest(unittest.TestCase):
     def _db(self):
         tmp = tempfile.TemporaryDirectory(prefix="kassiber-freshness-")

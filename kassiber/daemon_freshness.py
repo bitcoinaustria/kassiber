@@ -25,7 +25,7 @@ from .core.repo import current_context_snapshot
 from .core.sync import sync_progress_emitter
 from .core.ui_snapshot import build_report_blockers_snapshot
 from .db import open_db
-from .envelope import build_envelope
+from .envelope import build_envelope, build_event_envelope
 from .errors import AppError
 from .time_utils import now_iso, parse_iso_datetime_or_none
 from .util import str_or_none
@@ -845,7 +845,11 @@ def _emit_background_freshness_event(
     kind: str,
     payload: Mapping[str, Any],
 ) -> None:
-    out.write(build_envelope(kind, core_freshness.redact_freshness_payload(dict(payload))))
+    # The background worker has no originating request, so these records
+    # must use the `event: true` envelope class — the desktop supervisor
+    # kills the daemon over any other post-ready record without a
+    # request_id.
+    out.write(build_event_envelope(kind, core_freshness.redact_freshness_payload(dict(payload))))
 
 
 def _freshness_background_tick(

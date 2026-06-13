@@ -245,6 +245,11 @@ Existing success/error envelopes already match the docs. Add:
 {"request_id":"r-42","kind":"progress","schema_version":1,
  "data":{"step":"sync.fetching","done":12,"total":80,"detail":"history"}}
 
+// unsolicited daemon→UI event (no originating request, e.g. the
+// background freshness worker); `event: true`, never a request_id.
+// The supervisor forwards these on `daemon://event`.
+{"kind":"ui.freshness.background","schema_version":1,"event":true,"data":{}}
+
 // daemon-internal lifecycle
 {"kind":"daemon.ready","schema_version":1,"data":{"version":"0.21.0"}}
 {"kind":"daemon.shutdown","schema_version":1,"data":{}}
