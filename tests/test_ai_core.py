@@ -163,6 +163,8 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_transactions_list",
             "ui_transactions_extremes",
             "ui_transactions_search",
+            "ui_transactions_history",
+            "ui_activity_history",
             "ui_wallets_list",
             "ui_wallets_utxos",
             "ui_backends_list",
@@ -303,6 +305,32 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertEqual(
             summarize_tool_call(tool, {"wallet": "cold"}),
             "Refresh source cold",
+        )
+        # `debug` carries sanitized tracebacks on error envelopes; it must be
+        # dropped (not just masked) at every nesting level so an embedded
+        # envelope can never carry one into provider-bound content.
+        self.assertEqual(
+            redact_tool_arguments(
+                {
+                    "ok": False,
+                    "envelope": {
+                        "kind": "error",
+                        "error": {
+                            "code": "internal_error",
+                            "debug": "Traceback: secret at kassiber/daemon.py",
+                            "message": "boom",
+                        },
+                    },
+                    "debug": "top-level traceback",
+                }
+            ),
+            {
+                "ok": False,
+                "envelope": {
+                    "kind": "error",
+                    "error": {"code": "internal_error", "message": "boom"},
+                },
+            },
         )
         journal_tool = get_tool("ui.journals.process")
         self.assertEqual(summarize_tool_call(journal_tool, {}), "Process journals")

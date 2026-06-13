@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import csv
 import json
+import logging
 import queue
 import re
 import sqlite3
@@ -142,6 +143,12 @@ from .db import (
 )
 from .envelope import build_envelope, build_error_envelope, json_ready
 from .errors import AppError
+from .log_ring import (
+    current_request_id,
+    get_log_ring,
+    install_ring_logging,
+    sanitize_exception,
+)
 from .redaction import redact_secret_text, redact_secret_value
 from .util import str_or_none
 from .daemon_swap_review import (
@@ -200,8 +207,11 @@ _AI_PROVIDER_SECRET_STORE_IDS = {
     "windows_dpapi",
     "linux_secret_service",
 }
+_REQUEST_LOGGER = logging.getLogger("kassiber.daemon.request")
+
 SUPPORTED_KINDS = (
     "status",
+    "ui.logs.snapshot",
     "ui.overview.snapshot",
     "ui.workspace.overview.snapshot",
     "ui.transactions.list",
@@ -653,6 +663,7 @@ class AuthAttemptBackoff:
 class _DaemonMainThreadTask:
     callback: Callable[[sqlite3.Connection], Any]
     response: queue.Queue[tuple[bool, Any]]
+    request_id: str | None = None
 
 
 @dataclass
@@ -719,7 +730,13 @@ def _run_on_daemon_main_thread(
 ) -> Any:
     response: queue.Queue[tuple[bool, Any]] = queue.Queue(maxsize=1)
     runtime.main_thread_tasks.put(
-        _DaemonMainThreadTask(callback=callback, response=response)
+        _DaemonMainThreadTask(
+            callback=callback,
+            response=response,
+            # Carry the worker thread's correlation id so log records emitted
+            # while the callback runs on the main thread stay tied to the chat.
+            request_id=current_request_id.get(),
+        )
     )
     ok, payload = response.get()
     if ok:
@@ -735,6 +752,7 @@ def _drain_daemon_main_thread_tasks(ctx: DaemonContext) -> None:
             task = ctx.main_thread_tasks.get_nowait()
         except queue.Empty:
             return
+        rid_token = current_request_id.set(task.request_id)
         try:
             if ctx.conn is None:
                 raise AppError(
@@ -747,6 +765,8 @@ def _drain_daemon_main_thread_tasks(ctx: DaemonContext) -> None:
             task.response.put((False, exc))
         else:
             task.response.put((True, payload))
+        finally:
+            current_request_id.reset(rid_token)
 
 
 def _start_stdin_reader(input_stream: TextIO) -> queue.Queue[str]:
@@ -800,6 +820,7 @@ def _error_envelope(
     details: Any = None,
     hint: str | None = None,
     retryable: bool = False,
+    debug: str | None = None,
 ) -> dict[str, Any]:
     return _with_request_id(
         build_error_envelope(
@@ -808,6 +829,7 @@ def _error_envelope(
             details=redact_secret_value(details) if details is not None else None,
             hint=redact_secret_text(hint) if hint is not None else None,
             retryable=retryable,
+            debug=debug,
         ),
         request_id,
     )
@@ -2296,6 +2318,73 @@ def _coerce_args_dict(request_id: object, args: object) -> dict[str, Any]:
     )
 
 
+def _logs_snapshot_payload(request: dict[str, Any]) -> dict[str, Any]:
+    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
+    unknown = sorted(set(args) - {"after_id", "limit"})
+    if unknown:
+        raise AppError(
+            "ui.logs.snapshot received unsupported fields",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    after_id = _logs_snapshot_int(args, "after_id", default=0, minimum=0, maximum=None)
+    limit = _logs_snapshot_int(args, "limit", default=500, minimum=1, maximum=2000)
+    return get_log_ring().snapshot(after_id=after_id, limit=limit)
+
+
+def _logs_snapshot_int(
+    args: dict[str, Any],
+    key: str,
+    *,
+    default: int,
+    minimum: int,
+    maximum: int | None,
+) -> int:
+    if key not in args or args[key] is None:
+        return default
+    value = args[key]
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise AppError(
+            f"ui.logs.snapshot {key} must be an integer",
+            code="validation",
+            details={"type": type(value).__name__},
+            retryable=False,
+        )
+    if value < minimum or (maximum is not None and value > maximum):
+        raise AppError(
+            f"ui.logs.snapshot {key} is out of range",
+            code="validation",
+            details={"min": minimum, "max": maximum},
+            retryable=False,
+        )
+    return value
+
+
+def _kind_field(kind: object) -> dict[str, str]:
+    return {"type": "text", "value": str(kind) if kind is not None else ""}
+
+
+def _elapsed_ms_field(started: float) -> dict[str, Any]:
+    return {"type": "duration_ms", "value": int((time.monotonic() - started) * 1000)}
+
+
+def _request_outcome_fields(
+    kind: object,
+    started: float,
+    response: dict[str, Any] | None,
+) -> dict[str, Any]:
+    fields = {
+        "kind": _kind_field(kind),
+        "duration_ms": _elapsed_ms_field(started),
+    }
+    if isinstance(response, dict):
+        response_kind = response.get("kind")
+        if isinstance(response_kind, str):
+            fields["response_kind"] = {"type": "text", "value": response_kind}
+    return fields
+
+
 def _rates_kraken_csv_import_payload(
     conn: sqlite3.Connection,
     args: dict[str, Any],
@@ -3094,6 +3183,7 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
     except Exception as exc:
         traceback.print_exc(file=sys.stderr)
         sys.stderr.flush()
+        _REQUEST_LOGGER.error("read-only ai tool crashed", exc_info=exc)
         return _tool_result_denied(
             "tool_error",
             message=str(exc) or exc.__class__.__name__,
@@ -3177,6 +3267,7 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
     except Exception as exc:
         traceback.print_exc(file=sys.stderr)
         sys.stderr.flush()
+        _REQUEST_LOGGER.error("mutating ai tool crashed", exc_info=exc)
         return _tool_result_denied(
             "tool_error",
             message=str(exc) or exc.__class__.__name__,
@@ -4263,6 +4354,7 @@ def _run_ai_chat_stream(
 ) -> None:
     """Thread target — streams AI records and a terminal `ai.chat`."""
     cancel_event = active_chat.cancel_event
+    current_request_id.set(_request_id_registry_key(request_id))
     try:
         finish_reason = None
         if not cancel_event.is_set():
@@ -4348,12 +4440,14 @@ def _run_ai_chat_stream(
     except Exception as exc:
         traceback.print_exc(file=sys.stderr)
         sys.stderr.flush()
+        _REQUEST_LOGGER.error("ai chat crashed", exc_info=exc)
         out.write(
             _error_envelope(
                 "internal_error",
                 str(exc) or exc.__class__.__name__,
                 request_id=request_id,
                 retryable=False,
+                debug=sanitize_exception(exc),
             )
         )
     finally:
@@ -7196,6 +7290,15 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.logs.snapshot":
+        return (
+            _with_request_id(
+                build_envelope("ui.logs.snapshot", _logs_snapshot_payload(request)),
+                request_id,
+            ),
+            False,
+        )
+
     if ctx.conn is None:
         try:
             _open_daemon_connection(ctx)
@@ -9012,6 +9115,7 @@ def run(
 ) -> int:
     input_stream = stdin or sys.stdin
     output_stream = stdout or sys.stdout
+    install_ring_logging()
     out = _OutputChannel(output_stream)
     input_lines = _start_stdin_reader(input_stream)
     ctx = DaemonContext(
@@ -9093,9 +9197,35 @@ def run(
             if request.get("kind") == _SECRET_STORE_CONTROL_RESPONSE_KIND:
                 continue
 
+            kind = request.get("kind")
+            logged = kind != "ui.logs.snapshot"
+            rid_token = current_request_id.set(
+                _request_id_registry_key(request.get("request_id"))
+            )
+            started = time.monotonic()
             try:
+                if logged:
+                    _REQUEST_LOGGER.debug(
+                        "request started", extra={"kb_fields": {"kind": _kind_field(kind)}}
+                    )
                 response, should_shutdown = handle_request(ctx, request, out)
+                if logged:
+                    _REQUEST_LOGGER.debug(
+                        "request finished",
+                        extra={"kb_fields": _request_outcome_fields(kind, started, response)},
+                    )
             except AppError as exc:
+                if logged:
+                    _REQUEST_LOGGER.warning(
+                        "request failed",
+                        extra={
+                            "kb_fields": {
+                                "kind": _kind_field(kind),
+                                "duration_ms": _elapsed_ms_field(started),
+                                "error_code": {"type": "text", "value": exc.code or "app_error"},
+                            }
+                        },
+                    )
                 response = _error_envelope(
                     exc.code or "app_error",
                     str(exc),
@@ -9108,13 +9238,27 @@ def run(
             except Exception as exc:
                 traceback.print_exc(file=sys.stderr)
                 sys.stderr.flush()
+                if logged:
+                    _REQUEST_LOGGER.error(
+                        "request crashed",
+                        exc_info=exc,
+                        extra={
+                            "kb_fields": {
+                                "kind": _kind_field(kind),
+                                "duration_ms": _elapsed_ms_field(started),
+                            }
+                        },
+                    )
                 response = _error_envelope(
                     "internal_error",
                     str(exc) or exc.__class__.__name__,
                     request_id=request.get("request_id"),
                     retryable=False,
+                    debug=sanitize_exception(exc),
                 )
                 should_shutdown = False
+            finally:
+                current_request_id.reset(rid_token)
 
             if response is not None:
                 out.write(response)

@@ -66,16 +66,8 @@ export interface AppSupportBundleOptions {
   mode?: AppLogRedactionMode;
 }
 
-export const APP_LOG_MAX_RECORDS = 5_000;
-export const APP_LOG_MAX_BYTES = 2 * 1024 * 1024;
-
-const LEVEL_WEIGHT: Record<AppLogLevel, number> = {
-  trace: 10,
-  debug: 20,
-  info: 30,
-  warning: 40,
-  error: 50,
-};
+export const APP_LOG_MAX_RECORDS = 10_000;
+export const APP_LOG_MAX_BYTES = 4 * 1024 * 1024;
 
 const SECRET_FLOOR_FIELD_TYPES = new Set<AppLogFieldType>([
   "api_key",
@@ -95,7 +87,6 @@ const OPERATIONAL_FIELD_TYPES = new Set<AppLogFieldType>([
   "url",
 ]);
 
-let subscriptionLevel: AppLogLevel = "info";
 let memoryRing: AppLogRecord[] = [];
 let memoryRingBytes = 2;
 const subscribers = new Set<() => void>();
@@ -211,18 +202,6 @@ export function appLogLevels(): AppLogLevel[] {
   return ["trace", "debug", "info", "warning", "error"];
 }
 
-export function setAppLogSubscriptionLevel(level: AppLogLevel): void {
-  subscriptionLevel = level;
-}
-
-export function getAppLogSubscriptionLevel(): AppLogLevel {
-  return subscriptionLevel;
-}
-
-export function shouldEmitAppLog(level: AppLogLevel): boolean {
-  return LEVEL_WEIGHT[level] >= LEVEL_WEIGHT[subscriptionLevel];
-}
-
 export function subscribeAppLogRecords(listener: () => void): () => void {
   subscribers.add(listener);
   return () => {
@@ -249,8 +228,7 @@ export function emitAppLog(
     id?: string;
     ts?: string;
   },
-): AppLogRecord | null {
-  if (!shouldEmitAppLog(record.level)) return null;
+): AppLogRecord {
   const next: AppLogRecord = {
     id: record.id ?? makeLogId(),
     ts: record.ts ?? new Date().toISOString(),
@@ -258,9 +236,9 @@ export function emitAppLog(
     module: record.module,
     file: record.file,
     line: record.line,
-    msg: record.msg,
-    fields: record.fields,
-    spantrace: record.spantrace,
+    msg: redactSecretFloorText(record.msg),
+    fields: secretFloorFieldsAtInsert(record.fields),
+    spantrace: record.spantrace?.map(secretFloorRecordAtInsert),
   };
   const ring = [...memoryRing, next];
   const bounded = enforceRingBounds(
@@ -563,6 +541,31 @@ function redactedFieldName(name: string, field: AppLogField): string {
     return "wallet_material";
   }
   return field.type;
+}
+
+function secretFloorRecordAtInsert(record: AppLogRecord): AppLogRecord {
+  return {
+    ...record,
+    msg: redactSecretFloorText(record.msg),
+    fields: secretFloorFieldsAtInsert(record.fields),
+    spantrace: record.spantrace?.map(secretFloorRecordAtInsert),
+  };
+}
+
+function secretFloorFieldsAtInsert(
+  fields: Record<string, AppLogField>,
+): Record<string, AppLogField> {
+  let changed = false;
+  const entries = Object.entries(fields).map(([name, field]) => {
+    if (field.type !== "text" || typeof field.value !== "string") {
+      return [name, field] as const;
+    }
+    const value = redactSecretFloorText(field.value);
+    if (value === field.value) return [name, field] as const;
+    changed = true;
+    return [name, { ...field, value }] as const;
+  });
+  return changed ? Object.fromEntries(entries) : fields;
 }
 
 function redactTextForMode(value: string, mode: AppLogRedactionMode): string {

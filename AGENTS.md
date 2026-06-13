@@ -11,6 +11,7 @@
   - [kassiber/time_utils.py](kassiber/time_utils.py) — timestamp parsing + RFC3339 formatting and `UNKNOWN_OCCURRED_AT`.
   - [kassiber/msat.py](kassiber/msat.py) — `SATS_PER_BTC`, `MSAT_PER_BTC`, `dec`, `btc_to_msat`, `msat_to_btc`.
   - [kassiber/util.py](kassiber/util.py) — tiny type-coercion helpers (`str_or_none`, `parse_bool`, `parse_int`, chain/network normalizers).
+  - [kassiber/log_ring.py](kassiber/log_ring.py) — RAM-only bounded log ring + stdlib `logging` handler with secret-floor redaction at insert, `current_request_id` contextvar correlation, and sanitized-traceback helpers. Feeds the `ui.logs.snapshot` daemon kind; the privacy model (two-stage redaction, what reaches AI/disk) is documented in [docs/reference/logging.md](docs/reference/logging.md). Logs must never be written to disk except via explicit user export.
   - [kassiber/envelope.py](kassiber/envelope.py) — JSON envelope contract, `emit`, table/plain/csv output writers, and the `_KIND_SUBCOMMAND_ATTRS` kind map.
   - [kassiber/db.py](kassiber/db.py) — SQLite schema, `open_db`, data-root resolution, settings helpers, and msat column migrations.
   - [kassiber/backends.py](kassiber/backends.py) — named sync backends with SQLite as the canonical store plus optional dotenv bootstrap via `config/backends.env`, along with CRUD helpers.

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import logging
 import sqlite3
 import sys
 import traceback
@@ -111,6 +112,7 @@ from ..diagnostics import (
 )
 from ..backup.cli import add_backup_parser, dispatch_backup
 from ..errors import AppError
+from ..log_ring import sanitize_traceback_text
 from ..secrets.cli import add_secrets_parser, dispatch_secrets
 from ..secrets.cli_input import (
     add_secret_stdin_options,
@@ -3622,9 +3624,35 @@ def command_persists_bootstrap(args: argparse.Namespace) -> bool:
     return False
 
 
+def _configure_cli_logging(args: argparse.Namespace) -> None:
+    """Send library log records to stderr for non-daemon CLI runs.
+
+    The daemon installs its own RAM-only ring handler and must keep stderr
+    clean, so it is skipped here. Idempotent: repeated `main()` calls in tests
+    do not stack handlers.
+    """
+    if args.command == "daemon":
+        return
+    root = logging.getLogger()
+    level = logging.DEBUG if getattr(args, "debug", False) else logging.WARNING
+    for handler in root.handlers:
+        if getattr(handler, "_kassiber_cli_handler", False):
+            handler.setLevel(level)
+            break
+    else:
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setLevel(level)
+        handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+        handler._kassiber_cli_handler = True  # type: ignore[attr-defined]
+        root.addHandler(handler)
+    if root.level == logging.NOTSET or root.level > level:
+        root.setLevel(level)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    _configure_cli_logging(args)
 
     runtime = None
     try:
@@ -3645,8 +3673,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     except AppError as exc:
         debug_text = None
         if args.debug:
-            debug_text = traceback.format_exc()
-            sys.stderr.write(debug_text)
+            raw_traceback = traceback.format_exc()
+            sys.stderr.write(raw_traceback)
+            debug_text = sanitize_traceback_text(raw_traceback)
         write_error_diagnostics(
             args,
             runtime,
@@ -3657,9 +3686,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         emit_error(args, exc, debug_text=debug_text)
         return 1
     except Exception as exc:
-        debug_text = traceback.format_exc()
+        raw_traceback = traceback.format_exc()
         if args.debug:
-            sys.stderr.write(debug_text)
+            sys.stderr.write(raw_traceback)
         wrapped = AppError(str(exc) or exc.__class__.__name__, code="internal_error")
         write_error_diagnostics(
             args,
@@ -3668,7 +3697,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             stack=traceback.extract_tb(exc.__traceback__),
             unhandled=True,
         )
-        emit_error(args, wrapped, debug_text=debug_text if args.debug else None)
+        emit_error(
+            args,
+            wrapped,
+            debug_text=sanitize_traceback_text(raw_traceback) if args.debug else None,
+        )
         return 1
     finally:
         if runtime is not None:

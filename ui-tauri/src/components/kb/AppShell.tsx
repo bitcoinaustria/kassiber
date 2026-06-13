@@ -125,6 +125,10 @@ import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvid
 import type { AssistantReturnPath } from "@/components/ai/assistantSession";
 import kLedgerMarkUrl from "@/assets/k-ledger-mark-transparent.svg";
 import { APP_COMMIT, APP_VERSION } from "@/lib/appVersion";
+import {
+  startDaemonLogBridge,
+  stopDaemonLogBridge,
+} from "@/lib/daemonLogBridge";
 import { ScreenAssistantMockup } from "./ScreenAssistantMockup";
 import { PreAlphaBanner } from "./PreAlphaBanner";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
@@ -1023,6 +1027,13 @@ export function AppShell() {
       window.removeEventListener("pagehide", lockApp);
     };
   }, [appLockPolicy.lockOnWindowClose, encryptedWorkspace, lockApp]);
+
+  React.useEffect(() => {
+    const bridgeable = daemonEnabled && dataMode === "real";
+    if (!bridgeable) return;
+    startDaemonLogBridge({ isEnabled: () => bridgeable });
+    return () => stopDaemonLogBridge();
+  }, [daemonEnabled, dataMode]);
 
   React.useEffect(() => {
     if (!isAssistantRoute) {

@@ -1,3 +1,4 @@
+import io
 import json
 import queue
 import select
@@ -9,6 +10,7 @@ import tempfile
 import threading
 import time
 import unittest
+from types import SimpleNamespace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
@@ -24,6 +26,8 @@ from kassiber.daemon import (
     _planned_auto_read_tools,
     _reports_tax_summary_payload,
 )
+from kassiber import daemon as daemon_module
+from kassiber.log_ring import get_log_ring
 from kassiber.core import freshness as core_freshness
 from kassiber.db import open_db
 from kassiber.daemon_freshness import (
@@ -7938,6 +7942,98 @@ class DaemonSmokeTest(unittest.TestCase):
             code, stderr = _close_daemon(proc)
             self.assertEqual(code, 0, stderr)
             self.assertEqual(stderr, "")
+
+    def test_logs_snapshot_captures_requests_and_skips_itself(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+            proc = _start_daemon(Path(tmp) / "data")
+            self.assertEqual(_read_payload(proc)["kind"], "daemon.ready")
+
+            # Works before the database is opened (a pre-DB kind).
+            _write_payload(proc, {"request_id": "logs-0", "kind": "ui.logs.snapshot"})
+            first = _read_payload(proc)
+            self.assertEqual(first["kind"], "ui.logs.snapshot")
+            self.assertEqual(first["request_id"], "logs-0")
+            self.assertEqual(first["data"]["records"], [])
+            self.assertIn("started_at", first["data"])
+
+            _write_payload(proc, {"request_id": "status-1", "kind": "status"})
+            self.assertEqual(_read_payload(proc)["request_id"], "status-1")
+
+            _write_payload(proc, {"request_id": "logs-1", "kind": "ui.logs.snapshot"})
+            second = _read_payload(proc)
+            records = second["data"]["records"]
+            self.assertGreaterEqual(second["data"]["last_id"], 1)
+
+            def field(record, name):
+                return record.get("fields", {}).get(name, {}).get("value")
+
+            finished = [
+                record
+                for record in records
+                if record["msg"] == "request finished"
+                and field(record, "kind") == "status"
+            ]
+            self.assertTrue(finished, f"no status request log in {records!r}")
+            self.assertEqual(field(finished[0], "request_id"), "status-1")
+            self.assertIsInstance(field(finished[0], "duration_ms"), int)
+
+            # The snapshot poll must not log itself into the ring it reads.
+            self.assertFalse(
+                any(field(record, "kind") == "ui.logs.snapshot" for record in records),
+                f"ui.logs.snapshot should not be logged: {records!r}",
+            )
+
+            _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_payload(proc)["kind"], "daemon.shutdown")
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
+
+    def test_internal_error_envelope_carries_sanitized_debug(self):
+        secret_xprv = (
+            "xprv9s21ZrQH143K3GJpoapnV8SFfukcVBSfeCficPSGfubmSFDxo1kuHnLisriDvSnRRuL2Qrg5ggqHKNVpxR86QEC8w35uxmGoggxtQTPvfUu"
+        )
+
+        def boom(ctx, request, out):
+            raise RuntimeError(f"backend exploded with {secret_xprv}")
+
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+            data_root = Path(tmp) / "data"
+            data_root.mkdir(parents=True, exist_ok=True)
+            stdin = io.StringIO('{"request_id": "crash-1", "kind": "status"}\n')
+            stdout = io.StringIO()
+            args = SimpleNamespace(data_root=str(data_root), runtime_config={})
+            with mock.patch.object(daemon_module, "handle_request", boom):
+                rc = daemon_module.run(None, args, stdin=stdin, stdout=stdout)
+
+        self.assertEqual(rc, 0)
+        envelopes = [
+            json.loads(line) for line in stdout.getvalue().splitlines() if line.strip()
+        ]
+        self.assertEqual(envelopes[0]["kind"], "daemon.ready")
+        crash = next(env for env in envelopes if env.get("request_id") == "crash-1")
+        self.assertEqual(crash["kind"], "error")
+        self.assertEqual(crash["error"]["code"], "internal_error")
+
+        debug = crash["error"]["debug"]
+        self.assertIsInstance(debug, str)
+        self.assertIn("RuntimeError", debug)
+        self.assertNotIn(secret_xprv, debug)
+        self.assertNotIn("/Users/", debug)
+        self.assertNotIn(str(Path.home()), debug)
+        # Round-trips back onto the wire without loss.
+        self.assertEqual(json.loads(json.dumps(crash)), crash)
+
+        snapshot = get_log_ring().snapshot(limit=2000)
+        crashed = [
+            record
+            for record in snapshot["records"]
+            if record["msg"] == "request crashed"
+            and record.get("fields", {}).get("request_id", {}).get("value") == "crash-1"
+        ]
+        self.assertTrue(crashed, "no 'request crashed' ring record for crash-1")
+        self.assertEqual(crashed[0]["level"], "error")
+        self.assertIn("traceback", crashed[0]["fields"])
 
 
 if __name__ == "__main__":

@@ -11,7 +11,6 @@ import {
   getAppLogBufferSize,
   getAppLogRecords,
   logFilename,
-  setAppLogSubscriptionLevel,
   stableMaskedValue,
   supportBundleFilename,
   type AppLogRecord,
@@ -31,16 +30,41 @@ function record(fields: AppLogRecord["fields"] = {}): Omit<AppLogRecord, "id" | 
 describe("typed app logs", () => {
   beforeEach(() => {
     clearAppLogRecords();
-    setAppLogSubscriptionLevel("info");
   });
 
-  it("changes emission at the subscription level", () => {
+  it("always captures debug and trace records", () => {
+    emitAppLog({ ...record(), level: "trace" });
     emitAppLog({ ...record(), level: "debug" });
-    expect(getAppLogRecords()).toHaveLength(0);
 
-    setAppLogSubscriptionLevel("debug");
-    emitAppLog({ ...record(), level: "debug" });
-    expect(getAppLogRecords()).toHaveLength(1);
+    expect(getAppLogRecords()).toHaveLength(2);
+    expect(getAppLogRecords().map((item) => item.level)).toEqual([
+      "trace",
+      "debug",
+    ]);
+  });
+
+  it("applies the secret floor at insert so secrets never reach the ring", () => {
+    const xpub =
+      "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8";
+    emitAppLog({
+      ...record({
+        detail: {
+          type: "text",
+          value: `electrum ssl://user:hunter2@electrum.example.test:50002 rejected descriptor=wpkh([abcd1234/84h/0h/0h]${xpub}/0/*)`,
+        },
+        duration_ms: { type: "duration_ms", value: 12 },
+      }),
+      msg: "wallet import failed: api_key=sk-local-secret",
+    });
+
+    const stored = getAppLogRecords()[0];
+    expect(stored.msg).toBe("wallet import failed: api_key=[redacted]");
+    const detail = String(stored.fields.detail.value);
+    expect(detail).toContain("[redacted-credentials]@electrum.example.test");
+    expect(detail).toContain("descriptor=[redacted]");
+    expect(detail).not.toContain("hunter2");
+    expect(detail).not.toContain(xpub);
+    expect(stored.fields.duration_ms.value).toBe(12);
   });
 
   it("masks sensitive typed fields without changing the message", () => {
@@ -118,7 +142,7 @@ describe("typed app logs", () => {
         appVersion: "0.22.0 (abc1234)",
         os: "macOS",
         timeRange: "2026-05-17T18:00:00Z to 2026-05-17T18:01:00Z",
-        activeFilter: "subscription>=info, module=all, search=none",
+        activeFilter: "level=all, module=all, search=none",
         redaction: "redacted",
         generatedAt: "2026-05-17T18:08:00Z",
       },
@@ -200,7 +224,7 @@ describe("typed app logs", () => {
         appVersion: "0.22.0 (abc1234)",
         os: "macOS",
         timeRange: "2026-05-17T18:00:00Z to 2026-05-17T18:01:00Z",
-        activeFilter: "capture>=trace",
+        activeFilter: "level=all",
         redaction: "high_signal",
         generatedAt: "2026-05-17T18:08:00Z",
       },
@@ -306,7 +330,7 @@ describe("typed app logs", () => {
         appVersion: "0.22.0 (abc1234)",
         os: "macOS",
         timeRange: "2026-05-17T18:00:00Z to 2026-05-17T18:01:00Z",
-        activeFilter: "capture>=trace",
+        activeFilter: "level=all",
         redaction: "redacted-amounts",
         generatedAt: "2026-05-17T18:08:00Z",
       },

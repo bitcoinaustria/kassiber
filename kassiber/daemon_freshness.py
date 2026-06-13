@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sqlite3
 import threading
@@ -27,8 +28,11 @@ from .core.ui_snapshot import build_report_blockers_snapshot
 from .db import open_db
 from .envelope import build_envelope
 from .errors import AppError
+from .log_ring import current_request_id
 from .time_utils import now_iso, parse_iso_datetime_or_none
 from .util import str_or_none
+
+_LOGGER = logging.getLogger("kassiber.daemon.freshness")
 
 
 class FreshnessOutputChannel(Protocol):
@@ -924,6 +928,7 @@ def _start_freshness_background_worker(
     }
 
     def _worker() -> None:
+        current_request_id.set("background:freshness")
         worker_conn: sqlite3.Connection | None = None
         try:
             worker_conn = open_db(
@@ -932,6 +937,7 @@ def _start_freshness_background_worker(
             )
             merge_db_backends(worker_conn, ctx.runtime_config)
         except AppError as exc:
+            _LOGGER.warning("freshness worker unavailable", exc_info=exc)
             _emit_background_freshness_event(
                 ctx.out,
                 "ui.freshness.worker",
@@ -945,6 +951,7 @@ def _start_freshness_background_worker(
             )
             return
         except Exception as exc:
+            _LOGGER.error("freshness worker unavailable", exc_info=exc)
             _emit_background_freshness_event(
                 ctx.out,
                 "ui.freshness.worker",
@@ -962,6 +969,7 @@ def _start_freshness_background_worker(
                     _freshness_background_tick(worker_conn, ctx.runtime_config, ctx.out)
                 except Exception as exc:
                     worker_conn.rollback()
+                    _LOGGER.error("freshness background tick failed", exc_info=exc)
                     _emit_background_freshness_event(
                         ctx.out,
                         "ui.freshness.worker",

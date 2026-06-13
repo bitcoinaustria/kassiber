@@ -61,6 +61,7 @@ export interface DaemonEnvelope<T = unknown> {
     message: string;
     hint?: string | null;
     details?: unknown;
+    debug?: string | null;
     retryable?: boolean;
   };
 }
@@ -291,6 +292,15 @@ export function summarizeEnvelopeFields(
     if (envelope.error.hint) {
       summary.error_hint = textField(envelope.error.hint);
     }
+    // Secret-floor redaction runs at insert in appLogs and operational
+    // redaction at render time, so the raw payloads can pass through here.
+    const { details, debug } = envelope.error;
+    if (details !== undefined && details !== null) {
+      summary.error_details = textField(JSON.stringify(details).slice(0, 2048));
+    }
+    if (typeof debug === "string" && debug) {
+      summary.error_debug = textField(debug.slice(0, 2048));
+    }
   } else if (envelope.data && typeof envelope.data === "object") {
     addDataSummaryFields(summary, envelope.data as Record<string, unknown>);
   } else if (envelope.data !== undefined) {
@@ -398,6 +408,11 @@ function withDaemonLogging(
     async invoke<T = unknown>(
       req: DaemonRequest,
     ): Promise<DaemonEnvelope<T>> {
+      // The log bridge polls ui.logs.snapshot every few seconds to fold the
+      // daemon ring into this one; logging the polls would flood both rings.
+      if (req.kind === "ui.logs.snapshot") {
+        return transport.invoke<T>(requestWithId(req));
+      }
       const request = requestWithId(req);
       recordDaemonLog(
         "debug",
@@ -433,6 +448,9 @@ function withDaemonLogging(
       req: DaemonRequest,
       options?: DaemonStreamOptions<R>,
     ): Promise<DaemonEnvelope<T>> {
+      if (req.kind === "ui.logs.snapshot") {
+        return transport.stream<T, R>(requestWithId(req), options);
+      }
       const request = requestWithId(req);
       recordDaemonLog(
         "debug",

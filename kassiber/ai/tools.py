@@ -1262,6 +1262,10 @@ def redact_tool_arguments(value: Any) -> Any:
         for key, item in value.items():
             key_text = str(key)
             lowered = key_text.lower()
+            # `debug` carries sanitized tracebacks on error envelopes; never let
+            # one ride into provider-bound content even if an envelope is embedded.
+            if key_text == "debug":
+                continue
             if is_sensitive_key(key_text) or any(
                 part in lowered for part in SENSITIVE_ARGUMENT_KEY_PARTS
             ):
