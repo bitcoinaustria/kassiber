@@ -454,10 +454,16 @@ the configured live market-rate provider for current BTC price display.
 Coinbase Exchange is the default provider when none is configured; CoinGecko is
 also supported for live latest-price refresh. When the configured provider is
 Coinbase Exchange, the job also performs the existing live incremental
-minute-coverage pass for exact transaction timestamps. Background jobs skip the
-manual 30-day warm-cache fallback when no transaction minute is missing, so
-hourly price refresh stays provider-light. Kraken CSV remains an offline
-archive/import path because it needs a local file or bundled archive.
+minute-coverage pass for exact transaction timestamps. Live provider refresh is
+gated on the `market_rates` source class: the foreground and background enqueue
+paths skip the market-rate source when it is disabled, and the job handler
+itself also refuses any live provider call (returning `live_refresh: false`,
+`skipped_reason: market_rates_disabled`) so a profile with market-rate refresh
+off never reaches Coinbase Exchange, CoinGecko, or mempool — only the offline
+bundled seed runs. Background jobs skip the manual 30-day warm-cache fallback
+when no transaction minute is missing, so hourly price refresh stays
+provider-light. Kraken CSV remains an offline archive/import path because it
+needs a local file or bundled archive.
 
 Source states are `fresh`, `queued`, `syncing`, `paused`, `rate_limited`,
 `partially_stale`, `failed`, and `blocking_reports`. Report reads are blocked
