@@ -54,6 +54,10 @@ interface SupervisorLifecycleSnapshot {
   lastId: number;
 }
 
+type SupervisorLifecycleSnapshotReader = (
+  afterId: number,
+) => Promise<SupervisorLifecycleSnapshot>;
+
 export interface DaemonLogBridgeVisibilityTarget {
   addEventListener(type: "visibilitychange", listener: () => void): void;
   removeEventListener(type: "visibilitychange", listener: () => void): void;
@@ -65,6 +69,7 @@ export interface DaemonLogBridgeOptions {
   transport?: () => DaemonTransport;
   documentVisible?: () => boolean;
   visibilityTarget?: DaemonLogBridgeVisibilityTarget;
+  supervisorLifecycleSnapshot?: SupervisorLifecycleSnapshotReader;
 }
 
 interface BridgeState {
@@ -74,6 +79,7 @@ interface BridgeState {
   cursor: number;
   startedAt: string | null;
   lifecycleCursor: number;
+  supervisorLifecycleSnapshot?: SupervisorLifecycleSnapshotReader;
   failing: boolean;
   stopped: boolean;
   ticking: boolean;
@@ -106,6 +112,7 @@ export function startDaemonLogBridge(options: DaemonLogBridgeOptions): void {
     cursor: 0,
     startedAt: null,
     lifecycleCursor: 0,
+    supervisorLifecycleSnapshot: options.supervisorLifecycleSnapshot,
     failing: false,
     stopped: false,
     ticking: false,
@@ -261,13 +268,20 @@ async function pollDaemonRing(state: BridgeState): Promise<void> {
   }
 }
 
-async function pollSupervisorRing(state: BridgeState): Promise<void> {
-  if (!isTauriRuntime()) return;
+async function defaultSupervisorLifecycleSnapshot(
+  afterId: number,
+): Promise<SupervisorLifecycleSnapshot> {
   const { invoke } = await import("@tauri-apps/api/core");
-  const snapshot = await invoke<SupervisorLifecycleSnapshot>(
-    "daemon_lifecycle_snapshot",
-    { afterId: state.lifecycleCursor },
-  );
+  return invoke<SupervisorLifecycleSnapshot>("daemon_lifecycle_snapshot", {
+    afterId,
+  });
+}
+
+async function pollSupervisorRing(state: BridgeState): Promise<void> {
+  if (!state.supervisorLifecycleSnapshot && !isTauriRuntime()) return;
+  const snapshot = await (
+    state.supervisorLifecycleSnapshot ?? defaultSupervisorLifecycleSnapshot
+  )(state.lifecycleCursor);
   if (state.stopped) return;
   for (const record of snapshot.records) {
     const fields: Record<string, AppLogField> = {
