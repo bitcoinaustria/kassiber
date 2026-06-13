@@ -86,6 +86,20 @@ export interface DaemonStreamOptions<T = unknown> {
   signal?: AbortSignal;
 }
 
+/**
+ * Unsolicited daemon→UI event record (`event: true`, never a
+ * `request_id`), e.g. `ui.freshness.background` / `ui.freshness.worker`
+ * from the background freshness worker. The Rust supervisor forwards
+ * these on the `daemon://event` Tauri channel, separate from the
+ * per-request `daemon://stream` records.
+ */
+export interface DaemonEventRecord<T = unknown> {
+  kind: string;
+  schema_version: number;
+  event: true;
+  data?: T;
+}
+
 export interface DaemonTransport {
   invoke<T = unknown>(req: DaemonRequest): Promise<DaemonEnvelope<T>>;
   /** Streaming variant; resolves with the terminal envelope. */
@@ -779,6 +793,24 @@ export async function removeTerminalCommand(): Promise<TerminalCommandStatus> {
   }
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<TerminalCommandStatus>("terminal_command_remove_command");
+}
+
+/**
+ * Subscribe to unsolicited daemon events (`daemon://event`). Resolves
+ * with an unsubscribe function. The mock transport has no daemon and the
+ * dev bridge logs events in the Vite terminal instead of pushing them to
+ * the browser, so both return a no-op unsubscribe.
+ */
+export async function subscribeDaemonEvents<T = unknown>(
+  onEvent: (record: DaemonEventRecord<T>) => void,
+): Promise<() => void> {
+  if (DAEMON_MODE !== "tauri") {
+    return () => {};
+  }
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<DaemonEventRecord<T>>("daemon://event", (event) => {
+    onEvent(event.payload);
+  });
 }
 
 const tauriDaemon: DaemonTransport = {

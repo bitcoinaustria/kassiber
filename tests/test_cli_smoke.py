@@ -416,8 +416,9 @@ class CliSmokeTest(unittest.TestCase):
 
         error_payload, code = _run(
             self.data_root,
-            "ai", "chat", "hello",
+            "chat", "hello",
             "--provider", "smoke-remote",
+            input_text="",
         )
         self.assertNotEqual(code, 0)
         self.assertEqual(error_payload["error"]["code"], "ai_remote_ack_required")

@@ -491,6 +491,36 @@ CREATE TABLE IF NOT EXISTS saved_views (
 CREATE INDEX IF NOT EXISTS idx_saved_views_profile_surface
     ON saved_views(profile_id, surface);
 
+CREATE TABLE IF NOT EXISTS ai_chat_sessions (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    provider TEXT,
+    model TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_chat_sessions_profile_updated
+    ON ai_chat_sessions(profile_id, updated_at);
+
+CREATE TABLE IF NOT EXISTS ai_chat_messages (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES ai_chat_sessions(id) ON DELETE CASCADE,
+    seq INTEGER NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    tool_calls_json TEXT,
+    provenance_json TEXT,
+    finish_reason TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE (session_id, seq)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_chat_messages_session
+    ON ai_chat_messages(session_id, seq);
+
 CREATE TABLE IF NOT EXISTS bip329_labels (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

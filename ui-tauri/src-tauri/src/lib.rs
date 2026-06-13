@@ -248,6 +248,13 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ai.chat",
     "ai.chat.cancel",
     "ai.tool_call.consent",
+    // Stored chat history stays manageable even while the AI runtime
+    // toggle is off — these are privacy controls, not AI runtime kinds.
+    "ui.chat.sessions.list",
+    "ui.chat.sessions.get",
+    "ui.chat.sessions.delete",
+    "ui.chat.sessions.clear",
+    "ui.chat.history.configure",
     "ui.source_funds.preview",
     "ui.source_funds.cases.save",
     "ui.source_funds.cases.list",
@@ -1800,7 +1807,18 @@ pub fn run() {
             app.set_menu(menu)?;
             app.manage(menu_handles);
             app.manage(AppRuntimeState::new());
-            app.manage(Arc::new(DaemonSupervisor::new(resource_dir)));
+            let supervisor = Arc::new(DaemonSupervisor::new(resource_dir));
+            // Unsolicited daemon events (`event: true`, no request_id) —
+            // e.g. background freshness records — fan out to the webview
+            // on their own channel, separate from per-request
+            // `daemon://stream` records.
+            let event_app_handle = app.handle().clone();
+            supervisor.set_event_sink(move |record| {
+                if let Err(error) = event_app_handle.emit("daemon://event", record) {
+                    eprintln!("kassiber: failed to emit daemon event: {error}");
+                }
+            });
+            app.manage(supervisor);
 
             // Linux/Windows need an explicit runtime register; macOS uses
             // CFBundleURLTypes from the bundle config. `register` is a no-op

@@ -17,6 +17,44 @@ kassiber --format csv --output capital-gains.csv reports capital-gains
 
 Do not append `--machine` or `--format` after the subcommand tree.
 
+## AI chat
+
+Use top-level `chat` for the daemon-backed assistant:
+
+```bash
+kassiber chat "Summarise report blockers and suggest next actions."
+kassiber chat
+kassiber chat --allow-tool ui.journals.process "Refresh journals, then summarize blockers."
+kassiber chat --yes "Sync allowed wallets and summarize what changed."
+kassiber chat --stream-json "List my largest outbound transactions."
+kassiber --machine chat "How many transactions are missing prices?"
+printf 'Explain these journal blockers:\n%s\n' "$BLOCKERS" | kassiber chat -
+kassiber chat --transcript /tmp/chat-audit.ndjson "Why is my tax summary stale?"
+kassiber chat --continue "And what about the year before?"
+kassiber chat --incognito "One-off question, do not store this."
+kassiber --machine chats list
+kassiber chats config --history on
+```
+
+`kassiber chat` is the only chat command. It mirrors the desktop Assistant and
+drives daemon `ai.chat`, `ai.tool_call.consent`, and `ai.chat.cancel`.
+Mutating tools prompt on a TTY in rendered mode; in the REPL, `/tools` lists
+the tool catalog with consent classes, `/model` and `/provider` switch
+mid-session, `/allow` pre-approves a mutating tool, `/new` clears history,
+and Ctrl-C cancels the current turn. For scripts, `--allow-tool
+<daemon-tool-name>` approves only that tool; `--yes` approves all mutating
+tools for the chat session. `--machine` emits a single final `chat` envelope;
+`--stream-json` emits the raw daemon stream records as NDJSON (both one-shot
+only); `chat -` reads the one-shot prompt from stdin. Neither machine mode
+ever prompts for consent; unapproved mutating tool requests are denied and
+fed back to the model. On a TTY, markdown renders with ANSI styling and tool
+results draw deterministic tables from the daemon envelope (`--plain`
+disables both). With piped stdout the raw answer is the only thing on
+stdout (chrome moves to stderr), so `kassiber chat "..." > answer.txt` is
+clean. Use `--no-tools` for a provider-only exchange without the tool loop,
+and `--transcript <path>` to keep a plaintext NDJSON audit log of the
+session's daemon records.
+
 ## Fast paths
 
 Common requests should not require exploratory commands:

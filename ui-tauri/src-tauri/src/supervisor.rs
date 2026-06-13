@@ -43,6 +43,12 @@ type PendingSender = mpsc::Sender<DaemonResponse>;
 type PendingMap = Arc<Mutex<HashMap<String, PendingSender>>>;
 type SharedStdin = Arc<Mutex<ChildStdin>>;
 type SharedSecretStore = Arc<dyn SecretStore>;
+type EventSink = Box<dyn Fn(&Value) + Send + Sync>;
+/// Sink for unsolicited daemon→UI event records (`event: true`, no
+/// `request_id`). Shared between the supervisor and every spawned
+/// process's stdout reader so a sink registered after spawn still
+/// receives events.
+type SharedEventSink = Arc<Mutex<Option<EventSink>>>;
 
 const SECRET_STORE_CONTROL_REQUEST_KIND: &str = "supervisor.ai_secret_store.request";
 const SECRET_STORE_CONTROL_RESPONSE_KIND: &str = "supervisor.ai_secret_store.response";
@@ -55,6 +61,7 @@ pub struct DaemonSupervisor {
     secret_store: SharedSecretStore,
     lifecycle: Mutex<VecDeque<LifecycleRecord>>,
     next_lifecycle_id: AtomicU64,
+    event_sink: SharedEventSink,
 }
 
 /// Daemon lifecycle event kept for the diagnostics screen. `detail` and
@@ -307,6 +314,7 @@ impl DaemonSupervisor {
             secret_store: Arc::new(NativeSecretStore),
             lifecycle: Mutex::new(VecDeque::new()),
             next_lifecycle_id: AtomicU64::new(1),
+            event_sink: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -320,6 +328,7 @@ impl DaemonSupervisor {
             secret_store: Arc::new(NativeSecretStore),
             lifecycle: Mutex::new(VecDeque::new()),
             next_lifecycle_id: AtomicU64::new(1),
+            event_sink: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -336,6 +345,16 @@ impl DaemonSupervisor {
             secret_store,
             lifecycle: Mutex::new(VecDeque::new()),
             next_lifecycle_id: AtomicU64::new(1),
+            event_sink: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// Register the sink that receives unsolicited daemon→UI event
+    /// records (`event: true`, no `request_id`). The app shell forwards
+    /// them to the `daemon://event` Tauri channel.
+    pub fn set_event_sink(&self, sink: impl Fn(&Value) + Send + Sync + 'static) {
+        if let Ok(mut slot) = self.event_sink.lock() {
+            *slot = Some(Box::new(sink));
         }
     }
 
@@ -395,6 +414,7 @@ impl DaemonSupervisor {
         match DaemonProcess::spawn_command_with_secret_store(
             command,
             Arc::clone(&self.secret_store),
+            Arc::clone(&self.event_sink),
         ) {
             Ok(process) => {
                 self.record_lifecycle("spawned", "daemon ready", "", source);
@@ -681,12 +701,25 @@ impl DaemonSupervisor {
 impl DaemonProcess {
     #[cfg(test)]
     fn spawn_command(command: DaemonCommand) -> Result<Self, SupervisorError> {
-        Self::spawn_command_with_secret_store(command, Arc::new(NativeSecretStore))
+        Self::spawn_command_with_secret_store(
+            command,
+            Arc::new(NativeSecretStore),
+            Arc::new(Mutex::new(None)),
+        )
+    }
+
+    #[cfg(test)]
+    fn spawn_command_with_event_sink(
+        command: DaemonCommand,
+        event_sink: SharedEventSink,
+    ) -> Result<Self, SupervisorError> {
+        Self::spawn_command_with_secret_store(command, Arc::new(NativeSecretStore), event_sink)
     }
 
     fn spawn_command_with_secret_store(
         command: DaemonCommand,
         secret_store: SharedSecretStore,
+        event_sink: SharedEventSink,
     ) -> Result<Self, SupervisorError> {
         let mut process_command = Command::new(&command.program);
         process_command
@@ -743,6 +776,7 @@ impl DaemonProcess {
             ready_tx,
             Arc::clone(&stdin),
             secret_store,
+            event_sink,
         );
         let process = Self {
             child: Mutex::new(child),
@@ -975,6 +1009,7 @@ fn spawn_stdout_reader(
     ready_tx: PendingSender,
     stdin: SharedStdin,
     secret_store: SharedSecretStore,
+    event_sink: SharedEventSink,
 ) {
     std::thread::spawn(move || {
         let mut reader = BufReader::new(stdout);
@@ -1019,6 +1054,15 @@ fn spawn_stdout_reader(
 
                         match handle_secret_store_control_request(&response, &stdin, &secret_store)
                         {
+                            Ok(true) => continue,
+                            Ok(false) => {}
+                            Err(error) => {
+                                fail_stdout_reader(&broken, &pending, &mut startup, error);
+                                return;
+                            }
+                        }
+
+                        match handle_daemon_event_record(&response, &event_sink) {
                             Ok(true) => continue,
                             Ok(false) => {}
                             Err(error) => {
@@ -1333,6 +1377,54 @@ fn secret_ref_service_account(data: &Map<String, Value>) -> Result<(&str, &str),
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| "secret-store bridge request missing account".to_string())?;
     Ok((service, account))
+}
+
+/// Route unsolicited daemon→UI event records (`event: true`).
+///
+/// Returns `Ok(true)` when the record was an event and has been
+/// forwarded (or dropped because no sink is registered yet), `Ok(false)`
+/// when the record is not an event and should flow through request_id
+/// routing, and `Err` for malformed event records — an event must carry
+/// a non-empty `kind` and must not carry a `request_id`.
+fn handle_daemon_event_record(
+    response: &Value,
+    event_sink: &SharedEventSink,
+) -> Result<bool, SupervisorError> {
+    if response.get("event").and_then(Value::as_bool) != Some(true) {
+        return Ok(false);
+    }
+    if response.get("request_id").is_some() {
+        return Err(SupervisorError::new(
+            "daemon_protocol_error",
+            "Python daemon emitted an event record with a request_id",
+        )
+        .details(response.clone()));
+    }
+    if response
+        .get("kind")
+        .and_then(Value::as_str)
+        .filter(|kind| !kind.trim().is_empty())
+        .is_none()
+    {
+        return Err(SupervisorError::new(
+            "daemon_protocol_error",
+            "Python daemon emitted an event record without a kind",
+        )
+        .details(response.clone()));
+    }
+    match event_sink.lock() {
+        Ok(sink) => match sink.as_ref() {
+            Some(sink) => sink(response),
+            None => eprintln!(
+                "kassiber: dropping daemon event {:?} (no event sink registered)",
+                response.get("kind").and_then(Value::as_str).unwrap_or("")
+            ),
+        },
+        // A sink that panicked poisons the lock; losing events is better
+        // than killing a healthy daemon over a UI-side failure.
+        Err(_) => eprintln!("kassiber: dropping daemon event (event sink lock is poisoned)"),
+    }
+    Ok(true)
 }
 
 fn fail_stdout_reader(
@@ -1675,7 +1767,7 @@ def emit(payload):
 sys.stderr.write("stub-daemon startup api_key=sk-stub-stderr-secret\n")
 sys.stderr.flush()
 
-emit({"kind":"daemon.ready","schema_version":1,"data":{"version":"test","supported_kinds":["slow","fast","locked","secret-get","daemon.shutdown"]}})
+emit({"kind":"daemon.ready","schema_version":1,"data":{"version":"test","supported_kinds":["slow","fast","locked","secret-get","emit-event","daemon.shutdown"]}})
 
 def slow(request_id):
     emit({"kind":"slow.delta","schema_version":1,"request_id":request_id,"data":{"delta":{"content":"a"}}})
@@ -1694,6 +1786,9 @@ for line in sys.stdin:
         emit({"kind":"fast","schema_version":1,"request_id":request_id,"data":{"ok":True,"pid":os.getpid()}})
     elif kind == "locked":
         emit({"kind":"auth_required","schema_version":1,"request_id":request_id,"data":{"scope":"unlock_database"}})
+    elif kind == "emit-event":
+        emit({"kind":"ui.freshness.background","schema_version":1,"event":True,"data":{"enqueued":[],"completed":[]}})
+        emit({"kind":"emit-event","schema_version":1,"request_id":request_id,"data":{"ok":True}})
     elif kind == "secret-get":
         emit({"kind":"supervisor.ai_secret_store.request","schema_version":1,"request_id":"secret-control-1","data":{"op":"get","provider_name":"remote","store_id":"__TEST_STORE_ID__","service":"service-hash","account":"remote"}})
         control = json.loads(sys.stdin.readline())
@@ -1808,6 +1903,134 @@ for line in sys.stdin:
 
     #[test]
     #[cfg(unix)]
+    fn forwards_unsolicited_event_records_to_event_sink() {
+        let (dir, script) = write_stub_daemon();
+        let (event_tx, event_rx) = mpsc::channel();
+        let event_sink: SharedEventSink =
+            Arc::new(Mutex::new(Some(Box::new(move |record: &Value| {
+                let _ = event_tx.send(record.clone());
+            }) as EventSink)));
+        let process = DaemonProcess::spawn_command_with_event_sink(
+            DaemonCommand {
+                program: script,
+                args: Vec::new(),
+                cwd: dir.clone(),
+                source: "env_python",
+            },
+            event_sink,
+        )
+        .expect("spawn stub daemon");
+        let supervisor = DaemonSupervisor::new_with_process(process);
+
+        let response = supervisor
+            .invoke_inner(
+                "emit-event",
+                None,
+                false,
+                Some(json!("emit-event-1")),
+                |_| {},
+            )
+            .expect("emit-event response despite preceding unsolicited event");
+        assert_eq!(
+            response.get("kind").and_then(Value::as_str),
+            Some("emit-event")
+        );
+
+        let event = event_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("forwarded daemon event");
+        assert_eq!(
+            event.get("kind").and_then(Value::as_str),
+            Some("ui.freshness.background")
+        );
+        assert_eq!(event.get("event").and_then(Value::as_bool), Some(true));
+        assert!(event.get("request_id").is_none());
+
+        let fast = supervisor
+            .invoke_inner("fast", None, false, Some(json!("fast-after-event")), |_| {})
+            .expect("daemon stays healthy after an unsolicited event");
+        assert_eq!(fast.get("kind").and_then(Value::as_str), Some("fast"));
+
+        let _ = supervisor.invoke_inner(
+            "daemon.shutdown",
+            None,
+            false,
+            Some(json!("shutdown-event-sink")),
+            |_| {},
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn unsolicited_event_records_without_sink_do_not_break_daemon() {
+        let (dir, script) = write_stub_daemon();
+        let process = DaemonProcess::spawn_command(DaemonCommand {
+            program: script,
+            args: Vec::new(),
+            cwd: dir.clone(),
+            source: "env_python",
+        })
+        .expect("spawn stub daemon");
+        let supervisor = DaemonSupervisor::new_with_process(process);
+
+        // No event sink registered: the event is dropped with a log line,
+        // but it must not be treated as a protocol error that kills the
+        // daemon (the pre-fix behavior).
+        let response = supervisor
+            .invoke_inner(
+                "emit-event",
+                None,
+                false,
+                Some(json!("emit-event-no-sink")),
+                |_| {},
+            )
+            .expect("emit-event response without a registered sink");
+        assert_eq!(
+            response.get("kind").and_then(Value::as_str),
+            Some("emit-event")
+        );
+
+        let fast = supervisor
+            .invoke_inner("fast", None, false, Some(json!("fast-no-sink")), |_| {})
+            .expect("daemon stays healthy after a dropped event");
+        assert_eq!(fast.get("kind").and_then(Value::as_str), Some("fast"));
+
+        let _ = supervisor.invoke_inner(
+            "daemon.shutdown",
+            None,
+            false,
+            Some(json!("shutdown-no-sink")),
+            |_| {},
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn event_records_with_request_id_or_missing_kind_are_protocol_errors() {
+        let sink: SharedEventSink = Arc::new(Mutex::new(None));
+        assert!(
+            !handle_daemon_event_record(&json!({"kind": "fast", "request_id": "r-1"}), &sink)
+                .expect("plain response is not an event")
+        );
+        assert!(handle_daemon_event_record(
+            &json!({"kind": "ui.freshness.worker", "schema_version": 1, "event": true}),
+            &sink
+        )
+        .expect("event without sink is consumed"));
+        let with_request_id = handle_daemon_event_record(
+            &json!({"kind": "ui.freshness.worker", "event": true, "request_id": "r-2"}),
+            &sink,
+        )
+        .expect_err("event with request_id is a protocol error");
+        assert_eq!(with_request_id.code, "daemon_protocol_error");
+        let missing_kind = handle_daemon_event_record(&json!({"event": true}), &sink)
+            .expect_err("event without kind is a protocol error");
+        assert_eq!(missing_kind.code, "daemon_protocol_error");
+    }
+
+    #[test]
+    #[cfg(unix)]
     fn handles_secret_store_control_requests_without_forwarding_them() {
         let (dir, script) = write_stub_daemon();
         let mock_store = crate::secret_store::MockSecretStore::new(
@@ -1827,6 +2050,7 @@ for line in sys.stdin:
                 source: "env_python",
             },
             secret_store.clone(),
+            Arc::new(Mutex::new(None)),
         )
         .expect("spawn stub daemon");
         let supervisor = DaemonSupervisor::new_with_process_and_secret_store(process, secret_store);
@@ -2049,6 +2273,7 @@ for line in sys.stdin:
             secret_store: Arc::new(NativeSecretStore),
             lifecycle: Mutex::new(VecDeque::new()),
             next_lifecycle_id: AtomicU64::new(1),
+            event_sink: Arc::new(Mutex::new(None)),
         };
 
         let error = supervisor

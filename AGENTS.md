@@ -82,6 +82,24 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ai.chat.cancel` and `ai.tool_call.consent` take
   `args.target_request_id` so the control request keeps its own routing
   `request_id`; cancelled chats finish with `finish_reason: "cancelled"`.
+  Unsolicited daemon→UI records (e.g. the background freshness worker's
+  `ui.freshness.progress` / `ui.freshness.background` /
+  `ui.freshness.worker`) use a dedicated event envelope class — top-level
+  `event: true`, never a `request_id`, built via
+  `build_event_envelope` in [kassiber/envelope.py](kassiber/envelope.py) —
+  which the supervisor forwards on the `daemon://event` channel. Any other
+  post-ready record without a `request_id` is a fatal supervisor protocol
+  error, so new daemon-side worker threads must emit through
+  `build_event_envelope`, not `build_envelope`.
+  `ai.chat` accepts `persist: true|false|"auto"` (absent = false) and
+  `session_id`; persisted exchanges land in `ai_chat_sessions` /
+  `ai_chat_messages` inside the SQLCipher boundary, the terminal record
+  carries `session_id`, and session management is exposed via
+  `ui.chat.sessions.{list,get,delete,clear}` plus
+  `ui.chat.history.configure` for the GUI policy control. Chat history is
+  not an AI tool — the model cannot browse/search prior sessions unless the
+  user explicitly resumes one as chat context — and diagnostics/audit packages
+  exclude it.
 - In-app AI read tools are explicit daemon kinds, not generic CLI or daemon
   dispatch. Current read-only AI kinds are `status`,
   `ui.overview.snapshot`, `ui.transactions.list`,
@@ -161,7 +179,9 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 
 ## Command surface
 
-- `init`, `status`, `daemon`, `context {show,current,set}`
+- `init`, `status`, `daemon`, `chat`, `context {show,current,set}`
+- `chats {list,show,delete,clear,config}` — persisted AI chat sessions
+  (stored in the SQLCipher DB; `auto` policy persists only when encrypted)
 - `secrets {init,init-resume,change-passphrase,verify,status,migrate-credentials}`
 - `backup {export,import}`
 - `workspaces {list,create}`
@@ -181,7 +201,8 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `rates {pairs,sync,rebuild,latest,range,set}`
 - `diagnostics {collect}`
 - `ai providers {list,get,create,update,delete,set-default,clear-default}`
-- `ai {models,chat}`
+- `ai {models}` — provider/model management; chat lives at top-level `chat`,
+  which drives the daemon `ai.chat` tool loop with consent/cancel parity.
 
 ## Pagination
 
@@ -349,10 +370,11 @@ uv run python -m kassiber reports export-austrian-e1kv-csv --help
 uv run python -m kassiber reports balance-history --help
 uv run python -m kassiber rates --help
 uv run python -m kassiber diagnostics collect --help
+uv run python -m kassiber chat --help
+uv run python -m kassiber chats --help
 uv run python -m kassiber ai --help
 uv run python -m kassiber ai providers --help
 uv run python -m kassiber ai providers create --help
-uv run python -m kassiber ai chat --help
 ```
 
 - Safe local workflow:

@@ -361,6 +361,15 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   worker-pool model and one SQLite connection per worker when read-only tools
   or longer-running UI actions need daemon-side concurrency beyond the
   supervisor demux.
+- [x] Desktop Assistant chat history: the GUI sends `persist: "auto"` and
+  round-trips `session_id` on `ai.chat`, the Assistant toolbar has a History
+  panel (list/resume/delete via `ui.chat.sessions.*`) plus an incognito
+  toggle, and Settings → AI providers exposes the `ai_chat_history` policy
+  (`ui.chat.history.configure`) with a clear-stored-chats action. The mock
+  daemon mirrors the persistence semantics for browser dev.
+- [ ] Chat-history retention: optional cap (keep last N sessions or days) on
+  persisted `ai_chat_sessions`, enforced at append time, surfaced in
+  `chats config` and desktop Settings.
 - [x] Overview screen now uses `@shadcnblocks/dashboard5` as the first
   dashboard screen, keeping Export -> Reports, Add connection modal, and
   Show all transactions wiring
@@ -670,6 +679,21 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   with a structured `code: "pdf_unrepresentable"` error envelope listing the
   offending codepoints. Document the choice in
   [pdf_report.py](kassiber/pdf_report.py) and update the test pin.
+- [ ] Bump `vitest` 3.2.4 -> 3.2.6 to clear the critical Dependabot alert
+  (Vitest UI server arbitrary file read/exec, fixed in 3.2.6). Not exploitable
+  as used here: the `test` script runs plain `vitest` with no `--ui`, so the
+  vulnerable UI server never starts, and it is dev-only tooling. Deferred
+  because 3.2.6 was published 2026-06-01 and the `ui-tauri/.npmrc`
+  `minimum-release-age` (90 days) blocks it until ~2026-08-30; bumping sooner
+  needs the explicit owner approval that policy requires. Revisit after the
+  release-age window opens (or with owner approval), keep `pnpm-lock.yaml` in
+  the same commit, and re-run the gate.
+- [ ] Address the medium Dependabot alert on transitive `glib` 0.18.5
+  (unsoundness in `VariantStrIter` `Iterator`/`DoubleEndedIterator` impls,
+  fixed in 0.20.0). `glib` is not a direct dependency — the Tauri/GTK-rs stack
+  (`atk-sys`, `gdk`, ...) pins it to `^0.18`, so reaching 0.20 requires
+  upgrading that whole stack (Linux-only surface). Fold into the next
+  Tauri/GTK dependency upgrade rather than forcing a standalone `cargo update`.
 - [ ] Add live provider-backed FX adapters beyond CoinGecko and local Kraken
   CSV archive ingest only after the UI and daemon can expose provider limits,
   granularity, and review state honestly

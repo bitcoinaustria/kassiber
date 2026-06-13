@@ -1,8 +1,9 @@
 import * as React from "react";
-import { Download, Trash2 } from "lucide-react";
+import { Download, EyeOff, Trash2 } from "lucide-react";
 
 import Ai02 from "@/components/ai-02";
 import { useAssistantSession } from "@/components/ai/assistantSession";
+import { ChatHistoryPanel } from "@/components/ai/ChatHistoryPanel";
 import { ChatThread } from "@/components/ai/ChatThread";
 import { ToolConsentDialog } from "@/components/ai/ToolConsentDialog";
 import { useSupportedReasoningEffort } from "@/components/ai/useReasoningEffortSupport";
@@ -25,6 +26,8 @@ export function Assistant() {
     sendConsent,
     abort,
     reset,
+    incognito,
+    setIncognito,
   } = useAssistantSession();
   const hasMessages = messages.length > 0;
   const queuedPromptCount = queuedPrompts.length;
@@ -77,9 +80,9 @@ export function Assistant() {
         aria-label="Assistant conversation"
         className="flex min-h-0 flex-1 flex-col bg-background"
       >
-        {hasMessages ? (
-          <div className="mx-auto flex w-full max-w-4xl shrink-0 items-center justify-end gap-2 px-1 pb-3">
-            {isStreaming ? (
+        <div className="mx-auto flex w-full max-w-4xl shrink-0 items-center justify-end gap-2 px-1 pb-3">
+          {hasMessages ? (
+            isStreaming ? (
               <span className="mr-auto rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                 Generating
                 {queuedPromptCount > 0 ? ` - ${queuedPromptCount} queued` : ""}
@@ -88,29 +91,53 @@ export function Assistant() {
               <span className="mr-auto text-xs text-muted-foreground">
                 {messages.length} message{messages.length === 1 ? "" : "s"}
               </span>
+            )
+          ) : (
+            <span className="mr-auto" />
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className={cn(
+              "gap-2",
+              incognito
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground",
             )}
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="gap-2"
-              onClick={exportChat}
-            >
-              <Download className="size-4" aria-hidden="true" />
-              Export chat
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="gap-2 text-muted-foreground hover:text-destructive"
-              onClick={reset}
-            >
-              <Trash2 className="size-4" aria-hidden="true" />
-              Clear chat
-            </Button>
-          </div>
-        ) : null}
+            aria-pressed={incognito}
+            onClick={() => setIncognito(!incognito)}
+            title="Incognito: do not store this conversation"
+          >
+            <EyeOff className="size-4" aria-hidden="true" />
+            Incognito
+          </Button>
+          <ChatHistoryPanel />
+          {hasMessages ? (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="gap-2"
+                onClick={exportChat}
+              >
+                <Download className="size-4" aria-hidden="true" />
+                Export chat
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="gap-2 text-muted-foreground hover:text-destructive"
+                onClick={reset}
+              >
+                <Trash2 className="size-4" aria-hidden="true" />
+                Clear chat
+              </Button>
+            </>
+          ) : null}
+        </div>
 
         <div
           className={cn(

@@ -18,15 +18,15 @@ from ..ai import (
     get_db_ai_provider,
     get_ai_provider_api_key_for_use,
     redact_ai_provider_for_output,
-    require_ai_provider_acknowledged,
     resolve_ai_provider,
     set_default_ai_provider,
     update_db_ai_provider,
 )
-from ..ai.client import CLI_DEFAULT_MODEL, ai_client_for_locator, is_cli_provider_locator
+from ..ai.client import ai_client_for_locator
 from ..ai.providers import (
     list_with_default as list_ai_providers_with_default,
 )
+from ..core import chat_history as core_chat_history
 from .handlers import (
     APP_NAME,
     BACKEND_CLEAR_FIELD_ALIASES,
@@ -54,15 +54,20 @@ from .handlers import (
     apply_transfer_rules,
     bulk_pair_transfers,
     create_direct_swap_payout,
+    chat_history_config_cli,
+    clear_chat_sessions_cli,
     create_saved_view_cli,
     create_transaction_pair,
     create_transfer_rule,
+    delete_chat_session_cli,
     delete_direct_swap_payout,
     delete_saved_view_cli,
     delete_transaction_pair,
     delete_transfer_rule,
     dismiss_transfer_candidate,
+    list_chat_sessions_cli,
     list_saved_views_cli,
+    show_chat_session_cli,
     list_transfer_rules,
     set_transfer_rule_enabled,
     suggest_transfer_candidates,
@@ -111,6 +116,7 @@ from ..diagnostics import (
     write_error_diagnostics,
 )
 from ..backup.cli import add_backup_parser, dispatch_backup
+from ..backends import preferred_explorer_base
 from ..errors import AppError
 from ..log_ring import sanitize_traceback_text
 from ..secrets.cli import add_secrets_parser, dispatch_secrets
@@ -121,6 +127,7 @@ from ..secrets.cli_input import (
 )
 from ..tax_policy import supported_tax_countries
 from ..wallet_descriptors import MAX_DESCRIPTOR_GAP_LIMIT
+from .chat import run_chat_command
 
 
 _AI_PROVIDER_KINDS_LIST = AI_PROVIDER_KINDS
@@ -135,39 +142,11 @@ def _ai_provider_redacted(conn: sqlite3.Connection, provider: dict) -> dict:
     return redact_ai_provider_for_output(provider, default_name=get_default_ai_provider_name(conn))
 
 
-def _ai_chat_messages(args: argparse.Namespace) -> list[dict]:
-    messages: list[dict] = []
-    if getattr(args, "system", None):
-        messages.append({"role": "system", "content": args.system})
-    messages.append({"role": "user", "content": args.prompt})
-    return messages
-
-
-def _ai_chat_options(args: argparse.Namespace) -> dict | None:
-    options: dict = {}
-    temp = getattr(args, "temperature", None)
-    if temp is not None:
-        options["temperature"] = temp
-    max_tokens = getattr(args, "max_tokens", None)
-    if max_tokens is not None:
-        options["max_tokens"] = max_tokens
-    return options or None
-
-
 def _ai_client_for(provider: dict):
     return ai_client_for_locator(
         base_url=provider["base_url"],
         api_key=get_ai_provider_api_key_for_use(provider),
     )
-
-
-def _ai_model_for(provider: dict, explicit_model: str | None) -> str | None:
-    model = explicit_model or provider.get("default_model")
-    if model:
-        return model
-    if is_cli_provider_locator(provider["base_url"]):
-        return CLI_DEFAULT_MODEL
-    return None
 
 
 def _backend_extra_config(args: argparse.Namespace) -> dict[str, object] | None:
@@ -383,6 +362,7 @@ def _source_funds_hooks() -> core_source_funds.SourceFundsHooks:
         resolve_scope=resolve_scope,
         resolve_transaction=resolve_transaction,
         format_table=report_hooks.format_table,
+        explorer_base=preferred_explorer_base,
     )
 
 
@@ -491,6 +471,131 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("daemon")
     sub.add_parser("init")
     sub.add_parser("status")
+
+    chat = sub.add_parser(
+        "chat",
+        description=(
+            "Kassiber AI assistant — the same daemon tool loop, consent, and "
+            "cancel protocol as the desktop Assistant."
+        ),
+    )
+    chat.add_argument(
+        "prompt",
+        nargs="?",
+        help="One-shot prompt; pass '-' to read it from stdin. Omit for REPL mode.",
+    )
+    chat.add_argument("--prompt", dest="prompt_text", help="One-shot prompt text.")
+    chat.add_argument("--provider", help="Provider name (defaults to the stored default)")
+    chat.add_argument("--model", help="Model id (defaults to the provider's default_model)")
+    chat.add_argument(
+        "--system",
+        help="Raw system prompt replacing the built-in Kassiber assistant prompt.",
+    )
+    chat.add_argument("--temperature", type=float)
+    chat.add_argument("--max-tokens", type=int)
+    chat.add_argument(
+        "--reasoning-effort",
+        choices=("auto", "low", "medium", "high"),
+        default="auto",
+        help="Forward a provider-specific reasoning effort option when supported.",
+    )
+    chat.add_argument(
+        "--tool-loop-max-iterations",
+        type=int,
+        default=8,
+        help="Maximum daemon tool-loop iterations for one assistant turn.",
+    )
+    chat.add_argument(
+        "--no-tools",
+        action="store_true",
+        help="Disable daemon AI tools for this chat.",
+    )
+    chat.add_argument(
+        "--yes",
+        action="store_true",
+        help="Non-interactively allow mutating AI tools for this chat session.",
+    )
+    chat.add_argument(
+        "--allow-tool",
+        action="append",
+        help=(
+            "Non-interactively allow only this mutating tool name; repeat or "
+            "pass comma-separated names. Other mutating tools still prompt on a TTY "
+            "or deny without one."
+        ),
+    )
+    chat.add_argument(
+        "--stream-json",
+        action="store_true",
+        help=(
+            "One-shot scripting mode: emit the raw daemon stream records "
+            "(ai.chat.status/delta/tool_call/tool_result and the terminal "
+            "ai.chat) as NDJSON instead of rendered text."
+        ),
+    )
+    chat.add_argument(
+        "--transcript",
+        metavar="PATH",
+        help=(
+            "Append every daemon request and stream record for this chat "
+            "session to PATH as NDJSON. The file is plaintext and includes "
+            "prompts and redacted tool results."
+        ),
+    )
+    chat.add_argument(
+        "--plain",
+        action="store_true",
+        help=(
+            "Disable terminal markdown rendering and deterministic "
+            "tool-result tables; print the raw model output."
+        ),
+    )
+    chat.add_argument(
+        "--incognito",
+        action="store_true",
+        help="Do not persist this chat to the database, regardless of the history setting.",
+    )
+    chat.add_argument(
+        "--continue",
+        dest="continue_session",
+        action="store_true",
+        help="Continue the most recently updated persisted chat session.",
+    )
+    chat.add_argument(
+        "--session",
+        metavar="SESSION_ID",
+        help="Continue a specific persisted chat session (see `kassiber chats list`).",
+    )
+
+    chats = sub.add_parser(
+        "chats",
+        description=(
+            "Manage persisted AI chat sessions. History is stored in the "
+            "(SQLCipher-encrypted) database; the `auto` policy persists only "
+            "when the database is encrypted."
+        ),
+    )
+    chats_sub = chats.add_subparsers(dest="chats_command", required=True)
+    chats_list = chats_sub.add_parser("list")
+    chats_list.add_argument("--workspace")
+    chats_list.add_argument("--profile")
+    chats_list.add_argument("--limit", type=int, default=50)
+    chats_show = chats_sub.add_parser("show")
+    chats_show.add_argument("session_id")
+    chats_show.add_argument("--workspace")
+    chats_show.add_argument("--profile")
+    chats_delete = chats_sub.add_parser("delete")
+    chats_delete.add_argument("session_id")
+    chats_delete.add_argument("--workspace")
+    chats_delete.add_argument("--profile")
+    chats_clear = chats_sub.add_parser("clear")
+    chats_clear.add_argument("--workspace")
+    chats_clear.add_argument("--profile")
+    chats_config = chats_sub.add_parser(
+        "config",
+        description="Show or set the chat history policy (auto persists only on encrypted databases).",
+    )
+    chats_config.add_argument("--history", choices=("auto", "on", "off"))
 
     add_secrets_parser(sub)
     add_backup_parser(sub)
@@ -1845,20 +1950,19 @@ def build_parser() -> argparse.ArgumentParser:
     ai_models = ai_sub.add_parser("models", description="List models the configured provider exposes.")
     ai_models.add_argument("--provider", help="Provider name (defaults to the stored default)")
 
-    ai_chat = ai_sub.add_parser("chat", description="Send one prompt to the AI provider (non-streaming).")
-    ai_chat.add_argument("prompt", help="User prompt; use --system for an additional system message")
-    ai_chat.add_argument("--provider", help="Provider name (defaults to the stored default)")
-    ai_chat.add_argument("--model", help="Model id (defaults to the provider's default_model)")
-    ai_chat.add_argument("--system", help="Optional system prompt")
-    ai_chat.add_argument("--temperature", type=float)
-    ai_chat.add_argument("--max-tokens", type=int)
-
     return parser
 
 
 def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
     if args.command == "daemon":
         return daemon_runtime.run(conn, args)
+    if args.command == "chat":
+        result = run_chat_command(args)
+        if getattr(args, "stream_json", False):
+            return None
+        if args.format == "json":
+            return emit(args, result.to_payload(), kind="chat")
+        return None
     if args.command == "init":
         return cmd_init(conn, args)
     if args.command == "status":
@@ -2910,6 +3014,43 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             return emit(
                 args, delete_saved_view_cli(conn, args.workspace, args.profile, args.view_id)
             )
+    if args.command == "chats":
+        if args.chats_command == "list":
+            return emit(
+                args,
+                list_chat_sessions_cli(
+                    conn, args.workspace, args.profile, limit=args.limit
+                ),
+            )
+        if args.chats_command == "show":
+            return emit(
+                args,
+                show_chat_session_cli(
+                    conn, args.workspace, args.profile, args.session_id
+                ),
+            )
+        if args.chats_command == "delete":
+            return emit(
+                args,
+                delete_chat_session_cli(
+                    conn, args.workspace, args.profile, args.session_id
+                ),
+            )
+        if args.chats_command == "clear":
+            return emit(
+                args, clear_chat_sessions_cli(conn, args.workspace, args.profile)
+            )
+        if args.chats_command == "config":
+            return emit(
+                args,
+                chat_history_config_cli(
+                    conn,
+                    history=args.history,
+                    database_encrypted=core_chat_history.database_file_is_encrypted(
+                        args.data_root
+                    ),
+                ),
+            )
     if args.command == "btcpay":
         commercial_hooks = _commercial_hooks()
         if args.btcpay_command == "provenance":
@@ -3568,37 +3709,13 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             provider = resolve_ai_provider(conn, args.provider)
             client = _ai_client_for(provider)
             return emit(args, {"provider": provider["name"], "models": client.list_models()})
-        if args.ai_command == "chat":
-            provider = resolve_ai_provider(conn, args.provider)
-            model = _ai_model_for(provider, args.model)
-            if not model:
-                raise AppError(
-                    "AI chat requires a model",
-                    code="validation",
-                    hint=f"Pass --model, or set --default-model on provider '{provider['name']}'.",
-                )
-            require_ai_provider_acknowledged(provider)
-            client = _ai_client_for(provider)
-            response = client.chat(
-                messages=_ai_chat_messages(args),
-                model=model,
-                options=_ai_chat_options(args),
-            )
-            return emit(
-                args,
-                {
-                    "provider": provider["name"],
-                    "model": model,
-                    "message": {"role": response["role"], "content": response["content"]},
-                    "finish_reason": response.get("finish_reason"),
-                    "usage": response.get("usage"),
-                },
-            )
     raise AppError("Unknown command")
 
 
 def command_needs_db(args: argparse.Namespace) -> bool:
     if args.command == "daemon":
+        return False
+    if args.command == "chat":
         return False
     if args.command == "backends" and getattr(args, "backends_command", None) == "kinds":
         return False
