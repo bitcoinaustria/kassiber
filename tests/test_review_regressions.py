@@ -34,6 +34,8 @@ from kassiber.core.reports import (
     _generic_report_transfer_pair_rows,
     latest_transaction_rates_for_profile,
     report_austrian_e1kv,
+    report_balance_sheet,
+    report_portfolio_summary,
     report_tax_summary,
 )
 from kassiber.core.runtime import bootstrap_runtime, close_runtime
@@ -452,6 +454,205 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(report_rates, ledger_rates)
         self.assertEqual(report_rates["BTC"], Decimal("62000.123456789"))
         self.assertEqual(report_rates["LBTC"], Decimal("62000"))
+
+    def test_current_portfolio_reports_use_latest_cached_market_rate(self):
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        conn.row_factory = sqlite3.Row
+        conn.executescript(
+            """
+            CREATE TABLE transactions(
+                profile_id TEXT NOT NULL,
+                excluded INTEGER NOT NULL DEFAULT 0,
+                occurred_at TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                asset TEXT NOT NULL,
+                fiat_rate REAL,
+                fiat_value REAL,
+                fiat_rate_exact TEXT,
+                fiat_value_exact TEXT,
+                amount INTEGER NOT NULL
+            );
+            CREATE TABLE journal_account_holdings(
+                id TEXT NOT NULL,
+                profile_id TEXT NOT NULL,
+                account_code TEXT,
+                account_label TEXT,
+                asset TEXT NOT NULL,
+                quantity INTEGER NOT NULL,
+                cost_basis REAL NOT NULL
+            );
+            CREATE TABLE journal_wallet_holdings(
+                id TEXT NOT NULL,
+                profile_id TEXT NOT NULL,
+                wallet_id TEXT NOT NULL,
+                wallet_label TEXT NOT NULL,
+                account_code TEXT,
+                asset TEXT NOT NULL,
+                quantity INTEGER NOT NULL,
+                cost_basis REAL NOT NULL
+            );
+            CREATE TABLE rates_cache(
+                pair TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                rate REAL NOT NULL,
+                rate_exact TEXT,
+                source TEXT NOT NULL,
+                fetched_at TEXT NOT NULL,
+                granularity TEXT,
+                method TEXT
+            );
+            """
+        )
+        conn.executemany(
+            """
+            INSERT INTO transactions(
+                profile_id, excluded, occurred_at, created_at, asset,
+                fiat_rate, fiat_value, fiat_rate_exact, fiat_value_exact, amount
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "pf-current",
+                    0,
+                    "2026-05-15T17:42:32Z",
+                    "2026-05-15T17:42:32Z",
+                    "BTC",
+                    68_277.1,
+                    None,
+                    None,
+                    None,
+                    btc_to_msat("0.5"),
+                ),
+                (
+                    "pf-current",
+                    0,
+                    "2026-05-26T16:00:10Z",
+                    "2026-05-26T16:00:10Z",
+                    "LBTC",
+                    65_777.1,
+                    None,
+                    None,
+                    None,
+                    btc_to_msat("0.25"),
+                ),
+            ],
+        )
+        conn.execute(
+            """
+            INSERT INTO rates_cache(pair, timestamp, rate, rate_exact, source, fetched_at, granularity, method)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "BTC-EUR",
+                "2026-06-13T13:09:00Z",
+                55_455.25,
+                "55455.25",
+                "coinbase-exchange",
+                "2026-06-13T13:09:04Z",
+                "minute",
+                "product_candles",
+            ),
+        )
+        conn.executemany(
+            """
+            INSERT INTO journal_account_holdings(
+                id, profile_id, account_code, account_label, asset, quantity, cost_basis
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "acct-holding-btc",
+                    "pf-current",
+                    "treasury",
+                    "Treasury",
+                    "BTC",
+                    btc_to_msat("0.5"),
+                    20_000,
+                ),
+                (
+                    "acct-holding-lbtc",
+                    "pf-current",
+                    "treasury",
+                    "Treasury",
+                    "LBTC",
+                    btc_to_msat("0.25"),
+                    10_000,
+                ),
+            ],
+        )
+        conn.executemany(
+            """
+            INSERT INTO journal_wallet_holdings(
+                id, profile_id, wallet_id, wallet_label, account_code, asset, quantity, cost_basis
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "wallet-holding-btc",
+                    "pf-current",
+                    "wallet-btc",
+                    "Onchain",
+                    "treasury",
+                    "BTC",
+                    btc_to_msat("0.5"),
+                    20_000,
+                ),
+                (
+                    "wallet-holding-lbtc",
+                    "pf-current",
+                    "wallet-lbtc",
+                    "Liquid",
+                    "treasury",
+                    "LBTC",
+                    btc_to_msat("0.25"),
+                    10_000,
+                ),
+            ],
+        )
+        profile = {
+            "id": "pf-current",
+            "label": "Current",
+            "fiat_currency": "EUR",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+        }
+
+        def unused(*_args, **_kwargs):
+            raise AssertionError("unexpected hook call")
+
+        hooks = ReportHooks(
+            resolve_scope=lambda _conn, _workspace_ref, _profile_ref: (
+                {"id": "ws-current"},
+                profile,
+            ),
+            resolve_account=unused,
+            resolve_wallet=unused,
+            require_processed_journals=lambda _conn, _profile: None,
+            build_ledger_state=unused,
+            list_journal_entries=unused,
+            list_wallets=unused,
+            parse_iso_datetime=unused,
+            iso_z=unused,
+            now_iso=unused,
+            format_table=unused,
+            write_text_pdf=unused,
+        )
+
+        balance_rows = {
+            row["asset"]: row
+            for row in report_balance_sheet(conn, None, None, hooks)
+        }
+        portfolio_rows = {
+            row["asset"]: row
+            for row in report_portfolio_summary(conn, None, None, hooks)
+        }
+
+        self.assertAlmostEqual(balance_rows["BTC"]["market_value"], 27_727.625)
+        self.assertAlmostEqual(balance_rows["LBTC"]["market_value"], 13_863.8125)
+        self.assertAlmostEqual(portfolio_rows["BTC"]["market_value"], 27_727.625)
+        self.assertAlmostEqual(portfolio_rows["LBTC"]["market_value"], 13_863.8125)
 
     def test_ui_snapshots_use_populated_profile_rows(self):
         conn = open_db(self.data_root)
