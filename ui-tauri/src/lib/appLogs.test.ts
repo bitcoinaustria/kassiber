@@ -67,6 +67,24 @@ describe("typed app logs", () => {
     expect(stored.fields.duration_ms.value).toBe(12);
   });
 
+  it("floors a secret hiding in a non-secret typed field at insert", () => {
+    // Declared secret types are masked at render, but a credential can ride in
+    // under an operational/free type too (here a `url` with an api_key). The
+    // insert floor must scrub it so it never sits raw in the ring or a
+    // high-signal export, not only in a `text` field.
+    emitAppLog(
+      record({
+        endpoint: {
+          type: "url",
+          value: "https://api.example.test/v1?api_key=sk-leaked-001",
+        },
+      }),
+    );
+    const endpoint = String(getAppLogRecords()[0].fields.endpoint.value);
+    expect(endpoint).not.toContain("sk-leaked-001");
+    expect(endpoint).toContain("[redacted]");
+  });
+
   it("redacts JSON-shaped secrets in logged objects at insert", () => {
     // console.error(obj) JSON-stringifies its argument, so the secret floor
     // must catch quoted "key":"value" assignments, not just key=value text.

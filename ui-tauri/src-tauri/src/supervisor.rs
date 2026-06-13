@@ -209,11 +209,15 @@ fn redact_sensitive_text(text: &str) -> String {
             continue;
         }
         let recovery_assignment = is_recovery_assignment_word(word);
-        let redacted = redact_sensitive_word(word);
+        let (redacted, redact_following) = redact_sensitive_word(word);
         if recovery_assignment {
+            // A spaced recovery phrase: its words follow as separate tokens, so
+            // arm the recovery tail instead of `redact_next` (which would eat
+            // only the first word and then stay stuck on across the phrase).
             recovery_tail_words = 23;
+        } else {
+            redact_next = redact_following;
         }
-        redact_next = word.eq_ignore_ascii_case("bearer") || redacted == "Bearer";
         words.push(redacted);
     }
     words.join(" ")
@@ -247,16 +251,21 @@ fn looks_like_recovery_tail_word(word: &str) -> bool {
     (2..=12).contains(&len) && trimmed.chars().all(|c| c.is_ascii_alphabetic())
 }
 
-fn redact_sensitive_word(word: &str) -> String {
+/// Redacts a single whitespace-delimited token, returning the (possibly
+/// rewritten) token and whether the FOLLOWING token must also be redacted.
+/// The follow flag is true for `Bearer <token>` and for an assignment whose
+/// value is quoted *after* the separator (`"api_key": "secret"`), where
+/// `split_whitespace` puts the value in the next token.
+fn redact_sensitive_word(word: &str) -> (String, bool) {
     let lowered = word.to_ascii_lowercase();
     if lowered.starts_with("sk-") {
-        return "[redacted]".to_string();
+        return ("[redacted]".to_string(), false);
     }
     if contains_extended_key_or_descriptor(&lowered) {
-        return "[redacted]".to_string();
+        return ("[redacted]".to_string(), false);
     }
     if lowered.starts_with("bearer") {
-        return "Bearer".to_string();
+        return ("Bearer".to_string(), true);
     }
     for marker in [
         "api_key",
@@ -281,12 +290,28 @@ fn redact_sensitive_word(word: &str) -> String {
     ] {
         if let Some(index) = lowered.find(marker) {
             let after = &word[index + marker.len()..];
-            if after.starts_with('=') || after.starts_with(':') {
-                return format!("{}{}[redacted]", &word[..index + marker.len()], &after[..1]);
+            // Allow one closing quote between the key and the separator so JSON
+            // and Python-dict shapes match too: `api_key=`, `"api_key":`,
+            // `'api_key':`. `split_whitespace` leaves the quote on the key token.
+            let after_quote = after
+                .strip_prefix('"')
+                .or_else(|| after.strip_prefix('\''))
+                .unwrap_or(after);
+            if let Some(value) = after_quote
+                .strip_prefix(':')
+                .or_else(|| after_quote.strip_prefix('='))
+            {
+                if value.trim().is_empty() {
+                    // `"api_key":` — the value is quoted in the next token.
+                    return (word.to_string(), true);
+                }
+                // Value rides in this token (`api_key=sk...`, `{"api_key":"sk..."}`).
+                let key_end = word.len() - value.len();
+                return (format!("{}[redacted]", &word[..key_end]), false);
             }
         }
     }
-    word.to_string()
+    (word.to_string(), false)
 }
 
 fn contains_extended_key_or_descriptor(lowered: &str) -> bool {
@@ -1699,6 +1724,58 @@ mod tests {
         assert!(encoded.contains("\"tsMs\""));
         assert!(encoded.contains("\"stderrTail\""));
         assert!(encoded.contains("\"source\":\"env_python\""));
+    }
+
+    #[test]
+    fn redact_sensitive_text_handles_json_and_dict_shapes() {
+        // Raw daemon stderr can carry secrets in JSON or Python-dict shape,
+        // where the value token starts with a quote rather than with `sk-`, so
+        // the per-word prefix checks alone would miss it.
+        let cases = [
+            r#"{"api_key": "sk-live-001"}"#,
+            r#"{"api_key":"btcpay-no-sk-prefix"}"#,
+            r#"{'api_key': 'btcpay-no-sk-prefix'}"#,
+            r#"{"token": "secret-value-here"}"#,
+            r#"{"passphrase":"correct-horse-battery"}"#,
+        ];
+        for case in cases {
+            let redacted = redact_sensitive_text(case);
+            assert!(
+                redacted.contains("[redacted]"),
+                "no redaction marker in {redacted:?}"
+            );
+            for secret in [
+                "sk-live-001",
+                "btcpay-no-sk-prefix",
+                "secret-value-here",
+                "correct-horse-battery",
+            ] {
+                assert!(
+                    !redacted.contains(secret),
+                    "{secret:?} leaked while redacting {case:?} -> {redacted:?}"
+                );
+            }
+        }
+        // Key names and unrelated values survive.
+        let kept = redact_sensitive_text(r#"{"note": "keep", "api_key": "sk-secret-001"}"#);
+        assert!(kept.contains("note"));
+        assert!(kept.contains("keep"));
+        assert!(!kept.contains("sk-secret-001"));
+    }
+
+    #[test]
+    fn lifecycle_redacts_json_shaped_stderr() {
+        let supervisor = DaemonSupervisor::new(None);
+        supervisor.record_lifecycle(
+            "killed",
+            "daemon crashed",
+            r#"Traceback: AuthError({"api_key": "sk-leaked-key"})"#,
+            "env_python",
+        );
+        let (records, _) = supervisor.lifecycle_snapshot(0);
+        let record = records.first().expect("lifecycle record");
+        assert!(!record.stderr_tail.contains("sk-leaked-key"));
+        assert!(record.stderr_tail.contains("[redacted]"));
     }
 
     #[test]

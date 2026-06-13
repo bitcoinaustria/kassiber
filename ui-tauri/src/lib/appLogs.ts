@@ -564,7 +564,17 @@ function secretFloorFieldsAtInsert(
 ): Record<string, AppLogField> {
   let changed = false;
   const entries = Object.entries(fields).map(([name, field]) => {
-    if (field.type !== "text" || typeof field.value !== "string") {
+    // Run the secret-shape backstop on every string value EXCEPT the declared
+    // secret types: `redactField` masks those in both export tiers (and they
+    // are only ever raw in the watermarked raw view), where the original is
+    // needed to render a structure-revealing mask. Flooring here would still
+    // miss a secret arriving under a non-secret label — a `url` carrying a
+    // bearer token, or an unknown type that high-signal export passes through
+    // verbatim — so those are covered.
+    if (
+      typeof field.value !== "string" ||
+      SECRET_FLOOR_FIELD_TYPES.has(field.type)
+    ) {
       return [name, field] as const;
     }
     const value = redactSecretFloorText(field.value);
