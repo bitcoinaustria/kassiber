@@ -430,15 +430,25 @@ Job types are separate so partial success stays usable:
 - `journal_refresh` for follow-up local journal processing.
 
 Market-rate jobs first seed the bundled Kraken BTC daily BTC-EUR/BTC-USD
-archive into `rates_cache` when missing, then fetch a small latest quote from
-the configured live market-rate provider for current BTC price display.
-Coinbase Exchange is the default provider when none is configured; CoinGecko is
-also supported for live latest-price refresh. When the configured provider is
-Coinbase Exchange, the job also performs the existing live incremental
-minute-coverage pass for exact transaction timestamps. Background jobs skip the
-manual 30-day warm-cache fallback when no transaction minute is missing, so
-hourly price refresh stays provider-light. Kraken CSV remains an offline
-archive/import path because it needs a local file or bundled archive.
+archive into `rates_cache` when missing. The bundled seed is an offline,
+idempotent local-cache fill and always runs. Live provider refresh is then
+gated on the `market_rates` source class: when it is enabled the job fetches a
+small latest quote from the configured live market-rate provider for current
+BTC price display; when it is disabled the job returns after seeding without
+contacting any provider (`live_refresh: false`,
+`skipped_reason: market_rates_disabled`). This gate lives in the job handler
+itself, so every enqueue path honors it — the foreground `ui.freshness.run`,
+`ui.workspace.freshness.run`, the background worker, and report-read auto-sync.
+A user who disables market-rate refresh can therefore refresh sources and
+journals (which hit their own infrastructure) without any connection to the
+hardcoded rate providers. Coinbase Exchange is the default provider when none is
+configured; CoinGecko is also supported for live latest-price refresh. When the
+configured provider is Coinbase Exchange and live refresh is enabled, the job
+also performs the existing live incremental minute-coverage pass for exact
+transaction timestamps. Background jobs skip the manual 30-day warm-cache
+fallback when no transaction minute is missing, so hourly price refresh stays
+provider-light. Kraken CSV remains an offline archive/import path because it
+needs a local file or bundled archive.
 
 Source states are `fresh`, `queued`, `syncing`, `paused`, `rate_limited`,
 `partially_stale`, `failed`, and `blocking_reports`. Report reads are blocked
