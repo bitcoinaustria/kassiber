@@ -7,7 +7,7 @@ import threading
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from kassiber import daemon as daemon_runtime
 from kassiber import daemon_freshness
@@ -493,6 +493,57 @@ class FreshnessTest(unittest.TestCase):
         self.assertEqual(result["provider"], core_rates.RATE_SOURCE_MEMPOOL)
         self.assertEqual(result["latest"][0]["source"], core_rates.RATE_SOURCE_MEMPOOL)
         self.assertEqual(result["sync"][0]["source"], core_rates.RATE_SOURCE_MEMPOOL)
+
+    def test_market_rate_job_handler_refuses_provider_when_policy_off(self):
+        # Defense in depth on top of the enqueue-level gate: even if a
+        # market_rates job is somehow run for a profile that disabled the
+        # market_rates source class, the handler seeds the offline bundled
+        # archive but never contacts a live provider.
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        freshness.set_policy(
+            conn,
+            profile_id,
+            source_classes={freshness.SOURCE_RATES: False},
+        )
+        conn.commit()
+
+        def fake_seed(conn_arg, commit=True):
+            self.assertIs(conn_arg, conn)
+            self.assertTrue(commit)
+            return "memory://bundled-kraken", [
+                {"pair": "BTC-EUR", "samples": 2, "already_seeded": False},
+                {"pair": "BTC-USD", "samples": 2, "already_seeded": False},
+            ]
+
+        latest = Mock()
+        sync = Mock()
+        progress = []
+        handler = daemon_freshness._freshness_handlers({})[freshness.JOB_MARKET_RATES]
+        with patch(
+            "kassiber.daemon_freshness.core_rates.ensure_bundled_kraken_btc_daily_seed",
+            fake_seed,
+        ), patch(
+            "kassiber.daemon_freshness.core_rates.sync_latest_rates", latest
+        ), patch(
+            "kassiber.daemon_freshness.core_rates.sync_rates", sync
+        ):
+            result = handler(
+                conn,
+                {"profile_id": profile_id},
+                lambda payload: progress.append(dict(payload)),
+                lambda: None,
+            )
+
+        latest.assert_not_called()
+        sync.assert_not_called()
+        self.assertEqual(result["status"], "synced")
+        self.assertFalse(result["live_refresh"])
+        self.assertEqual(result["skipped_reason"], "market_rates_disabled")
+        self.assertEqual(result["latest"], [])
+        self.assertEqual(result["sync"], [])
+        self.assertEqual(result["bundled_seed"]["path"], "memory://bundled-kraken")
+        self.assertEqual(progress[0]["phase"], freshness.PHASE_RATE_COVERAGE)
 
     def test_freshness_configure_persists_market_rate_provider(self):
         conn = self._db()

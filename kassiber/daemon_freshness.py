@@ -560,15 +560,42 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
         progress: Callable[[Mapping[str, Any]], None],
         check_cancelled: Callable[[], None],
     ) -> Mapping[str, Any]:
-        del job
         progress({"phase": core_freshness.PHASE_RATE_COVERAGE})
         check_cancelled()
+        # The bundled Kraken daily seed is an offline, idempotent local-cache
+        # fill, so it always runs regardless of the market-rate policy.
         archive_path, seed_summary = core_rates.ensure_bundled_kraken_btc_daily_seed(
             conn,
             commit=True,
         )
         check_cancelled()
         provider = core_rates.get_market_rate_provider(conn)
+        bundled_seed = {
+            "source": core_rates.RATE_SOURCE_KRAKEN_CSV,
+            "path": archive_path,
+            "summary": seed_summary,
+        }
+        # Defense in depth: the foreground/background enqueue paths already skip
+        # the market-rate source when the market_rates source class is disabled,
+        # but gate the live provider call here too so no enqueue path can ever
+        # reach a hardcoded rate provider (Coinbase Exchange / CoinGecko /
+        # mempool) for a profile that turned market-rate refresh off.
+        profile_id = job.get("profile_id") if isinstance(job, Mapping) else None
+        policy = (
+            core_freshness.get_policy(conn, str(profile_id))
+            if profile_id
+            else core_freshness.default_policy()
+        )
+        if not policy.source_classes.get(core_freshness.SOURCE_RATES, False):
+            return {
+                "status": "synced",
+                "provider": provider,
+                "live_refresh": False,
+                "skipped_reason": "market_rates_disabled",
+                "bundled_seed": bundled_seed,
+                "latest": [],
+                "sync": [],
+            }
         latest_summary = core_rates.sync_latest_rates(
             conn,
             source=provider,
@@ -592,11 +619,8 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
         return {
             "status": "synced",
             "provider": provider,
-            "bundled_seed": {
-                "source": core_rates.RATE_SOURCE_KRAKEN_CSV,
-                "path": archive_path,
-                "summary": seed_summary,
-            },
+            "live_refresh": True,
+            "bundled_seed": bundled_seed,
             "latest": latest_summary,
             "sync": summary,
         }
