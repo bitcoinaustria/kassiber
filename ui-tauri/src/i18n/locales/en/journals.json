@@ -141,6 +141,8 @@
       "otherReview": "Other review"
     },
     "impact": "Held from reports",
+    "impactBlocksReports": "Blocks reports",
+    "impactHeldForReview": "Held for review",
     "source": "Journal quarantine · {{direction}}",
     "ownerFallback": "Active book",
     "direction": {

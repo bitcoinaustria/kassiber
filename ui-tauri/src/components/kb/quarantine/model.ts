@@ -26,7 +26,12 @@ export function quarantineItemToRow(
     source: t("quarantine.source", { direction: formatDirection(item.direction, t) }),
     amount: formatMsatAmount(amountMsat, item.asset),
     basis: basisLabel(reason, item.detail, t),
-    impact: t("quarantine.impact"),
+    // Per-row consequence, not a constant: high-priority reasons block the
+    // whole report run, the rest hold just this row out of journals.
+    impact:
+      priority === "High"
+        ? t("quarantine.impactBlocksReports")
+        : t("quarantine.impactHeldForReview"),
     status,
     priority,
     owner: profile ?? t("quarantine.ownerFallback"),
