@@ -5,6 +5,7 @@ import {
   applyAiChatStreamRecordToMessage,
   applyToolConsentResponseToMessage,
   aiChatStatusLabel,
+  buildAiChatStreamArgs,
   buildChatCancelArgs,
   buildToolConsentArgs,
   terminalAiChatStatus,
@@ -247,5 +248,39 @@ describe("AI stream reducer helpers", () => {
 
     expect(recordedDeny.toolCalls?.[0].status).toBe("denied");
     expect(recordedDeny.toolCalls?.[0].reason).toBe("user_denied");
+  });
+});
+
+describe("buildAiChatStreamArgs", () => {
+  it("maps camelCase request fields onto the wire contract", () => {
+    const args = buildAiChatStreamArgs({
+      provider: "ollama",
+      model: "mock-model",
+      messages: [{ role: "user", content: "hello" }],
+      toolsEnabled: true,
+      toolLoopMaxIterations: 8,
+      systemPromptKind: "kassiber",
+      sessionId: "session-1",
+      persist: "auto",
+    });
+    expect(args).toMatchObject({
+      provider: "ollama",
+      model: "mock-model",
+      tools_enabled: true,
+      tool_loop_max_iterations: 8,
+      system_prompt_kind: "kassiber",
+      session_id: "session-1",
+      persist: "auto",
+    });
+  });
+
+  it("omits the session id when absent and forwards incognito persist", () => {
+    const args = buildAiChatStreamArgs({
+      model: "mock-model",
+      messages: [],
+      persist: false,
+    });
+    expect(args.session_id).toBeUndefined();
+    expect(args.persist).toBe(false);
   });
 });

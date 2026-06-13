@@ -618,6 +618,10 @@ def _process_env_default_backend_override(runtime_config):
 
 
 def _fallback_backend_name(names):
+    if names:
+        user_created = sorted(name for name in names if name not in DEFAULT_BACKENDS)
+        if user_created:
+            return user_created[0]
     if "mempool" in names:
         return "mempool"
     if names:
@@ -627,6 +631,126 @@ def _fallback_backend_name(names):
         code="config_error",
         hint="Create a backend with `kassiber backends create`, or seed one through your dotenv bootstrap config.",
     )
+
+
+def _http_url_base(url, *, api: bool) -> str | None:
+    value = str_or_none(url)
+    if value is None:
+        return None
+    parsed = urlsplit(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    path = (parsed.path or "").rstrip("/")
+    if api:
+        if not path.lower().endswith("/api"):
+            path = f"{path}/api" if path else "/api"
+    elif path.lower().endswith("/api"):
+        path = path[:-4] or ""
+    return urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
+
+
+def _backend_matches_chain_network(backend, chain, network):
+    wanted_chain = normalize_chain_value(chain) if chain else None
+    wanted_network = normalize_network_value(wanted_chain, network) if wanted_chain and network else None
+    backend_chain = normalize_chain_value(backend_value(backend, "chain") or "bitcoin")
+    backend_network = normalize_network_value(
+        backend_chain,
+        backend_value(backend, "network") or ("liquidv1" if backend_chain == "liquid" else "main"),
+    )
+    return (
+        (wanted_chain is None or backend_chain == wanted_chain)
+        and (wanted_network is None or backend_network == wanted_network)
+    )
+
+
+def _http_explorer_backend_candidates(conn, chain, network):
+    rows = conn.execute("SELECT * FROM backends ORDER BY name ASC").fetchall()
+    candidates = []
+    for row in rows:
+        backend = _backend_row_to_dict(row)
+        kind = str(backend_value(backend, "kind") or "").lower()
+        if kind not in {"esplora", "mempool", "liquid-esplora"}:
+            continue
+        if not _backend_matches_chain_network(backend, chain, network):
+            continue
+        api_base_url = _http_url_base(backend_value(backend, "url"), api=True)
+        explorer_base_url = _http_url_base(backend_value(backend, "url"), api=False)
+        if api_base_url is None or explorer_base_url is None:
+            continue
+        candidates.append(
+            {
+                "name": backend["name"],
+                "backend": backend,
+                "api_base_url": api_base_url,
+                "explorer_base_url": explorer_base_url,
+            }
+        )
+    return candidates
+
+
+def _preferred_http_explorer_candidate(conn, chain="bitcoin", network="main"):
+    candidates = _http_explorer_backend_candidates(conn, chain, network)
+    if not candidates:
+        return None
+    default_name = get_setting(conn, DEFAULT_BACKEND_SETTING)
+
+    def sort_key(candidate):
+        name = candidate["name"]
+        backend = candidate["backend"]
+        return (
+            0 if backend_value(backend, "infrastructure_owner") == "self" else 1,
+            0 if name not in DEFAULT_BACKENDS else 1,
+            0 if default_name and name == default_name else 1,
+            name,
+        )
+
+    return sorted(candidates, key=sort_key)[0]
+
+
+def _user_owned_http_explorer_candidate(conn, chain="bitcoin", network="main"):
+    candidates = [
+        candidate
+        for candidate in _http_explorer_backend_candidates(conn, chain, network)
+        if candidate["name"] not in DEFAULT_BACKENDS
+        or backend_value(candidate["backend"], "infrastructure_owner") == "self"
+    ]
+    if not candidates:
+        return None
+    default_name = get_setting(conn, DEFAULT_BACKEND_SETTING)
+    return sorted(
+        candidates,
+        key=lambda candidate: (
+            0 if default_name and candidate["name"] == default_name else 1,
+            0 if backend_value(candidate["backend"], "infrastructure_owner") == "self" else 1,
+            candidate["name"],
+        ),
+    )[0]
+
+
+def preferred_explorer_base(conn, chain="bitcoin", network="main"):
+    candidate = _user_owned_http_explorer_candidate(conn, chain, network)
+    if candidate is None:
+        return None
+    backend = candidate["backend"]
+    return {
+        "label": backend_value(backend, "display_name") or candidate["name"],
+        "base_url": candidate["explorer_base_url"],
+        "backend": candidate["name"],
+    }
+
+
+def preferred_mempool_api_backend(conn, chain="bitcoin", network="main"):
+    candidate = _preferred_http_explorer_candidate(conn, chain, network)
+    if candidate is None:
+        return None
+    backend = candidate["backend"]
+    return {
+        "name": candidate["name"],
+        "api_base_url": candidate["api_base_url"],
+        "explorer_base_url": candidate["explorer_base_url"],
+        "tor_proxy": backend_value(backend, "tor_proxy"),
+        "timeout": parse_int(backend_value(backend, "timeout"), None),
+    }
 
 
 def _seedable_runtime_backend(name, backend):
@@ -1084,11 +1208,27 @@ def set_default_backend(conn, runtime_config, name, commit=True):
 def clear_default_backend(conn, runtime_config):
     """Reset the stored default to the bootstrap SQLite default."""
     available_names = _available_backend_names(conn)
+    previous_default = get_setting(conn, DEFAULT_BACKEND_SETTING)
     default_name = get_setting(conn, BOOTSTRAP_DEFAULT_BACKEND_SETTING)
+    notice = None
     if default_name not in available_names:
+        missing_default = default_name
         default_name = _fallback_backend_name(available_names)
         set_setting(conn, BOOTSTRAP_DEFAULT_BACKEND_SETTING, default_name)
+        notice = {
+            "code": "default_backend_fallback",
+            "message": (
+                f"Default backend fell back to '{default_name}' because "
+                f"'{missing_default}' is no longer configured."
+            ),
+            "previous_default": previous_default,
+            "missing_default": missing_default,
+            "default_backend": default_name,
+        }
     set_setting(conn, DEFAULT_BACKEND_SETTING, default_name)
     conn.commit()
     runtime_config["default_backend"] = default_name
-    return {"default_backend": default_name, "cleared": True}
+    payload = {"default_backend": default_name, "cleared": True}
+    if notice:
+        payload["notice"] = notice
+    return payload

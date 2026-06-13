@@ -18,8 +18,8 @@ Two surfaces ship today:
   assistants.
 - An **in-app assistant** in the desktop UI that streams chat from an
   OpenAI-compatible endpoint or fixed Claude/Codex CLI adapter, plus a
-  parallel CLI surface (`kassiber ai providers …`, `kassiber ai models`,
-  `kassiber ai chat`) that reuses the same provider config.
+  parallel CLI surface (`kassiber chat`, `kassiber ai providers …`,
+  `kassiber ai models`) that reuses the same provider config.
 
 The repo-local skill helps an AI assistant use the Kassiber CLI safely and
 correctly for:
@@ -138,8 +138,116 @@ printf '%s\n' "$OPENAI_API_KEY" | kassiber ai providers create openai --base-url
 kassiber ai providers create claude-cli --base-url claude-cli://default --kind remote --acknowledge --default-model default
 kassiber ai providers set-default openai
 kassiber ai models
-kassiber ai chat "Summarise the last week of imports."
+kassiber chat "Summarise the last week of imports."
+git log --oneline -20 | kassiber chat -
+kassiber chat
 ```
+
+`kassiber chat` is the CLI client for the same daemon-backed assistant used by
+the desktop UI — there is exactly one chat surface and one protocol. It starts
+a local daemon transport, sends `ai.chat` requests with `tools_enabled=true`,
+renders streaming deltas in the terminal, and sends `ai.tool_call.consent`
+decisions when mutating tools ask for approval. Pass a prompt positionally or
+with `--prompt` for one turn; `kassiber chat -` reads the one-shot prompt from
+stdin for pipelines and heredocs. After each rendered turn a dim provenance
+footer shows provider/model, the tools that actually ran, and whether journals
+were auto-refreshed — the same provenance the desktop Assistant records.
+`--no-tools` disables the tool loop for a provider-only exchange, and
+`--system "..."` replaces the built-in Kassiber system prompt with a raw one
+(`system_prompt_kind="raw"`).
+
+Omit the prompt for REPL mode, which has line editing and in-session history
+on real terminals, and these commands:
+
+- `/help` — command help; `/exit`, `/quit`, or Ctrl-D leaves.
+- `/tools` — the daemon tool catalog with consent classes.
+- `/model [id]`, `/provider [name]` — show or switch mid-session; a provider
+  switch re-resolves that provider's default model and rolls back on error.
+- `/allow <tool>`, `/allowed` — manage which mutating tools are pre-approved
+  for this session.
+- `/new` — start a fresh conversation without restarting the daemon.
+
+Ctrl-C during a reply cancels that turn cooperatively and keeps the session.
+Daemon-side `allow_session` consent spans a single `ai.chat` request, so the
+REPL carries an interactive "[s] session" answer across turns client-side and
+re-sends it for that tool.
+
+Output modes cover scripting:
+
+- default rendered text for humans. On a TTY, the model's markdown is
+  rendered with ANSI styling — bold, inline code, headers, bullets, fenced
+  code, and pipe tables re-drawn as box-aligned tables — while preserving
+  token streaming, and successful tool results draw a compact deterministic
+  table straight from the daemon envelope, so tabular numbers on screen never
+  depend on the model retyping them correctly. `--plain` turns both off.
+  With piped stdout, the raw answer text is the only thing on stdout —
+  progress labels, tool announcements, tool tables, consent UI, and the
+  provenance footer move to stderr;
+- `--machine` / `--format json` (one-shot only) emits a single `chat` envelope
+  with the final message, `finish_reason`, provenance, and tool-call summary;
+- `--stream-json` (one-shot only, mutually exclusive with `--machine`) emits
+  the raw daemon stream records — `ai.chat.status`, `ai.chat.delta`,
+  `ai.chat.tool_call`, `ai.chat.tool_consent_required`, `ai.chat.tool_result`,
+  then the terminal `ai.chat` — as NDJSON, mirroring what the desktop bridge
+  streams;
+- `--transcript PATH` (any mode, REPL included) appends every daemon request
+  and stream record for the session to PATH as NDJSON — a local audit trail
+  for debugging model answers and tool behavior. The file is plaintext and
+  contains prompts and redacted tool results; treat it like notes, not like
+  the encrypted database.
+
+For automation, `kassiber chat --yes "..."` approves mutating tool requests for
+that chat session without prompting. Prefer the narrower
+`--allow-tool ui.journals.process` form when a script should approve only one
+tool. Machine and `--stream-json` runs never prompt interactively even on a
+TTY; there, and without a TTY in rendered mode, unapproved mutating tools are
+denied and the denial is fed back to the model as `user_denied`.
+
+## Chat history
+
+Chat sessions can persist — inside the SQLite/SQLCipher database, next to the
+data the answers were derived from, never as separate plaintext files. The
+policy setting `ai_chat_history` has three values, managed via
+`kassiber chats config [--history auto|on|off]`:
+
+- `auto` (default) — persist only when the database file is
+  SQLCipher-encrypted. A plaintext database stays ephemeral; running
+  `kassiber secrets init` is what unlocks history.
+- `on` — persist regardless of encryption (an explicit user choice).
+- `off` — never persist.
+
+`kassiber chat --incognito` skips persistence for one session regardless of
+the setting. `kassiber chat --continue` resumes the most recently updated
+session (the stored messages are replayed to the model as context);
+`--session <id>` resumes a specific one. In the REPL, `/new` starts a fresh
+session. Stored exchanges keep the user prompt, the assistant answer, the
+`finish_reason`, and the answer provenance — not full tool result envelopes,
+which remain reproducible from the database (use `--transcript` for
+full-fidelity capture).
+
+Manage stored sessions with `kassiber chats list`, `chats show <id>`,
+`chats delete <id>`, and `chats clear`. Machine chat envelopes and the
+terminal `ai.chat` record carry `session_id` (null when nothing persisted).
+
+On the wire, persistence is per request: `ai.chat` accepts
+`persist: true | false | "auto"` plus `session_id` to append to an existing
+session; unknown session ids fail before streaming starts. A request opts in
+by sending `persist` true/`"auto"` or a `session_id`; with neither, nothing
+persists, so existing clients are unchanged. The stored policy stays
+authoritative over every write — `off` never persists and `auto` persists
+only on encrypted databases, even for continuations of an existing session. Session management is exposed as the daemon
+kinds `ui.chat.sessions.list`, `ui.chat.sessions.get`,
+`ui.chat.sessions.delete`, and `ui.chat.sessions.clear`, profile-scoped like
+the rest of the UI surface, plus `ui.chat.history.configure` for reading or
+setting the policy (the desktop Settings control). The desktop Assistant
+sends `persist: "auto"`, round-trips `session_id`, and surfaces history in
+its toolbar; these kinds stay usable while the AI runtime toggle is off,
+because seeing and deleting stored history is a privacy control, not an AI
+feature. Chat history is intentionally **not** an AI tool:
+the model cannot browse or search prior sessions on its own. Only a session
+the user explicitly resumes is replayed as normal chat context, so
+prompt-injection risk stays scoped to the resumed conversation. Diagnostics
+reports and audit packages do not include chat content.
 
 Provider API-key entry supports `--api-key-stdin` and `--api-key-fd FD`. The
 legacy `--api-key <value>` form still works as a warning-on-use compatibility
@@ -198,7 +306,8 @@ with phases such as `preparing`, `connecting`, and `waiting_for_model`. These
 records are UI progress hints only; chain-of-thought is shown only when the
 provider emits inline `<think>` content or structured `reasoning` deltas.
 
-Pressing **Stop** sends `ai.chat.cancel` with
+Pressing **Stop** in the desktop UI, choosing cancel at a terminal consent
+prompt, or interrupting `kassiber chat` sends `ai.chat.cancel` with
 `args.target_request_id = <active ai.chat request_id>`. Cancellation is
 best-effort and cooperative: Kassiber stops forwarding deltas once the Python
 worker returns between provider chunks, then emits the terminal `ai.chat`
@@ -207,7 +316,7 @@ tokens already generated or in flight may still be billed.
 
 ## Tool use
 
-The in-app assistant can opt into a bounded tool loop with
+The desktop assistant and `kassiber chat` opt into a bounded tool loop with
 `ai.chat` top-level args:
 
 ```json

@@ -58,8 +58,9 @@ workflow almost nobody else covers.
   [jlopp/physical-bitcoin-attacks](https://github.com/jlopp/physical-bitcoin-attacks)
   catalog covers the threats this addresses.
 - **Local AI Chat** — assistant defaults to local
-  [Ollama](https://ollama.com/); off-device providers require explicit
-  per-provider acknowledgement and per-tool consent.
+  [Ollama](https://ollama.com/); the desktop Assistant and `kassiber chat`
+  both use the same daemon tool loop. Off-device providers require explicit
+  per-provider acknowledgement and mutating tools require consent.
 - **AGPL 3.0** — auditable, forkable, no vendor lock-in.
 
 ## Highlights
@@ -146,8 +147,9 @@ python3 -m kassiber reports summary
 
 For transfer pairing, swap matching, source-of-funds, Austrian E 1kv,
 BTCPay reconciliation, and the concept model, see
-[docs/quickstart.md](docs/quickstart.md). Both surfaces speak the same
-Python daemon, so a daily flow can move freely between them.
+[docs/quickstart.md](docs/quickstart.md). The desktop GUI is optional:
+the Assistant sidebar and `kassiber chat` speak the same Python daemon, so a
+daily flow can move freely between them.
 
 ## Architecture
 

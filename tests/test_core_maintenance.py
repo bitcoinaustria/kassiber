@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kassiber.core import maintenance
+from kassiber.core import chat_history, maintenance
 from kassiber.db import open_db
 
 
@@ -118,6 +118,30 @@ class CoreMaintenanceTest(unittest.TestCase):
 
             conn = open_db(str(data_root))
             try:
+                workspace_id = conn.execute(
+                    "SELECT value FROM settings WHERE key = 'context_workspace'"
+                ).fetchone()[0]
+                profile_id = conn.execute(
+                    "SELECT value FROM settings WHERE key = 'context_profile'"
+                ).fetchone()[0]
+                chat_session_id = chat_history.create_session(
+                    conn,
+                    workspace_id,
+                    profile_id,
+                    title="Reset should clear this",
+                    provider="tool-local",
+                    model="test-model",
+                    commit=False,
+                )["id"]
+                chat_history.append_exchange(
+                    conn,
+                    profile_id,
+                    chat_session_id,
+                    user_content="old prompt",
+                    assistant_content="old answer",
+                    commit=True,
+                )
+
                 payload = maintenance.reset_current_profile_data(conn, str(data_root))
 
                 self.assertTrue(payload["reset"])
@@ -129,6 +153,8 @@ class CoreMaintenanceTest(unittest.TestCase):
                 self.assertGreaterEqual(payload["removed"]["journal_entries"], 1)
                 self.assertEqual(payload["removed"]["attachments"], 1)
                 self.assertEqual(payload["removed"]["attachment_files"], 1)
+                self.assertEqual(payload["removed"]["ai_chat_sessions"], 1)
+                self.assertEqual(payload["removed"]["ai_chat_messages"], 2)
                 self.assertEqual(payload["removed"]["rates_cache"], 0)
                 self.assertEqual(payload["rates_scope"], "preserved")
                 self.assertFalse(payload["shared_rates_cleared"])
@@ -141,6 +167,8 @@ class CoreMaintenanceTest(unittest.TestCase):
                     "journal_quarantines",
                     "transaction_pairs",
                     "direct_swap_payouts",
+                    "ai_chat_sessions",
+                    "ai_chat_messages",
                     "tags",
                 ):
                     count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]

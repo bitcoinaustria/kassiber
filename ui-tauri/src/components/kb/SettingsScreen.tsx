@@ -55,16 +55,17 @@ import { SecuritySettingsPanel } from "./settings/SecuritySettingsPanel";
 import { TerminalCommandSettingsPanel } from "./settings/TerminalCommandSettingsPanel";
 import { DEFAULT_SETTINGS_SECTION, SettingsRail, sectionMeta } from "./settings/SettingsNavigation";
 import {
-  DEFAULT_RATE_BACKENDS,
   PLAINTEXT_DELETE_ACK,
   backendPayload,
   backendRowToSettingsBackend,
   backendsForLayer,
   deriveExplorerSettings,
   formatCount,
+  marketRateBackends,
   type Backend,
   type BackendSettingsData,
   type BackendSettingsRow,
+  type MaintenanceSettingsData,
   type ResetBookData,
   type StatusData,
 } from "./settings/SettingsModel";
@@ -137,6 +138,11 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   });
   const backendSettingsQuery = useDaemon<BackendSettingsData>(
     "ui.backends.settings.list",
+    undefined,
+    { refetchOnMount: "always" },
+  );
+  const maintenanceSettingsQuery = useDaemon<MaintenanceSettingsData>(
+    "ui.maintenance.settings",
     undefined,
     { refetchOnMount: "always" },
   );
@@ -318,11 +324,15 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
 
   const backends = React.useMemo<Backend[]>(() => {
     const syncRows = backendSettingsQuery.data?.data?.backends ?? [];
+    const syncBackends = syncRows.map(backendRowToSettingsBackend);
     return [
-      ...syncRows.map(backendRowToSettingsBackend),
-      ...DEFAULT_RATE_BACKENDS,
+      ...syncBackends,
+      ...marketRateBackends(
+        maintenanceSettingsQuery.data?.data?.settings ?? null,
+        syncBackends,
+      ),
     ];
-  }, [backendSettingsQuery.data]);
+  }, [backendSettingsQuery.data, maintenanceSettingsQuery.data]);
 
   React.useEffect(() => {
     if (!backendSettingsQuery.data?.data?.backends) return;
@@ -874,6 +884,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             backends={backends}
             aiFeaturesEnabled={aiFeaturesEnabled}
             onEditBackend={openEditBackend}
+            onManageMarketData={() => goToSection("network-market")}
             onManageAi={() => goToSection("assistant-ai")}
           />
         );

@@ -90,9 +90,9 @@ export const EXPOSURE_GROUPS: ExposureGroupDef[] = [
     id: "market",
     title: "Market prices",
     subtitle:
-      "Offline history stays local. Live providers only see pair and time window.",
+      "Offline history stays local. Live providers see the pair and coarse transaction-time blocks.",
     nets: ["FX"],
-    canEdit: false,
+    canEdit: true,
   },
 ];
 
@@ -221,6 +221,7 @@ export function PrivacySettingsPanel({
   aiFeaturesEnabled,
   onEditBackend,
   onManageAi,
+  onManageMarketData,
 }: {
   hideSensitive: boolean;
   setHideSensitive: (value: boolean) => void;
@@ -230,6 +231,7 @@ export function PrivacySettingsPanel({
   aiFeaturesEnabled: boolean;
   onEditBackend: (backend: Backend) => void;
   onManageAi: () => void;
+  onManageMarketData: () => void;
 }) {
   const [filter, setFilter] = React.useState<ExposureFilter | null>(null);
 
@@ -357,7 +359,11 @@ export function PrivacySettingsPanel({
                       key={backend.id}
                       backend={backend}
                       canEdit={group.canEdit}
-                      onEdit={() => onEditBackend(backend)}
+                      onEdit={() =>
+                        group.id === "market"
+                          ? onManageMarketData()
+                          : onEditBackend(backend)
+                      }
                     />
                   ))}
                 </div>

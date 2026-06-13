@@ -8,9 +8,16 @@ import {
 import {
   type AiChatRequest,
   type AiToolConsentDecision,
+  type StoredChatEntry,
   useAiChatStream,
 } from "@/daemon/stream";
+import { getTransport, makeDaemonRequestId } from "@/daemon/transport";
 import { useUiStore } from "@/store/ui";
+
+interface StoredSessionShape {
+  id?: string;
+  messages?: { role?: string; content?: string }[];
+}
 
 interface AssistantSessionProviderProps {
   children: React.ReactNode;
@@ -37,8 +44,13 @@ export function AssistantSessionProvider({
     pendingConsent,
     sendConsent,
     reset,
+    sessionId,
+    loadConversation,
+    forgetSession,
   } = useAiChatStream();
+  const dataMode = useUiStore((state) => state.dataMode);
   const [queuedPrompts, setQueuedPrompts] = React.useState<string[]>([]);
+  const [incognito, setIncognito] = React.useState(false);
 
   const dispatchPrompt = React.useCallback(
     (prompt: string) => {
@@ -65,11 +77,13 @@ export function AssistantSessionProvider({
           toolsEnabled: true,
           toolLoopMaxIterations: 8,
           systemPromptKind: "kassiber",
+          sessionId,
+          persist: incognito ? false : "auto",
         },
         prompt,
       );
     },
-    [messages, selection, send, thinkingEffort],
+    [incognito, messages, selection, send, sessionId, thinkingEffort],
   );
 
   const sendPrompt = React.useCallback(
@@ -103,6 +117,33 @@ export function AssistantSessionProvider({
     reset();
   }, [reset]);
 
+  const resumeSession = React.useCallback(
+    async (targetSessionId: string) => {
+      if (isStreaming) return;
+      const envelope = await getTransport(dataMode).invoke<StoredSessionShape>({
+        kind: "ui.chat.sessions.get",
+        request_id: makeDaemonRequestId(),
+        args: { session_id: targetSessionId },
+      });
+      if (envelope.kind === "error" || envelope.error) {
+        throw new Error(
+          envelope.error?.message ?? "Could not load the chat session",
+        );
+      }
+      const entries: StoredChatEntry[] = (envelope.data?.messages ?? [])
+        .filter(
+          (message): message is { role: "user" | "assistant"; content: string } =>
+            (message.role === "user" || message.role === "assistant") &&
+            typeof message.content === "string" &&
+            message.content.length > 0,
+        )
+        .map((message) => ({ role: message.role, content: message.content }));
+      setQueuedPrompts([]);
+      loadConversation(entries, envelope.data?.id ?? targetSessionId);
+    },
+    [dataMode, isStreaming, loadConversation],
+  );
+
   const value = React.useMemo<AssistantSessionContextValue>(
     () => ({
       messages,
@@ -113,22 +154,31 @@ export function AssistantSessionProvider({
       selection,
       thinkingEffort,
       returnPath,
+      sessionId,
+      incognito,
       setSelection,
       setThinkingEffort,
+      setIncognito,
       sendPrompt,
       sendConsent: typedSendConsent,
       abort,
       reset: clearChat,
+      resumeSession,
+      forgetSession,
     }),
     [
       abort,
       clearChat,
       error,
+      forgetSession,
+      incognito,
       isStreaming,
       messages,
       pendingConsent,
       queuedPrompts,
+      resumeSession,
       returnPath,
+      sessionId,
       setSelection,
       selection,
       sendPrompt,

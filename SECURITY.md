@@ -60,7 +60,8 @@ configurable.
 | `wallets sync` against a user-configured Electrum backend | your configured `ssl://` or `tcp://` URL | Electrum JSON-RPC over raw TCP/TLS | IP, queried scripthashes, query timing |
 | `wallets sync` against a `bitcoinrpc` backend | your configured URL | HTTP(S) POST with Basic auth | nothing leaves your machine if the node is local |
 | `rates sync` (only) | `https://api.coingecko.com/api/v3/coins/bitcoin/market_chart` | unauthenticated HTTPS GET | IP, User-Agent, which fiat pair and window |
-| `ai models`, `ai chat`, `ai.test_connection` against a configured remote/TEE provider | your configured provider URL or CLI provider | OpenAI-compatible HTTP(S) or the configured local CLI's own transport | prompt/tool context, model request metadata, IP/provider account context according to that provider |
+| `ai models`, `chat`, `ai.test_connection` against a configured remote/TEE provider | your configured provider URL or CLI provider | OpenAI-compatible HTTP(S) or the configured local CLI's own transport | prompt/tool context, model request metadata, IP/provider account context according to that provider |
+| consented mutating AI tools inside `chat` or the desktop Assistant (`ui.wallets.sync`, `ui.rates.rebuild`, `ui.maintenance.run`) | the backends/rate sources of the rows above | as in those rows | as in those rows — tool consent is also network consent for that row |
 
 Nothing else makes network calls. `rates set`, `rates latest`,
 `rates range`, `rates pairs`, journal processing, metadata CRUD, and all
@@ -72,6 +73,15 @@ that itself contacts a remote service.
 - `~/.kassiber/data/kassiber.sqlite3` — default SQLite DB. Contains
   descriptors, xpubs, addresses, transactions, metadata, rates cache,
   backend definitions/defaults, and any stored backend credentials.
+- Persisted AI chat sessions also live inside that database
+  (`ai_chat_sessions` / `ai_chat_messages`) — never as separate plaintext
+  files. The default `auto` policy persists only when the database is
+  SQLCipher-encrypted; `kassiber chats config --history off` disables it,
+  `kassiber chat --incognito` skips one session, and `kassiber chats
+  delete/clear` remove stored sessions. Diagnostics reports and audit
+  packages do not include chat content. The opt-in `kassiber chat
+  --transcript <path>` file is the one plaintext chat artifact, written only
+  where the user points it.
 - `~/.kassiber/config/backends.env` — default backend config file. May contain
   Bitcoin Core RPC credentials and backend tokens.
 - `~/.kassiber/config/settings.json` — managed state manifest for the active

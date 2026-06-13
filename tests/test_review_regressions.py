@@ -4204,6 +4204,40 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["default_backend"], "alpha")
         self.assertEqual(payload["data"]["env_file"], str(env_file))
 
+    def test_clear_default_prefers_user_backend_and_surfaces_fallback_notice(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+
+        payload, result = self._run_json(
+            "backends",
+            "create",
+            "own-mempool",
+            "--kind",
+            "mempool",
+            "--url",
+            "http://127.0.0.1:3006/api",
+            "--chain",
+            "bitcoin",
+            "--network",
+            "mainnet",
+        )
+        self._assert_ok(payload, result, "backends.create")
+
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+        set_setting(conn, "bootstrap_default_backend", "missing-bootstrap")
+        set_setting(conn, "default_backend", "fulcrum")
+        conn.commit()
+
+        payload, result = self._run_json("backends", "clear-default")
+        self._assert_ok(payload, result, "backends.clear-default")
+
+        self.assertEqual(payload["data"]["default_backend"], "own-mempool")
+        self.assertTrue(payload["data"]["cleared"])
+        self.assertEqual(payload["data"]["notice"]["code"], "default_backend_fallback")
+        self.assertEqual(payload["data"]["notice"]["missing_default"], "missing-bootstrap")
+        self.assertEqual(payload["data"]["notice"]["previous_default"], "fulcrum")
+
     def test_bitcoinrpc_backend_bootstrap_persists_cookiefile_and_wallet_prefix(self):
         env_file = self.case_dir / "bitcoinrpc.env"
         cookie_file = self.case_dir / ".cookie"
