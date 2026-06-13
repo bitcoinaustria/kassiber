@@ -343,6 +343,29 @@ class RelativizePathTest(unittest.TestCase):
         self.assertNotIn("alice", sanitized)
         self.assertIn("RuntimeError", sanitized)
 
+    def test_username_with_space_does_not_survive(self):
+        # A space in the user directory must not stop path matching early and
+        # leak the unmatched suffix (the username) into the sanitized text.
+        self.assertNotIn(
+            "John Doe",
+            relativize_path("/Users/John Doe/Documents/wallet.dat"),
+        )
+        self.assertNotIn(
+            "John Doe",
+            relativize_path(r"C:\Users\John Doe\AppData\daemon.py"),
+        )
+
+    def test_sanitize_traceback_strips_spaced_username(self):
+        text = (
+            "Traceback (most recent call last):\n"
+            + '  File "/Users/John Doe/proj/app.py", line 3, in run\n'
+            + r'    raise RuntimeError("at C:\Users\John Doe\wallet.sqlite")' + "\n"
+            + "RuntimeError: boom\n"
+        )
+        sanitized = sanitize_traceback_text(text)
+        self.assertNotIn("John Doe", sanitized)
+        self.assertIn("RuntimeError", sanitized)
+
     def test_empty_passthrough(self):
         self.assertEqual(relativize_path(""), "")
 

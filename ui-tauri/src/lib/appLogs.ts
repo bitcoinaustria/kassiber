@@ -129,6 +129,13 @@ const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
     /\b(api[_-]?key|auth[_-]?header|cookie|descriptor|passphrase|password|secret|token)\b(\s*[:=]\s*)([^\s,;"']+)/gi,
     "$1$2[redacted]",
   ],
+  // JSON-shaped assignments, e.g. a logged object `{"api_key":"sk-..."}`. The
+  // pattern above stops at the key's closing quote, so the quoted value
+  // survives without this; keep the key and redact the value in place.
+  [
+    /("(?:api[_-]?key|auth[_-]?header|cookie|descriptor|mnemonic|recovery[_-]?phrase|passphrase|password|secret|seed(?:[_-]?(?:phrase|words))?|token|xprv)"\s*:\s*)"[^"]*"/gi,
+    '$1"[redacted]"',
+  ],
 ];
 
 const PUBLIC_SAFE_AMOUNT_NUMBER =

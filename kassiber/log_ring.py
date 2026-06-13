@@ -42,9 +42,12 @@ _TRACEBACK_TAIL = 7000
 # Matches POSIX (`/a/b`, `~/a`), Windows drive (`C:\a\b`), and UNC (`\\h\s`)
 # absolute paths in raw traceback text; `relativize_path` normalizes the
 # separators of each match. The drive/UNC alternatives precede the bare
-# separator so they win the leftmost match.
+# separator so they win the leftmost match. Segments allow spaces so a
+# `C:\Users\John Doe\...` or `/Users/John Doe/...` path is matched (and thus
+# relativized) as a whole instead of leaving the username suffix unredacted;
+# in tracebacks the surrounding quote/comma terminates the run.
 _PATH_SEGMENT_RE = re.compile(
-    r"(?:[A-Za-z]:[\\/]|[\\/]{2}|~|[\\/])[\w@.+-]*(?:[\\/][\w@.+-]+)+"
+    r"(?:[A-Za-z]:[\\/]|[\\/]{2}|~|[\\/])[\w@.+ -]*(?:[\\/][\w@.+ -]+)+"
 )
 
 
@@ -251,6 +254,10 @@ class RingHandler(logging.Handler):
                 fields=fields,
             )
         except Exception:
+            # A logging handler must never raise or write to stderr: a single
+            # bad log line cannot be allowed to disrupt or spam the process it
+            # observes. Drop the record silently (handleError below is
+            # overridden to a no-op for the same reason).
             pass
 
     def handleError(self, record: logging.LogRecord) -> None:

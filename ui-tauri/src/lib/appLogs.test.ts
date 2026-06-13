@@ -67,6 +67,22 @@ describe("typed app logs", () => {
     expect(stored.fields.duration_ms.value).toBe(12);
   });
 
+  it("redacts JSON-shaped secrets in logged objects at insert", () => {
+    // console.error(obj) JSON-stringifies its argument, so the secret floor
+    // must catch quoted "key":"value" assignments, not just key=value text.
+    emitAppLog({
+      ...record(),
+      module: "console",
+      msg: 'request body {"api_key":"sk-json-secret","passphrase": "hunter2","note":"keep"}',
+    });
+
+    const stored = getAppLogRecords()[0];
+    expect(stored.msg).not.toContain("sk-json-secret");
+    expect(stored.msg).not.toContain("hunter2");
+    expect(stored.msg).toContain('"api_key":"[redacted]"');
+    expect(stored.msg).toContain('"note":"keep"');
+  });
+
   it("masks sensitive typed fields without changing the message", () => {
     const emitted = emitAppLog(
       record({
