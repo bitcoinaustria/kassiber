@@ -1786,7 +1786,18 @@ pub fn run() {
             app.set_menu(menu)?;
             app.manage(menu_handles);
             app.manage(AppRuntimeState::new());
-            app.manage(Arc::new(DaemonSupervisor::new(resource_dir)));
+            let supervisor = Arc::new(DaemonSupervisor::new(resource_dir));
+            // Unsolicited daemon events (`event: true`, no request_id) —
+            // e.g. background freshness records — fan out to the webview
+            // on their own channel, separate from per-request
+            // `daemon://stream` records.
+            let event_app_handle = app.handle().clone();
+            supervisor.set_event_sink(move |record| {
+                if let Err(error) = event_app_handle.emit("daemon://event", record) {
+                    eprintln!("kassiber: failed to emit daemon event: {error}");
+                }
+            });
+            app.manage(supervisor);
 
             // Linux/Windows need an explicit runtime register; macOS uses
             // CFBundleURLTypes from the bundle config. `register` is a no-op

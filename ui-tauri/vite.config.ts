@@ -438,6 +438,23 @@ class DaemonBridgeSupervisor {
 
     const requestId = payload.request_id;
     if (requestId === null || requestId === undefined) {
+      // Unsolicited daemon events (`event: true`, no request_id) have no
+      // push channel over the HTTP bridge, so surface them in the dev
+      // server terminal instead of dropping them silently. Anything else
+      // without a request_id (besides the startup `daemon.ready`) is a
+      // daemon bug worth seeing in dev.
+      const kind = typeof payload.kind === "string" ? payload.kind : "<unknown>";
+      if (payload.event === true) {
+        console.info(
+          `[kassiber bridge] daemon event ${kind}: ${redactBridgeText(
+            JSON.stringify(payload),
+          ).slice(0, 2_000)}`,
+        );
+      } else if (kind !== "daemon.ready") {
+        console.warn(
+          `[kassiber bridge] dropping daemon record without request_id (kind ${kind})`,
+        );
+      }
       return;
     }
     const pending = this.pending.get(String(requestId));
