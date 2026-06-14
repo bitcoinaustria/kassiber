@@ -149,6 +149,28 @@ function connectionStatusLabel(status: ConnectionHealthStatus) {
   }
 }
 
+function connectionStatusText(
+  row: ConnectionHealthRow,
+  status: ConnectionHealthStatus,
+) {
+  if (status === "unavailable" && row.probeKind === "unsupported") {
+    return "Check skipped";
+  }
+  return connectionStatusLabel(status);
+}
+
+function connectionStatusTitle(
+  row: ConnectionHealthRow,
+  status: ConnectionHealthStatus,
+  record?: ConnectionHealthRecord,
+) {
+  if (record?.message) return record.message;
+  if (status === "unavailable" && row.probeKind === "unsupported") {
+    return "Saved HTTP explorer endpoints are listed here but not actively probed from the shell. The health checker probes Electrum/Fulcrum backends and approved display-only HTTP checks.";
+  }
+  return connectionStatusLabel(status);
+}
+
 function connectionDotClassName(status: ConnectionHealthStatus) {
   switch (status) {
     case "healthy":
@@ -465,6 +487,12 @@ export function NetworkStatusIndicator({
                 {connectionRows.map((row) => {
                   const rowStatus = rowHealthStatus(row, healthRecords);
                   const record = healthRecords[row.id];
+                  const rowStatusText = connectionStatusText(row, rowStatus);
+                  const rowStatusTitle = connectionStatusTitle(
+                    row,
+                    rowStatus,
+                    record,
+                  );
                   return (
                     <TableRow key={row.id}>
                       <TableCell>
@@ -473,8 +501,8 @@ export function NetworkStatusIndicator({
                             "block size-2.5 rounded-full",
                             connectionDotClassName(rowStatus),
                           )}
-                          aria-label={connectionStatusLabel(rowStatus)}
-                          title={record?.message ?? connectionStatusLabel(rowStatus)}
+                          aria-label={rowStatusText}
+                          title={rowStatusTitle}
                         />
                       </TableCell>
                       <TableCell className="min-w-0">
@@ -486,8 +514,11 @@ export function NetworkStatusIndicator({
                           <span className="block truncate font-medium">
                             {row.name}
                           </span>
-                          <span className="block truncate text-xs text-muted-foreground">
-                            {row.protocol} · {connectionStatusLabel(rowStatus)}
+                          <span
+                            className="block truncate text-xs text-muted-foreground"
+                            title={rowStatusTitle}
+                          >
+                            {row.protocol} · {rowStatusText}
                           </span>
                         </button>
                       </TableCell>

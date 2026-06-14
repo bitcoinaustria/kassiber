@@ -602,7 +602,11 @@ const TransactionsTable = ({
         quickFilter === null ||
         (quickFilter === "external_flow" &&
           ["incoming", "outgoing"].includes(displayFlow(txn))) ||
-        (quickFilter === "review_queue" && draft.reviewStatus !== "completed");
+        (quickFilter === "review_queue" &&
+          draft.reviewStatus !== "completed") ||
+        (quickFilter === "no_explorer_id" && !txn.explorerId) ||
+        (quickFilter === "missing_price" && !txn.rate) ||
+        (quickFilter === "failed_import" && draft.reviewStatus === "failed");
 
       const matchesBreakdownSelection =
         !breakdownSelection ||

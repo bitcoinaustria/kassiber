@@ -54,7 +54,12 @@ type FlowChartSelection = {
   mode: FlowChartMode;
 };
 
-type TableQuickFilter = "external_flow" | "review_queue";
+type TableQuickFilter =
+  | "external_flow"
+  | "review_queue"
+  | "no_explorer_id"
+  | "missing_price"
+  | "failed_import";
 type BreakdownSelection = {
   dimension: "network" | "wallet";
   key: string;
@@ -1037,7 +1042,10 @@ function flowChartSelectionLabel(selection: FlowChartSelection) {
 
 function quickFilterLabel(filter: TableQuickFilter) {
   if (filter === "external_flow") return "External flow";
-  return "Review queue";
+  if (filter === "review_queue") return "Review queue";
+  if (filter === "no_explorer_id") return "Missing explorer link";
+  if (filter === "missing_price") return "Missing price";
+  return "Failed import";
 }
 
 function breakdownSelectionLabel(selection: BreakdownSelection) {

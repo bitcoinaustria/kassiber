@@ -30,6 +30,12 @@ import {
   type BreakdownSelection,
 } from "./model";
 
+const workbenchBackedQuickFilters = new Set<TableQuickFilter>([
+  "no_explorer_id",
+  "missing_price",
+  "failed_import",
+]);
+
 const TransactionsDashboard = ({
   className,
   transactions = MOCK_TRANSACTIONS,
@@ -152,14 +158,26 @@ const TransactionsDashboard = ({
     }
     return [focusedRecord, ...tablePeriodRecords];
   }, [focusedRecord, tablePeriodRecords]);
+  const useWorkbenchRowsForTable =
+    quickFilter !== null && workbenchBackedQuickFilters.has(quickFilter);
+  const visibleTableRecords = React.useMemo(() => {
+    if (!useWorkbenchRowsForTable) return tableRecords;
+    if (
+      !focusedRecord ||
+      periodRecords.some((record) => record.id === focusedRecord.id)
+    ) {
+      return periodRecords;
+    }
+    return [focusedRecord, ...periodRecords];
+  }, [focusedRecord, periodRecords, tableRecords, useWorkbenchRowsForTable]);
   const tableSwapCandidateIds = React.useMemo(
     () =>
       new Set(
-        buildSwapCandidates(tablePeriodRecords, swapCandidates).flatMap(
+        buildSwapCandidates(visibleTableRecords, swapCandidates).flatMap(
           (candidate) => [candidate.in.id, candidate.out.id],
         ),
       ),
-    [tablePeriodRecords, swapCandidates],
+    [visibleTableRecords, swapCandidates],
   );
   const handlePeriodChange = React.useCallback((nextPeriod: PeriodKey) => {
     setPeriod(nextPeriod);
@@ -237,7 +255,7 @@ const TransactionsDashboard = ({
       />
 
       <TransactionsTable
-        records={tableRecords}
+        records={visibleTableRecords}
         hideSensitive={hideSensitive}
         currency={currency}
         nowRate={nowRate}
@@ -251,7 +269,7 @@ const TransactionsDashboard = ({
         onBreakdownSelectionChange={setBreakdownSelection}
         resetTableFiltersToken={resetTableFiltersToken}
         isRefreshing={showRefreshSkeleton}
-        hasMoreRecords={hasMoreTransactions}
+        hasMoreRecords={hasMoreTransactions && !useWorkbenchRowsForTable}
         isLoadingMoreRecords={isLoadingMoreTransactions}
         onLoadMoreRecords={onLoadMoreTransactions}
         deepLinkedTransactionId={deepLinkedTransactionId}

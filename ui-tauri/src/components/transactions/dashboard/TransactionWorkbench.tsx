@@ -392,6 +392,20 @@ const TransactionWorkbench = ({
     onQuickFilterChange,
     onTableFiltersReset,
   ]);
+  const handleQualityFilterClick = React.useCallback(
+    (filter: TableQuickFilter) => {
+      onFlowSelectionChange(null);
+      onBreakdownSelectionChange(null);
+      onTableFiltersReset();
+      onQuickFilterChange(filter);
+    },
+    [
+      onBreakdownSelectionChange,
+      onFlowSelectionChange,
+      onQuickFilterChange,
+      onTableFiltersReset,
+    ],
+  );
   const openSwapWorkflow = React.useCallback(() => {
     void navigate({ to: "/swaps" });
   }, [navigate]);
@@ -873,7 +887,8 @@ const TransactionWorkbench = ({
 
         <div className="col-span-2 grid gap-0 sm:grid-cols-2 md:col-span-3 xl:col-span-2 xl:grid-cols-1 xl:border-l">
           <BreakdownPanel
-            title="Network mix"
+            title="Activity by network"
+            description="Priced tx value in this period, not holdings."
             rows={networkRows}
             maxValue={maxNetworkValue}
             currency={currency}
@@ -887,7 +902,8 @@ const TransactionWorkbench = ({
             onSelect={(key) => handleBreakdownClick("network", key)}
           />
           <BreakdownPanel
-            title="Wallet/source mix"
+            title="Activity by wallet/source"
+            description="Priced tx value in this period, not balances."
             rows={walletRows.slice(0, 4)}
             maxValue={maxWalletValue}
             currency={currency}
@@ -916,14 +932,47 @@ const TransactionWorkbench = ({
               </div>
             ) : (
               <div className="divide-y text-xs">
-                <QualityRow label="No explorer id" value={withoutExplorer} />
-                <QualityRow label="Missing price" value={missingPriceCount} />
-                <QualityRow label="Failed import" value={failedCount} />
-                <QualityRow
-                  label="Swap candidates"
-                  value={swapCandidateTotals.count}
-                  onClick={swapCandidateTotals.count > 0 ? openSwapWorkflow : undefined}
-                />
+                {withoutExplorer > 0 ? (
+                  <QualityRow
+                    label="Missing explorer link"
+                    value={withoutExplorer}
+                    onClick={() => handleQualityFilterClick("no_explorer_id")}
+                  />
+                ) : null}
+                {missingPriceCount > 0 ? (
+                  <QualityRow
+                    label="Missing price"
+                    value={missingPriceCount}
+                    onClick={() => handleQualityFilterClick("missing_price")}
+                  />
+                ) : null}
+                {failedCount > 0 ? (
+                  <QualityRow
+                    label="Failed import"
+                    value={failedCount}
+                    onClick={() => handleQualityFilterClick("failed_import")}
+                  />
+                ) : null}
+                {swapCandidateTotals.count > 0 ? (
+                  <QualityRow
+                    label="Swap candidates"
+                    value={swapCandidateTotals.count}
+                    onClick={openSwapWorkflow}
+                  />
+                ) : null}
+                {withoutExplorer === 0 &&
+                missingPriceCount === 0 &&
+                failedCount === 0 &&
+                swapCandidateTotals.count === 0 ? (
+                  <div className="-mx-1 grid min-h-8 w-[calc(100%+0.5rem)] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md px-1 py-1.5 text-left">
+                    <span className="min-w-0 truncate text-muted-foreground">
+                      No data quality issues
+                    </span>
+                    <span className="shrink-0 font-semibold leading-none text-emerald-600">
+                      0
+                    </span>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>
@@ -1037,6 +1086,7 @@ function FlowTooltip({
 
 function BreakdownPanel({
   title,
+  description,
   rows,
   maxValue,
   currency,
@@ -1046,6 +1096,7 @@ function BreakdownPanel({
   onSelect,
 }: {
   title: string;
+  description?: string;
   rows: Array<{ key: string; count: number; eur: number; btc: number }>;
   maxValue: number;
   currency: Currency;
@@ -1056,10 +1107,17 @@ function BreakdownPanel({
 }) {
   return (
     <div className="border-t p-3 first:border-t-0 sm:p-4">
-      <h3 className="mb-3 text-sm font-semibold">{title}</h3>
+      <div className="mb-3 space-y-0.5">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {description ? (
+          <p className="text-[11px] leading-snug text-muted-foreground">
+            {description}
+          </p>
+        ) : null}
+      </div>
       {isRefreshing ? (
         <div className="space-y-3">
-          {Array.from({ length: title === "Wallet/source mix" ? 4 : 2 }).map(
+          {Array.from({ length: title.includes("wallet") ? 4 : 2 }).map(
             (_, index) => (
               <div key={index} className="space-y-2">
                 <div className="flex items-center justify-between gap-3">
@@ -1080,7 +1138,7 @@ function BreakdownPanel({
             <div className="flex items-center justify-between gap-2 text-xs">
               <span className="truncate font-medium">{row.key}</span>
               <span className="shrink-0 text-muted-foreground">
-                {row.count} ·{" "}
+                {row.count} tx ·{" "}
                 <CurrencyToggleText className={blurClass(hideSensitive)}>
                   {formatDisplayMoney(row.eur, row.btc, currency)}
                 </CurrencyToggleText>

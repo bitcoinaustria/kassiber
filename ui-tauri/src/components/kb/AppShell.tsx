@@ -1725,7 +1725,6 @@ function AppDashboardHeader({
   const navigate = useNavigate();
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
-  const dataMode = useUiStore((s) => s.dataMode);
   const appNotifications = useUiStore((s) => s.notifications);
   const clearNotifications = useUiStore((s) => s.clearNotifications);
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
@@ -1896,16 +1895,6 @@ function AppDashboardHeader({
           },
         ]
       : []),
-    {
-      id: "data-mode",
-      title: dataMode === "mock" ? "Mock data active" : "Real data active",
-      body:
-        dataMode === "mock"
-          ? "The UI is showing fixture data."
-          : "The UI is reading from the local daemon.",
-      tone: "info" as const,
-      to: "/settings" as const,
-    },
   ];
   const notificationItems: NotificationItem[] = [
     ...appNotifications.map((item) => ({
