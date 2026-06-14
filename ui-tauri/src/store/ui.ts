@@ -162,6 +162,13 @@ export interface UiState {
   daemonSession: number;
   notifications: AppNotification[];
   activeMaintenanceProgress: ActiveMaintenanceProgress | null;
+  /**
+   * Book keys (see `bookIdentityKey`) whose initial sync has completed at least
+   * once. Drives the one-time first-sync experience: a brand-new book gets the
+   * centered setup card, while every refresh after that shows only as the top
+   * progress line.
+   */
+  firstSyncDone: Record<string, true>;
   sourceFundsDrafts: Record<string, SourceFundsDraft>;
   deferredConnectionSetup: DeferredConnectionSetup | null;
   setLang: (lang: Lang) => void;
@@ -192,6 +199,7 @@ export interface UiState {
     progress: ActiveMaintenanceProgress | null,
   ) => void;
   clearActiveMaintenanceProgress: (id?: string) => void;
+  markFirstSyncDone: (bookKey: string) => void;
   clearNotification: (id: string) => void;
   clearNotifications: () => void;
   setSourceFundsDraft: (profileKey: string, draft: SourceFundsDraft) => void;
@@ -223,6 +231,22 @@ function normalizeIdentity(identity: Identity | null): Identity | null {
     profile: identity.profile === "mock" ? "mock books" : identity.profile,
     workspace: "My Books",
   };
+}
+
+/**
+ * Stable key for the active book, used to remember whether its initial sync has
+ * happened. An imported project is keyed by its database path; an
+ * onboarding-only identity falls back to its workspace/profile scope.
+ */
+export function bookIdentityKey(identity: Identity | null): string | null {
+  if (!identity) return null;
+  if (identity.importedProject?.database) {
+    return `db:${identity.importedProject.database}`;
+  }
+  const scope = [identity.workspace, identity.profile ?? identity.name]
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part));
+  return scope.length > 0 ? `id:${scope.join("/")}` : null;
 }
 
 function stripNotificationProgress(
@@ -261,6 +285,7 @@ export function uiStatePartialForStorage(state: UiState) {
     assistantModelSelection: state.assistantModelSelection,
     daemonSession: state.daemonSession,
     notifications: stripNotificationProgress(state.notifications),
+    firstSyncDone: state.firstSyncDone,
     sourceFundsDrafts: state.sourceFundsDrafts,
   };
 }
@@ -284,6 +309,7 @@ export const useUiStore = create<UiState>()(
       daemonSession: 0,
       notifications: [],
       activeMaintenanceProgress: null,
+      firstSyncDone: {},
       sourceFundsDrafts: {},
       setLang: (lang) => set({ lang }),
       setCurrency: (currency) => set({ currency }),
@@ -377,6 +403,12 @@ export const useUiStore = create<UiState>()(
           if (id && current.id !== id) return state;
           return { activeMaintenanceProgress: null };
         }),
+      markFirstSyncDone: (bookKey) =>
+        set((state) =>
+          state.firstSyncDone[bookKey]
+            ? state
+            : { firstSyncDone: { ...state.firstSyncDone, [bookKey]: true } },
+        ),
       clearNotification: (id) =>
         set((state) => ({
           notifications: state.notifications.filter(
@@ -441,6 +473,7 @@ export const useUiStore = create<UiState>()(
           notifications: stripNotificationProgress(
             restored.notifications ?? current.notifications,
           ),
+          firstSyncDone: restored.firstSyncDone ?? current.firstSyncDone,
           sourceFundsDrafts:
             restored.sourceFundsDrafts ?? current.sourceFundsDrafts,
         };

@@ -86,8 +86,9 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useUiStore } from "@/store/ui";
+import { bookIdentityKey, useUiStore } from "@/store/ui";
 import type { AppNotification, ThemePreference } from "@/store/ui";
+import { BOOK_REFRESH_PROGRESS_ID } from "@/lib/syncProgress";
 import {
   DAEMON_AUTH_REQUIRED_EVENT,
   daemonMutationKey,
@@ -132,6 +133,7 @@ import {
 } from "@/lib/daemonLogBridge";
 import { isTypingTarget } from "@/lib/keymap";
 import { ScreenAssistantMockup } from "./ScreenAssistantMockup";
+import { FirstSyncCard } from "./FirstSyncCard";
 import { PreAlphaBanner } from "./PreAlphaBanner";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
@@ -544,6 +546,41 @@ export function AppShell() {
     routeProgressFromNotifications(appNotifications);
   const shellBusy =
     routerBusy || daemonFetchCount > 0 || Boolean(shellProgress);
+  const firstSyncDone = useUiStore((s) => s.firstSyncDone);
+  const bookKey = React.useMemo(() => bookIdentityKey(identity), [identity]);
+  const bookRefreshActive =
+    activeMaintenanceProgress?.id === BOOK_REFRESH_PROGRESS_ID &&
+    Boolean(activeMaintenanceProgress?.active);
+  const firstSyncEligible =
+    bookRefreshActive && bookKey !== null && !firstSyncDone[bookKey];
+  const [firstSyncCardDismissed, setFirstSyncCardDismissed] =
+    React.useState(false);
+  React.useEffect(() => {
+    // Reset the per-run "continue in background" choice between syncs so the
+    // card returns the next time a brand-new book runs its first sync.
+    if (!firstSyncEligible) setFirstSyncCardDismissed(false);
+  }, [firstSyncEligible]);
+  const isFirstSync = firstSyncEligible && !firstSyncCardDismissed;
+  const dismissFirstSyncCard = React.useCallback(
+    () => setFirstSyncCardDismissed(true),
+    [],
+  );
+  // The card already shows the title in its header, so feed it the raw phase
+  // label rather than the route-composed "Title: detail" string. Gated on
+  // `active` to match `shellProgress`, so a stale maintenance record can't leak
+  // a value in.
+  const firstSyncCardProgress: RouteProgressState | null =
+    activeMaintenanceProgress?.active
+      ? {
+          indeterminate: Boolean(
+            activeMaintenanceProgress.progress.indeterminate,
+          ),
+          label:
+            activeMaintenanceProgress.progress.label?.trim() ||
+            activeMaintenanceProgress.body,
+          value: activeMaintenanceProgress.progress.value,
+        }
+      : shellProgress;
   const isAssistantRoute = pathname === "/assistant";
   const routeMeta =
     ROUTE_META.find(([prefix]) => pathname.startsWith(prefix))?.[1] ?? {
@@ -1302,10 +1339,6 @@ export function AppShell() {
                             : "pb-[240px]",
                         )}
                       >
-                        <RouteTransitionIndicator
-                          active={shellBusy}
-                          progress={shellProgress}
-                        />
                         <Outlet />
                       </main>
                       {isAssistantRoute ? null : (
@@ -1322,14 +1355,26 @@ export function AppShell() {
                       tabIndex={-1}
                       className={appMainClassName}
                     >
-                      <RouteTransitionIndicator
-                        active={shellBusy}
-                        progress={shellProgress}
-                      />
                       <Outlet />
                     </main>
                   )
                 )}
+                {!locked && !importRootBlocked ? (
+                  <>
+                    <RouteTopProgressLine
+                      active={shellBusy}
+                      progress={shellProgress}
+                      announce={!isFirstSync}
+                    />
+                    {isFirstSync ? (
+                      <FirstSyncCard
+                        progress={firstSyncCardProgress}
+                        title={activeMaintenanceProgress?.title}
+                        onDismiss={dismissFirstSyncCard}
+                      />
+                    ) : null}
+                  </>
+                ) : null}
               </div>
             </div>
           </div>
@@ -1339,67 +1384,58 @@ export function AppShell() {
   );
 }
 
-function RouteTransitionIndicator({
+/**
+ * Hairline refresh indicator pinned to the top edge of the content area.
+ *
+ * It overlays content (`absolute`, outside the scroll container) rather than
+ * sitting in normal flow, so starting/stopping a refresh never reflows the
+ * route below it. The previous in-flow bar grew from 0→36px and shoved
+ * everything down on every sync; this stays a constant 3px line and just fades
+ * in. The richer "what's syncing" detail now lives in the notifications panel
+ * and, for a brand-new book, the FirstSyncCard.
+ */
+function RouteTopProgressLine({
   active,
   progress,
+  announce = true,
 }: {
   active: boolean;
   progress?: RouteProgressState | null;
+  /** When false, skip the off-screen live region (the FirstSyncCard announces instead). */
+  announce?: boolean;
 }) {
   const value = notificationProgressValue(progress?.value);
   const isDeterminate =
-    progress && !progress.indeterminate && typeof progress.value === "number";
-  const hasProgressLabel = Boolean(progress?.label);
-  const statusLabel = isDeterminate
-    ? `${Math.round(value)}%`
-    : progress
-      ? "In progress"
-      : null;
+    Boolean(progress) &&
+    !progress?.indeterminate &&
+    typeof progress?.value === "number";
+  const label = progress?.label;
 
   return (
     <div
-      aria-hidden={hasProgressLabel ? undefined : "true"}
-      role={hasProgressLabel && active ? "status" : undefined}
-      aria-live={hasProgressLabel && active ? "polite" : undefined}
       className={cn(
-        "pointer-events-none sticky top-0 z-10 w-full overflow-hidden bg-background/95 px-3 transition-[height,opacity] duration-150 backdrop-blur sm:px-4 md:px-5",
-        active ? (hasProgressLabel ? "h-9" : "h-2") : "h-0",
+        "pointer-events-none absolute inset-x-0 top-0 z-30 h-[3px] transition-opacity duration-200",
         active ? "opacity-100" : "opacity-0",
       )}
     >
-      <div
-        className={cn(
-          "mx-auto flex h-full w-full flex-col justify-center gap-1",
-          hasProgressLabel ? "pt-1 pb-1.5" : "py-0.5",
-        )}
-      >
-        {progress ? (
-          <div className="flex min-w-0 items-center justify-between gap-3 text-[11px] font-medium leading-none">
-            <span className="min-w-0 truncate text-primary">
-              {progress.label}
-            </span>
-            <span className="shrink-0 text-muted-foreground tabular-nums">
-              {statusLabel}
-            </span>
-          </div>
-        ) : null}
+      <div className="h-full w-full overflow-hidden" aria-hidden="true">
         <div
           className={cn(
-            "h-1.5 w-full overflow-hidden rounded-full bg-primary/15",
-            !hasProgressLabel && "h-1",
+            "h-full bg-primary/80",
+            isDeterminate
+              ? "transition-[width] duration-200 ease-out"
+              : "w-1/3 will-change-transform motion-safe:animate-[route-progress_0.9s_ease-in-out_infinite] motion-reduce:w-full motion-reduce:will-change-auto",
           )}
-        >
-          <div
-            className={cn(
-              "h-full rounded-full bg-primary/80",
-              isDeterminate
-                ? "transition-[width] duration-200 ease-out"
-                : "w-1/3 will-change-transform motion-safe:animate-[route-progress_0.9s_ease-in-out_infinite] motion-reduce:w-full motion-reduce:will-change-auto",
-            )}
-            style={isDeterminate ? { width: `${value}%` } : undefined}
-          />
-        </div>
+          style={isDeterminate ? { width: `${value}%` } : undefined}
+        />
       </div>
+      {/* The visible label moved out of the layout, so keep an off-screen live
+          region for assistive tech to announce refresh progress. */}
+      {announce && active && label ? (
+        <span role="status" aria-live="polite" className="sr-only">
+          {label}
+        </span>
+      ) : null}
     </div>
   );
 }
