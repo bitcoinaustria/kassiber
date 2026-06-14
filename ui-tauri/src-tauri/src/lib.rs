@@ -55,6 +55,7 @@ const MENU_WINDOW_FOCUS: &str = "kassiber:window:focus";
 const MENU_QUIT: &str = "kassiber:quit";
 const MENU_HELP_DOCS: &str = "kassiber:help:docs";
 const MENU_HELP_ISSUES: &str = "kassiber:help:issues";
+const MENU_WORKFLOW_ADD_WALLET: &str = "kassiber:workflow:add-wallet";
 const MENU_WORKFLOW_SYNC_ALL: &str = "kassiber:workflow:sync-all";
 const MENU_WORKFLOW_PROCESS_JOURNALS: &str = "kassiber:workflow:process-journals";
 const MENU_WORKFLOW_OPEN_REPORTS: &str = "kassiber:workflow:open-reports";
@@ -86,6 +87,7 @@ const DEEP_LINK_SCHEME: &str = "kassiber";
 //   kassiber://<route>                        navigates to /<route>
 //   kassiber://settings                       opens Settings (no section)
 //   kassiber://settings/<section>             opens Settings, focuses panel
+//   kassiber://workflow/add-wallet            opens wallet-source setup
 //   kassiber://workflow/sync-all              triggers wallet sync
 //   kassiber://workflow/process-journals      rebuilds journal state
 //   kassiber://lock                           locks the workspace
@@ -1923,6 +1925,7 @@ fn menu_action_for_deep_link(url: &Url) -> Option<MenuActionPayload> {
             Some(open_settings_action(section))
         }
         "workflow" => match first_segment {
+            Some("add-wallet") => Some(menu_action("add-wallet")),
             Some("sync-all") | Some("sync") => Some(menu_action("sync-all-wallets")),
             Some("process-journals") => Some(menu_action("process-journals")),
             _ => None,
@@ -1992,11 +1995,17 @@ fn build_app_menu(
     let docs_item = menu_item(app, MENU_HELP_DOCS, "Kassiber Documentation", None)?;
     let issues_item = menu_item(app, MENU_HELP_ISSUES, "Report an Issue", None)?;
     let logs_item = menu_item(app, MENU_NAV_LOGS, "Logs", None)?;
+    let add_wallet_item = menu_item(
+        app,
+        MENU_WORKFLOW_ADD_WALLET,
+        "Add Wallet Connection...",
+        Some("CmdOrCtrl+Shift+A"),
+    )?;
     let sync_all_item = menu_item(
         app,
         MENU_WORKFLOW_SYNC_ALL,
         "Sync All Wallets",
-        Some("CmdOrCtrl+Shift+S"),
+        Some("CmdOrCtrl+R"),
     )?;
     let process_journals_item = menu_item(
         app,
@@ -2113,6 +2122,8 @@ fn build_app_menu(
         .build()?;
 
     let workflow_menu = SubmenuBuilder::new(app, "Workflows")
+        .item(&add_wallet_item)
+        .separator()
         .item(&sync_all_item)
         .item(&process_journals_item)
         .separator()
@@ -2299,6 +2310,7 @@ fn menu_action_for_id(id: &str) -> Option<MenuActionPayload> {
         MENU_UI_SCALE_DECREASE => Some(menu_action("ui-scale-decrease")),
         MENU_UI_SCALE_INCREASE => Some(menu_action("ui-scale-increase")),
         MENU_UI_SCALE_RESET => Some(menu_action("ui-scale-reset")),
+        MENU_WORKFLOW_ADD_WALLET => Some(menu_action("add-wallet")),
         MENU_WORKFLOW_SYNC_ALL => Some(menu_action("sync-all-wallets")),
         MENU_WORKFLOW_PROCESS_JOURNALS => Some(menu_action("process-journals")),
         MENU_WORKFLOW_OPEN_REPORTS => Some(navigate_action("/reports")),
@@ -2420,8 +2432,9 @@ mod tests {
         MENU_SETTINGS_BACKENDS, MENU_SETTINGS_DATA, MENU_SETTINGS_DISPLAY, MENU_SETTINGS_GENERAL,
         MENU_SETTINGS_PRIVACY, MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN,
         MENU_UI_SCALE_DECREASE, MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET,
-        MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
-        MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL, TERMINAL_COMMAND_MARKER,
+        MENU_WORKFLOW_ADD_WALLET, MENU_WORKFLOW_CONNECTIONS_IMPORTS,
+        MENU_WORKFLOW_OPEN_REPORTS, MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL,
+        TERMINAL_COMMAND_MARKER,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -2777,6 +2790,10 @@ mod tests {
             Some(menu_action("ui-scale-reset"))
         );
         assert_eq!(
+            menu_action_for_id(MENU_WORKFLOW_ADD_WALLET),
+            Some(menu_action("add-wallet"))
+        );
+        assert_eq!(
             menu_action_for_id(MENU_WORKFLOW_SYNC_ALL),
             Some(menu_action("sync-all-wallets"))
         );
@@ -2828,6 +2845,10 @@ mod tests {
         assert_eq!(
             parse("kassiber://settings/wallet-of-satoshi"),
             Some(open_settings_action(None))
+        );
+        assert_eq!(
+            parse("kassiber://workflow/add-wallet"),
+            Some(menu_action("add-wallet"))
         );
         assert_eq!(
             parse("kassiber://workflow/sync-all"),

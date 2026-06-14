@@ -52,6 +52,7 @@ export function RootIntentListener() {
               decreaseAppScale: store.decreaseAppScale,
               increaseAppScale: store.increaseAppScale,
               resetAppScale: store.resetAppScale,
+              runAddWalletConnection: unexpectedWorkspaceAction,
               runWalletSync: unexpectedWorkspaceAction,
               runJournalProcessing: unexpectedWorkspaceAction,
               addNotification: store.addNotification,

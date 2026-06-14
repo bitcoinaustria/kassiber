@@ -125,10 +125,12 @@ import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvid
 import type { AssistantReturnPath } from "@/components/ai/assistantSession";
 import kLedgerMarkUrl from "@/assets/k-ledger-mark-transparent.svg";
 import { APP_COMMIT, APP_VERSION } from "@/lib/appVersion";
+import { appWorkflowHotkeyAction } from "@/lib/appWorkflowHotkeys";
 import {
   startDaemonLogBridge,
   stopDaemonLogBridge,
 } from "@/lib/daemonLogBridge";
+import { isTypingTarget } from "@/lib/keymap";
 import { ScreenAssistantMockup } from "./ScreenAssistantMockup";
 import { PreAlphaBanner } from "./PreAlphaBanner";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
@@ -461,6 +463,9 @@ export function AppShell() {
   const setAppLockPolicy = useUiStore((s) => s.setAppLockPolicy);
   const setIdentity = useUiStore((s) => s.setIdentity);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
+  const setDeferredConnectionSetup = useUiStore(
+    (s) => s.setDeferredConnectionSetup,
+  );
   const addNotification = useUiStore((s) => s.addNotification);
   const appNotifications = useUiStore((s) => s.notifications);
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
@@ -827,28 +832,64 @@ export function AppShell() {
       notifyStart: true,
     });
 
-  const runMenuWalletSync = React.useCallback(() => {
-    if (!ensureWorkspaceForMenuAction()) return;
-    if (
-      isSyncing ||
-      isDaemonKindMutating("ui.freshness.run") ||
-      isDaemonKindMutating("ui.wallets.sync")
-    ) {
-      addNotification({
-        title: "Book refresh already running",
-        body: "Kassiber is already refreshing sources, rates, or journals.",
-        tone: "info",
+  const runMenuWalletSync = React.useCallback(
+    (options?: { forceFull?: boolean }) => {
+      if (!ensureWorkspaceForMenuAction()) return;
+      if (
+        isSyncing ||
+        isDaemonKindMutating("ui.freshness.run") ||
+        isDaemonKindMutating("ui.wallets.sync")
+      ) {
+        addNotification({
+          title: "Book refresh already running",
+          body: "Kassiber is already refreshing sources, rates, or journals.",
+          tone: "info",
+        });
+        return;
+      }
+      syncAll({ forceFull: Boolean(options?.forceFull) });
+    },
+    [
+      addNotification,
+      ensureWorkspaceForMenuAction,
+      isDaemonKindMutating,
+      isSyncing,
+      syncAll,
+    ],
+  );
+
+  const openAddWalletConnection = React.useCallback(
+    (reason: string) => {
+      if (!ensureWorkspaceForMenuAction()) return;
+      setDeferredConnectionSetup({
+        sourceId: "descriptor",
+        reason,
       });
-      return;
-    }
-    syncAll();
-  }, [
-    addNotification,
-    ensureWorkspaceForMenuAction,
-    isDaemonKindMutating,
-    isSyncing,
-    syncAll,
-  ]);
+      void navigate({ to: "/connections" });
+    },
+    [ensureWorkspaceForMenuAction, navigate, setDeferredConnectionSetup],
+  );
+
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (isTypingTarget(event.target)) return;
+      const action = appWorkflowHotkeyAction(event);
+      if (!action) return;
+      event.preventDefault();
+      if (action === "add-wallet") {
+        openAddWalletConnection("Opened from keyboard shortcut");
+        return;
+      }
+      if (action === "process-journals") {
+        runMenuJournalProcessing();
+        return;
+      }
+      runMenuWalletSync({ forceFull: action === "rescan-book" });
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [openAddWalletConnection, runMenuJournalProcessing, runMenuWalletSync]);
 
   React.useEffect(() => {
     if (identity) return;
@@ -1069,8 +1110,8 @@ export function AppShell() {
       .then(({ listen }) =>
         listen<NativeMenuPayload>(NATIVE_MENU_EVENT, (event) => {
           const store = useUiStore.getState();
-          // AppShell only handles workspace-scoped actions (lock, sync,
-          // process-journals). Global actions (navigate, open-settings,
+          // AppShell only handles workspace-scoped actions (lock, add wallet,
+          // sync, process-journals). Global actions (navigate, open-settings,
           // toggle-sensitive) flow through RootIntentListener at the
           // route-tree root so they work pre-workspace too. The "workspace"
           // scope filter prevents this listener from double-handling.
@@ -1088,6 +1129,8 @@ export function AppShell() {
               decreaseAppScale: store.decreaseAppScale,
               increaseAppScale: store.increaseAppScale,
               resetAppScale: store.resetAppScale,
+              runAddWalletConnection: () =>
+                openAddWalletConnection("Opened from native menu"),
               runWalletSync: runMenuWalletSync,
               runJournalProcessing: runMenuJournalProcessing,
               addNotification,
@@ -1121,6 +1164,7 @@ export function AppShell() {
   }, [
     lockApp,
     navigate,
+    openAddWalletConnection,
     runMenuJournalProcessing,
     runMenuWalletSync,
     aiFeaturesEnabled,

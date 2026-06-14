@@ -17,6 +17,7 @@ function makeDeps(overrides: Partial<MenuIntentDeps> = {}): MenuIntentDeps {
     decreaseAppScale: vi.fn(),
     increaseAppScale: vi.fn(),
     resetAppScale: vi.fn(),
+    runAddWalletConnection: vi.fn(),
     runWalletSync: vi.fn(),
     runJournalProcessing: vi.fn(),
     addNotification: vi.fn(),
@@ -147,9 +148,11 @@ describe("dispatchMenuIntent — scope filter", () => {
   it("global scope drops workspace actions", () => {
     const deps = makeDeps();
     dispatchMenuIntent({ action: "lock-app" }, deps, "global");
+    dispatchMenuIntent({ action: "add-wallet" }, deps, "global");
     dispatchMenuIntent({ action: "sync-all-wallets" }, deps, "global");
     dispatchMenuIntent({ action: "process-journals" }, deps, "global");
     expect(deps.lockApp).not.toHaveBeenCalled();
+    expect(deps.runAddWalletConnection).not.toHaveBeenCalled();
     expect(deps.runWalletSync).not.toHaveBeenCalled();
     expect(deps.runJournalProcessing).not.toHaveBeenCalled();
   });
@@ -190,12 +193,14 @@ describe("dispatchMenuIntent — scope filter", () => {
     expect(deps.resetAppScale).not.toHaveBeenCalled();
   });
 
-  it("workspace scope handles lock, sync, journals", () => {
+  it("workspace scope handles lock and workflow actions", () => {
     const deps = makeDeps();
     dispatchMenuIntent({ action: "lock-app" }, deps, "workspace");
+    dispatchMenuIntent({ action: "add-wallet" }, deps, "workspace");
     dispatchMenuIntent({ action: "sync-all-wallets" }, deps, "workspace");
     dispatchMenuIntent({ action: "process-journals" }, deps, "workspace");
     expect(deps.lockApp).toHaveBeenCalledTimes(1);
+    expect(deps.runAddWalletConnection).toHaveBeenCalledTimes(1);
     expect(deps.runWalletSync).toHaveBeenCalledTimes(1);
     expect(deps.runJournalProcessing).toHaveBeenCalledTimes(1);
   });
@@ -223,6 +228,14 @@ describe("dispatchMenuIntent — direct actions", () => {
     expect(deps.resetAppScale).toHaveBeenCalledTimes(1);
   });
 
+  it("add-wallet routes to the wallet connection runner", () => {
+    const deps = makeDeps();
+    dispatchMenuIntent({ action: "add-wallet" }, deps);
+    expect(deps.runAddWalletConnection).toHaveBeenCalledTimes(1);
+    expect(deps.runWalletSync).not.toHaveBeenCalled();
+    expect(deps.runJournalProcessing).not.toHaveBeenCalled();
+  });
+
   it("sync-all-wallets routes to the wallet sync runner", () => {
     const deps = makeDeps();
     dispatchMenuIntent({ action: "sync-all-wallets" }, deps);
@@ -244,8 +257,10 @@ describe("dispatchMenuIntent — direct actions", () => {
     // dispatcher ever starts gating workflows itself, this test should be
     // updated alongside that change.
     const deps = makeDeps({ hasWorkspace: false });
+    dispatchMenuIntent({ action: "add-wallet" }, deps);
     dispatchMenuIntent({ action: "sync-all-wallets" }, deps);
     dispatchMenuIntent({ action: "process-journals" }, deps);
+    expect(deps.runAddWalletConnection).toHaveBeenCalledTimes(1);
     expect(deps.runWalletSync).toHaveBeenCalledTimes(1);
     expect(deps.runJournalProcessing).toHaveBeenCalledTimes(1);
   });

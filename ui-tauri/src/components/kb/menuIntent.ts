@@ -56,7 +56,7 @@ export type SettingsMenuSection =
 export type NativeMenuPayload =
   | { action: "lock-app" | "toggle-sensitive" }
   | { action: "ui-scale-decrease" | "ui-scale-increase" | "ui-scale-reset" }
-  | { action: "sync-all-wallets" | "process-journals" }
+  | { action: "add-wallet" | "sync-all-wallets" | "process-journals" }
   | { action: "open-settings"; section?: SettingsMenuSection | null }
   | { action: "navigate"; route?: AppRoutePath | null };
 
@@ -97,6 +97,7 @@ export interface MenuIntentDeps {
   navigate: (opts: { to: string; hash?: string }) => void;
   lockApp: () => void;
   setHideSensitive: (next: boolean) => void;
+  runAddWalletConnection: () => void;
   runWalletSync: () => void;
   runJournalProcessing: () => void;
   decreaseAppScale: () => void;
@@ -142,12 +143,11 @@ export function dispatchMenuIntent(
     return;
   }
   // Workspace gating note: `lock-app` and `navigate` are gated here against
-  // `deps.hasWorkspace`. The workflow actions (`sync-all-wallets`,
-  // `process-journals`) are gated *inside* their runners — see
-  // `runMenuWalletSync` / `runMenuJournalProcessing` in AppShell, which
-  // call `ensureWorkspaceForMenuAction()` before mutating. If the gating
-  // rule ever changes (e.g. allow some workflow during onboarding), update
-  // both sites.
+  // `deps.hasWorkspace`. The workflow actions (`add-wallet`,
+  // `sync-all-wallets`, `process-journals`) are gated *inside* their runners
+  // — see AppShell, which calls `ensureWorkspaceForMenuAction()` before
+  // mutating or opening workspace-scoped dialogs. If the gating rule ever
+  // changes (e.g. allow some workflow during onboarding), update both sites.
   switch (payload.action) {
     case "lock-app":
       // The native menu greys out Lock when there's no workspace, but the
@@ -171,6 +171,10 @@ export function dispatchMenuIntent(
 
     case "ui-scale-reset":
       deps.resetAppScale();
+      return;
+
+    case "add-wallet":
+      deps.runAddWalletConnection();
       return;
 
     case "sync-all-wallets":
