@@ -78,6 +78,49 @@ const PHASE_PROGRESS_FRACTIONS: Record<string, number> = {
   error: 1,
 };
 
+export interface SyncMilestone {
+  phase: string;
+  label: string;
+  /** Cumulative progress fraction (0–1) at which this phase is considered done. */
+  fraction: number;
+}
+
+/**
+ * Ordered checklist for the first-sync experience. Derived from the same phase
+ * label/fraction maps that drive the progress bar so the milestone copy and the
+ * percentage can never drift apart.
+ */
+export const FIRST_SYNC_MILESTONES: readonly SyncMilestone[] = [
+  "discovery",
+  "backend_fetch",
+  "decode_enrich",
+  "import",
+  "rate_coverage",
+  "journal_refresh",
+].map((phase) => ({
+  phase,
+  label: PHASE_LABELS[phase] ?? phase,
+  fraction: PHASE_PROGRESS_FRACTIONS[phase] ?? 1,
+}));
+
+/**
+ * Index of the milestone the progress bar is currently in: the first phase the
+ * `fraction` (0–1) hasn't passed yet. Uses `<=` so a phase stays active while
+ * the bar is still within it (a phase at exactly its threshold is the current
+ * one, not already done). Returns `FIRST_SYNC_MILESTONES.length` when every
+ * phase is complete; with no determinate value the first milestone is active.
+ */
+export function firstSyncActiveMilestoneIndex(
+  fraction: number,
+  isDeterminate: boolean,
+): number {
+  if (!isDeterminate) return 0;
+  const firstPending = FIRST_SYNC_MILESTONES.findIndex(
+    (milestone) => fraction <= milestone.fraction,
+  );
+  return firstPending === -1 ? FIRST_SYNC_MILESTONES.length : firstPending;
+}
+
 export function syncPhaseLabel(phase: string | undefined, fallback: string) {
   if (!phase) return fallback;
   return PHASE_LABELS[phase] ?? phase.replaceAll("_", " ");

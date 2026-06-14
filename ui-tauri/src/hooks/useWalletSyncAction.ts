@@ -15,7 +15,7 @@ import {
   syncProgressNotification,
   type WalletSyncProgress,
 } from "@/lib/syncProgress";
-import { useUiStore } from "@/store/ui";
+import { bookIdentityKey, useUiStore } from "@/store/ui";
 
 type WalletSyncOptions = {
   onTrustedSuccess?: () => void;
@@ -45,6 +45,8 @@ export function useWalletSyncAction() {
   const clearActiveMaintenanceProgress = useUiStore(
     (state) => state.clearActiveMaintenanceProgress,
   );
+  const markFirstSyncDone = useUiStore((state) => state.markFirstSyncDone);
+  const bookKey = useUiStore((state) => bookIdentityKey(state.identity));
   const noticeIdRef = React.useRef<string | null>(null);
   const startedAtRef = React.useRef<string | null>(null);
   const progressValueRef = React.useRef(STARTING_SYNC_PROGRESS_VALUE);
@@ -150,6 +152,9 @@ export function useWalletSyncAction() {
             if (!needsAttention) options?.onTrustedSuccess?.();
             clearActiveMaintenanceProgress(BOOK_REFRESH_PROGRESS_ID);
             startedAtRef.current = null;
+            // The book has completed a full run, so subsequent refreshes are
+            // ordinary background syncs rather than a first-time setup.
+            if (bookKey) markFirstSyncDone(bookKey);
           },
           onError: (error) => {
             const body =
@@ -183,8 +188,10 @@ export function useWalletSyncAction() {
     },
     [
       addNotification,
+      bookKey,
       clearActiveMaintenanceProgress,
       freshnessRunMutationKey,
+      markFirstSyncDone,
       queryClient,
       refreshBook,
       setActiveMaintenanceProgress,
