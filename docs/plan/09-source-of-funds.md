@@ -138,8 +138,9 @@ Each link should carry:
 
 - `state`: `suggested`, `reviewed`, `rejected`
 - `confidence`: `exact`, `strong`, `weak`, `unknown`
-- `method`: deterministic source such as `same_external_id`,
-  `transaction_pair`, `provider_trade_id`, `manual`, or `chain_observation`
+- `method`: deterministic source such as `same_external_id`, `utxo_spend`,
+  `payment_hash`, `transaction_pair`, `provider_trade_id`, `manual`, or
+  `chain_observation`
 - `allocation_policy`: `explicit`, `heuristic`, or `unknown`
 - `explanation`: short human-readable reason
 
@@ -165,14 +166,62 @@ Deterministic suggestions should run in this order:
 1. Existing same-asset self-transfer detection by shared external transaction
    id across owned wallets.
 2. Existing manual `transaction_pairs`, including cross-asset swap links.
-3. Provider/import evidence such as trade ids, order ids, payment ids, or
+3. Transaction input/output structure (`utxo_spend`): chain-synced rows store
+   their vin outpoints in `raw_json` (esplora/electrum) and `wallet_utxos`
+   records the outputs each owned wallet controls (plus `spent_by` from
+   Wasabi imports). Joining a spend's inputs against owned outputs proves,
+   exactly: which earlier owned transaction funded this spend inside one
+   wallet (consolidation/change chaining), and which wallet received which
+   share of a multi-wallet transaction the 1:1 external-id heuristic
+   refuses. Works identically for Bitcoin and Liquid (`wallet_utxos.chain`).
+4. Lightning payment hashes (`payment_hash`): exactly one outbound and one
+   inbound owned row sharing a payment hash are two legs of one payment —
+   covering LN transfers between own wallets and on-chain HTLC legs whose
+   hash was extracted at import.
+5. Provider/import evidence such as trade ids, order ids, payment ids, or
    exchange ledger ids when stored in `raw_json`.
-4. Tight time and amount matches across owned wallets, as opt-in broad hints.
-5. Chain observations from configured Esplora, Electrum, or Bitcoin Core
+6. Tight time and amount matches across owned wallets, as opt-in broad hints.
+7. Chain observations from configured Esplora, Electrum, or Bitcoin Core
    backends, stored as evidence only unless the ownership link is reviewed.
    Public Esplora or third-party Electrum usage must show a privacy warning
    because the queried txids reveal the report target and investigation path to
    that backend.
+
+The `utxo_spend` and `payment_hash` derivers read only first-party wallet
+state that sync already imported — they never query a backend — so they sit
+outside the chain-observation manual-review policy and are deterministic
+bulk-review methods (re-derived from the live database before promotion,
+like every other deterministic method). One pair of transactions carries at
+most one non-rejected link regardless of method: parallel edges would
+double-allocate a hop into an `ambiguous_allocation` blocker, so the first
+method to claim a pair wins and stronger evidence may only re-suggest pairs
+whose earlier link was rejected.
+
+### Automatic assembly
+
+`source-funds assemble --target-transaction X` (daemon:
+`ui.source_funds.assemble`) is the one-call path from "target picked" to
+"everything provable is reviewed": it alternates target-scoped suggestion
+derivation with deterministic bulk review until the graph stops growing, so
+multi-hop chains assemble transitively — each reviewed hop extends the BFS
+frontier the next pass derives from. Privacy boundaries are never crossed,
+root sources are never invented, and what remains afterwards is exactly the
+user's work: root-source evidence, attested gaps, and weak hints.
+
+The scaling property is the product: every wallet, connection type, and
+layer added to a book (descriptor/xpub chain sync, Liquid, Lightning node
+adapters and CSV exports, platform imports) feeds more joins, so the
+assembled flow graph gets more complete without any new user effort. Gap
+findings stay the inverse signal — a hop Kassiber cannot prove is a hint
+that a counterparty wallet or connection is missing from the book, or that
+evidence must be attached by hand.
+
+Long-term UI direction: the desktop workflow is assemble-first and
+gap-driven. One primary action per step (pick target → Assemble History →
+fix the surfaced gaps → disclose and export); enriched findings render as
+actionable gap cards whose `next_step.action` dispatches straight to the
+fix (document gap, review link, open transaction); the manual link editor
+remains as the advanced escape hatch, not the main path.
 
 When a target transaction is supplied, suggestion writes are target-scoped:
 Kassiber only persists candidate links that touch the target or transactions
@@ -222,10 +271,52 @@ source-of-funds documents:
 
 The shipped local report envelope now carries those sections as structured
 fields instead of PDF-only prose: `overview`, `narrative`, `data_sources`,
-`simplified_flow`, `flow_levels`, `source_mix`, `graph`, `findings`,
-`disclosure_preview`, and `report_context`. The narrative and simplified chart
-model are generated deterministically from the saved review graph on the user's
-machine. They must not call an external AI service or upgrade weak heuristics
+`data_provenance_summary`, `simplified_flow`, `flow_levels`, `source_mix`,
+`graph`, `findings`, `disclosure_preview`, `report_context`, and (when
+requested) `diagrams`. The narrative and simplified chart model are generated
+deterministically from the saved review graph on the user's machine.
+
+Per-transaction granularity matches strict exchange-facing reviews: every
+transaction node carries `fee`/`fee_msat` and a `data_provenance` value
+(`chain_sync` for descriptor/xpub watch-only sync, `platform_export` for
+exchange/node CSV and API imports, `manual_import` for custom/manual rows),
+derived from the owning wallet's kind (descriptor/xpub/address wallets built
+around a file-based source count as `platform_export`, not chain-verified).
+`flow_levels` nodes additionally carry `direction` and a
+`fiat_value_allocated` pro-rata slice (node `fiat_value` prices the full
+transaction; the allocated slice scales it to the traced `required_amount`).
+Each level row carries `assets` plus a `fiat_value_total` subtotal — the sum
+of allocated slices, emitted only when every node in the level has a priced
+allocated value in one shared fiat currency, so partial pricing can never
+silently understate or overstate a level. The PDF
+renders this as one "Transaction Details by Level" sub-table per level (Date,
+Source, Type, In, Out, Fee, Fiat, ID/hash, Data source), with root sources
+included as attested rows. `data_provenance_summary` rolls disclosed
+transactions up by provenance for the data-sources ring; the data-sources
+table keeps wallet/category rollups and gains a per-row provenance column.
+`missing_history` gap findings carry the unexplained `amount`/`amount_msat`
+where the walk knows it, and the PDF renders a dedicated "Missing History and
+Gaps" section whenever `gaps` is non-empty.
+
+`disclosure_preview` also quantifies the disclosure footprint: `wallets_named`
+lists the wallet labels the report exposes, and `ownership_note` states the
+core privacy consequence — sharing the report demonstrates common ownership
+of those wallets to the recipient. This is a deliberate lightweight summary,
+not a chain-analysis privacy scorer.
+
+Diagrams are rendered by a single on-device substrate
+([kassiber/core/source_funds_diagram.py](../../kassiber/core/source_funds_diagram.py)):
+one `reportlab.graphics` `Drawing` per chart (a weighted Sankey-style
+simplified flow with value-share edge percentages and a Bitcoin-native legend,
+plus source-mix and data-source donut rings). The same builder renders the
+native-vector chart embedded in the PDF and a web-safe SVG string for the
+desktop disclosure preview, so the two cannot drift. SVG rendering is opt-in
+via `build_report(..., include_diagrams=True)`; the `compute_coverage` sweep
+leaves it off so its repeated per-transaction `build_report` calls never pay for
+chart rendering. When `include_diagrams` is set the `diagrams` SVGs are frozen
+into the case snapshot alongside the rest of the disclosure payload. `simplified_flow`
+edges now also carry `percent_of_target` (target amount = 100% base; trading
+gains/losses and fees are never folded into source percentages). They must not call an external AI service or upgrade weak heuristics
 into proof. The simplified chart follows reviewed local sources, wallet
 transfers, and consolidation-style reviewed hops. CoinJoin/PayJoin traversal is
 deferred for now and rendered as an explicit privacy boundary, not as proof
@@ -381,6 +472,39 @@ The first implementation adds the conservative, testable core path:
 - PDF sections for source overview, local narrative, data-source rollups, source
   mix, a simplified boxes-and-arrows flow path, level-by-level flow rows,
   transaction details, review gates, disclosure preview, and limitations
+- a single on-device diagram substrate
+  ([kassiber/core/source_funds_diagram.py](../../kassiber/core/source_funds_diagram.py))
+  that renders a weighted Sankey-style simplified flow (value-share edge
+  percentages, Bitcoin-native legend) plus source-mix / data-source donut rings,
+  emitted both as native-vector PDF charts and as web-safe SVG strings frozen in
+  the case snapshot; the desktop Export step embeds those same SVGs so the
+  preview matches the PDF, and the cover gains an at-a-glance strip and mini-flow
+- advanced, snapshot-frozen presentation options via `build_report(...,
+  report_options=...)`, stored as `envelope["report_options"]`. The first option
+  is `diagram_detail` (`summary` clusters long paths; `detailed` shows more hops
+  before clustering), exposed as `reports source-funds --diagram-detail`, the
+  daemon `report_options` arg, and a desktop Export-step control. The same
+  normalize-store-freeze pattern now also carries `amount_precision`
+  (`btc`/`sats`), `mask_recipient`, and `omit_sections` (verbose PDF sections
+  from `OPTIONAL_REPORT_SECTIONS`), each exposed via `reports source-funds`
+  flags (`--amount-precision`, `--mask-recipient`, `--omit-section`) and
+  Export-step controls. Further options should follow the same pattern so
+  simple UX stays the default
+- a recipient-ready evidence bundle: `reports export-source-funds-bundle --case
+  ...` (and the `ui.source_funds.export_bundle` daemon kind) zips the report PDF,
+  the original evidence files attached to disclosed sources, and a SHA-256
+  `manifest.json`. It reuses the same export gate as the PDF and is reveal-mode
+  scoped: `standard`/`full` include the files, `labels_only`/`minimal` record
+  them as `withheld_by_reveal_mode`. The report references originals by hash; it
+  never transcribes them (`attachments.resolve_attachment_files` resolves the
+  on-disk files).
+- a desktop target picker rendered as the transaction table (parity with the
+  Transactions screen) and the shared, editable transaction detail panel
+  ([TransactionDetailController](../../ui-tauri/src/components/transactions/dashboard/TransactionDetailController.tsx))
+  wired into the workflow: the picker's details affordance, review-step gate
+  findings, and flow-path transaction nodes all open it. Because daemon
+  mutations invalidate the source-of-funds queries, fixing pricing / exclusion /
+  evidence there re-evaluates the gates, coverage, and source mix automatically.
 - a basic Austrian/EUR report context with bilingual title, evidence checklist,
   and a checked-in fictitious demo generator at
   `scripts/generate-source-funds-demo-report.py`

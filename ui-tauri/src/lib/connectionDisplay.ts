@@ -1,4 +1,15 @@
-import type { ConnectionKind, ConnectionStatus } from "@/mocks/seed";
+import type { Connection, ConnectionKind, ConnectionStatus } from "@/mocks/seed";
+
+/**
+ * Layer-aware category: the chain wins over the kind so a Liquid
+ * descriptor wallet reads "Liquid", not "On-chain".
+ */
+export function connectionCategoryLabel(
+  connection: Pick<Connection, "kind" | "chain">,
+): string {
+  if (connection.chain === "liquid") return "Liquid";
+  return connectionKindCategoryLabels[connection.kind];
+}
 
 export const connectionKindCategoryLabels: Record<ConnectionKind, string> = {
   xpub: "On-chain",

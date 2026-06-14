@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import type { ConnectionStatus } from "@/mocks/seed";
 
 const kindFilterOptions = Array.from(
-  new Set(Object.values(connectionKindCategoryLabels)),
+  new Set([...Object.values(connectionKindCategoryLabels), "Liquid"]),
 );
 
 const statusFilterOptions: ConnectionStatus[] = [
@@ -23,6 +23,13 @@ const statusFilterOptions: ConnectionStatus[] = [
   "idle",
   "error",
 ];
+
+const statusFilterLabels: Record<ConnectionStatus, string> = {
+  synced: "Synced",
+  syncing: "Syncing",
+  idle: "Idle",
+  error: "Error",
+};
 
 const filterChipClassName =
   "inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted sm:text-xs";
@@ -90,7 +97,7 @@ export function WalletsFilters({
                 </DropdownMenuRadioItem>
                 {statusFilterOptions.map((status) => (
                   <DropdownMenuRadioItem key={status} value={status}>
-                    {status}
+                    {statusFilterLabels[status]}
                   </DropdownMenuRadioItem>
                 ))}
               </DropdownMenuRadioGroup>

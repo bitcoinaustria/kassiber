@@ -134,8 +134,13 @@ export interface SourceFundsDraft {
   plannedDestination?: string;
   plannedNote?: string;
   revealMode?: string;
+  diagramDetail?: "summary" | "detailed";
   selectedRecipientId?: string;
-  currentStep?: "setup" | "review" | "export";
+  /**
+   * Case-dossier stage. Older drafts may carry the retired wizard values
+   * ("setup" / "review"); readers map those onto the dossier stages.
+   */
+  currentStep?: "target" | "trace" | "disclose" | "export" | "setup" | "review";
 }
 
 /** Captures a "I was setting up X, came here to add a backend, take me back" hop. */

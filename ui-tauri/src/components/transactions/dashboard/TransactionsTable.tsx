@@ -1,5 +1,4 @@
 import {
-  AlertTriangle,
   ArrowDownRight,
   ArrowLeftRight,
   ArrowUpRight,
@@ -17,8 +16,6 @@ import {
   X,
 } from "lucide-react";
 import * as React from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -48,25 +45,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
-import { useDaemon, useDaemonMutation } from "@/daemon/client";
-import {
-  openAttachmentFile,
-  openExternalUrl,
-  type DaemonEnvelope,
-} from "@/daemon/transport";
+import { useDaemonMutation } from "@/daemon/client";
+import { useUiStore } from "@/store/ui";
 import { cn } from "@/lib/utils";
 import { type Currency } from "@/lib/currency";
 import { type ExplorerSettings } from "@/lib/explorer";
-import { useUiStore } from "@/store/ui";
-import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
-import type {
-  HistoryRevertTarget,
-  TransactionHistoryList,
-} from "@/lib/transactionHistory";
+import { TransactionDetailController } from "./TransactionDetailController";
 import {
   ExplorerOpenDialog,
-  TransactionDetailSheet,
-  TransactionEvidenceReuseDialog,
   allPaymentMethods,
   allTransactionFlows,
   allTransactionStatuses,
@@ -80,8 +66,6 @@ import {
   formatDisplayMoney,
   formatShortTxid,
   formatSignedDisplayMoney,
-  parseManualDecimal,
-  pricingCacheSummary,
   pricingSelectionValue,
   pricingSourceLabel,
   pricingSourceStyles,
@@ -92,38 +76,26 @@ import {
   transactionStatusIcons,
   transactionStatusLabels,
   transactionStatusStyles,
-  type CommercialContextData,
   type Transaction,
-  type TransactionEditDraft,
   type TransactionFlow,
   type TransactionStatus,
 } from "@/components/transactions";
 import {
   PAGE_SIZE_OPTIONS,
-  attachmentRecordToItem,
   breakdownSelectionLabel,
   dateFilterOptions,
   filterChipClassName,
   flowChartSelectionLabel,
-  isAttachmentListQueryKeyForTransaction,
   isRedundantTransactionLabel,
   matchesFlowChartSelection,
   matchesTransactionDeepLink,
   pairRailLabel,
   quickFilterLabel,
   readTransactionDetailParams,
-  removeAttachmentRecord,
-  replaceAttachmentRecord,
   updateTransactionDetailParams,
-  upsertAttachmentRecords,
-  type AttachmentOpenData,
-  type AttachmentRecord,
-  type AttachmentsCopyData,
-  type AttachmentsListData,
   type BreakdownSelection,
   type FeeFilter,
   type FlowChartSelection,
-  type JournalEventsData,
   type TableQuickFilter,
 } from "./model";
 
@@ -168,8 +140,9 @@ const TransactionsTable = ({
   deepLinkedTransactionId?: string | null;
   deepLinkedTransactionTab?: string;
 }) => {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  const excludeTransaction = useDaemonMutation(
+    "ui.transactions.metadata.update",
+  );
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
   const [dateFilter, setDateFilter] = React.useState<string>("all");
   const [flowFilter, setFlowFilter] = React.useState<string>("all");
@@ -184,63 +157,8 @@ const TransactionsTable = ({
   const [detailTransaction, setDetailTransaction] =
     React.useState<Transaction | null>(null);
   const [detailInitialTab, setDetailInitialTab] = React.useState("details");
-  const [attachmentListOverride, setAttachmentListOverride] = React.useState<{
-    transactionId: string;
-    attachments: AttachmentRecord[];
-  } | null>(null);
-  const [reuseDialogOpen, setReuseDialogOpen] = React.useState(false);
-  const [reuseSourceTransactionId, setReuseSourceTransactionId] =
-    React.useState("");
   const pendingDetailLinkRef = React.useRef(readTransactionDetailParams());
   const tableRef = React.useRef<HTMLDivElement>(null);
-  const [drafts, setDrafts] = React.useState<Record<string, TransactionEditDraft>>(
-    {},
-  );
-  const [saveError, setSaveError] = React.useState<string | null>(null);
-  const metadataUpdate = useDaemonMutation("ui.transactions.metadata.update");
-  const attachmentAdd = useDaemonMutation<AttachmentRecord>("ui.attachments.add");
-  const attachmentCopy = useDaemonMutation<AttachmentsCopyData>(
-    "ui.attachments.copy",
-  );
-  const attachmentRename =
-    useDaemonMutation<AttachmentRecord>("ui.attachments.rename");
-  const attachmentRemove = useDaemonMutation<AttachmentRecord>(
-    "ui.attachments.remove",
-  );
-  const attachmentOpen =
-    useDaemonMutation<AttachmentOpenData>("ui.attachments.open");
-  const unpairTransfer = useDaemonMutation("ui.transfers.unpair");
-  const revertHistory = useDaemonMutation("ui.transactions.history.revert");
-  const { runJournalProcessing, isProcessingJournals } =
-    useJournalProcessingAction({
-      notifyStart: true,
-      notifyAlreadyRunning: true,
-    });
-  const attachmentsQuery = useDaemon<AttachmentsListData>(
-    "ui.attachments.list",
-    { transaction: detailTransaction?.id ?? "" },
-    { enabled: Boolean(detailTransaction) },
-  );
-  const historyQuery = useDaemon<TransactionHistoryList>(
-    "ui.transactions.history",
-    { transaction: detailTransaction?.id ?? "", limit: 25 },
-    { enabled: Boolean(detailTransaction) },
-  );
-  const reuseSourceAttachmentsQuery = useDaemon<AttachmentsListData>(
-    "ui.attachments.list",
-    { transaction: reuseSourceTransactionId },
-    { enabled: reuseDialogOpen && Boolean(reuseSourceTransactionId) },
-  );
-  const journalEventsQuery = useDaemon<JournalEventsData>(
-    "ui.journals.events.list",
-    { transaction: detailTransaction?.id ?? "", limit: 20 },
-    { enabled: Boolean(detailTransaction) },
-  );
-  const commercialContextQuery = useDaemon<CommercialContextData>(
-    "ui.transactions.commercial_context",
-    { transaction: detailTransaction?.id ?? "" },
-    { enabled: Boolean(detailTransaction) },
-  );
   const explorerTarget = explorerTransaction
     ? explorerForTransaction(explorerTransaction, explorerSettings)
     : null;
@@ -250,227 +168,16 @@ const TransactionsTable = ({
     [swapCandidateIds],
   );
   const getDraft = React.useCallback(
-    (txn: Transaction) => drafts[txn.id] ?? draftForTransaction(txn),
-    [drafts],
+    (txn: Transaction) => draftForTransaction(txn),
+    [],
   );
-  const saveTransactionDraft = React.useCallback(
-    async (transactionId: string, draft: TransactionEditDraft) => {
-      setSaveError(null);
-      const sourceTransaction = records.find((txn) => txn.id === transactionId);
-      const baseline = sourceTransaction
-        ? drafts[transactionId] ?? draftForTransaction(sourceTransaction)
-        : null;
-      const persistedTagCodes = new Set(
-        (sourceTransaction?.tags ?? []).map((tag) => tag.toLowerCase()),
-      );
-      const shouldPersistLabel =
-        draft.label &&
-        draft.label !== "Unlabeled" &&
-        (persistedTagCodes.has(draft.label.toLowerCase()) ||
-          draft.label !== baseline?.label);
-      const tags = [
-        shouldPersistLabel ? draft.label : "",
-        ...draft.tags,
-      ].filter(Boolean);
-      const pricingDirty = baseline
-        ? draft.pricingSourceKind !== baseline.pricingSourceKind ||
-          draft.pricingQuality !== baseline.pricingQuality ||
-          draft.manualCurrency !== baseline.manualCurrency ||
-          draft.manualPrice !== baseline.manualPrice ||
-          draft.manualValue !== baseline.manualValue ||
-          draft.manualSource !== baseline.manualSource
-        : false;
-      const reviewTaxDirty = baseline
-        ? draft.reviewStatus !== baseline.reviewStatus ||
-          draft.taxable !== baseline.taxable ||
-          draft.atRegime !== baseline.atRegime ||
-          draft.atCategory !== baseline.atCategory
-        : false;
-      const manualPrice = parseManualDecimal(draft.manualPrice);
-      const manualValue = parseManualDecimal(draft.manualValue);
-      await metadataUpdate.mutateAsync({
-        transaction: transactionId,
-        note: draft.note.trim() ? draft.note : null,
-        tags: Array.from(new Set(tags)),
-        excluded: draft.excluded,
-        ...(reviewTaxDirty
-          ? {
-              review_status: draft.reviewStatus,
-              taxable: draft.taxable,
-              at_regime: draft.atRegime,
-              at_category: draft.atCategory,
-            }
-          : {}),
-        ...(pricingDirty
-          ? {
-              pricing_source_kind: draft.pricingSourceKind,
-              pricing_quality: draft.pricingQuality,
-              fiat_currency: draft.manualCurrency.trim().toUpperCase(),
-              fiat_rate: manualPrice === null ? null : draft.manualPrice,
-              fiat_value: manualValue === null ? null : draft.manualValue,
-              pricing_external_ref: draft.manualSource.trim() || null,
-            }
-          : {}),
-      });
-      setDrafts((current) => ({
-        ...current,
-        [transactionId]: draft,
-      }));
-    },
-    [drafts, metadataUpdate, records],
-  );
-
   const openTransactionDetail = React.useCallback(
     (txn: Transaction, tab = "details") => {
-      setSaveError(null);
       setDetailInitialTab(tab);
       setDetailTransaction(txn);
       updateTransactionDetailParams(txn.id, tab);
     },
     [],
-  );
-  React.useEffect(() => {
-    if (!deepLinkedTransactionId) return;
-    if (
-      detailTransaction &&
-      matchesTransactionDeepLink(detailTransaction, deepLinkedTransactionId)
-    ) {
-      return;
-    }
-    const transaction = records.find((txn) =>
-      matchesTransactionDeepLink(txn, deepLinkedTransactionId),
-    );
-    if (transaction) {
-      pendingDetailLinkRef.current = { transactionId: null, tab: "details" };
-      openTransactionDetail(transaction, deepLinkedTransactionTab);
-      return;
-    }
-    pendingDetailLinkRef.current = {
-      transactionId: deepLinkedTransactionId,
-      tab: deepLinkedTransactionTab,
-    };
-  }, [
-    deepLinkedTransactionId,
-    deepLinkedTransactionTab,
-    detailTransaction,
-    openTransactionDetail,
-    records,
-  ]);
-  const detailAttachmentRecords = React.useMemo(
-    () => {
-      if (
-        attachmentListOverride &&
-        attachmentListOverride.transactionId === detailTransaction?.id
-      ) {
-        return attachmentListOverride.attachments;
-      }
-      return attachmentsQuery.data?.data?.attachments ?? [];
-    },
-    [
-      attachmentListOverride,
-      attachmentsQuery.data?.data?.attachments,
-      detailTransaction?.id,
-    ],
-  );
-  const attachmentItems = React.useMemo(
-    () => detailAttachmentRecords.map(attachmentRecordToItem),
-    [detailAttachmentRecords],
-  );
-  React.useEffect(() => {
-    setAttachmentListOverride(null);
-  }, [detailTransaction?.id]);
-  const updateDetailAttachmentRecords = React.useCallback(
-    (updater: (attachments: AttachmentRecord[]) => AttachmentRecord[]) => {
-      if (!detailTransaction) return;
-      setAttachmentListOverride((current) => {
-        const currentAttachments =
-          current?.transactionId === detailTransaction.id
-            ? current.attachments
-            : attachmentsQuery.data?.data?.attachments ?? [];
-        return {
-          transactionId: detailTransaction.id,
-          attachments: updater(currentAttachments),
-        };
-      });
-    },
-    [attachmentsQuery.data?.data?.attachments, detailTransaction],
-  );
-  const updateAttachmentListQueryCache = React.useCallback(
-    (
-      transactionId: string,
-      updater: (attachments: AttachmentRecord[]) => AttachmentRecord[],
-    ) => {
-      queryClient.setQueriesData<DaemonEnvelope<AttachmentsListData>>(
-        {
-          queryKey: ["daemon"],
-          predicate: (query) =>
-            isAttachmentListQueryKeyForTransaction(
-              query.queryKey,
-              transactionId,
-            ),
-        },
-        (current) =>
-          current?.data
-            ? {
-                ...current,
-                data: {
-                  ...current.data,
-                  attachments: updater(current.data.attachments),
-                },
-              }
-            : current,
-      );
-    },
-    [queryClient],
-  );
-  const evidenceSourceTransactions = React.useMemo(
-    () =>
-      detailTransaction
-        ? records.filter((txn) => txn.id !== detailTransaction.id)
-        : [],
-    [detailTransaction, records],
-  );
-  React.useEffect(() => {
-    if (!reuseDialogOpen) return;
-    if (
-      reuseSourceTransactionId &&
-      evidenceSourceTransactions.some(
-        (transaction) => transaction.id === reuseSourceTransactionId,
-      )
-    ) {
-      return;
-    }
-    setReuseSourceTransactionId(evidenceSourceTransactions[0]?.id ?? "");
-  }, [evidenceSourceTransactions, reuseDialogOpen, reuseSourceTransactionId]);
-  const reuseSourceAttachmentItems = React.useMemo(
-    () =>
-      (reuseSourceAttachmentsQuery.data?.data?.attachments ?? []).map(
-        attachmentRecordToItem,
-      ),
-    [reuseSourceAttachmentsQuery.data],
-  );
-  const journalEvents = journalEventsQuery.data?.data?.events ?? [];
-  const commercialContext = commercialContextQuery.data?.data;
-  const historyData = historyQuery.data?.data;
-  const revertHistoryTarget = React.useCallback(
-    async (target: HistoryRevertTarget) => {
-      if (!detailTransaction) return;
-      await revertHistory.mutateAsync({
-        transaction: detailTransaction.id,
-        event: target.event.id,
-        ...(target.field ? { field: target.field.field } : {}),
-        reason: target.field
-          ? `Reverted ${target.field.label} from edit history`
-          : "Reverted edit history event",
-      });
-      useUiStore.getState().addNotification({
-        title: "Edit reverted",
-        body: "Kassiber wrote a new edit history entry with the reverted value.",
-        tone: "success",
-        dedupeKey: `history-revert-${target.event.id}-${target.field?.field ?? "event"}`,
-      });
-    },
-    [detailTransaction, revertHistory],
   );
 
   const hasActiveFilters =
@@ -577,6 +284,34 @@ const TransactionsTable = ({
     pendingDetailLinkRef.current = { transactionId: null, tab: "details" };
     openTransactionDetail(transaction, pending.tab);
   }, [records, openTransactionDetail]);
+
+  React.useEffect(() => {
+    if (!deepLinkedTransactionId) return;
+    if (
+      detailTransaction &&
+      matchesTransactionDeepLink(detailTransaction, deepLinkedTransactionId)
+    ) {
+      return;
+    }
+    const transaction = records.find((txn) =>
+      matchesTransactionDeepLink(txn, deepLinkedTransactionId),
+    );
+    if (transaction) {
+      pendingDetailLinkRef.current = { transactionId: null, tab: "details" };
+      openTransactionDetail(transaction, deepLinkedTransactionTab);
+      return;
+    }
+    pendingDetailLinkRef.current = {
+      transactionId: deepLinkedTransactionId,
+      tab: deepLinkedTransactionTab,
+    };
+  }, [
+    deepLinkedTransactionId,
+    deepLinkedTransactionTab,
+    detailTransaction,
+    openTransactionDetail,
+    records,
+  ]);
 
   const filteredTransactions = React.useMemo(() => {
     return records.filter((txn) => {
@@ -1099,10 +834,6 @@ const TransactionsTable = ({
                   draft.pricingSourceKind,
                   draft.pricingQuality,
                 );
-                const rowPricingSummary =
-                  draft.pricingSourceKind === "manual_override"
-                    ? null
-                    : pricingCacheSummary(txn);
                 const StatusIcon = transactionStatusIcons[draft.reviewStatus];
                 const explorer = explorerForTransaction(txn, explorerSettings);
                 const flow = displayFlow(txn);
@@ -1266,28 +997,17 @@ const TransactionsTable = ({
                       </p>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className={cn(
-                            "inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium sm:text-xs",
-                            pricingSourceStyles[rowPricingValue],
-                          )}
-                        >
-                          {pricingSourceLabel(
-                            draft.pricingSourceKind,
-                            draft.pricingQuality,
-                          )}
-                        </span>
-                        {draft.pricingQuality === "coarse_fallback" ? (
-                          <span
-                            className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
-                            title="Coarse daily fallback price — review before relying on it"
-                          >
-                            <AlertTriangle className="size-3" aria-hidden="true" />
-                            Coarse
-                          </span>
-                        ) : null}
-                      </div>
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium sm:text-xs",
+                          pricingSourceStyles[rowPricingValue],
+                        )}
+                      >
+                        {pricingSourceLabel(
+                          draft.pricingSourceKind,
+                          draft.pricingQuality,
+                        )}
+                      </span>
                       <p
                         className={cn(
                           "mt-1 truncate text-[10px] text-muted-foreground sm:text-xs",
@@ -1300,14 +1020,6 @@ const TransactionsTable = ({
                             ? `${currencyFormatter.format(txn.rate)} / BTC`
                             : "Awaiting price"}
                       </p>
-                      {rowPricingSummary ? (
-                        <p
-                          className="truncate text-[10px] text-muted-foreground/80"
-                          title={rowPricingSummary}
-                        >
-                          {rowPricingSummary}
-                        </p>
-                      ) : null}
                     </TableCell>
                     <TableCell className="hidden xl:table-cell">
                       <div className="flex flex-wrap gap-1">
@@ -1373,9 +1085,20 @@ const TransactionsTable = ({
                             onSelect={(event: Event) => {
                               event.preventDefault();
                               if (typeof window === "undefined") return;
-                              window.confirm(
-                                "Void this transaction? This cannot be undone.",
+                              const confirmed = window.confirm(
+                                "Exclude this transaction from journals and reports? You can re-include it from the transaction's Classify tab.",
                               );
+                              if (!confirmed) return;
+                              void excludeTransaction.mutateAsync({
+                                transaction: txn.id,
+                                excluded: true,
+                              });
+                              useUiStore.getState().addNotification({
+                                title: "Transaction excluded",
+                                body: "Reprocess journals before trusting reports again.",
+                                tone: "info",
+                                dedupeKey: `tx-exclude-${txn.id}`,
+                              });
                             }}
                           >
                             <X className="mr-2 size-4" aria-hidden="true" />
@@ -1512,247 +1235,22 @@ const TransactionsTable = ({
         target={explorerTarget}
         onTransactionChange={setExplorerTransaction}
       />
-      <TransactionDetailSheet
+      <TransactionDetailController
         transaction={detailTransaction}
-        draft={detailTransaction ? getDraft(detailTransaction) : null}
         initialTab={detailInitialTab}
         hideSensitive={hideSensitive}
         currency={currency}
         explorerSettings={explorerSettings}
-        isSaving={metadataUpdate.isPending}
-        saveError={saveError}
         nowRate={nowRate}
-        attachments={detailTransaction ? attachmentItems : undefined}
-        journalEvents={journalEvents}
-        commercialContext={commercialContext}
-        commercialContextLoading={commercialContextQuery.isLoading}
-        historyEvents={historyData?.events}
-        historyStale={historyData?.stale}
-        historyLoading={historyQuery.isLoading}
-        isRevertingHistory={revertHistory.isPending}
-        onRevertHistory={revertHistoryTarget}
-        onProcessJournals={runJournalProcessing}
-        isProcessingJournals={isProcessingJournals}
-        onAddAttachmentFiles={async (paths) => {
-          if (!detailTransaction) return;
-          const added: AttachmentRecord[] = [];
-          for (const path of paths) {
-            const result = await attachmentAdd.mutateAsync({
-              transaction: detailTransaction.id,
-              file_path: path,
-            });
-            if (result.data) {
-              added.push(result.data);
-            }
-          }
-          if (added.length) {
-            updateDetailAttachmentRecords((attachments) =>
-              upsertAttachmentRecords(attachments, added),
-            );
-            updateAttachmentListQueryCache(
-              detailTransaction.id,
-              (attachments) => upsertAttachmentRecords(attachments, added),
-            );
-          }
-          useUiStore.getState().addNotification({
-            title: "Files attached",
-            body: `${paths.length} file${paths.length === 1 ? "" : "s"} copied into Kassiber attachments.`,
-            tone: "success",
-            dedupeKey: `attachments-files-${detailTransaction.id}`,
-          });
-        }}
-        onAddAttachmentLinks={async (urls) => {
-          if (!detailTransaction) return;
-          const added: AttachmentRecord[] = [];
-          for (const url of urls) {
-            const result = await attachmentAdd.mutateAsync({
-              transaction: detailTransaction.id,
-              url,
-            });
-            if (result.data) {
-              added.push(result.data);
-            }
-          }
-          if (added.length) {
-            updateDetailAttachmentRecords((attachments) =>
-              upsertAttachmentRecords(attachments, added),
-            );
-            updateAttachmentListQueryCache(
-              detailTransaction.id,
-              (attachments) => upsertAttachmentRecords(attachments, added),
-            );
-          }
-          useUiStore.getState().addNotification({
-            title: "Links attached",
-            body: `${urls.length} link${urls.length === 1 ? "" : "s"} stored as attachment references.`,
-            tone: "success",
-            dedupeKey: `attachments-links-${detailTransaction.id}`,
-          });
-        }}
-        onReuseEvidence={
-          evidenceSourceTransactions.length
-            ? () => {
-                setReuseDialogOpen(true);
-              }
-            : undefined
-        }
-        onOpenAttachment={async (item) => {
-          const result = await attachmentOpen.mutateAsync({
-            attachment: item.id,
-          });
-          const data = result.data;
-          if (!data) return;
-          if (data.target_type === "url" && data.url) {
-            await openExternalUrl(data.url);
-            return;
-          }
-          if (data.target_type === "file" && data.path) {
-            await openAttachmentFile(data.path);
-          }
-        }}
-        onRenameAttachment={async (item, label) => {
-          if (!detailTransaction) return;
-          const result = await attachmentRename.mutateAsync({
-            attachment: item.id,
-            label,
-          });
-          const updated = result.data;
-          if (updated) {
-            updateDetailAttachmentRecords((attachments) =>
-              replaceAttachmentRecord(attachments, updated),
-            );
-            updateAttachmentListQueryCache(
-              detailTransaction.id,
-              (attachments) => replaceAttachmentRecord(attachments, updated),
-            );
-          }
-          useUiStore.getState().addNotification({
-            title: "Link text updated",
-            body: "Attachment link label saved.",
-            tone: "success",
-          });
-        }}
-        onRemoveAttachment={async (item) => {
-          if (!detailTransaction) return;
-          await attachmentRemove.mutateAsync({ attachment: item.id });
-          updateDetailAttachmentRecords((attachments) =>
-            removeAttachmentRecord(attachments, item.id),
-          );
-          updateAttachmentListQueryCache(
-            detailTransaction.id,
-            (attachments) => removeAttachmentRecord(attachments, item.id),
-          );
-          useUiStore.getState().addNotification({
-            title: "Attachment removed",
-            body: item.kind === "file" ? "Attachment record and copied file removed." : "Attachment link removed.",
-            tone: "success",
-            dedupeKey: `attachment-remove-${item.id}`,
-          });
-        }}
-        onUnpair={async (pairId) => {
-          await unpairTransfer.mutateAsync({ pair_id: pairId });
-          setDetailTransaction((current) =>
-            current?.pair?.id === pairId ? { ...current, pair: undefined } : current,
-          );
-          useUiStore.getState().addNotification({
-            title: "Pair removed",
-            body: "This movement is no longer linked to the other leg.",
-            tone: "success",
-            dedupeKey: `transfer-unpair-${pairId}`,
-          });
-        }}
-        isUnpairing={unpairTransfer.isPending}
-        onOpenMarketDataSettings={() => {
-          setDetailTransaction(null);
-          updateTransactionDetailParams(null);
-          void navigate({ to: "/settings", hash: "market" });
-        }}
-        hasNext={
-          detailTransaction
-            ? filteredTransactions.findIndex(
-                (txn) => txn.id === detailTransaction.id,
-              ) <
-              filteredTransactions.length - 1
-            : false
-        }
+        navList={filteredTransactions}
+        evidenceSourceList={records}
         onOpenChange={(open) => {
           if (!open) {
             setDetailTransaction(null);
-            setReuseDialogOpen(false);
-            setSaveError(null);
             updateTransactionDetailParams(null);
           }
         }}
-        onOpenExplorer={(transaction) => setExplorerTransaction(transaction)}
-        onSave={async (transactionId, draft) => {
-          try {
-            await saveTransactionDraft(transactionId, draft);
-          } catch (error) {
-            setSaveError(
-              error instanceof Error ? error.message : "Could not save metadata.",
-            );
-            throw error;
-          }
-        }}
-        onSaveAndNext={async (transactionId, draft) => {
-          try {
-            await saveTransactionDraft(transactionId, draft);
-            const idx = filteredTransactions.findIndex(
-              (txn) => txn.id === transactionId,
-            );
-            const next = filteredTransactions[idx + 1];
-            if (next) {
-              openTransactionDetail(next, detailInitialTab);
-            } else {
-              setDetailTransaction(null);
-              updateTransactionDetailParams(null);
-            }
-          } catch (error) {
-            setSaveError(
-              error instanceof Error ? error.message : "Could not save metadata.",
-            );
-            throw error;
-          }
-        }}
-      />
-      <TransactionEvidenceReuseDialog
-        open={reuseDialogOpen}
-        onOpenChange={setReuseDialogOpen}
-        targetTransaction={detailTransaction}
-        sourceTransactions={evidenceSourceTransactions}
-        sourceTransactionId={reuseSourceTransactionId}
-        onSourceTransactionIdChange={setReuseSourceTransactionId}
-        sourceAttachments={reuseSourceAttachmentItems}
-        isLoadingSourceAttachments={reuseSourceAttachmentsQuery.isLoading}
-        isCopying={attachmentCopy.isPending}
-        hideSensitive={hideSensitive}
-        onCopy={async (attachmentIds) => {
-          if (!detailTransaction || !reuseSourceTransactionId) return;
-          const result = await attachmentCopy.mutateAsync({
-            transaction: detailTransaction.id,
-            source_transaction: reuseSourceTransactionId,
-            attachments: attachmentIds,
-          });
-          const copied = result.data?.copied ?? attachmentIds.length;
-          const copiedAttachments = result.data?.attachments ?? [];
-          if (copiedAttachments.length) {
-            updateDetailAttachmentRecords((attachments) =>
-              upsertAttachmentRecords(attachments, copiedAttachments),
-            );
-            updateAttachmentListQueryCache(
-              detailTransaction.id,
-              (attachments) =>
-                upsertAttachmentRecords(attachments, copiedAttachments),
-            );
-          }
-          setReuseDialogOpen(false);
-          useUiStore.getState().addNotification({
-            title: "Evidence reused",
-            body: `${copied} evidence item${copied === 1 ? "" : "s"} copied to this transaction.`,
-            tone: "success",
-            dedupeKey: `attachments-copy-${detailTransaction.id}`,
-          });
-        }}
+        onNavigate={(txn, tab) => openTransactionDetail(txn, tab)}
       />
     </>
   );

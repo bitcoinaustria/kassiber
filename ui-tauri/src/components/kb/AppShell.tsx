@@ -75,6 +75,7 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
@@ -129,7 +130,7 @@ import {
   startDaemonLogBridge,
   stopDaemonLogBridge,
 } from "@/lib/daemonLogBridge";
-import { ScreenAssistantMockup } from "./ScreenAssistantMockup";
+import { AssistantDock } from "./AssistantDock";
 import { PreAlphaBanner } from "./PreAlphaBanner";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
@@ -196,7 +197,7 @@ function notificationProgressValue(value: number | undefined) {
 }
 
 const appMainClassName =
-  "relative min-h-0 w-full flex-1 overflow-auto overscroll-contain bg-background text-zinc-950 dark:text-zinc-50";
+  "relative min-h-0 w-full flex-1 overflow-auto overscroll-contain bg-background text-foreground";
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -213,9 +214,9 @@ const NAV_GROUPS: NavGroup[] = [
     title: "Review",
     items: [
       { label: "Quarantine", icon: ShieldAlert, href: "/quarantine" },
-      { label: "Source Funds", icon: BadgeCheck, href: "/source-of-funds" },
+      { label: "Source of Funds", icon: BadgeCheck, href: "/source-of-funds" },
       { label: "Swaps & Transfers", icon: ArrowLeftRight, href: "/swaps" },
-      { label: "Ledger", icon: BookOpen, href: "/journals" },
+      { label: "Journals", icon: BookOpen, href: "/journals" },
     ],
   },
 ];
@@ -269,10 +270,19 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
   [
     "/journals",
     {
-      title: "Ledger",
+      title: "Journals",
       icon: BookOpen,
-      searchLabel: "Search ledger",
+      searchLabel: "Search journals",
       searchPlaceholder: "Search entries, wallets, assets...",
+    },
+  ],
+  [
+    "/imports",
+    {
+      title: "Imports",
+      icon: WalletCards,
+      searchLabel: "Search imports",
+      searchPlaceholder: "Search wallets, file formats...",
     },
   ],
   [
@@ -318,15 +328,6 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       icon: ShieldAlert,
       searchLabel: "Search quarantine",
       searchPlaceholder: "Search issue, account, source...",
-    },
-  ],
-  [
-    "/transfers",
-    {
-      title: "Swaps & Transfers",
-      icon: ArrowLeftRight,
-      searchLabel: "Search swaps and transfers",
-      searchPlaceholder: "Search wallet, asset pair, txid...",
     },
   ],
   [
@@ -1253,9 +1254,13 @@ export function AppShell() {
                         tabIndex={-1}
                         className={cn(
                           appMainClassName,
+                          // Reserve dock space only while the dock is
+                          // expanded; the collapsed pill needs a sliver.
                           isAssistantRoute
                             ? "pb-0"
-                            : "pb-[240px]",
+                            : assistantCollapsed
+                              ? "pb-16"
+                              : "pb-[240px]",
                         )}
                       >
                         <RouteTransitionIndicator
@@ -1265,7 +1270,7 @@ export function AppShell() {
                         <Outlet />
                       </main>
                       {isAssistantRoute ? null : (
-                        <ScreenAssistantMockup
+                        <AssistantDock
                           collapsed={assistantCollapsed}
                           className="absolute inset-x-0 bottom-0 z-20"
                         />
@@ -1383,6 +1388,17 @@ function AppSidebar({
       })).filter((group) => group.items.length > 0),
     [aiFeaturesEnabled],
   );
+  // Shell-level workload signal: review queues show their open counts so
+  // pressure is visible without visiting each screen.
+  const { data: navSnapshot } = useDaemon<OverviewSnapshot>(
+    "ui.overview.snapshot",
+    undefined,
+    { enabled: daemonEnabled },
+  );
+  const quarantineCount = navSnapshot?.data?.status?.quarantines ?? 0;
+  const navBadges: Record<string, number> = {
+    "/quarantine": quarantineCount,
+  };
 
   return (
     <Sidebar
@@ -1397,7 +1413,12 @@ function AppSidebar({
             <SidebarGroupContent>
               <SidebarMenu>
                 {group.items.map((item) => (
-                  <NavMenuItem key={item.label} item={item} pathname={pathname} />
+                  <NavMenuItem
+                    key={item.label}
+                    item={item}
+                    pathname={pathname}
+                    badge={navBadges[item.href]}
+                  />
                 ))}
               </SidebarMenu>
             </SidebarGroupContent>
@@ -1457,22 +1478,24 @@ function SidebarActions({
           </SidebarMenuButton>
         </SidebarMenuItem>
       ) : null}
-      <SidebarMenuItem>
-        <div className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-          <Server className="size-4 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">
-            {isRealData ? "Real data" : "Mock data"}
-          </span>
-          <Switch
-            checked={isRealData}
-            aria-label="Toggle real data mode"
-            onCheckedChange={(checked) =>
-              setDataMode(checked ? "real" : "mock")
-            }
-            className="group-data-[collapsible=icon]:hidden"
-          />
-        </div>
-      </SidebarMenuItem>
+      {developerToolsEnabled ? (
+        <SidebarMenuItem>
+          <div className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+            <Server className="size-4 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">
+              {isRealData ? "Real data" : "Mock data"}
+            </span>
+            <Switch
+              checked={isRealData}
+              aria-label="Toggle real data mode"
+              onCheckedChange={(checked) =>
+                setDataMode(checked ? "real" : "mock")
+              }
+              className="group-data-[collapsible=icon]:hidden"
+            />
+          </div>
+        </SidebarMenuItem>
+      ) : null}
       <SidebarMenuItem>
         <Collapsible asChild defaultOpen={supportActive} className="group/collapsible">
           <div>
@@ -1499,9 +1522,13 @@ function SidebarActions({
                 </SidebarMenuSubItem>
                 <SidebarMenuSubItem>
                   <SidebarMenuSubButton asChild>
-                    <a href="#donate">
+                    <a
+                      href="https://github.com/bitcoinaustria/kassiber/discussions"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
                       <Heart className="size-3.5" aria-hidden="true" />
-                      <span>Donate sats</span>
+                      <span>Discussions</span>
                     </a>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
@@ -1529,9 +1556,11 @@ function SidebarActions({
 function NavMenuItem({
   item,
   pathname,
+  badge,
 }: {
   item: NavItem;
   pathname: string;
+  badge?: number;
 }) {
   const Icon = item.icon;
   const childActive = item.children?.some(
@@ -1556,6 +1585,11 @@ function NavMenuItem({
             <span>{item.label}</span>
           </Link>
         </SidebarMenuButton>
+        {typeof badge === "number" && badge > 0 && (
+          <SidebarMenuBadge className="bg-amber-100 text-amber-900 dark:bg-amber-950/70 dark:text-amber-200">
+            {badge > 99 ? "99+" : badge}
+          </SidebarMenuBadge>
+        )}
       </SidebarMenuItem>
     );
   }
@@ -2032,7 +2066,7 @@ function AppDashboardHeader({
 
       <div
         ref={searchRootRef}
-        className="relative hidden w-full min-w-0 md:block"
+        className="relative w-full min-w-0"
         onBlur={(event) => {
           if (
             event.relatedTarget instanceof Node &&

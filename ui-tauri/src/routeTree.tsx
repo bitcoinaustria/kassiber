@@ -48,7 +48,7 @@ const Activity = lazyRouteComponent(
 );
 const Reports = lazyRouteComponent(() => import("./routes/Reports"), "Reports");
 const SourceFunds = lazyRouteComponent(
-  () => import("./routes/SourceFunds"),
+  () => import("./routes/source-funds"),
   "SourceFunds",
 );
 const Journals = lazyRouteComponent(

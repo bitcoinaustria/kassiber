@@ -13,7 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  connectionKindCategoryLabels,
+  connectionCategoryLabel,
   connectionKindTone,
 } from "@/lib/connectionDisplay";
 import type { Currency } from "@/lib/currency";
@@ -34,6 +34,8 @@ interface WalletsTableProps {
   onSelectConnection: (id: string) => void;
   priceEur: number;
   totalBtc: number;
+  /** Unfiltered wallet count, to distinguish empty book from empty filter. */
+  totalCount?: number;
 }
 
 export function WalletsTable({
@@ -43,6 +45,7 @@ export function WalletsTable({
   onSelectConnection,
   priceEur,
   totalBtc,
+  totalCount,
 }: WalletsTableProps) {
   return (
     <div className="border-t">
@@ -74,7 +77,9 @@ export function WalletsTable({
                   colSpan={5}
                   className="h-24 text-center text-sm text-muted-foreground"
                 >
-                  No wallets or sources match your filters.
+                  {totalCount === 0
+                    ? "No wallets yet — add a wallet to start syncing or importing history."
+                    : "No wallets or sources match your filters."}
                 </TableCell>
               </TableRow>
             ) : (
@@ -173,7 +178,7 @@ function WalletRow({
       </TableCell>
       <TableCell>
         <Badge variant="outline" className="rounded-md whitespace-nowrap">
-          {connectionKindCategoryLabels[connection.kind]}
+          {connectionCategoryLabel(connection)}
         </Badge>
       </TableCell>
       <TableCell>

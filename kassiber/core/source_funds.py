@@ -17,11 +17,23 @@ from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
 from ..wallet_descriptors import normalize_asset_code, normalize_chain, normalize_network
 from .attachments import attachment_display_label
 from .privacy_hops import privacy_hop_type_from_row
+from .source_funds_assembly import (
+    build_owned_outpoint_index,
+    derive_payment_hash_pairs,
+    derive_utxo_spend_pairs,
+)
 from .source_funds_hints import enrich_findings_with_next_steps
 
 
 REVEAL_MODES = ("labels_only", "minimal", "standard", "full")
 REPORT_PURPOSES = ("existing_transaction", "planned_exchange_sale")
+# Verbose PDF sections that the advanced panel can omit for a leaner report.
+OPTIONAL_REPORT_SECTIONS = (
+    "flow_levels",
+    "transaction_details",
+    "flow_links",
+    "graph_nodes",
+)
 SOURCE_TYPES = (
     "fiat_purchase",
     "exchange_withdrawal",
@@ -50,6 +62,7 @@ LINK_TYPES = (
 )
 LINK_STATES = ("suggested", "reviewed", "rejected")
 CONFIDENCE_LEVELS = ("exact", "strong", "weak", "unknown")
+_CONFIDENCE_RANK = {"unknown": 0, "weak": 1, "strong": 2, "exact": 3}
 ALLOCATION_POLICIES = ("explicit", "heuristic", "unknown")
 PRIVACY_LINK_TYPES = {"coinjoin", "payjoin"}
 ATTESTATION_SOURCE_TYPES = {"missing_history", "opening_balance_attestation"}
@@ -61,6 +74,13 @@ DETERMINISTIC_BULK_REVIEW_METHODS = {
     "provider_payment_id",
     "provider_exchange_order_id",
     "provider_ledger_id",
+    # Assembly derivers: re-verified against transaction input/output
+    # structure and payment-hash groupings at bulk-review time. These read
+    # only locally synced wallet data — first-party wallet state, not
+    # chain observations fetched about third-party transactions — so they
+    # stay outside the uses_chain_observation manual-review policy.
+    "utxo_spend",
+    "payment_hash",
 }
 PROVIDER_UNIQUE_KEYS = (
     "trade_id",
@@ -74,6 +94,32 @@ PROVIDER_BROAD_KEYS = ("provider_id",)
 PROVIDER_EVIDENCE_KEYS = PROVIDER_UNIQUE_KEYS + PROVIDER_BROAD_KEYS
 RAW_PRIVACY_HOP_TYPES = PRIVACY_LINK_TYPES | {"payment_in_coinjoin", "sweep"}
 SUGGESTION_WRITE_CAP = 500
+# How a transaction row entered Kassiber, derived from its wallet's kind.
+# This is the "data source" column a strict reviewer wants next to every
+# traced row: chain-verified watch-only sync vs a platform/CSV export vs a
+# manual/custom import. Wallet-level derivation is a documented
+# simplification (a descriptor wallet enriched by BTCPay comments still
+# counts as chain_sync because the balance source is the chain).
+DATA_PROVENANCE_KINDS = ("chain_sync", "platform_export", "manual_import")
+DATA_PROVENANCE_LABELS = {
+    "chain_sync": "Blockchain (watch-only sync)",
+    "platform_export": "Platform export / API",
+    "manual_import": "Manual / custom import",
+}
+_CHAIN_SYNC_WALLET_KINDS = {"descriptor", "xpub", "samourai"}
+_PLATFORM_EXPORT_WALLET_KINDS = {
+    "coreln",
+    "lnd",
+    "nwc",
+    "phoenix",
+    "river",
+    "bullbitcoin",
+    "coinfinity",
+    "21bitcoin",
+    "pocketbitcoin",
+    "strike",
+    "wasabi",
+}
 _PUBLIC_TXID_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 _PUBLIC_EXPLORER_BASES = {
     ("bitcoin", "main"): ("mempool.space", "https://mempool.space"),
@@ -257,7 +303,22 @@ def _timestamp_after(left: Any, right: Any) -> bool:
     return bool(left_ts and right_ts and left_ts > right_ts)
 
 
-def _public_tx_id(row: Mapping[str, Any], reveal_mode: str, *, is_target: bool = False) -> str:
+def _public_tx_id(
+    row: Mapping[str, Any],
+    reveal_mode: str,
+    *,
+    is_target: bool = False,
+    overrides: Mapping[str, str] | None = None,
+) -> str:
+    # Per-node overrides (keyed by Kassiber transaction id) win over the global
+    # reveal mode: "hide" always redacts the txid; "show" reveals it even when
+    # the mode would otherwise drop it. The user is the disclosure boundary.
+    if overrides:
+        decision = overrides.get(row["id"])
+        if decision == "hide":
+            return ""
+        if decision == "show":
+            return row["external_id"] or row["id"]
     if reveal_mode == "labels_only":
         return ""
     if reveal_mode == "minimal" and not is_target:
@@ -283,6 +344,22 @@ def _wallet_chain_network(config_json: Any, asset: Any) -> tuple[str, str]:
     except ValueError:
         return "", ""
     return chain, network
+
+
+def _wallet_data_provenance(wallet_kind: Any, config_json: Any) -> str:
+    kind = str(wallet_kind or "").strip().lower()
+    if kind in _CHAIN_SYNC_WALLET_KINDS or kind == "address":
+        # Descriptor/xpub/address wallets are chain-verified only when they
+        # actually sync from the chain; the same kinds can also be created
+        # around a file-based source, and those rows are platform exports.
+        config = _safe_json_loads(config_json)
+        has_import_source = isinstance(config, dict) and bool(
+            config.get("source_file") or config.get("source_format")
+        )
+        return "platform_export" if has_import_source else "chain_sync"
+    if kind in _PLATFORM_EXPORT_WALLET_KINDS:
+        return "platform_export"
+    return "manual_import"
 
 
 def _samourai_metadata_from_wallet_config(config_json: Any) -> dict[str, str] | None:
@@ -360,6 +437,45 @@ def _mapping_value(row: Mapping[str, Any], key: str, default: Any = "") -> Any:
     return default
 
 
+def _normalize_report_options(report_options: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Normalize advanced, snapshot-frozen presentation options.
+
+    Defaults keep the simple path; everything here is meant to live behind the
+    desktop advanced panel. Unknown values fall back to the safe default.
+    """
+    options = report_options or {}
+    detail = str(options.get("diagram_detail") or "summary").strip().lower()
+    if detail not in ("summary", "detailed"):
+        detail = "summary"
+    precision = str(options.get("amount_precision") or "btc").strip().lower()
+    if precision not in ("btc", "sats"):
+        precision = "btc"
+    raw_omit = options.get("omit_sections") or []
+    if isinstance(raw_omit, str):
+        raw_omit = [raw_omit]
+    omit_sections = sorted(
+        {
+            str(item).strip().lower()
+            for item in raw_omit
+            if str(item).strip().lower() in OPTIONAL_REPORT_SECTIONS
+        }
+    )
+    raw_overrides = options.get("reveal_overrides") or {}
+    reveal_overrides: dict[str, str] = {}
+    if isinstance(raw_overrides, Mapping):
+        for key, value in raw_overrides.items():
+            decision = str(value).strip().lower()
+            if str(key) and decision in ("show", "hide"):
+                reveal_overrides[str(key)] = decision
+    return {
+        "diagram_detail": detail,
+        "amount_precision": precision,
+        "mask_recipient": bool(options.get("mask_recipient")),
+        "omit_sections": omit_sections,
+        "reveal_overrides": reveal_overrides,
+    }
+
+
 def _report_context(profile: Mapping[str, Any]) -> dict[str, Any]:
     tax_country = str(_mapping_value(profile, "tax_country", "generic") or "generic").lower()
     fiat_currency = str(_mapping_value(profile, "fiat_currency", "") or "").upper()
@@ -400,9 +516,15 @@ def _report_context(profile: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _tx_label(row: Mapping[str, Any], reveal_mode: str, *, is_target: bool = False) -> str:
+def _tx_label(
+    row: Mapping[str, Any],
+    reveal_mode: str,
+    *,
+    is_target: bool = False,
+    overrides: Mapping[str, str] | None = None,
+) -> str:
     wallet = row["wallet_label"] if "wallet_label" in row.keys() else row.get("wallet", "")
-    public_id = _public_tx_id(row, reveal_mode, is_target=is_target)
+    public_id = _public_tx_id(row, reveal_mode, is_target=is_target, overrides=overrides)
     if public_id:
         return public_id
     return f"{wallet} {row['direction']} {row['asset']} {float(msat_to_btc(row['amount'])):.8f}"
@@ -506,7 +628,8 @@ def _link_row_to_dict(conn: sqlite3.Connection, row: Mapping[str, Any]) -> dict[
 def _transaction_by_id(conn: sqlite3.Connection, profile_id: str, tx_id: str):
     return conn.execute(
         """
-        SELECT t.*, w.label AS wallet_label, w.config_json AS wallet_config_json
+        SELECT t.*, w.label AS wallet_label, w.kind AS wallet_kind,
+               w.config_json AS wallet_config_json
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         WHERE t.profile_id = ? AND t.id = ?
@@ -1124,6 +1247,62 @@ def _provider_key_still_deterministic(
     return False
 
 
+def _skip_assembly_row(row: Mapping[str, Any]) -> bool:
+    """Rows the assembly derivers must never assert lineage through.
+
+    Privacy-boundary rows (CoinJoin/PayJoin/sweeps) keep their deferred
+    semantics, and Samourai group wallets keep the dedicated Whirlpool
+    boundary handling instead of raw input/output edges.
+    """
+    if _raw_privacy_hop(row):
+        return True
+    return _samourai_metadata_from_wallet_config(row["wallet_config_json"]) is not None
+
+
+def _utxo_spend_still_deterministic(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    row: Mapping[str, Any],
+    from_tx: Mapping[str, Any] | None,
+    to_tx: Mapping[str, Any],
+) -> bool:
+    if not from_tx:
+        return False
+    owned_index = build_owned_outpoint_index(conn, profile_id)
+    if not owned_index:
+        return False
+    pairs = derive_utxo_spend_pairs(
+        _active_transaction_rows(conn, profile_id),
+        owned_index,
+        skip_row=_skip_assembly_row,
+    )
+    return any(
+        pair["from_row"]["id"] == row["from_transaction_id"]
+        and pair["to_row"]["id"] == row["to_transaction_id"]
+        for pair in pairs
+    )
+
+
+def _payment_hash_still_deterministic(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    row: Mapping[str, Any],
+    from_tx: Mapping[str, Any] | None,
+    to_tx: Mapping[str, Any],
+) -> bool:
+    if not from_tx:
+        return False
+    pairs = derive_payment_hash_pairs(
+        _active_transaction_rows(conn, profile_id),
+        skip_row=_skip_assembly_row,
+    )
+    return any(
+        pair["from_row"]["id"] == row["from_transaction_id"]
+        and pair["to_row"]["id"] == row["to_transaction_id"]
+        for pair in pairs
+    )
+
+
 def _suggestion_still_deterministic(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -1136,6 +1315,10 @@ def _suggestion_still_deterministic(
         return _same_external_id_still_deterministic(conn, profile_id, row, from_tx, to_tx)
     if method == "transaction_pair":
         return _transaction_pair_still_deterministic(conn, profile_id, row, from_tx, to_tx)
+    if method == "utxo_spend":
+        return _utxo_spend_still_deterministic(conn, profile_id, row, from_tx, to_tx)
+    if method == "payment_hash":
+        return _payment_hash_still_deterministic(conn, profile_id, row, from_tx, to_tx)
     if method.startswith("provider_"):
         return _provider_key_still_deterministic(conn, profile_id, row, from_tx, to_tx)
     return False
@@ -1170,6 +1353,27 @@ def _target_scoped_link_rows(
     return list(by_id.values())
 
 
+def _pair_has_rejected_link(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    from_transaction_id: str | None,
+    to_transaction_id: str,
+) -> bool:
+    if not from_transaction_id:
+        return False
+    return bool(
+        conn.execute(
+            """
+            SELECT 1 FROM source_funds_links
+            WHERE profile_id = ? AND from_transaction_id = ? AND to_transaction_id = ?
+              AND state = 'rejected'
+            LIMIT 1
+            """,
+            (profile_id, from_transaction_id, to_transaction_id),
+        ).fetchone()
+    )
+
+
 def _validated_bulk_review_candidates(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -1178,6 +1382,11 @@ def _validated_bulk_review_candidates(
     candidates: list[Mapping[str, Any]] = []
     for row in rows:
         if not _is_bulk_reviewable_suggestion(row):
+            continue
+        # A pair the user explicitly rejected never auto-reviews again, even
+        # when a different method re-suggests it with stronger evidence —
+        # the re-suggestion stays a manual review item.
+        if _pair_has_rejected_link(conn, profile_id, row["from_transaction_id"], row["to_transaction_id"]):
             continue
         to_tx = _transaction_by_id(conn, profile_id, row["to_transaction_id"])
         if not to_tx:
@@ -1215,10 +1424,12 @@ def bulk_review_suggestions(
 ) -> dict[str, Any]:
     """Accept deterministic source-funds suggestions as user-reviewed links.
 
-    This is intentionally narrow: exact external-id matches, already-reviewed
-    transaction_pairs, and one-to-one provider/import ids can be accepted in
-    bulk. Broad account ids, weak time/amount guesses, and chain-observation
-    hints stay manual.
+    This is intentionally narrow: exact external-id matches, transaction
+    input/output structure (utxo_spend), Lightning payment hashes,
+    already-reviewed transaction_pairs, and one-to-one provider/import ids
+    can be accepted in bulk, each re-verified against the live database.
+    Broad account ids, weak time/amount guesses, chain-observation hints,
+    and pairs the user previously rejected stay manual.
     """
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     target = hooks.resolve_transaction(conn, profile["id"], target_transaction_ref)
@@ -1250,8 +1461,85 @@ def bulk_review_suggestions(
         "links": [_link_row_to_dict(conn, row) for row in reviewed_rows if row],
         "policy": (
             "Bulk review only accepts exact/strong deterministic suggestions from same external ids, "
-            "existing transaction_pairs, or one-to-one per-transaction provider/import ids. "
-            "Weak time/amount matches, broad provider ids, and chain observations remain manual review items."
+            "transaction input/output structure, Lightning payment hashes, existing transaction_pairs, "
+            "or one-to-one per-transaction provider/import ids, re-verified against the live database. "
+            "Weak time/amount matches, broad provider ids, chain observations, and pairs the user "
+            "previously rejected remain manual review items."
+        ),
+    }
+
+
+# Convergence backstop for assemble_history. Each pass can only extend the
+# frontier by reviewing new deterministic edges, so real chains converge in
+# a handful of passes; the cap guards against pathological data.
+_MAX_ASSEMBLE_PASSES = 16
+
+
+def assemble_history(
+    conn: sqlite3.Connection,
+    workspace_ref: str | None,
+    profile_ref: str | None,
+    hooks: SourceFundsHooks,
+    *,
+    target_transaction_ref: str,
+    include_broad_hints: bool = False,
+    max_passes: int = 8,
+) -> dict[str, Any]:
+    """Automatically assemble the reviewed flow graph behind a target.
+
+    Alternates suggestion derivation and deterministic bulk review until the
+    graph stops growing. Each reviewed edge extends the target-scoped BFS
+    frontier, so multi-hop chains assemble transitively in one call:
+    transaction input/output structure and Lightning payment hashes yield
+    exact auto-reviewed hops; platform ids and reviewed pairs fill in where
+    no chain structure exists. Reads only local data — assembly never
+    contacts a backend. What remains afterwards is exactly the user's work:
+    root-source evidence, privacy boundaries, and attested gaps.
+    """
+    if max_passes <= 0:
+        raise AppError("--max-passes must be positive", code="validation")
+    max_passes = min(max_passes, _MAX_ASSEMBLE_PASSES)
+    passes = 0
+    total_inserted = 0
+    total_reviewed = 0
+    total_skipped = 0
+    methods: dict[str, int] = defaultdict(int)
+    while passes < max_passes:
+        passes += 1
+        suggested = suggest_links(
+            conn,
+            workspace_ref,
+            profile_ref,
+            hooks,
+            target_transaction_ref=target_transaction_ref,
+            include_broad_hints=include_broad_hints,
+        )
+        reviewed = bulk_review_suggestions(
+            conn,
+            workspace_ref,
+            profile_ref,
+            hooks,
+            target_transaction_ref=target_transaction_ref,
+        )
+        total_inserted += suggested["inserted"]
+        total_reviewed += reviewed["reviewed"]
+        total_skipped = reviewed["skipped"]
+        for link in reviewed["links"]:
+            methods[str(link.get("method") or "")] += 1
+        if suggested["inserted"] == 0 and reviewed["reviewed"] == 0:
+            break
+    return {
+        "target_transaction_id": reviewed["target_transaction_id"],
+        "passes": passes,
+        "inserted": total_inserted,
+        "auto_reviewed": total_reviewed,
+        "awaiting_manual_review": total_skipped,
+        "methods": dict(sorted(methods.items())),
+        "policy": (
+            "Assembly derives exact edges from synced transaction inputs/outputs and "
+            "Lightning payment hashes, plus deterministic platform-id and reviewed-pair "
+            "matches. Weak hints, chain observations, privacy boundaries, and root-source "
+            "evidence remain manual review items."
         ),
     }
 
@@ -1259,7 +1547,8 @@ def bulk_review_suggestions(
 def _active_transaction_rows(conn: sqlite3.Connection, profile_id: str):
     return conn.execute(
         """
-        SELECT t.*, w.label AS wallet_label, w.config_json AS wallet_config_json
+        SELECT t.*, w.label AS wallet_label, w.kind AS wallet_kind,
+               w.config_json AS wallet_config_json
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         WHERE t.profile_id = ? AND t.excluded = 0
@@ -1294,6 +1583,37 @@ def _insert_suggestion(
     )
     if existing:
         return None
+    # A pair that already carries any non-rejected link (manual or another
+    # method) must not get a parallel suggestion: two reviewed links on one
+    # hop double-allocate it straight into an ambiguous_allocation blocker.
+    # Reviewed links always win. Pending suggestions only block
+    # equal-or-stronger confidence; a stronger deriver supersedes a weaker
+    # pending suggestion in place. Rejected links stay method-scoped
+    # (handled above) so stronger evidence may re-suggest a pair the user
+    # rejected — those re-suggestions never bulk-review (see
+    # _validated_bulk_review_candidates).
+    existing_pair_rows = conn.execute(
+        """
+        SELECT id, state, confidence FROM source_funds_links
+        WHERE profile_id = ? AND from_transaction_id = ? AND to_transaction_id = ?
+          AND state != 'rejected'
+        """,
+        (profile_id, from_tx["id"], to_tx["id"]),
+    ).fetchall()
+    if any(row["state"] != "suggested" for row in existing_pair_rows):
+        return None
+    if existing_pair_rows:
+        new_rank = _CONFIDENCE_RANK.get(confidence, 0)
+        best_existing = max(
+            _CONFIDENCE_RANK.get(str(row["confidence"] or ""), 0)
+            for row in existing_pair_rows
+        )
+        if new_rank <= best_existing:
+            return None
+        conn.executemany(
+            "DELETE FROM source_funds_links WHERE id = ?",
+            [(row["id"],) for row in existing_pair_rows],
+        )
     created_at = _now()
     link_id = str(uuid.uuid4())
     conn.execute(
@@ -1534,6 +1854,56 @@ def suggest_links(
         )
         remember(link)
 
+    # Assembly derivers: exact edges from real transaction structure
+    # (inputs/outputs joined against owned outputs, Bitcoin and Liquid
+    # alike) and from Lightning payment hashes. Local reads only — the
+    # privacy_warning below stays true. Pairs that already carry any
+    # active link are skipped so assembly composes with manual review
+    # and the other derivers instead of double-allocating hops.
+    owned_index = build_owned_outpoint_index(conn, profile["id"])
+    if owned_index:
+        for pair in derive_utxo_spend_pairs(rows, owned_index, skip_row=_skip_assembly_row):
+            out_tx, in_tx = pair["from_row"], pair["to_row"]
+            if not in_scope(out_tx, in_tx):
+                continue
+            if int(pair["allocation_msat"]) <= 0:
+                continue
+            link = _insert_suggestion(
+                conn,
+                workspace["id"],
+                profile["id"],
+                from_tx=out_tx,
+                to_tx=in_tx,
+                link_type="self_transfer",
+                method="utxo_spend",
+                confidence="exact",
+                allocation_msat=int(pair["allocation_msat"]),
+                from_allocation_msat=int(pair["from_allocation_msat"]),
+                explanation=pair["explanation"],
+            )
+            remember(link)
+
+    for pair in derive_payment_hash_pairs(rows, skip_row=_skip_assembly_row):
+        out_tx, in_tx = pair["from_row"], pair["to_row"]
+        if not in_scope(out_tx, in_tx):
+            continue
+        if int(pair["allocation_msat"]) <= 0:
+            continue
+        link = _insert_suggestion(
+            conn,
+            workspace["id"],
+            profile["id"],
+            from_tx=out_tx,
+            to_tx=in_tx,
+            link_type="self_transfer",
+            method="payment_hash",
+            confidence="exact",
+            allocation_msat=int(pair["allocation_msat"]),
+            from_allocation_msat=int(pair["from_allocation_msat"]),
+            explanation=pair["explanation"],
+        )
+        remember(link)
+
     by_provider_key = defaultdict(list)
     for row in rows:
         for key, value in _raw_evidence_values(row):
@@ -1645,6 +2015,7 @@ def _tx_node(
     required_msat: int | None,
     *,
     is_target: bool = False,
+    overrides: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     # ``id`` and ``transaction_id`` carry the Kassiber-internal UUID at
     # every reveal mode. The UUID is random per database, has no
@@ -1659,19 +2030,25 @@ def _tx_node(
         "id": f"tx:{row['id']}",
         "node_type": "transaction",
         "transaction_id": row["id"],
-        "label": _tx_label(row, reveal_mode, is_target=is_target),
+        "label": _tx_label(row, reveal_mode, is_target=is_target, overrides=overrides),
         "wallet": row["wallet_label"],
         "occurred_at": row["occurred_at"],
         "direction": row["direction"],
         "asset": row["asset"],
         "amount": _btc_value(row["amount"]),
         "amount_msat": int(row["amount"]),
+        "fee": _btc_value(int(_row_value(row, "fee") or 0)),
+        "fee_msat": int(_row_value(row, "fee") or 0),
         "required_amount": _btc_value(required_msat),
         "required_amount_msat": required_msat,
-        "external_id": _public_tx_id(row, reveal_mode, is_target=is_target),
+        "external_id": _public_tx_id(row, reveal_mode, is_target=is_target, overrides=overrides),
         "fiat_currency": row["fiat_currency"] or "",
         "fiat_value": row["fiat_value"],
         "pricing_source_kind": row["pricing_source_kind"] or row["fiat_price_source"] or "",
+        "data_provenance": _wallet_data_provenance(
+            _row_value(row, "wallet_kind"),
+            _row_value(row, "wallet_config_json"),
+        ),
         "description": row["description"] or "" if free_text_visible else "",
         "counterparty": row["counterparty"] or "" if free_text_visible else "",
     }
@@ -1702,12 +2079,34 @@ def _source_node(source: Mapping[str, Any], reveal_mode: str, required_msat: int
     }
 
 
-def _finding(code: str, severity: str, message: str, *, ref: str | None = None) -> dict[str, Any]:
-    return {"code": code, "severity": severity, "message": message, "ref": ref or ""}
+def _finding(
+    code: str,
+    severity: str,
+    message: str,
+    *,
+    ref: str | None = None,
+    amount_msat: int | None = None,
+    asset: str | None = None,
+) -> dict[str, Any]:
+    item: dict[str, Any] = {"code": code, "severity": severity, "message": message, "ref": ref or ""}
+    if amount_msat is not None:
+        item["amount"] = _btc_value(amount_msat)
+        item["amount_msat"] = int(amount_msat)
+        item["asset"] = asset or ""
+    return item
 
 
-def _add_finding(findings: list[dict[str, Any]], code: str, severity: str, message: str, *, ref: str | None = None):
-    item = _finding(code, severity, message, ref=ref)
+def _add_finding(
+    findings: list[dict[str, Any]],
+    code: str,
+    severity: str,
+    message: str,
+    *,
+    ref: str | None = None,
+    amount_msat: int | None = None,
+    asset: str | None = None,
+):
+    item = _finding(code, severity, message, ref=ref, amount_msat=amount_msat, asset=asset)
     if item not in findings:
         findings.append(item)
 
@@ -1716,17 +2115,27 @@ def _node_event_time(node: Mapping[str, Any]) -> str:
     return str(node.get("occurred_at") or node.get("acquired_at") or "")
 
 
+def _row_value(row: Any, key: str, default: Any = None) -> Any:
+    """Key access that works for sqlite3.Row and plain dict rows alike."""
+    try:
+        return row[key]
+    except (KeyError, IndexError):
+        return default
+
+
 def _summarize_report_data_sources(nodes: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     grouped: dict[tuple[str, str], dict[str, Any]] = {}
     for node in nodes:
         if node.get("node_type") == "transaction":
             label = str(node.get("wallet") or "Unlabeled wallet")
             kind = "wallet"
+            provenance = str(node.get("data_provenance") or "")
             transaction_count = 1
             source_count = 0
         else:
             label = str(node.get("label") or _label(node.get("source_type")) or "Reviewed source")
             kind = str(node.get("source_type") or "source")
+            provenance = "attested_source"
             transaction_count = 0
             source_count = 1
         key = (kind, label)
@@ -1735,6 +2144,7 @@ def _summarize_report_data_sources(nodes: Sequence[Mapping[str, Any]]) -> list[d
             {
                 "label": label,
                 "kind": kind,
+                "provenance": provenance,
                 "transaction_count": 0,
                 "source_count": 0,
                 "assets": set(),
@@ -1758,23 +2168,50 @@ def _summarize_report_data_sources(nodes: Sequence[Mapping[str, Any]]) -> list[d
     return sorted(rows, key=lambda row: (row["kind"], row["label"]))
 
 
+def _allocated_fiat_value(node: Mapping[str, Any]) -> float | None:
+    """Pro-rata fiat value of the traced slice of this node.
+
+    Node ``fiat_value`` prices the FULL transaction/source amount, while the
+    level tables show ``required_amount`` (the reviewed allocation). Scaling
+    keeps level subtotals honest when only part of a transaction feeds the
+    target.
+    """
+    fiat = node.get("fiat_value")
+    if fiat is None:
+        return None
+    amount_msat = node.get("amount_msat")
+    required_msat = node.get("required_amount_msat")
+    if not amount_msat or required_msat is None:
+        return round(float(fiat), 2)
+    try:
+        return round(float(fiat) * (int(required_msat) / int(amount_msat)), 2)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+
+
 def _compact_flow_node(node: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "id": node.get("id", ""),
         "node_type": node.get("node_type", ""),
+        "transaction_id": node.get("transaction_id", ""),
         "label": node.get("label", ""),
         "wallet": node.get("wallet", ""),
         "source_type": node.get("source_type", ""),
+        "direction": node.get("direction", ""),
         "asset": node.get("asset", ""),
         "required_amount": node.get("required_amount"),
         "required_amount_msat": node.get("required_amount_msat"),
         "amount": node.get("amount"),
         "amount_msat": node.get("amount_msat"),
+        "fee": node.get("fee"),
+        "fee_msat": node.get("fee_msat"),
         "occurred_at": node.get("occurred_at", ""),
         "acquired_at": node.get("acquired_at", ""),
         "external_id": node.get("external_id", ""),
         "fiat_currency": node.get("fiat_currency", ""),
         "fiat_value": node.get("fiat_value"),
+        "fiat_value_allocated": _allocated_fiat_value(node),
+        "data_provenance": node.get("data_provenance", ""),
         "review_state": node.get("review_state", ""),
     }
 
@@ -1825,13 +2262,57 @@ def _build_flow_levels(report: Mapping[str, Any]) -> list[dict[str, Any]]:
                 str(node.get("label") or ""),
             ),
         )
+        compact_nodes = [_compact_flow_node(node) for node in level_nodes]
+        # Subtotal only when every node in the level has a priced, allocated
+        # fiat slice in one currency — a partial sum would silently understate
+        # the level, and full-transaction values would overstate it.
+        allocated_values = [node.get("fiat_value_allocated") for node in compact_nodes]
+        fiat_currencies = {str(node.get("fiat_currency") or "") for node in compact_nodes}
+        fiat_total = (
+            round(sum(float(value) for value in allocated_values), 2)
+            if allocated_values
+            and all(value is not None for value in allocated_values)
+            and len(fiat_currencies) == 1
+            else None
+        )
         rows.append(
             {
                 "level": depth + 1,
                 "role": "target" if depth == 0 else "upstream",
-                "nodes": [_compact_flow_node(node) for node in level_nodes],
+                "nodes": compact_nodes,
                 "transaction_count": sum(1 for node in level_nodes if node.get("node_type") == "transaction"),
                 "source_count": sum(1 for node in level_nodes if node.get("node_type") == "source"),
+                "assets": sorted({str(node.get("asset") or "") for node in level_nodes if node.get("asset")}),
+                "fiat_currency": next(iter(fiat_currencies)) if fiat_total is not None else "",
+                "fiat_value_total": fiat_total,
+            }
+        )
+    return rows
+
+
+def _summarize_data_provenance(nodes: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Roll up disclosed transactions by how their rows entered Kassiber.
+
+    This powers the data-sources ring and table column a strict reviewer
+    wants: how much of the trace is chain-verified watch-only sync versus
+    platform exports versus manual imports. Reviewed root sources are user
+    attestations, not imported rows, so they are not counted here.
+    """
+    counts: dict[str, int] = defaultdict(int)
+    for node in nodes:
+        if node.get("node_type") == "transaction":
+            counts[str(node.get("data_provenance") or "manual_import")] += 1
+    total = sum(counts.values())
+    rows = []
+    for key in DATA_PROVENANCE_KINDS:
+        if key not in counts:
+            continue
+        rows.append(
+            {
+                "provenance": key,
+                "label": DATA_PROVENANCE_LABELS.get(key, _label(key)),
+                "count": counts[key],
+                "percent": round((counts[key] / total) * 100, 2) if total else 0,
             }
         )
     return rows
@@ -1846,6 +2327,7 @@ def _compact_simplified_flow_node(
     return {
         "id": node.get("id", ""),
         "node_type": node.get("node_type", ""),
+        "transaction_id": node.get("transaction_id", ""),
         "kind": kind,
         "label": node.get("label", ""),
         "wallet": node.get("wallet", ""),
@@ -1966,11 +2448,16 @@ def _build_simplified_flow(report: Mapping[str, Any]) -> dict[str, Any]:
             }
         )
 
+    target_amount_msat = target.get("required_amount_msat") or target.get("amount_msat")
     simplified_edges = []
     for edge in edges:
         parent = str(edge.get("from") or "")
         child = str(edge.get("to") or "")
         if parent in included and child in included:
+            allocation_msat = edge.get("allocation_amount_msat")
+            percent_of_target = None
+            if target_amount_msat and allocation_msat is not None:
+                percent_of_target = round((allocation_msat / target_amount_msat) * 100, 4)
             simplified_edges.append(
                 {
                     "id": edge.get("id", ""),
@@ -1979,7 +2466,8 @@ def _build_simplified_flow(report: Mapping[str, Any]) -> dict[str, Any]:
                     "link_type": edge.get("link_type", ""),
                     "asset": edge.get("asset", ""),
                     "amount": edge.get("allocation_amount"),
-                    "amount_msat": edge.get("allocation_amount_msat"),
+                    "amount_msat": allocation_msat,
+                    "percent_of_target": percent_of_target,
                     "deferred_privacy_hop": edge.get("link_type") in PRIVACY_LINK_TYPES,
                 }
             )
@@ -2047,6 +2535,7 @@ def _add_report_shape(envelope: dict[str, Any]) -> None:
         "warning_count": warning_count,
     }
     envelope["data_sources"] = data_sources
+    envelope["data_provenance_summary"] = _summarize_data_provenance(nodes)
     envelope["flow_levels"] = _build_flow_levels(envelope)
     envelope["simplified_flow"] = _build_simplified_flow(envelope)
     envelope["narrative"] = {
@@ -2074,6 +2563,70 @@ def _add_report_shape(envelope: dict[str, Any]) -> None:
     }
 
 
+def attach_diagram_svgs(envelope: dict[str, Any]) -> None:
+    """Render the flow + rollup diagrams to frozen, embeddable SVG strings.
+
+    Called only when a diagram is actually shown (report preview, case save,
+    PDF export) so the hot ``compute_coverage`` path never pays for SVG
+    rendering. PDF and GUI derive from the same builder applied to the same
+    frozen ``simplified_flow`` data, so the embedded SVG matches the export.
+    """
+    from .._pdf_common import register_fonts, require_reportlab
+    from . import source_funds_diagram as diagram
+
+    rl = require_reportlab("Source-of-funds diagram")
+    rl["rl_config"].warnOnMissingFontGlyphs = 0
+    fonts = register_fonts(rl)
+    width = 500.0
+    overview = envelope.get("overview") or {}
+    options = envelope.get("report_options") or {}
+    max_levels, max_nodes = diagram.detail_thresholds(options.get("diagram_detail"))
+    diagrams: dict[str, Any] = {}
+
+    flow = envelope.get("simplified_flow") or {}
+    if flow.get("levels"):
+        diagrams["flow_svg"] = diagram.render_drawing_to_svg(
+            rl,
+            fonts,
+            diagram.build_flow_drawing(
+                rl, fonts, flow, width=width, max_levels=max_levels, max_nodes=max_nodes
+            ),
+        )
+
+    mix_segments = diagram.source_mix_segments(envelope)
+    if mix_segments:
+        diagrams["source_mix_ring_svg"] = diagram.render_drawing_to_svg(
+            rl,
+            fonts,
+            diagram.build_ring_drawing(
+                rl,
+                fonts,
+                mix_segments,
+                center_value=f"{float(overview.get('target_amount') or 0):.8f}",
+                center_label=f"{overview.get('target_asset') or 'BTC'} explained",
+                width=width,
+            ),
+        )
+
+    data_segments = diagram.data_source_segments(envelope)
+    if data_segments:
+        total_tx = int(sum(segment["value"] for segment in data_segments))
+        diagrams["data_source_ring_svg"] = diagram.render_drawing_to_svg(
+            rl,
+            fonts,
+            diagram.build_ring_drawing(
+                rl,
+                fonts,
+                data_segments,
+                center_value=str(total_tx),
+                center_label="transactions",
+                width=width,
+            ),
+        )
+
+    envelope["diagrams"] = diagrams
+
+
 def build_report(
     conn: sqlite3.Connection,
     workspace_ref: str | None,
@@ -2090,6 +2643,8 @@ def build_report(
     save_case: bool = False,
     case_label: str | None = None,
     recipient_ref: str | None = None,
+    include_diagrams: bool = False,
+    report_options: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     if max_depth <= 0:
         max_depth = 1
@@ -2105,6 +2660,8 @@ def build_report(
         recipient_ref=recipient_ref,
     )
     mode = _normalize_reveal_mode(resolved_mode)
+    normalized_options = _normalize_report_options(report_options)
+    reveal_overrides = normalized_options["reveal_overrides"]
     purpose = _normalize_report_purpose(report_purpose)
     target_amount_msat = _amount_msat(target_amount, label="--target-amount") if target_amount not in (None, "") else int(target["amount"])
     if target_amount_msat <= 0:
@@ -2166,7 +2723,7 @@ def build_report(
             continue
         node_id = f"tx:{tx_id}"
         is_target_tx = tx_id == target["id"]
-        nodes[node_id] = _tx_node(tx, mode, required_msat, is_target=is_target_tx)
+        nodes[node_id] = _tx_node(tx, mode, required_msat, is_target=is_target_tx, overrides=reveal_overrides)
         raw_privacy_hop = _raw_privacy_hop(tx)
         if raw_privacy_hop:
             _add_finding(
@@ -2180,7 +2737,7 @@ def build_report(
                 ),
                 ref=tx_id,
             )
-        disclosed_txid = _public_tx_id(tx, mode, is_target=is_target_tx)
+        disclosed_txid = _public_tx_id(tx, mode, is_target=is_target_tx, overrides=reveal_overrides)
         if disclosed_txid:
             disclosure_txids.add(disclosed_txid)
             explorer_link = _public_explorer_link(
@@ -2249,6 +2806,8 @@ def build_report(
                 "blocker",
                 "The path stops at a transaction without a reviewed root source or missing-history attestation.",
                 ref=tx_id,
+                amount_msat=required_msat,
+                asset=required_asset,
             )
             continue
         for link in reviewed:
@@ -2362,6 +2921,8 @@ def build_report(
                         "warning",
                         "Reviewed missing-history gap included; it is not a real root source.",
                         ref=source["id"],
+                        amount_msat=int(source_required) if source_required is not None else None,
+                        asset=source["asset"],
                     )
                 elif source["source_type"] == "opening_balance_attestation":
                     _add_finding(
@@ -2413,7 +2974,7 @@ def build_report(
                             "A self-transfer link declares a different asset than its parent or target transaction.",
                             ref=link["id"],
                         )
-                nodes[f"tx:{from_tx_id}"] = _tx_node(from_tx, mode, int(parent_required))
+                nodes[f"tx:{from_tx_id}"] = _tx_node(from_tx, mode, int(parent_required), overrides=reveal_overrides)
                 if from_tx_id in path:
                     _add_finding(
                         findings,
@@ -2434,7 +2995,7 @@ def build_report(
                         )
                     tx_required_assets[from_tx_id] = existing_asset or link_from_asset
                     tx_requirements_msat[from_tx_id] += parent_required
-                    nodes[f"tx:{from_tx_id}"] = _tx_node(from_tx, mode, int(tx_requirements_msat[from_tx_id]))
+                    nodes[f"tx:{from_tx_id}"] = _tx_node(from_tx, mode, int(tx_requirements_msat[from_tx_id]), overrides=reveal_overrides)
                     if tx_requirements_msat[from_tx_id] > int(from_tx["amount"]):
                         _add_finding(
                             findings,
@@ -2459,6 +3020,18 @@ def build_report(
                     else:
                         tx_depths[from_tx_id] = max(tx_depths[from_tx_id], depth + 1)
                 from_id = f"tx:{from_tx_id}"
+            edge_explanation = _public_explanation(link["explanation"], mode)
+            # Per-node "hide" overrides must also cover edge explanations:
+            # machine-derived ones embed outpoint/payment-hash prefixes that
+            # would otherwise leak the hidden transaction's identifiers.
+            edge_endpoint_ids = [tx_id]
+            if from_id.startswith("tx:"):
+                edge_endpoint_ids.append(from_id[3:])
+            if edge_explanation and any(
+                reveal_overrides.get(endpoint_id) == "hide"
+                for endpoint_id in edge_endpoint_ids
+            ):
+                edge_explanation = "Reviewed link; details withheld for a hidden transaction."
             edges.append(
                 {
                     "id": link["id"],
@@ -2475,7 +3048,7 @@ def build_report(
                     "from_allocation_amount": _btc_value(link["from_allocation_amount"]),
                     "from_allocation_amount_msat": link["from_allocation_amount"],
                     "allocation_policy": link["allocation_policy"],
-                    "explanation": _public_explanation(link["explanation"], mode),
+                    "explanation": edge_explanation,
                     "attachments": [_attachment_summary(attachment, mode) for attachment in attachment_rows],
                 }
             )
@@ -2505,10 +3078,18 @@ def build_report(
         }
         for source_type, values in sorted(source_mix.items())
     ]
+    wallets_named = sorted(
+        {
+            str(node.get("wallet"))
+            for node in nodes.values()
+            if node.get("node_type") == "transaction" and node.get("wallet")
+        }
+    )
     envelope = {
         "workspace": workspace["label"],
         "profile": profile["label"],
         "report_context": _report_context(profile),
+        "report_options": normalized_options,
         "purpose": {
             "type": purpose,
             "label": "Planned exchange sale" if purpose == "planned_exchange_sale" else "Already completed transaction",
@@ -2525,14 +3106,21 @@ def build_report(
         "target": _tx_node(
             {
                 **_row_dict(target),
-                "wallet_label": conn.execute(
-                    "SELECT label FROM wallets WHERE id = ?",
-                    (target["wallet_id"],),
-                ).fetchone()["label"],
+                **dict(
+                    conn.execute(
+                        """
+                        SELECT label AS wallet_label, kind AS wallet_kind,
+                               config_json AS wallet_config_json
+                        FROM wallets WHERE id = ?
+                        """,
+                        (target["wallet_id"],),
+                    ).fetchone()
+                ),
             },
             mode,
             target_amount_msat,
             is_target=True,
+            overrides=reveal_overrides,
         ),
         "reveal_mode": mode,
         "graph": {
@@ -2560,8 +3148,16 @@ def build_report(
                 for txid in sorted(explorer_links_by_txid)
             ],
             "attachments": sorted(disclosure_attachments.values(), key=lambda item: item["id"]),
+            "wallets_named": wallets_named,
             "privacy_note": (
                 "Txids disclose on-chain neighbors to the recipient. Chain observations are context, not proof of ownership."
+            ),
+            "ownership_note": (
+                "Sharing this report demonstrates to the recipient that the wallets named above "
+                "are under common ownership or control, and links their disclosed transactions "
+                "to your identity."
+                if len(wallets_named) > 1
+                else ""
             ),
             "excluded": [
                 "descriptors",
@@ -2581,6 +3177,8 @@ def build_report(
             "default_reveal_mode": recipient["default_reveal_mode"],
         }
     _add_report_shape(envelope)
+    if include_diagrams:
+        attach_diagram_svgs(envelope)
     if save_case:
         case = save_case_snapshot(
             conn,
@@ -2750,7 +3348,7 @@ def build_report_lines(report: Mapping[str, Any], hooks: SourceFundsHooks) -> li
             f"Profile:         {report['profile']}",
             f"Purpose:         {report.get('purpose', {}).get('label', 'Already completed transaction')}",
             f"Reveal mode:     {report['reveal_mode']}",
-            f"{'Funds anchor' if report.get('purpose', {}).get('type') == 'planned_exchange_sale' else 'Target'}:          {target['label']}",
+            f"{'Bitcoin being sold' if report.get('purpose', {}).get('type') == 'planned_exchange_sale' else 'Target'}:          {target['label']}",
             f"{'Planned amount' if report.get('purpose', {}).get('type') == 'planned_exchange_sale' else 'Target amount'}:   {target['required_amount']:.8f} {target['asset']}",
             f"Exportable:      {report['explain_gates']['exportable']}",
             "",
@@ -2893,13 +3491,10 @@ def export_pdf(
     hooks: SourceFundsHooks,
     *,
     case_ref: str | None = None,
-    target_transaction_ref: str | None = None,
-    target_amount: Any = None,
-    report_purpose: str = "existing_transaction",
-    planned_destination: str | None = None,
-    planned_note: str | None = None,
-    reveal_mode: str | None = None,
 ) -> dict[str, Any]:
+    # Export renders only saved immutable case snapshots: target, reveal
+    # mode, and report options are frozen at preview/save time, so this
+    # surface deliberately takes no report-shaping parameters.
     if not case_ref:
         raise AppError(
             "export-source-funds-pdf requires --case from a saved source-funds preview",
@@ -2940,3 +3535,213 @@ def export_pdf(
         }
     )
     return result
+
+
+def _sha256_file(path: Any) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _bundle_safe_name(label: str, original: str, suffix: str, used: set[str]) -> str:
+    base = (original or label or "evidence").strip()
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", base).strip("._") or "evidence"
+    stem, _, ext = cleaned.rpartition(".")
+    if ext and not stem:
+        stem, ext = cleaned, ""
+    if not ext and suffix:
+        ext = suffix.lstrip(".")
+    candidate = f"{stem or cleaned}.{ext}" if ext else (stem or cleaned)
+    index = 2
+    final = candidate
+    while final in used:
+        if ext:
+            final = f"{stem or cleaned}-{index}.{ext}"
+        else:
+            final = f"{candidate}-{index}"
+        index += 1
+    used.add(final)
+    return final
+
+
+def export_bundle(
+    conn: sqlite3.Connection,
+    workspace_ref: str | None,
+    profile_ref: str | None,
+    file_path: str,
+    hooks: SourceFundsHooks,
+    *,
+    data_root: str,
+    case_ref: str | None = None,
+) -> dict[str, Any]:
+    """Export a recipient-ready ZIP: the report PDF + the original evidence files.
+
+    The bundle ships the actual files the user attached to the disclosed
+    sources (not a Kassiber transcription), plus a ``manifest.json`` of
+    SHA-256 hashes so the recipient can verify the originals are untampered.
+    Evidence files are included only when the reveal mode discloses them
+    (``standard``/``full``); ``labels_only``/``minimal`` ship the PDF and a
+    manifest that records the evidence was withheld by reveal mode.
+    """
+    import shutil
+    import tempfile
+    import zipfile
+    from pathlib import Path as _Path
+
+    from .attachments import resolve_attachment_files
+
+    if not case_ref:
+        raise AppError(
+            "export-source-funds-bundle requires --case from a saved source-funds preview",
+            code="validation",
+            hint=(
+                "Run `reports source-funds --save-case ...` first, review the "
+                "disclosure preview, then export that case id as a bundle."
+            ),
+        )
+    report = load_case_snapshot(conn, workspace_ref, profile_ref, hooks, case_ref)
+    if not report["explain_gates"]["exportable"]:
+        raise AppError(
+            "Source-of-funds bundle export is blocked by unresolved review gates",
+            code="export_blocked",
+            hint="Run `reports source-funds --machine ...` and resolve every explain_gates.blockers item.",
+            details={"blockers": report["explain_gates"]["blockers"]},
+            retryable=False,
+        )
+
+    snapshot_hash = _snapshot_hash(report)
+    reveal_mode = _normalize_reveal_mode(report.get("reveal_mode"))
+    include_files = reveal_mode in {"standard", "full"}
+    generated_at = _now()
+
+    out_path = _Path(str(file_path)).expanduser()
+    if out_path.suffix.lower() != ".zip":
+        out_path = out_path.with_suffix(".zip")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    disclosed = list(report.get("disclosure_preview", {}).get("attachments") or [])
+    attachment_ids = [
+        str(item.get("id"))
+        for item in disclosed
+        if isinstance(item, Mapping) and item.get("id")
+    ]
+    resolved = (
+        resolve_attachment_files(conn, data_root, attachment_ids)
+        if (include_files and attachment_ids)
+        else {}
+    )
+
+    evidence_manifest: list[dict[str, Any]] = []
+    used_names: set[str] = set()
+    file_count = 0
+    url_count = 0
+    withheld_count = 0
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp = _Path(tmp_dir)
+        pdf_path = tmp / "source-of-funds-report.pdf"
+        write_source_funds_pdf(
+            str(pdf_path),
+            report=report,
+            generated_at=generated_at,
+            snapshot_hash=snapshot_hash,
+        )
+        pdf_sha = _sha256_file(pdf_path)
+        evidence_dir = tmp / "evidence"
+
+        for item in disclosed:
+            if not isinstance(item, Mapping):
+                continue
+            label = str(item.get("label") or "evidence")
+            attachment_type = str(item.get("attachment_type") or "")
+            info = resolved.get(str(item.get("id"))) if item.get("id") else None
+            if not include_files:
+                withheld_count += 1
+                evidence_manifest.append(
+                    {"label": label, "attachment_type": attachment_type, "source": "withheld_by_reveal_mode", "sha256": ""}
+                )
+                continue
+            if info and info.get("resolved_path"):
+                evidence_dir.mkdir(parents=True, exist_ok=True)
+                source = _Path(info["resolved_path"])
+                fname = _bundle_safe_name(label, info.get("original_filename") or "", source.suffix, used_names)
+                shutil.copy2(source, evidence_dir / fname)
+                sha = info.get("sha256") or _sha256_file(evidence_dir / fname)
+                evidence_manifest.append(
+                    {
+                        "label": label,
+                        "attachment_type": attachment_type,
+                        "source": "file",
+                        "filename": f"evidence/{fname}",
+                        "media_type": info.get("media_type") or "",
+                        "sha256": sha,
+                    }
+                )
+                file_count += 1
+            elif (info and info.get("url")) or item.get("source_url"):
+                evidence_manifest.append(
+                    {
+                        "label": label,
+                        "attachment_type": attachment_type,
+                        "source": "url",
+                        "source_url": (info.get("url") if info else None) or item.get("source_url") or "",
+                        "sha256": "",
+                    }
+                )
+                url_count += 1
+            else:
+                withheld_count += 1
+                evidence_manifest.append(
+                    {"label": label, "attachment_type": attachment_type, "source": "unavailable", "sha256": ""}
+                )
+
+        manifest = {
+            "kind": "kassiber.source_funds.bundle.manifest",
+            "schema_version": 1,
+            "generated_at": generated_at,
+            "workspace": report.get("workspace", ""),
+            "profile": report.get("profile", ""),
+            "case_id": (report.get("case") or {}).get("id") or case_ref,
+            "snapshot_hash": snapshot_hash,
+            "reveal_mode": reveal_mode,
+            "report_pdf": {"filename": "source-of-funds-report.pdf", "sha256": pdf_sha},
+            "evidence": evidence_manifest,
+            "note": (
+                "This bundle contains the Kassiber source-of-funds report and the original "
+                "evidence files attached to the disclosed sources. Verify each SHA-256 against "
+                "the report's Disclosure Preview. Kassiber references originals; it does not "
+                "transcribe or recompute them."
+            ),
+        }
+        manifest_path = tmp / "manifest.json"
+        manifest_path.write_text(
+            json.dumps(json_ready(manifest), indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+
+        if out_path.exists():
+            out_path.unlink()
+        with zipfile.ZipFile(out_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.write(pdf_path, "source-of-funds-report.pdf")
+            archive.write(manifest_path, "manifest.json")
+            if evidence_dir.exists():
+                for evidence_file in sorted(evidence_dir.iterdir()):
+                    archive.write(evidence_file, f"evidence/{evidence_file.name}")
+
+    return {
+        "file": str(out_path.resolve()),
+        "bytes": out_path.stat().st_size,
+        "format": "zip",
+        "scope": "source_funds",
+        "snapshot_hash": snapshot_hash,
+        "reveal_mode": reveal_mode,
+        "case_id": (report.get("case") or {}).get("id") or case_ref,
+        "target_transaction_id": report["target"]["transaction_id"],
+        "evidence_files": file_count,
+        "evidence_urls": url_count,
+        "evidence_withheld": withheld_count,
+        "evidence_total": len(evidence_manifest),
+        "exportable": True,
+    }

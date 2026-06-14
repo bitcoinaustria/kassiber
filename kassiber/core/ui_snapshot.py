@@ -821,9 +821,14 @@ def _connections(
         sync_source = _string_or_empty(config.get("sync_source") or source_format)
         gap_limit = config.get("gap_limit")
         has_descriptor = bool(config.get("descriptor"))
+        try:
+            wallet_chain = normalize_chain(config.get("chain") or "bitcoin")
+        except ValueError:
+            wallet_chain = "bitcoin"
         connection = {
             "id": row["id"],
             "kind": _map_wallet_kind(row["kind"]),
+            "chain": wallet_chain,
             "label": row["label"],
             "last": _relative_last(
                 last_synced_at or row["last_tx_at"] or row["created_at"]

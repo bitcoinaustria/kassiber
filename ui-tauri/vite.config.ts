@@ -158,6 +158,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.source_funds.links.bulk_review",
   "ui.source_funds.links.attach",
   "ui.source_funds.suggest",
+  "ui.source_funds.assemble",
   "ui.source_funds.evidence.list",
   "ui.source_funds.export_pdf",
   "ui.source_funds.coverage",

@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { screenShellClassName } from "@/lib/screen-layout";
 import { useDaemon, useDaemonInfinite, useDaemonMutation } from "@/daemon/client";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { cn } from "@/lib/utils";
@@ -116,8 +117,8 @@ export function Activity() {
   );
 
   return (
-    <main className="min-h-full bg-background">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6">
+    <div className={screenShellClassName}>
+      <div className="flex w-full flex-col gap-5">
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -284,6 +285,6 @@ export function Activity() {
           ) : null}
         </section>
       </div>
-    </main>
+    </div>
   );
 }
