@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { clearAppLogRecords, getAppLogRecords } from "./appLogs";
 import type { DaemonEnvelope, DaemonTransport } from "@/daemon/transport";
 import {
@@ -11,8 +10,6 @@ import {
   startDaemonLogBridge,
   stopDaemonLogBridge,
 } from "./daemonLogBridge";
-
-vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
 interface RingSnapshot {
   records: Array<Record<string, unknown>>;
@@ -82,7 +79,6 @@ describe("daemon log bridge", () => {
   beforeEach(() => {
     clearAppLogRecords();
     vi.useFakeTimers();
-    vi.mocked(tauriInvoke).mockReset();
   });
 
   afterEach(() => {
@@ -191,29 +187,48 @@ describe("daemon log bridge", () => {
     expect(transport.calls).toHaveLength(0);
   });
 
-  it("folds supervisor lifecycle records with mapped levels in the Tauri runtime", async () => {
-    vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
-    vi.mocked(tauriInvoke).mockResolvedValue({
-      records: [
-        { id: 1, tsMs: 1_760_000_000_000, event: "spawned", detail: "", stderrTail: "", source: "bundled_sidecar" },
-        { id: 2, tsMs: 1_760_000_001_000, event: "exited", detail: "status: 0", stderrTail: "", source: "bundled_sidecar" },
-        { id: 3, tsMs: 1_760_000_002_000, event: "killed", detail: "daemon_timeout", stderrTail: "boom", source: "bundled_sidecar" },
-      ],
-      lastId: 3,
-    });
+  it("folds supervisor lifecycle records with mapped levels", async () => {
     const transport = queuedTransport([snapshot({})]);
-    startDaemonLogBridge(baseOptions(transport));
+    const lifecycleCursors: number[] = [];
+    startDaemonLogBridge({
+      ...baseOptions(transport),
+      supervisorLifecycleSnapshot: async (afterId) => {
+        lifecycleCursors.push(afterId);
+        return {
+          records: [
+            {
+              id: 1,
+              tsMs: 1_760_000_000_000,
+              event: "spawned",
+              detail: "",
+              stderrTail: "",
+              source: "bundled_sidecar",
+            },
+            {
+              id: 2,
+              tsMs: 1_760_000_001_000,
+              event: "exited",
+              detail: "status: 0",
+              stderrTail: "",
+              source: "bundled_sidecar",
+            },
+            {
+              id: 3,
+              tsMs: 1_760_000_002_000,
+              event: "killed",
+              detail: "daemon_timeout",
+              stderrTail: "boom",
+              source: "bundled_sidecar",
+            },
+          ],
+          lastId: 3,
+        };
+      },
+    });
 
-    // The supervisor poll resolves through a dynamic import() whose microtask
-    // chain settles unpredictably under fake timers; flush until the records
-    // are actually folded (the true end-state) rather than a fixed count, all
-    // well within the 4s reschedule so no second tick runs.
-    const supervisorRecords = () =>
-      getAppLogRecords().filter((record) => record.module === "supervisor");
-    for (let i = 0; i < 50 && supervisorRecords().length === 0; i += 1) {
-      await vi.advanceTimersByTimeAsync(1);
-    }
+    await vi.advanceTimersByTimeAsync(1);
     const supervisor = supervisorRecords();
+    expect(lifecycleCursors).toEqual([0]);
     expect(supervisor.map((record) => [record.id, record.level])).toEqual([
       ["super-1", "info"],
       ["super-2", "info"],
@@ -223,3 +238,7 @@ describe("daemon log bridge", () => {
     expect(killed?.fields.stderr_tail).toEqual({ type: "text", value: "boom" });
   });
 });
+
+function supervisorRecords() {
+  return getAppLogRecords().filter((record) => record.module === "supervisor");
+}

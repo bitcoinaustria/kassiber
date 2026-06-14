@@ -9,6 +9,8 @@ from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
+from . import pricing
+from . import rates as core_rates
 from .austrian import kennzahl_for_disposal_category
 from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
@@ -256,6 +258,72 @@ def latest_transaction_rates_for_profile(conn, profile_id):
     return rates
 
 
+def _profile_market_rate_assets(conn, profile_id):
+    assets = set()
+    for table in ("journal_account_holdings", "journal_wallet_holdings", "transactions"):
+        try:
+            rows = conn.execute(
+                f"""
+                SELECT DISTINCT asset
+                FROM {table}
+                WHERE profile_id = ?
+                """,
+                (profile_id,),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            continue
+        for row in rows:
+            asset = str(row["asset"] or "").strip().upper()
+            if asset:
+                assets.add(asset)
+    return sorted(assets)
+
+
+def latest_market_rates_for_profile(conn, profile, *, assets=None, fallback_rates=None):
+    """Return current market rates for profile holdings, falling back to tx prices.
+
+    Current portfolio reports should value remaining holdings at the latest
+    cached market quote for the profile fiat currency. Transaction prices are
+    still a useful fallback for older databases or books without a rate cache,
+    but they are not the definition of "current market value."
+    """
+    profile_id = profile["id"]
+    fiat_currency = profile["fiat_currency"]
+    fallback = dict(fallback_rates or latest_transaction_rates_for_profile(conn, profile_id))
+    if assets is None:
+        asset_list = _profile_market_rate_assets(conn, profile_id)
+        if not asset_list:
+            asset_list = sorted(fallback)
+    else:
+        asset_list = sorted(
+            {str(asset or "").strip().upper() for asset in assets if str(asset or "").strip()}
+        )
+
+    market_rates = {}
+    for asset in asset_list:
+        pair = core_rates.transaction_rate_pair(asset, fiat_currency)
+        rate = None
+        if pair is not None:
+            try:
+                cached_rate = core_rates.get_latest_rate(conn, pair)
+            except sqlite3.OperationalError:
+                cached_rate = None
+            except AppError as exc:
+                if exc.code != "not_found":
+                    raise
+                cached_rate = None
+            if cached_rate is not None:
+                rate = pricing.decimal_from_exact(cached_rate.get("rate_exact"), cached_rate.get("rate"))
+        if rate is None:
+            rate = fallback.get(asset)
+        if rate is not None:
+            market_rates[asset] = rate
+
+    for asset, rate in fallback.items():
+        market_rates.setdefault(asset, rate)
+    return market_rates
+
+
 def _profile_has_journal_entries(conn, profile_id):
     row = conn.execute(
         "SELECT 1 FROM journal_entries WHERE profile_id = ? LIMIT 1",
@@ -267,7 +335,7 @@ def _profile_has_journal_entries(conn, profile_id):
 def report_balance_sheet(conn, workspace_ref, profile_ref, hooks: ReportHooks):
     _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     hooks.require_processed_journals(conn, profile)
-    latest_rates = latest_transaction_rates_for_profile(conn, profile["id"])
+    fallback_rates = None
     rows = []
     try:
         holding_rows = conn.execute(
@@ -283,6 +351,7 @@ def report_balance_sheet(conn, workspace_ref, profile_ref, hooks: ReportHooks):
         holding_rows = None
     if holding_rows is None or (not holding_rows and _profile_has_journal_entries(conn, profile["id"])):
         state = hooks.build_ledger_state(conn, profile)
+        fallback_rates = state["latest_rates"]
         holding_rows = [
             {
                 "account_code": account_code,
@@ -295,7 +364,12 @@ def report_balance_sheet(conn, workspace_ref, profile_ref, hooks: ReportHooks):
                 "account_holdings"
             ].items()
         ]
-        latest_rates = state["latest_rates"]
+    latest_rates = latest_market_rates_for_profile(
+        conn,
+        profile,
+        assets=[row["asset"] for row in holding_rows],
+        fallback_rates=fallback_rates,
+    )
     for value in holding_rows:
         quantity = msat_to_btc(value["quantity"])
         if quantity <= 0:
@@ -413,7 +487,7 @@ def report_portfolio_summary(conn, workspace_ref, profile_ref, hooks: ReportHook
     if as_of is not None:
         as_of_dt = hooks.parse_iso_datetime(as_of, "as_of") if not isinstance(as_of, datetime) else as_of
         return _historical_portfolio_summary(conn, profile, hooks, as_of_dt, include_wallet_id=include_wallet_id)
-    latest_rates = latest_transaction_rates_for_profile(conn, profile["id"])
+    fallback_rates = None
     rows = []
     try:
         holding_rows = conn.execute(
@@ -429,6 +503,7 @@ def report_portfolio_summary(conn, workspace_ref, profile_ref, hooks: ReportHook
         holding_rows = None
     if holding_rows is None or (not holding_rows and _profile_has_journal_entries(conn, profile["id"])):
         state = hooks.build_ledger_state(conn, profile)
+        fallback_rates = state["latest_rates"]
         holding_rows = [
             {
                 "wallet_id": wallet_id,
@@ -442,7 +517,12 @@ def report_portfolio_summary(conn, workspace_ref, profile_ref, hooks: ReportHook
                 "wallet_holdings"
             ].items()
         ]
-        latest_rates = state["latest_rates"]
+    latest_rates = latest_market_rates_for_profile(
+        conn,
+        profile,
+        assets=[row["asset"] for row in holding_rows],
+        fallback_rates=fallback_rates,
+    )
     for value in holding_rows:
         quantity = msat_to_btc(value["quantity"])
         if quantity <= 0:
@@ -4755,6 +4835,7 @@ __all__ = [
     "export_pdf_report",
     "export_summary_pdf_report",
     "export_xlsx_report",
+    "latest_market_rates_for_profile",
     "latest_transaction_rates_for_profile",
     "report_austrian_e1kv",
     "report_balance_history",
