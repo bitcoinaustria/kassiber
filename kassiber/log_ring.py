@@ -111,15 +111,19 @@ def sanitize_exception(exc: BaseException) -> str:
 def _coerce_field(value) -> dict:
     """Normalize one field into the wire `{"type", "value"}` shape.
 
-    Secret-floor redaction applies to text-typed string values; anything not
-    JSON-primitive is stringified (and floored) so snapshots stay wire-safe.
+    The secret-floor backstop runs on every string value regardless of its
+    declared `type`, so a credential can never ride into the ring under a
+    non-`text` label (e.g. a field mislabeled `api_key`/`descriptor`). It only
+    strips secret-*shaped* material, so operational values (amounts, txids,
+    addresses, paths) still pass through verbatim and are masked at render.
+    Anything not JSON-primitive is stringified (and floored) so snapshots stay
+    wire-safe.
     """
     if isinstance(value, dict) and "type" in value and "value" in value:
         ftype = str(value["type"])
         fval = value["value"]
         if isinstance(fval, str):
-            if ftype == "text":
-                fval = redact_secret_text(fval)
+            fval = redact_secret_text(fval)
         elif not isinstance(fval, (int, float, bool, type(None))):
             fval = redact_secret_text(str(fval))
         return {"type": ftype, "value": fval}

@@ -150,6 +150,27 @@ class SecretFloorTest(unittest.TestCase):
             "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b",
         )
 
+    def test_secret_typed_field_value_floored_at_insert(self):
+        # The insert floor is type-agnostic: a secret riding in under a
+        # non-`text` type (here `api_key`/`descriptor`) must still be scrubbed,
+        # not left for render-time masking.
+        ring = LogRing()
+        ring.append(
+            "info",
+            "kassiber.test",
+            "kassiber/daemon.py",
+            1,
+            "wallet import",
+            fields={
+                "key": {"type": "api_key", "value": "sk-live-ABC123secret"},
+                "descr": {"type": "descriptor", "value": f"wpkh({XPUB}/0/*)"},
+            },
+        )
+        fields = ring.snapshot()["records"][0]["fields"]
+        self.assertNotIn("sk-live-ABC123secret", fields["key"]["value"])
+        self.assertIn("[redacted", fields["key"]["value"])
+        self.assertNotIn("xpub661", fields["descr"]["value"])
+
     def test_absolute_file_paths_never_stored(self):
         ring = LogRing()
         ring.append(
