@@ -28,9 +28,11 @@ export function Assistant() {
     reset,
     incognito,
     setIncognito,
+    sessionId,
   } = useAssistantSession();
   const hasMessages = messages.length > 0;
   const queuedPromptCount = queuedPrompts.length;
+  const showIncognitoToggle = sessionId === null;
   const supportsThinkingEffort = useSupportedReasoningEffort({
     selection,
     thinkingEffort,
@@ -95,23 +97,25 @@ export function Assistant() {
           ) : (
             <span className="mr-auto" />
           )}
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className={cn(
-              "gap-2",
-              incognito
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground",
-            )}
-            aria-pressed={incognito}
-            onClick={() => setIncognito(!incognito)}
-            title="Incognito: do not store this conversation"
-          >
-            <EyeOff className="size-4" aria-hidden="true" />
-            Incognito
-          </Button>
+          {showIncognitoToggle ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "gap-2",
+                incognito
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground",
+              )}
+              aria-pressed={incognito}
+              onClick={() => setIncognito(!incognito)}
+              title="Incognito: do not store this conversation"
+            >
+              <EyeOff className="size-4" aria-hidden="true" />
+              Incognito
+            </Button>
+          ) : null}
           <ChatHistoryPanel />
           {hasMessages ? (
             <>

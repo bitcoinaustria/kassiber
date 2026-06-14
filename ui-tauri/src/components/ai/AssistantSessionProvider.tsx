@@ -78,7 +78,7 @@ export function AssistantSessionProvider({
           toolLoopMaxIterations: 8,
           systemPromptKind: "kassiber",
           sessionId,
-          persist: incognito ? false : "auto",
+          persist: incognito && sessionId === null ? false : "auto",
         },
         prompt,
       );
@@ -139,6 +139,7 @@ export function AssistantSessionProvider({
         )
         .map((message) => ({ role: message.role, content: message.content }));
       setQueuedPrompts([]);
+      setIncognito(false);
       loadConversation(entries, envelope.data?.id ?? targetSessionId);
     },
     [dataMode, isStreaming, loadConversation],
