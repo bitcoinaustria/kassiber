@@ -165,7 +165,9 @@ def suggest_swap_candidates(
     dismissed_pairs = _active_dismissals(dismissals, now_seconds)
 
     eligible_rows = _select_eligible_rows(rows, paired_ids)
-    deterministic_transfer_ids = _deterministic_self_transfer_ids(eligible_rows)
+    deterministic_transfer_ids = _deterministic_self_transfer_ids(
+        eligible_rows, fee_pct_max, fee_sats_min
+    )
     out_rows = [
         row
         for row in eligible_rows
@@ -357,7 +359,11 @@ def _select_eligible_rows(rows: Sequence[Mapping], paired_ids: set[str]) -> list
     return eligible
 
 
-def _deterministic_self_transfer_ids(rows: Sequence[Mapping]) -> set[object]:
+def _deterministic_self_transfer_ids(
+    rows: Sequence[Mapping],
+    fee_pct_max: float = DEFAULT_FEE_PCT_MAX,
+    fee_sats_min: int = DEFAULT_FEE_SATS_MIN,
+) -> set[object]:
     """Return row ids that are already proven same-chain self-transfers.
 
     The swap review queue is for ambiguous layer hops. A single outbound and
@@ -401,7 +407,7 @@ def _deterministic_self_transfer_ids(rows: Sequence[Mapping]) -> set[object]:
         out_amount = int(_record_get(out_row, "amount") or 0)
         in_amount = int(_record_get(in_row, "amount") or 0)
         if out_amount - in_amount > fee_threshold_msat(
-            out_amount, DEFAULT_FEE_PCT_MAX, DEFAULT_FEE_SATS_MIN
+            out_amount, fee_pct_max, fee_sats_min
         ):
             # Implausible implied fee — likely an unrecognized peg/payment leg.
             # Don't claim it as a proven self-transfer; let it reach swap review.
