@@ -149,12 +149,17 @@ export function useWalletSyncAction() {
                 dedupeKey: "book-refresh",
               });
             }
-            if (!needsAttention) options?.onTrustedSuccess?.();
+            if (!needsAttention) {
+              options?.onTrustedSuccess?.();
+              // The book has completed a clean full run, so subsequent
+              // refreshes are ordinary background syncs rather than a
+              // first-time setup. A run that still needs attention (job
+              // errors, blocking reports) stays in first-sync mode so a retry
+              // keeps the setup card instead of demoting to the thin line.
+              if (bookKey) markFirstSyncDone(bookKey);
+            }
             clearActiveMaintenanceProgress(BOOK_REFRESH_PROGRESS_ID);
             startedAtRef.current = null;
-            // The book has completed a full run, so subsequent refreshes are
-            // ordinary background syncs rather than a first-time setup.
-            if (bookKey) markFirstSyncDone(bookKey);
           },
           onError: (error) => {
             const body =
