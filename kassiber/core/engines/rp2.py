@@ -494,6 +494,21 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
     # acquired BEFORE that instant; beyond it the disposal re-FIFOs onto a wrong
     # later lot (wrong basis / flipped AT regime) and must be quarantined.
     first_drop_at = normalized_inputs.earliest_dropped_acquisition_at
+    # An unclassified-income inbound is dropped below (quarantined) and never
+    # enters RP2's FIFO — exactly like a missing/coarse-priced acquisition — so
+    # it must also advance the basis-provenance cursor, else a later disposal
+    # re-FIFOs onto the wrong lot unflagged. Fold the earliest such drop into
+    # first_drop_at up front so priced_in_before_drop accumulates correctly in
+    # the single ordered walk below.
+    for event in normalized_inputs.events:
+        if event.direction != "inbound":
+            continue
+        kind = _normalized_event_kind(event)
+        if kind not in _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE and _kind_has_token(
+            kind, _INCOME_LIKE_KIND_TOKENS
+        ):
+            if first_drop_at is None or event.occurred_at < first_drop_at:
+                first_drop_at = event.occurred_at
     priced_in_before_drop = Decimal("0")
     cumulative_disposed = Decimal("0")
     quarantines = list(normalized_inputs.quarantines)
@@ -680,6 +695,13 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                     },
                 )
             )
+            # Only the TAX treatment is quarantined — the coins really left. Debit
+            # availability and advance the disposal cursor so they aren't double-
+            # spent: a later sale must see them gone (the gate is the availability
+            # authority; the un-booked gift just isn't emitted to RP2).
+            account_available[event.wallet_label] -= needed
+            priced_available -= needed
+            cumulative_disposed += needed
             continue
         # Marked Austrian swap-outs can depend on another asset's same-timestamp
         # swap-in. Feed the full graph to rp2's native runner instead of applying

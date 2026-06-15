@@ -210,6 +210,23 @@ _BASIS_PROVENANCE_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,descri
 2026-03-01T10:00:00Z,h2-sell,outbound,BTC,0.50000000,0,72000,Sell,
 """
 
+# Unclassified income before a priced acquisition+sale: the dropped income lot
+# is missing from the FIFO, so the later sale must be flagged
+# basis_provenance_incomplete (not silently re-based onto the wrong lot).
+_INCOME_PROVENANCE_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description,kind
+2026-01-01T10:00:00Z,inc-reward,inbound,BTC,0.01000000,0,60000,Referral reward,reward
+2026-02-01T10:00:00Z,inc-fund,inbound,BTC,0.50000000,0,65000,Funding,buy
+2026-03-01T10:00:00Z,inc-sell,outbound,BTC,0.30000000,0,70000,Sell,sell
+"""
+
+# A quarantined gift is still a real outflow: it must debit availability so a
+# later sale of the (now-gone) coins is gated insufficient, not booked.
+_GIFT_DEBIT_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description,kind
+2026-01-01T10:00:00Z,gd-fund,inbound,BTC,0.10000000,0,60000,Funding,buy
+2026-02-01T10:00:00Z,gd-gift,outbound,BTC,0.08000000,0,72000,Gift to a friend,gift
+2026-03-01T10:00:00Z,gd-sell,outbound,BTC,0.05000000,0,73000,Sell the rest,sell
+"""
+
 # Manual same-asset pair scenario: two BTC legs whose external_ids deliberately
 # don't match, so auto-detection skips them. The user knows they're paired
 # (e.g., a swap via a custom counterparty) and creates a manual pair.
@@ -350,6 +367,10 @@ class CliSmokeTest(unittest.TestCase):
         cls.gift_csv.write_text(_GIFT_CSV, encoding="utf-8")
         cls.reward_csv = Path(cls._tmp.name) / "reward.csv"
         cls.reward_csv.write_text(_REWARD_CSV, encoding="utf-8")
+        cls.income_provenance_csv = Path(cls._tmp.name) / "income-provenance.csv"
+        cls.income_provenance_csv.write_text(_INCOME_PROVENANCE_CSV, encoding="utf-8")
+        cls.gift_debit_csv = Path(cls._tmp.name) / "gift-debit.csv"
+        cls.gift_debit_csv.write_text(_GIFT_DEBIT_CSV, encoding="utf-8")
         cls.basis_provenance_csv = Path(cls._tmp.name) / "basis-provenance.csv"
         cls.basis_provenance_csv.write_text(_BASIS_PROVENANCE_CSV, encoding="utf-8")
         cls.manual_from_csv = Path(cls._tmp.name) / "manual-from.csv"
@@ -2008,6 +2029,41 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIn("basis_provenance_incomplete", reasons)  # the starved sell
         # The sell did NOT produce a (mis-based) realized gain.
         payload = self._cli("reports", "capital-gains", "--workspace", "Main", "--profile", "Basis")
+        self.assertEqual(payload["data"], [])
+
+    def test_13j_unclassified_income_marks_basis_provenance(self):
+        # An unclassified income lot dropped before a later sale leaves the FIFO
+        # incomplete, so the sale is flagged basis_provenance_incomplete too.
+        self._cli("profiles", "create", "--workspace", "Main",
+                  "--fiat-currency", "USD", "--tax-country", "generic", "IncomeProv")
+        self._cli("wallets", "create", "--workspace", "Main",
+                  "--profile", "IncomeProv", "--label", "W", "--kind", "custom")
+        self._cli("wallets", "import-csv", "--workspace", "Main", "--profile", "IncomeProv",
+                  "--wallet", "W", "--file", str(self.income_provenance_csv))
+        payload = self._cli("journals", "process", "--workspace", "Main", "--profile", "IncomeProv")
+        self._assert_kind(payload, "journals.process")
+        payload = self._cli("journals", "quarantined", "--workspace", "Main", "--profile", "IncomeProv")
+        reasons = [q["reason"] for q in payload["data"]]
+        self.assertIn("unclassified_income_kind", reasons)
+        self.assertIn("basis_provenance_incomplete", reasons)
+
+    def test_13k_quarantined_gift_debits_availability(self):
+        # A quarantined gift is a real outflow: it debits availability so the
+        # later sale of the now-gone coins is gated insufficient, not booked.
+        self._cli("profiles", "create", "--workspace", "Main",
+                  "--fiat-currency", "USD", "--tax-country", "generic", "GiftDebit")
+        self._cli("wallets", "create", "--workspace", "Main",
+                  "--profile", "GiftDebit", "--label", "W", "--kind", "custom")
+        self._cli("wallets", "import-csv", "--workspace", "Main", "--profile", "GiftDebit",
+                  "--wallet", "W", "--file", str(self.gift_debit_csv))
+        payload = self._cli("journals", "process", "--workspace", "Main", "--profile", "GiftDebit")
+        self._assert_kind(payload, "journals.process")
+        payload = self._cli("journals", "quarantined", "--workspace", "Main", "--profile", "GiftDebit")
+        reasons = [q["reason"] for q in payload["data"]]
+        self.assertIn("non_sale_disposal_kind", reasons)  # the gift
+        self.assertIn("insufficient_lots", reasons)  # the sale, now that the gift is debited
+        # No realized gain booked: the gift is deferred and the sale is gated.
+        payload = self._cli("reports", "capital-gains", "--workspace", "Main", "--profile", "GiftDebit")
         self.assertEqual(payload["data"], [])
 
     def test_13b_pair_by_shared_external_id(self):
