@@ -1740,6 +1740,89 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.connections.bullbitcoin_wallet.create") {
+      const args = (req.args ?? {}) as {
+        label?: unknown;
+        source_file?: unknown;
+        networks?: unknown;
+        mode?: unknown;
+        routes?: unknown;
+      };
+      const label = typeof args.label === "string" ? args.label.trim() : "";
+      const sourceFile =
+        typeof args.source_file === "string" ? args.source_file.trim() : "";
+      if (!label || !sourceFile) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "Bull Bitcoin wallet setup requires a label and export file",
+            retryable: false,
+          },
+        };
+      }
+      const overview = mockOverviewSnapshot();
+      if (args.mode === "existing_wallets") {
+        const routes = Array.isArray(args.routes) ? args.routes : [];
+        const mapped = routes
+          .map((route) =>
+            typeof route === "object" && route !== null && "wallet" in route
+              ? overview.connections.find(
+                  (connection) =>
+                    connection.label ===
+                    String((route as { wallet?: unknown }).wallet ?? ""),
+                )
+              : undefined,
+          )
+          .filter((connection): connection is MockConnection =>
+            Boolean(connection),
+          );
+        return {
+          kind: "ui.connections.bullbitcoin_wallet.create",
+          schema_version: 1,
+          request_id: req.request_id,
+          data: {
+            mode: "existing_wallets",
+            wallet: mapped[0],
+            wallets: mapped,
+            routes,
+          } as T,
+        };
+      }
+      const rawNetworks = Array.isArray(args.networks)
+        ? args.networks
+        : ["bitcoin", "liquid", "lightning"];
+      const networks = rawNetworks
+        .filter((network): network is string =>
+          typeof network === "string" && Boolean(network.trim()),
+        )
+        .map((network) => network.trim());
+      const connections = networks.map((network, index) => ({
+        id: `mock-bull-wallet-${Date.now()}-${index}`,
+        label:
+          networks.length === 1
+            ? label
+            : `${label} - ${network[0].toUpperCase()}${network.slice(1)}`,
+        kind: "bullbitcoin",
+        syncMode: "file_import",
+        syncSource: "bullbitcoin_wallet_csv",
+      }));
+      overview.connections = [...overview.connections, ...connections];
+      return {
+        kind: "ui.connections.bullbitcoin_wallet.create",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          mode: "wallet_sources",
+          wallet: connections[0],
+          wallets: connections,
+          networks,
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.connections.btcpay.discover") {
       const args = (req.args ?? {}) as {
         backend?: unknown;
@@ -2544,6 +2627,7 @@ export const mockDaemon: DaemonTransport = {
             "phoenix_csv",
             "river_csv",
             "bullbitcoin_csv",
+            "bullbitcoin_wallet_csv",
             "coinfinity_csv",
             "21bitcoin_csv",
             "strike_csv",

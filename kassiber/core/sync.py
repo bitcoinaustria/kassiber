@@ -13,7 +13,11 @@ from typing import Any, Callable, Mapping, MutableMapping, Sequence
 
 from ..errors import AppError
 from ..util import str_or_none
-from .wallets import wallet_btcpay_provenance_config, wallet_btcpay_sync_config
+from .wallets import (
+    wallet_btcpay_provenance_config,
+    wallet_btcpay_sync_config,
+    wallet_bullbitcoin_wallet_export_config,
+)
 
 WalletRow = Mapping[str, Any]
 ProfileRow = Mapping[str, Any]
@@ -38,6 +42,10 @@ SyncBTCPayWallet = Callable[
     SyncOutcome,
 ]
 EnrichBTCPayWallet = Callable[
+    [sqlite3.Connection, RuntimeConfig, ProfileRow, WalletRow],
+    SyncOutcome,
+]
+EnrichBullBitcoinWallet = Callable[
     [sqlite3.Connection, RuntimeConfig, ProfileRow, WalletRow],
     SyncOutcome,
 ]
@@ -80,6 +88,7 @@ class WalletSyncHooks:
     backend_adapters: Mapping[str, BackendAdapter]
     sync_btcpay_wallet: SyncBTCPayWallet | None = None
     enrich_btcpay_wallet: EnrichBTCPayWallet | None = None
+    enrich_bullbitcoin_wallet: EnrichBullBitcoinWallet | None = None
     sync_core_lightning_wallet: SyncCoreLightningWallet | None = None
     update_output_inventory: UpdateOutputInventory | None = None
 
@@ -209,6 +218,38 @@ def _merge_btcpay_enrichment(
     merged = dict(outcome)
     merged["btcpay_provenance"] = enriched
     return merged
+
+
+def _merge_bullbitcoin_enrichment(
+    conn: sqlite3.Connection,
+    runtime_config: RuntimeConfig,
+    profile: ProfileRow,
+    wallet: WalletRow,
+    hooks: WalletSyncHooks,
+    outcome: SyncOutcome,
+) -> SyncOutcome:
+    config = json.loads(wallet["config_json"] or "{}")
+    routes = wallet_bullbitcoin_wallet_export_config(config)
+    if not routes:
+        return outcome
+    if hooks.enrich_bullbitcoin_wallet is None:
+        raise AppError("Bull Bitcoin wallet export refresh is not configured for this runtime")
+    enriched = hooks.enrich_bullbitcoin_wallet(conn, runtime_config, profile, wallet)
+    merged = dict(outcome)
+    merged["bullbitcoin_wallet_exports"] = enriched
+    return merged
+
+
+def _merge_wallet_enrichments(
+    conn: sqlite3.Connection,
+    runtime_config: RuntimeConfig,
+    profile: ProfileRow,
+    wallet: WalletRow,
+    hooks: WalletSyncHooks,
+    outcome: SyncOutcome,
+) -> SyncOutcome:
+    outcome = _merge_btcpay_enrichment(conn, runtime_config, profile, wallet, hooks, outcome)
+    return _merge_bullbitcoin_enrichment(conn, runtime_config, profile, wallet, hooks, outcome)
 
 
 def normalize_backend_kind(kind: Any) -> str:
@@ -486,6 +527,14 @@ def sync_wallets(
             finally:
                 if token is not None:
                     sync_progress_emitter.reset(token)
+            outcome = _merge_bullbitcoin_enrichment(
+                conn,
+                runtime_config,
+                profile,
+                sync_wallet,
+                hooks,
+                outcome,
+            )
             results.append({"wallet": sync_wallet["label"], "status": "synced", **outcome})
             continue
         if sync_wallet["kind"] == "coreln" and config.get("backend"):
@@ -498,11 +547,19 @@ def sync_wallets(
             finally:
                 if token is not None:
                     sync_progress_emitter.reset(token)
+            outcome = _merge_bullbitcoin_enrichment(
+                conn,
+                runtime_config,
+                profile,
+                sync_wallet,
+                hooks,
+                outcome,
+            )
             results.append({"wallet": sync_wallet["label"], **outcome})
             continue
         if source_file and source_format:
             outcome = hooks.import_file(conn, profile, sync_wallet, source_file, source_format)
-            outcome = _merge_btcpay_enrichment(
+            outcome = _merge_wallet_enrichments(
                 conn,
                 runtime_config,
                 profile,
@@ -527,7 +584,7 @@ def sync_wallets(
             if outcome.get("status") == "skipped":
                 results.append(outcome)
             else:
-                outcome = _merge_btcpay_enrichment(
+                outcome = _merge_wallet_enrichments(
                     conn,
                     runtime_config,
                     profile,

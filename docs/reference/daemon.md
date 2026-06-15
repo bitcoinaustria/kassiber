@@ -88,6 +88,7 @@ daemon for the exact current allowlist:
       "ui.wallets.import_file",
       "ui.wallets.import_samourai",
       "ui.connections.btcpay.create",
+      "ui.connections.bullbitcoin_wallet.create",
       "ui.connections.btcpay.discover",
       "ui.connections.btcpay.test",
       "ui.connections.node.snapshot",
@@ -269,7 +270,14 @@ exchange evidence and enriches only unique matching transactions in the active
 profile. `mode="full"` imports all normalized provider rows into the selected
 or default provider wallet as excluded evidence, then flags each row as
 `matched`, `unmatched`, or `ambiguous` against this book's wallet transactions.
-Coinfinity imports return `coinfinity_rows`. For
+`source_format="bullbitcoin_wallet_csv"` is different: it imports Bull's
+unified mobile wallet transaction export as active wallet-scoped BTC/LBTC/
+Lightning activity, returns `bullbitcoin_wallet_rows`, skips failed/expired and
+self-direction rows, and redacts exported preimages before raw metadata is
+stored. Wallet config may include `bullbitcoin_wallet_network` (`bitcoin`,
+`liquid`, or `lightning`) to split one unified export into separate source
+wallets; filtered results also include `bullbitcoin_wallet_rows_total` and
+`bullbitcoin_wallet_network`. Coinfinity imports return `coinfinity_rows`. For
 `source_format="21bitcoin_csv"`, the default `mode="full"` imports active
 custodial ledger rows into the selected or default `21bitcoin` wallet; explicit
 `mode="relevant"` keeps the evidence-only matching behavior for L1 withdrawal
@@ -319,6 +327,16 @@ backend row first, then store only the redacted backend reference on the
 wallet. Use one Kassiber wallet per real underlying BTCPay-backed wallet
 balance; stores that share the same BTCPay wallet should not be duplicated as
 separate Kassiber wallets.
+
+`ui.connections.bullbitcoin_wallet.create` configures Bull's unified mobile
+wallet CSV in one of two modes. The default `wallet_sources` mode accepts
+`label`, `source_file`, and optional `networks` (`bitcoin`, `liquid`,
+`lightning`) and creates one `bullbitcoin` wallet per selected network, each
+sharing the same CSV path with a different `bullbitcoin_wallet_network` filter.
+The `existing_wallets` mode accepts `label`, `source_file`, and `routes`
+containing `wallet` plus `network`; it stores Bull export routes on those
+wallets so their normal descriptor/file source remains authoritative while Bull
+metadata enriches matching rows during `ui.wallets.sync`.
 
 `ui.connections.btcpay.discover` accepts the same saved-backend or inline
 instance credential shape as `create`, performs read-only Greenfield discovery,

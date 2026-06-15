@@ -16,10 +16,12 @@ from ..errors import AppError
 from ..fingerprints import make_transaction_fingerprint
 from . import pricing
 from ..importers import (
+    bullbitcoin_wallet_record_network,
     exchange_evidence_label,
     exchange_evidence_rows_key,
     is_btcpay_format,
     is_bullbitcoin_format,
+    is_bullbitcoin_wallet_format,
     is_coinfinity_format,
     is_exchange_evidence_format,
     is_phoenix_format,
@@ -37,6 +39,7 @@ from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
 from ..util import str_or_none
 from ..wallet_descriptors import normalize_asset_code
 from . import output_inventory as core_output_inventory
+from . import wallets as core_wallets
 from .privacy_hops import privacy_boundary_from_import_record
 from .sync import sync_progress_emitter
 
@@ -607,6 +610,28 @@ def normalize_bullbitcoin_import_mode(import_mode: str | None) -> str:
             retryable=False,
         )
     return mode
+
+
+def filter_bullbitcoin_wallet_records(
+    records: Sequence[ImportRow],
+    network: str | None,
+) -> list[ImportRow]:
+    if not network:
+        return list(records)
+    normalized_network = core_wallets.normalize_bullbitcoin_wallet_network(network)
+    return [
+        record
+        for record in records
+        if bullbitcoin_wallet_record_network(record) == normalized_network
+    ]
+
+
+def wallet_bullbitcoin_wallet_network(wallet: Mapping[str, Any]) -> str | None:
+    try:
+        config = json.loads(wallet["config_json"] or "{}")
+    except (KeyError, TypeError, ValueError):
+        config = {}
+    return core_wallets.wallet_bullbitcoin_wallet_network(config)
 
 
 def _reconciliation_tags(input_format: str) -> Mapping[str, tuple[str, str]]:
@@ -1757,6 +1782,11 @@ def import_file_into_wallet(
             conn.commit()
         return outcome
     records = load_import_records(file_path, input_format)
+    bullbitcoin_wallet_rows_total = len(records) if is_bullbitcoin_wallet_format(input_format) else None
+    bullbitcoin_wallet_network = None
+    if is_bullbitcoin_wallet_format(input_format):
+        bullbitcoin_wallet_network = wallet_bullbitcoin_wallet_network(wallet)
+        records = filter_bullbitcoin_wallet_records(records, bullbitcoin_wallet_network)
     outcome = import_records_into_wallet(
         conn,
         profile,
@@ -1791,6 +1821,11 @@ def import_file_into_wallet(
         outcome[exchange_evidence_rows_key(input_format)] = len(records)
     if is_strike_format(input_format):
         outcome["strike_rows"] = len(records)
+    if is_bullbitcoin_wallet_format(input_format):
+        outcome["bullbitcoin_wallet_rows"] = len(records)
+        outcome["bullbitcoin_wallet_rows_total"] = bullbitcoin_wallet_rows_total
+        if bullbitcoin_wallet_network:
+            outcome["bullbitcoin_wallet_network"] = bullbitcoin_wallet_network
     outcome["input_format"] = input_format
     outcome["file"] = os.path.abspath(file_path)
     return outcome

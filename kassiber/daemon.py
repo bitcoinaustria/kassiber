@@ -343,6 +343,7 @@ SUPPORTED_KINDS = (
     "ui.wallets.preview_descriptor",
     "ui.connections.sources",
     "ui.connections.btcpay.create",
+    "ui.connections.bullbitcoin_wallet.create",
     "ui.connections.btcpay.discover",
     "ui.connections.btcpay.test",
     "ui.connections.node.snapshot",
@@ -5256,6 +5257,7 @@ _UI_WALLET_SOURCE_FORMATS = {
     "phoenix_csv",
     "river_csv",
     "bullbitcoin_csv",
+    "bullbitcoin_wallet_csv",
     "coinfinity_csv",
     "21bitcoin_csv",
     "pocketbitcoin_csv",
@@ -6153,6 +6155,224 @@ def _btcpay_wallet_labels(base_label: str, payment_method_ids: list[str]) -> lis
         f"{base_label} - {payment_method_id}"
         for payment_method_id in payment_method_ids
     ]
+
+
+_BULLBITCOIN_WALLET_NETWORK_LABELS = {
+    "bitcoin": "Bitcoin",
+    "liquid": "Liquid",
+    "lightning": "Lightning",
+}
+
+
+def _bullbitcoin_wallet_source_file(args: dict[str, Any]) -> str:
+    source_file = _optional_str_arg(args, "source_file") or _optional_str_arg(args, "file")
+    if source_file is None:
+        raise AppError(
+            "Bull Bitcoin wallet setup requires a CSV file",
+            code="validation",
+            hint="Choose the unified wallet export CSV from Bull Bitcoin Wallet.",
+            retryable=False,
+        )
+    return str(Path(source_file).expanduser().resolve())
+
+
+def _bullbitcoin_wallet_networks(args: dict[str, Any]) -> list[str]:
+    raw_networks = args.get("networks")
+    if raw_networks is None:
+        single = _optional_str_arg(args, "network")
+        if single is not None:
+            return [core_wallets.normalize_bullbitcoin_wallet_network(single)]
+        return list(core_wallets.BULLBITCOIN_WALLET_NETWORKS)
+    if not isinstance(raw_networks, list):
+        raise AppError(
+            "Bull Bitcoin wallet networks must be an array",
+            code="validation",
+            details={"type": type(raw_networks).__name__},
+            retryable=False,
+        )
+    networks = []
+    seen = set()
+    for raw_network in raw_networks:
+        network = core_wallets.normalize_bullbitcoin_wallet_network(raw_network)
+        if network not in seen:
+            networks.append(network)
+            seen.add(network)
+    if not networks:
+        raise AppError(
+            "Select at least one Bull Bitcoin wallet network",
+            code="validation",
+            retryable=False,
+        )
+    return networks
+
+
+def _bullbitcoin_wallet_labels(base_label: str, networks: list[str]) -> list[str]:
+    if len(networks) == 1:
+        return [base_label]
+    return [
+        f"{base_label} - {_BULLBITCOIN_WALLET_NETWORK_LABELS[network]}"
+        for network in networks
+    ]
+
+
+def _bullbitcoin_existing_wallet_routes(
+    args: dict[str, Any],
+) -> list[dict[str, str]]:
+    raw_routes = args.get("routes")
+    if raw_routes is None:
+        target_wallet = _optional_str_arg(args, "target_wallet")
+        if target_wallet is None:
+            raise AppError(
+                "Existing-wallet Bull Bitcoin setup requires routes",
+                code="validation",
+                hint="Choose which Kassiber wallet each Bull export network maps into.",
+                retryable=False,
+            )
+        return [
+            {"wallet": target_wallet, "network": network}
+            for network in _bullbitcoin_wallet_networks(args)
+        ]
+    if not isinstance(raw_routes, list) or not raw_routes:
+        raise AppError(
+            "Existing-wallet Bull Bitcoin routes must be a non-empty array",
+            code="validation",
+            retryable=False,
+        )
+    routes = []
+    seen = set()
+    for raw_route in raw_routes:
+        if not isinstance(raw_route, dict):
+            raise AppError(
+                "Existing-wallet Bull Bitcoin routes must be objects",
+                code="validation",
+                retryable=False,
+            )
+        wallet_ref = _optional_str_arg(raw_route, "wallet") or _optional_str_arg(
+            raw_route,
+            "target_wallet",
+        )
+        if wallet_ref is None:
+            raise AppError(
+                "Existing-wallet Bull Bitcoin routes require a wallet",
+                code="validation",
+                retryable=False,
+            )
+        network = core_wallets.normalize_bullbitcoin_wallet_network(
+            _required_str_arg(raw_route, "network", "Bull Bitcoin network")
+        )
+        key = (wallet_ref, network)
+        if key not in seen:
+            routes.append({"wallet": wallet_ref, "network": network})
+            seen.add(key)
+    return routes
+
+
+def _attach_bullbitcoin_wallet_exports_payload(
+    ctx: "DaemonContext",
+    args: dict[str, Any],
+    source_file: str,
+) -> dict[str, Any]:
+    conn = _require_conn(ctx)
+    routes = _bullbitcoin_existing_wallet_routes(args)
+    updated_wallets = []
+    for route in routes:
+        wallet = core_wallets.get_wallet_details(conn, None, None, route["wallet"])
+        existing_routes = list(
+            wallet.get("config", {}).get(core_wallets.BULLBITCOIN_WALLET_EXPORTS_CONFIG_KEY)
+            or []
+        )
+        next_route = {
+            "source_file": source_file,
+            "network": route["network"],
+        }
+        if next_route not in existing_routes:
+            existing_routes.append(next_route)
+        updated_wallets.append(
+            core_wallets.update_wallet(
+                conn,
+                None,
+                None,
+                wallet["id"],
+                {
+                    "config": {
+                        core_wallets.BULLBITCOIN_WALLET_EXPORTS_CONFIG_KEY: existing_routes,
+                    },
+                },
+            )
+        )
+    return {
+        "mode": "existing_wallets",
+        "source_file": source_file,
+        "wallet": updated_wallets[0],
+        "wallets": updated_wallets,
+        "routes": routes,
+    }
+
+
+def _create_bullbitcoin_wallet_connection_payload(
+    ctx: "DaemonContext",
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    conn = _require_conn(ctx)
+    wallet_label = _required_str_arg(args, "label", "Connection label")
+    source_file = _bullbitcoin_wallet_source_file(args)
+    mode = (_optional_str_arg(args, "mode") or "wallet_sources").strip().lower()
+    if mode not in {"wallet_sources", "existing_wallets", "map_existing", "provenance"}:
+        raise AppError(
+            f"Unsupported Bull Bitcoin wallet setup mode '{mode}'",
+            code="validation",
+            retryable=False,
+        )
+    if mode in {"existing_wallets", "map_existing", "provenance"}:
+        for route in _bullbitcoin_existing_wallet_routes(args):
+            core_wallets.get_wallet_details(conn, None, None, route["wallet"])
+        return _attach_bullbitcoin_wallet_exports_payload(ctx, args, source_file)
+
+    _, profile = resolve_scope(conn, None, None)
+    networks = _bullbitcoin_wallet_networks(args)
+    wallet_labels = _bullbitcoin_wallet_labels(wallet_label, networks)
+    existing_rows = conn.execute(
+        f"""
+        SELECT label FROM wallets
+        WHERE profile_id = ? AND label IN ({",".join("?" for _ in wallet_labels)})
+        """,
+        (profile["id"], *wallet_labels),
+    ).fetchall()
+    if existing_rows:
+        existing_labels = sorted(str(row["label"]) for row in existing_rows)
+        raise AppError(
+            f"Wallet '{existing_labels[0]}' already exists in profile '{profile['label']}'",
+            code="conflict",
+            hint="Choose a different connection label.",
+            details={"existing_labels": existing_labels},
+            retryable=False,
+        )
+    wallets = []
+    for label, network in zip(wallet_labels, networks, strict=True):
+        config = {
+            "source_file": source_file,
+            "source_format": "bullbitcoin_wallet_csv",
+            core_wallets.BULLBITCOIN_WALLET_NETWORK_CONFIG_KEY: network,
+        }
+        if network in {"bitcoin", "liquid"}:
+            config["chain"] = network
+        wallets.append(
+            core_wallets.create_wallet(
+                conn,
+                None,
+                None,
+                label,
+                "bullbitcoin",
+                config=config,
+            )
+        )
+    return {
+        "mode": "wallet_sources",
+        "source_file": source_file,
+        "wallet": wallets[0],
+        "wallets": wallets,
+        "networks": networks,
+    }
 
 
 def _btcpay_existing_wallet_routes(
@@ -8631,6 +8851,21 @@ def handle_request(
                 build_envelope(
                     "ui.connections.btcpay.create",
                     _create_btcpay_connection_payload(
+                        ctx,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.connections.bullbitcoin_wallet.create":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.connections.bullbitcoin_wallet.create",
+                    _create_bullbitcoin_wallet_connection_payload(
                         ctx,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),

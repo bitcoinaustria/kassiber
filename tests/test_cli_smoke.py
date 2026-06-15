@@ -60,6 +60,16 @@ _BULLBITCOIN_LN_ORDERS_CSV = """ORDER_NUMBER,ORDER_TYPE,ORDER_SUBTYPE,MESSAGE,OR
 1004,Fiat Payment,Market Order,,order-ln-1,600.00,USD,0.01000000,BTC,60000.00,USD,SEPA Transfer (USD),Bitcoin Lightning,Completed,Completed,Completed,2026-04-18 09:40:00.000Z,2026-04-18 09:50:00.000Z,2026-04-18 09:51:00.000Z,60000.00,USD,bull-ln-buy-tx,lnbc1example
 """
 
+_BULLBITCOIN_WALLET_CSV = """date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid
+2026-01-15T10:30:00Z,onchain,incoming,500000,0.00500000,0,confirmed,bull-wallet-btc-in,bitcoin,bc1qsalary,,,,,,,
+2026-02-01T08:00:00Z,liquid,outgoing,200000,0.00200000,350,confirmed,bull-wallet-lbtc-out,liquid,lq1merchant,,,,,,,
+2026-03-10T14:22:00Z,lightning_send,outgoing,50000,0.00050000,150,completed,cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc,lightning,,swap-ln,1111111111111111111111111111111111111111111111111111111111111111,125,,,,
+2026-04-05T09:15:00Z,chain_swap,outgoing,1000000,0.01000000,500,completed,bull-chain-send,bitcoin,VJLCbLBTCksDqx1,swap-chain,,750,bitcoin,liquid,bull-chain-send,bull-chain-recv
+2026-04-05T09:20:00Z,chain_swap,incoming,990000,0.00990000,200,completed,bull-chain-recv,liquid,VJLCbLBTCksDqx1,swap-chain,,750,bitcoin,liquid,bull-chain-send,bull-chain-recv
+2026-04-06T09:20:00Z,onchain,self,10000,0.00010000,120,confirmed,bull-self,bitcoin,bc1qself,,,,,,,
+2026-04-07T09:20:00Z,onchain,outgoing,10000,0.00010000,120,failed,bull-failed,bitcoin,bc1qfailed,,,,,,,
+"""
+
 _COINFINITY_EXISTING_CSV = """date,txid,direction,asset,amount,fee,fiat_value,fiat_rate,kind,description,counterparty
 2026-05-11T13:19:36Z,coinfinity-buy-tx,inbound,BTC,0.00147403,0,100.00,68872.40,deposit,Synced from self custody wallet,Synced from node
 """
@@ -2346,6 +2356,212 @@ class AccountBucketBehaviorTest(unittest.TestCase):
         self.assertEqual(interest["kind"], "interest")
         self.assertEqual(interest["pricing_source_kind"], "fmv_provider")
         self.assertEqual(interest["pricing_quality"], "provider_sample")
+
+    def test_z_bullbitcoin_wallet_csv_connection_import(self):
+        bull_wallet_csv = Path(self._tmp.name) / "bull-wallet-transactions.csv"
+        bull_wallet_csv.write_text(_BULLBITCOIN_WALLET_CSV, encoding="utf-8")
+
+        for label, network in (
+            ("Bull Wallet - Bitcoin", "bitcoin"),
+            ("Bull Wallet - Liquid", "liquid"),
+            ("Bull Wallet - Lightning", "lightning"),
+        ):
+            payload = self._cli(
+                "wallets", "create",
+                "--workspace", "Buckets",
+                "--profile", "Default",
+                "--label", label,
+                "--kind", "bullbitcoin",
+                "--source-file", str(bull_wallet_csv),
+                "--source-format", "bullbitcoin_wallet_csv",
+                "--config", json.dumps({"bullbitcoin_wallet_network": network}),
+            )
+            self.assertEqual(payload["kind"], "wallets.create")
+            self.assertEqual(payload["data"]["source_format"], "bullbitcoin_wallet_csv")
+
+        sync_expectations = {
+            "Bull Wallet - Bitcoin": ("bitcoin", 2),
+            "Bull Wallet - Liquid": ("liquid", 2),
+            "Bull Wallet - Lightning": ("lightning", 1),
+        }
+        for label, (network, rows) in sync_expectations.items():
+            payload = self._cli(
+                "wallets", "sync",
+                "--workspace", "Buckets",
+                "--profile", "Default",
+                "--wallet", label,
+            )
+            self.assertEqual(payload["kind"], "wallets.sync")
+            sync = payload["data"][0]
+            self.assertEqual(sync["status"], "synced")
+            self.assertEqual(sync["input_format"], "bullbitcoin_wallet_csv")
+            self.assertEqual(sync["bullbitcoin_wallet_network"], network)
+            self.assertEqual(sync["bullbitcoin_wallet_rows"], rows)
+            self.assertEqual(sync["bullbitcoin_wallet_rows_total"], 5)
+            self.assertEqual(sync["imported"], rows)
+            self.assertEqual(sync["skipped"], 0)
+
+        bitcoin_records = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "Bull Wallet - Bitcoin",
+            "--order", "asc",
+        )["data"]
+        liquid_records = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "Bull Wallet - Liquid",
+            "--order", "asc",
+        )["data"]
+        lightning_records = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "Bull Wallet - Lightning",
+            "--order", "asc",
+        )["data"]
+        by_external_id = {
+            record["external_id"]: record
+            for record in [*bitcoin_records, *liquid_records, *lightning_records]
+        }
+        self.assertEqual(by_external_id["bull-wallet-btc-in"]["asset"], "BTC")
+        self.assertEqual(by_external_id["bull-wallet-btc-in"]["direction"], "inbound")
+        self.assertEqual(by_external_id["bull-wallet-lbtc-out"]["asset"], "LBTC")
+        self.assertEqual(by_external_id["bull-wallet-lbtc-out"]["fee_msat"], 350_000)
+        self.assertEqual(by_external_id["bull-chain-send"]["asset"], "BTC")
+        self.assertEqual(by_external_id["bull-chain-recv"]["asset"], "LBTC")
+        self.assertNotIn("bull-self", by_external_id)
+        self.assertNotIn("bull-failed", by_external_id)
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        try:
+            swap_wallets = conn.execute(
+                """
+                SELECT t.external_id, w.label AS wallet
+                FROM transactions t
+                JOIN wallets w ON w.id = t.wallet_id
+                WHERE t.external_id IN ('bull-chain-send', 'bull-chain-recv')
+                ORDER BY t.external_id
+                """
+            ).fetchall()
+            self.assertEqual(
+                {row["external_id"]: row["wallet"] for row in swap_wallets},
+                {
+                    "bull-chain-recv": "Bull Wallet - Liquid",
+                    "bull-chain-send": "Bull Wallet - Bitcoin",
+                },
+            )
+            lightning = conn.execute(
+                """
+                SELECT payment_hash, payment_hash_source, raw_json
+                FROM transactions
+                WHERE external_id = ?
+                """,
+                ("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",),
+            ).fetchone()
+            self.assertIsNotNone(lightning)
+            self.assertEqual(
+                lightning["payment_hash"],
+                "02d449a31fbb267c8f352e9968a79e3e5fc95c1bbeaa502fd6454ebde5a4bedc",
+            )
+            self.assertEqual(lightning["payment_hash_source"], "importer")
+            self.assertNotIn(
+                "1111111111111111111111111111111111111111111111111111111111111111",
+                lightning["raw_json"],
+            )
+            raw = json.loads(lightning["raw_json"])
+            self.assertEqual(raw["preimage"], "[redacted]")
+            self.assertTrue(raw["preimage_redacted"])
+
+            swap = conn.execute(
+                "SELECT raw_json FROM transactions WHERE external_id = 'bull-chain-recv'"
+            ).fetchone()
+            swap_raw = json.loads(swap["raw_json"])
+            self.assertEqual(swap_raw["swap_id"], "swap-chain")
+            self.assertEqual(swap_raw["send_network"], "bitcoin")
+            self.assertEqual(swap_raw["receive_network"], "liquid")
+        finally:
+            conn.close()
+
+        existing_btc_csv = Path(self._tmp.name) / "bull-existing-btc.csv"
+        existing_btc_csv.write_text(
+            "date,txid,direction,asset,amount,fee\n"
+            "2026-04-05T09:15:00Z,bull-chain-send,outbound,BTC,0.01000000,0.00000500\n",
+            encoding="utf-8",
+        )
+        existing_liquid_csv = Path(self._tmp.name) / "bull-existing-liquid.csv"
+        existing_liquid_csv.write_text(
+            "date,txid,direction,asset,amount,fee\n"
+            "2026-04-05T09:20:00Z,bull-chain-recv,inbound,LBTC,0.00990000,0.00000200\n",
+            encoding="utf-8",
+        )
+        for label, csv_path in (
+            ("Descriptor BTC", existing_btc_csv),
+            ("Descriptor Liquid", existing_liquid_csv),
+        ):
+            self._cli(
+                "wallets", "create",
+                "--workspace", "Buckets",
+                "--profile", "Default",
+                "--label", label,
+                "--kind", "custom",
+                "--source-file", str(csv_path),
+                "--source-format", "csv",
+            )
+            self._cli(
+                "wallets", "sync",
+                "--workspace", "Buckets",
+                "--profile", "Default",
+                "--wallet", label,
+            )
+        for label, network in (("Descriptor BTC", "bitcoin"), ("Descriptor Liquid", "liquid")):
+            payload = self._cli(
+                "wallets", "attach-bullbitcoin-wallet",
+                "--workspace", "Buckets",
+                "--profile", "Default",
+                "--wallet", label,
+                "--file", str(bull_wallet_csv),
+                "--network", network,
+            )
+            self.assertEqual(payload["kind"], "wallets.attach-bullbitcoin-wallet")
+            self.assertEqual(payload["data"]["network"], network)
+
+        payload = self._cli(
+            "wallets", "sync",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "Descriptor BTC",
+        )
+        self.assertEqual(payload["data"][0]["bullbitcoin_wallet_exports"]["updated"], 1)
+        payload = self._cli(
+            "wallets", "sync",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "Descriptor Liquid",
+        )
+        self.assertEqual(payload["data"][0]["bullbitcoin_wallet_exports"]["updated"], 1)
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        try:
+            descriptor_rows = conn.execute(
+                """
+                SELECT w.label AS wallet, t.external_id, t.kind, t.raw_json
+                FROM transactions t
+                JOIN wallets w ON w.id = t.wallet_id
+                WHERE w.label IN ('Descriptor BTC', 'Descriptor Liquid')
+                ORDER BY w.label
+                """
+            ).fetchall()
+            self.assertEqual(len(descriptor_rows), 2)
+            self.assertEqual({row["kind"] for row in descriptor_rows}, {"chain_swap"})
+            for row in descriptor_rows:
+                raw = json.loads(row["raw_json"])
+                self.assertEqual(raw["swap_id"], "swap-chain")
+        finally:
+            conn.close()
 
     def test_z_bullbitcoin_csv_enriches_existing_wallet_transaction(self):
         existing_csv = Path(self._tmp.name) / "bull-existing-wallet.csv"

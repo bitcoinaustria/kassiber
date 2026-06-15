@@ -42,6 +42,7 @@ export type SetupKind =
   | "file-enrichment"
   | "samourai"
   | "btcpay"
+  | "bullbitcoin-wallet"
   | "bip329"
   | "backend-settings"
   | "planned";
@@ -52,6 +53,7 @@ export type ConnectionSourceFormat =
   | "phoenix_csv"
   | "river_csv"
   | "bullbitcoin_csv"
+  | "bullbitcoin_wallet_csv"
   | "coinfinity_csv"
   | "21bitcoin_csv"
   | "strike_csv"
@@ -195,7 +197,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     status: "ready",
     pathLabel: "Wallet export",
     formatLabel: "wasabi_bundle",
-    setupKind: "file-wallet",
+    setupKind: "bullbitcoin-wallet",
     walletKind: "wasabi",
     sourceFormat: "wasabi_bundle",
     chain: "bitcoin",
@@ -452,6 +454,26 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     ],
   },
   {
+    id: "bullbitcoin-wallet",
+    title: "Bull Bitcoin Wallet",
+    description: "Unified wallet transaction CSV import.",
+    category: "wallets",
+    image: bullBitcoinIcon,
+    imageClassName: "size-9 rounded-md",
+    status: "ready",
+    pathLabel: "Wallet CSV import",
+    formatLabel: "bullbitcoin_wallet_csv",
+    docsHref: "https://github.com/SatoshiPortal/bullbitcoin-mobile/issues/1363",
+    setupKind: "file-wallet",
+    walletKind: "bullbitcoin",
+    sourceFormat: "bullbitcoin_wallet_csv",
+    details: [
+      "Imports Bitcoin, Liquid, Lightning, payjoin, and swap wallet rows",
+      "Use descriptor wallets instead when they are your source of truth",
+      "Bull order CSV remains available under Exchanges for exact fiat pricing",
+    ],
+  },
+  {
     id: "btcpay",
     title: "BTCPay Server",
     description: "Store wallet history through a scoped API key.",
@@ -493,6 +515,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     description: "Order CSV import for exact buy/sell execution pricing.",
     category: "exchanges",
     image: bullBitcoinIcon,
+    imageClassName: "size-9 rounded-md",
     status: "ready",
     pathLabel: "CSV import",
     formatLabel: "bullbitcoin_csv",

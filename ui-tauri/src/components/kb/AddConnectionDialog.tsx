@@ -60,6 +60,9 @@ interface SetupFormState {
   backend: string;
   btcpayInstanceMode: "saved" | "new";
   btcpaySetupMode: "wallet_sources" | "existing_wallets";
+  bullWalletSetupMode: "wallet_sources" | "existing_wallets";
+  bullWalletNetworks: BullBitcoinWalletNetwork[];
+  bullWalletRouteWallets: Record<BullBitcoinWalletNetwork, string>;
   btcpayInstanceLabel: string;
   btcpayServerUrl: string;
   btcpayApiKey: string;
@@ -103,6 +106,7 @@ interface SyncResult {
   excluded?: number;
   updated?: number;
   bullbitcoin_rows?: number;
+  bullbitcoin_wallet_rows?: number;
   coinfinity_rows?: number;
   twentyonebitcoin_rows?: number;
   strike_rows?: number;
@@ -198,6 +202,7 @@ interface ImportFileResult {
   excluded?: number;
   updated?: number;
   bullbitcoin_rows?: number;
+  bullbitcoin_wallet_rows?: number;
   coinfinity_rows?: number;
   twentyonebitcoin_rows?: number;
   strike_rows?: number;
@@ -221,6 +226,16 @@ type DialogStep = "source" | "setup";
 const DESCRIPTOR_BACKEND_KINDS = new Set(["esplora", "electrum"]);
 const DEFAULT_BTCPAY_PAYMENT_METHOD_ID = "BTC-CHAIN";
 const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
+type BullBitcoinWalletNetwork = "bitcoin" | "liquid" | "lightning";
+const BULLBITCOIN_WALLET_NETWORKS: Array<{
+  id: BullBitcoinWalletNetwork;
+  label: string;
+  helper: string;
+}> = [
+  { id: "bitcoin", label: "Bitcoin", helper: "BTC on-chain and payjoin rows" },
+  { id: "liquid", label: "Liquid", helper: "LBTC wallet and swap rows" },
+  { id: "lightning", label: "Lightning", helper: "Lightning send/receive rows" },
+];
 type SamouraiFormKey =
   | "samouraiDeposit"
   | "samouraiBadbank"
@@ -317,6 +332,9 @@ function sourceFileFilters(source: ConnectionSource) {
   if (source.sourceFormat === "bullbitcoin_csv") {
     return [{ name: "Bull Bitcoin CSV", extensions: ["csv"] }];
   }
+  if (source.sourceFormat === "bullbitcoin_wallet_csv") {
+    return [{ name: "Bull Bitcoin wallet CSV", extensions: ["csv"] }];
+  }
   if (source.sourceFormat === "coinfinity_csv") {
     return [{ name: "Coinfinity CSV", extensions: ["csv"] }];
   }
@@ -350,6 +368,13 @@ const formDefaultsFor = (source: ConnectionSource): SetupFormState => {
     backend: "",
     btcpayInstanceMode: "new",
     btcpaySetupMode: "wallet_sources",
+    bullWalletSetupMode: "wallet_sources",
+    bullWalletNetworks: ["bitcoin", "liquid", "lightning"],
+    bullWalletRouteWallets: {
+      bitcoin: "",
+      liquid: "",
+      lightning: "",
+    },
     btcpayInstanceLabel: "btcpay",
     btcpayServerUrl: "",
     btcpayApiKey: "",
@@ -374,7 +399,9 @@ const formDefaultsFor = (source: ConnectionSource): SetupFormState => {
     btcpayRouteWallets: {},
     bip329Wallet: "",
     bip329File: "",
-    syncAfterCreate: source.setupKind === "file-wallet",
+    syncAfterCreate:
+      source.setupKind === "file-wallet" ||
+      source.setupKind === "bullbitcoin-wallet",
   };
 };
 
@@ -479,6 +506,12 @@ export function AddConnectionDialog({
     wallet: { label: string };
     wallets?: Array<{ label: string }>;
   }>("ui.connections.btcpay.create");
+  const createBullBitcoinWallet = useDaemonMutation<{
+    mode: "wallet_sources" | "existing_wallets";
+    wallet: { label: string };
+    wallets?: Array<{ label: string }>;
+    routes?: Array<{ wallet: string; network: BullBitcoinWalletNetwork }>;
+  }>("ui.connections.bullbitcoin_wallet.create");
   const discoverBtcpay = useDaemonMutation<BtcpayDiscoveryData>(
     "ui.connections.btcpay.discover",
   );
@@ -655,9 +688,34 @@ export function AddConnectionDialog({
     },
     [existingWalletOptions],
   );
+  const walletForBullNetwork = React.useCallback(
+    (network: BullBitcoinWalletNetwork) => {
+      if (network === "lightning") {
+        return (
+          existingWalletOptions.find((wallet) =>
+            ["phoenix", "lnd", "coreln", "nwc"].includes(wallet.kind),
+          )?.label ?? ""
+        );
+      }
+      return (
+        existingWalletOptions.find(
+          (wallet) => wallet.chain === network && wallet.kind !== "bullbitcoin",
+        )?.label ??
+        existingWalletOptions.find((wallet) => wallet.chain === network)
+          ?.label ??
+        ""
+      );
+    },
+    [existingWalletOptions],
+  );
   const selectedBtcpayRoutes = selectedBtcpayPaymentMethodIds.map((id) => ({
     paymentMethodId: id,
     wallet: form.btcpayRouteWallets[id] || walletForPaymentMethod(id),
+  }));
+  const selectedBullWalletRoutes = form.bullWalletNetworks.map((network) => ({
+    network,
+    wallet:
+      form.bullWalletRouteWallets[network] || walletForBullNetwork(network),
   }));
   const missingBtcpayMappingDiscovery =
     setupKind === "btcpay" &&
@@ -668,6 +726,7 @@ export function AddConnectionDialog({
     importFile.isPending ||
     importSamourai.isPending ||
     createBtcpay.isPending ||
+    createBullBitcoinWallet.isPending ||
     discoverBtcpay.isPending ||
     importBip329.isPending ||
     syncWallet.isPending;
@@ -692,6 +751,12 @@ export function AddConnectionDialog({
             : setupKind === "btcpay" &&
                 selectedBtcpayPaymentMethodIds.length > 1
               ? "Create connections"
+              : setupKind === "bullbitcoin-wallet" &&
+                  form.bullWalletSetupMode === "existing_wallets"
+                ? "Save wallet mapping"
+              : setupKind === "bullbitcoin-wallet" &&
+                  form.bullWalletNetworks.length > 1
+                ? "Create connections"
               : setupKind === "file-enrichment"
                 ? "Import pricing"
               : "Create connection";
@@ -787,7 +852,10 @@ export function AddConnectionDialog({
       key === "wasabiAdditional" ||
       key === "targetWallet" ||
       key === "sourceFormat" ||
-      key === "bullImportMode"
+      key === "bullImportMode" ||
+      key === "bullWalletSetupMode" ||
+      key === "bullWalletNetworks" ||
+      key === "bullWalletRouteWallets"
     ) {
       setLastImportResult(null);
     }
@@ -827,7 +895,8 @@ export function AddConnectionDialog({
       setupKind === "descriptor" ||
       setupKind === "file-wallet" ||
       setupKind === "samourai" ||
-      setupKind === "btcpay"
+      setupKind === "btcpay" ||
+      setupKind === "bullbitcoin-wallet"
     ) {
       if (!form.label.trim()) {
         errors.label = "Connection label is required.";
@@ -910,6 +979,21 @@ export function AddConnectionDialog({
       }
       if (!form.sourceFile.trim()) {
         errors.sourceFile = "Pick the export file.";
+      }
+    }
+    if (setupKind === "bullbitcoin-wallet") {
+      if (!form.sourceFile.trim()) {
+        errors.sourceFile = "Pick the Bull Bitcoin wallet export.";
+      }
+      if (form.bullWalletNetworks.length === 0) {
+        errors.sourceFile = "Select at least one Bull wallet network.";
+      }
+      if (form.bullWalletSetupMode === "existing_wallets") {
+        if (existingWalletOptions.length === 0) {
+          errors.sourceFile = "Create or import the target wallets first.";
+        } else if (selectedBullWalletRoutes.some((route) => !route.wallet)) {
+          errors.sourceFile = "Choose a Kassiber wallet for each selected Bull network.";
+        }
       }
     }
     if (setupKind === "btcpay") {
@@ -1135,6 +1219,71 @@ export function AddConnectionDialog({
           ).toLocaleString("en-US")} rows and skipped ${(
             importResult?.skipped ?? 0
           ).toLocaleString("en-US")}.`,
+          tone: "success",
+        });
+      } else if (setupKind === "bullbitcoin-wallet") {
+        const envelope = await createBullBitcoinWallet.mutateAsync(
+          form.bullWalletSetupMode === "existing_wallets"
+            ? {
+                mode: "existing_wallets",
+                label,
+                source_file: form.sourceFile.trim(),
+                routes: selectedBullWalletRoutes.map((route) => ({
+                  wallet: route.wallet,
+                  network: route.network,
+                })),
+              }
+            : {
+                mode: "wallet_sources",
+                label,
+                source_file: form.sourceFile.trim(),
+                networks: form.bullWalletNetworks,
+              },
+        );
+        const walletLabels =
+          form.bullWalletSetupMode === "existing_wallets"
+            ? Array.from(
+                new Set(selectedBullWalletRoutes.map((route) => route.wallet)),
+              )
+            : (envelope.data?.wallets ?? [envelope.data?.wallet])
+                .filter((wallet): wallet is { label: string } =>
+                  Boolean(wallet),
+                )
+                .map((wallet) => wallet.label);
+        if (form.syncAfterCreate && walletLabels.length > 0) {
+          startSyncNotice(
+            form.bullWalletSetupMode === "existing_wallets"
+              ? `${label} is refreshing the mapped wallets so Bull export metadata can reconcile.`
+              : `${label} is importing the selected Bull wallet networks. Large exports can take a bit.`,
+          );
+          try {
+            for (const walletLabel of walletLabels) {
+              const syncEnvelope = await syncWallet.mutateAsync({
+                wallet: walletLabel,
+              });
+              const result = syncEnvelope.data?.results.find(
+                (item) => item.wallet === walletLabel,
+              );
+              const importSummary = importResultFromSyncResult(result);
+              if (importSummary) {
+                setLastImportResult(importSummary);
+              }
+            }
+          } finally {
+            clearSyncNotice();
+          }
+        }
+        addNotification({
+          title:
+            form.bullWalletSetupMode === "existing_wallets"
+              ? "Bull Wallet mapping saved"
+              : walletLabels.length > 1
+                ? "Connections added"
+                : "Connection added",
+          body:
+            form.bullWalletSetupMode === "existing_wallets"
+              ? `${walletLabels.length} wallet${walletLabels.length === 1 ? "" : "s"} will use Bull export metadata during refresh${form.syncAfterCreate ? " and was refreshed" : ""}.`
+              : `${walletLabels.length} Bull wallet source${walletLabels.length === 1 ? "" : "s"} configured${form.syncAfterCreate ? " and imported" : ""}.`,
           tone: "success",
         });
       } else if (setupKind === "btcpay") {
@@ -1724,6 +1873,163 @@ export function AddConnectionDialog({
             </SetupField>
           ) : null}
           {renderSourceFileSetup("Import after setup")}
+        </>
+      );
+    }
+
+    if (setupKind === "bullbitcoin-wallet") {
+      return (
+        <>
+          {renderConnectionLabelField()}
+          <SetupField id="connection-bull-wallet-mode" label="Import behavior">
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant={
+                  form.bullWalletSetupMode === "wallet_sources"
+                    ? "secondary"
+                    : "outline"
+                }
+                onClick={() =>
+                  updateForm("bullWalletSetupMode", "wallet_sources")
+                }
+              >
+                Create Bull wallets
+              </Button>
+              <Button
+                type="button"
+                variant={
+                  form.bullWalletSetupMode === "existing_wallets"
+                    ? "secondary"
+                    : "outline"
+                }
+                onClick={() =>
+                  updateForm("bullWalletSetupMode", "existing_wallets")
+                }
+              >
+                Map existing wallets
+              </Button>
+            </div>
+          </SetupField>
+          <SetupField
+            id="connection-bull-wallet-networks"
+            label="Bull wallet networks"
+            helper={
+              form.bullWalletSetupMode === "wallet_sources"
+                ? "Kassiber creates one source wallet per network so Bitcoin and Liquid swap legs can pair cleanly."
+                : "Kassiber keeps your descriptor or wallet source authoritative and only enriches matching rows from Bull."
+            }
+          >
+            <div className="grid gap-2 sm:grid-cols-3">
+              {BULLBITCOIN_WALLET_NETWORKS.map((network) => {
+                const checked = form.bullWalletNetworks.includes(network.id);
+                return (
+                  <label
+                    key={network.id}
+                    className="flex min-h-20 items-start gap-3 rounded-md border border-border/70 p-3 text-sm"
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(value) => {
+                        const nextChecked = value === true;
+                        setForm((current) => {
+                          const networks = new Set(current.bullWalletNetworks);
+                          if (nextChecked) {
+                            networks.add(network.id);
+                          } else {
+                            networks.delete(network.id);
+                          }
+                          const routeWallets = {
+                            ...current.bullWalletRouteWallets,
+                          };
+                          if (nextChecked && !routeWallets[network.id]) {
+                            routeWallets[network.id] =
+                              walletForBullNetwork(network.id);
+                          }
+                          return {
+                            ...current,
+                            bullWalletNetworks: Array.from(networks),
+                            bullWalletRouteWallets: routeWallets,
+                          };
+                        });
+                      }}
+                    />
+                    <span className="grid gap-1">
+                      <span>{network.label}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {network.helper}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </SetupField>
+          {form.bullWalletSetupMode === "existing_wallets" ? (
+            <div className="space-y-3 rounded-md border border-border/70 p-3">
+              <div>
+                <p className="text-sm font-medium">Wallet mapping</p>
+                <p className="text-xs text-muted-foreground">
+                  Link each selected Bull network to the Kassiber wallet that
+                  already tracks those transactions.
+                </p>
+              </div>
+              {selectedBullWalletRoutes.length === 0 ? (
+                <div className="rounded-md border border-dashed border-border/70 p-3 text-sm text-muted-foreground">
+                  Select at least one Bull network to map.
+                </div>
+              ) : (
+                selectedBullWalletRoutes.map((route) => (
+                  <div
+                    key={route.network}
+                    className="grid gap-3 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]"
+                  >
+                    <div className="space-y-2">
+                      <Label>Export network</Label>
+                      <div className="flex h-9 items-center rounded-md border border-border/70 bg-muted/40 px-3 text-sm capitalize">
+                        {route.network}
+                      </div>
+                    </div>
+                    <SetupField
+                      id={`connection-bull-route-${route.network}`}
+                      label="Kassiber wallet"
+                    >
+                      <select
+                        id={`connection-bull-route-${route.network}`}
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        value={route.wallet}
+                        onChange={(event) => {
+                          setForm((current) => ({
+                            ...current,
+                            bullWalletRouteWallets: {
+                              ...current.bullWalletRouteWallets,
+                              [route.network]: event.target.value,
+                            },
+                          }));
+                        }}
+                        disabled={existingWalletOptions.length === 0}
+                      >
+                        {existingWalletOptions.length === 0 ? (
+                          <option value="">No wallets yet</option>
+                        ) : (
+                          <option value="" disabled>
+                            Select wallet
+                          </option>
+                        )}
+                        {existingWalletOptions.map((wallet) => (
+                          <option key={wallet.label} value={wallet.label}>
+                            {wallet.label}
+                            {wallet.chain ? ` (${wallet.chain})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </SetupField>
+                  </div>
+                ))
+              )}
+            </div>
+          ) : null}
+          {renderSourceFileSetup("Refresh after setup")}
         </>
       );
     }
@@ -2515,6 +2821,7 @@ export function AddConnectionDialog({
       excluded: result.excluded,
       updated: result.updated,
       bullbitcoin_rows: result.bullbitcoin_rows,
+      bullbitcoin_wallet_rows: result.bullbitcoin_wallet_rows,
       coinfinity_rows: result.coinfinity_rows,
       twentyonebitcoin_rows: result.twentyonebitcoin_rows,
       strike_rows: result.strike_rows,
@@ -2539,6 +2846,7 @@ export function AddConnectionDialog({
     const hiddenRecords = Math.max(0, changedRecords.length - shownRecords.length);
     const rowsRead =
       lastImportResult.bullbitcoin_rows ??
+      lastImportResult.bullbitcoin_wallet_rows ??
       lastImportResult.coinfinity_rows ??
       lastImportResult.twentyonebitcoin_rows ??
       lastImportResult.strike_rows ??
