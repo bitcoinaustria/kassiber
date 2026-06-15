@@ -49,6 +49,9 @@ REDACTED_CONFIG_VALUE = "[redacted]"
 BTCPAY_SYNC_SOURCE = "btcpay"
 BTCPAY_DEFAULT_PAYMENT_METHOD_ID = "BTC-CHAIN"
 BTCPAY_PROVENANCE_CONFIG_KEY = "btcpay_provenance"
+BULLBITCOIN_WALLET_NETWORK_CONFIG_KEY = "bullbitcoin_wallet_network"
+BULLBITCOIN_WALLET_EXPORTS_CONFIG_KEY = "bullbitcoin_wallet_exports"
+BULLBITCOIN_WALLET_NETWORKS = ("bitcoin", "liquid", "lightning")
 WALLET_SAFE_CONFIG_FIELDS = (
     "addresses",
     "backend",
@@ -60,6 +63,8 @@ WALLET_SAFE_CONFIG_FIELDS = (
     "store_id",
     "payment_method_id",
     BTCPAY_PROVENANCE_CONFIG_KEY,
+    BULLBITCOIN_WALLET_NETWORK_CONFIG_KEY,
+    BULLBITCOIN_WALLET_EXPORTS_CONFIG_KEY,
     "source_file",
     "source_format",
     "altbestand",
@@ -234,6 +239,74 @@ def wallet_btcpay_provenance_config(config):
     return routes
 
 
+def normalize_bullbitcoin_wallet_network(value):
+    network = str_or_none(value)
+    if network is None:
+        raise AppError("Bull Bitcoin wallet network cannot be empty", code="validation")
+    normalized = network.strip().lower()
+    aliases = {
+        "btc": "bitcoin",
+        "onchain": "bitcoin",
+        "chain": "bitcoin",
+        "lbtc": "liquid",
+        "liquidv1": "liquid",
+        "ln": "lightning",
+    }
+    normalized = aliases.get(normalized, normalized)
+    if normalized not in BULLBITCOIN_WALLET_NETWORKS:
+        raise AppError(
+            f"Unsupported Bull Bitcoin wallet network '{value}'",
+            code="validation",
+            hint="Supported networks: bitcoin, liquid, lightning.",
+        )
+    return normalized
+
+
+def wallet_bullbitcoin_wallet_network(config):
+    if not isinstance(config, dict):
+        return None
+    value = config.get(BULLBITCOIN_WALLET_NETWORK_CONFIG_KEY)
+    if value in (None, ""):
+        return None
+    return normalize_bullbitcoin_wallet_network(value)
+
+
+def wallet_bullbitcoin_wallet_export_config(config):
+    if not isinstance(config, dict):
+        return []
+    raw_routes = config.get(BULLBITCOIN_WALLET_EXPORTS_CONFIG_KEY)
+    if raw_routes is None:
+        return []
+    if not isinstance(raw_routes, list):
+        raise AppError(
+            "Bull Bitcoin wallet export config must be a list",
+            code="validation",
+        )
+    routes = []
+    seen = set()
+    for raw_route in raw_routes:
+        if not isinstance(raw_route, dict):
+            raise AppError(
+                "Bull Bitcoin wallet export routes must be objects",
+                code="validation",
+            )
+        source_file = str_or_none(raw_route.get("source_file"))
+        if source_file is None:
+            raise AppError(
+                "Bull Bitcoin wallet export routes require source_file",
+                code="validation",
+            )
+        route = {
+            "source_file": os.path.abspath(os.path.expanduser(source_file)),
+            "network": normalize_bullbitcoin_wallet_network(raw_route.get("network")),
+        }
+        key = (route["source_file"], route["network"])
+        if key not in seen:
+            routes.append(route)
+            seen.add(key)
+    return routes
+
+
 def normalize_btcpay_store_id(value):
     store_id = str_or_none(value)
     if store_id is None:
@@ -309,6 +382,12 @@ def parse_wallet_config(args):
         has_btcpay_flag = True
     if has_btcpay_flag:
         config["sync_source"] = BTCPAY_SYNC_SOURCE
+    bull_network = wallet_bullbitcoin_wallet_network(config)
+    if bull_network:
+        config[BULLBITCOIN_WALLET_NETWORK_CONFIG_KEY] = bull_network
+    bull_routes = wallet_bullbitcoin_wallet_export_config(config)
+    if bull_routes or BULLBITCOIN_WALLET_EXPORTS_CONFIG_KEY in config:
+        config[BULLBITCOIN_WALLET_EXPORTS_CONFIG_KEY] = bull_routes
     chain, network = wallet_live_chain_config(config)
     if chain:
         config["chain"] = chain
@@ -400,6 +479,12 @@ def _validated_wallet_config(normalized_kind, config):
     if chain and network:
         config["chain"] = chain
         config["network"] = network
+    bull_network = wallet_bullbitcoin_wallet_network(config)
+    if bull_network:
+        config[BULLBITCOIN_WALLET_NETWORK_CONFIG_KEY] = bull_network
+    bull_routes = wallet_bullbitcoin_wallet_export_config(config)
+    if bull_routes or BULLBITCOIN_WALLET_EXPORTS_CONFIG_KEY in config:
+        config[BULLBITCOIN_WALLET_EXPORTS_CONFIG_KEY] = bull_routes
     btcpay_config = wallet_btcpay_sync_config(config)
     if btcpay_config:
         config.update(btcpay_config)
@@ -510,7 +595,7 @@ WALLET_KIND_CATALOG = {
         "requires": [],
     },
     "bullbitcoin": {
-        "summary": "Bull Bitcoin order CSV importer for exact buy/sell execution pricing.",
+        "summary": "Bull Bitcoin order evidence and unified wallet CSV importer.",
         "config_fields": ["source_file", "source_format"],
         "requires": [],
     },

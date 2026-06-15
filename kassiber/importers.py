@@ -27,6 +27,9 @@ Import format families live here:
     Bitcoin on-chain, Lightning, or Liquid <-> fiat orders are normalized
     to exchange execution pricing, keyed by the exported transaction id
     when present.
+  - Bull Bitcoin wallet (`bullbitcoin_wallet_csv`) — unified wallet-history
+    CSV. Bitcoin, Liquid, Lightning, payjoin, and swap rows are normalized as
+    wallet activity without fiat execution pricing.
   - Coinfinity (`coinfinity_csv`) — order export CSV. BTC/EUR broker rows
     are normalized as exact exchange execution evidence, with fiat fees
     folded into the taxable buy/sell value.
@@ -53,6 +56,7 @@ a validation envelope rather than a bare `ValueError` / `KeyError`.
 """
 
 import csv
+import hashlib
 import json
 import os
 from datetime import datetime, timezone
@@ -104,6 +108,8 @@ def load_import_records(file_path, input_format):
         return load_river_csv_records(file_path)
     if input_format == "bullbitcoin_csv":
         return load_bullbitcoin_csv_records(file_path)
+    if input_format == "bullbitcoin_wallet_csv":
+        return load_bullbitcoin_wallet_csv_records(file_path)
     if input_format == "coinfinity_csv":
         return load_coinfinity_csv_records(file_path)
     if input_format == "21bitcoin_csv":
@@ -761,6 +767,21 @@ def _normalize_payment_hash(value):
     return text
 
 
+def _payment_hash_from_preimage(value):
+    """Derive a Lightning payment hash from a 32-byte hex preimage."""
+    text = str_or_none(value)
+    if not text:
+        return None
+    text = text.strip().lower()
+    if len(text) != 64:
+        return None
+    try:
+        preimage = bytes.fromhex(text)
+    except ValueError:
+        return None
+    return hashlib.sha256(preimage).hexdigest()
+
+
 def normalize_phoenix_record(record):
     """Turn a Phoenix CSV row into the common import-record shape.
 
@@ -1058,6 +1079,222 @@ def load_bullbitcoin_csv_records(file_path):
 
 def is_bullbitcoin_format(input_format):
     return input_format == "bullbitcoin_csv"
+
+
+# -- Bull Bitcoin wallet export ---------------------------------------------
+
+
+BULLBITCOIN_WALLET_CSV_FORMAT = "bullbitcoin_wallet_csv"
+
+_BULLBITCOIN_WALLET_REQUIRED_COLUMNS = (
+    "date",
+    "type",
+    "direction",
+    "amount_sats",
+    "amount_btc",
+    "fee_sats",
+    "status",
+    "txid",
+    "network",
+    "address",
+    "swap_id",
+    "preimage",
+    "total_swap_fees_sats",
+    "send_network",
+    "receive_network",
+    "send_txid",
+    "receive_txid",
+)
+
+_BULLBITCOIN_WALLET_SKIPPED_STATUSES = {"failed", "expired"}
+_BULLBITCOIN_WALLET_INBOUND_DIRECTIONS = {"incoming", "inbound", "received", "receive"}
+_BULLBITCOIN_WALLET_OUTBOUND_DIRECTIONS = {"outgoing", "outbound", "sent", "send"}
+
+
+def _bullbitcoin_wallet_sats(record, column, *, default=None):
+    value = _decimal_cell(_get_cell(record, column))
+    if value is None:
+        if default is not None:
+            return default
+        raise AppError(f"Bull Bitcoin wallet CSV has a row with empty {column}")
+    integral = value.to_integral_value()
+    if value != integral:
+        raise AppError(f"Bull Bitcoin wallet CSV has non-integer {column}: {value}")
+    return int(integral)
+
+
+def _bullbitcoin_wallet_btc_from_sats(sats):
+    return Decimal(sats) / Decimal("100000000")
+
+
+def _bullbitcoin_wallet_direction(value):
+    direction = str(value or "").strip().casefold()
+    if direction in _BULLBITCOIN_WALLET_INBOUND_DIRECTIONS:
+        return "inbound"
+    if direction in _BULLBITCOIN_WALLET_OUTBOUND_DIRECTIONS:
+        return "outbound"
+    if direction == "self":
+        return None
+    raise AppError(f"Unsupported Bull Bitcoin wallet direction '{value}'")
+
+
+def _bullbitcoin_wallet_network(record, bull_type, direction):
+    network = str_or_none(_get_cell(record, "network"))
+    if not network and bull_type == "chain_swap":
+        network = str_or_none(
+            _get_cell(
+                record,
+                "receive_network" if direction == "inbound" else "send_network",
+            )
+        )
+    if not network and bull_type == "liquid":
+        network = "liquid"
+    if not network and bull_type in {"onchain", "payjoin_send", "payjoin_receive"}:
+        network = "bitcoin"
+    if not network and bull_type in {"lightning_send", "lightning_receive"}:
+        network = "lightning"
+    normalized = str(network or "").strip().casefold()
+    if normalized in {"bitcoin", "btc", "onchain"}:
+        return "bitcoin"
+    if normalized in {"liquid", "lbtc", "liquidv1"}:
+        return "liquid"
+    if normalized in {"lightning", "ln"}:
+        return "lightning"
+    raise AppError(f"Unsupported Bull Bitcoin wallet network '{network}'")
+
+
+def _bullbitcoin_wallet_asset(network, bull_type):
+    if network == "liquid" or bull_type == "liquid":
+        return "LBTC"
+    return "BTC"
+
+
+def _bullbitcoin_wallet_external_id(sanitized, index):
+    txid = str_or_none(_get_cell(sanitized, "txid"))
+    if txid:
+        return txid
+    for column in ("receive_txid", "send_txid", "swap_id"):
+        value = str_or_none(_get_cell(sanitized, column))
+        if value:
+            return value
+    return (
+        "bullbitcoin-wallet:"
+        f"{_get_cell(sanitized, 'date') or index}:"
+        f"{_get_cell(sanitized, 'type') or 'transaction'}:"
+        f"{_get_cell(sanitized, 'direction') or ''}:"
+        f"{_get_cell(sanitized, 'amount_sats') or ''}"
+    )
+
+
+def _bullbitcoin_wallet_payment_hash(bull_type, external_id, preimage):
+    if bull_type not in {"lightning_send", "lightning_receive"}:
+        return None
+    return _payment_hash_from_preimage(preimage) or _normalize_payment_hash(external_id)
+
+
+def normalize_bullbitcoin_wallet_record(record, index=0):
+    """Turn one Bull Bitcoin unified wallet-history row into the common shape."""
+    sanitized = {str(key).strip(): value for key, value in record.items() if key is not None}
+    bull_type = str(_get_cell(sanitized, "type") or "").strip().casefold()
+    status = str(_get_cell(sanitized, "status") or "").strip().casefold()
+    if status in _BULLBITCOIN_WALLET_SKIPPED_STATUSES:
+        return None
+    direction = _bullbitcoin_wallet_direction(_get_cell(sanitized, "direction"))
+    if direction is None:
+        return None
+    amount_sats = abs(_bullbitcoin_wallet_sats(sanitized, "amount_sats"))
+    fee_sats = abs(_bullbitcoin_wallet_sats(sanitized, "fee_sats", default=0))
+    network = _bullbitcoin_wallet_network(sanitized, bull_type, direction)
+    asset = _bullbitcoin_wallet_asset(network, bull_type)
+    external_id = _bullbitcoin_wallet_external_id(sanitized, index)
+    payment_hash = _bullbitcoin_wallet_payment_hash(
+        bull_type,
+        external_id,
+        _get_cell(sanitized, "preimage"),
+    )
+    raw_payload = dict(sanitized)
+    preimage_redacted = False
+    for key in list(raw_payload.keys()):
+        if _normalized_column_key(key) == "preimage" and str_or_none(raw_payload.get(key)):
+            raw_payload[key] = "[redacted]"
+            preimage_redacted = True
+    if preimage_redacted:
+        raw_payload["preimage_redacted"] = True
+    raw_payload["source"] = BULLBITCOIN_WALLET_CSV_FORMAT
+    raw_payload["normalized_network"] = network
+
+    record_out = {
+        "txid": external_id,
+        "occurred_at": _get_cell(sanitized, "date"),
+        "confirmed_at": _get_cell(sanitized, "date")
+        if status in {"confirmed", "completed"}
+        else None,
+        "direction": direction,
+        "asset": asset,
+        "amount": _bullbitcoin_wallet_btc_from_sats(amount_sats),
+        "fee": _bullbitcoin_wallet_btc_from_sats(fee_sats),
+        "fiat_rate": None,
+        "fiat_value": None,
+        "kind": bull_type or "transaction",
+        "description": f"Bull Bitcoin wallet {bull_type or 'transaction'}",
+        "counterparty": None,
+        "payment_hash": payment_hash,
+        "payment_hash_source": "importer" if payment_hash else None,
+        "_bullbitcoin_wallet_network": network,
+        # Bull reports a per-transaction fee on receive/swap rows, but a wallet
+        # that synced the same on-chain transaction from a descriptor backend
+        # stores a receive fee of 0 (the recipient pays none). Let enrichment
+        # match those rows by txid/amount even when the fee differs; merges only
+        # attach metadata and never overwrite the stored fee.
+        "_match_existing_ignore_fee": True,
+        "raw_json": json.dumps(json_ready(raw_payload), sort_keys=True),
+    }
+    if bull_type in {"payjoin_send", "payjoin_receive"}:
+        record_out["privacy_boundary"] = "payjoin"
+    return record_out
+
+
+def load_bullbitcoin_wallet_csv_records(file_path):
+    """Load Bull Bitcoin unified wallet-history CSV rows."""
+    with open(file_path, "r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        return []
+    header = {_normalized_column_key(column) for column in rows[0].keys()}
+    missing = [
+        column
+        for column in _BULLBITCOIN_WALLET_REQUIRED_COLUMNS
+        if _normalized_column_key(column) not in header
+    ]
+    if missing:
+        raise AppError(
+            "Bull Bitcoin wallet CSV is missing required columns: "
+            + ", ".join(missing)
+        )
+    normalized = []
+    for index, row in enumerate(rows, start=1):
+        record = normalize_bullbitcoin_wallet_record(row, index=index)
+        if record is not None:
+            normalized.append(record)
+    return normalized
+
+
+def is_bullbitcoin_wallet_format(input_format):
+    return input_format == BULLBITCOIN_WALLET_CSV_FORMAT
+
+
+def bullbitcoin_wallet_record_network(record):
+    network = str_or_none(record.get("_bullbitcoin_wallet_network"))
+    if network:
+        return network
+    raw_json = record.get("raw_json")
+    if not raw_json:
+        return None
+    try:
+        raw_payload = json.loads(raw_json)
+    except (TypeError, ValueError):
+        return None
+    return str_or_none(raw_payload.get("normalized_network"))
 
 
 # -- Coinfinity --------------------------------------------------------------

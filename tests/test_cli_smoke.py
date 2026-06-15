@@ -60,6 +60,16 @@ _BULLBITCOIN_LN_ORDERS_CSV = """ORDER_NUMBER,ORDER_TYPE,ORDER_SUBTYPE,MESSAGE,OR
 1004,Fiat Payment,Market Order,,order-ln-1,600.00,USD,0.01000000,BTC,60000.00,USD,SEPA Transfer (USD),Bitcoin Lightning,Completed,Completed,Completed,2026-04-18 09:40:00.000Z,2026-04-18 09:50:00.000Z,2026-04-18 09:51:00.000Z,60000.00,USD,bull-ln-buy-tx,lnbc1example
 """
 
+_BULLBITCOIN_WALLET_CSV = """date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid
+2026-01-15T10:30:00Z,onchain,incoming,500000,0.00500000,0,confirmed,bull-wallet-btc-in,bitcoin,bc1qsalary,,,,,,,
+2026-02-01T08:00:00Z,liquid,outgoing,200000,0.00200000,350,confirmed,bull-wallet-lbtc-out,liquid,lq1merchant,,,,,,,
+2026-03-10T14:22:00Z,lightning_send,outgoing,50000,0.00050000,150,completed,cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc,lightning,,swap-ln,1111111111111111111111111111111111111111111111111111111111111111,125,,,,
+2026-04-05T09:15:00Z,chain_swap,outgoing,1000000,0.01000000,500,completed,bull-chain-send,bitcoin,VJLCbLBTCksDqx1,swap-chain,,750,bitcoin,liquid,bull-chain-send,bull-chain-recv
+2026-04-05T09:20:00Z,chain_swap,incoming,990000,0.00990000,200,completed,bull-chain-recv,liquid,VJLCbLBTCksDqx1,swap-chain,,750,bitcoin,liquid,bull-chain-send,bull-chain-recv
+2026-04-06T09:20:00Z,onchain,self,10000,0.00010000,120,confirmed,bull-self,bitcoin,bc1qself,,,,,,,
+2026-04-07T09:20:00Z,onchain,outgoing,10000,0.00010000,120,failed,bull-failed,bitcoin,bc1qfailed,,,,,,,
+"""
+
 _COINFINITY_EXISTING_CSV = """date,txid,direction,asset,amount,fee,fiat_value,fiat_rate,kind,description,counterparty
 2026-05-11T13:19:36Z,coinfinity-buy-tx,inbound,BTC,0.00147403,0,100.00,68872.40,deposit,Synced from self custody wallet,Synced from node
 """
@@ -150,6 +160,96 @@ _HOT_TRANSFER_VALUE_ONLY_CSV = """date,txid,direction,asset,amount,fee,fiat_valu
 _FEE_ONLY_CONSOLIDATION_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
 2026-01-01T10:00:00Z,fee-only-funding-1,inbound,BTC,1.00000000,0,60000,Funding
 2026-02-01T12:00:00Z,fee-only-consolidation-1,outbound,BTC,0,0.001,65000,Wallet consolidation fee
+"""
+
+# Split-peg scenario: one outbound (0.04702253) fans out to an owned wallet
+# (0.02750000, the returned change) AND a Liquid peg (~0.0195, a non-owned
+# federation address that produces no owned inbound). Auto-pairing sees only the
+# 1-out/1-in BTC shape and would otherwise absorb the ~0.0195 peg as a transfer
+# "fee" and tax it as a disposal. The implausible-fee guard must quarantine it.
+_SPLIT_PEG_COLD_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-01-01T10:00:00Z,splitpeg-funding-1,inbound,BTC,0.10000000,0,60000,Cold acquisition
+2026-05-31T15:06:39Z,splitpeg-1,outbound,BTC,0.04702253,0,63255,Spend split between hot wallet and Liquid peg
+"""
+_SPLIT_PEG_HOT_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-05-31T15:06:39Z,splitpeg-1,inbound,BTC,0.02750000,0,63255,Returned change portion
+"""
+
+# Per-account over-sell: "Onchain" sells BTC on 2026-01-15, but its funding
+# transfer from "Source" only arrives 2026-02-01. The coins exist globally (in
+# Source), so the old global gate passed the sell and rp2's per-account
+# BalanceSet then crashed the whole report; the per-account gate must instead
+# quarantine just the sell and compute the rest.
+_OVERSELL_SOURCE_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-01-01T10:00:00Z,oversell-fund,inbound,BTC,1.00000000,0,60000,Source funding
+2026-02-01T12:00:00Z,oversell-move,outbound,BTC,0.50000000,0,65000,Move to Onchain
+"""
+_OVERSELL_ONCHAIN_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-01-15T09:00:00Z,oversell-sell,outbound,BTC,0.30000000,0,62000,Sell before funded
+2026-02-01T12:00:00Z,oversell-move,inbound,BTC,0.50000000,0,65000,Receive from Source
+"""
+
+# Same-timestamp buy + sell in one wallet: the buy must fund the sell regardless
+# of import/uuid order (IN sorts before OUT at an equal timestamp).
+_SAMETS_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-04-01T12:00:00Z,samets-buy,inbound,BTC,0.50000000,0,70000,Same-second buy
+2026-04-01T12:00:00Z,samets-sell,outbound,BTC,0.50000000,0,71000,Same-second sell
+"""
+
+# A gift disposal (kind=gift) must be quarantined, not taxed as a market SELL.
+_GIFT_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description,kind
+2026-01-01T10:00:00Z,gift-fund,inbound,BTC,0.20000000,0,60000,Funding,buy
+2026-03-01T10:00:00Z,gift-out,outbound,BTC,0.05000000,0,72000,Gift to a friend,gift
+"""
+
+# An income-looking inbound kind that isn't a recognized earn type (kind=reward)
+# must be quarantined for classification, not silently booked as a plain buy.
+_REWARD_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description,kind
+2026-01-01T10:00:00Z,reward-fund,inbound,BTC,0.10000000,0,60000,Funding,buy
+2026-02-01T10:00:00Z,reward-in,inbound,BTC,0.01000000,0,65000,Referral reward,reward
+"""
+
+# Split swap: one 0.05 BTC spend returns 0.03 to an owned wallet (self-transfer)
+# and pegs 0.02 to Liquid. Pairing the BTC out with the L-BTC in and declaring
+# --out-amount 0.02 must split it into a clean self-transfer MOVE + a
+# carrying-value peg, not a single transfer with a 0.02 "fee".
+_SPLIT_SWAP_SPEND_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2025-06-01T10:00:00Z,splitswap-fund,inbound,BTC,0.10000000,0,30000,Funding
+2025-09-01T12:00:00Z,splitswap-out,outbound,BTC,0.05000000,0,60000,Spend: change back + peg to Liquid
+"""
+_SPLIT_SWAP_KEEP_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2025-09-01T12:00:00Z,splitswap-out,inbound,BTC,0.03000000,0,60000,Change returned on-chain
+"""
+_SPLIT_SWAP_LBTC_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2025-09-01T12:30:00Z,splitswap-peg,inbound,LBTC,0.01980000,0,60000,Pegged-in L-BTC
+"""
+
+# Basis provenance: an early acquisition is dropped for coarse pricing. A later
+# sell is funded per-account (0.7 held) but FIFO-consumes past the 0.2 priced
+# before the drop, so it would re-base onto the wrong lot and must be
+# quarantined (basis_provenance_incomplete) rather than silently mis-based.
+_BASIS_PROVENANCE_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description,pricing_quality
+2025-12-01T10:00:00Z,h2-acq0,inbound,BTC,0.20000000,0,55000,Priced acquisition,
+2026-01-01T10:00:00Z,h2-acq1,inbound,BTC,0.50000000,0,60000,Coarse acquisition,coarse_fallback
+2026-02-01T10:00:00Z,h2-acq2,inbound,BTC,0.50000000,0,70000,Priced acquisition,
+2026-03-01T10:00:00Z,h2-sell,outbound,BTC,0.50000000,0,72000,Sell,
+"""
+
+# Unclassified income before a priced acquisition+sale: the dropped income lot
+# is missing from the FIFO, so the later sale must be flagged
+# basis_provenance_incomplete (not silently re-based onto the wrong lot).
+_INCOME_PROVENANCE_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description,kind
+2026-01-01T10:00:00Z,inc-reward,inbound,BTC,0.01000000,0,60000,Referral reward,reward
+2026-02-01T10:00:00Z,inc-fund,inbound,BTC,0.50000000,0,65000,Funding,buy
+2026-03-01T10:00:00Z,inc-sell,outbound,BTC,0.30000000,0,70000,Sell,sell
+"""
+
+# A quarantined gift is still a real outflow: it must debit availability so a
+# later sale of the (now-gone) coins is gated insufficient, not booked.
+_GIFT_DEBIT_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description,kind
+2026-01-01T10:00:00Z,gd-fund,inbound,BTC,0.10000000,0,60000,Funding,buy
+2026-02-01T10:00:00Z,gd-gift,outbound,BTC,0.08000000,0,72000,Gift to a friend,gift
+2026-03-01T10:00:00Z,gd-sell,outbound,BTC,0.05000000,0,73000,Sell the rest,sell
 """
 
 # Manual same-asset pair scenario: two BTC legs whose external_ids deliberately
@@ -278,6 +378,32 @@ class CliSmokeTest(unittest.TestCase):
         cls.hot_transfer_value_only_csv.write_text(_HOT_TRANSFER_VALUE_ONLY_CSV, encoding="utf-8")
         cls.fee_only_consolidation_csv = Path(cls._tmp.name) / "fee-only-consolidation.csv"
         cls.fee_only_consolidation_csv.write_text(_FEE_ONLY_CONSOLIDATION_CSV, encoding="utf-8")
+        cls.split_peg_cold_csv = Path(cls._tmp.name) / "split-peg-cold.csv"
+        cls.split_peg_cold_csv.write_text(_SPLIT_PEG_COLD_CSV, encoding="utf-8")
+        cls.split_peg_hot_csv = Path(cls._tmp.name) / "split-peg-hot.csv"
+        cls.split_peg_hot_csv.write_text(_SPLIT_PEG_HOT_CSV, encoding="utf-8")
+        cls.oversell_source_csv = Path(cls._tmp.name) / "oversell-source.csv"
+        cls.oversell_source_csv.write_text(_OVERSELL_SOURCE_CSV, encoding="utf-8")
+        cls.oversell_onchain_csv = Path(cls._tmp.name) / "oversell-onchain.csv"
+        cls.oversell_onchain_csv.write_text(_OVERSELL_ONCHAIN_CSV, encoding="utf-8")
+        cls.samets_csv = Path(cls._tmp.name) / "samets.csv"
+        cls.samets_csv.write_text(_SAMETS_CSV, encoding="utf-8")
+        cls.gift_csv = Path(cls._tmp.name) / "gift.csv"
+        cls.gift_csv.write_text(_GIFT_CSV, encoding="utf-8")
+        cls.reward_csv = Path(cls._tmp.name) / "reward.csv"
+        cls.reward_csv.write_text(_REWARD_CSV, encoding="utf-8")
+        cls.income_provenance_csv = Path(cls._tmp.name) / "income-provenance.csv"
+        cls.income_provenance_csv.write_text(_INCOME_PROVENANCE_CSV, encoding="utf-8")
+        cls.gift_debit_csv = Path(cls._tmp.name) / "gift-debit.csv"
+        cls.gift_debit_csv.write_text(_GIFT_DEBIT_CSV, encoding="utf-8")
+        cls.basis_provenance_csv = Path(cls._tmp.name) / "basis-provenance.csv"
+        cls.basis_provenance_csv.write_text(_BASIS_PROVENANCE_CSV, encoding="utf-8")
+        cls.split_swap_spend_csv = Path(cls._tmp.name) / "split-swap-spend.csv"
+        cls.split_swap_spend_csv.write_text(_SPLIT_SWAP_SPEND_CSV, encoding="utf-8")
+        cls.split_swap_keep_csv = Path(cls._tmp.name) / "split-swap-keep.csv"
+        cls.split_swap_keep_csv.write_text(_SPLIT_SWAP_KEEP_CSV, encoding="utf-8")
+        cls.split_swap_lbtc_csv = Path(cls._tmp.name) / "split-swap-lbtc.csv"
+        cls.split_swap_lbtc_csv.write_text(_SPLIT_SWAP_LBTC_CSV, encoding="utf-8")
         cls.manual_from_csv = Path(cls._tmp.name) / "manual-from.csv"
         cls.manual_from_csv.write_text(_MANUAL_FROM_CSV, encoding="utf-8")
         cls.manual_to_csv = Path(cls._tmp.name) / "manual-to.csv"
@@ -1773,6 +1899,206 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(detail_rows[0]["quantity_msat"], 100000000)
         self.assertAlmostEqual(float(detail_rows[0]["gain_loss"]), 5.0, places=4)
 
+    def test_13d_split_peg_implausible_fee_is_quarantined_not_taxed(self):
+        # A spend that fans out to an owned wallet + a Liquid peg must NOT be
+        # booked as a self-transfer whose ~0.0195 BTC peg residual is taxed as a
+        # network fee. The implausible-fee guard quarantines it for review while
+        # the rest of the report (the funding acquisition) still computes.
+        payload = self._cli(
+            "profiles", "create",
+            "--workspace", "Main",
+            "--fiat-currency", "USD",
+            "--tax-country", "generic",
+            "SplitPeg",
+        )
+        self._assert_kind(payload, "profiles.create")
+        for label in ("Cold", "Hot"):
+            payload = self._cli(
+                "wallets", "create",
+                "--workspace", "Main",
+                "--profile", "SplitPeg",
+                "--label", label,
+                "--kind", "custom",
+            )
+            self._assert_kind(payload, "wallets.create")
+        payload = self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Main", "--profile", "SplitPeg",
+            "--wallet", "Cold", "--file", str(self.split_peg_cold_csv),
+        )
+        self.assertEqual(payload["data"]["imported"], 2)
+        payload = self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Main", "--profile", "SplitPeg",
+            "--wallet", "Hot", "--file", str(self.split_peg_hot_csv),
+        )
+        self.assertEqual(payload["data"]["imported"], 1)
+
+        payload = self._cli(
+            "journals", "process",
+            "--workspace", "Main", "--profile", "SplitPeg",
+        )
+        self._assert_kind(payload, "journals.process")
+        data = payload["data"]
+        # The bad pair is quarantined, not booked as a transfer; only the
+        # funding acquisition survives as an entry.
+        self.assertEqual(data["transfers_detected"], 0)
+        self.assertGreaterEqual(data["quarantined"], 1)
+        self.assertEqual(data["entries_created"], 1)
+
+        # No fee/transfer disposal was created for the pegged residual.
+        payload = self._cli(
+            "reports", "journal-entries",
+            "--workspace", "Main", "--profile", "SplitPeg",
+        )
+        entry_types = {e["entry_type"] for e in payload["data"]}
+        self.assertEqual(entry_types, {"acquisition"})
+
+        # The quarantine names the implausible-fee reason and the right legs.
+        payload = self._cli(
+            "journals", "quarantined",
+            "--workspace", "Main", "--profile", "SplitPeg",
+        )
+        reasons = [q["reason"] for q in payload["data"]]
+        self.assertIn("transfer_fee_implausible", reasons)
+        flagged = next(
+            q for q in payload["data"] if q["reason"] == "transfer_fee_implausible"
+        )
+        self.assertAlmostEqual(flagged["detail"]["implied_fee"], 0.01952253, places=8)
+        self.assertGreater(
+            flagged["detail"]["implied_fee"], flagged["detail"]["fee_ceiling"]
+        )
+
+    def test_13e_per_account_oversell_quarantined_not_crashed(self):
+        # An account that sells before its funding transfer arrives is quarantined
+        # per-account (insufficient_lots), NOT a whole-report crash the way the old
+        # global-pool gate caused once rp2's per-account BalanceSet rejected it.
+        self._cli("profiles", "create", "--workspace", "Main",
+                  "--fiat-currency", "USD", "--tax-country", "generic", "Oversell")
+        for label in ("Source", "Onchain"):
+            self._cli("wallets", "create", "--workspace", "Main",
+                      "--profile", "Oversell", "--label", label, "--kind", "custom")
+        self._cli("wallets", "import-csv", "--workspace", "Main", "--profile", "Oversell",
+                  "--wallet", "Source", "--file", str(self.oversell_source_csv))
+        self._cli("wallets", "import-csv", "--workspace", "Main", "--profile", "Oversell",
+                  "--wallet", "Onchain", "--file", str(self.oversell_onchain_csv))
+        payload = self._cli("journals", "process", "--workspace", "Main", "--profile", "Oversell")
+        # Success envelope, not an app_error — the report computes.
+        self._assert_kind(payload, "journals.process")
+        self.assertEqual(payload["data"]["transfers_detected"], 1)
+        self.assertGreaterEqual(payload["data"]["quarantined"], 1)
+        payload = self._cli("journals", "quarantined", "--workspace", "Main", "--profile", "Oversell")
+        flagged = [q for q in payload["data"] if q["reason"] == "insufficient_lots"]
+        self.assertEqual(len(flagged), 1)
+        self.assertEqual(flagged[0]["wallet"], "Onchain")
+
+    def test_13f_same_timestamp_buy_funds_sell(self):
+        # A buy and sell at the same timestamp in one wallet: the buy must fund
+        # the sell (IN ordered before OUT at equal timestamp), so neither drops.
+        self._cli("profiles", "create", "--workspace", "Main",
+                  "--fiat-currency", "USD", "--tax-country", "generic", "SameTs")
+        self._cli("wallets", "create", "--workspace", "Main",
+                  "--profile", "SameTs", "--label", "W", "--kind", "custom")
+        self._cli("wallets", "import-csv", "--workspace", "Main", "--profile", "SameTs",
+                  "--wallet", "W", "--file", str(self.samets_csv))
+        payload = self._cli("journals", "process", "--workspace", "Main", "--profile", "SameTs")
+        self._assert_kind(payload, "journals.process")
+        self.assertEqual(payload["data"]["quarantined"], 0)
+        payload = self._cli("reports", "capital-gains", "--workspace", "Main", "--profile", "SameTs")
+        rows = payload["data"]
+        self.assertEqual(len(rows), 1)
+        self.assertAlmostEqual(float(rows[0]["gain_loss"]), 500.0, places=2)
+
+    def test_13g_gift_disposal_quarantined_not_taxed(self):
+        # kind=gift is a disposition but not a market sale; it must be quarantined
+        # rather than booked as a full-market-value SELL.
+        self._cli("profiles", "create", "--workspace", "Main",
+                  "--fiat-currency", "USD", "--tax-country", "generic", "Gift")
+        self._cli("wallets", "create", "--workspace", "Main",
+                  "--profile", "Gift", "--label", "W", "--kind", "custom")
+        self._cli("wallets", "import-csv", "--workspace", "Main", "--profile", "Gift",
+                  "--wallet", "W", "--file", str(self.gift_csv))
+        payload = self._cli("journals", "process", "--workspace", "Main", "--profile", "Gift")
+        self._assert_kind(payload, "journals.process")
+        self.assertGreaterEqual(payload["data"]["quarantined"], 1)
+        payload = self._cli("reports", "capital-gains", "--workspace", "Main", "--profile", "Gift")
+        self.assertEqual(payload["data"], [])
+        payload = self._cli("journals", "quarantined", "--workspace", "Main", "--profile", "Gift")
+        self.assertIn("non_sale_disposal_kind", [q["reason"] for q in payload["data"]])
+
+    def test_13h_unclassified_income_kind_quarantined(self):
+        # kind=reward looks like income but isn't a recognized earn type; it must
+        # be quarantined for classification, not silently booked as a plain buy.
+        self._cli("profiles", "create", "--workspace", "Main",
+                  "--fiat-currency", "USD", "--tax-country", "generic", "Reward")
+        self._cli("wallets", "create", "--workspace", "Main",
+                  "--profile", "Reward", "--label", "W", "--kind", "custom")
+        self._cli("wallets", "import-csv", "--workspace", "Main", "--profile", "Reward",
+                  "--wallet", "W", "--file", str(self.reward_csv))
+        payload = self._cli("journals", "process", "--workspace", "Main", "--profile", "Reward")
+        self._assert_kind(payload, "journals.process")
+        self.assertGreaterEqual(payload["data"]["quarantined"], 1)
+        payload = self._cli("journals", "quarantined", "--workspace", "Main", "--profile", "Reward")
+        self.assertIn("unclassified_income_kind", [q["reason"] for q in payload["data"]])
+
+    def test_13i_dropped_acquisition_starves_later_disposal_basis(self):
+        # An early acquisition dropped for coarse pricing contaminates the FIFO:
+        # a later sell that is funded per-account but consumes past the priced
+        # pre-drop supply must be quarantined, not silently re-based onto a wrong
+        # (later) lot.
+        self._cli("profiles", "create", "--workspace", "Main",
+                  "--fiat-currency", "USD", "--tax-country", "generic", "Basis")
+        self._cli("wallets", "create", "--workspace", "Main",
+                  "--profile", "Basis", "--label", "W", "--kind", "custom")
+        self._cli("wallets", "import-csv", "--workspace", "Main", "--profile", "Basis",
+                  "--wallet", "W", "--file", str(self.basis_provenance_csv))
+        payload = self._cli("journals", "process", "--workspace", "Main", "--profile", "Basis")
+        self._assert_kind(payload, "journals.process")
+        payload = self._cli("journals", "quarantined", "--workspace", "Main", "--profile", "Basis")
+        reasons = [q["reason"] for q in payload["data"]]
+        self.assertIn("pricing_review_required", reasons)  # the coarse acquisition
+        self.assertIn("basis_provenance_incomplete", reasons)  # the starved sell
+        # The sell did NOT produce a (mis-based) realized gain.
+        payload = self._cli("reports", "capital-gains", "--workspace", "Main", "--profile", "Basis")
+        self.assertEqual(payload["data"], [])
+
+    def test_13j_unclassified_income_marks_basis_provenance(self):
+        # An unclassified income lot dropped before a later sale leaves the FIFO
+        # incomplete, so the sale is flagged basis_provenance_incomplete too.
+        self._cli("profiles", "create", "--workspace", "Main",
+                  "--fiat-currency", "USD", "--tax-country", "generic", "IncomeProv")
+        self._cli("wallets", "create", "--workspace", "Main",
+                  "--profile", "IncomeProv", "--label", "W", "--kind", "custom")
+        self._cli("wallets", "import-csv", "--workspace", "Main", "--profile", "IncomeProv",
+                  "--wallet", "W", "--file", str(self.income_provenance_csv))
+        payload = self._cli("journals", "process", "--workspace", "Main", "--profile", "IncomeProv")
+        self._assert_kind(payload, "journals.process")
+        payload = self._cli("journals", "quarantined", "--workspace", "Main", "--profile", "IncomeProv")
+        reasons = [q["reason"] for q in payload["data"]]
+        self.assertIn("unclassified_income_kind", reasons)
+        self.assertIn("basis_provenance_incomplete", reasons)
+
+    def test_13k_quarantined_gift_contaminates_later_disposal(self):
+        # A quarantined gift isn't booked into RP2's lots, so a later sale would
+        # draw from a lot that should have been consumed. The gift's timestamp
+        # contaminates provenance, so the sale is quarantined too (rather than
+        # booked against a wrong basis) until the gift is resolved.
+        self._cli("profiles", "create", "--workspace", "Main",
+                  "--fiat-currency", "USD", "--tax-country", "generic", "GiftDebit")
+        self._cli("wallets", "create", "--workspace", "Main",
+                  "--profile", "GiftDebit", "--label", "W", "--kind", "custom")
+        self._cli("wallets", "import-csv", "--workspace", "Main", "--profile", "GiftDebit",
+                  "--wallet", "W", "--file", str(self.gift_debit_csv))
+        payload = self._cli("journals", "process", "--workspace", "Main", "--profile", "GiftDebit")
+        self._assert_kind(payload, "journals.process")
+        payload = self._cli("journals", "quarantined", "--workspace", "Main", "--profile", "GiftDebit")
+        reasons = [q["reason"] for q in payload["data"]]
+        self.assertIn("non_sale_disposal_kind", reasons)  # the gift
+        self.assertIn("basis_provenance_incomplete", reasons)  # the later sale
+        # No realized gain booked: the gift is deferred and the sale is gated.
+        payload = self._cli("reports", "capital-gains", "--workspace", "Main", "--profile", "GiftDebit")
+        self.assertEqual(payload["data"], [])
+
     def test_13b_pair_by_shared_external_id(self):
         payload = self._cli(
             "profiles", "create",
@@ -1923,6 +2249,20 @@ class CliSmokeTest(unittest.TestCase):
         # 1 acquisition + transfer_fee + transfer_out + transfer_in = 4 entries.
         self.assertEqual(data["entries_created"], 4)
 
+        # Excluding a leg of the active pair is refused — it would orphan the
+        # other leg into a phantom journal entry. The user must unpair first.
+        payload, code = _run(
+            self.data_root,
+            "metadata", "records", "excluded", "set",
+            "--workspace", "Main",
+            "--profile", "ManualPair",
+            "--transaction", "manual-out-leg",
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "conflict")
+        self.assertIn(pair_id, payload["error"]["message"])
+
         # Unpairing reverts behavior to a straight disposal on next process.
         payload = self._cli(
             "transfers", "unpair",
@@ -1944,6 +2284,15 @@ class CliSmokeTest(unittest.TestCase):
         )
         self._assert_kind(payload, "reports.summary")
         self.assertEqual(payload["data"]["transfer_pairs"], [])
+
+        # Once unpaired, the leg can be excluded normally.
+        payload = self._cli(
+            "metadata", "records", "excluded", "set",
+            "--workspace", "Main",
+            "--profile", "ManualPair",
+            "--transaction", "manual-out-leg",
+        )
+        self.assertEqual(payload["data"]["excluded"], True)
 
     def test_15_cross_asset_pair_policies(self):
         payload = self._cli(
@@ -2138,6 +2487,65 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(pairs[0]["policy"], "carrying-value")
         self.assertEqual(pairs[0]["out_transaction_id"], "cross-out-leg")
         self.assertEqual(pairs[0]["in_transaction_id"], "cross-in-leg")
+
+    def test_17_split_swap_self_transfer_plus_carrying_value_peg(self):
+        workspace = "SplitSwapAT"
+        self._cli("init")
+        self._cli("workspaces", "create", workspace)
+        self._cli("profiles", "create", "--workspace", workspace,
+                  "--fiat-currency", "EUR", "--tax-country", "at", "SplitSwap")
+        for label in ("Spend", "Keep", "Liq"):
+            self._cli("wallets", "create", "--workspace", workspace,
+                      "--profile", "SplitSwap", "--label", label, "--kind", "custom")
+        self._cli("wallets", "import-csv", "--workspace", workspace, "--profile", "SplitSwap",
+                  "--wallet", "Spend", "--file", str(self.split_swap_spend_csv))
+        self._cli("wallets", "import-csv", "--workspace", workspace, "--profile", "SplitSwap",
+                  "--wallet", "Keep", "--file", str(self.split_swap_keep_csv))
+        self._cli("wallets", "import-csv", "--workspace", workspace, "--profile", "SplitSwap",
+                  "--wallet", "Liq", "--file", str(self.split_swap_lbtc_csv))
+
+        # Unresolved, the 0.05-out / 0.03-in auto-pair has an implausible 0.02
+        # "fee" and is quarantined.
+        payload = self._cli("journals", "process", "--workspace", workspace, "--profile", "SplitSwap")
+        self.assertGreaterEqual(payload["data"]["quarantined"], 1)
+        payload = self._cli("journals", "quarantined", "--workspace", workspace, "--profile", "SplitSwap")
+        self.assertIn("transfer_fee_implausible", [q["reason"] for q in payload["data"]])
+
+        # Resolve by pairing the BTC spend with the L-BTC peg and declaring the
+        # 0.02 BTC that was swapped; the 0.03 remainder is the self-transfer.
+        payload = self._cli("transfers", "pair", "--workspace", workspace, "--profile", "SplitSwap",
+                            "--tx-out", "splitswap-out", "--tx-in", "splitswap-peg",
+                            "--kind", "peg-in", "--policy", "carrying-value", "--out-amount", "0.02")
+        self._assert_kind(payload, "transfers.pair")
+        self.assertEqual(payload["data"]["out_amount"], 2000000000)
+        # Swap fee is the swapped portion (0.02 BTC) minus the L-BTC received
+        # (0.0198) = 0.0002 BTC, NOT the full 0.05 outbound minus 0.0198.
+        self.assertEqual(payload["data"]["swap_fee_msat"], 20000000)
+
+        # The pair listing must show the SWAPPED portion (consistent with the
+        # 0.0002 swap fee), not the full 0.05 outbound, while still exposing the
+        # underlying transaction total under full_amount.
+        payload = self._cli("transfers", "list", "--workspace", workspace, "--profile", "SplitSwap")
+        pair = payload["data"][0]
+        self.assertEqual(pair["out"]["amount_msat"], 2000000000)
+        self.assertEqual(pair["out"]["full_amount_msat"], 5000000000)
+
+        payload = self._cli("journals", "process", "--workspace", workspace, "--profile", "SplitSwap")
+        data = payload["data"]
+        # Split resolves into a clean self-transfer MOVE + a carrying-value peg;
+        # no implausible-fee quarantine remains.
+        self.assertEqual(data["quarantined"], 0)
+        self.assertEqual(data["transfers_detected"], 1)
+        self.assertEqual(data["cross_asset_pairs"], 1)
+
+        # The audit references the REAL BTC out tx (the synthetic split leg is
+        # engine-only) and shows both the self-transfer and the peg.
+        payload = self._cli("journals", "transfers", "list", "--workspace", workspace, "--profile", "SplitSwap")
+        audit = payload["data"]
+        self.assertEqual(audit["summary"]["same_asset_transfers"], 1)
+        self.assertEqual(audit["summary"]["cross_asset_pairs"], 1)
+        self.assertEqual(audit["cross_asset_pairs"][0]["out_wallet"], "Spend")
+        self.assertEqual(audit["cross_asset_pairs"][0]["in_wallet"], "Liq")
 
 
 class AccountBucketBehaviorTest(unittest.TestCase):
@@ -2346,6 +2754,224 @@ class AccountBucketBehaviorTest(unittest.TestCase):
         self.assertEqual(interest["kind"], "interest")
         self.assertEqual(interest["pricing_source_kind"], "fmv_provider")
         self.assertEqual(interest["pricing_quality"], "provider_sample")
+
+    def test_z_bullbitcoin_wallet_csv_connection_import(self):
+        bull_wallet_csv = Path(self._tmp.name) / "bull-wallet-transactions.csv"
+        bull_wallet_csv.write_text(_BULLBITCOIN_WALLET_CSV, encoding="utf-8")
+
+        for label, network in (
+            ("Bull Wallet - Bitcoin", "bitcoin"),
+            ("Bull Wallet - Liquid", "liquid"),
+            ("Bull Wallet - Lightning", "lightning"),
+        ):
+            payload = self._cli(
+                "wallets", "create",
+                "--workspace", "Buckets",
+                "--profile", "Default",
+                "--label", label,
+                "--kind", "bullbitcoin",
+                "--source-file", str(bull_wallet_csv),
+                "--source-format", "bullbitcoin_wallet_csv",
+                "--config", json.dumps({"bullbitcoin_wallet_network": network}),
+            )
+            self.assertEqual(payload["kind"], "wallets.create")
+            self.assertEqual(payload["data"]["source_format"], "bullbitcoin_wallet_csv")
+
+        sync_expectations = {
+            "Bull Wallet - Bitcoin": ("bitcoin", 2),
+            "Bull Wallet - Liquid": ("liquid", 2),
+            "Bull Wallet - Lightning": ("lightning", 1),
+        }
+        for label, (network, rows) in sync_expectations.items():
+            payload = self._cli(
+                "wallets", "sync",
+                "--workspace", "Buckets",
+                "--profile", "Default",
+                "--wallet", label,
+            )
+            self.assertEqual(payload["kind"], "wallets.sync")
+            sync = payload["data"][0]
+            self.assertEqual(sync["status"], "synced")
+            self.assertEqual(sync["input_format"], "bullbitcoin_wallet_csv")
+            self.assertEqual(sync["bullbitcoin_wallet_network"], network)
+            self.assertEqual(sync["bullbitcoin_wallet_rows"], rows)
+            self.assertEqual(sync["bullbitcoin_wallet_rows_total"], 5)
+            self.assertEqual(sync["imported"], rows)
+            self.assertEqual(sync["skipped"], 0)
+
+        bitcoin_records = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "Bull Wallet - Bitcoin",
+            "--order", "asc",
+        )["data"]
+        liquid_records = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "Bull Wallet - Liquid",
+            "--order", "asc",
+        )["data"]
+        lightning_records = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "Bull Wallet - Lightning",
+            "--order", "asc",
+        )["data"]
+        by_external_id = {
+            record["external_id"]: record
+            for record in [*bitcoin_records, *liquid_records, *lightning_records]
+        }
+        self.assertEqual(by_external_id["bull-wallet-btc-in"]["asset"], "BTC")
+        self.assertEqual(by_external_id["bull-wallet-btc-in"]["direction"], "inbound")
+        self.assertEqual(by_external_id["bull-wallet-lbtc-out"]["asset"], "LBTC")
+        self.assertEqual(by_external_id["bull-wallet-lbtc-out"]["fee_msat"], 350_000)
+        self.assertEqual(by_external_id["bull-chain-send"]["asset"], "BTC")
+        self.assertEqual(by_external_id["bull-chain-recv"]["asset"], "LBTC")
+        self.assertNotIn("bull-self", by_external_id)
+        self.assertNotIn("bull-failed", by_external_id)
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        try:
+            swap_wallets = conn.execute(
+                """
+                SELECT t.external_id, w.label AS wallet
+                FROM transactions t
+                JOIN wallets w ON w.id = t.wallet_id
+                WHERE t.external_id IN ('bull-chain-send', 'bull-chain-recv')
+                ORDER BY t.external_id
+                """
+            ).fetchall()
+            self.assertEqual(
+                {row["external_id"]: row["wallet"] for row in swap_wallets},
+                {
+                    "bull-chain-recv": "Bull Wallet - Liquid",
+                    "bull-chain-send": "Bull Wallet - Bitcoin",
+                },
+            )
+            lightning = conn.execute(
+                """
+                SELECT payment_hash, payment_hash_source, raw_json
+                FROM transactions
+                WHERE external_id = ?
+                """,
+                ("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",),
+            ).fetchone()
+            self.assertIsNotNone(lightning)
+            self.assertEqual(
+                lightning["payment_hash"],
+                "02d449a31fbb267c8f352e9968a79e3e5fc95c1bbeaa502fd6454ebde5a4bedc",
+            )
+            self.assertEqual(lightning["payment_hash_source"], "importer")
+            self.assertNotIn(
+                "1111111111111111111111111111111111111111111111111111111111111111",
+                lightning["raw_json"],
+            )
+            raw = json.loads(lightning["raw_json"])
+            self.assertEqual(raw["preimage"], "[redacted]")
+            self.assertTrue(raw["preimage_redacted"])
+
+            swap = conn.execute(
+                "SELECT raw_json FROM transactions WHERE external_id = 'bull-chain-recv'"
+            ).fetchone()
+            swap_raw = json.loads(swap["raw_json"])
+            self.assertEqual(swap_raw["swap_id"], "swap-chain")
+            self.assertEqual(swap_raw["send_network"], "bitcoin")
+            self.assertEqual(swap_raw["receive_network"], "liquid")
+        finally:
+            conn.close()
+
+        existing_btc_csv = Path(self._tmp.name) / "bull-existing-btc.csv"
+        existing_btc_csv.write_text(
+            "date,txid,direction,asset,amount,fee\n"
+            "2026-04-05T09:15:00Z,bull-chain-send,outbound,BTC,0.01000000,0.00000500\n",
+            encoding="utf-8",
+        )
+        # A real descriptor backend stores a receive with fee 0 (the recipient
+        # pays no fee), while the Bull export reports a nonzero fee on the same
+        # swap row. Enrichment must still match by txid/amount despite the fee
+        # mismatch, so keep this descriptor receive fee at 0 on purpose.
+        existing_liquid_csv = Path(self._tmp.name) / "bull-existing-liquid.csv"
+        existing_liquid_csv.write_text(
+            "date,txid,direction,asset,amount,fee\n"
+            "2026-04-05T09:20:00Z,bull-chain-recv,inbound,LBTC,0.00990000,0\n",
+            encoding="utf-8",
+        )
+        for label, csv_path in (
+            ("Descriptor BTC", existing_btc_csv),
+            ("Descriptor Liquid", existing_liquid_csv),
+        ):
+            self._cli(
+                "wallets", "create",
+                "--workspace", "Buckets",
+                "--profile", "Default",
+                "--label", label,
+                "--kind", "custom",
+                "--source-file", str(csv_path),
+                "--source-format", "csv",
+            )
+            self._cli(
+                "wallets", "sync",
+                "--workspace", "Buckets",
+                "--profile", "Default",
+                "--wallet", label,
+            )
+        for label, network in (("Descriptor BTC", "bitcoin"), ("Descriptor Liquid", "liquid")):
+            payload = self._cli(
+                "wallets", "attach-bullbitcoin-wallet",
+                "--workspace", "Buckets",
+                "--profile", "Default",
+                "--wallet", label,
+                "--file", str(bull_wallet_csv),
+                "--network", network,
+            )
+            self.assertEqual(payload["kind"], "wallets.attach-bullbitcoin-wallet")
+            self.assertEqual(payload["data"]["network"], network)
+
+        payload = self._cli(
+            "wallets", "sync",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "Descriptor BTC",
+        )
+        self.assertEqual(payload["data"][0]["bullbitcoin_wallet_exports"]["updated"], 1)
+        payload = self._cli(
+            "wallets", "sync",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "Descriptor Liquid",
+        )
+        self.assertEqual(payload["data"][0]["bullbitcoin_wallet_exports"]["updated"], 1)
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        try:
+            descriptor_rows = conn.execute(
+                """
+                SELECT w.label AS wallet, t.external_id, t.kind, t.fee, t.raw_json
+                FROM transactions t
+                JOIN wallets w ON w.id = t.wallet_id
+                WHERE w.label IN ('Descriptor BTC', 'Descriptor Liquid')
+                ORDER BY w.label
+                """
+            ).fetchall()
+            self.assertEqual(len(descriptor_rows), 2)
+            self.assertEqual({row["kind"] for row in descriptor_rows}, {"chain_swap"})
+            for row in descriptor_rows:
+                raw = json.loads(row["raw_json"])
+                self.assertEqual(raw["swap_id"], "swap-chain")
+            fees_by_external_id = {
+                row["external_id"]: row["fee"] for row in descriptor_rows
+            }
+            # The matching network-fee send still reconciles exactly, and the
+            # fee-0 descriptor receive is enriched without its stored fee being
+            # overwritten by the Bull-reported swap fee.
+            self.assertEqual(fees_by_external_id["bull-chain-send"], 500_000)
+            self.assertEqual(fees_by_external_id["bull-chain-recv"], 0)
+        finally:
+            conn.close()
 
     def test_z_bullbitcoin_csv_enriches_existing_wallet_transaction(self):
         existing_csv = Path(self._tmp.name) / "bull-existing-wallet.csv"
