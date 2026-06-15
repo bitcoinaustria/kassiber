@@ -11,6 +11,8 @@
  */
 import * as React from "react";
 import {
+  ChevronDown,
+  ChevronRight,
   ClipboardCopy,
   Fingerprint,
   Globe,
@@ -210,6 +212,88 @@ function MetricTile({
   );
 }
 
+type Leg = NonNullable<IdentifyResult["legs"]>[number];
+
+function truncateMiddle(value: string, head = 10, tail = 6): string {
+  return value.length > head + tail + 1
+    ? `${value.slice(0, head)}…${value.slice(-tail)}`
+    : value;
+}
+
+function LegRow({ leg, hideSensitive }: { leg: Leg; hideSensitive: boolean }) {
+  const label =
+    leg.side === "input"
+      ? leg.outpoint
+        ? truncateMiddle(leg.outpoint)
+        : "input"
+      : `#${leg.n ?? "?"}`;
+  return (
+    <div className="flex items-center justify-between gap-2 py-0.5">
+      <span
+        className={`font-mono text-[11px] ${hiddenSensitiveClassName(hideSensitive)}`}
+      >
+        {label}
+      </span>
+      {leg.owned ? (
+        <span className="text-[11px] text-emerald-600 dark:text-emerald-400">
+          {leg.wallet}
+          {leg.branch ? ` · ${leg.branch}` : ""}
+        </span>
+      ) : (
+        <span className="text-[11px] text-muted-foreground">external</span>
+      )}
+    </div>
+  );
+}
+
+function LegColumn({
+  title,
+  legs,
+  hideSensitive,
+}: {
+  title: string;
+  legs: Leg[];
+  hideSensitive: boolean;
+}) {
+  return (
+    <div>
+      <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {title} ({legs.length})
+      </p>
+      {legs.length === 0 ? (
+        <p className="text-[11px] text-muted-foreground">—</p>
+      ) : (
+        legs.map((leg, index) => (
+          <LegRow key={index} leg={leg} hideSensitive={hideSensitive} />
+        ))
+      )}
+    </div>
+  );
+}
+
+function LegsBreakdown({
+  legs,
+  hideSensitive,
+}: {
+  legs: Leg[];
+  hideSensitive: boolean;
+}) {
+  return (
+    <div className="grid gap-4 rounded-md bg-muted/40 p-3 sm:grid-cols-2">
+      <LegColumn
+        title="Inputs"
+        legs={legs.filter((leg) => leg.side === "input")}
+        hideSensitive={hideSensitive}
+      />
+      <LegColumn
+        title="Outputs"
+        legs={legs.filter((leg) => leg.side === "output")}
+        hideSensitive={hideSensitive}
+      />
+    </div>
+  );
+}
+
 export function Reconcile() {
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const [input, setInput] = React.useState("");
@@ -219,6 +303,7 @@ export function Reconcile() {
   // verify, whichever ran most recently.
   const [report, setReport] = React.useState<IdentifyReport | null>(null);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
+  const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set());
   const check = useDaemonMutation<IdentifyReport>("ui.wallets.identify");
   const verify = useDaemonMutation<IdentifyReport>("ui.wallets.identify_onchain");
 
@@ -235,6 +320,7 @@ export function Reconcile() {
     if (!trimmed) return;
     setErrorMessage(null);
     setStatusFilter("all");
+    setExpanded(new Set());
     try {
       const envelope = await mutation.mutateAsync({ text: input });
       setReport(envelope.data ?? null);
@@ -245,6 +331,14 @@ export function Reconcile() {
 
   const onCheck = () => runMutation(check, "Ownership check failed");
   const onVerify = () => runMutation(verify, "On-chain verification failed");
+
+  const toggleExpand = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   const filtered = React.useMemo(
     () =>
@@ -414,46 +508,76 @@ export function Reconcile() {
                       const badge =
                         STATUS_BADGE[result.status] ?? STATUS_BADGE.unknown;
                       const owner = ownerLabel(result);
+                      const rowKey = `${result.input}-${index}`;
+                      const legs = result.legs ?? [];
+                      const hasLegs = legs.length > 0;
+                      const isOpen = expanded.has(rowKey);
                       return (
-                        <TableRow key={`${result.input}-${index}`}>
-                          <TableCell className="max-w-[22rem]">
-                            <div className="flex items-center gap-1.5">
-                              <span
-                                className={`truncate font-mono text-xs ${hiddenSensitiveClassName(hideSensitive)}`}
-                                title={result.input}
-                              >
-                                {result.input}
+                        <React.Fragment key={rowKey}>
+                          <TableRow>
+                            <TableCell className="max-w-[22rem]">
+                              <div className="flex items-center gap-1.5">
+                                {hasLegs ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleExpand(rowKey)}
+                                    aria-label={isOpen ? "Hide legs" : "Show legs"}
+                                    aria-expanded={isOpen}
+                                    className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                                  >
+                                    {isOpen ? (
+                                      <ChevronDown className="size-3.5" />
+                                    ) : (
+                                      <ChevronRight className="size-3.5" />
+                                    )}
+                                  </button>
+                                ) : (
+                                  <span className="w-[1.125rem]" aria-hidden />
+                                )}
+                                <span
+                                  className={`truncate font-mono text-xs ${hiddenSensitiveClassName(hideSensitive)}`}
+                                  title={result.input}
+                                >
+                                  {result.input}
+                                </span>
+                                <CopyButton value={result.input} ariaLabel="Copy input" />
+                              </div>
+                              <span className="ml-[1.625rem] text-[11px] uppercase tracking-wide text-muted-foreground">
+                                {result.type}
+                                {result.chain ? ` · ${result.chain}` : ""}
                               </span>
-                              <CopyButton value={result.input} ariaLabel="Copy input" />
-                            </div>
-                            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                              {result.type}
-                              {result.chain ? ` · ${result.chain}` : ""}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={badge.variant}>{badge.label}</Badge>
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {owner || (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {branchLabel(result) || "—"}
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            <span>
-                              {CLASSIFICATION_LABEL[result.classification] ??
-                                result.classification}
-                            </span>
-                            {result.note ? (
-                              <p className="text-xs text-muted-foreground">
-                                {result.note}
-                              </p>
-                            ) : null}
-                          </TableCell>
-                        </TableRow>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={badge.variant}>{badge.label}</Badge>
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {owner || (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {branchLabel(result) || "—"}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              <span>
+                                {CLASSIFICATION_LABEL[result.classification] ??
+                                  result.classification}
+                              </span>
+                              {result.note ? (
+                                <p className="text-xs text-muted-foreground">
+                                  {result.note}
+                                </p>
+                              ) : null}
+                            </TableCell>
+                          </TableRow>
+                          {hasLegs && isOpen ? (
+                            <TableRow>
+                              <TableCell colSpan={5} className="bg-muted/20 py-2">
+                                <LegsBreakdown legs={legs} hideSensitive={hideSensitive} />
+                              </TableCell>
+                            </TableRow>
+                          ) : null}
+                        </React.Fragment>
                       );
                     })
                   )}
