@@ -28,6 +28,7 @@ interface OverviewSnapshot {
 
 const TRANSACTIONS_PAGE_LIMIT = 100;
 const TRANSACTIONS_WORKBENCH_LIMIT = 500;
+const TRANSACTIONS_AUTO_PREFETCH_LIMIT = 5000;
 
 function isCrossAssetCandidate(candidate: SwapCandidateReference) {
   if (!candidate.in_asset || !candidate.out_asset) return true;
@@ -82,14 +83,36 @@ export function Transactions() {
       txs: pages.flatMap((page) => page.txs),
     };
   }, [transactionsQuery.data]);
+  const loadedTransactions = React.useMemo<TransactionsList | null>(() => {
+    if (!liveTransactions) return workbenchData;
+    if (!workbenchData) return liveTransactions;
+    return liveTransactions.txs.length >= workbenchData.txs.length
+      ? liveTransactions
+      : workbenchData;
+  }, [liveTransactions, workbenchData]);
+  React.useEffect(() => {
+    if (dataMode !== "real") return;
+    if (!transactionsQuery.hasNextPage) return;
+    if (transactionsQuery.isFetchingNextPage) return;
+    if ((liveTransactions?.txs.length ?? 0) >= TRANSACTIONS_AUTO_PREFETCH_LIMIT) {
+      return;
+    }
+    void transactionsQuery.fetchNextPage();
+  }, [
+    dataMode,
+    liveTransactions?.txs.length,
+    transactionsQuery.hasNextPage,
+    transactionsQuery.isFetchingNextPage,
+    transactionsQuery.fetchNextPage,
+  ]);
   const transactions: TransactionsList =
-    hasLiveTransactions && workbenchData
-      ? workbenchData
+    hasLiveTransactions && loadedTransactions
+      ? loadedTransactions
       : dataMode === "real"
         ? { ...MOCK_TRANSACTIONS, txs: [], nextCursor: null, hasMore: false }
         : MOCK_TRANSACTIONS;
   const tableTransactions: TransactionsList =
-    liveTransactions ??
+    loadedTransactions ??
     (hasLiveTableTransactions ? firstPage?.data : null) ??
     transactions;
   const hasMoreTransactions = Boolean(transactionsQuery.hasNextPage);

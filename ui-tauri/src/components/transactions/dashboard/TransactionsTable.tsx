@@ -778,13 +778,6 @@ const TransactionsTable = ({
       <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5">
         <div className="flex flex-1 items-center gap-2">
           <span className="text-sm font-medium sm:text-base">Transactions</span>
-          <span className="ml-1 inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-[10px] font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
-            {isRefreshing ? (
-              <Skeleton className="h-3 w-5" />
-            ) : (
-              filteredTransactions.length
-            )}
-          </span>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
