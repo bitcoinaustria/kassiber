@@ -197,7 +197,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     status: "ready",
     pathLabel: "Wallet export",
     formatLabel: "wasabi_bundle",
-    setupKind: "bullbitcoin-wallet",
+    setupKind: "file-wallet",
     walletKind: "wasabi",
     sourceFormat: "wasabi_bundle",
     chain: "bitcoin",
@@ -464,7 +464,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     pathLabel: "Wallet CSV import",
     formatLabel: "bullbitcoin_wallet_csv",
     docsHref: "https://github.com/SatoshiPortal/bullbitcoin-mobile/issues/1363",
-    setupKind: "file-wallet",
+    setupKind: "bullbitcoin-wallet",
     walletKind: "bullbitcoin",
     sourceFormat: "bullbitcoin_wallet_csv",
     details: [
