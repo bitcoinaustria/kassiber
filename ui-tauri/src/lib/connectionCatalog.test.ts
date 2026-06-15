@@ -23,6 +23,7 @@ describe("connection catalog", () => {
       "file-wallet",
       "file-enrichment",
       "btcpay",
+      "bullbitcoin-wallet",
       "bip329",
       "backend-settings",
       "samourai",
@@ -44,6 +45,7 @@ describe("connection catalog", () => {
         "btcpay",
         "samourai",
         "phoenix",
+        "bullbitcoin-wallet",
         "river",
         "bullbitcoin",
         "coinfinity",
@@ -81,6 +83,19 @@ describe("connection catalog", () => {
     expect(coreLightning?.image).toContain("data:image/svg+xml");
     expect(coreLightning?.image).not.toContain("font-family");
     expect(coreLightning?.image).not.toContain("Core%20Lightning");
+  });
+
+  it("uses the Bull Bitcoin logo for both wallet and exchange entries", () => {
+    const bullWallet = CONNECTION_SOURCES.find(
+      (source) => source.id === "bullbitcoin-wallet",
+    );
+    const bullExchange = CONNECTION_SOURCES.find(
+      (source) => source.id === "bullbitcoin",
+    );
+
+    expect(bullWallet?.image).toBeTruthy();
+    expect(bullWallet?.image).toBe(bullExchange?.image);
+    expect(bullWallet?.imageClassName).toContain("size-9");
   });
 
   it("marks transparent dark logos with a light frame for dark mode", () => {

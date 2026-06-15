@@ -92,6 +92,7 @@ from .handlers import (
     resolve_quarantine_price_override,
     show_quarantine,
     attach_btcpay_provenance_to_wallet,
+    attach_bullbitcoin_wallet_export_to_wallet,
     sync_btcpay_commercial_provenance,
     sync_btcpay_into_wallet,
     sync_wallet,
@@ -814,7 +815,7 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_create.add_argument("--config")
     wallets_create.add_argument("--config-file")
     wallets_create.add_argument("--source-file")
-    wallets_create.add_argument("--source-format", choices=["json", "csv", "btcpay_json", "btcpay_csv", "phoenix_csv", "river_csv", "bullbitcoin_csv", "coinfinity_csv", "21bitcoin_csv", "pocketbitcoin_csv", "strike_csv", "wasabi_bundle"])
+    wallets_create.add_argument("--source-format", choices=["json", "csv", "btcpay_json", "btcpay_csv", "phoenix_csv", "river_csv", "bullbitcoin_csv", "bullbitcoin_wallet_csv", "coinfinity_csv", "21bitcoin_csv", "pocketbitcoin_csv", "strike_csv", "wasabi_bundle"])
 
     wallets_sub.add_parser("kinds")
 
@@ -957,6 +958,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--payment-method-id",
         default=BTCPAY_DEFAULT_PAYMENT_METHOD_ID,
         dest="payment_method_id",
+    )
+    wallets_attach_bullwallet = wallets_sub.add_parser(
+        "attach-bullbitcoin-wallet",
+        help="Record a Bull Bitcoin unified wallet export route on an existing wallet",
+    )
+    wallets_attach_bullwallet.add_argument("--workspace")
+    wallets_attach_bullwallet.add_argument("--profile")
+    wallets_attach_bullwallet.add_argument("--wallet", required=True)
+    wallets_attach_bullwallet.add_argument("--file", required=True)
+    wallets_attach_bullwallet.add_argument(
+        "--network",
+        required=True,
+        choices=["bitcoin", "liquid", "lightning"],
+        help="Which Bull export network should enrich this wallet",
     )
     wallets_sync = wallets_sub.add_parser("sync")
     wallets_sync.add_argument("--workspace")
@@ -2356,6 +2371,19 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.backend,
                     args.store_id,
                     args.payment_method_id,
+                ),
+            )
+        if args.wallets_command == "attach-bullbitcoin-wallet":
+            return emit(
+                args,
+                attach_bullbitcoin_wallet_export_to_wallet(
+                    conn,
+                    args.runtime_config,
+                    args.workspace,
+                    args.profile,
+                    args.wallet,
+                    args.file,
+                    args.network,
                 ),
             )
         if args.wallets_command == "sync":

@@ -114,6 +114,7 @@ from ..wallet_descriptors import (
     normalize_chain,
     normalize_network,
 )
+from ..importers import load_import_records
 from ..sync_btcpay import (
     DEFAULT_PAGE_SIZE as BTCPAY_DEFAULT_PAGE_SIZE,
     DEFAULT_PAYMENT_METHOD_ID as BTCPAY_DEFAULT_PAYMENT_METHOD_ID,
@@ -1570,7 +1571,7 @@ WALLET_KIND_CATALOG = {
         "requires": [],
     },
     "bullbitcoin": {
-        "summary": "Bull Bitcoin order CSV importer for exact buy/sell execution pricing.",
+        "summary": "Bull Bitcoin order evidence and unified wallet CSV importer.",
         "config_fields": ["source_file", "source_format"],
         "requires": [],
     },
@@ -1940,6 +1941,13 @@ def _wallet_sync_hooks(commit=True):
             wallet,
             commit=commit,
         ),
+        enrich_bullbitcoin_wallet=lambda conn, runtime_config, profile, wallet: enrich_wallet_from_bullbitcoin_wallet_exports(
+            conn,
+            runtime_config,
+            profile,
+            wallet,
+            commit=commit,
+        ),
         sync_core_lightning_wallet=lambda conn, runtime_config, profile, wallet: core_lightning_cln.sync_core_lightning_wallet(
             conn,
             profile,
@@ -2254,6 +2262,69 @@ def enrich_wallet_from_btcpay_provenance(
     }
 
 
+def enrich_wallet_from_bullbitcoin_wallet_exports(
+    conn,
+    runtime_config,
+    profile,
+    wallet,
+    *,
+    commit=True,
+):
+    del runtime_config
+    config = json.loads(wallet["config_json"] or "{}")
+    routes = core_wallets.wallet_bullbitcoin_wallet_export_config(config)
+    totals = {
+        "routes": 0,
+        "rows": 0,
+        "rows_total": 0,
+        "updated": 0,
+        "unchanged": 0,
+        "skipped": 0,
+    }
+    route_results = []
+    for route in routes:
+        all_records = load_import_records(
+            route["source_file"],
+            "bullbitcoin_wallet_csv",
+        )
+        records = core_imports.filter_bullbitcoin_wallet_records(
+            all_records,
+            route["network"],
+        )
+        outcome = core_imports.import_records_into_wallet(
+            conn,
+            profile,
+            wallet,
+            records,
+            f"bullbitcoin-wallet:{route['network']}",
+            _import_coordinator_hooks(),
+            match_existing_only=True,
+            report_updates=True,
+            commit=False,
+        )
+        updated = len(outcome.get("updated_records") or [])
+        route_result = {
+            "source_file": route["source_file"],
+            "network": route["network"],
+            "rows": len(records),
+            "rows_total": len(all_records),
+            "updated": updated,
+            "unchanged": int(outcome.get("unchanged") or 0),
+            "skipped": int(outcome.get("skipped") or 0),
+            "journal_invalidated": bool(outcome.get("journal_invalidated")),
+        }
+        route_results.append(route_result)
+        totals["routes"] += 1
+        totals["rows"] += route_result["rows"]
+        totals["rows_total"] += route_result["rows_total"]
+        totals["updated"] += route_result["updated"]
+        totals["unchanged"] += route_result["unchanged"]
+        totals["skipped"] += route_result["skipped"]
+    if commit:
+        conn.commit()
+    return {**totals, "route_results": route_results}
+
+
 def sync_btcpay_into_wallet(
     conn,
     runtime_config,
@@ -2306,6 +2377,58 @@ def sync_btcpay_into_wallet(
     _mark_wallet_synced(conn, wallet)
     conn.commit()
     return outcome
+
+
+def attach_bullbitcoin_wallet_export_to_wallet(
+    conn,
+    runtime_config,
+    workspace_ref,
+    profile_ref,
+    wallet_ref,
+    source_file,
+    network,
+):
+    """Record a Bull Bitcoin wallet-export route on an existing wallet.
+
+    Descriptor/file sync remains the source of truth. During `wallets sync`,
+    matching rows from the unified Bull export can backfill safe wallet
+    metadata such as swap kind and payment hashes without inserting rows that
+    would duplicate the descriptor wallet.
+    """
+
+    del runtime_config
+    normalized_network = core_wallets.normalize_bullbitcoin_wallet_network(network)
+    normalized_file = os.path.abspath(os.path.expanduser(source_file))
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    wallet = resolve_wallet(conn, profile["id"], wallet_ref)
+    existing_config = json.loads(wallet["config_json"] or "{}")
+    existing_routes = list(
+        core_wallets.wallet_bullbitcoin_wallet_export_config(existing_config)
+    )
+    next_route = {
+        "source_file": normalized_file,
+        "network": normalized_network,
+    }
+    if next_route not in existing_routes:
+        existing_routes.append(next_route)
+    updated = core_wallets.update_wallet(
+        conn,
+        workspace_ref,
+        profile_ref,
+        wallet_ref,
+        {
+            "config": {
+                core_wallets.BULLBITCOIN_WALLET_EXPORTS_CONFIG_KEY: existing_routes,
+            },
+            "clear": [],
+        },
+    )
+    return {
+        "wallet": updated,
+        "source_file": normalized_file,
+        "network": normalized_network,
+        "routes": existing_routes,
+    }
 
 
 def attach_btcpay_provenance_to_wallet(

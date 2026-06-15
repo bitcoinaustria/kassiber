@@ -11,6 +11,7 @@ Kassiber can ingest transactions and metadata from several sources. Imported dat
 - Phoenix CSV exports
 - River Bitcoin Activity / Account Activity CSV exports
 - Bull Bitcoin order CSV exports
+- Bull Bitcoin unified wallet transaction CSV exports
 - Coinfinity order CSV exports
 - 21bitcoin transaction CSV exports
 - Pocket Bitcoin account CSV exports
@@ -24,6 +25,7 @@ Format references used by the dedicated importers:
 - Wasabi RPC export methods: <https://docs.wasabiwallet.io/using-wasabi/RPC.html>
 - River Account Activity CSV: <https://support.river.com/hc/en-us/articles/45513824178963-How-do-I-download-my-account-activity>
 - Bull Bitcoin order CSV export from the Bull account order history
+- Bull Bitcoin wallet CSV export from the Bull mobile wallet transaction-history export
 - Coinfinity order CSV export from the Coinfinity account order history
 - 21bitcoin transaction CSV export from the 21bitcoin app
 - Pocket Bitcoin account CSV export
@@ -547,6 +549,84 @@ python3 -m kassiber wallets update --wallet treasury \
 
 python3 -m kassiber wallets sync --wallet treasury
 ```
+
+## Bull Bitcoin Wallet CSV
+
+Bull's mobile wallet can export a unified wallet-history CSV containing Bitcoin
+on-chain, Liquid, Lightning, payjoin, and swap rows. Kassiber supports this as
+`source_format="bullbitcoin_wallet_csv"`. This is wallet activity, not exchange
+order evidence, and it does not contain fiat execution prices.
+
+Use this importer when the Bull wallet export is the source of wallet history.
+Create one Kassiber wallet per Bull network from the same CSV so BTC, Liquid,
+and Lightning rows stay separate. This lets the swap matcher see BTC/LBTC swap
+legs as different wallets instead of two rows inside one mixed wallet:
+
+```bash
+python3 -m kassiber wallets create \
+  --label "Bull Bitcoin Wallet - Bitcoin" \
+  --kind bullbitcoin \
+  --source-file /path/to/bull_transactions.csv \
+  --source-format bullbitcoin_wallet_csv \
+  --config '{"bullbitcoin_wallet_network":"bitcoin"}'
+
+python3 -m kassiber wallets create \
+  --label "Bull Bitcoin Wallet - Liquid" \
+  --kind bullbitcoin \
+  --source-file /path/to/bull_transactions.csv \
+  --source-format bullbitcoin_wallet_csv \
+  --config '{"bullbitcoin_wallet_network":"liquid"}'
+
+python3 -m kassiber wallets sync --wallet "Bull Bitcoin Wallet - Bitcoin"
+python3 -m kassiber wallets sync --wallet "Bull Bitcoin Wallet - Liquid"
+```
+
+Behavior:
+
+- `bullbitcoin_wallet_network=bitcoin` imports only Bitcoin on-chain/payjoin and
+  Bitcoin-side chain-swap rows as `BTC`
+- `bullbitcoin_wallet_network=liquid` imports only Liquid and Liquid-side
+  chain-swap rows as `LBTC`
+- `bullbitcoin_wallet_network=lightning` imports Lightning rows as `BTC`
+- Lightning rows derive Kassiber's `payment_hash` from a valid exported
+  preimage, or fall back to a 64-hex `txid`, for exact swap-pair matching
+- chain-swap metadata such as `swap_id`, `send_network`, `receive_network`,
+  `send_txid`, and `receive_txid` is preserved in redacted raw metadata
+- `preimage` is not stored in raw metadata; the importer records that it was
+  redacted
+- `direction=self` rows and `status=failed` / `status=expired` rows are skipped
+  because they are not standalone taxable wallet movements
+
+If BTC and Liquid descriptors are already the book's source of wallet history,
+do not also import the same Bull wallet CSV rows into separate active wallets,
+or the on-chain/Liquid transactions will be duplicated. Attach the unified Bull
+export to those existing wallets instead:
+
+```bash
+python3 -m kassiber wallets attach-bullbitcoin-wallet \
+  --wallet "Bitcoin descriptor" \
+  --file /path/to/bull_transactions.csv \
+  --network bitcoin
+
+python3 -m kassiber wallets attach-bullbitcoin-wallet \
+  --wallet "Liquid descriptor" \
+  --file /path/to/bull_transactions.csv \
+  --network liquid
+
+python3 -m kassiber wallets sync --wallet "Bitcoin descriptor"
+python3 -m kassiber wallets sync --wallet "Liquid descriptor"
+```
+
+The next wallet refresh keeps the descriptor/file source authoritative and uses
+matching Bull rows only to backfill safe metadata such as swap kind, redacted
+raw Bull route data, and Lightning payment hashes. Unmatched Bull rows are left
+uninserted in this mode.
+
+If the CSV was imported first and descriptors are added later, map the Bull CSV
+onto the descriptor wallets with `attach-bullbitcoin-wallet`, refresh the
+descriptor wallets, then retire or delete the earlier Bull CSV source wallets
+before relying on portfolio totals. Kassiber does not automatically migrate
+transactions from the CSV source wallets into descriptor wallets.
 
 ## Coinfinity
 
