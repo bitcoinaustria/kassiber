@@ -5032,7 +5032,7 @@ def _onboarding_complete_payload(
         )
     tax_country = _optional_string_arg(args, "tax_country") or "generic"
     fiat_currency = _optional_string_arg(args, "fiat_currency") or "EUR"
-    gains_algorithm = _optional_string_arg(args, "gains_algorithm") or "FIFO"
+    gains_algorithm = _optional_string_arg(args, "gains_algorithm")
     raw_tax_long_term_days = args.get("tax_long_term_days", 365)
     try:
         tax_long_term_days = int(raw_tax_long_term_days)

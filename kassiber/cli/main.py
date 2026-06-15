@@ -738,7 +738,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Tax country for the book (CLI profile; currently supported: {', '.join(supported_tax_countries())})",
     )
     profiles_create.add_argument("--tax-long-term-days", type=int, default=DEFAULT_LONG_TERM_DAYS)
-    profiles_create.add_argument("--gains-algorithm", choices=list(RP2_ACCOUNTING_METHODS), default="FIFO")
+    profiles_create.add_argument("--gains-algorithm", choices=list(RP2_ACCOUNTING_METHODS))
 
     profiles_get = profiles_sub.add_parser("get")
     profiles_get.add_argument("--workspace")
