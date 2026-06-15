@@ -581,6 +581,14 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
             account_available[from_account] -= transfer.sent
             account_available[to_account] += transfer.received
             priced_available -= transfer.fee
+            # The transfer fee is a realized disposal that consumes global FIFO
+            # basis just like an OUT, so it must advance the basis-provenance
+            # cursor — otherwise a fee booked after a dropped acquisition silently
+            # eats the pre-drop priced supply and lets a later sale pass the guard
+            # against a wrong lot. We only advance the cursor (we don't quarantine
+            # the MOVE itself: dropping it would desync the destination balance,
+            # and the dust fee's own basis is corrected once the drop is resolved).
+            cumulative_disposed += transfer.fee
             audit_row = {
                 "out_id": transfer.out_transaction_id,
                 "in_id": transfer.in_transaction_id,

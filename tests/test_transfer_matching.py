@@ -251,6 +251,20 @@ class HeuristicMatchTests(unittest.TestCase):
                        occurred_at="2026-03-14T17:31:00Z")
         self.assertEqual(suggest_swap_candidates([out, inbound], tax_country="at"), [])
 
+    def test_deterministic_self_transfer_respects_caller_fee_tolerance(self):
+        # The implausible-fee cutoff must honor caller-supplied tolerances, not
+        # the hard-coded defaults: a move over the default band but under a loose
+        # caller band is a proven self-transfer again.
+        out = _row(id="o", external_id="txid", wallet_id="cold",
+                   direction="outbound", asset="BTC", amount=4_702_253_000)
+        inbound = _row(id="i", external_id="txid", wallet_id="hot",
+                       direction="inbound", asset="BTC", amount=2_750_000_000)
+        self.assertEqual(_deterministic_self_transfer_ids([out, inbound]), set())
+        self.assertEqual(
+            _deterministic_self_transfer_ids([out, inbound], fee_pct_max=0.5),
+            {"o", "i"},
+        )
+
     def test_pegout_within_window_paired(self):
         out = _row(
             id="lbtc-out",
