@@ -189,7 +189,11 @@ def _find_existing_transaction(
             btc_to_msat(normalized["fee"]),
         ),
     ).fetchone()
-    if existing or normalized["pricing_source_kind"] != pricing.SOURCE_EXCHANGE_EXECUTION:
+    relax_fee_match = (
+        normalized["pricing_source_kind"] == pricing.SOURCE_EXCHANGE_EXECUTION
+        or normalized.get("match_existing_ignore_fee")
+    )
+    if existing or not relax_fee_match:
         return existing
     return conn.execute(
         f"""
@@ -940,6 +944,7 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
         "exchange_evidence_match_time_tolerance_seconds": int(
             record.get("_exchange_evidence_match_time_tolerance_seconds") or 0
         ),
+        "match_existing_ignore_fee": bool(record.get("_match_existing_ignore_fee")),
         "raw_json": raw_json,
     }
 

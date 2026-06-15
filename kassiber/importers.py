@@ -1241,6 +1241,12 @@ def normalize_bullbitcoin_wallet_record(record, index=0):
         "payment_hash": payment_hash,
         "payment_hash_source": "importer" if payment_hash else None,
         "_bullbitcoin_wallet_network": network,
+        # Bull reports a per-transaction fee on receive/swap rows, but a wallet
+        # that synced the same on-chain transaction from a descriptor backend
+        # stores a receive fee of 0 (the recipient pays none). Let enrichment
+        # match those rows by txid/amount even when the fee differs; merges only
+        # attach metadata and never overwrite the stored fee.
+        "_match_existing_ignore_fee": True,
         "raw_json": json.dumps(json_ready(raw_payload), sort_keys=True),
     }
     if bull_type in {"payjoin_send", "payjoin_receive"}:

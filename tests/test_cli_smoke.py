@@ -2492,10 +2492,14 @@ class AccountBucketBehaviorTest(unittest.TestCase):
             "2026-04-05T09:15:00Z,bull-chain-send,outbound,BTC,0.01000000,0.00000500\n",
             encoding="utf-8",
         )
+        # A real descriptor backend stores a receive with fee 0 (the recipient
+        # pays no fee), while the Bull export reports a nonzero fee on the same
+        # swap row. Enrichment must still match by txid/amount despite the fee
+        # mismatch, so keep this descriptor receive fee at 0 on purpose.
         existing_liquid_csv = Path(self._tmp.name) / "bull-existing-liquid.csv"
         existing_liquid_csv.write_text(
             "date,txid,direction,asset,amount,fee\n"
-            "2026-04-05T09:20:00Z,bull-chain-recv,inbound,LBTC,0.00990000,0.00000200\n",
+            "2026-04-05T09:20:00Z,bull-chain-recv,inbound,LBTC,0.00990000,0\n",
             encoding="utf-8",
         )
         for label, csv_path in (
@@ -2548,7 +2552,7 @@ class AccountBucketBehaviorTest(unittest.TestCase):
         try:
             descriptor_rows = conn.execute(
                 """
-                SELECT w.label AS wallet, t.external_id, t.kind, t.raw_json
+                SELECT w.label AS wallet, t.external_id, t.kind, t.fee, t.raw_json
                 FROM transactions t
                 JOIN wallets w ON w.id = t.wallet_id
                 WHERE w.label IN ('Descriptor BTC', 'Descriptor Liquid')
@@ -2560,6 +2564,14 @@ class AccountBucketBehaviorTest(unittest.TestCase):
             for row in descriptor_rows:
                 raw = json.loads(row["raw_json"])
                 self.assertEqual(raw["swap_id"], "swap-chain")
+            fees_by_external_id = {
+                row["external_id"]: row["fee"] for row in descriptor_rows
+            }
+            # The matching network-fee send still reconciles exactly, and the
+            # fee-0 descriptor receive is enriched without its stored fee being
+            # overwritten by the Bull-reported swap fee.
+            self.assertEqual(fees_by_external_id["bull-chain-send"], 500_000)
+            self.assertEqual(fees_by_external_id["bull-chain-recv"], 0)
         finally:
             conn.close()
 
