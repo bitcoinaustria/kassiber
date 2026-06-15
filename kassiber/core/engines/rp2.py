@@ -458,6 +458,33 @@ def _transaction_row_sort_key(row: Mapping[str, Any]) -> tuple[str, str, str]:
     )
 
 
+def _earliest_lot_contamination(dropped_acquisition_at, events) -> str | None:
+    """Earliest instant the asset's lot state becomes uncertain.
+
+    Combines normalize's earliest dropped-acquisition timestamp (missing/coarse
+    pricing) with the gate-level drops that also leave RP2's lots inconsistent:
+    unclassified-income inbounds (never enter the lot pool) and quarantined
+    non-sale disposals (gift / donation / lost — a real outflow that is not
+    booked). Any same-asset disposal at or after this instant cannot be trusted
+    to select the right lot under any accounting method. ``None`` when nothing
+    contaminates the lots.
+    """
+    earliest = dropped_acquisition_at
+    for event in events:
+        kind = _normalized_event_kind(event)
+        contaminates = (
+            event.direction == "inbound"
+            and kind not in _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE
+            and _kind_has_token(kind, _INCOME_LIKE_KIND_TOKENS)
+        ) or (
+            event.direction == "outbound"
+            and _kind_has_token(kind, _NON_SALE_DISPOSAL_KIND_TOKENS)
+        )
+        if contaminates and (earliest is None or event.occurred_at < earliest):
+            earliest = event.occurred_at
+    return earliest
+
+
 def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInputs, configuration) -> _RP2PreparedInput:
     """Build RP2 ``InputData`` for one asset without running ``compute_tax``.
 
@@ -488,29 +515,22 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
     # Cost basis, by contrast, is assigned by rp2's universal-application FIFO
     # GLOBALLY across accounts, so the priced/cost-basis pool stays global.
     priced_available = Decimal("0")
-    # Basis-provenance guard: if an acquisition was dropped for a pricing reason,
-    # the global FIFO is missing a lot from `first_drop_at` onward. A disposal is
-    # safely based only while cumulative disposals stay within the priced supply
-    # acquired BEFORE that instant; beyond it the disposal re-FIFOs onto a wrong
-    # later lot (wrong basis / flipped AT regime) and must be quarantined.
-    first_drop_at = normalized_inputs.earliest_dropped_acquisition_at
-    # An unclassified-income inbound is dropped below (quarantined) and never
-    # enters RP2's FIFO — exactly like a missing/coarse-priced acquisition — so
-    # it must also advance the basis-provenance cursor, else a later disposal
-    # re-FIFOs onto the wrong lot unflagged. Fold the earliest such drop into
-    # first_drop_at up front so priced_in_before_drop accumulates correctly in
-    # the single ordered walk below.
-    for event in normalized_inputs.events:
-        if event.direction != "inbound":
-            continue
-        kind = _normalized_event_kind(event)
-        if kind not in _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE and _kind_has_token(
-            kind, _INCOME_LIKE_KIND_TOKENS
-        ):
-            if first_drop_at is None or event.occurred_at < first_drop_at:
-                first_drop_at = event.occurred_at
-    priced_in_before_drop = Decimal("0")
-    cumulative_disposed = Decimal("0")
+    # Basis-provenance guard. When the lot state for this asset becomes
+    # uncertain — an acquisition dropped for missing/coarse pricing, an
+    # unclassified-income inbound, or a quarantined non-sale disposal (gift /
+    # donation / lost) that is NOT booked into RP2's lots — every later disposal
+    # is computed against a lot the engine can no longer trust. Which lot is
+    # wrong depends on the accounting method (FIFO picks an older lot,
+    # moving-average folds the missing lot into the pool, LIFO/HIFO pick
+    # differently), so rather than assume FIFO we conservatively quarantine ANY
+    # same-asset disposal at or after the earliest contamination instant. The
+    # user resolves the contaminating row (price it, classify it, or exclude it)
+    # and re-runs. `_earliest_lot_contamination` folds the gate-level income /
+    # gift drops in with normalize's dropped-acquisition timestamp.
+    first_drop_at = _earliest_lot_contamination(
+        normalized_inputs.earliest_dropped_acquisition_at,
+        normalized_inputs.events,
+    )
     quarantines = list(normalized_inputs.quarantines)
     intra_audit = []
     row_index = 1
@@ -596,14 +616,6 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
             account_available[from_account] -= transfer.sent
             account_available[to_account] += transfer.received
             priced_available -= transfer.fee
-            # The transfer fee is a realized disposal that consumes global FIFO
-            # basis just like an OUT, so it must advance the basis-provenance
-            # cursor — otherwise a fee booked after a dropped acquisition silently
-            # eats the pre-drop priced supply and lets a later sale pass the guard
-            # against a wrong lot. We only advance the cursor (we don't quarantine
-            # the MOVE itself: dropping it would desync the destination balance,
-            # and the dust fee's own basis is corrected once the drop is resolved).
-            cumulative_disposed += transfer.fee
             audit_row = {
                 "out_id": transfer.out_transaction_id,
                 "in_id": transfer.in_transaction_id,
@@ -649,8 +661,6 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                 )
                 continue
             account_available[event.wallet_label] += event.amount
-            if first_drop_at is None or event.occurred_at < first_drop_at:
-                priced_in_before_drop += event.amount
             in_set.add_entry(
                 InTransaction(
                     configuration=configuration,
@@ -695,13 +705,11 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                     },
                 )
             )
-            # Only the TAX treatment is quarantined — the coins really left. Debit
-            # availability and advance the disposal cursor so they aren't double-
-            # spent: a later sale must see them gone (the gate is the availability
-            # authority; the un-booked gift just isn't emitted to RP2).
-            account_available[event.wallet_label] -= needed
-            priced_available -= needed
-            cumulative_disposed += needed
+            # Don't touch availability: the row isn't emitted, so RP2 keeps the
+            # lot. Debiting here would diverge the gate from RP2 and over- or
+            # under-gate a later sale depending on method. Instead the gift's
+            # timestamp contaminates lot provenance (see _earliest_lot_contamination),
+            # so any later disposal is quarantined until the gift is resolved.
             continue
         # Marked Austrian swap-outs can depend on another asset's same-timestamp
         # swap-in. Feed the full graph to rp2's native runner instead of applying
@@ -741,12 +749,12 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
             first_drop_at is not None
             and not is_marked_at_swap
             and event.occurred_at >= first_drop_at
-            and cumulative_disposed + needed > priced_in_before_drop
         ):
-            # This disposal consumes at/past the position of an acquisition that
-            # was dropped for missing/coarse pricing, so rp2's global FIFO would
-            # match it onto a wrong (later) lot — wrong basis, possibly a flipped
-            # AT Alt/Neu regime. Quarantine until the dropped lot is priced.
+            # The lot state is contaminated from first_drop_at (a dropped /
+            # unpriced acquisition, an unclassified income lot, or a quarantined
+            # gift not booked into the pool). Which lot this disposal would draw
+            # from is method-dependent and untrustworthy, so quarantine it until
+            # the contaminating row is resolved rather than book a wrong basis.
             quarantines.append(
                 build_tax_quarantine(
                     profile,
@@ -756,9 +764,7 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                         "wallet": event.wallet_label,
                         "asset": asset,
                         "required": float(needed),
-                        "priced_before_drop": float(priced_in_before_drop),
-                        "disposed_so_far": float(cumulative_disposed),
-                        "earliest_unpriced_acquisition_at": first_drop_at,
+                        "lot_state_uncertain_since": first_drop_at,
                     },
                 )
             )
@@ -781,7 +787,6 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                 notes=_compose_event_notes(event),
             )
         )
-        cumulative_disposed += needed
         account_available[event.wallet_label] -= needed
         priced_available -= needed
         row_index += 1

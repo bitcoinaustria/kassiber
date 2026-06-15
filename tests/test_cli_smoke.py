@@ -2068,9 +2068,11 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIn("unclassified_income_kind", reasons)
         self.assertIn("basis_provenance_incomplete", reasons)
 
-    def test_13k_quarantined_gift_debits_availability(self):
-        # A quarantined gift is a real outflow: it debits availability so the
-        # later sale of the now-gone coins is gated insufficient, not booked.
+    def test_13k_quarantined_gift_contaminates_later_disposal(self):
+        # A quarantined gift isn't booked into RP2's lots, so a later sale would
+        # draw from a lot that should have been consumed. The gift's timestamp
+        # contaminates provenance, so the sale is quarantined too (rather than
+        # booked against a wrong basis) until the gift is resolved.
         self._cli("profiles", "create", "--workspace", "Main",
                   "--fiat-currency", "USD", "--tax-country", "generic", "GiftDebit")
         self._cli("wallets", "create", "--workspace", "Main",
@@ -2082,7 +2084,7 @@ class CliSmokeTest(unittest.TestCase):
         payload = self._cli("journals", "quarantined", "--workspace", "Main", "--profile", "GiftDebit")
         reasons = [q["reason"] for q in payload["data"]]
         self.assertIn("non_sale_disposal_kind", reasons)  # the gift
-        self.assertIn("insufficient_lots", reasons)  # the sale, now that the gift is debited
+        self.assertIn("basis_provenance_incomplete", reasons)  # the later sale
         # No realized gain booked: the gift is deferred and the sale is gated.
         payload = self._cli("reports", "capital-gains", "--workspace", "Main", "--profile", "GiftDebit")
         self.assertEqual(payload["data"], [])

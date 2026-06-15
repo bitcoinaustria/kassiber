@@ -684,13 +684,12 @@ def normalize_tax_asset_inputs(
                 spot_price = _spot_price_from_row(in_row, msat_to_btc(in_row["amount"]))
                 spot_price_row = in_row
                 spot_price_wallet_label = to_wallet["label"]
-            # When only the FEE can't be priced (coarse or missing spot), still
-            # MOVE the coins so the destination wallet is funded — dropping the
-            # whole transfer desyncs balances and spuriously starves a later
-            # disposal from the destination (and, pre-fix, crashed rp2's
-            # per-account BalanceSet). Surface the fee as a quarantine and drop it
-            # to zero so no mis-priced fee disposal is booked; the fee coins stay
-            # attributed to the source until the price is supplied.
+            # When the fee can't be priced, quarantine the whole transfer rather
+            # than book a mis-priced fee or emit a partial MOVE: a zero-fee MOVE
+            # would leave the un-moved fee quantity in the source (overstating
+            # holdings / double-spendable). The transfer is deferred until the
+            # fee is priced; the per-account gate quarantines any dependent
+            # destination disposal gracefully in the meantime (no crash).
             if fee > 0 and spot_price is not None and _pricing_needs_review(spot_price_row):
                 quarantines.append(
                     build_tax_quarantine(
@@ -705,9 +704,8 @@ def normalize_tax_asset_inputs(
                         ),
                     )
                 )
-                sent = received
-                fee = Decimal("0")
-            elif spot_price is None and fee > 0:
+                continue
+            if spot_price is None and fee > 0:
                 quarantines.append(
                     build_tax_quarantine(
                         profile,
@@ -722,9 +720,7 @@ def normalize_tax_asset_inputs(
                         },
                     )
                 )
-                sent = received
-                fee = Decimal("0")
-                spot_price = Decimal("0")
+                continue
 
             description = (
                 out_row["note"]
