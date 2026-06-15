@@ -86,6 +86,10 @@ const Assistant = lazyRouteComponent(
   () => import("./routes/Assistant"),
   "Assistant",
 );
+const ManySats = lazyRouteComponent(
+  () => import("./routes/ManySats"),
+  "ManySats",
+);
 
 const rootRoute = createRootRoute({
   component: () => (
@@ -273,6 +277,12 @@ const assistantRoute = createRoute({
   component: Assistant,
 });
 
+const manySatsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/manysats",
+  component: ManySats,
+});
+
 const assistantTypoRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/assitant",
@@ -326,6 +336,7 @@ const routeTree = rootRoute.addChildren([
     importsRoute,
     settingsRoute,
     assistantRoute,
+    manySatsRoute,
   ]),
 ]);
 

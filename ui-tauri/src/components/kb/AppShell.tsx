@@ -584,6 +584,9 @@ export function AppShell() {
         }
       : shellProgress;
   const isAssistantRoute = pathname === "/assistant";
+  // Routes that suppress the bottom-docked assistant chat: the full-page
+  // assistant (which already hosts chat) and the focused ManySats calculator.
+  const hideDockedAssistant = isAssistantRoute || pathname === "/manysats";
   const routeMeta =
     ROUTE_META.find(([prefix]) => pathname.startsWith(prefix))?.[1] ?? {
       title: "Kassiber",
@@ -1336,14 +1339,14 @@ export function AppShell() {
                         tabIndex={-1}
                         className={cn(
                           appMainClassName,
-                          isAssistantRoute
+                          hideDockedAssistant
                             ? "pb-0"
                             : "pb-[240px]",
                         )}
                       >
                         <Outlet />
                       </main>
-                      {isAssistantRoute ? null : (
+                      {hideDockedAssistant ? null : (
                         <ScreenAssistantMockup
                           collapsed={assistantCollapsed}
                           className="absolute inset-x-0 bottom-0 z-20"
@@ -1510,6 +1513,8 @@ function SidebarActions({
   const setDataMode = useUiStore((state) => state.setDataMode);
   const isRealData = dataMode === "real";
   const supportActive = pathname === "/diagnostics";
+  const manySatsActive = pathname === "/manysats";
+  const extrasActive = manySatsActive;
 
   return (
     <SidebarMenu>
@@ -1593,10 +1598,14 @@ function SidebarActions({
         </Collapsible>
       </SidebarMenuItem>
       <SidebarMenuItem>
-        <Collapsible asChild className="group/collapsible">
+        <Collapsible
+          asChild
+          defaultOpen={extrasActive}
+          className="group/collapsible"
+        >
           <div>
             <CollapsibleTrigger asChild>
-              <SidebarMenuButton tooltip="Extras">
+              <SidebarMenuButton isActive={extrasActive} tooltip="Extras">
                 <Plus className="size-4" aria-hidden="true" />
                 <span>Extras</span>
                 <ChevronRight className="ml-auto size-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
@@ -1605,14 +1614,11 @@ function SidebarActions({
             <CollapsibleContent>
               <SidebarMenuSub>
                 <SidebarMenuSubItem>
-                  <SidebarMenuSubButton
-                    asChild
-                    className="w-full cursor-default"
-                  >
-                    <button type="button" disabled>
+                  <SidebarMenuSubButton asChild isActive={manySatsActive}>
+                    <Link to="/manysats">
                       <Calculator className="size-3.5" aria-hidden="true" />
                       <span>ManySats</span>
-                    </button>
+                    </Link>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
                 <SidebarMenuSubItem>
