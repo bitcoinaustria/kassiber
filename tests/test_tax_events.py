@@ -269,13 +269,10 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
             self.wallet_refs_by_id,
             [{"out": out_row, "in": in_row}],
         )
-        # The fee can't be priced, so the coins still MOVE (zero-fee) to fund the
-        # destination — dropping the whole transfer would desync balances — and
-        # the unpriced fee is surfaced as a quarantine.
-        self.assertEqual(len(inputs.transfers), 1)
-        self.assertEqual(float(inputs.transfers[0].sent), 0.5)
-        self.assertEqual(float(inputs.transfers[0].received), 0.5)
-        self.assertEqual(float(inputs.transfers[0].fee), 0.0)
+        # The fee can't be priced, so the whole transfer is quarantined (not
+        # emitted as a partial zero-fee MOVE that would leave the un-moved fee
+        # quantity double-spendable in the source). Resolved by pricing the fee.
+        self.assertEqual(inputs.transfers, [])
         self.assertEqual(len(inputs.quarantines), 1)
         self.assertEqual(inputs.quarantines[0]["reason"], "missing_spot_price")
         detail = json.loads(inputs.quarantines[0]["detail_json"])
