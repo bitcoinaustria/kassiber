@@ -8,7 +8,7 @@ from collections import defaultdict
 from datetime import date, datetime, timezone
 from typing import Any
 
-from ..backends import backend_value, redact_backend_for_output
+from ..backends import backend_value, redact_backend_for_output, resolve_backend
 from ..errors import AppError
 from ..msat import msat_to_btc
 from ..tax_policy import build_tax_policy
@@ -25,6 +25,7 @@ from ..wallet_descriptors import (
 from . import output_inventory as core_output_inventory
 from . import ownership as core_ownership
 from . import rates as core_rates
+from . import sync_backends as core_sync_backends
 from . import reports as report_builders
 from .samourai import samourai_metadata_from_wallet_config
 from . import transaction_history
@@ -3750,6 +3751,24 @@ def _identify_inputs(args: Any) -> dict[str, Any]:
     }
 
 
+def _empty_identify_payload() -> dict[str, Any]:
+    return {
+        "results": [],
+        "summary": {
+            "total": 0,
+            "owned": 0,
+            "external": 0,
+            "unknown": 0,
+            "invalid": 0,
+            "wallets_scanned": 0,
+            "scan_to_index": 0,
+            "verified_on_chain": False,
+        },
+        "warnings": [],
+        "context": {"workspace": None, "profile": None},
+    }
+
+
 def build_wallet_identify_snapshot(
     conn: sqlite3.Connection,
     runtime_config: dict[str, object] | None,
@@ -3759,26 +3778,12 @@ def build_wallet_identify_snapshot(
 
     Read-only and cache-only: matches against the watch-only output inventory,
     imported txids and offline descriptor derivation. It never contacts the
-    network — on-chain verification is a deliberate CLI opt-in, so this read
-    surface stays safe to call without consent.
+    network — on-chain verification is the separate ``ui.wallets.identify_onchain``
+    action, so this read surface stays safe to call without consent.
     """
     context, profile = _active_context_and_profile(conn)
     if profile is None:
-        return {
-            "results": [],
-            "summary": {
-                "total": 0,
-                "owned": 0,
-                "external": 0,
-                "unknown": 0,
-                "invalid": 0,
-                "wallets_scanned": 0,
-                "scan_to_index": 0,
-                "verified_on_chain": False,
-            },
-            "warnings": [],
-            "context": {"workspace": None, "profile": None},
-        }
+        return _empty_identify_payload()
     inputs = _identify_inputs(args)
     scan_to_index = inputs["scan_to_index"]
     if scan_to_index is None:
@@ -3793,6 +3798,58 @@ def build_wallet_identify_snapshot(
         scan_to_index=scan_to_index,
         verify_fetcher=None,
     )
+    report["context"] = {
+        "workspace": context["workspace_label"] or None,
+        "profile": context["profile_label"] or None,
+    }
+    return report
+
+
+def build_wallet_identify_onchain_snapshot(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object] | None,
+    args: Any,
+) -> dict[str, Any]:
+    """Reconcile with the opt-in on-chain tier: txids not in local history are
+    fetched through an Esplora/Electrum backend for a per-leg verdict.
+
+    This contacts the network, so it is a mutating daemon kind (the desktop
+    "Verify on chain" action), never a read tool and never exposed to the AI.
+    """
+    context, profile = _active_context_and_profile(conn)
+    if profile is None:
+        return _empty_identify_payload()
+    if not isinstance(runtime_config, dict):
+        raise AppError(
+            "On-chain verification is unavailable without backend configuration",
+            code="validation",
+            retryable=False,
+        )
+    inputs = _identify_inputs(args)
+    scan_to_index = inputs["scan_to_index"]
+    if scan_to_index is None:
+        scan_to_index = core_ownership.DEFAULT_SCAN_TO_INDEX
+    backend_name = args.get("backend") if isinstance(args, dict) else None
+    backend = resolve_backend(runtime_config, backend_name)
+    kind = str(backend.get("kind") or "").strip().lower()
+    if kind not in {"esplora", "electrum"}:
+        raise AppError(
+            f"On-chain verification needs an Esplora or Electrum backend, not '{kind}'",
+            code="validation",
+            hint="Choose an Esplora or Electrum backend for verification.",
+            retryable=False,
+        )
+    with core_sync_backends.verify_session(backend) as fetcher:
+        report = core_ownership.identify(
+            conn,
+            profile["id"],
+            addresses=inputs["addresses"],
+            txids=inputs["txids"],
+            candidates=inputs["candidates"],
+            file_text=inputs["text"],
+            scan_to_index=scan_to_index,
+            verify_fetcher=fetcher,
+        )
     report["context"] = {
         "workspace": context["workspace_label"] or None,
         "profile": context["profile_label"] or None,

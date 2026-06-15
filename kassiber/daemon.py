@@ -123,6 +123,7 @@ from .core.ui_snapshot import (
     build_wallet_utxos_snapshot,
     build_wallet_identify_snapshot_for_ai,
     build_wallet_identify_snapshot,
+    build_wallet_identify_onchain_snapshot,
     build_wallets_list_snapshot,
     build_workspace_health_snapshot,
     build_workspace_overview_snapshot,
@@ -236,6 +237,7 @@ SUPPORTED_KINDS = (
     "ui.wallets.list",
     "ui.wallets.utxos",
     "ui.wallets.identify",
+    "ui.wallets.identify_onchain",
     "ui.backends.list",
     "ui.backends.options",
     "ui.backends.public_defaults",
@@ -7917,6 +7919,22 @@ def handle_request(
                 build_envelope(
                     "ui.wallets.identify",
                     build_wallet_identify_snapshot(
+                        ctx.conn,
+                        ctx.runtime_config,
+                        request.get("args"),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.wallets.identify_onchain":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.wallets.identify_onchain",
+                    build_wallet_identify_onchain_snapshot(
                         ctx.conn,
                         ctx.runtime_config,
                         request.get("args"),

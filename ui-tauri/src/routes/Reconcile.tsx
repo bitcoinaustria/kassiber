@@ -13,6 +13,7 @@ import * as React from "react";
 import {
   ClipboardCopy,
   Fingerprint,
+  Globe,
   Search,
   ShieldCheck,
 } from "lucide-react";
@@ -37,7 +38,7 @@ import {
 } from "@/components/ui/table";
 import { CopyButton } from "@/components/kb/CopyButton";
 import { hiddenSensitiveClassName } from "@/components/kb/wallets/format";
-import { useDaemonMutation, formatDaemonEnvelopeError } from "@/daemon/client";
+import { useDaemonMutation } from "@/daemon/client";
 import { copyTextWithPolicy } from "@/lib/clipboard";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { useUiStore } from "@/store/ui";
@@ -66,6 +67,16 @@ interface IdentifyResult {
   owned_outputs?: number | null;
   external_outputs?: number | null;
   match_source?: string;
+  // Per-leg detail is carried on txid rows by the real payload; the screen does
+  // not render it yet, but the field is typed so the shape stays in lockstep.
+  legs?: Array<{
+    side: string;
+    outpoint?: string | null;
+    n?: number | null;
+    owned: boolean;
+    wallet: string;
+    branch?: string;
+  }>;
 }
 
 interface IdentifySummary {
@@ -107,6 +118,7 @@ const CLASSIFICATION_LABEL: Record<string, string> = {
   touches_wallet: "Touches wallet",
   external: "External",
   unknown: "Unknown",
+  undetermined: "Undetermined",
   invalid: "Invalid",
 };
 
@@ -203,18 +215,36 @@ export function Reconcile() {
   const [input, setInput] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
   const [copied, setCopied] = React.useState(false);
+  // The displayed report comes from either the cache-only check or the on-chain
+  // verify, whichever ran most recently.
+  const [report, setReport] = React.useState<IdentifyReport | null>(null);
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const check = useDaemonMutation<IdentifyReport>("ui.wallets.identify");
+  const verify = useDaemonMutation<IdentifyReport>("ui.wallets.identify_onchain");
 
-  const report = check.data?.data;
   const results = React.useMemo(() => report?.results ?? [], [report]);
   const summary = report?.summary;
+  const unknownCount = summary?.unknown ?? 0;
 
   const trimmed = input.trim();
-  const onCheck = () => {
+
+  const runMutation = async (
+    mutation: typeof check,
+    failureLabel: string,
+  ) => {
     if (!trimmed) return;
+    setErrorMessage(null);
     setStatusFilter("all");
-    check.mutate({ text: input });
+    try {
+      const envelope = await mutation.mutateAsync({ text: input });
+      setReport(envelope.data ?? null);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : failureLabel);
+    }
   };
+
+  const onCheck = () => runMutation(check, "Ownership check failed");
+  const onVerify = () => runMutation(verify, "On-chain verification failed");
 
   const filtered = React.useMemo(
     () =>
@@ -234,12 +264,6 @@ export function Reconcile() {
       // Clipboard access is best-effort in browser preview.
     }
   };
-
-  const errorMessage = check.isError
-    ? check.error instanceof Error
-      ? check.error.message
-      : "Ownership check failed"
-    : null;
 
   return (
     <div className={screenShellClassName}>
@@ -269,16 +293,13 @@ export function Reconcile() {
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <ShieldCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" />
               Checked on-device against your wallets — nothing leaves this
-              machine. For unsynced txids, use{" "}
-              <code className="rounded bg-muted px-1">
-                kassiber wallets identify --verify-on-chain
-              </code>
-              .
+              machine. Transactions not in your synced history can be verified
+              on chain below (that one step contacts your backend).
             </p>
             <Button
               type="button"
               onClick={onCheck}
-              disabled={!trimmed || check.isPending}
+              disabled={!trimmed || check.isPending || verify.isPending}
             >
               <Search className="size-4" />
               {check.isPending ? "Checking…" : "Check ownership"}
@@ -291,15 +312,6 @@ export function Reconcile() {
         <Card>
           <CardContent className="py-4 text-sm text-destructive">
             {errorMessage}
-            {check.error &&
-            typeof check.error === "object" &&
-            "envelope" in check.error
-              ? formatDaemonEnvelopeError(
-                  (check.error as { envelope: Parameters<typeof formatDaemonEnvelopeError>[0] })
-                    .envelope,
-                  { includeDetails: true },
-                )
-              : null}
           </CardContent>
         </Card>
       ) : null}
@@ -349,16 +361,32 @@ export function Reconcile() {
                 derivation index {summary.scan_to_index}
                 {summary.verified_on_chain ? " · verified on-chain" : ""}.
               </CardDescription>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={onCopyCsv}
-                disabled={results.length === 0}
-              >
-                <ClipboardCopy className="size-4" />
-                {copied ? "Copied" : "Copy CSV"}
-              </Button>
+              <div className="flex items-center gap-2">
+                {unknownCount > 0 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={onVerify}
+                    disabled={verify.isPending || check.isPending}
+                  >
+                    <Globe className="size-4" />
+                    {verify.isPending
+                      ? "Verifying…"
+                      : `Verify ${unknownCount} on chain`}
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onCopyCsv}
+                  disabled={results.length === 0}
+                >
+                  <ClipboardCopy className="size-4" />
+                  {copied ? "Copied" : "Copy CSV"}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <Table>

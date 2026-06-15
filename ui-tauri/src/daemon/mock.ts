@@ -879,7 +879,11 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
-    if (req.kind === "ui.wallets.identify") {
+    if (
+      req.kind === "ui.wallets.identify" ||
+      req.kind === "ui.wallets.identify_onchain"
+    ) {
+      const verified = req.kind === "ui.wallets.identify_onchain";
       const overview = mockOverviewSnapshot();
       const args = (req.args ?? {}) as {
         text?: unknown;
@@ -901,26 +905,66 @@ export const mockDaemon: DaemonTransport = {
         .filter((token) => token.length > 0 && !token.startsWith("#"));
       const ownerWallet = overview.connections[0]?.label ?? "Cold Storage";
       // Deterministic mock: a 64-hex string is a txid, otherwise an address;
-      // tokens containing "own"/"mine" demo an owned hit so the screen shows
-      // both branches without needing a real descriptor scan.
+      // tokens containing "own"/"mine"/"demo" demo an owned hit. The cache-only
+      // kind mirrors the real read surface (owned txid -> touches_wallet, else
+      // unknown); the on-chain kind upgrades txids to a per-leg verdict.
       let receiveIndex = 0;
       const results = cleaned.map((token) => {
         const isTxid = /^[0-9a-fA-F]{64}$/.test(token);
         const owned = /own|mine|demo/i.test(token);
+        // A txid can't contain "demo" (non-hex), so use a hex-valid sentinel to
+        // demo the owned-txid path (touches_wallet cache-only, self_transfer
+        // once verified); any other 64-hex txid stays unknown/external.
+        const ownedTxid = isTxid && token.toLowerCase().startsWith("dead");
         if (isTxid) {
-          return owned
+          if (ownedTxid) {
+            return verified
+              ? {
+                  input: token,
+                  type: "txid",
+                  chain: "bitcoin",
+                  status: "owned",
+                  classification: "self_transfer",
+                  wallets: [ownerWallet],
+                  owned_inputs: 1,
+                  owned_outputs: 2,
+                  external_outputs: 0,
+                  legs: [
+                    { side: "input", outpoint: `${token}:0`, owned: true, wallet: ownerWallet },
+                    { side: "output", n: 0, owned: true, wallet: ownerWallet, branch: "change" },
+                  ],
+                  match_source: "chain",
+                  note: "Self-transfer/consolidation: all outputs return to owned addresses.",
+                }
+              : {
+                  input: token,
+                  type: "txid",
+                  chain: "",
+                  status: "owned",
+                  classification: "touches_wallet",
+                  wallets: [ownerWallet],
+                  owned_inputs: null,
+                  owned_outputs: null,
+                  external_outputs: null,
+                  legs: [],
+                  match_source: "inventory",
+                  note: `Recorded against '${ownerWallet}'; per-leg breakdown needs on-chain verification.`,
+                };
+          }
+          return verified
             ? {
                 input: token,
                 type: "txid",
                 chain: "bitcoin",
-                status: "owned",
-                classification: "self_transfer",
-                wallets: [ownerWallet],
-                owned_inputs: 1,
-                owned_outputs: 2,
-                external_outputs: 0,
+                status: "external",
+                classification: "external",
+                wallets: [],
+                owned_inputs: 0,
+                owned_outputs: 0,
+                external_outputs: 1,
+                legs: [],
                 match_source: "chain",
-                note: "Self-transfer/consolidation: all outputs return to owned addresses.",
+                note: "No inputs or outputs belong to this profile.",
               }
             : {
                 input: token,
@@ -929,8 +973,12 @@ export const mockDaemon: DaemonTransport = {
                 status: "unknown",
                 classification: "unknown",
                 wallets: [],
+                owned_inputs: null,
+                owned_outputs: null,
+                external_outputs: null,
+                legs: [],
                 match_source: "none",
-                note: "Not in this profile's synced/imported history; retry with --verify-on-chain.",
+                note: "Not in this profile's synced/imported history; on-chain verification is needed for a verdict.",
               };
         }
         if (owned) {
@@ -973,7 +1021,7 @@ export const mockDaemon: DaemonTransport = {
         }
       }
       return {
-        kind: "ui.wallets.identify",
+        kind: req.kind,
         schema_version: 1,
         request_id: req.request_id,
         data: {
@@ -983,7 +1031,7 @@ export const mockDaemon: DaemonTransport = {
             ...counts,
             wallets_scanned: overview.connections.length,
             scan_to_index: 500,
-            verified_on_chain: false,
+            verified_on_chain: verified,
           },
           warnings: [],
           context: { workspace: "Demo", profile: "Default" },
