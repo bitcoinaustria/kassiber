@@ -219,6 +219,7 @@ const NAV_GROUPS: NavGroup[] = [
     title: "Review",
     items: [
       { label: "Quarantine", icon: ShieldAlert, href: "/quarantine" },
+      { label: "Reconcile", icon: Fingerprint, href: "/reconcile" },
       { label: "Source Funds", icon: BadgeCheck, href: "/source-of-funds" },
       { label: "Swaps & Transfers", icon: ArrowLeftRight, href: "/swaps" },
       { label: "Ledger", icon: BookOpen, href: "/journals" },
@@ -324,6 +325,15 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       icon: ShieldAlert,
       searchLabel: "Search quarantine",
       searchPlaceholder: "Search issue, account, source...",
+    },
+  ],
+  [
+    "/reconcile",
+    {
+      title: "Reconcile",
+      icon: Fingerprint,
+      searchLabel: "Search reconcile",
+      searchPlaceholder: "Paste addresses or transaction ids...",
     },
   ],
   [

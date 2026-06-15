@@ -1,0 +1,452 @@
+/**
+ * Reconcile — address / transaction-id ownership lookup.
+ *
+ * Paste a pile of addresses or txids (Bitcoin or Liquid, mixed) and see which
+ * belong to a wallet in the active profile — naming the wallet and whether it
+ * is a receive or change address — and which are external. The reconciliation
+ * workflow for telling apart historic payments from transfers between your own
+ * wallets. Matching runs locally against synced inventory and offline
+ * descriptor derivation; nothing leaves the device. Deeper / on-chain
+ * verification is available from the `kassiber wallets identify` CLI.
+ */
+import * as React from "react";
+import {
+  ClipboardCopy,
+  Fingerprint,
+  Search,
+  ShieldCheck,
+} from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { CopyButton } from "@/components/kb/CopyButton";
+import { hiddenSensitiveClassName } from "@/components/kb/wallets/format";
+import { useDaemonMutation, formatDaemonEnvelopeError } from "@/daemon/client";
+import { copyTextWithPolicy } from "@/lib/clipboard";
+import { screenShellClassName } from "@/lib/screen-layout";
+import { useUiStore } from "@/store/ui";
+
+interface IdentifyMatch {
+  wallet: string;
+  account: string;
+  chain: string;
+  network: string;
+  branch: string;
+  address_index: number | null;
+  derivation_path: string | null;
+  match_source: string;
+}
+
+interface IdentifyResult {
+  input: string;
+  type: string;
+  chain: string;
+  status: string;
+  classification: string;
+  note: string;
+  matches?: IdentifyMatch[];
+  wallets?: string[];
+  owned_inputs?: number | null;
+  owned_outputs?: number | null;
+  external_outputs?: number | null;
+  match_source?: string;
+}
+
+interface IdentifySummary {
+  total: number;
+  owned: number;
+  external: number;
+  unknown: number;
+  invalid: number;
+  wallets_scanned: number;
+  scan_to_index: number;
+  verified_on_chain: boolean;
+}
+
+interface IdentifyReport {
+  results: IdentifyResult[];
+  summary: IdentifySummary;
+  warnings: string[];
+  context?: { workspace: string | null; profile: string | null };
+}
+
+type StatusFilter = "all" | "owned" | "external" | "unknown" | "invalid";
+
+const STATUS_BADGE: Record<
+  string,
+  { variant: "default" | "secondary" | "outline" | "destructive"; label: string }
+> = {
+  owned: { variant: "default", label: "Owned" },
+  external: { variant: "secondary", label: "External" },
+  unknown: { variant: "outline", label: "Unknown" },
+  invalid: { variant: "destructive", label: "Invalid" },
+};
+
+const CLASSIFICATION_LABEL: Record<string, string> = {
+  owned_address: "Owned address",
+  external_address: "External address",
+  self_transfer: "Self-transfer",
+  outbound_payment: "Outbound payment",
+  inbound_receipt: "Inbound receipt",
+  touches_wallet: "Touches wallet",
+  external: "External",
+  unknown: "Unknown",
+  invalid: "Invalid",
+};
+
+const PLACEHOLDER = [
+  "Paste one address or transaction id per line, for example:",
+  "bc1qexampleaddress…",
+  "a1b2c3…  (64-char transaction id)",
+].join("\n");
+
+function ownerLabel(result: IdentifyResult): string {
+  if (result.matches && result.matches.length > 0) {
+    return Array.from(new Set(result.matches.map((m) => m.wallet).filter(Boolean))).join(", ");
+  }
+  if (result.wallets && result.wallets.length > 0) {
+    return result.wallets.filter(Boolean).join(", ");
+  }
+  return "";
+}
+
+function branchLabel(result: IdentifyResult): string {
+  const primary = result.matches?.[0];
+  if (!primary) return "";
+  const where = primary.branch || "address";
+  return primary.address_index != null ? `${where} #${primary.address_index}` : where;
+}
+
+function csvCell(value: string): string {
+  if (/[",\n]/.test(value)) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+function resultsToCsv(results: IdentifyResult[]): string {
+  const header = [
+    "input",
+    "type",
+    "chain",
+    "status",
+    "classification",
+    "wallet",
+    "branch",
+    "note",
+  ];
+  const lines = [header.join(",")];
+  for (const result of results) {
+    lines.push(
+      [
+        result.input,
+        result.type,
+        result.chain,
+        result.status,
+        result.classification,
+        ownerLabel(result),
+        branchLabel(result),
+        result.note,
+      ]
+        .map((value) => csvCell(String(value ?? "")))
+        .join(","),
+    );
+  }
+  return lines.join("\n");
+}
+
+function MetricTile({
+  label,
+  value,
+  active,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex min-w-24 flex-1 flex-col rounded-lg border px-3 py-2 text-left transition-colors ${
+        active
+          ? "border-primary bg-primary/5"
+          : "border-border bg-card hover:bg-accent"
+      }`}
+    >
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-xl font-semibold tabular-nums">{value}</span>
+    </button>
+  );
+}
+
+export function Reconcile() {
+  const hideSensitive = useUiStore((s) => s.hideSensitive);
+  const [input, setInput] = React.useState("");
+  const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
+  const [copied, setCopied] = React.useState(false);
+  const check = useDaemonMutation<IdentifyReport>("ui.wallets.identify");
+
+  const report = check.data?.data;
+  const results = React.useMemo(() => report?.results ?? [], [report]);
+  const summary = report?.summary;
+
+  const trimmed = input.trim();
+  const onCheck = () => {
+    if (!trimmed) return;
+    setStatusFilter("all");
+    check.mutate({ text: input });
+  };
+
+  const filtered = React.useMemo(
+    () =>
+      statusFilter === "all"
+        ? results
+        : results.filter((r) => r.status === statusFilter),
+    [results, statusFilter],
+  );
+
+  const onCopyCsv = async () => {
+    if (results.length === 0) return;
+    try {
+      await copyTextWithPolicy(resultsToCsv(results));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    } catch {
+      // Clipboard access is best-effort in browser preview.
+    }
+  };
+
+  const errorMessage = check.isError
+    ? check.error instanceof Error
+      ? check.error.message
+      : "Ownership check failed"
+    : null;
+
+  return (
+    <div className={screenShellClassName}>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Fingerprint className="size-5 text-primary" />
+            Reconcile addresses &amp; transactions
+          </CardTitle>
+          <CardDescription>
+            Paste addresses or transaction ids to find which belong to a wallet
+            in this book — receive or change — and which are external. Useful for
+            telling apart historic payments from transfers between your own
+            wallets.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Textarea
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            placeholder={PLACEHOLDER}
+            rows={6}
+            spellCheck={false}
+            className={`font-mono text-xs ${hiddenSensitiveClassName(hideSensitive)}`}
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <ShieldCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+              Checked on-device against your wallets — nothing leaves this
+              machine. For unsynced txids, use{" "}
+              <code className="rounded bg-muted px-1">
+                kassiber wallets identify --verify-on-chain
+              </code>
+              .
+            </p>
+            <Button
+              type="button"
+              onClick={onCheck}
+              disabled={!trimmed || check.isPending}
+            >
+              <Search className="size-4" />
+              {check.isPending ? "Checking…" : "Check ownership"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {errorMessage ? (
+        <Card>
+          <CardContent className="py-4 text-sm text-destructive">
+            {errorMessage}
+            {check.error &&
+            typeof check.error === "object" &&
+            "envelope" in check.error
+              ? formatDaemonEnvelopeError(
+                  (check.error as { envelope: Parameters<typeof formatDaemonEnvelopeError>[0] })
+                    .envelope,
+                  { includeDetails: true },
+                )
+              : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {summary ? (
+        <>
+          <div className="flex flex-wrap gap-2">
+            <MetricTile
+              label="Checked"
+              value={summary.total}
+              active={statusFilter === "all"}
+              onClick={() => setStatusFilter("all")}
+            />
+            <MetricTile
+              label="Owned"
+              value={summary.owned}
+              active={statusFilter === "owned"}
+              onClick={() => setStatusFilter("owned")}
+            />
+            <MetricTile
+              label="External"
+              value={summary.external}
+              active={statusFilter === "external"}
+              onClick={() => setStatusFilter("external")}
+            />
+            <MetricTile
+              label="Unknown"
+              value={summary.unknown}
+              active={statusFilter === "unknown"}
+              onClick={() => setStatusFilter("unknown")}
+            />
+            {summary.invalid > 0 ? (
+              <MetricTile
+                label="Invalid"
+                value={summary.invalid}
+                active={statusFilter === "invalid"}
+                onClick={() => setStatusFilter("invalid")}
+              />
+            ) : null}
+          </div>
+
+          <Card>
+            <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
+              <CardDescription>
+                Scanned {summary.wallets_scanned}{" "}
+                {summary.wallets_scanned === 1 ? "wallet" : "wallets"} to
+                derivation index {summary.scan_to_index}
+                {summary.verified_on_chain ? " · verified on-chain" : ""}.
+              </CardDescription>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onCopyCsv}
+                disabled={results.length === 0}
+              >
+                <ClipboardCopy className="size-4" />
+                {copied ? "Copied" : "Copy CSV"}
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Input</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Wallet</TableHead>
+                    <TableHead>Branch</TableHead>
+                    <TableHead>Classification</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={5}
+                        className="py-6 text-center text-sm text-muted-foreground"
+                      >
+                        No matching results.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filtered.map((result, index) => {
+                      const badge =
+                        STATUS_BADGE[result.status] ?? STATUS_BADGE.unknown;
+                      const owner = ownerLabel(result);
+                      return (
+                        <TableRow key={`${result.input}-${index}`}>
+                          <TableCell className="max-w-[22rem]">
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={`truncate font-mono text-xs ${hiddenSensitiveClassName(hideSensitive)}`}
+                                title={result.input}
+                              >
+                                {result.input}
+                              </span>
+                              <CopyButton value={result.input} ariaLabel="Copy input" />
+                            </div>
+                            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                              {result.type}
+                              {result.chain ? ` · ${result.chain}` : ""}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={badge.variant}>{badge.label}</Badge>
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {owner || (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {branchLabel(result) || "—"}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            <span>
+                              {CLASSIFICATION_LABEL[result.classification] ??
+                                result.classification}
+                            </span>
+                            {result.note ? (
+                              <p className="text-xs text-muted-foreground">
+                                {result.note}
+                              </p>
+                            ) : null}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {report?.warnings && report.warnings.length > 0 ? (
+            <Card>
+              <CardContent className="space-y-1 py-3 text-xs text-muted-foreground">
+                {report.warnings.map((warning, index) => (
+                  <p key={index}>⚠ {warning}</p>
+                ))}
+              </CardContent>
+            </Card>
+          ) : null}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+export default Reconcile;

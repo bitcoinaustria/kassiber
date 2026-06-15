@@ -879,6 +879,118 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.wallets.identify") {
+      const overview = mockOverviewSnapshot();
+      const args = (req.args ?? {}) as {
+        text?: unknown;
+        addresses?: unknown;
+        txids?: unknown;
+      };
+      const tokens: string[] = [];
+      if (typeof args.text === "string") {
+        tokens.push(...args.text.split(/\r?\n/));
+      }
+      if (Array.isArray(args.addresses)) {
+        tokens.push(...args.addresses.map((value) => String(value)));
+      }
+      if (Array.isArray(args.txids)) {
+        tokens.push(...args.txids.map((value) => String(value)));
+      }
+      const cleaned = tokens
+        .map((token) => token.trim())
+        .filter((token) => token.length > 0 && !token.startsWith("#"));
+      const ownerWallet = overview.connections[0]?.label ?? "Cold Storage";
+      // Deterministic mock: a 64-hex string is a txid, otherwise an address;
+      // tokens containing "own"/"mine" demo an owned hit so the screen shows
+      // both branches without needing a real descriptor scan.
+      let receiveIndex = 0;
+      const results = cleaned.map((token) => {
+        const isTxid = /^[0-9a-fA-F]{64}$/.test(token);
+        const owned = /own|mine|demo/i.test(token);
+        if (isTxid) {
+          return owned
+            ? {
+                input: token,
+                type: "txid",
+                chain: "bitcoin",
+                status: "owned",
+                classification: "self_transfer",
+                wallets: [ownerWallet],
+                owned_inputs: 1,
+                owned_outputs: 2,
+                external_outputs: 0,
+                match_source: "chain",
+                note: "Self-transfer/consolidation: all outputs return to owned addresses.",
+              }
+            : {
+                input: token,
+                type: "txid",
+                chain: "",
+                status: "unknown",
+                classification: "unknown",
+                wallets: [],
+                match_source: "none",
+                note: "Not in this profile's synced/imported history; retry with --verify-on-chain.",
+              };
+        }
+        if (owned) {
+          const index = receiveIndex++;
+          return {
+            input: token,
+            type: "address",
+            chain: "bitcoin",
+            status: "owned",
+            classification: "owned_address",
+            matches: [
+              {
+                wallet: ownerWallet,
+                account: "treasury",
+                chain: "bitcoin",
+                network: "main",
+                branch: "receive",
+                address_index: index,
+                derivation_path: `m/84'/0'/0'/0/${index}`,
+                match_source: "derived",
+              },
+            ],
+            note: `Owned by '${ownerWallet}' (receive #${index}).`,
+          };
+        }
+        return {
+          input: token,
+          type: "address",
+          chain: "bitcoin",
+          status: "external",
+          classification: "external_address",
+          matches: [],
+          note: "Not derived from or seen by any wallet in this profile.",
+        };
+      });
+      const counts = { owned: 0, external: 0, unknown: 0, invalid: 0 };
+      for (const result of results) {
+        if (result.status in counts) {
+          counts[result.status as keyof typeof counts] += 1;
+        }
+      }
+      return {
+        kind: "ui.wallets.identify",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          results,
+          summary: {
+            total: results.length,
+            ...counts,
+            wallets_scanned: overview.connections.length,
+            scan_to_index: 500,
+            verified_on_chain: false,
+          },
+          warnings: [],
+          context: { workspace: "Demo", profile: "Default" },
+        } as T,
+      };
+    }
+
     if (req.kind === "daemon.lock") {
       return {
         kind: "daemon.lock",
