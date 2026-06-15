@@ -389,9 +389,10 @@ class BuildTaxQuarantineTest(unittest.TestCase):
     profile = {"id": "p", "workspace_id": "w"}
 
     def test_uses_real_id_for_synthetic_rows(self):
-        # A synthetic engine-only row must quarantine against its real tx so the
-        # journal_quarantines FK to transactions(id) holds.
-        row = {"id": "cross-split:abc:out", "journal_transaction_id": "real-tx"}
+        # A synthetic engine-only row (e.g. a direct-payout or cross-split leg)
+        # must quarantine against its real tx so the journal_quarantines FK to
+        # transactions(id) holds — otherwise the whole `journals process` aborts.
+        row = {"id": "direct-payout:abc:out", "journal_transaction_id": "real-tx"}
         q = build_tax_quarantine(self.profile, row, "reason", {})
         self.assertEqual(q["transaction_id"], "real-tx")
 
