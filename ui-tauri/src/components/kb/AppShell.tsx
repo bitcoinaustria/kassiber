@@ -18,6 +18,7 @@ import {
   Bell,
   BookOpen,
   Bug,
+  Calculator,
   ChevronRight,
   ChevronsUpDown,
   ClipboardList,
@@ -34,6 +35,7 @@ import {
   LogOut,
   MessageSquareText,
   Moon,
+  Plus,
   Search,
   Server,
   Settings,
@@ -1583,6 +1585,45 @@ function SidebarActions({
                       <Heart className="size-3.5" aria-hidden="true" />
                       <span>Donate sats</span>
                     </a>
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+              </SidebarMenuSub>
+            </CollapsibleContent>
+          </div>
+        </Collapsible>
+      </SidebarMenuItem>
+      <SidebarMenuItem>
+        <Collapsible asChild className="group/collapsible">
+          <div>
+            <CollapsibleTrigger asChild>
+              <SidebarMenuButton tooltip="Extras">
+                <Plus className="size-4" aria-hidden="true" />
+                <span>Extras</span>
+                <ChevronRight className="ml-auto size-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
+              </SidebarMenuButton>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarMenuSub>
+                <SidebarMenuSubItem>
+                  <SidebarMenuSubButton
+                    asChild
+                    className="w-full cursor-default"
+                  >
+                    <button type="button" disabled>
+                      <Calculator className="size-3.5" aria-hidden="true" />
+                      <span>ManySats</span>
+                    </button>
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+                <SidebarMenuSubItem>
+                  <SidebarMenuSubButton
+                    asChild
+                    className="w-full cursor-default"
+                  >
+                    <button type="button" disabled>
+                      <LogOut className="size-3.5" aria-hidden="true" />
+                      <span>Exit-Calculator</span>
+                    </button>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
               </SidebarMenuSub>
