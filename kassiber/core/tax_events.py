@@ -118,6 +118,51 @@ def build_tax_quarantine(
     }
 
 
+def dedupe_quarantines(quarantines: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Collapse quarantines that share a ``transaction_id``.
+
+    ``journal_quarantines.transaction_id`` is the PRIMARY KEY. Several engine
+    paths can emit more than one quarantine for the SAME real transaction id —
+    multiple synthetic legs (direct-payout proceeds rows, and on the split
+    branch the ``cross-split:`` peg legs) map back to one real out tx, and any
+    two gate/normalize drops keyed on the same row collide too. Inserting both
+    rows would raise a UNIQUE constraint and abort the ENTIRE ``journals
+    process`` — the exact all-or-nothing failure this hardening exists to
+    remove. Collapse to one row per transaction, preserving the first-seen
+    reason/detail and folding any *distinct* later reasons into
+    ``detail_json['additional_reasons']`` so no review signal is silently lost.
+    Exact duplicates are discarded; first-seen transaction order is preserved.
+    """
+    by_id: dict[str, dict[str, Any]] = {}
+    for quarantine in quarantines:
+        tx_id = quarantine["transaction_id"]
+        existing = by_id.get(tx_id)
+        if existing is None:
+            by_id[tx_id] = dict(quarantine)
+            continue
+        if (
+            quarantine["reason"] == existing["reason"]
+            and quarantine["detail_json"] == existing["detail_json"]
+        ):
+            # Identical quarantine for the same transaction — nothing new.
+            continue
+        try:
+            detail = json.loads(existing["detail_json"])
+        except (ValueError, TypeError):
+            detail = None
+        if not isinstance(detail, dict):
+            detail = {"detail": detail}
+        try:
+            extra_detail: Any = json.loads(quarantine["detail_json"])
+        except (ValueError, TypeError):
+            extra_detail = quarantine["detail_json"]
+        detail.setdefault("additional_reasons", []).append(
+            {"reason": quarantine["reason"], "detail": extra_detail}
+        )
+        existing["detail_json"] = json.dumps(detail, sort_keys=True)
+    return list(by_id.values())
+
+
 def _spot_price_from_row(row: Mapping[str, Any], quantity: Decimal) -> Decimal | None:
     rate = pricing.decimal_from_exact(
         _row_get(row, "fiat_rate_exact"),

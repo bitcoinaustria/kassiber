@@ -45,6 +45,7 @@ from ..core import saved_views as core_saved_views
 from ..core import swap_rules as core_swap_rules
 from ..core import sync as core_sync
 from ..core import sync_backends as core_sync_backends
+from ..core import tax_events as core_tax_events
 from ..core import transfer_matching as core_transfer_matching
 from ..core import wallets as core_wallets
 from ..core.engines import TaxEngineLedgerInputs, build_tax_engine
@@ -3000,6 +3001,10 @@ def process_journals(conn, workspace_ref, profile_ref):
             """,
             journal_entry_rows,
         )
+        # Collapse legs that map to the same real transaction (e.g. multiple
+        # synthetic payout/split legs of one out row) so two rows never collide
+        # on journal_quarantines' PRIMARY KEY and abort the whole run.
+        deduped_quarantines = core_tax_events.dedupe_quarantines(state["quarantines"])
         conn.executemany(
             """
             INSERT INTO journal_quarantines(
@@ -3015,7 +3020,7 @@ def process_journals(conn, workspace_ref, profile_ref):
                     quarantine["detail_json"],
                     created_at,
                 )
-                for quarantine in state["quarantines"]
+                for quarantine in deduped_quarantines
             ],
         )
         conn.executemany(
@@ -3120,7 +3125,7 @@ def process_journals(conn, workspace_ref, profile_ref):
     result = {
         "profile": profile["label"],
         "entries_created": len(state["entries"]),
-        "quarantined": len(state["quarantines"]),
+        "quarantined": len(deduped_quarantines),
         "transfers_detected": len(state.get("intra_audit", [])),
         "cross_asset_pairs": len(state.get("cross_asset_pairs", [])),
         "auto_priced": auto_priced,
@@ -3294,7 +3299,7 @@ def inspect_transfer_audit(conn, workspace_ref, profile_ref):
             "same_asset_transfers": len(intra_transfers),
             "cross_asset_pairs": len(cross_asset_pairs),
             "direct_swap_payouts": len(direct_swap_payouts),
-            "quarantines": len(state["quarantines"]),
+            "quarantines": len(core_tax_events.dedupe_quarantines(state["quarantines"])),
         },
         "same_asset_transfers": intra_transfers,
         "cross_asset_pairs": cross_asset_pairs,
