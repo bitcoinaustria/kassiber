@@ -72,10 +72,11 @@ class InferRegimeFromTimestampTest(unittest.TestCase):
 
 
 class ResolvePoolIdTest(unittest.TestCase):
-    def test_wallet_id_becomes_pool_id(self):
-        self.assertEqual(resolve_pool_id("wallet-abc"), "wallet-abc")
-
-    def test_missing_wallet_id_falls_back_to_default(self):
+    def test_pool_is_global_regardless_of_wallet(self):
+        # Single global moving-average pool per asset (§ 2 KryptowährungsVO): the pool id no longer
+        # depends on the wallet, so coins acquired in one wallet and sold from another share one pool.
+        self.assertEqual(resolve_pool_id("wallet-abc"), "default")
+        self.assertEqual(resolve_pool_id("wallet-xyz"), "default")
         self.assertEqual(resolve_pool_id(None), "default")
         self.assertEqual(resolve_pool_id(""), "default")
 
@@ -95,6 +96,18 @@ class InferOutboundRegimesTest(unittest.TestCase):
             _row("sell-later", "wallet-a", "outbound", 30_000_000, occurred_at="2025-06-01T00:00:00Z"),
         ]
         self.assertEqual(infer_outbound_regimes(rows), {"sell-later": REGIME_NEU})
+
+    def test_post_cutoff_sale_from_other_wallet_draws_global_neu_pool(self):
+        # bitcoinaustria/kassiber#213: Neu acquired in wallet-a, sold from wallet-b. With the old
+        # per-wallet pools the sale wrongly fell back to Alt (wallet-b's Neu pool was empty while Alt
+        # existed); with the single global per-asset pool it correctly stays Neu, drawing on the
+        # taxpayer's whole Neu holding. (Mirrors how rp2's moving_average_at now sees one Neu pool.)
+        rows = [
+            _row("buy-alt", "wallet-a", "inbound", 50_000_000, occurred_at="2020-06-01T00:00:00Z"),
+            _row("buy-neu", "wallet-a", "inbound", 100_000_000, occurred_at="2024-06-01T00:00:00Z"),
+            _row("sell-from-b", "wallet-b", "outbound", 30_000_000, occurred_at="2025-06-01T00:00:00Z"),
+        ]
+        self.assertEqual(infer_outbound_regimes(rows), {"sell-from-b": REGIME_NEU})
 
 
 class AustrianKennzahlMappingTest(unittest.TestCase):
@@ -149,7 +162,7 @@ class AustrianNormalizationTest(unittest.TestCase):
         self.assertEqual(len(result.events), 1)
         event = result.events[0]
         self.assertEqual(event.at_regime, REGIME_NEU)
-        self.assertEqual(event.at_pool, "wallet-a")
+        self.assertEqual(event.at_pool, "default")  # single global per-asset pool, not per-wallet
         self.assertIsNone(event.at_swap_link)
 
     def test_at_inbound_event_pre_cutoff_gets_alt_regime(self):
@@ -184,7 +197,7 @@ class AustrianNormalizationTest(unittest.TestCase):
         self.assertEqual(event.at_swap_link, "swap-42")
         self.assertEqual(event.fiat_value, event.amount * event.spot_price)
 
-    def test_at_transfer_gets_pool_from_source_wallet(self):
+    def test_at_transfer_uses_global_pool(self):
         rows = [
             _row("out-1", "wallet-a", "outbound", 1, occurred_at="2025-06-01T00:00:00Z", external_id="chain-1"),
             _row("in-1", "wallet-b", "inbound", 1, occurred_at="2025-06-01T00:00:00Z", external_id="chain-1"),
@@ -194,7 +207,9 @@ class AustrianNormalizationTest(unittest.TestCase):
             self.at_profile, "BTC", rows, self.wallet_refs, [pair]
         )
         self.assertEqual(len(result.transfers), 1)
-        self.assertEqual(result.transfers[0].at_pool, "wallet-a")
+        # Transfers carry the single global pool, not the source wallet — so a later sale from the
+        # destination wallet resolves against the same Neu pool the coins were acquired in.
+        self.assertEqual(result.transfers[0].at_pool, "default")
 
     def test_at_outbound_post_cutoff_with_only_alt_inventory_gets_alt_regime(self):
         rows = [

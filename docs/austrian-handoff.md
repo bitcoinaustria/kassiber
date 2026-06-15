@@ -13,7 +13,7 @@ rp2 reads three markers from `InTransaction.notes` / `OutTransaction.notes`:
 | Marker | Shape | Effect in rp2 |
 | --- | --- | --- |
 | `at_regime=alt` / `at_regime=neu` | flag | forces regime, overrides the 2021-03-01 Europe/Vienna date cutoff |
-| `at_pool=<id>` | non-empty id | partitions the Neu moving-average pool; absent → `"default"`; ignored for Alt |
+| `at_pool=<id>` | non-empty id | partitions the Neu moving-average pool; absent → `"default"`; ignored for Alt. Kassiber emits a single global pool per asset (`"default"`) — see the `at_pool` row below |
 | `at_swap_link=<id>` | non-empty id required | Neu outgoing leg: zero-gain + pool depletes at avg. Alt: marker ignored. Empty id → rp2 raises `RP2ValueError` |
 
 Multiple markers can coexist on the same `notes` separated by any of
@@ -39,7 +39,7 @@ country-level `compute_tax_for_assets` hook.
 | Field | Type | Populated by |
 | --- | --- | --- |
 | `at_regime` | `"alt" | "neu" | None` | Inbound rows: direct from the 2021-03-01 Europe/Vienna acquisition cutoff. Outbound rows: same cutoff by default, but post-cutoff disposals fall back to `alt` when only Alt inventory remains in scope. Future: explicit row annotations. |
-| `at_pool` | `str | None` | v1: wallet_id. Future: configurable per profile. |
+| `at_pool` | `str | None` | Single global pool per asset (always `"default"` for AT rows). The gleitender Durchschnittspreis (§ 2 KryptowährungsVO) is computed over the taxpayer's whole holding of each crypto, not per wallet; this also keeps the AT cost-basis pool consistent with the engine's global cost basis (only the *availability* gate is per-`(exchange, holder)`). Earlier v1 keyed the pool by `wallet_id`, which broke when coins were sold from a transfer-funded wallet (kassiber#213). `resolve_pool_id` keeps a `wallet_id` parameter as a seam for a hypothetical future per-wallet scheme. |
 | `at_swap_link` | `str | None` | Engine classifier tags both surviving legs of a reviewed Neu cross-asset carrying-value pair with the pair id. |
 
 ## Receipt and disposal bucketing contract

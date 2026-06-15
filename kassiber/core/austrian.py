@@ -30,6 +30,10 @@ AT_NEU_CUTOFF = datetime(2021, 3, 1, 0, 0, 0, tzinfo=ZoneInfo("Europe/Vienna"))
 REGIME_ALT: Literal["alt"] = "alt"
 REGIME_NEU: Literal["neu"] = "neu"
 
+# Single global moving-average pool id per asset (see resolve_pool_id). Matches
+# rp2.plugin.country.at.AT_DEFAULT_POOL and rp2's absent-marker fallback.
+AT_DEFAULT_POOL = "default"
+
 # Quarantine reason emitted when a reviewed Neu cross-asset swap cannot be
 # marked and fed into rp2's native carry path safely. The engine adds a
 # `reason_code` in the detail so callers can distinguish missing pricing,
@@ -123,17 +127,24 @@ def infer_outbound_regimes(rows: Sequence[Mapping[str, Any]]) -> dict[str, Liter
     return regimes_by_row_id
 
 
-def resolve_pool_id(wallet_id: Optional[str]) -> str:
-    """One pool per wallet. Falls back to `"default"` when wallet_id is missing.
+def resolve_pool_id(wallet_id: Optional[str]) -> str:  # wallet_id reserved as a future per-wallet seam; intentionally unused
+    """Single global Neuvermögen moving-average pool per asset.
 
-    v1 choice — documented in docs/austrian-handoff.md. Future multi-wallet
-    pool schemes (e.g. one pool per exchange account, one global pool) must
-    feed the same wallet_id-keyed output shape so upstream consumers don't
-    change.
+    The gleitender Durchschnittspreis (§ 2 KryptowährungsVO) is computed over the
+    taxpayer's *entire holding of each cryptocurrency*, not per wallet. rp2 runs one
+    accounting pass per asset, so a single constant pool id == the whole per-asset
+    holding. This also keeps the Austrian cost-basis pool consistent with the rest of
+    the engine, where cost basis is global (universal-application FIFO) and only the
+    *availability* gate is per-`(exchange, holder)` — see kassiber/core/engines/rp2.py.
+
+    Returning one pool id regardless of wallet fixes the multi-wallet hazard where coins
+    acquired in one wallet and sold from another were tagged with different `at_pool`s, so
+    rp2's `moving_average_at` found no lots in the disposal's pool (bitcoinaustria/kassiber#213,
+    bitcoinaustria/rp2#7). `wallet_id` is retained as the seam for a hypothetical future
+    per-wallet scheme; it is intentionally unused today. The wallet-keyed *output shape*
+    (a single pool-id string) is preserved, so upstream consumers do not change.
     """
-    if not wallet_id:
-        return "default"
-    return str(wallet_id)
+    return AT_DEFAULT_POOL
 
 
 def kennzahl_for_disposal_category(category: Optional[str]) -> int | None:
@@ -144,6 +155,7 @@ def kennzahl_for_disposal_category(category: Optional[str]) -> int | None:
 
 __all__ = [
     "AT_CATEGORY_TO_KENNZAHL",
+    "AT_DEFAULT_POOL",
     "AT_NEU_CUTOFF",
     "AT_SWAP_QUARANTINE_REASON",
     "REGIME_ALT",
