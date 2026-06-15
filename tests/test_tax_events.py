@@ -1,6 +1,7 @@
 import json
 import unittest
 
+from kassiber.core.engines.rp2 import _apply_cross_asset_splits
 from kassiber.core.tax_events import (
     build_tax_quarantine,
     dedupe_quarantines,
@@ -388,9 +389,9 @@ class BuildTaxQuarantineTest(unittest.TestCase):
     profile = {"id": "p", "workspace_id": "w"}
 
     def test_uses_real_id_for_synthetic_rows(self):
-        # A synthetic engine-only row (e.g. a direct-payout leg) must quarantine
-        # against its real tx so the journal_quarantines FK to transactions(id)
-        # holds — otherwise the whole `journals process` aborts.
+        # A synthetic engine-only row (e.g. a direct-payout or cross-split leg)
+        # must quarantine against its real tx so the journal_quarantines FK to
+        # transactions(id) holds — otherwise the whole `journals process` aborts.
         row = {"id": "direct-payout:abc:out", "journal_transaction_id": "real-tx"}
         q = build_tax_quarantine(self.profile, row, "reason", {})
         self.assertEqual(q["transaction_id"], "real-tx")
@@ -398,6 +399,33 @@ class BuildTaxQuarantineTest(unittest.TestCase):
     def test_uses_own_id_for_real_rows(self):
         q = build_tax_quarantine(self.profile, {"id": "real-tx"}, "reason", {})
         self.assertEqual(q["transaction_id"], "real-tx")
+
+
+class CrossAssetSplitTest(unittest.TestCase):
+    def test_value_only_pricing_materializes_unit_rate(self):
+        # A row priced by fiat_value alone (no fiat_rate) must keep a usable price
+        # on both split legs (a derived per-unit rate), not become unpriced.
+        out_row = {
+            "id": "btc-out", "asset": "BTC", "direction": "outbound",
+            "amount": 50_000_000_000, "fee": 0,
+            "fiat_rate": None, "fiat_rate_exact": None,
+            "fiat_value": 3000.0, "fiat_value_exact": "3000",
+        }
+        in_row = {"id": "lbtc-in", "asset": "LBTC", "direction": "inbound", "amount": 19_800_000_000}
+        record = {
+            "id": "pair-1", "out_transaction_id": "btc-out",
+            "in_transaction_id": "lbtc-in", "out_amount": 20_000_000_000,
+        }
+        rows, _records, out_map = _apply_cross_asset_splits([out_row, in_row], [record])
+        by_id = {r["id"]: r for r in rows}
+        # 0.5 BTC priced at 3000 EUR => 6000 EUR/BTC unit rate on both legs.
+        self.assertEqual(by_id["btc-out"]["fiat_rate"], "6000")
+        self.assertIsNone(by_id["btc-out"]["fiat_value"])
+        synthetic = next(r for r in rows if str(r["id"]).startswith("cross-split:"))
+        self.assertEqual(synthetic["fiat_rate"], "6000")
+        self.assertEqual(synthetic["amount"], 20_000_000_000)
+        self.assertEqual(by_id["btc-out"]["amount"], 30_000_000_000)
+        self.assertEqual(out_map[synthetic["id"]], "btc-out")
 
 
 class DedupeQuarantinesTest(unittest.TestCase):

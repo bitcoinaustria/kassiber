@@ -1033,7 +1033,9 @@ def _transaction_pair_display_meta(
             p.out_transaction_id,
             p.in_transaction_id,
             tout.asset AS out_asset,
-            tout.amount AS out_amount,
+            -- Split cross-asset pairs cross only `out_amount`; keep the pair's
+            -- out amount consistent with swap_fee_msat (NULL on whole pairs).
+            COALESCE(p.out_amount, tout.amount) AS out_amount,
             tout.fiat_rate AS out_fiat_rate,
             tin.asset AS in_asset,
             tin.amount AS in_amount,
@@ -2688,7 +2690,9 @@ def _capital_gains_neutral_swap_rows(
             COALESCE(p.swap_fee_kind, '') AS swap_fee_kind,
             wout.label AS out_wallet,
             tout.asset AS out_asset,
-            tout.amount AS out_amount,
+            -- Split cross-asset swaps cross only `out_amount`; keep outSats
+            -- consistent with feeSats (swap_fee_msat) on neu_swap detail rows.
+            COALESCE(p.out_amount, tout.amount) AS out_amount,
             win.label AS in_wallet,
             tin.asset AS in_asset,
             tin.amount AS in_amount
@@ -3008,7 +3012,7 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                 tout.external_id AS pair_out_external_id,
                 wout.label AS pair_out_wallet,
                 tout.asset AS pair_out_asset,
-                tout.amount AS pair_out_amount,
+                COALESCE(p_out.out_amount, p_in.out_amount, tout.amount) AS pair_out_amount,
                 COALESCE(p_out.in_transaction_id, p_in.in_transaction_id) AS pair_in_transaction_id,
                 tin.external_id AS pair_in_external_id,
                 win.label AS pair_in_wallet,
@@ -3057,7 +3061,7 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                     tout.external_id AS pair_out_external_id,
                     wout.label AS pair_out_wallet,
                     tout.asset AS pair_out_asset,
-                    tout.amount AS pair_out_amount,
+                    COALESCE(p_out.out_amount, p_in.out_amount, tout.amount) AS pair_out_amount,
                     COALESCE(p_out.in_transaction_id, p_in.in_transaction_id) AS pair_in_transaction_id,
                     tin.external_id AS pair_in_external_id,
                     win.label AS pair_in_wallet,
@@ -3219,7 +3223,7 @@ def build_journal_events_list_snapshot(
             tout.external_id AS pair_out_external_id,
             wout.label AS pair_out_wallet,
             tout.asset AS pair_out_asset,
-            tout.amount AS pair_out_amount,
+            COALESCE(p_out.out_amount, p_in.out_amount, tout.amount) AS pair_out_amount,
             COALESCE(p_out.in_transaction_id, p_in.in_transaction_id) AS pair_in_transaction_id,
             tin.external_id AS pair_in_external_id,
             win.label AS pair_in_wallet,
@@ -3957,7 +3961,9 @@ def build_journals_transfers_list_snapshot(
             tout.external_id AS out_external_id,
             tout.occurred_at AS out_occurred_at,
             tout.asset AS out_asset,
-            tout.amount AS out_amount,
+            -- Split cross-asset pairs cross only `out_amount`; mirror the CLI
+            -- transfers-list (swap_fee_msat is measured against this portion).
+            COALESCE(p.out_amount, tout.amount) AS out_amount,
             wout.label AS out_wallet,
             tin.external_id AS in_external_id,
             tin.occurred_at AS in_occurred_at,

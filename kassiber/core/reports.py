@@ -1012,7 +1012,10 @@ def _report_query_rows(conn, profile, wallet=None):
             COALESCE(tout.external_id, '') AS out_transaction_id,
             wout.label AS out_wallet,
             tout.asset AS out_asset,
-            tout.amount AS out_amount,
+            -- Split cross-asset pairs cross only `out_amount`; the swap fee is
+            -- measured against that portion, so the Transfers & Swaps sheet must
+            -- report it too (NULL out_amount on whole/same-asset pairs).
+            COALESCE(p.out_amount, tout.amount) AS out_amount,
             tout.fee AS out_fee,
             tin.occurred_at AS in_occurred_at,
             COALESCE(tin.external_id, '') AS in_transaction_id,

@@ -1543,6 +1543,109 @@ def _direct_payout_synthetic_rows(
     return rows_for_engine, cross_asset_pairs, direct_payouts, quarantines, blocked_row_ids
 
 
+def _pair_record_out_amount(record: Mapping[str, Any]) -> Any:
+    if hasattr(record, "keys"):
+        return record["out_amount"] if "out_amount" in record.keys() else None
+    return record.get("out_amount")
+
+
+def _apply_cross_asset_splits(
+    rows_for_engine: list[Mapping[str, Any]],
+    manual_pair_records: Sequence[Mapping[str, Any]],
+) -> tuple[list[Mapping[str, Any]], list[Mapping[str, Any]], dict[str, str]]:
+    """Split one outbound across a same-asset self-transfer + a cross-asset peg.
+
+    A cross-asset pair may carry only PART of its out leg (``out_amount`` < the
+    row's amount) when a single spend both returned change to an owned wallet
+    and pegged the rest to another asset. Reduce the real out row to the
+    self-transfer remainder — so it auto-pairs with the same-txid change as a
+    clean MOVE — and synthesize a separate outbound for the pegged portion that
+    the cross-asset pair carries (carrying-value basis carry / taxable SELL+BUY,
+    per the pair's policy). The pair record is rewritten to point at the
+    synthetic leg, leaving the real reduced row free to auto-pair.
+
+    No-ops for whole-row pairs (``out_amount`` unset / >= the row amount) and
+    same-asset pairs. Returns ``(rows_for_engine, manual_pair_records,
+    synthetic_out_id -> real_out_id)``; the first two are unchanged and the map
+    empty when no split applies. The map lets callers show the real out tx in
+    audits while the engine carries the synthetic leg.
+    """
+    rows_by_id = {str(row["id"]): row for row in rows_for_engine}
+    overrides: dict[str, dict[str, Any]] = {}
+    synthetic_rows: list[dict[str, Any]] = []
+    rewritten: list[Mapping[str, Any]] = []
+    out_id_to_real: dict[str, str] = {}
+    changed = False
+    for record in manual_pair_records:
+        raw = _pair_record_out_amount(record)
+        out_id = str(record["out_transaction_id"])
+        in_id = str(record["in_transaction_id"])
+        out_row = rows_by_id.get(out_id)
+        in_row = rows_by_id.get(in_id)
+        if (
+            raw in (None, "")
+            or out_row is None
+            or in_row is None
+            or out_row["asset"] == in_row["asset"]
+        ):
+            rewritten.append(record)
+            continue
+        peg = int(raw)
+        full = int(out_row["amount"] or 0)
+        self_amt = full - peg
+        if peg <= 0 or self_amt <= 0:
+            # Whole-row swap (or nothing left to self-transfer): existing path.
+            rewritten.append(record)
+            continue
+        changed = True
+        pair_id = (
+            str(record["id"])
+            if hasattr(record, "keys") and "id" in record.keys()
+            else f"{out_id}->{in_id}"
+        )
+        # The per-unit rate survives the amount change, so each leg reprices from
+        # its own amount once the (now-wrong) absolute fiat value is dropped. But
+        # a row priced by value ALONE (no fiat_rate) would lose its only pricing
+        # evidence — materialize a unit rate from value/amount first so it doesn't
+        # become a false missing-price quarantine.
+        base = dict(out_row)
+        if (
+            _row_get(out_row, "fiat_rate_exact") in (None, "")
+            and _row_get(out_row, "fiat_rate") in (None, "")
+            and full > 0
+        ):
+            fiat_value = _row_get(out_row, "fiat_value_exact") or _row_get(out_row, "fiat_value")
+            if fiat_value not in (None, ""):
+                # format("f") keeps plain decimal notation (no "6E+3") so the
+                # derived rate matches how exact rates are stored elsewhere.
+                unit_rate = format(Decimal(str(fiat_value)) / msat_to_btc(full), "f")
+                base["fiat_rate"] = unit_rate
+                base["fiat_rate_exact"] = unit_rate
+        base["fiat_value"] = None
+        base["fiat_value_exact"] = None
+        overrides[out_id] = {**base, "amount": self_amt}
+        swap_out_id = f"cross-split:{pair_id}:out"
+        out_id_to_real[swap_out_id] = out_id
+        synthetic_rows.append(
+            {
+                **base,
+                "id": swap_out_id,
+                "amount": peg,
+                "fee": 0,
+                "external_id": f"cross-split:{pair_id}",
+                "direction": "outbound",
+                "kind": "sell",
+                "journal_transaction_id": out_id,
+            }
+        )
+        rewritten.append({**dict(record), "out_transaction_id": swap_out_id})
+    if not changed:
+        return rows_for_engine, list(manual_pair_records), {}
+    new_rows = [overrides.get(str(row["id"]), row) for row in rows_for_engine]
+    new_rows.extend(synthetic_rows)
+    return new_rows, rewritten, out_id_to_real
+
+
 class GenericRP2TaxEngine:
     """Current generic RP2-backed implementation behind the engine seam."""
 
@@ -1587,13 +1690,27 @@ class GenericRP2TaxEngine:
             wallet_refs_by_label = {
                 ref["label"]: ref for ref in inputs.wallet_refs_by_id.values()
             }
+            # Split spends (part same-asset self-transfer, part cross-asset peg)
+            # are decomposed before pairing: the real out row is reduced to the
+            # self-transfer remainder (auto-pairs with its change) and a synthetic
+            # outbound carries the pegged portion into the cross-asset pair.
+            rows_for_engine, split_pair_records, split_out_id_to_real = _apply_cross_asset_splits(
+                rows_for_engine,
+                inputs.manual_pair_records,
+            )
             auto_pairs, _ = detect_intra_transfers(rows_for_engine)
             all_pairs, manual_cross_asset_pairs = apply_manual_pairs(
                 rows_for_engine,
                 auto_pairs,
-                inputs.manual_pair_records,
+                split_pair_records,
             )
-            manual_cross_asset_pairs_all = manual_cross_asset_pairs
+            # The engine carries the synthetic split leg (so it can mark the
+            # cross-asset swap-out without touching the self-transfer remainder),
+            # but the result/audit should reference the real out tx — map it back.
+            manual_cross_asset_pairs_all = [
+                {**pair, "out_id": split_out_id_to_real.get(str(pair["out_id"]), pair["out_id"])}
+                for pair in manual_cross_asset_pairs
+            ]
             engine_cross_asset_pairs.extend(manual_cross_asset_pairs)
             rows_by_asset = defaultdict(list)
             for row in rows_for_engine:

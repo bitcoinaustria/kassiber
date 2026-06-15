@@ -209,6 +209,21 @@ _REWARD_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description,kind
 2026-02-01T10:00:00Z,reward-in,inbound,BTC,0.01000000,0,65000,Referral reward,reward
 """
 
+# Split swap: one 0.05 BTC spend returns 0.03 to an owned wallet (self-transfer)
+# and pegs 0.02 to Liquid. Pairing the BTC out with the L-BTC in and declaring
+# --out-amount 0.02 must split it into a clean self-transfer MOVE + a
+# carrying-value peg, not a single transfer with a 0.02 "fee".
+_SPLIT_SWAP_SPEND_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2025-06-01T10:00:00Z,splitswap-fund,inbound,BTC,0.10000000,0,30000,Funding
+2025-09-01T12:00:00Z,splitswap-out,outbound,BTC,0.05000000,0,60000,Spend: change back + peg to Liquid
+"""
+_SPLIT_SWAP_KEEP_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2025-09-01T12:00:00Z,splitswap-out,inbound,BTC,0.03000000,0,60000,Change returned on-chain
+"""
+_SPLIT_SWAP_LBTC_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2025-09-01T12:30:00Z,splitswap-peg,inbound,LBTC,0.01980000,0,60000,Pegged-in L-BTC
+"""
+
 # Basis provenance: an early acquisition is dropped for coarse pricing. A later
 # sell is funded per-account (0.7 held) but FIFO-consumes past the 0.2 priced
 # before the drop, so it would re-base onto the wrong lot and must be
@@ -383,6 +398,12 @@ class CliSmokeTest(unittest.TestCase):
         cls.gift_debit_csv.write_text(_GIFT_DEBIT_CSV, encoding="utf-8")
         cls.basis_provenance_csv = Path(cls._tmp.name) / "basis-provenance.csv"
         cls.basis_provenance_csv.write_text(_BASIS_PROVENANCE_CSV, encoding="utf-8")
+        cls.split_swap_spend_csv = Path(cls._tmp.name) / "split-swap-spend.csv"
+        cls.split_swap_spend_csv.write_text(_SPLIT_SWAP_SPEND_CSV, encoding="utf-8")
+        cls.split_swap_keep_csv = Path(cls._tmp.name) / "split-swap-keep.csv"
+        cls.split_swap_keep_csv.write_text(_SPLIT_SWAP_KEEP_CSV, encoding="utf-8")
+        cls.split_swap_lbtc_csv = Path(cls._tmp.name) / "split-swap-lbtc.csv"
+        cls.split_swap_lbtc_csv.write_text(_SPLIT_SWAP_LBTC_CSV, encoding="utf-8")
         cls.manual_from_csv = Path(cls._tmp.name) / "manual-from.csv"
         cls.manual_from_csv.write_text(_MANUAL_FROM_CSV, encoding="utf-8")
         cls.manual_to_csv = Path(cls._tmp.name) / "manual-to.csv"
@@ -2466,6 +2487,65 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(pairs[0]["policy"], "carrying-value")
         self.assertEqual(pairs[0]["out_transaction_id"], "cross-out-leg")
         self.assertEqual(pairs[0]["in_transaction_id"], "cross-in-leg")
+
+    def test_17_split_swap_self_transfer_plus_carrying_value_peg(self):
+        workspace = "SplitSwapAT"
+        self._cli("init")
+        self._cli("workspaces", "create", workspace)
+        self._cli("profiles", "create", "--workspace", workspace,
+                  "--fiat-currency", "EUR", "--tax-country", "at", "SplitSwap")
+        for label in ("Spend", "Keep", "Liq"):
+            self._cli("wallets", "create", "--workspace", workspace,
+                      "--profile", "SplitSwap", "--label", label, "--kind", "custom")
+        self._cli("wallets", "import-csv", "--workspace", workspace, "--profile", "SplitSwap",
+                  "--wallet", "Spend", "--file", str(self.split_swap_spend_csv))
+        self._cli("wallets", "import-csv", "--workspace", workspace, "--profile", "SplitSwap",
+                  "--wallet", "Keep", "--file", str(self.split_swap_keep_csv))
+        self._cli("wallets", "import-csv", "--workspace", workspace, "--profile", "SplitSwap",
+                  "--wallet", "Liq", "--file", str(self.split_swap_lbtc_csv))
+
+        # Unresolved, the 0.05-out / 0.03-in auto-pair has an implausible 0.02
+        # "fee" and is quarantined.
+        payload = self._cli("journals", "process", "--workspace", workspace, "--profile", "SplitSwap")
+        self.assertGreaterEqual(payload["data"]["quarantined"], 1)
+        payload = self._cli("journals", "quarantined", "--workspace", workspace, "--profile", "SplitSwap")
+        self.assertIn("transfer_fee_implausible", [q["reason"] for q in payload["data"]])
+
+        # Resolve by pairing the BTC spend with the L-BTC peg and declaring the
+        # 0.02 BTC that was swapped; the 0.03 remainder is the self-transfer.
+        payload = self._cli("transfers", "pair", "--workspace", workspace, "--profile", "SplitSwap",
+                            "--tx-out", "splitswap-out", "--tx-in", "splitswap-peg",
+                            "--kind", "peg-in", "--policy", "carrying-value", "--out-amount", "0.02")
+        self._assert_kind(payload, "transfers.pair")
+        self.assertEqual(payload["data"]["out_amount"], 2000000000)
+        # Swap fee is the swapped portion (0.02 BTC) minus the L-BTC received
+        # (0.0198) = 0.0002 BTC, NOT the full 0.05 outbound minus 0.0198.
+        self.assertEqual(payload["data"]["swap_fee_msat"], 20000000)
+
+        # The pair listing must show the SWAPPED portion (consistent with the
+        # 0.0002 swap fee), not the full 0.05 outbound, while still exposing the
+        # underlying transaction total under full_amount.
+        payload = self._cli("transfers", "list", "--workspace", workspace, "--profile", "SplitSwap")
+        pair = payload["data"][0]
+        self.assertEqual(pair["out"]["amount_msat"], 2000000000)
+        self.assertEqual(pair["out"]["full_amount_msat"], 5000000000)
+
+        payload = self._cli("journals", "process", "--workspace", workspace, "--profile", "SplitSwap")
+        data = payload["data"]
+        # Split resolves into a clean self-transfer MOVE + a carrying-value peg;
+        # no implausible-fee quarantine remains.
+        self.assertEqual(data["quarantined"], 0)
+        self.assertEqual(data["transfers_detected"], 1)
+        self.assertEqual(data["cross_asset_pairs"], 1)
+
+        # The audit references the REAL BTC out tx (the synthetic split leg is
+        # engine-only) and shows both the self-transfer and the peg.
+        payload = self._cli("journals", "transfers", "list", "--workspace", workspace, "--profile", "SplitSwap")
+        audit = payload["data"]
+        self.assertEqual(audit["summary"]["same_asset_transfers"], 1)
+        self.assertEqual(audit["summary"]["cross_asset_pairs"], 1)
+        self.assertEqual(audit["cross_asset_pairs"][0]["out_wallet"], "Spend")
+        self.assertEqual(audit["cross_asset_pairs"][0]["in_wallet"], "Liq")
 
 
 class AccountBucketBehaviorTest(unittest.TestCase):

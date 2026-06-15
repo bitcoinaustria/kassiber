@@ -1868,6 +1868,10 @@ def _ensure_swap_matching_schema(conn):
     ensure_column(conn, "transaction_pairs", "confidence_at_pair", "TEXT")
     ensure_column(conn, "transaction_pairs", "pair_source", "TEXT")
     ensure_column(conn, "transaction_pairs", "deleted_at", "TEXT")
+    # Portion of the out leg (msat) that participates in a cross-asset swap when
+    # the spend is split between a same-asset self-transfer and a peg. NULL means
+    # the whole out leg is paired (the default / existing behavior).
+    ensure_column(conn, "transaction_pairs", "out_amount", "INTEGER")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_transactions_payment_hash "
         "ON transactions(payment_hash) WHERE payment_hash IS NOT NULL"
