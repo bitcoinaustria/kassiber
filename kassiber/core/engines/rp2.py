@@ -1576,9 +1576,24 @@ def _apply_cross_asset_splits(
             if hasattr(record, "keys") and "id" in record.keys()
             else f"{out_id}->{in_id}"
         )
-        # Per-unit rate survives the amount change; drop the absolute fiat value
-        # so the reduced/synthetic legs reprice from their own amounts.
+        # The per-unit rate survives the amount change, so each leg reprices from
+        # its own amount once the (now-wrong) absolute fiat value is dropped. But
+        # a row priced by value ALONE (no fiat_rate) would lose its only pricing
+        # evidence — materialize a unit rate from value/amount first so it doesn't
+        # become a false missing-price quarantine.
         base = dict(out_row)
+        if (
+            _row_get(out_row, "fiat_rate_exact") in (None, "")
+            and _row_get(out_row, "fiat_rate") in (None, "")
+            and full > 0
+        ):
+            fiat_value = _row_get(out_row, "fiat_value_exact") or _row_get(out_row, "fiat_value")
+            if fiat_value not in (None, ""):
+                # format("f") keeps plain decimal notation (no "6E+3") so the
+                # derived rate matches how exact rates are stored elsewhere.
+                unit_rate = format(Decimal(str(fiat_value)) / msat_to_btc(full), "f")
+                base["fiat_rate"] = unit_rate
+                base["fiat_rate_exact"] = unit_rate
         base["fiat_value"] = None
         base["fiat_value_exact"] = None
         overrides[out_id] = {**base, "amount": self_amt}

@@ -2450,6 +2450,9 @@ class CliSmokeTest(unittest.TestCase):
                             "--kind", "peg-in", "--policy", "carrying-value", "--out-amount", "0.02")
         self._assert_kind(payload, "transfers.pair")
         self.assertEqual(payload["data"]["out_amount"], 2000000000)
+        # Swap fee is the swapped portion (0.02 BTC) minus the L-BTC received
+        # (0.0198) = 0.0002 BTC, NOT the full 0.05 outbound minus 0.0198.
+        self.assertEqual(payload["data"]["swap_fee_msat"], 20000000)
 
         payload = self._cli("journals", "process", "--workspace", workspace, "--profile", "SplitSwap")
         data = payload["data"]

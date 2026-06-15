@@ -107,8 +107,14 @@ def build_tax_quarantine(
     reason: str,
     detail: Mapping[str, Any],
 ) -> dict[str, Any]:
+    # Synthetic, engine-only rows (split / direct-payout legs) carry a
+    # journal_transaction_id pointing at the real transaction. A quarantine must
+    # reference that real id so it satisfies journal_quarantines' FK to
+    # transactions(id) — a synthetic id like "cross-split:...:out" would make the
+    # insert fail and abort the whole `journals process`.
+    transaction_id = _row_get(row, "journal_transaction_id") or row["id"]
     return {
-        "transaction_id": row["id"],
+        "transaction_id": transaction_id,
         "workspace_id": profile["workspace_id"],
         "profile_id": profile["id"],
         "reason": reason,

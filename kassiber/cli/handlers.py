@@ -498,8 +498,14 @@ def create_transaction_pair(
             hint="Run `kassiber transfers payouts delete --payout-id "
             f"{existing_payout['id']}` first.",
         )
+    # On a split pair only the swapped portion (`out_amount`) crosses to the
+    # other asset, so the persisted swap fee must be measured against that, not
+    # the full outbound (the remainder is a same-asset self-transfer).
+    swap_fee_out_msat = (
+        out_amount_msat if out_amount_msat is not None else int(out_row["amount"] or 0)
+    )
     swap_fee_msat, swap_fee_kind = core_transfer_matching.compute_swap_fee(
-        int(out_row["amount"] or 0),
+        swap_fee_out_msat,
         int(in_row["amount"] or 0),
     )
     pair_id = str(uuid.uuid4())
