@@ -2,7 +2,11 @@ import json
 import unittest
 
 from kassiber.core.engines.rp2 import _apply_cross_asset_splits
-from kassiber.core.tax_events import build_tax_quarantine, normalize_tax_asset_inputs
+from kassiber.core.tax_events import (
+    build_tax_quarantine,
+    dedupe_quarantines,
+    normalize_tax_asset_inputs,
+)
 
 
 def _row(
@@ -421,6 +425,55 @@ class CrossAssetSplitTest(unittest.TestCase):
         self.assertEqual(synthetic["amount"], 20_000_000_000)
         self.assertEqual(by_id["btc-out"]["amount"], 30_000_000_000)
         self.assertEqual(out_map[synthetic["id"]], "btc-out")
+
+
+class DedupeQuarantinesTest(unittest.TestCase):
+    profile = {"id": "p", "workspace_id": "w"}
+
+    def _q(self, tx_id, reason, detail):
+        # build through the real builder so detail_json serialization matches prod
+        return build_tax_quarantine(self.profile, {"id": tx_id}, reason, detail)
+
+    def test_distinct_reasons_for_same_tx_merge_into_one_row(self):
+        # Two engine legs (e.g. a direct-payout synthetic leg AND another drop)
+        # that map back to the same real tx would otherwise collide on
+        # journal_quarantines' PRIMARY KEY and abort the whole run. They must
+        # collapse to ONE row, with the later reason preserved under detail.
+        out = dedupe_quarantines(
+            [
+                self._q("real-tx", "missing_cost_basis", {"required": 1.0}),
+                self._q("real-tx", "basis_provenance_incomplete", {"since": "x"}),
+            ]
+        )
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["transaction_id"], "real-tx")
+        self.assertEqual(out[0]["reason"], "missing_cost_basis")
+        detail = json.loads(out[0]["detail_json"])
+        self.assertEqual(detail["required"], 1.0)
+        self.assertEqual(len(detail["additional_reasons"]), 1)
+        self.assertEqual(
+            detail["additional_reasons"][0]["reason"], "basis_provenance_incomplete"
+        )
+        self.assertEqual(detail["additional_reasons"][0]["detail"]["since"], "x")
+
+    def test_exact_duplicate_for_same_tx_is_dropped_silently(self):
+        out = dedupe_quarantines(
+            [
+                self._q("real-tx", "missing_cost_basis", {"required": 1.0}),
+                self._q("real-tx", "missing_cost_basis", {"required": 1.0}),
+            ]
+        )
+        self.assertEqual(len(out), 1)
+        self.assertNotIn("additional_reasons", json.loads(out[0]["detail_json"]))
+
+    def test_distinct_transactions_preserved_in_order(self):
+        out = dedupe_quarantines(
+            [
+                self._q("tx-b", "r1", {}),
+                self._q("tx-a", "r2", {}),
+            ]
+        )
+        self.assertEqual([q["transaction_id"] for q in out], ["tx-b", "tx-a"])
 
 
 if __name__ == "__main__":
