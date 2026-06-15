@@ -28,7 +28,7 @@ import {
   formatSatsPlain,
   LIVE_FIATS,
   pairForFiat,
-  parseLooseNumber,
+  parseFieldAmount,
   rateFromLatest,
   type ConversionField,
 } from "./manySatsModel";
@@ -205,7 +205,7 @@ export function ManySatsCalculator() {
     rate?.fetchedAt ?? rate?.timestamp ?? null,
   );
 
-  const parsed = parseLooseNumber(active.raw);
+  const parsed = parseFieldAmount(active.raw, active.field);
   const btc = parsed == null ? null : deriveBtc(active.field, parsed, price);
 
   const valueFor = (field: ConversionField): string => {

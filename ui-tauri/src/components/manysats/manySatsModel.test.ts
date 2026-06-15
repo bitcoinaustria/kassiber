@@ -8,7 +8,7 @@ import {
   isLiveFiat,
   LIVE_FIATS,
   pairForFiat,
-  parseLooseNumber,
+  parseFieldAmount,
   rateFromLatest,
   SATS_PER_BTC,
 } from "./manySatsModel";
@@ -27,31 +27,53 @@ describe("fiat pair helpers", () => {
   });
 });
 
-describe("parseLooseNumber", () => {
+describe("parseFieldAmount", () => {
   it("returns null for empty or junk input", () => {
-    expect(parseLooseNumber("")).toBeNull();
-    expect(parseLooseNumber("   ")).toBeNull();
-    expect(parseLooseNumber("abc")).toBeNull();
-    expect(parseLooseNumber("1.2.3,4,5x")).toBeNull();
+    expect(parseFieldAmount("", "fiat")).toBeNull();
+    expect(parseFieldAmount("   ", "btc")).toBeNull();
+    expect(parseFieldAmount("abc", "sats")).toBeNull();
+    expect(parseFieldAmount("1.2.3,4,5x", "fiat")).toBeNull();
   });
 
-  it("parses plain and en-grouped numbers", () => {
-    expect(parseLooseNumber("1234.56")).toBe(1234.56);
-    expect(parseLooseNumber("1,234.56")).toBe(1234.56);
-    expect(parseLooseNumber("1,234,567")).toBe(1234567);
-    expect(parseLooseNumber("100")).toBe(100);
+  it("reads a single thousands separator in fiat as grouping (en + de)", () => {
+    // A lone separator + three digits is a thousands group either way.
+    expect(parseFieldAmount("1.000", "fiat")).toBe(1000);
+    expect(parseFieldAmount("1,000", "fiat")).toBe(1000);
+    expect(parseFieldAmount("12.000", "fiat")).toBe(12000);
+    // 1–2 trailing digits stay decimal, so the 2-decimal display round-trips.
+    expect(parseFieldAmount("71545.43", "fiat")).toBe(71545.43);
+    expect(parseFieldAmount("1,50", "fiat")).toBe(1.5);
+    expect(parseFieldAmount("1.50", "fiat")).toBe(1.5);
+    // Mixed separators: the last one is the decimal point.
+    expect(parseFieldAmount("1,234.56", "fiat")).toBe(1234.56);
+    expect(parseFieldAmount("1.234,56", "fiat")).toBe(1234.56);
+    // Repeated grouping separators.
+    expect(parseFieldAmount("1.234.567", "fiat")).toBe(1234567);
+    expect(parseFieldAmount("1,234,567", "fiat")).toBe(1234567);
+    // Leading-zero integer is a decimal, not a group.
+    expect(parseFieldAmount("0.500", "fiat")).toBe(0.5);
   });
 
-  it("parses de-grouped numbers (last separator wins)", () => {
-    expect(parseLooseNumber("1.234,56")).toBe(1234.56);
-    expect(parseLooseNumber("1234,56")).toBe(1234.56);
-    expect(parseLooseNumber("1.234.567")).toBe(1234567);
-    expect(parseLooseNumber("0,5")).toBe(0.5);
+  it("treats every separator in sats as grouping (integers)", () => {
+    expect(parseFieldAmount("1,000", "sats")).toBe(1000);
+    expect(parseFieldAmount("100.000.000", "sats")).toBe(100000000);
+    expect(parseFieldAmount("100,000,000", "sats")).toBe(100000000);
+    expect(parseFieldAmount("153846", "sats")).toBe(153846);
+  });
+
+  it("treats '.' as the decimal point for BTC and keeps de comma decimals", () => {
+    expect(parseFieldAmount("0.5", "btc")).toBe(0.5);
+    expect(parseFieldAmount("0.500", "btc")).toBe(0.5);
+    expect(parseFieldAmount("1.500", "btc")).toBe(1.5);
+    expect(parseFieldAmount("0,5", "btc")).toBe(0.5);
+    expect(parseFieldAmount("1.000", "btc")).toBe(1);
+    expect(parseFieldAmount("0.00153846", "btc")).toBe(0.00153846);
+    expect(parseFieldAmount("1,000.5", "btc")).toBe(1000.5);
   });
 
   it("ignores spaces and underscores as group separators", () => {
-    expect(parseLooseNumber("1 234 567")).toBe(1234567);
-    expect(parseLooseNumber("100_000")).toBe(100000);
+    expect(parseFieldAmount("1 234 567", "fiat")).toBe(1234567);
+    expect(parseFieldAmount("100_000", "sats")).toBe(100000);
   });
 });
 

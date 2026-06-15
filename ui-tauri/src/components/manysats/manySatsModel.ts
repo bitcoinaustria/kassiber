@@ -28,33 +28,70 @@ export function pairForFiat(code: string): string {
   return `BTC-${code.trim().toUpperCase()}`;
 }
 
+const NUMERIC_RE = /^[-+]?(\d+\.?\d*|\.\d+)$/;
+
+function toNumberOrNull(normalized: string): number | null {
+  if (!NUMERIC_RE.test(normalized)) return null;
+  const value = Number(normalized);
+  return Number.isFinite(value) ? value : null;
+}
+
 /**
- * Parse a loosely-typed numeric string into a number, tolerating both en
- * (`1,234.56`) and de (`1.234,56`) grouping. The separator that appears last
- * is treated as the decimal point; a lone comma is a decimal separator.
- * Returns null for empty or non-numeric input.
+ * Normalize loosely-typed en/de input to a single `.`-decimal string,
+ * locale-agnostically:
+ *  - mixed `.` and `,` → the last-occurring one is the decimal point, the
+ *    other is grouping (`1,234.56` and `1.234,56` both ⇒ `1234.56`);
+ *  - the same separator repeated → grouping (`1.234.567` ⇒ `1234567`);
+ *  - a single separator → decimal, EXCEPT (when `singleTripletIsGroup`) a
+ *    separator followed by exactly three digits behind a non-zero integer,
+ *    which is read as a thousands group (`1.000`/`1,000` ⇒ `1000`).
+ *
+ * `singleTripletIsGroup` is true for fiat (grouping is common; values display
+ * with 2 decimals so `71545.43` still parses as a decimal) and false for BTC,
+ * where `.` is always the decimal and grouping is unrealistic (`0.500` ⇒ 0.5).
  */
-export function parseLooseNumber(raw: string): number | null {
-  let s = raw.trim().replace(/[\s_]/g, "");
-  if (!s) return null;
+function normalizeNumeric(s: string, singleTripletIsGroup: boolean): string {
   const hasComma = s.includes(",");
   const hasDot = s.includes(".");
   if (hasComma && hasDot) {
-    if (s.lastIndexOf(",") > s.lastIndexOf(".")) {
-      s = s.replace(/\./g, "").replace(/,/g, ".");
-    } else {
-      s = s.replace(/,/g, "");
-    }
-  } else if (hasComma) {
-    const commaCount = (s.match(/,/g) ?? []).length;
-    s = commaCount > 1 ? s.replace(/,/g, "") : s.replace(",", ".");
-  } else if (hasDot) {
-    const dotCount = (s.match(/\./g) ?? []).length;
-    if (dotCount > 1) s = s.replace(/\./g, "");
+    return s.lastIndexOf(",") > s.lastIndexOf(".")
+      ? s.replace(/\./g, "").replace(/,/g, ".")
+      : s.replace(/,/g, "");
   }
-  if (!/^[-+]?(\d+\.?\d*|\.\d+)$/.test(s)) return null;
-  const value = Number(s);
-  return Number.isFinite(value) ? value : null;
+  const sep = hasComma ? "," : hasDot ? "." : "";
+  if (!sep) return s;
+  const count = sep === "," ? (s.match(/,/g) ?? []).length : (s.match(/\./g) ?? []).length;
+  if (count > 1) return s.split(sep).join("");
+  const idx = s.indexOf(sep);
+  const before = s.slice(0, idx);
+  const after = s.slice(idx + 1);
+  if (singleTripletIsGroup && after.length === 3 && /^[1-9]\d*$/.test(before)) {
+    return before + after;
+  }
+  return sep === "," ? s.replace(",", ".") : s;
+}
+
+/**
+ * Parse a user-entered amount for a specific field, resolving the
+ * decimal/grouping ambiguity per field so grouped input like `1,000` (USD)
+ * or `1.000` (de-AT EUR) reads as one thousand rather than 1.0:
+ *
+ *  - `sats` — integers; every `.`/`,` is a grouping separator and is stripped.
+ *  - `fiat` — a lone separator + three digits is a thousands group; 1–2
+ *    trailing digits stay decimal (so the 2-decimal display round-trips).
+ *  - `btc`  — `.` is always the decimal separator and grouping is unrealistic
+ *    (keeps `0,5` ⇒ 0.5 and `0.500` ⇒ 0.5).
+ *
+ * Returns null for empty or non-numeric input.
+ */
+export function parseFieldAmount(
+  raw: string,
+  field: ConversionField,
+): number | null {
+  const s = raw.trim().replace(/[\s_]/g, "");
+  if (!s) return null;
+  if (field === "sats") return toNumberOrNull(s.replace(/[.,]/g, ""));
+  return toNumberOrNull(normalizeNumeric(s, field === "fiat"));
 }
 
 /**
