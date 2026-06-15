@@ -94,7 +94,7 @@ export function fiatFractionDigits(code: string): number {
   const key = code.trim().toUpperCase();
   const cached = fiatFractionDigitsCache.get(key);
   if (cached !== undefined) return cached;
-  let digits = 2;
+  let digits: number;
   try {
     digits =
       new Intl.NumberFormat(localeForFiat(key), {
