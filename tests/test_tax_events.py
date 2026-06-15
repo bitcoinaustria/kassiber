@@ -163,6 +163,26 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         self.assertGreater(detail["implied_fee"], detail["fee_ceiling"])
         self.assertEqual(detail["required_for"], "transfer_fee_review")
 
+    def test_high_recorded_fee_self_transfer_not_implausible(self):
+        # 0.001 BTC moved with a high 0.00005 BTC RECORDED network fee. The full
+        # implied fee exceeds the max(1%, 2500 sats) band, but it's entirely the
+        # recorded miner fee (out.amount == in.amount, nothing unrecognized left
+        # the source), so it must still pair, not quarantine as implausible.
+        out_row = _row(
+            "tx-out", "wallet-a", "outbound", 100_000_000,
+            fee=5_000_000, fiat_rate=65_000, external_id="high-fee",
+        )
+        in_row = _row(
+            "tx-in", "wallet-b", "inbound", 100_000_000, external_id="high-fee",
+        )
+        inputs = normalize_tax_asset_inputs(
+            self.profile, "BTC", [out_row, in_row], self.wallet_refs_by_id,
+            [{"out": out_row, "in": in_row}],
+        )
+        self.assertEqual(inputs.quarantines, [])
+        self.assertEqual(len(inputs.transfers), 1)
+        self.assertAlmostEqual(float(inputs.transfers[0].fee), 0.00005, places=8)
+
     def test_transfer_fee_just_under_ceiling_still_pairs(self):
         # A 0.0005 BTC implied fee on a 0.1 BTC transfer is under the
         # max(1%, 2500 sats) = 0.001 BTC ceiling, so it still normalizes as a
