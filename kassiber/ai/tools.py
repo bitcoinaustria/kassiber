@@ -287,14 +287,14 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         description=(
             "Reconcile a list of addresses and/or transaction ids against the "
             "active profile's wallets: for each input, report whether it belongs "
-            "to a wallet (naming the wallet and whether it is a receive or change "
-            "branch) or is external/unknown, and classify each transaction as a "
-            "self-transfer, outbound payment, or inbound receipt. Matches local "
-            "data only (synced inventory, imported transactions, offline "
-            "descriptor derivation) and does NOT contact the network. Never "
-            "returns descriptors, xpubs, scriptPubKeys, derivation paths, "
-            "address indices, blinding keys, backend URLs/tokens, or raw wallet "
-            "config."
+            "to a wallet (naming the wallet) or is external/unknown, and classify "
+            "each transaction as a self-transfer, outbound payment, or inbound "
+            "receipt. Matches local data only (synced inventory, imported "
+            "transactions, offline descriptor derivation) and does NOT contact "
+            "the network. Receive-vs-change branch and derivation geometry are "
+            "intentionally not exposed; never returns descriptors, xpubs, "
+            "scriptPubKeys, derivation paths, address indices, blinding keys, "
+            "backend URLs/tokens, or raw wallet config."
         ),
         parameters={
             "type": "object",

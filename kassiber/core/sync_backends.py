@@ -10,6 +10,7 @@ import socket
 import ssl
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from contextvars import copy_context
 from decimal import Decimal
 from pathlib import Path
@@ -992,7 +993,7 @@ def _legs_from_liquid_tx(decoded):
     return {"inputs": inputs, "outputs": outputs, "chain": "liquid", "source": "chain"}
 
 
-def fetch_transaction_legs(backend, txid, chain=None):
+def fetch_transaction_legs(backend, txid, chain=None, *, client=None):
     """Fetch a transaction and reduce it to ownership-matching legs.
 
     Returns ``{"inputs": [{"outpoint", "script"}], "outputs": [{"n", "script"}],
@@ -1001,6 +1002,9 @@ def fetch_transaction_legs(backend, txid, chain=None):
     outpoints (input ownership then relies on the local UTXO inventory, since
     Electrum does not return prevout scripts inline). Liquid output scripts are
     visible without unblinding, so ownership matching needs no blinding keys.
+
+    ``client`` lets the caller reuse one open ``ElectrumClient`` across a batch
+    of txids instead of reconnecting per call.
     """
     kind = normalize_backend_kind(backend.get("kind"))
     timeout = backend_timeout(backend)
@@ -1013,8 +1017,19 @@ def fetch_transaction_legs(backend, txid, chain=None):
         tx = fetch_esplora_transaction(backend["url"], txid, timeout=timeout)
         return _legs_from_esplora_tx(tx, normalized_chain)
     if kind == "electrum":
-        with ElectrumClient(backend) as client:
+        # Electrum can't be probed for chain, so a Liquid tx decoded as Bitcoin
+        # (or vice versa) yields garbage; require an explicit chain instead.
+        if normalized_chain not in ("bitcoin", "liquid"):
+            raise AppError(
+                "Electrum on-chain verification needs the backend's chain set to bitcoin or liquid",
+                code="validation",
+                hint="Set the backend chain (e.g. --chain liquid) or use an Esplora backend.",
+            )
+        if client is not None:
             raw_hex = client.call("blockchain.transaction.get", [txid])
+        else:
+            with ElectrumClient(backend) as owned_client:
+                raw_hex = owned_client.call("blockchain.transaction.get", [txid])
         if normalized_chain == "liquid":
             return _legs_from_liquid_tx(decode_liquid_transaction(raw_hex))
         return _legs_from_bitcoin_tx(decode_raw_transaction(raw_hex))
@@ -1023,6 +1038,25 @@ def fetch_transaction_legs(backend, txid, chain=None):
         code="validation",
         hint="Pass --verify-backend pointing at an Esplora or Electrum endpoint.",
     )
+
+
+@contextmanager
+def verify_session(backend):
+    """Yield a ``(txid, chain) -> legs`` fetcher for a batch of verifications.
+
+    For Electrum one socket is opened for the whole batch and reused across
+    txids; Esplora is stateless HTTP so each call stands alone. The yielded
+    fetcher matches the ``verify_fetcher`` contract consumed by
+    ``kassiber.core.ownership.identify``.
+    """
+    kind = normalize_backend_kind(backend.get("kind"))
+    if kind == "electrum":
+        with ElectrumClient(backend) as client:
+            yield lambda txid, chain=None: fetch_transaction_legs(
+                backend, txid, chain, client=client
+            )
+    else:
+        yield lambda txid, chain=None: fetch_transaction_legs(backend, txid, chain)
 
 
 def _target_output_metadata(target):
@@ -2672,6 +2706,7 @@ __all__ = [
     "fetch_esplora_transaction",
     "fetch_transaction_legs",
     "resolve_wallet_sync_targets",
+    "verify_session",
     "sync_target_from_address",
     "sync_target_from_derived",
 ]

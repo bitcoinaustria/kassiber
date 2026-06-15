@@ -2636,36 +2636,39 @@ def identify_wallet_owners(
             hint="Example: wallets identify --address bc1q... --txid <64-hex>",
         )
 
-    verify_fetcher = None
-    if verify_on_chain:
-        if not isinstance(runtime_config, dict):
-            raise AppError(
-                "On-chain verification is unavailable without backend configuration",
-                code="validation",
-            )
-        backend = resolve_backend(runtime_config, verify_backend)
-        kind = str(backend.get("kind") or "").strip().lower()
-        if kind not in {"esplora", "electrum"}:
-            raise AppError(
-                f"On-chain verification needs an Esplora or Electrum backend, not '{kind}'",
-                code="validation",
-                hint="Pass --verify-backend with an Esplora or Electrum backend name.",
-            )
+    def _run(verify_fetcher):
+        return core_ownership.identify(
+            conn,
+            profile["id"],
+            addresses=addresses,
+            txids=txids,
+            candidates=candidates,
+            file_text=file_text,
+            wallet_ids=wallet_ids,
+            scan_to_index=scan_to_index,
+            verify_fetcher=verify_fetcher,
+        )
 
-        def verify_fetcher(txid, chain_hint, _backend=backend):
-            return core_sync_backends.fetch_transaction_legs(_backend, txid, chain_hint or None)
+    if not verify_on_chain:
+        return _run(None)
 
-    return core_ownership.identify(
-        conn,
-        profile["id"],
-        addresses=addresses,
-        txids=txids,
-        candidates=candidates,
-        file_text=file_text,
-        wallet_ids=wallet_ids,
-        scan_to_index=scan_to_index,
-        verify_fetcher=verify_fetcher,
-    )
+    if not isinstance(runtime_config, dict):
+        raise AppError(
+            "On-chain verification is unavailable without backend configuration",
+            code="validation",
+        )
+    backend = resolve_backend(runtime_config, verify_backend)
+    kind = str(backend.get("kind") or "").strip().lower()
+    if kind not in {"esplora", "electrum"}:
+        raise AppError(
+            f"On-chain verification needs an Esplora or Electrum backend, not '{kind}'",
+            code="validation",
+            hint="Pass --verify-backend with an Esplora or Electrum backend name.",
+        )
+
+    # One reused connection for the whole batch (Electrum); stateless for Esplora.
+    with core_sync_backends.verify_session(backend) as fetcher:
+        return _run(fetcher)
 
 
 TRANSACTION_SORT_COLUMNS = {

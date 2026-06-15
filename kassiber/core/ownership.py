@@ -29,6 +29,7 @@ Three resolution tiers, cheapest first:
 """
 
 import json
+import re
 import sqlite3
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Mapping, Sequence
@@ -63,6 +64,11 @@ _CASE_INSENSITIVE_PREFIXES = (
     "el1",
     "ert1",
 )
+
+# A plausible address is purely alphanumeric (bech32/bech32m/blech32 and base58
+# are all alnum) within sane length bounds. Anything else (spaces, punctuation,
+# a pasted label or URI) is flagged invalid rather than silently "external".
+_ADDRESS_RE = re.compile(r"[0-9A-Za-z]{8,150}")
 
 
 @dataclass(frozen=True)
@@ -194,12 +200,16 @@ def parse_tokens(
             if len(normalized) != _TXID_LENGTH or not _is_hex(normalized):
                 invalid.append({"input": text, "type": "txid", "reason": "not a 64-char hex transaction id"})
                 return
+            dedup_key = normalized
         else:
-            normalized = text
-            if not text:
-                invalid.append({"input": text, "type": "address", "reason": "empty address"})
+            if not _ADDRESS_RE.fullmatch(text):
+                invalid.append({"input": text, "type": "address", "reason": "not a valid-looking address"})
                 return
-        key = (token_type, normalized)
+            normalized = text
+            # bech32/blech32 HRPs are case-insensitive, so collapse case variants
+            # of the same address to one entry (base58 stays case-sensitive).
+            dedup_key = _address_key(text)
+        key = (token_type, dedup_key)
         if key in seen:
             return
         seen.add(key)
@@ -516,7 +526,7 @@ def classify_txid(
                 "note": (
                     "Recorded against "
                     + ", ".join(f"'{w}'" for w in wallets)
-                    + "; per-leg breakdown needs --verify-on-chain."
+                    + "; per-leg breakdown needs on-chain verification."
                 ),
             }
         return {
@@ -531,7 +541,10 @@ def classify_txid(
             "external_outputs": None,
             "legs": [],
             "match_source": "none",
-            "note": "Not in this profile's synced/imported history; retry with --verify-on-chain.",
+            "note": (
+                "Not in this profile's synced/imported history; "
+                "on-chain verification is needed for a verdict."
+            ),
         }
 
     chain = str(legs.get("chain") or token.get("chain") or "")
@@ -553,7 +566,13 @@ def classify_txid(
     out_legs: list[dict[str, Any]] = []
     owned_out = 0
     for leg in legs.get("outputs", []):
-        script_matches = index.lookup_script(leg.get("script"))
+        script = leg.get("script")
+        if not script:
+            # An empty scriptPubKey is the Liquid fee output, not a recipient;
+            # skip it so it can't inflate the external-output count and flip a
+            # self-transfer into an outbound payment.
+            continue
+        script_matches = index.lookup_script(script)
         match = script_matches[0] if script_matches else None
         owned = match is not None
         owned_out += 1 if owned else 0
@@ -593,6 +612,14 @@ def classify_txid(
 def _classify_legs(owned_in: int, owned_out: int, external_out: int) -> tuple[str, str, str]:
     if owned_in == 0 and owned_out == 0:
         return ("external", "external", "No inputs or outputs belong to this profile.")
+    if owned_out == 0 and external_out == 0:
+        # Owned inputs but no spendable outputs resolved (partial/malformed legs);
+        # do not assert a self-transfer about outputs that aren't there.
+        return (
+            "undetermined",
+            "owned",
+            "Inputs are owned but no outputs were resolved; classification unavailable.",
+        )
     if owned_in == 0 and owned_out > 0:
         return (
             "inbound_receipt",
@@ -625,22 +652,25 @@ def load_local_tx_legs(
 ) -> dict[str, Any] | None:
     """Recover input/output scripts from a locally stored transaction.
 
-    Only the Bitcoin esplora sync path persists the full ``vin``/``vout`` esplora
-    JSON in ``raw_json``; Liquid (component context only) and all import paths
-    return ``None`` so the caller falls back to on-chain verification.
+    Only Bitcoin on-chain sync persists full ``vin``/``vout`` JSON in
+    ``raw_json``, in two shapes: esplora (``vout[].scriptpubkey``,
+    ``vin[].prevout.scriptpubkey``) and Electrum's decoded form
+    (``vout[].script_hex``, no inline prevout scripts). Both are handled.
+    Liquid (component context only) and all import paths carry no vin/vout, so
+    they return ``None`` and the caller falls back to on-chain verification.
     """
     rows = conn.execute(
         "SELECT raw_json FROM transactions WHERE profile_id = ? AND external_id = ?",
         (profile_id, txid),
     ).fetchall()
     for row in rows:
-        legs = _legs_from_esplora_json(row["raw_json"])
+        legs = _legs_from_local_tx_json(row["raw_json"])
         if legs is not None:
             return legs
     return None
 
 
-def _legs_from_esplora_json(raw_json: Any) -> dict[str, Any] | None:
+def _legs_from_local_tx_json(raw_json: Any) -> dict[str, Any] | None:
     try:
         raw = json.loads(raw_json or "{}")
     except (TypeError, ValueError, json.JSONDecodeError):
@@ -659,12 +689,18 @@ def _legs_from_esplora_json(raw_json: Any) -> dict[str, Any] | None:
         outpoint = None
         if entry.get("txid") is not None and entry.get("vout") is not None:
             outpoint = f"{str(entry.get('txid')).lower()}:{int(entry.get('vout'))}"
+        # esplora carries the prevout script inline; the Electrum decode form
+        # does not (input ownership then resolves via the outpoint).
         inputs.append({"outpoint": outpoint, "script": prevout.get("scriptpubkey")})
     outputs = []
     for position, entry in enumerate(vout):
         if not isinstance(entry, dict):
             continue
-        outputs.append({"n": position, "script": entry.get("scriptpubkey")})
+        # esplora -> scriptpubkey; Electrum decode form -> script_hex.
+        script = entry.get("scriptpubkey")
+        if script is None:
+            script = entry.get("script_hex")
+        outputs.append({"n": entry.get("n", position), "script": script})
     return {"inputs": inputs, "outputs": outputs, "chain": "bitcoin", "source": "local_tx"}
 
 

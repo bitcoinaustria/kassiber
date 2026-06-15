@@ -1,5 +1,6 @@
 """Pure-engine tests for kassiber.core.ownership (no subprocess, no network)."""
 
+import json
 import sqlite3
 import unittest
 
@@ -205,21 +206,119 @@ class ClassifyTxidTests(unittest.TestCase):
         self.assertEqual(result["status"], "unknown")
 
 
-class EsploraLegsTests(unittest.TestCase):
-    def test_legs_from_esplora_json(self):
+class LocalTxLegsTests(unittest.TestCase):
+    def test_legs_from_esplora_shape(self):
         raw = (
             '{"vin":[{"txid":"AA","vout":0,"prevout":{"scriptpubkey":"0014aa"}}],'
             '"vout":[{"scriptpubkey":"0014bb"},{"scriptpubkey":"0014cc"}]}'
         )
-        legs = ownership._legs_from_esplora_json(raw)
+        legs = ownership._legs_from_local_tx_json(raw)
         self.assertEqual(legs["chain"], "bitcoin")
         self.assertEqual(legs["inputs"][0]["outpoint"], "aa:0")
         self.assertEqual(legs["inputs"][0]["script"], "0014aa")
         self.assertEqual([o["script"] for o in legs["outputs"]], ["0014bb", "0014cc"])
 
-    def test_legs_from_non_esplora_returns_none(self):
-        self.assertIsNone(ownership._legs_from_esplora_json('{"component": {}}'))
-        self.assertIsNone(ownership._legs_from_esplora_json("not json"))
+    def test_legs_from_electrum_decode_shape(self):
+        # Electrum-synced raw_json uses script_hex on outputs and has no inline
+        # prevout script; output ownership must still resolve.
+        raw = (
+            '{"vin":[{"txid":"AA","vout":1,"sequence":4294967295}],'
+            '"vout":[{"n":0,"value":1,"script_hex":"0014bb"},'
+            '{"n":1,"value":2,"script_hex":"0014cc"}]}'
+        )
+        legs = ownership._legs_from_local_tx_json(raw)
+        self.assertEqual(legs["inputs"][0]["outpoint"], "aa:1")
+        self.assertIsNone(legs["inputs"][0]["script"])
+        self.assertEqual([o["script"] for o in legs["outputs"]], ["0014bb", "0014cc"])
+
+    def test_electrum_shape_classifies_receipt_not_external(self):
+        # Regression: the esplora-only parser read None scripts for Electrum
+        # rows, misclassifying an owned receipt as external.
+        index = OwnedIndex()
+        index.add_script("0014bb", _match(branch="receive", index=0))
+        legs = ownership._legs_from_local_tx_json(
+            '{"vin":[{"txid":"AA","vout":1}],"vout":[{"n":0,"script_hex":"0014bb"}]}'
+        )
+        result = ownership.classify_txid(
+            {"input": "bb" * 32, "normalized": "bb" * 32, "type": "txid"}, index, legs
+        )
+        self.assertEqual(result["status"], "owned")
+        self.assertEqual(result["classification"], "inbound_receipt")
+        self.assertEqual(result["owned_outputs"], 1)
+
+    def test_legs_from_non_tx_returns_none(self):
+        self.assertIsNone(ownership._legs_from_local_tx_json('{"component": {}}'))
+        self.assertIsNone(ownership._legs_from_local_tx_json("not json"))
+
+
+class LegEdgeCaseTests(unittest.TestCase):
+    def test_liquid_fee_output_does_not_break_self_transfer(self):
+        # The Liquid fee output carries an empty scriptPubKey; it must not count
+        # as an external recipient and flip a self-transfer to outbound payment.
+        index = OwnedIndex()
+        index.by_outpoint["aa" * 32 + ":0"] = _match()
+        index.add_script("0014owned00000000000000000000000000000000", _match(branch="change"))
+        legs = {
+            "inputs": [{"outpoint": "aa" * 32 + ":0", "script": None}],
+            "outputs": [
+                {"n": 0, "script": "0014owned00000000000000000000000000000000"},
+                {"n": 1, "script": ""},  # Liquid fee output
+            ],
+            "chain": "liquid",
+            "source": "chain",
+        }
+        result = ownership.classify_txid(
+            {"input": "bb" * 32, "normalized": "bb" * 32, "type": "txid"}, index, legs
+        )
+        self.assertEqual(result["classification"], "self_transfer")
+        self.assertEqual(result["external_outputs"], 0)
+
+    def test_zero_output_does_not_assert_self_transfer(self):
+        index = OwnedIndex()
+        index.by_outpoint["aa" * 32 + ":0"] = _match()
+        legs = {
+            "inputs": [{"outpoint": "aa" * 32 + ":0", "script": None}],
+            "outputs": [],
+            "chain": "bitcoin",
+            "source": "chain",
+        }
+        result = ownership.classify_txid(
+            {"input": "bb" * 32, "normalized": "bb" * 32, "type": "txid"}, index, legs
+        )
+        self.assertNotEqual(result["classification"], "self_transfer")
+        self.assertEqual(result["classification"], "undetermined")
+
+
+class ChainDetectAndDedupTests(unittest.TestCase):
+    def test_detect_chain(self):
+        self.assertEqual(ownership._detect_chain("lq1qexample"), "liquid")
+        self.assertEqual(ownership._detect_chain("ex1qexample"), "liquid")
+        self.assertEqual(ownership._detect_chain("bc1qexample"), "bitcoin")
+        self.assertEqual(ownership._detect_chain("1someBase58"), "")
+
+    def test_case_variant_bech32_dedup(self):
+        parsed, invalid = ownership.parse_tokens(
+            candidates=["BC1QABCDEFGH", "bc1qabcdefgh"]
+        )
+        self.assertEqual(invalid, [])
+        self.assertEqual(len(parsed), 1)
+
+    def test_malformed_address_is_invalid(self):
+        parsed, invalid = ownership.parse_tokens(addresses=["bc1q has a space"])
+        self.assertEqual(parsed, [])
+        self.assertEqual(len(invalid), 1)
+        self.assertEqual(invalid[0]["type"], "address")
+
+    def test_liquid_confidential_address_owned_via_string_fallback(self):
+        # _script_hex_for_address can't canonicalize a Liquid confidential
+        # address, so ownership rides the address-string index.
+        index = OwnedIndex()
+        index.add_address("lq1qwconfidentialexampleaddress", _match(chain="liquid", network="liquidv1"))
+        result = ownership.classify_address(
+            {"input": "lq1qwconfidentialexampleaddress", "type": "address", "chain": "liquid"},
+            index,
+        )
+        self.assertEqual(result["status"], "owned")
 
 
 class FlattenAndRedactTests(unittest.TestCase):
@@ -247,6 +346,32 @@ class FlattenAndRedactTests(unittest.TestCase):
         self.assertNotIn("change #12", redacted["note"])
         self.assertEqual(redacted["wallets"], ["Vault"])
         self.assertEqual(redacted["status"], "owned")
+
+    def test_redact_txid_drops_legs_and_geometry(self):
+        # A txid result carries per-leg outpoints + branch labels; the AI
+        # surface must not see any of it.
+        index = OwnedIndex()
+        index.by_outpoint["aa" * 32 + ":0"] = _match(branch="change", index=3)
+        index.add_script("0014owned", _match())
+        legs = {
+            "inputs": [{"outpoint": "aa" * 32 + ":0", "script": None}],
+            "outputs": [
+                {"n": 0, "script": "0014owned"},
+                {"n": 1, "script": "0014deadbeef"},
+            ],
+            "chain": "bitcoin",
+            "source": "chain",
+        }
+        txid_result = ownership.classify_txid(
+            {"input": "bb" * 32, "normalized": "bb" * 32, "type": "txid"}, index, legs
+        )
+        self.assertIn("legs", txid_result)  # full result has legs
+        redacted = ownership.redact_result_for_ai(txid_result)
+        self.assertNotIn("legs", redacted)
+        self.assertNotIn("outpoint", json.dumps(redacted))
+        self.assertNotIn("branch", json.dumps(redacted))
+        self.assertEqual(redacted["status"], "owned")
+        self.assertEqual(redacted["classification"], "outbound_payment")
 
 
 class IdentifyVerifyTierTests(unittest.TestCase):

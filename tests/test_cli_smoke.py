@@ -606,6 +606,27 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(by_input[owned]["matches"][0]["wallet"], "Vault")
         self.assertEqual(by_input[external]["status"], "external")
 
+        # --candidate auto-detects address vs txid, and --file reads a mixed
+        # list (with comments/blank lines) — exercise both at the CLI layer.
+        list_file = os.path.join(self._tmp.name, "reconcile.txt")
+        with open(list_file, "w", encoding="utf-8") as handle:
+            handle.write(f"# reconcile list\n{owned}\n\n{external}\n")
+        payload = self._cli(
+            "wallets", "identify",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "Vault",
+            "--candidate", owned,
+            "--file", list_file,
+            "--scan-to-index", "5",
+        )
+        self._assert_kind(payload, "wallets.identify")
+        # owned appears via both --candidate and --file but dedupes to one row.
+        candidate_inputs = [row["input"] for row in payload["data"]["results"]]
+        self.assertEqual(candidate_inputs.count(owned), 1)
+        self.assertEqual(payload["data"]["summary"]["owned"], 1)
+        self.assertEqual(payload["data"]["summary"]["external"], 1)
+
         # No candidates is a validation error, not an empty success.
         error_payload, code = _run(
             self.data_root,
