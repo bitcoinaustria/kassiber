@@ -99,6 +99,19 @@ kassiber wallets sync --wallet vault
 kassiber wallets sync --all
 ```
 
+Reconcile addresses / txids against wallets (which are mine? payment vs transfer):
+
+```bash
+kassiber wallets identify --address bc1q... --txid <64-hex>
+kassiber wallets identify --file ./reconcile.txt   # one address/txid per line
+kassiber --format csv wallets identify --file ./reconcile.txt --output owned.csv
+kassiber wallets identify --txid <64-hex> --verify-on-chain --verify-backend mempool
+```
+
+At least one of `--address` / `--txid` / `--candidate` / `--file` is required.
+`--verify-on-chain` is the only path that contacts a backend; without it, txids
+not already synced/imported come back `unknown`.
+
 Durable wallet mutations:
 
 ```bash

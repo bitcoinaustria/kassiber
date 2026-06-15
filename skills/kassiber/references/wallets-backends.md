@@ -180,6 +180,36 @@ the wallet is not a positional argument.
 For "sync the project wallets" or "sync current wallets", use `--all` directly
 unless the user names a single wallet.
 
+## Ownership reconciliation (`wallets identify`)
+
+Check whether a pile of addresses and/or transaction ids belong to any wallet
+in the active profile — the workflow for telling apart historic payments from
+transfers between your own wallets.
+
+```bash
+# Mixed inputs; --candidate auto-detects address vs txid, --file reads one per line
+kassiber wallets identify --address bc1q... --txid <64-hex> --candidate <addr-or-txid>
+kassiber wallets identify --file ./to-reconcile.txt
+# Spreadsheet-friendly annotated output
+kassiber --format csv wallets identify --file ./to-reconcile.txt --output owned.csv
+# Per-leg payment/transfer classification for txids not in local history (hits a backend)
+kassiber wallets identify --txid <64-hex> --verify-on-chain --verify-backend mempool
+```
+
+- Matching is on canonical scriptPubKey (with address-string fallback for
+  Liquid confidential addresses) and covers receive **and** change. Each owned
+  result names the wallet, branch and derivation index; externals are flagged.
+- Descriptor wallets are derived offline up to `--scan-to-index` (default 500),
+  floored at the highest synced index. Raise it for deep historic reconciliation
+  when a flagged address might sit far past the synced range.
+- Without `--verify-on-chain`, a txid not already synced/imported returns
+  `unknown` (cache-only, no network). `--verify-on-chain` fetches it through an
+  Esplora/Electrum backend and classifies it as a self-transfer, outbound
+  payment, or inbound receipt. JSON (`--machine`) keeps the full per-leg detail;
+  `--format csv` flattens to one row per input.
+- Scope with repeatable `--wallet` (default: all wallets). At least one of
+  `--address` / `--txid` / `--candidate` / `--file` is required.
+
 ## Imports
 
 Import into an existing wallet when the file represents the same real wallet.

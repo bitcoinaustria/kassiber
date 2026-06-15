@@ -26,6 +26,7 @@
   - [kassiber/core/sync.py](kassiber/core/sync.py) — wallet sync orchestration above backend-specific transport details.
   - [kassiber/core/sync_backends.py](kassiber/core/sync_backends.py) — descriptor target discovery plus `esplora`, `electrum`, and `bitcoinrpc` live-sync adapters.
   - [kassiber/core/output_inventory.py](kassiber/core/output_inventory.py) — durable watch-only coin/UTXO inventory model updated by chain-backed wallet sync; stores current/spent outpoints, amounts, confirmation state, receive/change metadata, and source freshness without exposing descriptors, xpubs, backend URLs/tokens, raw wallet config, or raw wallet files through UI/AI surfaces.
+  - [kassiber/core/ownership.py](kassiber/core/ownership.py) — pure address/txid ownership reconciliation engine behind `wallets identify` and `ui.wallets.identify`. Given pasted addresses/txids it matches them (by canonical scriptPubKey, with address-string fallback for Liquid confidential addresses) against the watch-only inventory, imported txids, and offline descriptor derivation (receive + change, floored at the synced index, capped by `--scan-to-index`), naming the owning wallet/branch/index and flagging externals. txids get a per-leg payment/transfer/receipt classification; the optional on-chain tier is a caller-injected fetcher (`fetch_transaction_legs` in sync_backends) so the read surfaces stay cache-only. The AI variant drops scriptPubKeys, derivation paths and address indices.
   - [kassiber/core/reports.py](kassiber/core/reports.py) — extracted report builders, balance-history calculations, and PDF export assembly behind hookable journal/runtime dependencies. `reports tax-summary` rows include `row_type=swap_fees_year` / `swap_fees_total` summarising persisted `transaction_pairs.swap_fee_msat` and `direct_swap_payouts.swap_fee_msat`.
   - [kassiber/core/transfer_matching.py](kassiber/core/transfer_matching.py) — pure swap-candidate matcher with `payment_hash` (exact) and time + amount (strong) confidence bands, signed fee computation, conflict cluster ids plus match-time `conflict_size` (stamped over the full candidate set so filtered views cannot make a cluster member look solo), and pair/dismissal suppression. Defaults: 24h time window, fee tolerance `max(1%, 2500 sats)`.
   - [kassiber/core/lightning/](kassiber/core/lightning/) — read-only Lightning scaffold: typed `NodeSnapshot` / `NodeChannel` / `NodeForward` shapes, `LightningAdapter` Protocol, registry (`register_adapter` / `resolve_adapter` / `registered_kinds`), and the generic `build_profitability_report` / `profitability_csv_rows` helpers. Node adapters (LND, Core Lightning, NWC, …) live in sibling modules and register themselves with the registry; the daemon kinds `ui.connections.node.snapshot` and `ui.reports.lightning_profitability` plus the `reports lightning-profitability` / `reports export-lightning-profitability-csv` CLI commands dispatch through the registry. The desktop / CLI path returns the full payload (`snapshot_to_dict` / `LightningProfitabilityReport.to_envelope_payload`); the AI tool dispatch swaps in redacted variants (`snapshot_to_dict_for_ai` / `to_ai_envelope_payload`) that drop the Tier-3 identity graph (operator pubkey, channel funding outpoints, peer pubkeys / aliases, short channel ids on channels and forwards, per-channel covers-open-cost rows). Adapters MUST follow the discard policy in [docs/reference/lightning-opsec.md](docs/reference/lightning-opsec.md): drop preimages, payment_secrets, full encoded bolt11 strings, route hop pubkey lists, route hints from received invoices, and `failure_source_pubkey` at the adapter boundary; pass `None` for `NodeChannel.peer_pubkey` on private channels (enforced at construction by `__post_init__`). `NodeChannel.__post_init__` enforces the `None`-for-private rule on `peer_pubkey` and runs format-only checks on `short_channel_id` / `funding_outpoint` so smuggling fails at the dataclass boundary; `NodeForward.failure_reason` is a categorical `NodeForwardFailureReason` Literal so adapters cannot smuggle raw node error blobs.
@@ -113,7 +114,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ui.rates.coverage`, `ui.report.blockers`,
   `ui.audit.changes_since_last_answer`, `ui.audit.evidence.summary`,
   `ui.transactions.history`, `ui.activity.history`, `ui.activity.stale`,
-  `ui.wallets.utxos`, `ui.maintenance.settings`, `ui.workspace.health`,
+  `ui.wallets.utxos`, `ui.wallets.identify`, `ui.maintenance.settings`, `ui.workspace.health`,
   `ui.next_actions`, and virtual
   `read_skill_reference`. Lightning kinds require a registered adapter
   (`kassiber.core.lightning.register_adapter`); LND ships an adapter that
@@ -188,7 +189,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `workspaces {list,create}`
 - `profiles {list,create,get,set}`
 - `accounts {list,create}`
-- `wallets {kinds,list,create,get,update,delete,reveal-descriptor,sync,sync-btcpay,attach-btcpay,attach-bullbitcoin-wallet,derive,import-json,import-csv,import-btcpay,import-phoenix,import-river,import-bull,import-coinfinity,import-21bitcoin,import-strike,import-samourai}`
+- `wallets {kinds,list,create,get,update,delete,reveal-descriptor,sync,sync-btcpay,attach-btcpay,attach-bullbitcoin-wallet,derive,identify,import-json,import-csv,import-btcpay,import-phoenix,import-river,import-bull,import-coinfinity,import-21bitcoin,import-strike,import-samourai}`
 - `backends {kinds,list,get,create,update,delete,reveal-token,set-default,clear-default}`
 - `transactions {list}`
 - `attachments {add,list,remove,verify,gc}`
@@ -352,6 +353,7 @@ uv run python -m kassiber --machine status
 uv run python -m kassiber backends list
 uv run python -m kassiber wallets kinds
 uv run python -m kassiber wallets sync-btcpay --help
+uv run python -m kassiber wallets identify --help
 uv run python -m kassiber wallets import-river --help
 uv run python -m kassiber wallets import-coinfinity --help
 uv run python -m kassiber wallets import-21bitcoin --help
