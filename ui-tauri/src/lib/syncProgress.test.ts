@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   activeSyncMaintenanceProgress,
+  FIRST_SYNC_MILESTONES,
+  firstSyncActiveMilestoneIndex,
   formatSyncProgressBody,
   syncProgressNotification,
 } from "./syncProgress";
@@ -171,5 +173,45 @@ describe("sync progress notifications", () => {
       ],
       active: true,
     });
+  });
+});
+
+describe("first-sync milestones", () => {
+  const indexOfPhase = (phase: string) =>
+    FIRST_SYNC_MILESTONES.findIndex((m) => m.phase === phase);
+
+  it("treats the first milestone as active before any determinate value", () => {
+    expect(firstSyncActiveMilestoneIndex(0, false)).toBe(0);
+    // Indeterminate wins even if a stale fraction is passed.
+    expect(firstSyncActiveMilestoneIndex(0.9, false)).toBe(0);
+  });
+
+  it("keeps a phase active while the bar is still within it", () => {
+    // Regression guard: at a phase's own threshold the phase is the CURRENT one,
+    // not already done (the `<=` vs `<` off-by-one).
+    expect(firstSyncActiveMilestoneIndex(0.12, true)).toBe(
+      indexOfPhase("discovery"),
+    );
+    expect(firstSyncActiveMilestoneIndex(0.46, true)).toBe(
+      indexOfPhase("backend_fetch"),
+    );
+  });
+
+  it("advances to the next phase once the bar passes a threshold", () => {
+    expect(firstSyncActiveMilestoneIndex(0.13, true)).toBe(
+      indexOfPhase("backend_fetch"),
+    );
+    expect(firstSyncActiveMilestoneIndex(0.5, true)).toBe(
+      indexOfPhase("decode_enrich"),
+    );
+  });
+
+  it("reports every phase done at or past completion", () => {
+    expect(firstSyncActiveMilestoneIndex(0.95, true)).toBe(
+      FIRST_SYNC_MILESTONES.length,
+    );
+    expect(firstSyncActiveMilestoneIndex(1, true)).toBe(
+      FIRST_SYNC_MILESTONES.length,
+    );
   });
 });
