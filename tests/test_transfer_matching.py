@@ -10,6 +10,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 
 from kassiber.core.transfer_matching import (
+    _deterministic_self_transfer_ids,
     CONFIDENCE_EXACT,
     CONFIDENCE_STRONG,
     KIND_MANUAL,
@@ -215,6 +216,40 @@ class HeuristicMatchTests(unittest.TestCase):
         candidates = suggest_swap_candidates([out, inbound], tax_country="at")
         self.assertEqual(len(candidates), 1)
         self.assertEqual(candidates[0].default_kind, KIND_PEG_IN)
+
+    def test_normal_self_transfer_claimed_as_deterministic(self):
+        # delta 0.001 BTC on a 1.001 BTC transfer is well under the
+        # max(1%, 2500 sats) ceiling -> a clean self-transfer, claimed.
+        out = _row(id="o", external_id="txid", wallet_id="cold",
+                   direction="outbound", asset="BTC", amount=100_100_000_000)
+        inbound = _row(id="i", external_id="txid", wallet_id="hot",
+                       direction="inbound", asset="BTC", amount=100_000_000_000)
+        ids = _deterministic_self_transfer_ids([out, inbound])
+        self.assertEqual(ids, {"o", "i"})
+
+    def test_implausible_fee_self_transfer_not_claimed_as_deterministic(self):
+        # The id=47 split-peg shape: a ~41x-tolerance implied fee means the
+        # outbound fanned out to an unrecognized recipient, so it must NOT be
+        # claimed as a proven self-transfer (kept eligible for swap review,
+        # in lockstep with the transfer_fee_implausible tax quarantine).
+        out = _row(id="o", external_id="txid", wallet_id="cold",
+                   direction="outbound", asset="BTC", amount=4_702_253_000)
+        inbound = _row(id="i", external_id="txid", wallet_id="hot",
+                       direction="inbound", asset="BTC", amount=2_750_000_000)
+        ids = _deterministic_self_transfer_ids([out, inbound])
+        self.assertEqual(ids, set())
+
+    def test_cross_asset_heuristic_without_recognized_route_skipped(self):
+        # LBTC->BTC across two custom (non-chain, non-Lightning) wallets is not a
+        # recognized peg/submarine route, so the time+amount heuristic must NOT
+        # surface it as a strong candidate (would otherwise be weldable into a
+        # basis-corrupting carrying-value pair).
+        out = _row(id="o", external_id="", wallet_id="w1", wallet_kind="custom",
+                   direction="outbound", asset="LBTC", amount=100_000_000)
+        inbound = _row(id="i", external_id="", wallet_id="w2", wallet_kind="custom",
+                       direction="inbound", asset="BTC", amount=99_900_000,
+                       occurred_at="2026-03-14T17:31:00Z")
+        self.assertEqual(suggest_swap_candidates([out, inbound], tax_country="at"), [])
 
     def test_pegout_within_window_paired(self):
         out = _row(

@@ -107,6 +107,116 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         self.assertEqual(float(transfer.fee), 0.001)
         self.assertEqual(float(transfer.spot_price), 65000.0)
 
+    def test_negative_fiat_value_falls_back_to_spot_derived_value(self):
+        # A malformed negative fiat_value is truthy, so the old `or` fallback let
+        # it through to RP2 and crashed the whole report. It must clamp to the
+        # spot-derived value (amount * spot_price) instead.
+        row = _row(
+            "tx-neg", "wallet-a", "inbound", 100_000_000_000,
+            fiat_rate=60_000, fiat_value=-50,
+        )
+        inputs = normalize_tax_asset_inputs(
+            self.profile, "BTC", [row], self.wallet_refs_by_id, [],
+        )
+        self.assertEqual(inputs.quarantines, [])
+        self.assertEqual(len(inputs.events), 1)
+        self.assertEqual(float(inputs.events[0].fiat_value), 60000.0)
+
+    def test_implausible_transfer_fee_quarantines(self):
+        # Reproduces the id=47 split-peg case: a single outbound (0.04702253)
+        # fans out to an owned wallet (0.02750000) AND a Liquid peg, so the
+        # 1-out/1-in pairing absorbs the ~0.0195 peg as an implied "fee". That
+        # must be quarantined for review, never booked as a transfer fee.
+        out_row = _row(
+            "tx-out",
+            "wallet-a",
+            "outbound",
+            4_702_253_000,
+            fiat_rate=63_255,
+            external_id="pair-peg",
+        )
+        in_row = _row(
+            "tx-in",
+            "wallet-b",
+            "inbound",
+            2_750_000_000,
+            external_id="pair-peg",
+        )
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_row, in_row],
+            self.wallet_refs_by_id,
+            [{"out": out_row, "in": in_row}],
+        )
+        self.assertEqual(inputs.transfers, [])
+        self.assertEqual(inputs.events, [])
+        self.assertEqual(len(inputs.quarantines), 1)
+        self.assertEqual(
+            inputs.quarantines[0]["reason"], "transfer_fee_implausible"
+        )
+        detail = json.loads(inputs.quarantines[0]["detail_json"])
+        self.assertEqual(detail["from_wallet"], "Wallet A")
+        self.assertEqual(detail["to_wallet"], "Wallet B")
+        self.assertAlmostEqual(detail["implied_fee"], 0.01952253, places=8)
+        self.assertGreater(detail["implied_fee"], detail["fee_ceiling"])
+        self.assertEqual(detail["required_for"], "transfer_fee_review")
+
+    def test_transfer_fee_just_under_ceiling_still_pairs(self):
+        # A 0.0005 BTC implied fee on a 0.1 BTC transfer is under the
+        # max(1%, 2500 sats) = 0.001 BTC ceiling, so it still normalizes as a
+        # transfer (guards against over-quarantining genuine network fees).
+        out_row = _row(
+            "tx-out",
+            "wallet-a",
+            "outbound",
+            10_000_000_000,
+            fiat_rate=65_000,
+            external_id="pair-ok",
+        )
+        in_row = _row(
+            "tx-in",
+            "wallet-b",
+            "inbound",
+            9_950_000_000,
+            external_id="pair-ok",
+        )
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_row, in_row],
+            self.wallet_refs_by_id,
+            [{"out": out_row, "in": in_row}],
+        )
+        self.assertEqual(inputs.quarantines, [])
+        self.assertEqual(len(inputs.transfers), 1)
+        self.assertAlmostEqual(float(inputs.transfers[0].fee), 0.0005, places=8)
+
+    def test_owned_fanout_quarantines_all_legs(self):
+        # One tx fans out from wallet-a to BOTH wallet-b and wallet-c.
+        # detect_intra_transfers skips it (not 1-out/1-in); booking each leg
+        # standalone would destroy basis, so every leg is quarantined.
+        refs = {
+            "wallet-a": {"id": "wallet-a", "label": "Wallet A"},
+            "wallet-b": {"id": "wallet-b", "label": "Wallet B"},
+            "wallet-c": {"id": "wallet-c", "label": "Wallet C"},
+        }
+        out_row = _row("fan-out", "wallet-a", "outbound", 50_000_000_000,
+                       fiat_rate=60_000, external_id="fanout-1")
+        in_b = _row("fan-in-b", "wallet-b", "inbound", 30_000_000_000,
+                    fiat_rate=60_000, external_id="fanout-1")
+        in_c = _row("fan-in-c", "wallet-c", "inbound", 20_000_000_000,
+                    fiat_rate=60_000, external_id="fanout-1")
+        inputs = normalize_tax_asset_inputs(
+            self.profile, "BTC", [out_row, in_b, in_c], refs, [],
+        )
+        self.assertEqual(inputs.transfers, [])
+        self.assertEqual(inputs.events, [])
+        self.assertEqual(len(inputs.quarantines), 3)
+        self.assertTrue(
+            all(q["reason"] == "owned_fanout_unresolved" for q in inputs.quarantines)
+        )
+
     def test_transfer_mismatch_quarantines_without_normalized_transfer(self):
         out_row = _row(
             "tx-out",
@@ -159,7 +269,13 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
             self.wallet_refs_by_id,
             [{"out": out_row, "in": in_row}],
         )
-        self.assertEqual(inputs.transfers, [])
+        # The fee can't be priced, so the coins still MOVE (zero-fee) to fund the
+        # destination — dropping the whole transfer would desync balances — and
+        # the unpriced fee is surfaced as a quarantine.
+        self.assertEqual(len(inputs.transfers), 1)
+        self.assertEqual(float(inputs.transfers[0].sent), 0.5)
+        self.assertEqual(float(inputs.transfers[0].received), 0.5)
+        self.assertEqual(float(inputs.transfers[0].fee), 0.0)
         self.assertEqual(len(inputs.quarantines), 1)
         self.assertEqual(inputs.quarantines[0]["reason"], "missing_spot_price")
         detail = json.loads(inputs.quarantines[0]["detail_json"])

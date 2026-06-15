@@ -366,6 +366,14 @@ def _deterministic_self_transfer_ids(rows: Sequence[Mapping]) -> set[object]:
     used by the journal pipeline. This mirrors
     ``kassiber.transfers.detect_intra_transfers``; keep the predicates in
     lockstep so ordinary cold-to-hot moves do not look like swaps to review.
+
+    Exception: when the implied fee (``out_amount - in_amount``) blows past the
+    swap-fee tolerance, the outbound almost certainly fanned out to an
+    unrecognized recipient (a cross-asset peg/swap or a payment), so this is NOT
+    a clean self-transfer. The journal pipeline quarantines it
+    (``transfer_fee_implausible`` in ``normalize_tax_asset_inputs``) rather than
+    booking the residual as a fee; here we correspondingly leave it eligible for
+    swap review instead of silently claiming it as a proven self-transfer.
     """
     grouped: dict[tuple[str, str], list[Mapping]] = {}
     for row in rows:
@@ -389,6 +397,14 @@ def _deterministic_self_transfer_ids(rows: Sequence[Mapping]) -> set[object]:
         out_row = outs[0]
         in_row = ins[0]
         if _record_get(out_row, "wallet_id") == _record_get(in_row, "wallet_id"):
+            continue
+        out_amount = int(_record_get(out_row, "amount") or 0)
+        in_amount = int(_record_get(in_row, "amount") or 0)
+        if out_amount - in_amount > fee_threshold_msat(
+            out_amount, DEFAULT_FEE_PCT_MAX, DEFAULT_FEE_SATS_MIN
+        ):
+            # Implausible implied fee — likely an unrecognized peg/payment leg.
+            # Don't claim it as a proven self-transfer; let it reach swap review.
             continue
         deterministic_ids.add(_record_get(out_row, "id"))
         deterministic_ids.add(_record_get(in_row, "id"))
@@ -468,12 +484,30 @@ def _match_heuristic(
         # rejection exactly.
         lo = bisect.bisect_left(in_times, out_seconds - time_window_seconds)
         hi = bisect.bisect_right(in_times, out_seconds + time_window_seconds)
+        out_asset = str(_record_get(out_row, "asset") or "")
+        out_wallet_kind = str(_record_get(out_row, "wallet_kind") or "")
         for _, in_row, in_amount in in_entries[lo:hi]:
             if out_wallet_id == _record_get(in_row, "wallet_id"):
                 continue
             delta = out_amount - in_amount
             if delta < 0 or delta > threshold:
                 continue
+            in_asset = str(_record_get(in_row, "asset") or "")
+            if out_asset.upper() != in_asset.upper():
+                # Cross-asset (layer-hop) candidates must look like a recognized
+                # peg / submarine route, not just two similar-sized legs that
+                # happen to fall inside the window+fee band. Without this, an
+                # unrelated L-BTC disposal and BTC acquisition get matched and
+                # stamped `strong`, weldable into a carrying-value pair that
+                # corrupts basis on both sides. Genuine pegs are ~1:1 minus a
+                # tiny federation fee, so the standard fee band still admits them.
+                kind = default_kind_for(
+                    out_asset, in_asset,
+                    out_wallet_kind,
+                    str(_record_get(in_row, "wallet_kind") or ""),
+                )
+                if kind == KIND_MANUAL:
+                    continue
             pairs.append((out_row, in_row))
     return pairs
 
