@@ -384,6 +384,22 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         self.assertEqual(detail["direction"], "transfer")
 
 
+class BuildTaxQuarantineTest(unittest.TestCase):
+    profile = {"id": "p", "workspace_id": "w"}
+
+    def test_uses_real_id_for_synthetic_rows(self):
+        # A synthetic engine-only row (e.g. a direct-payout leg) must quarantine
+        # against its real tx so the journal_quarantines FK to transactions(id)
+        # holds — otherwise the whole `journals process` aborts.
+        row = {"id": "direct-payout:abc:out", "journal_transaction_id": "real-tx"}
+        q = build_tax_quarantine(self.profile, row, "reason", {})
+        self.assertEqual(q["transaction_id"], "real-tx")
+
+    def test_uses_own_id_for_real_rows(self):
+        q = build_tax_quarantine(self.profile, {"id": "real-tx"}, "reason", {})
+        self.assertEqual(q["transaction_id"], "real-tx")
+
+
 class DedupeQuarantinesTest(unittest.TestCase):
     profile = {"id": "p", "workspace_id": "w"}
 
