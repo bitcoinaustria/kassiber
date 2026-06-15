@@ -2512,6 +2512,14 @@ class CliSmokeTest(unittest.TestCase):
         # (0.0198) = 0.0002 BTC, NOT the full 0.05 outbound minus 0.0198.
         self.assertEqual(payload["data"]["swap_fee_msat"], 20000000)
 
+        # The pair listing must show the SWAPPED portion (consistent with the
+        # 0.0002 swap fee), not the full 0.05 outbound, while still exposing the
+        # underlying transaction total under full_amount.
+        payload = self._cli("transfers", "list", "--workspace", workspace, "--profile", "SplitSwap")
+        pair = payload["data"][0]
+        self.assertEqual(pair["out"]["amount_msat"], 2000000000)
+        self.assertEqual(pair["out"]["full_amount_msat"], 5000000000)
+
         payload = self._cli("journals", "process", "--workspace", workspace, "--profile", "SplitSwap")
         data = payload["data"]
         # Split resolves into a clean self-transfer MOVE + a carrying-value peg;

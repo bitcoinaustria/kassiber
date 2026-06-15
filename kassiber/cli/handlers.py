@@ -734,7 +734,11 @@ def list_transaction_pairs(conn, workspace_ref, profile_ref, *, include_deleted=
             p.*,
             tout.external_id AS out_external_id,
             tout.asset AS out_asset,
-            tout.amount AS out_amount_msat,
+            -- On a split cross-asset pair only `out_amount` crossed to the other
+            -- asset; swap_fee_msat was computed from that portion, so the pair's
+            -- out amount must match it. Same-asset / whole pairs keep tout.amount.
+            COALESCE(p.out_amount, tout.amount) AS out_amount_msat,
+            tout.amount AS out_full_amount_msat,
             wout.label AS out_wallet,
             tin.external_id AS in_external_id,
             tin.asset AS in_asset,
@@ -758,8 +762,12 @@ def list_transaction_pairs(conn, workspace_ref, profile_ref, *, include_deleted=
             "external_id": row["out_external_id"] or "",
             "wallet": row["out_wallet"],
             "asset": row["out_asset"],
+            # `amount` is the swapped portion on a split pair; `full_amount`
+            # carries the underlying transaction's total for transparency.
             "amount": float(msat_to_btc(row["out_amount_msat"])),
             "amount_msat": int(row["out_amount_msat"]),
+            "full_amount": float(msat_to_btc(row["out_full_amount_msat"])),
+            "full_amount_msat": int(row["out_full_amount_msat"]),
         }
         entry["in"] = {
             "transaction_id": row["in_transaction_id"],
