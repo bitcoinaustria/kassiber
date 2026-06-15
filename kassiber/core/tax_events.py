@@ -636,16 +636,18 @@ def normalize_tax_asset_inputs(
                 continue
 
             fee = sent - received
-            # A same-asset self-transfer's implied fee should be at most the
-            # on-chain network fee. When it blows past the swap-fee tolerance
-            # (max(1%, 2500 sats)), the outbound almost certainly fanned out to
-            # an unrecognized recipient — a cross-asset peg/swap (e.g. BTC->L-BTC
-            # to a Liquid federation address) or a payment — that this 1-out/1-in
-            # pairing silently absorbed as "fee". Booking it would tax the whole
-            # residual as a disposal (and the pegged asset gets a fresh basis on
-            # the other chain — double-counted). Quarantine for explicit review
-            # instead of mis-booking; the user splits the row into the real
-            # self-transfer portion plus a cross-asset pair / direct swap payout.
+            # The recorded on-chain fee (out_row["fee"]) legitimately explains
+            # part of the implied fee, so only the UNRECOGNIZED outflow — the
+            # amount that left the source beyond what the recipient got and the
+            # recorded miner fee (i.e. out.amount - in.amount) — is suspicious. A
+            # small move with a high recorded network fee is fine; but when this
+            # excess blows past the swap-fee tolerance (max(1%, 2500 sats)) the
+            # outbound almost certainly fanned out to an unrecognized recipient (a
+            # cross-asset peg to a Liquid federation address, or a payment) that
+            # this 1-out/1-in pairing would otherwise absorb as a giant "fee" and
+            # tax as a disposal. Quarantine for explicit review (the user splits
+            # it into the real self-transfer + a cross-asset pair / swap payout).
+            unrecognized_outflow = msat_to_btc(out_row["amount"]) - msat_to_btc(in_row["amount"])
             fee_ceiling = msat_to_btc(
                 fee_threshold_msat(
                     int(out_row["amount"] or 0),
@@ -653,7 +655,7 @@ def normalize_tax_asset_inputs(
                     DEFAULT_FEE_SATS_MIN,
                 )
             )
-            if fee > fee_ceiling:
+            if unrecognized_outflow > fee_ceiling:
                 quarantines.append(
                     build_tax_quarantine(
                         profile,
@@ -666,6 +668,7 @@ def normalize_tax_asset_inputs(
                             "sent": float(sent),
                             "received": float(received),
                             "implied_fee": float(fee),
+                            "unrecognized_outflow": float(unrecognized_outflow),
                             "fee_ceiling": float(fee_ceiling),
                             "required_for": "transfer_fee_review",
                         },
