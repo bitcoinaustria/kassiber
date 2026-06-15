@@ -49,6 +49,33 @@ _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE = {
     "staking": "STAKING",
     "wages": "WAGES",
 }
+# Inbound kinds that look like income but are NOT in the map above. Defaulting
+# them to BUY (a plain acquisition) silently drops the income declaration, so
+# they are quarantined for explicit income-vs-acquisition classification.
+_INCOME_LIKE_KIND_TOKENS = (
+    "reward",
+    "referral",
+    "bonus",
+    "cashback",
+    "rebate",
+    "dividend",
+    "yield",
+)
+# Outbound kinds that are dispositions but NOT market sales. RP2 taxes every
+# OutTransaction at full market value, so booking a gift/donation/lost coin as a
+# SELL overstates gains. Quarantine for explicit handling (exclude, or apply a
+# taxability/category override) instead of guessing the jurisdiction's rule.
+_NON_SALE_DISPOSAL_KIND_TOKENS = (
+    "gift",
+    "donat",
+    "lost",
+    "stolen",
+    "theft",
+)
+
+
+def _kind_has_token(kind: str, tokens: tuple[str, ...]) -> bool:
+    return bool(kind) and any(token in kind for token in tokens)
 
 
 @dataclass(frozen=True)
@@ -431,6 +458,33 @@ def _transaction_row_sort_key(row: Mapping[str, Any]) -> tuple[str, str, str]:
     )
 
 
+def _earliest_lot_contamination(dropped_acquisition_at, events) -> str | None:
+    """Earliest instant the asset's lot state becomes uncertain.
+
+    Combines normalize's earliest dropped-acquisition timestamp (missing/coarse
+    pricing) with the gate-level drops that also leave RP2's lots inconsistent:
+    unclassified-income inbounds (never enter the lot pool) and quarantined
+    non-sale disposals (gift / donation / lost — a real outflow that is not
+    booked). Any same-asset disposal at or after this instant cannot be trusted
+    to select the right lot under any accounting method. ``None`` when nothing
+    contaminates the lots.
+    """
+    earliest = dropped_acquisition_at
+    for event in events:
+        kind = _normalized_event_kind(event)
+        contaminates = (
+            event.direction == "inbound"
+            and kind not in _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE
+            and _kind_has_token(kind, _INCOME_LIKE_KIND_TOKENS)
+        ) or (
+            event.direction == "outbound"
+            and _kind_has_token(kind, _NON_SALE_DISPOSAL_KIND_TOKENS)
+        )
+        if contaminates and (earliest is None or event.occurred_at < earliest):
+            earliest = event.occurred_at
+    return earliest
+
+
 def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInputs, configuration) -> _RP2PreparedInput:
     """Build RP2 ``InputData`` for one asset without running ``compute_tax``.
 
@@ -451,8 +505,32 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
     out_set = TransactionSet(configuration, "OUT", asset)
     intra_set = TransactionSet(configuration, "INTRA", asset)
     holder = profile["label"]
-    total_available = Decimal("0")
+    # Quantity balances are tracked PER ACCOUNT (wallet label; holder is constant
+    # within a profile) to mirror rp2's BalanceSet, which enforces non-negative
+    # balances per (exchange, holder). The old single global pool let an
+    # account-local over-sell pass this gate and then crash compute_tax with an
+    # uncatchable "balance went negative", aborting the whole report instead of
+    # quarantining the one offending row.
+    account_available: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    # Cost basis, by contrast, is assigned by rp2's universal-application FIFO
+    # GLOBALLY across accounts, so the priced/cost-basis pool stays global.
     priced_available = Decimal("0")
+    # Basis-provenance guard. When the lot state for this asset becomes
+    # uncertain — an acquisition dropped for missing/coarse pricing, an
+    # unclassified-income inbound, or a quarantined non-sale disposal (gift /
+    # donation / lost) that is NOT booked into RP2's lots — every later disposal
+    # is computed against a lot the engine can no longer trust. Which lot is
+    # wrong depends on the accounting method (FIFO picks an older lot,
+    # moving-average folds the missing lot into the pool, LIFO/HIFO pick
+    # differently), so rather than assume FIFO we conservatively quarantine ANY
+    # same-asset disposal at or after the earliest contamination instant. The
+    # user resolves the contaminating row (price it, classify it, or exclude it)
+    # and re-runs. `_earliest_lot_contamination` folds the gate-level income /
+    # gift drops in with normalize's quarantine-derived contamination instant.
+    first_drop_at = _earliest_lot_contamination(
+        normalized_inputs.earliest_lot_contamination_at,
+        normalized_inputs.events,
+    )
     quarantines = list(normalized_inputs.quarantines)
     intra_audit = []
     row_index = 1
@@ -462,11 +540,29 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
         for transfer in normalized_inputs.transfers
     }
 
-    for item_kind, item_id in normalized_inputs.ordered_items:
+    # Walk the ledger in rp2's own order — by timestamp, and within a timestamp
+    # IN before INTRA before OUT — so this gate's availability decision matches
+    # the BalanceSet (which concatenates IN+INTRA+OUT then stable-sorts by
+    # timestamp). The original-stream index is the final, deterministic tiebreak,
+    # replacing the previous nondeterministic random-uuid order that could flip a
+    # same-timestamp buy/sell between re-imports. row_index then follows the same
+    # order rp2 itself processes in.
+    def _gate_order_key(indexed_item):
+        index, (kind, ident) = indexed_item
+        if kind == "transfer":
+            return (transfers_by_id[ident].occurred_at, 1, index)
+        ev = events_by_id[ident]
+        return (ev.occurred_at, 0 if ev.direction == "inbound" else 2, index)
+
+    for _, (item_kind, item_id) in sorted(
+        enumerate(normalized_inputs.ordered_items), key=_gate_order_key
+    ):
         if item_kind == "transfer":
             transfer = transfers_by_id[item_id]
             transfer_id = _transfer_item_id(transfer)
-            if total_available < transfer.sent:
+            from_account = transfer.from_wallet_label
+            to_account = transfer.to_wallet_label
+            if account_available[from_account] < transfer.sent:
                 quarantines.append(
                     build_tax_quarantine(
                         profile,
@@ -476,7 +572,7 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                             "from_wallet": transfer.from_wallet_label,
                             "asset": asset,
                             "required": float(transfer.sent),
-                            "available": float(total_available),
+                            "available": float(account_available[from_account]),
                         },
                     )
                 )
@@ -514,7 +610,11 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                 )
             )
             row_index += 1
-            total_available -= transfer.fee
+            # The transfer debits `sent` from the source account and credits
+            # `received` to the destination; the difference (the fee) is the only
+            # quantity that leaves the global priced pool. Matches BalanceSet.
+            account_available[from_account] -= transfer.sent
+            account_available[to_account] += transfer.received
             priced_available -= transfer.fee
             audit_row = {
                 "out_id": transfer.out_transaction_id,
@@ -538,7 +638,29 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
 
         event = events_by_id[item_id]
         if event.direction == "inbound":
-            total_available += event.amount
+            kind = _normalized_event_kind(event)
+            if (
+                kind not in _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE
+                and _kind_has_token(kind, _INCOME_LIKE_KIND_TOKENS)
+            ):
+                # Looks like income but isn't a recognized earn type. Defaulting
+                # to BUY would silently drop the income declaration, so quarantine
+                # for explicit income-vs-acquisition classification.
+                quarantines.append(
+                    build_tax_quarantine(
+                        profile,
+                        event.raw_row,
+                        "unclassified_income_kind",
+                        {
+                            "wallet": event.wallet_label,
+                            "asset": asset,
+                            "direction": "inbound",
+                            "kind": kind,
+                        },
+                    )
+                )
+                continue
+            account_available[event.wallet_label] += event.amount
             in_set.add_entry(
                 InTransaction(
                     configuration=configuration,
@@ -564,11 +686,36 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
         needed = event.amount + event.fee
         if needed <= 0:
             continue
+        disposal_kind = _normalized_event_kind(event)
+        if _kind_has_token(disposal_kind, _NON_SALE_DISPOSAL_KIND_TOKENS):
+            # Gift / donation / lost-or-stolen: a disposition, but not a market
+            # sale. rp2 taxes every OutTransaction at full market value, so
+            # booking it as a SELL overstates gains. Quarantine for explicit
+            # handling (exclude, or apply a taxability/category override).
+            quarantines.append(
+                build_tax_quarantine(
+                    profile,
+                    event.raw_row,
+                    "non_sale_disposal_kind",
+                    {
+                        "wallet": event.wallet_label,
+                        "asset": asset,
+                        "direction": "outbound",
+                        "kind": disposal_kind,
+                    },
+                )
+            )
+            # Don't touch availability: the row isn't emitted, so RP2 keeps the
+            # lot. Debiting here would diverge the gate from RP2 and over- or
+            # under-gate a later sale depending on method. Instead the gift's
+            # timestamp contaminates lot provenance (see _earliest_lot_contamination),
+            # so any later disposal is quarantined until the gift is resolved.
+            continue
         # Marked Austrian swap-outs can depend on another asset's same-timestamp
         # swap-in. Feed the full graph to rp2's native runner instead of applying
         # Kassiber's single-asset availability gate first.
         is_marked_at_swap = bool(getattr(event, "at_swap_link", None))
-        if total_available < needed and not is_marked_at_swap:
+        if account_available[event.wallet_label] < needed and not is_marked_at_swap:
             quarantines.append(
                 build_tax_quarantine(
                     profile,
@@ -578,7 +725,7 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                         "wallet": event.wallet_label,
                         "asset": asset,
                         "required": float(needed),
-                        "available": float(total_available),
+                        "available": float(account_available[event.wallet_label]),
                     },
                 )
             )
@@ -594,6 +741,30 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                         "asset": asset,
                         "required": float(needed),
                         "priced_available": float(priced_available),
+                    },
+                )
+            )
+            continue
+        if (
+            first_drop_at is not None
+            and not is_marked_at_swap
+            and event.occurred_at >= first_drop_at
+        ):
+            # The lot state is contaminated from first_drop_at (a dropped /
+            # unpriced acquisition, an unclassified income lot, or a quarantined
+            # gift not booked into the pool). Which lot this disposal would draw
+            # from is method-dependent and untrustworthy, so quarantine it until
+            # the contaminating row is resolved rather than book a wrong basis.
+            quarantines.append(
+                build_tax_quarantine(
+                    profile,
+                    event.raw_row,
+                    "basis_provenance_incomplete",
+                    {
+                        "wallet": event.wallet_label,
+                        "asset": asset,
+                        "required": float(needed),
+                        "lot_state_uncertain_since": first_drop_at,
                     },
                 )
             )
@@ -616,7 +787,7 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                 notes=_compose_event_notes(event),
             )
         )
-        total_available -= needed
+        account_available[event.wallet_label] -= needed
         priced_available -= needed
         row_index += 1
 
