@@ -337,6 +337,7 @@ def _pair_to_dict(row):
     confidence_at_pair = row["confidence_at_pair"] if "confidence_at_pair" in keys else None
     pair_source = row["pair_source"] if "pair_source" in keys else None
     deleted_at = row["deleted_at"] if "deleted_at" in keys else None
+    out_amount = row["out_amount"] if "out_amount" in keys else None
     return {
         "id": row["id"],
         "workspace_id": row["workspace_id"],
@@ -350,6 +351,7 @@ def _pair_to_dict(row):
         "swap_fee_kind": swap_fee_kind,
         "confidence_at_pair": confidence_at_pair,
         "pair_source": pair_source,
+        "out_amount": int(out_amount) if out_amount is not None else None,
         "deleted_at": deleted_at,
         "created_at": row["created_at"],
     }
@@ -400,6 +402,7 @@ def create_transaction_pair(
     *,
     pair_source="manual",
     confidence_at_pair=None,
+    out_amount=None,
     commit=True,
 ):
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
@@ -446,6 +449,23 @@ def create_transaction_pair(
                 code="validation",
                 hint="Re-run with --policy taxable, or use an Austrian profile for cross-asset carrying-value swaps.",
             )
+    out_amount_msat = None
+    if out_amount is not None:
+        if out_row["asset"] == in_row["asset"]:
+            raise AppError(
+                "--out-amount only applies to cross-asset swap pairs: it is the "
+                "portion of the outbound that was swapped, with the remainder "
+                "treated as a same-asset self-transfer.",
+                code="validation",
+            )
+        out_amount_msat = _positive_btc_amount_msat(out_amount, "--out-amount")
+        full_out_msat = int(out_row["amount"] or 0)
+        if out_amount_msat > full_out_msat:
+            raise AppError(
+                f"--out-amount exceeds the outbound amount "
+                f"({out_amount_msat} > {full_out_msat} msat).",
+                code="validation",
+            )
     existing = conn.execute(
         """
         SELECT id FROM transaction_pairs
@@ -488,8 +508,8 @@ def create_transaction_pair(
         INSERT INTO transaction_pairs(
             id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
             kind, policy, notes, swap_fee_msat, swap_fee_kind, confidence_at_pair,
-            pair_source, deleted_at, created_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+            pair_source, out_amount, deleted_at, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
         """,
         (
             pair_id,
@@ -504,6 +524,7 @@ def create_transaction_pair(
             swap_fee_kind,
             confidence_at_pair,
             pair_source,
+            out_amount_msat,
             now_iso(),
         ),
     )

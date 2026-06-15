@@ -1280,6 +1280,12 @@ def build_parser() -> argparse.ArgumentParser:
     transfers_pair.add_argument("--kind", choices=list(TRANSFER_PAIR_KINDS), default="manual")
     transfers_pair.add_argument("--policy", choices=list(TRANSFER_PAIR_POLICIES), default="carrying-value")
     transfers_pair.add_argument("--note", dest="note")
+    transfers_pair.add_argument(
+        "--out-amount",
+        dest="out_amount",
+        help="Portion of the outbound (BTC) that was swapped on a cross-asset pair; "
+        "the remainder is treated as a same-asset self-transfer (split spend).",
+    )
     transfers_unpair = transfers_sub.add_parser("unpair")
     transfers_unpair.add_argument("--workspace")
     transfers_unpair.add_argument("--profile")
@@ -2846,6 +2852,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     kind=args.kind,
                     policy=args.policy,
                     notes=args.note,
+                    out_amount=args.out_amount,
                 ),
             )
         if args.transfers_command == "unpair":
