@@ -97,17 +97,27 @@ class InferOutboundRegimesTest(unittest.TestCase):
         ]
         self.assertEqual(infer_outbound_regimes(rows), {"sell-later": REGIME_NEU})
 
-    def test_post_cutoff_sale_from_other_wallet_draws_global_neu_pool(self):
-        # bitcoinaustria/kassiber#213: Neu acquired in wallet-a, sold from wallet-b. With the old
-        # per-wallet pools the sale wrongly fell back to Alt (wallet-b's Neu pool was empty while Alt
-        # existed); with the single global per-asset pool it correctly stays Neu, drawing on the
-        # taxpayer's whole Neu holding. (Mirrors how rp2's moving_average_at now sees one Neu pool.)
+    def test_post_cutoff_sale_from_alt_only_wallet_stays_alt(self):
+        rows = [
+            _row("buy-alt", "wallet-a", "inbound", 50_000_000, occurred_at="2020-06-01T00:00:00Z"),
+            _row("buy-neu", "wallet-b", "inbound", 100_000_000, occurred_at="2024-06-01T00:00:00Z"),
+            _row("sell-from-a", "wallet-a", "outbound", 30_000_000, occurred_at="2025-06-01T00:00:00Z"),
+        ]
+        self.assertEqual(infer_outbound_regimes(rows), {"sell-from-a": REGIME_ALT})
+
+    def test_post_cutoff_sale_from_transfer_funded_wallet_draws_moved_neu_inventory(self):
+        # bitcoinaustria/kassiber#213: Neu acquired in wallet-a, moved to wallet-b, then sold from
+        # wallet-b. The rp2 cost-basis pool is global, but regime availability still follows wallets
+        # and explicit internal transfers.
         rows = [
             _row("buy-alt", "wallet-a", "inbound", 50_000_000, occurred_at="2020-06-01T00:00:00Z"),
             _row("buy-neu", "wallet-a", "inbound", 100_000_000, occurred_at="2024-06-01T00:00:00Z"),
+            _row("xfer-out", "wallet-a", "outbound", 100_000_000, occurred_at="2024-07-01T00:00:00Z", external_id="xfer-1"),
+            _row("xfer-in", "wallet-b", "inbound", 100_000_000, occurred_at="2024-07-01T00:00:00Z", external_id="xfer-1"),
             _row("sell-from-b", "wallet-b", "outbound", 30_000_000, occurred_at="2025-06-01T00:00:00Z"),
         ]
-        self.assertEqual(infer_outbound_regimes(rows), {"sell-from-b": REGIME_NEU})
+        intra_pairs = [{"out": rows[2], "in": rows[3]}]
+        self.assertEqual(infer_outbound_regimes(rows, intra_pairs), {"sell-from-b": REGIME_NEU})
 
 
 class AustrianKennzahlMappingTest(unittest.TestCase):

@@ -70,9 +70,8 @@ class NormalizedTaxTransfer:
     external_id: str | None
     out_row: Mapping[str, Any]
     in_row: Mapping[str, Any]
-    # Pool partition id to preserve across an intra-wallet move when
-    # Kassiber models pools as per-wallet. Intra transfers don't have
-    # a regime or swap-link concept; only the pool marker applies.
+    # Pool partition id to preserve across an intra-wallet move. Intra transfers
+    # don't have a regime or swap-link concept; only the pool marker applies.
     at_pool: Optional[str] = None
     # Optional stable id for one logical movement split out of a multi-output
     # wallet transaction. Journal rows still point at the real out/in rows.
@@ -447,7 +446,7 @@ def normalize_tax_asset_inputs(
     is_at = tax_country == "at"
     regime_map = at_regime_by_row_id or {}
     swap_link_map = at_swap_link_by_row_id or {}
-    outbound_regimes = infer_outbound_regimes(rows) if is_at else {}
+    outbound_regimes = infer_outbound_regimes(rows, intra_pairs) if is_at else {}
     events: list[NormalizedTaxEvent] = []
     transfers: list[NormalizedTaxTransfer] = []
     ordered_items: list[tuple[str, str]] = []
