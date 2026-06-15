@@ -74,6 +74,7 @@ from .handlers import (
     derive_wallet_targets,
     emit,
     get_journal_event,
+    identify_wallet_owners,
     import_into_wallet,
     inspect_transfer_audit,
     list_direct_swap_payouts,
@@ -103,6 +104,7 @@ from ..core import commercial as core_commercial
 from ..core import lightning as core_lightning
 from ..core.lightning import lnd as _core_lightning_lnd  # noqa: F401 — registers the LND adapter on import.
 from ..core import metadata as core_metadata
+from ..core import ownership as core_ownership
 from ..core import rates as core_rates
 from ..core import reports as core_reports
 from ..core import samourai as core_samourai
@@ -365,6 +367,16 @@ def _source_funds_hooks() -> core_source_funds.SourceFundsHooks:
         format_table=report_hooks.format_table,
         explorer_base=preferred_explorer_base,
     )
+
+
+def _emit_wallet_identify(args: argparse.Namespace, report) -> int:
+    """JSON keeps the full report (rich per-leg detail); table/plain/csv get
+    flat, column-aligned rows — the paste-list-in / annotated-list-out shape
+    that drives spreadsheet reconciliation."""
+    if getattr(args, "format", "table") == "json":
+        return emit(args, report)
+    rows = [core_ownership.flatten_result_row(item) for item in report.get("results", [])]
+    return emit(args, rows)
 
 
 def _emit_austrian_e1kv_report(
@@ -985,6 +997,46 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_derive.add_argument("--branch", default="all")
     wallets_derive.add_argument("--start", type=int, default=0)
     wallets_derive.add_argument("--count", type=int)
+    wallets_identify = wallets_sub.add_parser(
+        "identify",
+        help="Check whether addresses / txids belong to any wallet (reconciliation)",
+    )
+    wallets_identify.add_argument("--workspace")
+    wallets_identify.add_argument("--profile")
+    wallets_identify.add_argument(
+        "--wallet",
+        action="append",
+        help="Restrict to this wallet id/label (repeatable; default: all wallets)",
+    )
+    wallets_identify.add_argument(
+        "--address", action="append", help="Address to check (repeatable)"
+    )
+    wallets_identify.add_argument(
+        "--txid", action="append", help="Transaction id to check (repeatable)"
+    )
+    wallets_identify.add_argument(
+        "--candidate",
+        action="append",
+        help="Address or txid, auto-detected (repeatable)",
+    )
+    wallets_identify.add_argument(
+        "--file", help="File with one address/txid per line (# comments allowed)"
+    )
+    wallets_identify.add_argument(
+        "--scan-to-index",
+        type=int,
+        default=core_ownership.DEFAULT_SCAN_TO_INDEX,
+        help="Max derivation index per branch when scanning descriptor wallets",
+    )
+    wallets_identify.add_argument(
+        "--verify-on-chain",
+        action="store_true",
+        help="Fetch txids not in local history from a backend for per-leg classification",
+    )
+    wallets_identify.add_argument(
+        "--verify-backend",
+        help="Backend name for --verify-on-chain (default: active backend)",
+    )
 
     transactions = sub.add_parser("transactions")
     tx_sub = transactions.add_subparsers(dest="transactions_command", required=True)
@@ -2399,6 +2451,24 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     branch=args.branch,
                     start=args.start,
                     count=args.count,
+                ),
+            )
+        if args.wallets_command == "identify":
+            return _emit_wallet_identify(
+                args,
+                identify_wallet_owners(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    wallet_refs=args.wallet,
+                    addresses=args.address,
+                    txids=args.txid,
+                    candidates=args.candidate,
+                    file=args.file,
+                    scan_to_index=args.scan_to_index,
+                    verify_on_chain=args.verify_on_chain,
+                    verify_backend=args.verify_backend,
+                    runtime_config=getattr(args, "runtime_config", None),
                 ),
             )
     if args.command == "transactions":

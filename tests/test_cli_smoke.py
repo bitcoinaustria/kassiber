@@ -570,6 +570,53 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(rows[1]["branch_label"], "change")
         self.assertEqual(len(rows[0]["key_origins"]), 4)
 
+    def test_03c_wallet_identify_classifies_ownership(self):
+        derived = self._cli(
+            "wallets", "derive",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "Vault",
+            "--branch", "receive",
+            "--start", "0",
+            "--count", "1",
+        )
+        owned = derived["data"][0]["address"]
+        external = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
+
+        payload = self._cli(
+            "wallets", "identify",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "Vault",
+            "--address", owned,
+            "--address", external,
+            "--txid", "not-a-valid-txid",
+            "--scan-to-index", "5",
+        )
+        self._assert_kind(payload, "wallets.identify")
+        data = payload["data"]
+        self.assertEqual(data["summary"]["owned"], 1)
+        self.assertEqual(data["summary"]["external"], 1)
+        self.assertEqual(data["summary"]["invalid"], 1)
+        self.assertFalse(data["summary"]["verified_on_chain"])
+
+        by_input = {row["input"]: row for row in data["results"]}
+        self.assertEqual(by_input[owned]["status"], "owned")
+        self.assertEqual(by_input[owned]["matches"][0]["branch"], "receive")
+        self.assertEqual(by_input[owned]["matches"][0]["wallet"], "Vault")
+        self.assertEqual(by_input[external]["status"], "external")
+
+        # No candidates is a validation error, not an empty success.
+        error_payload, code = _run(
+            self.data_root,
+            "wallets", "identify",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(error_payload["kind"], "error")
+        self.assertEqual(error_payload["error"]["code"], "validation")
+
     def test_04_phoenix_import(self):
         payload = self._cli(
             "wallets", "import-phoenix",
