@@ -91,14 +91,16 @@ class NormalizedTaxAssetInputs:
     transfers: Sequence[NormalizedTaxTransfer]
     ordered_items: Sequence[tuple[str, str]]
     quarantines: Sequence[dict[str, Any]]
-    # Earliest occurred_at of an inbound acquisition that was dropped for a
-    # pricing reason (coarse/missing spot). After this instant the global FIFO
-    # is missing a lot, so any disposal that would consume past the priced
-    # supply acquired before it is re-FIFO'd onto the wrong (later) lot — wrong
-    # basis, and for AT a flipped Alt/Neu regime. The engine uses this to
-    # quarantine those disposals instead of silently mis-basing them. None when
-    # no acquisition was dropped.
-    earliest_dropped_acquisition_at: Optional[str] = None
+    # Earliest occurred_at of any normalize-quarantined acquisition / disposal /
+    # transfer leg for this asset. Any such drop leaves RP2's lot pool
+    # inconsistent (a missing-basis acquisition, an unconsumed disposal, an
+    # un-booked / partial transfer), so from that instant the cost basis a later
+    # disposal would draw is untrustworthy under ANY accounting method. The
+    # engine combines this with its own gate-level drops (unclassified income,
+    # gift/lost) and conservatively quarantines later disposals as
+    # `basis_provenance_incomplete` until the contaminating row is resolved.
+    # None when nothing was quarantined.
+    earliest_lot_contamination_at: Optional[str] = None
 
 
 def build_tax_quarantine(
@@ -527,7 +529,6 @@ def normalize_tax_asset_inputs(
     transfers: list[NormalizedTaxTransfer] = []
     ordered_items: list[tuple[str, str]] = []
     quarantines: list[dict[str, Any]] = []
-    dropped_acquisition_times: list[str] = []
     samourai_internal_groups = _samourai_internal_privacy_groups(rows)
     samourai_internal_row_ids = _samourai_internal_privacy_row_ids(
         samourai_internal_groups
@@ -773,7 +774,6 @@ def normalize_tax_asset_inputs(
                         _pricing_review_detail(row, wallet["label"], asset, direction),
                     )
                 )
-                dropped_acquisition_times.append(row["occurred_at"])
                 continue
             spot_price = _spot_price_from_row(row, amount)
             if spot_price is None:
@@ -790,7 +790,6 @@ def normalize_tax_asset_inputs(
                         },
                     )
                 )
-                dropped_acquisition_times.append(row["occurred_at"])
                 continue
             fiat_value = _positive_fiat_value(row, amount * spot_price)
         elif direction == "outbound":
@@ -878,14 +877,27 @@ def normalize_tax_asset_inputs(
         )
         ordered_items.append(("event", row["id"]))
 
+    # Any quarantined acquisition / disposal / transfer leg leaves the lot pool
+    # inconsistent from its occurred_at on. Derive the earliest such instant
+    # directly from the quarantine set (method-agnostic) rather than enumerating
+    # individual reasons, so a newly-added quarantine reason can't silently slip
+    # past the basis-provenance guard.
+    quarantined_ids = {str(q["transaction_id"]) for q in quarantines}
+    contamination_times = [
+        row["occurred_at"]
+        for row in rows
+        if str(row["id"]) in quarantined_ids
+        and _row_get(row, "direction") in ("inbound", "outbound")
+    ]
+
     return NormalizedTaxAssetInputs(
         asset=asset,
         events=events,
         transfers=transfers,
         ordered_items=ordered_items,
         quarantines=quarantines,
-        earliest_dropped_acquisition_at=(
-            min(dropped_acquisition_times) if dropped_acquisition_times else None
+        earliest_lot_contamination_at=(
+            min(contamination_times) if contamination_times else None
         ),
     )
 

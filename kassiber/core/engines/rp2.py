@@ -526,9 +526,9 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
     # same-asset disposal at or after the earliest contamination instant. The
     # user resolves the contaminating row (price it, classify it, or exclude it)
     # and re-runs. `_earliest_lot_contamination` folds the gate-level income /
-    # gift drops in with normalize's dropped-acquisition timestamp.
+    # gift drops in with normalize's quarantine-derived contamination instant.
     first_drop_at = _earliest_lot_contamination(
-        normalized_inputs.earliest_dropped_acquisition_at,
+        normalized_inputs.earliest_lot_contamination_at,
         normalized_inputs.events,
     )
     quarantines = list(normalized_inputs.quarantines)
