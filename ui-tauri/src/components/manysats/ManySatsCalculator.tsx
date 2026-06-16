@@ -252,10 +252,12 @@ export function ManySatsCalculator() {
   const rateLoading = latestQuery.isLoading;
   const isFetching = latestQuery.isFetching;
 
-  const providerLabel = configuredProvider
-    ? marketRateProviderLabel(configuredProvider)
-    : rate?.source
-      ? marketRateProviderLabel(rate.source)
+  // Attribute to the rate row's actual source; fall back to the configured
+  // provider only when the row has no source yet (e.g. still loading).
+  const providerLabel = rate?.source
+    ? marketRateProviderLabel(rate.source)
+    : configuredProvider
+      ? marketRateProviderLabel(configuredProvider)
       : null;
   const asOf = formatClock(rate?.fetchedAt ?? rate?.timestamp ?? null);
 
