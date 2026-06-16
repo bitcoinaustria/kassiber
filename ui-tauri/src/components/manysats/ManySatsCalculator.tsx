@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Copy, RefreshCw } from "lucide-react";
+import { Bitcoin, Copy, Equal, RefreshCw } from "lucide-react";
 
 import { CopyButton } from "@/components/kb/CopyButton";
 import {
@@ -8,7 +8,7 @@ import {
   type RateLatestData,
 } from "@/components/kb/settings/SettingsModel";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -89,68 +89,103 @@ function formatClock(timestamp: string | null): string | null {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-interface ConversionRowProps {
+/** A pill-shaped unit badge (static), mirroring Boltz's asset chips. */
+function UnitChip({
+  icon,
+  children,
+}: {
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-white/10 bg-muted px-3.5 font-sans text-sm font-semibold text-foreground">
+      {icon}
+      {children}
+    </div>
+  );
+}
+
+/** Decorative equals disc between amount panels (we convert, we don't swap). */
+function Connector() {
+  return (
+    <div
+      className="relative z-10 flex h-0 items-center justify-center"
+      aria-hidden="true"
+    >
+      <span className="absolute flex size-8 items-center justify-center rounded-full border border-white/10 bg-card text-muted-foreground shadow-sm">
+        <Equal className="size-3.5" />
+      </span>
+    </div>
+  );
+}
+
+interface AmountPanelProps {
   fieldId: string;
+  label: string;
   value: string;
   placeholder: string;
   inputMode: "decimal" | "numeric";
   disabled?: boolean;
   onChange: (raw: string) => void;
-  /** Right-hand unit control: a currency Select (fiat) or a unit label. */
+  /** Right-hand unit control: a currency Select (fiat) or a static UnitChip. */
   unit: React.ReactNode;
 }
 
-function ConversionRow({
+function AmountPanel({
   fieldId,
+  label,
   value,
   placeholder,
   inputMode,
   disabled,
   onChange,
   unit,
-}: ConversionRowProps) {
+}: AmountPanelProps) {
   return (
-    <div className="flex items-center gap-3">
-      <Input
-        id={fieldId}
-        value={value}
-        placeholder={placeholder}
-        inputMode={inputMode}
-        disabled={disabled}
-        autoComplete="off"
-        spellCheck={false}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-12 flex-1 text-right font-mono text-lg tabular-nums md:text-xl"
-      />
-      <div className="flex w-[5.5rem] shrink-0 justify-center">{unit}</div>
-      {value ? (
-        <CopyButton value={value} ariaLabel="Copy amount" size="icon" />
-      ) : (
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          disabled
-          aria-label="Nothing to copy"
+    <div className="rounded-xl border border-white/10 bg-background/60 px-4 py-3 transition-colors focus-within:border-[var(--color-accent)]/50">
+      <div className="flex h-6 items-center justify-between">
+        <label
+          htmlFor={fieldId}
+          className="font-sans text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground"
         >
-          <Copy className="size-3.5" aria-hidden="true" />
-        </Button>
-      )}
+          {label}
+        </label>
+        {value ? (
+          <CopyButton
+            value={value}
+            ariaLabel={`Copy ${label}`}
+            variant="ghost"
+            size="icon-xs"
+          />
+        ) : (
+          <span className="inline-flex size-6 items-center justify-center text-muted-foreground/40">
+            <Copy className="size-3" aria-hidden="true" />
+          </span>
+        )}
+      </div>
+      <div className="mt-1 flex items-center gap-3">
+        <Input
+          id={fieldId}
+          value={value}
+          placeholder={placeholder}
+          inputMode={inputMode}
+          disabled={disabled}
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(event) => onChange(event.target.value)}
+          className="h-auto min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 font-mono text-2xl font-semibold tabular-nums shadow-none focus-visible:ring-0 disabled:opacity-50 sm:text-3xl dark:bg-transparent"
+        />
+        {unit}
+      </div>
     </div>
-  );
-}
-
-function UnitLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="font-sans text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-      {children}
-    </span>
   );
 }
 
 /**
  * ManySats — convert between fiat, BTC, and satoshis at the current live spot
  * price from the connected market-rate provider. Live-only (BTC-EUR / BTC-USD).
+ * Layout takes design cues from the Boltz swap client (stacked amount panels
+ * with asset chips and a connector disc) on the Bitcoin Austria theme.
  */
 export function ManySatsCalculator() {
   // null = "use the profile's fiat currency" (discovered from a no-pair fetch).
@@ -221,93 +256,105 @@ export function ManySatsCalculator() {
   };
 
   return (
-    <Card className="w-full gap-0 overflow-hidden">
-      <CardContent className="flex flex-col gap-5">
-        {/* Rate badge (left) + auto-refresh control (right) */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-h-[3.25rem] items-center rounded-full bg-[var(--color-accent)] px-5 py-2 text-center text-white shadow-sm">
-            {hasPrice ? (
-              <div className="leading-tight">
-                <div className="font-mono text-lg font-bold tabular-nums">
-                  {formatFiatAmount(price, displayFiat)}
-                </div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/85">
-                  {displayFiat} / BTC
-                </div>
+    <Card className="w-full gap-4 rounded-2xl border-white/10 bg-card p-5 shadow-xl sm:p-6">
+      {/* Rate badge (left) + auto-refresh control (right) */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-h-[3.25rem] items-center rounded-full bg-[var(--color-accent)] px-5 py-2 text-center text-white shadow-sm">
+          {hasPrice ? (
+            <div className="leading-tight">
+              <div className="font-mono text-lg font-bold tabular-nums">
+                {formatFiatAmount(price, displayFiat)}
               </div>
-            ) : rateLoading ? (
-              <Skeleton className="h-7 w-28 bg-white/30" />
-            ) : (
-              <span className="text-sm font-semibold">Rate unavailable</span>
-            )}
-          </div>
-          <Button
-            type="button"
-            variant="secondary"
-            className="rounded-full"
-            onClick={refresh}
-            disabled={isFetching}
-          >
-            <RefreshCw
-              className={cn("size-4", isFetching && "animate-spin")}
-              aria-hidden="true"
-            />
-            {isFetching ? "Refreshing…" : `Refresh in ${secondsLeft}s`}
-          </Button>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/85">
+                {displayFiat} / BTC
+              </div>
+            </div>
+          ) : rateLoading ? (
+            <Skeleton className="h-7 w-28 bg-white/30" />
+          ) : (
+            <span className="text-sm font-semibold">Rate unavailable</span>
+          )}
         </div>
+        <Button
+          type="button"
+          variant="secondary"
+          className="rounded-full"
+          onClick={refresh}
+          disabled={isFetching}
+        >
+          <RefreshCw
+            className={cn("size-4", isFetching && "animate-spin")}
+            aria-hidden="true"
+          />
+          {isFetching ? "Refreshing…" : `Refresh in ${secondsLeft}s`}
+        </Button>
+      </div>
 
-        {/* Provider attribution */}
-        <p className="text-xs text-muted-foreground">
-          {hasPrice ? "Live rate" : "Live rate only"}
-          {providerLabel ? <> · via {providerLabel}</> : null}
-          {asOf ? <> · as of {asOf}</> : null}
-        </p>
+      {/* Provider attribution */}
+      <p className="text-xs text-muted-foreground">
+        {hasPrice ? "Live rate" : "Live rate only"}
+        {providerLabel ? <> · via {providerLabel}</> : null}
+        {asOf ? <> · as of {asOf}</> : null}
+      </p>
 
-        {/* Converter: Fiat → SAT → BTC, matching the ManySats layout */}
-        <div className="flex flex-col gap-4">
-          <ConversionRow
-            fieldId="manysats-fiat"
-            value={valueFor("fiat")}
-            placeholder={hasPrice ? "0.00" : "—"}
-            inputMode="decimal"
-            disabled={!hasPrice}
-            onChange={onFieldChange("fiat")}
-            unit={
-              <Select
-                value={displayFiat}
-                onValueChange={(value) => setSelectedFiat(value)}
+      {/* Stacked amount panels (Fiat = SAT = BTC), Boltz-style */}
+      <div className="flex flex-col gap-1.5">
+        <AmountPanel
+          fieldId="manysats-fiat"
+          label="Fiat"
+          value={valueFor("fiat")}
+          placeholder={hasPrice ? "0.00" : "—"}
+          inputMode="decimal"
+          disabled={!hasPrice}
+          onChange={onFieldChange("fiat")}
+          unit={
+            <Select
+              value={displayFiat}
+              onValueChange={(value) => setSelectedFiat(value)}
+            >
+              <SelectTrigger
+                aria-label="Fiat currency"
+                className="h-9 gap-1.5 rounded-full border-white/10 bg-muted px-3.5 font-semibold"
               >
-                <SelectTrigger aria-label="Fiat currency" className="h-9 w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {LIVE_FIATS.map((code) => (
-                    <SelectItem key={code} value={code}>
-                      {code}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            }
-          />
-          <ConversionRow
-            fieldId="manysats-sats"
-            value={valueFor("sats")}
-            placeholder="0"
-            inputMode="numeric"
-            onChange={onFieldChange("sats")}
-            unit={<UnitLabel>SAT</UnitLabel>}
-          />
-          <ConversionRow
-            fieldId="manysats-btc"
-            value={valueFor("btc")}
-            placeholder="0.00000000"
-            inputMode="decimal"
-            onChange={onFieldChange("btc")}
-            unit={<UnitLabel>BTC</UnitLabel>}
-          />
-        </div>
-      </CardContent>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LIVE_FIATS.map((code) => (
+                  <SelectItem key={code} value={code}>
+                    {code}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          }
+        />
+        <Connector />
+        <AmountPanel
+          fieldId="manysats-sats"
+          label="Satoshis"
+          value={valueFor("sats")}
+          placeholder="0"
+          inputMode="numeric"
+          onChange={onFieldChange("sats")}
+          unit={<UnitChip>SAT</UnitChip>}
+        />
+        <Connector />
+        <AmountPanel
+          fieldId="manysats-btc"
+          label="Bitcoin"
+          value={valueFor("btc")}
+          placeholder="0.00000000"
+          inputMode="decimal"
+          onChange={onFieldChange("btc")}
+          unit={
+            <UnitChip
+              icon={<Bitcoin className="size-4 text-[#f7931a]" aria-hidden="true" />}
+            >
+              BTC
+            </UnitChip>
+          }
+        />
+      </div>
     </Card>
   );
 }
