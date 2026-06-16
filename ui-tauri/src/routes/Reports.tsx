@@ -108,9 +108,9 @@ const METHOD_LABELS: Record<
       desc: "Average cost pool",
     },
     moving_average_at: {
-      name: "Moving average (AT)",
-      fullName: "Austrian § 27b method — Altvermögen FIFO, Neuvermögen moving average",
-      desc: "Altvermögen FIFO; Neuvermögen moving average",
+      name: "ATM",
+      fullName: "ATM - Austrian Tax Method (FIFO old stock & AVCO new stock)",
+      desc: "FIFO old stock; AVCO new stock",
     },
   };
 

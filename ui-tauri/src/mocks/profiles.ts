@@ -60,7 +60,7 @@ export const MOCK_PROFILES: ProfilesSnapshot = {
         {
           id: "p1",
           name: "Alice",
-          taxPolicy: "Austria - moving average - EUR",
+          taxPolicy: "Austria - ATM - EUR",
           fiatCurrency: "EUR",
           taxCountry: "at",
           taxLongTermDays: 0,

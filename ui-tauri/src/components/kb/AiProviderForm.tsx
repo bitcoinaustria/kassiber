@@ -64,7 +64,7 @@ const PROVIDER_PRESETS = [
     label: "Ollama",
     base_url: "http://localhost:11434/v1",
     kind: "local" as const,
-    default_model: "qwen3:8b",
+    default_model: "qwen3.6:35b",
   },
   {
     name: "claude-cli",
@@ -339,7 +339,7 @@ export function AiProviderForm({
               id="ai-form-default-model"
               value={defaultModel}
               onChange={(event) => setDefaultModel(event.target.value)}
-              placeholder="qwen3:8b"
+              placeholder="qwen3.6:35b"
             />
           </div>
           <div className="grid gap-2">

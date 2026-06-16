@@ -38,7 +38,7 @@ export const JURISDICTIONS: Record<string, Jurisdiction> = {
     rateLabel: "KESt 27,5 %",
     defaultMethod: "moving_average_at",
     methodLocked: true,
-    methodNote: "Austrian § 27b method — Altvermögen FIFO, Neuvermögen moving average",
+    methodNote: "ATM - Austrian Tax Method (FIFO old stock & AVCO new stock)",
     internalsNonTaxable: true,
     longTermDays: 365,
     ccy: "€",
