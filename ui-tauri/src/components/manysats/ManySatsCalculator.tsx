@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Bitcoin, Copy, Equal, RefreshCw } from "lucide-react";
+import { Bitcoin, Copy, Equal, RefreshCw, RotateCcw } from "lucide-react";
 
 import { CopyButton } from "@/components/kb/CopyButton";
 import {
@@ -18,10 +18,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Slider } from "@/components/ui/slider";
 import { useDaemon } from "@/daemon/client";
 import { formatFiatAmount } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import {
+  applyPremium,
+  clampPremium,
   deriveBtc,
   formatBtcPlain,
   formatFiatPlain,
@@ -29,6 +32,7 @@ import {
   LIVE_FIATS,
   pairForFiat,
   parseFieldAmount,
+  PREMIUM_LIMIT_PCT,
   rateFromLatest,
   type ConversionField,
 } from "./manySatsModel";
@@ -194,6 +198,19 @@ export function ManySatsCalculator() {
     field: ConversionField;
     raw: string;
   }>({ field: "fiat", raw: "" });
+  const [premiumPct, setPremiumPct] = React.useState(0);
+  const [premiumInput, setPremiumInput] = React.useState("0");
+
+  const applyPremiumPct = React.useCallback((pct: number) => {
+    const clamped = clampPremium(pct);
+    setPremiumPct(clamped);
+    setPremiumInput(String(clamped));
+  }, []);
+  const onPremiumInput = (raw: string) => {
+    setPremiumInput(raw);
+    const parsed = Number(raw.trim().replace(",", "."));
+    if (Number.isFinite(parsed)) setPremiumPct(clampPremium(parsed));
+  };
 
   const settingsQuery = useDaemon<MaintenanceSettingsData>(
     "ui.maintenance.settings",
@@ -220,6 +237,9 @@ export function ManySatsCalculator() {
   const displayFiat = (selectedFiat ?? rate?.fiatCurrency ?? "EUR").toUpperCase();
   const price = rate?.price ?? null;
   const hasPrice = price != null && price > 0;
+  // Effective rate the conversion uses, after premium/discount.
+  const convPrice = applyPremium(price, premiumPct);
+  const hasConvPrice = convPrice != null && convPrice > 0;
   const rateLoading = latestQuery.isLoading;
   const isFetching = latestQuery.isFetching;
 
@@ -241,14 +261,14 @@ export function ManySatsCalculator() {
   );
 
   const parsed = parseFieldAmount(active.raw, active.field);
-  const btc = parsed == null ? null : deriveBtc(active.field, parsed, price);
+  const btc = parsed == null ? null : deriveBtc(active.field, parsed, convPrice);
 
   const valueFor = (field: ConversionField): string => {
     if (field === active.field) return active.raw;
     if (btc == null) return "";
     if (field === "btc") return formatBtcPlain(btc);
     if (field === "sats") return formatSatsPlain(btc);
-    return price != null ? formatFiatPlain(btc * price, displayFiat) : "";
+    return convPrice != null ? formatFiatPlain(btc * convPrice, displayFiat) : "";
   };
 
   const onFieldChange = (field: ConversionField) => (raw: string) => {
@@ -260,10 +280,10 @@ export function ManySatsCalculator() {
       {/* Rate badge (left) + auto-refresh control (right) */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-h-[3.25rem] items-center rounded-full bg-[var(--color-accent)] px-5 py-2 text-center text-white shadow-sm">
-          {hasPrice ? (
+          {hasConvPrice ? (
             <div className="leading-tight">
               <div className="font-mono text-lg font-bold tabular-nums">
-                {formatFiatAmount(price, displayFiat)}
+                {formatFiatAmount(convPrice, displayFiat)}
               </div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/85">
                 {displayFiat} / BTC
@@ -295,7 +315,70 @@ export function ManySatsCalculator() {
         {hasPrice ? "Live rate" : "Live rate only"}
         {providerLabel ? <> · via {providerLabel}</> : null}
         {asOf ? <> · as of {asOf}</> : null}
+        {premiumPct !== 0 && hasPrice ? (
+          <> · market {formatFiatAmount(price, displayFiat)}</>
+        ) : null}
       </p>
+
+      {/* Premium / discount over the market rate */}
+      <div className="rounded-xl border border-white/10 bg-background/40 px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <span className="font-sans text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            Premium / discount
+          </span>
+          <div className="flex items-center gap-2">
+            {premiumPct !== 0 ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Reset to market rate"
+                onClick={() => applyPremiumPct(0)}
+              >
+                <RotateCcw className="size-3" aria-hidden="true" />
+              </Button>
+            ) : null}
+            <div className="relative w-20">
+              <Input
+                value={premiumInput}
+                inputMode="decimal"
+                aria-label="Premium or discount percent"
+                autoComplete="off"
+                spellCheck={false}
+                onChange={(event) => onPremiumInput(event.target.value)}
+                onBlur={() => setPremiumInput(String(premiumPct))}
+                className="h-8 pr-6 text-right font-mono text-sm tabular-nums"
+              />
+              <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-sm text-muted-foreground">
+                %
+              </span>
+            </div>
+          </div>
+        </div>
+        <Slider
+          className="mt-3"
+          value={[premiumPct]}
+          min={-PREMIUM_LIMIT_PCT}
+          max={PREMIUM_LIMIT_PCT}
+          step={0.1}
+          aria-label="Premium or discount over market rate"
+          onValueChange={(values) => applyPremiumPct(values[0] ?? 0)}
+        />
+        <div className="mt-1.5 flex justify-between font-mono text-[10px] text-muted-foreground/70">
+          <span>−{PREMIUM_LIMIT_PCT}%</span>
+          <span
+            className={cn(
+              "font-semibold",
+              premiumPct > 0 && "text-emerald-600 dark:text-emerald-400",
+              premiumPct < 0 && "text-[var(--color-accent)]",
+            )}
+          >
+            {premiumPct > 0 ? "+" : ""}
+            {premiumPct.toFixed(1)}%
+          </span>
+          <span>+{PREMIUM_LIMIT_PCT}%</span>
+        </div>
+      </div>
 
       {/* Stacked amount panels (Fiat = SAT = BTC), Boltz-style */}
       <div className="flex flex-col gap-1.5">
@@ -303,9 +386,9 @@ export function ManySatsCalculator() {
           fieldId="manysats-fiat"
           label="Fiat"
           value={valueFor("fiat")}
-          placeholder={hasPrice ? "0.00" : "—"}
+          placeholder={hasConvPrice ? "0.00" : "—"}
           inputMode="decimal"
-          disabled={!hasPrice}
+          disabled={!hasConvPrice}
           onChange={onFieldChange("fiat")}
           unit={
             <Select

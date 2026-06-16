@@ -151,6 +151,27 @@ export function formatFiatPlain(value: number, code: string): string {
   return value.toFixed(fiatFractionDigits(code));
 }
 
+/** Max premium/discount magnitude (percent) the slider and input allow. */
+export const PREMIUM_LIMIT_PCT = 10;
+
+/** Clamp a premium/discount percent into [-PREMIUM_LIMIT_PCT, +PREMIUM_LIMIT_PCT]. */
+export function clampPremium(pct: number): number {
+  if (!Number.isFinite(pct)) return 0;
+  return Math.max(-PREMIUM_LIMIT_PCT, Math.min(PREMIUM_LIMIT_PCT, pct));
+}
+
+/**
+ * Apply a premium (positive) or discount (negative) percent over the market
+ * price. Returns null when there is no usable market price.
+ */
+export function applyPremium(
+  price: number | null,
+  premiumPct: number,
+): number | null {
+  if (price == null || !(price > 0)) return null;
+  return price * (1 + premiumPct / 100);
+}
+
 export interface ResolvedRate {
   /** Fiat per 1 BTC, or null when no rate is available. */
   price: number | null;

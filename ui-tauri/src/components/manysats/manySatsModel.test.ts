@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyPremium,
+  clampPremium,
   deriveBtc,
   formatBtcPlain,
   formatFiatPlain,
@@ -88,6 +90,24 @@ describe("deriveBtc", () => {
     expect(deriveBtc("fiat", 65_000, 65_000)).toBe(1);
     expect(deriveBtc("fiat", 100, null)).toBeNull();
     expect(deriveBtc("fiat", 100, 0)).toBeNull();
+  });
+});
+
+describe("premium / discount", () => {
+  it("clamps to the allowed range and treats non-finite as 0", () => {
+    expect(clampPremium(2.5)).toBe(2.5);
+    expect(clampPremium(-3)).toBe(-3);
+    expect(clampPremium(999)).toBe(10);
+    expect(clampPremium(-999)).toBe(-10);
+    expect(clampPremium(Number.NaN)).toBe(0);
+  });
+
+  it("applies a premium or discount over the market price", () => {
+    expect(applyPremium(100, 0)).toBe(100);
+    expect(applyPremium(100, 2)).toBeCloseTo(102, 9);
+    expect(applyPremium(100, -1.5)).toBeCloseTo(98.5, 9);
+    expect(applyPremium(null, 2)).toBeNull();
+    expect(applyPremium(0, 2)).toBeNull();
   });
 });
 
