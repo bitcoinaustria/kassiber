@@ -1112,15 +1112,15 @@ function ConnectionDetailView({
         // Mismatch: the two figures genuinely differ, so the comparison + the
         // signed delta is the actionable signal.
         <Card className="rounded-xl border-amber-300 py-3 dark:border-amber-900/60">
-          <CardContent className="flex flex-col gap-4 px-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3 sm:gap-4">
+          <CardContent className="flex items-center justify-between gap-4 px-4">
+            <div className="flex items-center gap-4">
               <span
-                className="hidden size-9 shrink-0 items-center justify-center rounded-md border bg-muted/40 text-muted-foreground sm:flex"
+                className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted/40 text-muted-foreground"
                 aria-hidden="true"
               >
                 <Scale className="size-4" />
               </span>
-              <div className="flex items-center gap-3 sm:gap-4">
+              <div className="flex items-center gap-4">
                 <div>
                   <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                     On-chain inventory
@@ -1161,7 +1161,7 @@ function ConnectionDetailView({
                 </div>
               </div>
             </div>
-            <div className="sm:text-right">
+            <div className="text-right">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:text-amber-300">
                 <AlertTriangle className="size-3.5" aria-hidden="true" />
                 {reconciliation.deltaSat < 0
@@ -1370,7 +1370,7 @@ function ConnectionDetailView({
       ) : null}
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.85fr)]">
-        <Card className="min-w-0">
+        <Card>
           <CardHeader className="border-b px-4 pb-3">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
@@ -1447,7 +1447,7 @@ function ConnectionDetailView({
           </CardContent>
         </Card>
 
-        <div className="min-w-0 space-y-3">
+        <div className="space-y-3">
           <WalletBalanceHistoryCard
             walletId={connection.id}
             hideSensitive={hideSensitive}
