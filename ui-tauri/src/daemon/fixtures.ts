@@ -1548,7 +1548,7 @@ export const fixtures: Record<string, unknown> = {
         name: "ollama",
         base_url: "http://localhost:11434/v1",
         kind: "local",
-        default_model: "qwen3.6:35b",
+        default_model: "qwen3:8b",
         notes: "Local Ollama (mock).",
         acknowledged_at: "2026-04-27T08:00:00Z",
         created_at: "2026-04-27T08:00:00Z",
@@ -1577,7 +1577,7 @@ export const fixtures: Record<string, unknown> = {
   "ai.list_models": {
     provider: "ollama",
     models: [
-      { id: "qwen3.6:35b", owned_by: "library" },
+      { id: "qwen3:8b", owned_by: "library" },
       { id: "llama3.3:70b", owned_by: "library" },
     ],
   },
@@ -1585,7 +1585,7 @@ export const fixtures: Record<string, unknown> = {
     base_url: "http://localhost:11434/v1",
     model_count: 2,
     models: [
-      { id: "qwen3.6:35b", owned_by: "library" },
+      { id: "qwen3:8b", owned_by: "library" },
       { id: "llama3.3:70b", owned_by: "library" },
     ],
   },

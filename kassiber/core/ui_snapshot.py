@@ -661,7 +661,7 @@ def _tax_policy_label(profile: sqlite3.Row) -> str:
 def _human_tax_method(value: str) -> str:
     normalized = str(value or "").strip().upper()
     if normalized == "MOVING_AVERAGE_AT":
-        return "ATM"
+        return "moving average"
     if normalized == "MOVING_AVERAGE":
         return "moving average"
     return normalized or "unknown"

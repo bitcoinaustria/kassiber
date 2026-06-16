@@ -48,7 +48,7 @@ export const ReviewStep = ({
 
   return (
     <OnboardingSingleColumnFrame
-      title="Review security setup"
+      title="Review setup"
       currentStep={currentStep}
       totalSteps={totalSteps}
       goBack={goBack}
@@ -242,7 +242,7 @@ function syncNote(
     if (backendPreviewRows.length === 0) {
       return "Backend addresses are loading from Kassiber.";
     }
-    return "Public operators can see address queries; no no-log promise.";
+    return "Public operators can see your address queries. Use Tor or your own node if that matters.";
   }
   if (form.backendKind === "electrum" && form.backendUseProxy) {
     return "Custom Electrum backend routed through the configured proxy.";

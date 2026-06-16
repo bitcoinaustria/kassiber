@@ -108,9 +108,9 @@ const METHOD_LABELS: Record<
       desc: "Average cost pool",
     },
     moving_average_at: {
-      name: "ATM",
-      fullName: "ATM - Austria Tax Method (FIFO old stock & AVCO new stock)",
-      desc: "FIFO old stock; AVCO new stock",
+      name: "Moving average (AT)",
+      fullName: "Austrian § 27b method — Altvermögen FIFO, Neuvermögen moving average",
+      desc: "Altvermögen FIFO; Neuvermögen moving average",
     },
   };
 
@@ -118,7 +118,7 @@ const AUSTRIAN_TAX_FIELD_COPY: Record<
   string,
   { label: string; form: string; note?: string }
 > = {
-  "172": { label: "Foreign recurring crypto income", form: "E 1kv" },
+  "172": { label: "Foreign ongoing crypto income", form: "E 1kv" },
   "174": { label: "Foreign realized crypto gains", form: "E 1kv" },
   "176": { label: "Foreign realized crypto losses", form: "E 1kv" },
   "801": {
@@ -1823,7 +1823,7 @@ function ReportPolicyPanel({
               label="Long-term rule"
               value={
                 jurisdiction.code === "AT"
-                  ? "Pre-2022 holdings only"
+                  ? "Pre-1 Mar 2021 holdings only"
                   : jurisdiction.longTermDays
                   ? `${jurisdiction.longTermDays} days`
                   : "Not applied"

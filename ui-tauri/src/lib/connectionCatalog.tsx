@@ -253,7 +253,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     formatLabel: "esplora",
     setupKind: "backend-settings",
     details: [
-      "Kassiber ships with a built-in mempool.space-compatible Bitcoin backend",
+      "Kassiber ships with a built-in Esplora/mempool-API Bitcoin backend",
       "Use Settings to add a self-hosted Esplora endpoint",
     ],
   },

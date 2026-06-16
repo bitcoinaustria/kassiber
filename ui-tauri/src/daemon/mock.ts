@@ -1163,7 +1163,9 @@ export const mockDaemon: DaemonTransport = {
             id: `mock-profile-${Date.now()}`,
             name: profileName,
             taxPolicy:
-              taxCountry === "at" ? "Austria - ATM - EUR" : "Generic defaults",
+              taxCountry === "at"
+                ? "Austria - moving average - EUR"
+                : "Generic defaults",
             fiatCurrency,
             taxCountry,
             taxLongTermDays,

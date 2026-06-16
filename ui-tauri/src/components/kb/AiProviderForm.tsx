@@ -54,7 +54,7 @@ interface AiProviderFormProps {
 const PROVIDER_KIND_HINTS: Record<AiProviderInput["kind"], string> = {
   local: "Runs on this machine. No data leaves the device.",
   remote: "Cloud, LAN, or vendor CLI provider. Prompts may leave the device.",
-  tee: "Encrypted attestation provider (e.g. Maple AI). Off-device but with documented confidentiality guarantees.",
+  tee: "Provider claims a trusted-execution / attestation path (e.g. Maple AI). Kassiber still treats it as off-device.",
 };
 
 const CLI_LOCATORS = ["claude-cli://default", "codex-cli://default"] as const;
@@ -64,7 +64,7 @@ const PROVIDER_PRESETS = [
     label: "Ollama",
     base_url: "http://localhost:11434/v1",
     kind: "local" as const,
-    default_model: "qwen3.6:35b",
+    default_model: "qwen3:8b",
   },
   {
     name: "claude-cli",
@@ -339,7 +339,7 @@ export function AiProviderForm({
               id="ai-form-default-model"
               value={defaultModel}
               onChange={(event) => setDefaultModel(event.target.value)}
-              placeholder="qwen3.6:35b"
+              placeholder="qwen3:8b"
             />
           </div>
           <div className="grid gap-2">
