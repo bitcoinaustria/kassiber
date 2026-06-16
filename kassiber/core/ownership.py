@@ -460,11 +460,11 @@ def build_owned_index(
     """Build the ownership index for the given wallets.
 
     Seeds the cheap tiers (output inventory + imported txids + address-list
-    wallets) unconditionally, then — when ``derive`` is set — derives descriptor
-    wallets up to a per-wallet ceiling (``max(scan_to_index, highest_used +
-    gap_limit)``) so historic addresses past the last synced index are still
-    found. Returns the index plus any non-fatal warnings (e.g. a descriptor that
-    could not be parsed).
+    wallets) unconditionally, then - when ``derive`` is set - derives descriptor
+    wallets up to a per-wallet inclusive ceiling (``max(scan_to_index,
+    highest_used + gap_limit)``) so historic addresses past the last synced
+    index are still found. Returns the index plus any non-fatal warnings (e.g.
+    a descriptor that could not be parsed).
     """
     index = OwnedIndex()
     warnings: list[str] = []
@@ -604,8 +604,8 @@ def _derive_wallet_into_index(
         return
     gap_limit = int(getattr(plan, "gap_limit", 0) or 0)
     used_floor = max(highest_used.values(), default=-1)
-    ceiling = max(int(scan_to_index), used_floor + gap_limit + 1)
-    ceiling = max(1, min(ceiling, MAX_SCAN_TO_INDEX))
+    ceiling = max(int(scan_to_index) + 1, used_floor + gap_limit + 1)
+    ceiling = max(1, min(ceiling, MAX_SCAN_TO_INDEX + 1))
     wallet_id = str(wallet["id"])
     depth: dict[str, int] = {}
     for target in derive_descriptor_targets(plan, branch_index=None, start=0, end=ceiling):
@@ -734,12 +734,16 @@ def classify_txid(
     source = str(legs.get("source") or "chain")
     in_legs: list[dict[str, Any]] = []
     owned_in = 0
+    unresolved_inputs = 0
     involved: set[str] = set()
     for leg in legs.get("inputs", []):
         match = index.by_outpoint.get(str(leg.get("outpoint") or ""))
         if match is None:
-            script_matches = index.lookup_script(leg.get("script"))
+            script = leg.get("script")
+            script_matches = index.lookup_script(script)
             match = script_matches[0] if script_matches else None
+            if match is None and script is None and source != "local_tx":
+                unresolved_inputs += 1
         owned = match is not None
         owned_in += 1 if owned else 0
         if match is not None:
@@ -750,10 +754,9 @@ def classify_txid(
     owned_out = 0
     for leg in legs.get("outputs", []):
         script = leg.get("script")
-        if not script:
-            # An empty scriptPubKey is the Liquid fee output, not a recipient;
-            # skip it so it can't inflate the external-output count and flip a
-            # self-transfer into an outbound payment.
+        if _is_unspendable_output_script(script):
+            # Empty scriptPubKey is the Liquid fee output; OP_RETURN/data
+            # outputs are provably unspendable. Neither is a recipient.
             continue
         script_matches = index.lookup_script(script)
         match = script_matches[0] if script_matches else None
@@ -775,7 +778,13 @@ def classify_txid(
 
     output_count = len(out_legs)
     external_out = output_count - owned_out
-    classification, status, note = _classify_legs(owned_in, owned_out, external_out)
+    classification, status, note = _classify_legs(
+        owned_in,
+        owned_out,
+        external_out,
+        unresolved_inputs=unresolved_inputs,
+        touches_wallet=bool(local_wallets),
+    )
     return {
         "input": txid,
         "type": "txid",
@@ -792,8 +801,28 @@ def classify_txid(
     }
 
 
-def _classify_legs(owned_in: int, owned_out: int, external_out: int) -> tuple[str, str, str]:
+def _is_unspendable_output_script(script: Any) -> bool:
+    if not script:
+        return True
+    return str(script).strip().lower().startswith("6a")
+
+
+def _classify_legs(
+    owned_in: int,
+    owned_out: int,
+    external_out: int,
+    *,
+    unresolved_inputs: int = 0,
+    touches_wallet: bool = False,
+) -> tuple[str, str, str]:
     if owned_in == 0 and owned_out == 0:
+        if touches_wallet:
+            return (
+                "touches_wallet",
+                "owned",
+                "Recorded locally against this profile, but verified legs did not match "
+                "known wallet scripts.",
+            )
         return ("external", "external", "No inputs or outputs belong to this profile.")
     if owned_out == 0 and external_out == 0:
         # Owned inputs but no spendable outputs resolved (partial/malformed legs);
@@ -804,6 +833,12 @@ def _classify_legs(owned_in: int, owned_out: int, external_out: int) -> tuple[st
             "Inputs are owned but no outputs were resolved; classification unavailable.",
         )
     if owned_in == 0 and owned_out > 0:
+        if unresolved_inputs > 0:
+            return (
+                "undetermined",
+                "owned",
+                "Outputs include an owned address, but one or more inputs could not be resolved.",
+            )
         return (
             "inbound_receipt",
             "owned",

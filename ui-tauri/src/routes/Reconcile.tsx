@@ -318,6 +318,17 @@ export function Reconcile() {
   const results = React.useMemo(() => report?.results ?? [], [report]);
   const summary = report?.summary;
   const unknownCount = summary?.unknown ?? 0;
+  const txidsMissingLegs = React.useMemo(
+    () =>
+      results.filter(
+        (result) =>
+          result.type === "txid" &&
+          result.status !== "invalid" &&
+          (result.legs?.length ?? 0) === 0,
+      ).length,
+    [results],
+  );
+  const verifyCount = Math.max(unknownCount, txidsMissingLegs);
 
   const trimmed = input.trim();
   const hasInput = trimmed.length > 0 || !!csvText;
@@ -525,7 +536,7 @@ export function Reconcile() {
                 {summary.verified_on_chain ? " · verified on-chain" : ""}.
               </CardDescription>
               <div className="flex items-center gap-2">
-                {unknownCount > 0 ? (
+                {verifyCount > 0 ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -536,7 +547,7 @@ export function Reconcile() {
                     <Globe className="size-4" />
                     {verify.isPending
                       ? "Verifying…"
-                      : `Verify ${unknownCount} on chain`}
+                      : `Verify ${verifyCount} on chain`}
                   </Button>
                 ) : null}
                 <Button

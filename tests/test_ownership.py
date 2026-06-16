@@ -3,6 +3,7 @@
 import json
 import sqlite3
 import unittest
+import unittest.mock
 
 from kassiber.core import ownership
 from kassiber.core.ownership import OwnedIndex, OwnedMatch
@@ -163,7 +164,7 @@ class ClassifyTxidTests(unittest.TestCase):
     def test_inbound_receipt(self):
         index = self._index()
         legs = {
-            "inputs": [{"outpoint": "ff" * 32 + ":9", "script": None}],
+            "inputs": [{"outpoint": "ff" * 32 + ":9", "script": "0014external"}],
             "outputs": [{"n": 0, "script": "00146f6e656473637269707400000000000000000000"}],
             "chain": "bitcoin",
             "source": "chain",
@@ -177,7 +178,7 @@ class ClassifyTxidTests(unittest.TestCase):
     def test_external_transaction(self):
         index = self._index()
         legs = {
-            "inputs": [{"outpoint": "ff" * 32 + ":9", "script": None}],
+            "inputs": [{"outpoint": "ff" * 32 + ":9", "script": "0014external"}],
             "outputs": [{"n": 0, "script": "0014deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"}],
             "chain": "bitcoin",
             "source": "chain",
@@ -288,6 +289,56 @@ class LegEdgeCaseTests(unittest.TestCase):
         self.assertNotEqual(result["classification"], "self_transfer")
         self.assertEqual(result["classification"], "undetermined")
 
+    def test_op_return_output_does_not_break_self_transfer(self):
+        index = OwnedIndex()
+        index.by_outpoint["aa" * 32 + ":0"] = _match()
+        index.add_script("0014owned00000000000000000000000000000000", _match(branch="change"))
+        legs = {
+            "inputs": [{"outpoint": "aa" * 32 + ":0", "script": None}],
+            "outputs": [
+                {"n": 0, "script": "0014owned00000000000000000000000000000000"},
+                {"n": 1, "script": "6a146d656d6f"},
+            ],
+            "chain": "bitcoin",
+            "source": "chain",
+        }
+        result = ownership.classify_txid(
+            {"input": "bb" * 32, "normalized": "bb" * 32, "type": "txid"}, index, legs
+        )
+        self.assertEqual(result["classification"], "self_transfer")
+        self.assertEqual(result["external_outputs"], 0)
+
+    def test_unresolved_inputs_with_owned_output_are_undetermined(self):
+        index = OwnedIndex()
+        index.add_script("0014owned00000000000000000000000000000000", _match(branch="change"))
+        legs = {
+            "inputs": [{"outpoint": "ff" * 32 + ":9", "script": None}],
+            "outputs": [{"n": 0, "script": "0014owned00000000000000000000000000000000"}],
+            "chain": "bitcoin",
+            "source": "chain",
+        }
+        result = ownership.classify_txid(
+            {"input": "bb" * 32, "normalized": "bb" * 32, "type": "txid"}, index, legs
+        )
+        self.assertEqual(result["status"], "owned")
+        self.assertEqual(result["classification"], "undetermined")
+
+    def test_local_txid_stays_owned_when_verified_legs_do_not_match(self):
+        index = OwnedIndex()
+        index.note_txid("bb" * 32, "w1", "Vault")
+        legs = {
+            "inputs": [{"outpoint": "ff" * 32 + ":9", "script": "0014external"}],
+            "outputs": [{"n": 0, "script": "0014deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"}],
+            "chain": "bitcoin",
+            "source": "chain",
+        }
+        result = ownership.classify_txid(
+            {"input": "bb" * 32, "normalized": "bb" * 32, "type": "txid"}, index, legs
+        )
+        self.assertEqual(result["status"], "owned")
+        self.assertEqual(result["classification"], "touches_wallet")
+        self.assertEqual(result["wallets"], ["Vault"])
+
 
 class ChainDetectAndDedupTests(unittest.TestCase):
     def test_detect_chain(self):
@@ -319,6 +370,31 @@ class ChainDetectAndDedupTests(unittest.TestCase):
             index,
         )
         self.assertEqual(result["status"], "owned")
+
+
+class BuildOwnedIndexTests(unittest.TestCase):
+    def test_scan_to_index_is_inclusive_for_descriptor_derivation(self):
+        conn = _engine_conn()
+        conn.execute(
+            "INSERT INTO wallets(id, profile_id, label, kind, config_json, account_id) "
+            "VALUES(?,?,?,?,?,?)",
+            ("w1", "p1", "Vault", "descriptor", '{"descriptor":"wpkh(xpub/.../*)"}', None),
+        )
+        wallet = conn.execute("SELECT * FROM wallets WHERE id = ?", ("w1",)).fetchone()
+
+        class Plan:
+            gap_limit = 0
+            chain = "bitcoin"
+            network = "main"
+
+        with unittest.mock.patch.object(
+            ownership, "load_wallet_descriptor_plan_from_config", return_value=Plan()
+        ), unittest.mock.patch.object(
+            ownership, "derive_descriptor_targets", return_value=[]
+        ) as derive:
+            ownership.build_owned_index(conn, "p1", [wallet], scan_to_index=5)
+
+        self.assertEqual(derive.call_args.kwargs["end"], 6)
 
 
 class FlattenAndRedactTests(unittest.TestCase):
@@ -469,8 +545,6 @@ class AiCsvStripTests(unittest.TestCase):
     def test_for_ai_builder_drops_csv_text(self):
         # The AI surface must never harvest a CSV: build_wallet_identify_snapshot_for_ai
         # strips csv_text before delegating (defense in depth behind the schema).
-        from unittest import mock
-
         from kassiber.core import ui_snapshot
 
         captured: dict = {}
@@ -479,7 +553,7 @@ class AiCsvStripTests(unittest.TestCase):
             captured["args"] = args
             return {"results": [], "summary": {}, "warnings": []}
 
-        with mock.patch.object(ui_snapshot, "build_wallet_identify_snapshot", _fake):
+        with unittest.mock.patch.object(ui_snapshot, "build_wallet_identify_snapshot", _fake):
             ui_snapshot.build_wallet_identify_snapshot_for_ai(
                 None, None, {"csv_text": "bc1qsneaky", "addresses": ["bc1qkeep"]}
             )

@@ -2649,7 +2649,7 @@ def identify_wallet_owners(
             code="validation",
         )
     backend = resolve_backend(runtime_config, verify_backend)
-    kind = str(backend.get("kind") or "").strip().lower()
+    kind = core_sync.normalize_backend_kind(backend.get("kind"))
     if kind not in {"esplora", "electrum"}:
         raise AppError(
             f"On-chain verification needs an Esplora or Electrum backend, not '{kind}'",

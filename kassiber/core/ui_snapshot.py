@@ -3842,7 +3842,7 @@ def build_wallet_identify_onchain_snapshot(
         scan_to_index = core_ownership.DEFAULT_SCAN_TO_INDEX
     backend_name = args.get("backend") if isinstance(args, dict) else None
     backend = resolve_backend(runtime_config, backend_name)
-    kind = str(backend.get("kind") or "").strip().lower()
+    kind = normalize_backend_kind(backend.get("kind"))
     if kind not in {"esplora", "electrum"}:
         raise AppError(
             f"On-chain verification needs an Esplora or Electrum backend, not '{kind}'",
