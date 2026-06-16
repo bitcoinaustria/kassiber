@@ -52,6 +52,7 @@ const TransactionsDashboard = ({
   deepLinkedTransactionTab,
   deepLinkedWallet,
   deepLinkedQuickFilter,
+  onWalletScopeChange,
 }: {
   className?: string;
   transactions?: TransactionsList;
@@ -68,6 +69,7 @@ const TransactionsDashboard = ({
   deepLinkedTransactionTab?: string;
   deepLinkedWallet?: string | null;
   deepLinkedQuickFilter?: TableQuickFilter | null;
+  onWalletScopeChange?: (wallet: string | null) => void;
 }) => {
   const [period, setPeriod] = React.useState<PeriodKey>(initialPeriodFromUrl);
   const [newTxnOpen, setNewTxnOpen] = React.useState(false);
@@ -283,6 +285,7 @@ const TransactionsDashboard = ({
           onChartSelectionChange={setFlowChartSelection}
           onQuickFilterChange={setQuickFilter}
           onBreakdownSelectionChange={setBreakdownSelection}
+          onWalletScopeChange={onWalletScopeChange}
           resetTableFiltersToken={resetTableFiltersToken}
           isRefreshing={showRefreshSkeleton}
           hasMoreRecords={hasMoreTransactions && !useWorkbenchRowsForTable}

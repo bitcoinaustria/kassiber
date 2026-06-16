@@ -14,6 +14,7 @@ import type {
   DaemonTransport,
 } from "./transport";
 import { DEFAULT_OPEN_COST_SAT } from "@/lib/lightning";
+import { accountMatchesLabel } from "@/lib/connectionTransactions";
 import { MOCK_PROFILES } from "@/mocks/profiles";
 import type {
   ProfileGainsAlgorithm,
@@ -3546,6 +3547,33 @@ export const mockDaemon: DaemonTransport = {
         request_id: req.request_id,
         data: { transaction, query } as T,
       };
+    }
+
+    if (req.kind === "ui.transactions.list") {
+      const args = (req.args ?? {}) as { wallet?: unknown };
+      const wallet =
+        typeof args.wallet === "string" && args.wallet.trim()
+          ? args.wallet.trim()
+          : null;
+      if (wallet) {
+        // Mirror the daemon's server-side wallet scoping so the preview's
+        // wallet deep links return that wallet's rows (leg-aware, so a
+        // transfer "Cold Storage -> Vault" is included for "Cold Storage").
+        const base = fixtures["ui.transactions.list"] as {
+          txs: Array<{ account?: string }>;
+          nextCursor: unknown;
+          hasMore: boolean;
+        };
+        const txs = base.txs.filter((tx) =>
+          accountMatchesLabel(tx.account, wallet),
+        );
+        return {
+          kind: "ui.transactions.list",
+          schema_version: 1,
+          request_id: req.request_id,
+          data: { ...base, txs, nextCursor: null, hasMore: false } as T,
+        };
+      }
     }
 
     const fixture = fixtures[req.kind];

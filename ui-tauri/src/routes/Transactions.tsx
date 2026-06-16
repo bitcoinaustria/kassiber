@@ -46,11 +46,25 @@ export function Transactions() {
     () => readTransactionScopeParams(),
     [routeSearch],
   );
+  // When a wallet deep link is active (Wallet Detail "Show all" / related
+  // links), scope the daemon queries to that wallet instead of filtering the
+  // fetched page client-side. Otherwise a wallet whose transactions are older
+  // than the global page/workbench limits would render an empty or truncated
+  // table. The daemon `wallet` filter matches by wallet_id / label, so it
+  // returns the wallet's complete history (including its transfers).
+  //
+  // This is plain React state (seeded from the deep-link param at mount) rather
+  // than the URL, so the dropdown/clear mutate it directly and the queries
+  // refetch reliably — the screen's other filters are client state too.
+  const [walletScope, setWalletScope] = React.useState<string | null>(
+    scopeParams.wallet ?? null,
+  );
   const transactionArgs = React.useMemo(
     () => ({
       limit: TRANSACTIONS_PAGE_LIMIT,
+      ...(walletScope ? { wallet: walletScope } : {}),
     }),
-    [],
+    [walletScope],
   );
   const transactionsQuery = useDaemonInfinite<TransactionsList>(
     "ui.transactions.list",
@@ -59,6 +73,7 @@ export function Transactions() {
   );
   const workbenchQuery = useDaemon<TransactionsList>("ui.transactions.list", {
     limit: TRANSACTIONS_WORKBENCH_LIMIT,
+    ...(walletScope ? { wallet: walletScope } : {}),
   });
   const focusedTransaction = useDaemon<{
     transaction?: TransactionsList["txs"][number] | null;
@@ -171,6 +186,7 @@ export function Transactions() {
       deepLinkedTransactionTab={detailParams.tab}
       deepLinkedWallet={scopeParams.wallet}
       deepLinkedQuickFilter={scopeParams.quick}
+      onWalletScopeChange={setWalletScope}
     />
   );
 }

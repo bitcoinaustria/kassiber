@@ -142,6 +142,7 @@ const TransactionsTable = ({
   onChartSelectionChange,
   onQuickFilterChange,
   onBreakdownSelectionChange,
+  onWalletScopeChange,
   resetTableFiltersToken,
   isRefreshing,
   hasMoreRecords = false,
@@ -162,6 +163,7 @@ const TransactionsTable = ({
   onChartSelectionChange: (selection: FlowChartSelection | null) => void;
   onQuickFilterChange: (filter: TableQuickFilter | null) => void;
   onBreakdownSelectionChange: (selection: BreakdownSelection | null) => void;
+  onWalletScopeChange?: (wallet: string | null) => void;
   resetTableFiltersToken: number;
   isRefreshing?: boolean;
   hasMoreRecords?: boolean;
@@ -271,6 +273,21 @@ const TransactionsTable = ({
     if (selectedWalletKey) legs.add(selectedWalletKey);
     return Array.from(legs).sort((a, b) => a.localeCompare(b));
   }, [records, selectedWalletKey]);
+  // Selecting/clearing a wallet drives the parent's wallet-scope state so the
+  // daemon queries re-scope to that wallet (complete history, not a client
+  // filter over the fetched page). breakdownSelection is set in lockstep for
+  // the immediate chip + dropdown state.
+  const selectWalletScope = React.useCallback(
+    (key: string) => {
+      onBreakdownSelectionChange({ dimension: "wallet", key, match: "leg" });
+      onWalletScopeChange?.(key);
+    },
+    [onBreakdownSelectionChange, onWalletScopeChange],
+  );
+  const clearWalletScope = React.useCallback(() => {
+    onBreakdownSelectionChange(null);
+    onWalletScopeChange?.(null);
+  }, [onBreakdownSelectionChange, onWalletScopeChange]);
   const getDraft = React.useCallback(
     (txn: Transaction) => drafts[txn.id] ?? draftForTransaction(txn),
     [drafts],
@@ -982,7 +999,7 @@ const TransactionsTable = ({
                 onCheckedChange={() => {
                   // Only clear when a wallet is selected — don't clobber an
                   // active network breakdown (both share breakdownSelection).
-                  if (walletFilterActive) onBreakdownSelectionChange(null);
+                  if (walletFilterActive) clearWalletScope();
                 }}
               >
                 All wallets
@@ -991,13 +1008,7 @@ const TransactionsTable = ({
                 <DropdownMenuCheckboxItem
                   key={wallet}
                   checked={selectedWalletKey === wallet}
-                  onCheckedChange={() =>
-                    onBreakdownSelectionChange({
-                      dimension: "wallet",
-                      key: wallet,
-                      match: "leg",
-                    })
-                  }
+                  onCheckedChange={() => selectWalletScope(wallet)}
                 >
                   {wallet}
                 </DropdownMenuCheckboxItem>
@@ -1038,7 +1049,12 @@ const TransactionsTable = ({
             <button
               type="button"
               className={filterChipClassName}
-              onClick={() => onBreakdownSelectionChange(null)}
+              onClick={() =>
+                breakdownSelection.dimension === "wallet" &&
+                breakdownSelection.match === "leg"
+                  ? clearWalletScope()
+                  : onBreakdownSelectionChange(null)
+              }
               aria-label={`Clear ${breakdownSelectionLabel(breakdownSelection)} filter`}
             >
               {breakdownSelectionLabel(breakdownSelection)}
