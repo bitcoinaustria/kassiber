@@ -15,7 +15,6 @@ import {
   ArrowRight,
   ArrowUpRight,
   AlertTriangle,
-  CheckCircle2,
   CircleDollarSign,
   Database,
   ListChecks,
@@ -1088,28 +1087,11 @@ function ConnectionDetailView({
         />
       </div>
 
-      {reconciliation.available && reconciliation.reconciled ? (
-        // Reconciled: the on-chain total equals the Balance metric above, so we
-        // don't repeat the figure — just confirm the books are verified against
-        // the chain. The full two-figure comparison only appears on a mismatch.
-        <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-          <CheckCircle2
-            className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400"
-            aria-hidden="true"
-          />
-          <span>
-            <span className="font-medium text-foreground">
-              Reconciled with on-chain inventory.
-            </span>{" "}
-            Imported balance matches the watch-only coin set
-            {reconciliation.lastSyncedAt
-              ? ` · synced ${formatShortDate(reconciliation.lastSyncedAt)}`
-              : ""}
-            .
-          </span>
-        </div>
-      ) : reconciliation.available ? (
-        // Mismatch: the two figures genuinely differ, so the comparison + the
+      {reconciliation.available && !reconciliation.reconciled ? (
+        // Only surface reconciliation when it needs attention: the two figures
+        // genuinely differ. When the books match the chain we stay quiet (the
+        // Balance metric already reflects it) rather than adding a standing
+        // "all good" confirmation. The comparison + the
         // signed delta is the actionable signal.
         <Card className="rounded-xl border-amber-300 py-3 dark:border-amber-900/60">
           <CardContent className="flex items-center justify-between gap-4 px-4">
