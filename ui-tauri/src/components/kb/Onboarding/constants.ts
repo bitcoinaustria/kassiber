@@ -179,10 +179,10 @@ export const BACKEND_KINDS: BackendKind[] = [
 ];
 
 export const BACKEND_KIND_LABELS: Record<BackendKind, string> = {
-  esplora: "Esplora",
-  electrum: "Electrum",
+  esplora: "Explorer API",
+  electrum: "Electrum / Fulcrum",
   bitcoinrpc: "Bitcoin Core RPC",
-  "liquid-esplora": "Liquid Esplora",
+  "liquid-esplora": "Liquid Explorer API",
 };
 
 export const AI_PROVIDER_KIND_LABELS: Record<AiProviderKind, string> = {
