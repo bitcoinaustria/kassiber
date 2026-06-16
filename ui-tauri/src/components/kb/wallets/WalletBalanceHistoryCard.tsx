@@ -8,7 +8,13 @@
  */
 
 import { useMemo } from "react";
-import { Area, AreaChart, ResponsiveContainer, YAxis } from "recharts";
+import {
+  Area,
+  AreaChart,
+  ResponsiveContainer,
+  Tooltip,
+  YAxis,
+} from "recharts";
 
 import {
   Card,
@@ -36,6 +42,17 @@ interface BalanceHistoryData {
 }
 
 const fmtBtc = (value: number) => `₿ ${value.toFixed(8)}`;
+
+const MONTH_LABELS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+function monthLabel(bucket: string) {
+  const [year, month] = bucket.split("-");
+  const index = Number.parseInt(month ?? "", 10) - 1;
+  return MONTH_LABELS[index] ? `${MONTH_LABELS[index]} ${year}` : bucket.slice(0, 7);
+}
 
 export function WalletBalanceHistoryCard({
   walletId,
@@ -133,6 +150,32 @@ export function WalletBalanceHistoryCard({
                     </linearGradient>
                   </defs>
                   <YAxis hide domain={["dataMin", "dataMax"]} />
+                  <Tooltip
+                    cursor={{ stroke: "var(--border)", strokeWidth: 1 }}
+                    isAnimationActive={false}
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const point = payload[0]?.payload as
+                        | { bucket: string; quantity: number }
+                        | undefined;
+                      if (!point) return null;
+                      return (
+                        <div className="rounded-md border bg-popover px-2 py-1 text-xs shadow-sm">
+                          <div className="text-muted-foreground">
+                            {monthLabel(point.bucket)}
+                          </div>
+                          <div
+                            className={cn(
+                              "font-mono font-medium tabular-nums",
+                              hideSensitive && "sensitive",
+                            )}
+                          >
+                            {fmtBtc(point.quantity)}
+                          </div>
+                        </div>
+                      );
+                    }}
+                  />
                   <Area
                     type="monotone"
                     dataKey="quantity"
@@ -141,6 +184,7 @@ export function WalletBalanceHistoryCard({
                     fill={`url(#${gradientId})`}
                     fillOpacity={1}
                     dot={false}
+                    activeDot={{ r: 3, fill: color, strokeWidth: 0 }}
                     isAnimationActive={false}
                   />
                 </AreaChart>

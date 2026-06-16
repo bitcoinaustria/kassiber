@@ -24,6 +24,7 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  Scale,
   ShieldCheck,
   Trash2,
   Wallet,
@@ -149,9 +150,11 @@ const fmtShortTxid = (value?: string) =>
   !value ? "no id" : value.length <= 18 ? value : `${value.slice(0, 10)}…${value.slice(-6)}`;
 
 const relatedViewLinkClass =
-  "flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 const relatedViewIconClass =
-  "flex size-8 shrink-0 items-center justify-center rounded-md border bg-muted/40 text-muted-foreground";
+  "flex size-8 shrink-0 items-center justify-center rounded-md border bg-muted/40 text-muted-foreground transition-colors group-hover:border-foreground/20 group-hover:text-foreground";
+const relatedViewArrowClass =
+  "size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5";
 
 const PLAINTEXT_CHANGE_ACK = "CHANGE LOCAL DATA";
 const PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA";
@@ -1085,75 +1088,90 @@ function ConnectionDetailView({
         />
       </div>
 
-      {reconciliation.available ? (
-        <Card
-          className={cn(
-            "rounded-xl py-3",
-            !reconciliation.reconciled &&
-              "border-amber-300 dark:border-amber-900/60",
-          )}
-        >
-          <CardContent className="flex flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
-              {/* On-chain is the authoritative figure for a watch-only wallet;
-                  the books are what we check against it. */}
-              <div>
-                <div className="text-xs text-muted-foreground">
-                  On-chain inventory
+      {reconciliation.available && reconciliation.reconciled ? (
+        // Reconciled: the on-chain total equals the Balance metric above, so we
+        // don't repeat the figure — just confirm the books are verified against
+        // the chain. The full two-figure comparison only appears on a mismatch.
+        <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+          <CheckCircle2
+            className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400"
+            aria-hidden="true"
+          />
+          <span>
+            <span className="font-medium text-foreground">
+              Reconciled with on-chain inventory.
+            </span>{" "}
+            Imported balance matches the watch-only coin set
+            {reconciliation.lastSyncedAt
+              ? ` · synced ${formatShortDate(reconciliation.lastSyncedAt)}`
+              : ""}
+            .
+          </span>
+        </div>
+      ) : reconciliation.available ? (
+        // Mismatch: the two figures genuinely differ, so the comparison + the
+        // signed delta is the actionable signal.
+        <Card className="rounded-xl border-amber-300 py-3 dark:border-amber-900/60">
+          <CardContent className="flex flex-col gap-4 px-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <span
+                className="hidden size-9 shrink-0 items-center justify-center rounded-md border bg-muted/40 text-muted-foreground sm:flex"
+                aria-hidden="true"
+              >
+                <Scale className="size-4" />
+              </span>
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div>
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    On-chain inventory
+                  </div>
+                  <div
+                    className={cn(
+                      "font-mono text-base font-semibold tabular-nums",
+                      blurClass(hideSensitive),
+                    )}
+                  >
+                    {fmtBtc(reconciliation.utxoSat / 1e8)}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">
+                    Watch-only source of truth
+                  </div>
                 </div>
-                <div
-                  className={cn(
-                    "font-mono text-sm font-semibold tabular-nums",
-                    blurClass(hideSensitive),
-                  )}
+                <span
+                  className="self-start pt-4 font-mono text-base font-semibold text-amber-600 dark:text-amber-400"
+                  aria-hidden="true"
                 >
-                  {fmtBtc(reconciliation.utxoSat / 1e8)}
-                </div>
-                <div className="text-[10px] text-muted-foreground">
-                  Watch-only source of truth
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">
-                  Recorded in your books
-                </div>
-                <div
-                  className={cn(
-                    "font-mono text-sm font-semibold tabular-nums",
-                    blurClass(hideSensitive),
-                  )}
-                >
-                  {fmtBtc(reconciliation.importedSat / 1e8)}
-                </div>
-                <div className="text-[10px] text-muted-foreground">
-                  Feeds tax &amp; reports
+                  ≠
+                </span>
+                <div>
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Recorded in books
+                  </div>
+                  <div
+                    className={cn(
+                      "font-mono text-base font-semibold tabular-nums",
+                      blurClass(hideSensitive),
+                    )}
+                  >
+                    {fmtBtc(reconciliation.importedSat / 1e8)}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">
+                    Feeds tax &amp; reports
+                  </div>
                 </div>
               </div>
             </div>
             <div className="sm:text-right">
-              {reconciliation.reconciled ? (
-                <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-300">
-                  <CheckCircle2 className="size-4" aria-hidden="true" />
-                  Books match the chain
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 text-sm font-medium text-amber-700 dark:text-amber-300">
-                  <AlertTriangle className="size-4" aria-hidden="true" />
-                  {reconciliation.deltaSat < 0
-                    ? `${fmtBtc(Math.abs(reconciliation.deltaSat) / 1e8)} on-chain not in your books`
-                    : `${fmtBtc(Math.abs(reconciliation.deltaSat) / 1e8)} in your books isn't on-chain`}
-                </span>
-              )}
-              <div className="mt-0.5 text-xs text-muted-foreground">
-                {reconciliation.reconciled
-                  ? `Every on-chain sat is accounted for${
-                      reconciliation.lastSyncedAt
-                        ? ` · synced ${formatShortDate(reconciliation.lastSyncedAt)}`
-                        : ""
-                    }`
-                  : reconciliation.deltaSat < 0
-                    ? "An inbound is excluded or the sync is stale — refresh, or unhide excluded transactions."
-                    : "Likely a manual or duplicate entry, or a spend that didn't sync — refresh or review those rows."}
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:text-amber-300">
+                <AlertTriangle className="size-3.5" aria-hidden="true" />
+                {reconciliation.deltaSat < 0
+                  ? `${fmtBtc(Math.abs(reconciliation.deltaSat) / 1e8)} on-chain, not in books`
+                  : `${fmtBtc(Math.abs(reconciliation.deltaSat) / 1e8)} in books, not on-chain`}
+              </span>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {reconciliation.deltaSat < 0
+                  ? "An inbound is excluded or the sync is stale — refresh, or unhide excluded transactions."
+                  : "Likely a manual or duplicate entry, or a spend that didn't sync — refresh or review those rows."}
               </div>
             </div>
           </CardContent>
@@ -1352,7 +1370,7 @@ function ConnectionDetailView({
       ) : null}
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.85fr)]">
-        <Card>
+        <Card className="min-w-0">
           <CardHeader className="border-b px-4 pb-3">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
@@ -1429,7 +1447,7 @@ function ConnectionDetailView({
           </CardContent>
         </Card>
 
-        <div className="space-y-3">
+        <div className="min-w-0 space-y-3">
           <WalletBalanceHistoryCard
             walletId={connection.id}
             hideSensitive={hideSensitive}
@@ -1511,10 +1529,7 @@ function ConnectionDetailView({
                       {txCount.toLocaleString("en-US")} in this wallet
                     </span>
                   </span>
-                  <ArrowRight
-                    className="size-4 shrink-0 text-muted-foreground"
-                    aria-hidden="true"
-                  />
+                  <ArrowRight className={relatedViewArrowClass} aria-hidden="true" />
                 </Link>
                 <Link
                   to="/transactions"
@@ -1533,10 +1548,7 @@ function ConnectionDetailView({
                       Rows not yet marked reviewed
                     </span>
                   </span>
-                  <ArrowRight
-                    className="size-4 shrink-0 text-muted-foreground"
-                    aria-hidden="true"
-                  />
+                  <ArrowRight className={relatedViewArrowClass} aria-hidden="true" />
                 </Link>
                 <Link
                   to="/transactions"
@@ -1555,10 +1567,7 @@ function ConnectionDetailView({
                       Unpriced rows block tax reports
                     </span>
                   </span>
-                  <ArrowRight
-                    className="size-4 shrink-0 text-muted-foreground"
-                    aria-hidden="true"
-                  />
+                  <ArrowRight className={relatedViewArrowClass} aria-hidden="true" />
                 </Link>
                 <Link to="/source-of-funds" className={relatedViewLinkClass}>
                   <span className={relatedViewIconClass} aria-hidden="true">
@@ -1572,10 +1581,7 @@ function ConnectionDetailView({
                       Evidence &amp; provenance readiness
                     </span>
                   </span>
-                  <ArrowRight
-                    className="size-4 shrink-0 text-muted-foreground"
-                    aria-hidden="true"
-                  />
+                  <ArrowRight className={relatedViewArrowClass} aria-hidden="true" />
                 </Link>
               </div>
             </CardContent>
