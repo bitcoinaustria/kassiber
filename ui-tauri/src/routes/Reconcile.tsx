@@ -14,10 +14,12 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardCopy,
+  FileSpreadsheet,
   Fingerprint,
   Globe,
   Search,
   ShieldCheck,
+  X,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -304,6 +306,12 @@ export function Reconcile() {
   const [report, setReport] = React.useState<IdentifyReport | null>(null);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set());
+  // Smart CSV import: the file's content travels as csv_text and is harvested
+  // daemon-side, so it works in every runtime (Tauri webview, bridge, browser)
+  // with no daemon filesystem read.
+  const [csvText, setCsvText] = React.useState<string | null>(null);
+  const [csvName, setCsvName] = React.useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const check = useDaemonMutation<IdentifyReport>("ui.wallets.identify");
   const verify = useDaemonMutation<IdentifyReport>("ui.wallets.identify_onchain");
 
@@ -312,17 +320,23 @@ export function Reconcile() {
   const unknownCount = summary?.unknown ?? 0;
 
   const trimmed = input.trim();
+  const hasInput = trimmed.length > 0 || !!csvText;
 
   const runMutation = async (
     mutation: typeof check,
     failureLabel: string,
+    csvOverride?: string | null,
   ) => {
-    if (!trimmed) return;
+    const csv = csvOverride !== undefined ? csvOverride : csvText;
+    if (!trimmed && !csv) return;
     setErrorMessage(null);
     setStatusFilter("all");
     setExpanded(new Set());
     try {
-      const envelope = await mutation.mutateAsync({ text: input });
+      const args: Record<string, unknown> = {};
+      if (trimmed) args.text = input;
+      if (csv) args.csv_text = csv;
+      const envelope = await mutation.mutateAsync(args);
       setReport(envelope.data ?? null);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : failureLabel);
@@ -331,6 +345,25 @@ export function Reconcile() {
 
   const onCheck = () => runMutation(check, "Ownership check failed");
   const onVerify = () => runMutation(verify, "On-chain verification failed");
+
+  const onImportCsv = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = ""; // allow re-importing the same file
+    if (!file) return;
+    try {
+      const content = await file.text();
+      setCsvText(content);
+      setCsvName(file.name);
+      await runMutation(check, "CSV import failed", content);
+    } catch {
+      setErrorMessage("Could not read that file.");
+    }
+  };
+
+  const clearCsv = () => {
+    setCsvText(null);
+    setCsvName(null);
+  };
 
   const toggleExpand = (key: string) =>
     setExpanded((prev) => {
@@ -383,6 +416,27 @@ export function Reconcile() {
             spellCheck={false}
             className={`font-mono text-xs ${hiddenSensitiveClassName(hideSensitive)}`}
           />
+          {csvName ? (
+            <div className="flex w-fit items-center gap-2 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs">
+              <FileSpreadsheet className="size-3.5 text-muted-foreground" />
+              <span className="font-medium">{csvName}</span>
+              <button
+                type="button"
+                onClick={clearCsv}
+                aria-label="Remove imported CSV"
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          ) : null}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,.tsv,.txt,text/csv,text/plain"
+            className="hidden"
+            onChange={onImportCsv}
+          />
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <ShieldCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -390,14 +444,25 @@ export function Reconcile() {
               machine. Transactions not in your synced history can be verified
               on chain below (that one step contacts your backend).
             </p>
-            <Button
-              type="button"
-              onClick={onCheck}
-              disabled={!trimmed || check.isPending || verify.isPending}
-            >
-              <Search className="size-4" />
-              {check.isPending ? "Checking…" : "Check ownership"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={check.isPending || verify.isPending}
+              >
+                <FileSpreadsheet className="size-4" />
+                Import CSV
+              </Button>
+              <Button
+                type="button"
+                onClick={onCheck}
+                disabled={!hasInput || check.isPending || verify.isPending}
+              >
+                <Search className="size-4" />
+                {check.isPending ? "Checking…" : "Check ownership"}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

@@ -889,6 +889,7 @@ export const mockDaemon: DaemonTransport = {
         text?: unknown;
         addresses?: unknown;
         txids?: unknown;
+        csv_text?: unknown;
       };
       const tokens: string[] = [];
       if (typeof args.text === "string") {
@@ -899,6 +900,20 @@ export const mockDaemon: DaemonTransport = {
       }
       if (Array.isArray(args.txids)) {
         tokens.push(...args.txids.map((value) => String(value)));
+      }
+      if (typeof args.csv_text === "string") {
+        // Smart harvest (mock approximation): split into cells and keep only
+        // address/txid-looking tokens, ignoring headers/amounts/dates.
+        for (const cell of args.csv_text.split(/[\s,;|\t]+/)) {
+          const token = cell.trim();
+          if (
+            /^[0-9a-fA-F]{64}$/.test(token) ||
+            /^(bc1|tb1|bcrt1|lq1|tlq1|ex1|tex1|el1|ert1)/i.test(token) ||
+            (/^[13mn2]/.test(token) && token.length >= 26 && /^[0-9A-Za-z]+$/.test(token))
+          ) {
+            tokens.push(token);
+          }
+        }
       }
       const cleaned = tokens
         .map((token) => token.trim())

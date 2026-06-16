@@ -627,6 +627,30 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(payload["data"]["summary"]["owned"], 1)
         self.assertEqual(payload["data"]["summary"]["external"], 1)
 
+        # --csv smart-imports a messy spreadsheet (semicolon delimiter, noise
+        # columns, an oddly-named txid column) and harvests only the tokens.
+        csv_file = os.path.join(self._tmp.name, "reconcile.csv")
+        with open(csv_file, "w", encoding="utf-8") as handle:
+            handle.write("Date;Amount;Wallet Address;Memo;Tx Hash\n")
+            handle.write(f"2024-01-01;0.5;{owned};rent;{'a' * 64}\n")
+            handle.write(f"2024-02-01;1.0;{external};coffee;\n")
+        payload = self._cli(
+            "wallets", "identify",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "Vault",
+            "--csv", csv_file,
+            "--scan-to-index", "5",
+        )
+        self._assert_kind(payload, "wallets.identify")
+        csv_summary = payload["data"]["summary"]
+        self.assertEqual(csv_summary["owned"], 1)
+        self.assertEqual(csv_summary["external"], 1)
+        self.assertEqual(csv_summary["unknown"], 1)  # the harvested txid
+        csv_by_input = {row["input"]: row for row in payload["data"]["results"]}
+        self.assertEqual(csv_by_input[owned]["status"], "owned")
+        self.assertNotIn("0.5", csv_by_input)  # amounts/dates/memos are not harvested
+
         # No candidates is a validation error, not an empty success.
         error_payload, code = _run(
             self.data_root,

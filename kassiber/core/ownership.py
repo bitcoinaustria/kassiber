@@ -28,6 +28,8 @@ Three resolution tiers, cheapest first:
    transaction so its inputs/outputs can be classified per-leg.
 """
 
+import csv
+import io
 import json
 import re
 import sqlite3
@@ -69,6 +71,57 @@ _CASE_INSENSITIVE_PREFIXES = (
 # are all alnum) within sane length bounds. Anything else (spaces, punctuation,
 # a pasted label or URI) is flagged invalid rather than silently "external".
 _ADDRESS_RE = re.compile(r"[0-9A-Za-z]{8,150}")
+
+# Address HRPs that make a token unambiguously a bech32/bech32m/blech32 address.
+_BECH32_ADDRESS_PREFIXES = (
+    "bc1",
+    "tb1",
+    "bcrt1",
+    "lq1",
+    "tlq1",
+    "ex1",
+    "tex1",
+    "el1",
+    "ert1",
+)
+
+# Conservative header aliases for smart CSV import. Ambiguous names (bare "tx",
+# "hash", "transaction") are intentionally omitted — content harvesting (strict
+# 64-hex / real-address checks) catches those columns without false positives.
+_ADDRESS_HEADER_ALIASES = frozenset(
+    {
+        "address",
+        "addr",
+        "addresses",
+        "bitcoin address",
+        "btc address",
+        "wallet address",
+        "receive address",
+        "receiving address",
+        "to address",
+        "from address",
+        "output address",
+        "destination address",
+        "liquid address",
+    }
+)
+_TXID_HEADER_ALIASES = frozenset(
+    {
+        "txid",
+        "tx id",
+        "tx_id",
+        "txhash",
+        "tx hash",
+        "transaction id",
+        "transaction hash",
+        "txn id",
+        "txn hash",
+    }
+)
+
+# Upper bound on tokens harvested from one CSV, so a pathological file can't wedge
+# the (single-threaded) daemon; the caller surfaces a truncation warning.
+MAX_HARVEST_CANDIDATES = 10_000
 
 
 @dataclass(frozen=True)
@@ -236,6 +289,128 @@ def _is_hex(value: str) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _is_txid_token(value: str) -> bool:
+    return len(value) == _TXID_LENGTH and _is_hex(value.lower())
+
+
+def _looks_like_address(value: str) -> bool:
+    """Strict "is this really an address" check for CSV content harvesting.
+
+    Bech32/blech32 are accepted by HRP prefix; base58 is accepted only when it
+    checksum-validates via ``address_to_scriptpubkey``. This is deliberately
+    tighter than ``_ADDRESS_RE`` so a plain word/amount in a spreadsheet cell is
+    not harvested as an address.
+    """
+    text = str(value or "").strip()
+    if not text or not _ADDRESS_RE.fullmatch(text):
+        return False
+    if text.lower().startswith(_BECH32_ADDRESS_PREFIXES):
+        return True
+    return _script_hex_for_address(text) is not None
+
+
+def _normalize_header(value: Any) -> str:
+    return " ".join(str(value or "").replace("\xa0", " ").split()).casefold()
+
+
+def _read_csv_rows(text: str) -> list[list[str]]:
+    """Parse CSV text into rows, sniffing the delimiter (comma/semicolon/tab/pipe)
+    and stripping a UTF-8 BOM."""
+    if not text:
+        return []
+    stripped = text.lstrip("\ufeff")
+    if not stripped.strip():
+        return []
+    try:
+        dialect: Any = csv.Sniffer().sniff(stripped[:8192], delimiters=",;\t|")
+    except csv.Error:
+        dialect = None
+    reader = (
+        csv.reader(io.StringIO(stripped), dialect)
+        if dialect is not None
+        else csv.reader(io.StringIO(stripped))
+    )
+    rows: list[list[str]] = []
+    try:
+        for row in reader:
+            rows.append([str(cell) for cell in row])
+    except csv.Error:
+        # Malformed CSV (e.g. unbalanced quotes): fall back to line/whitespace
+        # splitting so content harvesting can still recover tokens.
+        return [re.split(r"[\s,;|\t]+", line) for line in stripped.splitlines()]
+    return rows
+
+
+def _recognize_csv_columns(header: Sequence[str]) -> tuple[list[int], list[int]]:
+    address_cols: list[int] = []
+    txid_cols: list[int] = []
+    for index, cell in enumerate(header):
+        name = _normalize_header(cell)
+        if name in _ADDRESS_HEADER_ALIASES:
+            address_cols.append(index)
+        elif name in _TXID_HEADER_ALIASES:
+            txid_cols.append(index)
+    return address_cols, txid_cols
+
+
+def extract_candidates_from_csv(text: str | None) -> list[str]:
+    """Harvest address/txid tokens from arbitrary CSV text.
+
+    Two complementary passes, unioned and de-duplicated in first-seen order:
+
+    1. Header-targeted — cells under a recognized ``address``/``txid`` column are
+       taken verbatim (and validated downstream, so a bad value in a named column
+       still surfaces as ``invalid``).
+    2. Content harvest — every cell that is a strict 64-hex txid or a real
+       address (checksum-validated for base58) is collected, so tokens in
+       unrecognized columns or header-less files are still found without
+       harvesting plain words/amounts/dates.
+    """
+    rows = _read_csv_rows(text or "")
+    if not rows:
+        return []
+    address_cols, txid_cols = _recognize_csv_columns(rows[0])
+    recognized = bool(address_cols or txid_cols)
+    seen: set[str] = set()
+    out: list[str] = []
+
+    def _add(value: str) -> None:
+        token = str(value or "").strip()
+        if token and token not in seen:
+            seen.add(token)
+            out.append(token)
+
+    if recognized:
+        for row in rows[1:]:
+            for column in (*address_cols, *txid_cols):
+                if column < len(row):
+                    _add(row[column])
+
+    for row in rows:
+        for cell in row:
+            token = str(cell or "").strip()
+            if not token:
+                continue
+            if _is_txid_token(token) or _looks_like_address(token):
+                _add(token)
+    return out
+
+
+def read_text_file(path: str, *, label: str = "file") -> str:
+    """Read a UTF-8 text file, rejecting binary content (NUL bytes)."""
+    from pathlib import Path
+
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except FileNotFoundError as exc:
+        raise AppError(f"{label.capitalize()} not found: {path}", code="validation") from exc
+    except (OSError, UnicodeDecodeError) as exc:
+        raise AppError(f"Could not read {label}: {path}", code="validation") from exc
+    if "\x00" in text:
+        raise AppError(f"{label.capitalize()} is not valid UTF-8 text", code="validation")
+    return text
 
 
 def load_profile_wallets(
@@ -715,6 +890,7 @@ def identify(
     txids: Iterable[str] | None = None,
     candidates: Iterable[str] | None = None,
     file_text: str | None = None,
+    csv_text: str | None = None,
     wallet_ids: Sequence[str] | None = None,
     scan_to_index: int = DEFAULT_SCAN_TO_INDEX,
     verify_fetcher: VerifyFetcher | None = None,
@@ -723,12 +899,25 @@ def identify(
 
     ``verify_fetcher(txid, chain_hint) -> legs|None`` is injected by the caller
     for the opt-in on-chain tier; when ``None`` (the cache-only default) txids
-    not already in local history resolve to ``unknown``.
+    not already in local history resolve to ``unknown``. ``csv_text`` is parsed
+    by the smart CSV harvester and folded into the candidate set.
     """
     scan_to_index = max(0, min(int(scan_to_index or 0), MAX_SCAN_TO_INDEX))
-    parsed, invalid = parse_tokens(addresses, txids, candidates, file_text)
+    pre_warnings: list[str] = []
+    merged_candidates = list(candidates or [])
+    if csv_text:
+        harvested = extract_candidates_from_csv(csv_text)
+        if len(harvested) > MAX_HARVEST_CANDIDATES:
+            pre_warnings.append(
+                f"CSV yielded {len(harvested)} candidates; only the first "
+                f"{MAX_HARVEST_CANDIDATES} were checked."
+            )
+            harvested = harvested[:MAX_HARVEST_CANDIDATES]
+        merged_candidates.extend(harvested)
+    parsed, invalid = parse_tokens(addresses, txids, merged_candidates, file_text)
     wallets = load_profile_wallets(conn, profile_id, wallet_ids)
     index, warnings = build_owned_index(conn, profile_id, wallets, scan_to_index=scan_to_index)
+    warnings = pre_warnings + warnings
 
     results: list[dict[str, Any]] = []
     for token in parsed:

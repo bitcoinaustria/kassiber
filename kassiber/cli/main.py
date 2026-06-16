@@ -1023,6 +1023,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--file", help="File with one address/txid per line (# comments allowed)"
     )
     wallets_identify.add_argument(
+        "--csv",
+        help="CSV/spreadsheet to smart-import: harvests addresses/txids from any common shape",
+    )
+    wallets_identify.add_argument(
         "--scan-to-index",
         type=int,
         default=core_ownership.DEFAULT_SCAN_TO_INDEX,
@@ -2465,6 +2469,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     txids=args.txid,
                     candidates=args.candidate,
                     file=args.file,
+                    csv=args.csv,
                     scan_to_index=args.scan_to_index,
                     verify_on_chain=args.verify_on_chain,
                     verify_backend=args.verify_backend,

@@ -104,6 +104,7 @@ Reconcile addresses / txids against wallets (which are mine? payment vs transfer
 ```bash
 kassiber wallets identify --address bc1q... --txid <64-hex>
 kassiber wallets identify --file ./reconcile.txt   # one address/txid per line
+kassiber wallets identify --csv ./export.csv       # smart-import any CSV shape
 kassiber --format csv wallets identify --file ./reconcile.txt --output owned.csv
 kassiber wallets identify --txid <64-hex> --verify-on-chain --verify-backend mempool
 ```

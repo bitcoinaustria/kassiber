@@ -3718,8 +3718,16 @@ def build_wallet_utxos_snapshot_for_ai(
 
 
 def _identify_inputs(args: Any) -> dict[str, Any]:
+    empty = {
+        "addresses": [],
+        "txids": [],
+        "candidates": [],
+        "text": None,
+        "csv_text": None,
+        "scan_to_index": None,
+    }
     if args is None:
-        return {"addresses": [], "txids": [], "candidates": [], "text": None, "scan_to_index": None}
+        return empty
     if not isinstance(args, dict):
         raise AppError(
             "ui.wallets.identify args must be an object",
@@ -3741,12 +3749,14 @@ def _identify_inputs(args: Any) -> dict[str, Any]:
         )
 
     text = args.get("text")
+    csv_text = args.get("csv_text")
     scan_to_index = args.get("scan_to_index")
     return {
         "addresses": _as_list(args.get("addresses")),
         "txids": _as_list(args.get("txids")),
         "candidates": _as_list(args.get("candidates")),
         "text": text if isinstance(text, str) else None,
+        "csv_text": csv_text if isinstance(csv_text, str) else None,
         "scan_to_index": int(scan_to_index) if isinstance(scan_to_index, int) else None,
     }
 
@@ -3795,6 +3805,7 @@ def build_wallet_identify_snapshot(
         txids=inputs["txids"],
         candidates=inputs["candidates"],
         file_text=inputs["text"],
+        csv_text=inputs["csv_text"],
         scan_to_index=scan_to_index,
         verify_fetcher=None,
     )
@@ -3847,6 +3858,7 @@ def build_wallet_identify_onchain_snapshot(
             txids=inputs["txids"],
             candidates=inputs["candidates"],
             file_text=inputs["text"],
+            csv_text=inputs["csv_text"],
             scan_to_index=scan_to_index,
             verify_fetcher=fetcher,
         )
@@ -3862,6 +3874,10 @@ def build_wallet_identify_snapshot_for_ai(
     runtime_config: dict[str, object] | None,
     args: Any,
 ) -> dict[str, Any]:
+    # Defense in depth: the AI tool schema never exposes csv_text, but strip it
+    # here too so the model can never drive a bulk file/CSV harvest.
+    if isinstance(args, dict) and "csv_text" in args:
+        args = {key: value for key, value in args.items() if key != "csv_text"}
     payload = build_wallet_identify_snapshot(conn, runtime_config, args)
     return {
         **payload,

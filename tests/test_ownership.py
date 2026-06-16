@@ -374,6 +374,52 @@ class FlattenAndRedactTests(unittest.TestCase):
         self.assertEqual(redacted["classification"], "outbound_payment")
 
 
+class CsvHarvestTests(unittest.TestCase):
+    BECH32 = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
+    TXID = "a" * 64
+
+    def test_headered_comma_csv_harvests_and_ignores_noise(self):
+        text = f"date,address,amount,txid\n2024-01-01,{self.BECH32},0.5,{self.TXID}\n"
+        got = ownership.extract_candidates_from_csv(text)
+        self.assertIn(self.BECH32, got)
+        self.assertIn(self.TXID, got)
+        self.assertNotIn("0.5", got)
+        self.assertNotIn("2024-01-01", got)
+
+    def test_no_header_semicolon_content_harvest(self):
+        text = f"{self.BECH32};100;done\nfoo;{self.TXID};x\n"
+        got = ownership.extract_candidates_from_csv(text)
+        self.assertEqual(sorted(got), sorted([self.BECH32, self.TXID]))
+
+    def test_bom_and_tab_and_unrecognized_columns(self):
+        text = f"\ufeffcol1\tcol2\nhello\t{self.BECH32}\n"
+        got = ownership.extract_candidates_from_csv(text)
+        self.assertEqual(got, [self.BECH32])
+
+    def test_noise_only_returns_empty(self):
+        self.assertEqual(
+            ownership.extract_candidates_from_csv("name,amount\nalice,100\nbob,200\n"),
+            [],
+        )
+
+    def test_plain_one_per_line_list(self):
+        text = f"{self.BECH32}\n{self.TXID}\n# a comment, not an address\n"
+        got = ownership.extract_candidates_from_csv(text)
+        self.assertEqual(sorted(got), sorted([self.BECH32, self.TXID]))
+
+    def test_identify_with_csv_text(self):
+        conn = _engine_conn()
+        report = ownership.identify(
+            conn,
+            "p1",
+            csv_text=f"address,memo\n{self.BECH32},rent\n",
+            scan_to_index=0,
+        )
+        inputs = [r["input"] for r in report["results"]]
+        self.assertIn(self.BECH32, inputs)
+        self.assertEqual(report["results"][0]["status"], "external")  # no wallets seeded
+
+
 class IdentifyVerifyTierTests(unittest.TestCase):
     def test_failed_verify_degrades_to_unknown_with_warning(self):
         conn = _engine_conn()

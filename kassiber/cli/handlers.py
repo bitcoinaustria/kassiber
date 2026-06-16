@@ -2581,18 +2581,6 @@ def derive_wallet_targets(conn, workspace_ref, profile_ref, wallet_ref, branch=N
     ]
 
 
-def _read_identify_candidates_file(path):
-    try:
-        text = Path(path).read_text(encoding="utf-8")
-    except FileNotFoundError as exc:
-        raise AppError(f"Candidate file not found: {path}", code="validation") from exc
-    except OSError as exc:
-        raise AppError(f"Could not read candidate file: {path}", code="validation") from exc
-    if "\x00" in text:
-        raise AppError("Candidate file is not valid UTF-8 text", code="validation")
-    return text
-
-
 def identify_wallet_owners(
     conn,
     workspace_ref,
@@ -2603,6 +2591,7 @@ def identify_wallet_owners(
     txids=None,
     candidates=None,
     file=None,
+    csv=None,
     scan_to_index=None,
     verify_on_chain=False,
     verify_backend=None,
@@ -2612,7 +2601,8 @@ def identify_wallet_owners(
 
     Returns a structured report (``results`` + ``summary`` + ``warnings``)
     classifying each input as owned (naming the wallet, branch and derivation
-    index) or external/unknown. ``--verify-on-chain`` resolves an Esplora or
+    index) or external/unknown. ``--csv`` smart-harvests addresses/txids from a
+    spreadsheet of any common shape. ``--verify-on-chain`` resolves an Esplora or
     Electrum backend so unseen txids get a per-leg payment/transfer breakdown.
     """
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
@@ -2621,17 +2611,17 @@ def identify_wallet_owners(
     if wallet_refs:
         wallet_ids = [resolve_wallet(conn, profile["id"], ref)["id"] for ref in wallet_refs]
 
-    file_text = _read_identify_candidates_file(file) if file else None
+    file_text = core_ownership.read_text_file(file, label="candidate file") if file else None
+    csv_text = core_ownership.read_text_file(csv, label="CSV file") if csv else None
 
     if scan_to_index is None:
         scan_to_index = core_ownership.DEFAULT_SCAN_TO_INDEX
     if scan_to_index < 0:
         raise AppError("--scan-to-index must be non-negative", code="validation")
 
-    parsed, invalid = core_ownership.parse_tokens(addresses, txids, candidates, file_text)
-    if not parsed and not invalid:
+    if not any([addresses, txids, candidates, file_text, csv_text]):
         raise AppError(
-            "Provide at least one --address, --txid, --candidate, or --file entry to check",
+            "Provide at least one --address, --txid, --candidate, --file, or --csv input to check",
             code="validation",
             hint="Example: wallets identify --address bc1q... --txid <64-hex>",
         )
@@ -2644,6 +2634,7 @@ def identify_wallet_owners(
             txids=txids,
             candidates=candidates,
             file_text=file_text,
+            csv_text=csv_text,
             wallet_ids=wallet_ids,
             scan_to_index=scan_to_index,
             verify_fetcher=verify_fetcher,
