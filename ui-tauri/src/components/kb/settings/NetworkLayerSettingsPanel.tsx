@@ -18,9 +18,9 @@ export const NETWORK_LAYER_META: Record<
 > = {
   bitcoin: {
     blurb:
-      "Explorer API, Electrum/Fulcrum, or Bitcoin Core RPC endpoints that serve on-chain history to your watch-only wallets.",
+      "Explorer API (Esplora / mempool.space-type HTTP REST), Electrum / Fulcrum (Electrum protocol over TCP/SSL), or Bitcoin Core RPC endpoints that serve on-chain history to your watch-only wallets.",
     empty:
-      "No Bitcoin indexers yet. Add one so on-chain wallets can refresh their balances.",
+      "No Bitcoin backends yet. Add one so on-chain wallets can refresh their balances.",
     addLabel: "Add Bitcoin backend",
   },
   lightning: {
@@ -32,9 +32,9 @@ export const NETWORK_LAYER_META: Record<
   },
   liquid: {
     blurb:
-      "Explorer API or Electrum/Fulcrum endpoints that serve Liquid (L-BTC) history to your watch-only wallets.",
+      "Explorer API (Esplora HTTP REST) or Electrum / Fulcrum (Electrum protocol over TCP/SSL) endpoints that serve Liquid (L-BTC) history to your watch-only wallets.",
     empty:
-      "No Liquid indexers yet. Add one so L-BTC wallets can refresh their balances.",
+      "No Liquid backends yet. Add one so L-BTC wallets can refresh their balances.",
     addLabel: "Add Liquid backend",
   },
 };
@@ -113,7 +113,7 @@ export function NetworkLayerSettingsPanel({
                 layer === "bitcoin"
                   ? "mempool.bitcoin-austria.at"
                   : "Liquid Network"
-              } default until you add an Explorer API backend. Electrum/Fulcrum backends are sync-only.`}
+              } default until you add an Explorer API backend. Electrum / Fulcrum backends are sync-only.`}
         </p>
       ) : null}
     </section>

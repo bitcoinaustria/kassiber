@@ -351,7 +351,7 @@ export function backendModalCopy({
       return {
         title: "Add Bitcoin backend",
         description:
-          "Connect a Bitcoin indexer or node used by watch-only wallets.",
+          "Connect a Bitcoin backend used by watch-only wallets: an Explorer API (Esplora/mempool), Electrum / Fulcrum, or Bitcoin Core RPC.",
         selectorLabel: "Network",
       };
     }
@@ -359,7 +359,7 @@ export function backendModalCopy({
       return {
         title: "Add Liquid backend",
         description:
-          "Connect a Liquid indexer used by Liquid watch-only wallets.",
+          "Connect a Liquid backend used by Liquid watch-only wallets: an Explorer API (Esplora) or Electrum / Fulcrum.",
         selectorLabel: "Network",
       };
     }
@@ -1022,7 +1022,9 @@ export function SyncBackendSettingsModal({
                 <div>
                   <Label>Endpoint type</Label>
                   <p className="text-xs text-muted-foreground">
-                    Choose the protocol your backend exposes.
+                    Choose the protocol your backend exposes — e.g. an Explorer
+                    API (Esplora/mempool) over HTTP, or Electrum / Fulcrum over
+                    TCP/SSL.
                   </p>
                 </div>
                 <Tabs value={presetId} onValueChange={setPresetId}>
@@ -1113,8 +1115,9 @@ export function SyncBackendSettingsModal({
 
             {type.net !== "LN" && selectedKindIsExplorerApi ? (
               <div className="rounded-md border border-sky-500/25 bg-sky-500/5 p-3 text-xs text-muted-foreground">
-                This Explorer API will also provide transaction links. Electrum
-                and Fulcrum backends only provide wallet history sync.
+                This Explorer API (Esplora / mempool.space-type HTTP REST) also
+                provides clickable transaction links. Electrum / Fulcrum
+                backends are sync-only.
               </div>
             ) : null}
 

@@ -125,7 +125,7 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
         <ChoiceCard
           active={form.backendSetupMode === "default"}
           title="Use built-in public backends"
-          description="Start quickly with the bundled Fulcrum, Esplora, and Liquid endpoints. You can replace them later."
+          description="Start quickly with the bundled Explorer API, Electrum / Fulcrum, and Liquid endpoints. You can replace them later."
           onClick={() => {
             update("backendSetupMode", "default");
             update("backendKind", "electrum");
@@ -137,7 +137,7 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
         <ChoiceCard
           active={customSelected}
           title="Use a custom sync backend"
-          description="Point Kassiber at an Esplora, Electrum/Fulcrum, Bitcoin Core RPC, or Liquid endpoint."
+          description="Point Kassiber at an Explorer API (Esplora/mempool), Electrum / Fulcrum, Bitcoin Core RPC, or Liquid endpoint."
           onClick={() => {
             update("backendSetupMode", "custom");
             if (

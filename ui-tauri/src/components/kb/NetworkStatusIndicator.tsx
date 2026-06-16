@@ -166,7 +166,7 @@ function connectionStatusTitle(
 ) {
   if (record?.message) return record.message;
   if (status === "unavailable" && row.probeKind === "unsupported") {
-    return "Saved HTTP explorer endpoints are listed here but not actively probed from the shell. The health checker probes Electrum/Fulcrum backends and approved display-only HTTP checks.";
+    return "Saved HTTP explorer endpoints are listed here but not actively probed from the shell. The health checker probes Electrum / Fulcrum backends and approved display-only HTTP checks.";
   }
   return connectionStatusLabel(status);
 }
