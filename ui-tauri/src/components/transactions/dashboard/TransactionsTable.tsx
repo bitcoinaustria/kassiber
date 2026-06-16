@@ -14,6 +14,7 @@ import {
   MoreHorizontal,
   Pencil,
   Wallet,
+  WalletCards,
   X,
 } from "lucide-react";
 import * as React from "react";
@@ -55,6 +56,7 @@ import {
   type DaemonEnvelope,
 } from "@/daemon/transport";
 import { cn } from "@/lib/utils";
+import { accountLegs, accountMatchesLabel } from "@/lib/connectionTransactions";
 import { type Currency } from "@/lib/currency";
 import { type ExplorerSettings } from "@/lib/explorer";
 import { useUiStore } from "@/store/ui";
@@ -248,6 +250,38 @@ const TransactionsTable = ({
     (txn: Transaction): TransactionFlow =>
       swapCandidateIds.has(txn.id) ? "swap" : transactionFlow(txn),
     [swapCandidateIds],
+  );
+  // The Wallet dropdown owns leg-mode wallet selections only — it shares
+  // `breakdownSelection` with the breakdown chart and the "Show all" deep link
+  // behind one removable chip, but a chart-driven (exact) wallet selection is
+  // not a leg filter, so the dropdown does not claim it as active/checked.
+  const walletFilterActive =
+    breakdownSelection?.dimension === "wallet" &&
+    breakdownSelection.match === "leg";
+  const selectedWalletKey = walletFilterActive ? breakdownSelection.key : null;
+  // Options are the distinct single-wallet legs present in the data — so a
+  // transfer row "Cold Storage → Vault" contributes "Cold Storage" and "Vault",
+  // never the combined string. The active key is always offered even if the
+  // current period filtered all its rows out.
+  const walletOptions = React.useMemo(() => {
+    const legs = new Set<string>();
+    for (const txn of records) {
+      for (const leg of accountLegs(txn.wallet)) legs.add(leg);
+    }
+    if (selectedWalletKey) legs.add(selectedWalletKey);
+    return Array.from(legs).sort((a, b) => a.localeCompare(b));
+  }, [records, selectedWalletKey]);
+  // Selecting/clearing a leg-mode wallet goes through breakdownSelection; the
+  // dashboard derives the parent's server-side wallet scope from it (so every
+  // clear path stays in sync, not just this dropdown).
+  const selectWalletScope = React.useCallback(
+    (key: string) =>
+      onBreakdownSelectionChange({ dimension: "wallet", key, match: "leg" }),
+    [onBreakdownSelectionChange],
+  );
+  const clearWalletScope = React.useCallback(
+    () => onBreakdownSelectionChange(null),
+    [onBreakdownSelectionChange],
   );
   const getDraft = React.useCallback(
     (txn: Transaction) => drafts[txn.id] ?? draftForTransaction(txn),
@@ -612,8 +646,15 @@ const TransactionsTable = ({
         !breakdownSelection ||
         (breakdownSelection.dimension === "network" &&
           txn.paymentMethod === breakdownSelection.key) ||
+        // Wallet matching depends on how the selection was made. Leg-aware
+        // ("Cold Storage" also surfaces "Cold Storage → Vault") for the Wallet
+        // dropdown and the "Show all" deep link — matching the Wallet Detail
+        // recent-transactions list. Exact (full account string) for chart-bar
+        // clicks, so the table count stays equal to the clicked bar's count.
         (breakdownSelection.dimension === "wallet" &&
-          (txn.wallet ?? "Unassigned") === breakdownSelection.key);
+          (breakdownSelection.match === "leg"
+            ? accountMatchesLabel(txn.wallet, breakdownSelection.key)
+            : (txn.wallet ?? "Unassigned") === breakdownSelection.key));
 
       let matchesDate = true;
       const pd = txn.date.toLowerCase();
@@ -909,6 +950,55 @@ const TransactionsTable = ({
                   onCheckedChange={() => setPaymentMethodFilter(method)}
                 >
                   {method}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn(
+                  "h-8 gap-1.5 sm:h-9 sm:gap-2",
+                  walletFilterActive && "border-primary",
+                )}
+                aria-label="Filter by wallet or source"
+                disabled={walletOptions.length === 0}
+              >
+                <WalletCards
+                  className="size-3.5 sm:size-4"
+                  aria-hidden="true"
+                />
+                <span className="hidden sm:inline">Wallet</span>
+                {walletFilterActive && (
+                  <span className="size-1.5 rounded-full bg-primary sm:size-2" />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="max-h-[320px] w-[220px] overflow-y-auto"
+            >
+              <DropdownMenuLabel>Filter by wallet / source</DropdownMenuLabel>
+              <DropdownMenuCheckboxItem
+                checked={!walletFilterActive}
+                onCheckedChange={() => {
+                  // Only clear when a wallet is selected — don't clobber an
+                  // active network breakdown (both share breakdownSelection).
+                  if (walletFilterActive) clearWalletScope();
+                }}
+              >
+                All wallets
+              </DropdownMenuCheckboxItem>
+              {walletOptions.map((wallet) => (
+                <DropdownMenuCheckboxItem
+                  key={wallet}
+                  checked={selectedWalletKey === wallet}
+                  onCheckedChange={() => selectWalletScope(wallet)}
+                >
+                  {wallet}
                 </DropdownMenuCheckboxItem>
               ))}
             </DropdownMenuContent>

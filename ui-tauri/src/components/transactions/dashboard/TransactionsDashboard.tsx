@@ -50,6 +50,9 @@ const TransactionsDashboard = ({
   focusedTransaction,
   deepLinkedTransactionId,
   deepLinkedTransactionTab,
+  deepLinkedWallet,
+  deepLinkedQuickFilter,
+  onWalletScopeChange,
 }: {
   className?: string;
   transactions?: TransactionsList;
@@ -64,15 +67,25 @@ const TransactionsDashboard = ({
   focusedTransaction?: TransactionsList["txs"][number] | null;
   deepLinkedTransactionId?: string | null;
   deepLinkedTransactionTab?: string;
+  deepLinkedWallet?: string | null;
+  deepLinkedQuickFilter?: TableQuickFilter | null;
+  onWalletScopeChange?: (wallet: string | null) => void;
 }) => {
   const [period, setPeriod] = React.useState<PeriodKey>(initialPeriodFromUrl);
   const [newTxnOpen, setNewTxnOpen] = React.useState(false);
   const [flowChartSelection, setFlowChartSelection] =
     React.useState<FlowChartSelection | null>(null);
-  const [quickFilter, setQuickFilter] =
-    React.useState<TableQuickFilter | null>(null);
+  // Seed the table filters from a Wallet Detail deep link so "Show all" /
+  // "Needs review" land pre-filtered to the wallet.
+  const [quickFilter, setQuickFilter] = React.useState<TableQuickFilter | null>(
+    deepLinkedQuickFilter ?? null,
+  );
   const [breakdownSelection, setBreakdownSelection] =
-    React.useState<BreakdownSelection | null>(null);
+    React.useState<BreakdownSelection | null>(
+      deepLinkedWallet
+        ? { dimension: "wallet", key: deepLinkedWallet, match: "leg" }
+        : null,
+    );
   const [resetTableFiltersToken, setResetTableFiltersToken] = React.useState(0);
   const [newTransactionDraft, setNewTransactionDraft] =
     React.useState<NewTransactionDraft>(createNewTransactionDraft);
@@ -190,6 +203,20 @@ const TransactionsDashboard = ({
     setResetTableFiltersToken((token) => token + 1);
   }, []);
 
+  // Keep the parent's wallet scope (which server-scopes the ui.transactions.list
+  // queries) in lockstep with the wallet selection. Deriving it from
+  // breakdownSelection means EVERY clear path propagates — "Clear all", period
+  // change, chart / quick-filter resets — not just the dropdown's own clear, so
+  // the chip and the queried scope never disagree.
+  React.useEffect(() => {
+    onWalletScopeChange?.(
+      breakdownSelection?.dimension === "wallet" &&
+        breakdownSelection.match === "leg"
+        ? breakdownSelection.key
+        : null,
+    );
+  }, [breakdownSelection, onWalletScopeChange]);
+
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
@@ -200,6 +227,10 @@ const TransactionsDashboard = ({
       : window.location.pathname;
     window.history.replaceState(null, "", nextUrl);
   }, [period]);
+
+  // Note: scrolling the table into view on a "Show all" deep link is handled by
+  // TransactionsTable's own scroll-on-active-filter effect (the deep link seeds
+  // breakdownSelection at mount), so no separate scroll is needed here.
 
   return (
     <div
@@ -254,27 +285,29 @@ const TransactionsDashboard = ({
         isRefreshing={showRefreshSkeleton}
       />
 
-      <TransactionsTable
-        records={visibleTableRecords}
-        hideSensitive={hideSensitive}
-        currency={currency}
-        nowRate={nowRate}
-        explorerSettings={explorerSettings}
-        swapCandidateIds={tableSwapCandidateIds}
-        chartSelection={flowChartSelection}
-        quickFilter={quickFilter}
-        breakdownSelection={breakdownSelection}
-        onChartSelectionChange={setFlowChartSelection}
-        onQuickFilterChange={setQuickFilter}
-        onBreakdownSelectionChange={setBreakdownSelection}
-        resetTableFiltersToken={resetTableFiltersToken}
-        isRefreshing={showRefreshSkeleton}
-        hasMoreRecords={hasMoreTransactions && !useWorkbenchRowsForTable}
-        isLoadingMoreRecords={isLoadingMoreTransactions}
-        onLoadMoreRecords={onLoadMoreTransactions}
-        deepLinkedTransactionId={deepLinkedTransactionId}
-        deepLinkedTransactionTab={deepLinkedTransactionTab}
-      />
+      <div id="transactions-table" className="scroll-mt-4">
+        <TransactionsTable
+          records={visibleTableRecords}
+          hideSensitive={hideSensitive}
+          currency={currency}
+          nowRate={nowRate}
+          explorerSettings={explorerSettings}
+          swapCandidateIds={tableSwapCandidateIds}
+          chartSelection={flowChartSelection}
+          quickFilter={quickFilter}
+          breakdownSelection={breakdownSelection}
+          onChartSelectionChange={setFlowChartSelection}
+          onQuickFilterChange={setQuickFilter}
+          onBreakdownSelectionChange={setBreakdownSelection}
+          resetTableFiltersToken={resetTableFiltersToken}
+          isRefreshing={showRefreshSkeleton}
+          hasMoreRecords={hasMoreTransactions && !useWorkbenchRowsForTable}
+          isLoadingMoreRecords={isLoadingMoreTransactions}
+          onLoadMoreRecords={onLoadMoreTransactions}
+          deepLinkedTransactionId={deepLinkedTransactionId}
+          deepLinkedTransactionTab={deepLinkedTransactionTab}
+        />
+      </div>
     </div>
   );
 };

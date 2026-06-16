@@ -14,6 +14,7 @@ import type {
   DaemonTransport,
 } from "./transport";
 import { DEFAULT_OPEN_COST_SAT } from "@/lib/lightning";
+import { accountMatchesLabel } from "@/lib/connectionTransactions";
 import { MOCK_PROFILES } from "@/mocks/profiles";
 import type {
   ProfileGainsAlgorithm,
@@ -447,6 +448,8 @@ type MockConnection = {
   syncMode?: string;
   syncSource?: string;
   gap?: number;
+  /** balance in BTC (float) — present on overview-snapshot connection rows. */
+  balance?: number;
 };
 
 const mockOverviewSnapshot = () =>
@@ -870,6 +873,19 @@ export const mockDaemon: DaemonTransport = {
           active_count: 0,
         };
         payload.summary.count = 0;
+      } else {
+        // Keep the on-chain inventory total consistent with the connection's
+        // imported-transaction balance so the Wallet Detail balance
+        // reconciliation renders its healthy (reconciled) state by default.
+        const balanceSat = Math.round((connection?.balance ?? 0) * 1e8);
+        payload.totals = [
+          {
+            asset: "BTC",
+            amount: (connection?.balance ?? 0).toFixed(8),
+            amount_sat: balanceSat,
+            amount_msat: balanceSat * 1000,
+          },
+        ];
       }
       return {
         kind: "ui.wallets.utxos",
@@ -877,6 +893,67 @@ export const mockDaemon: DaemonTransport = {
         request_id: req.request_id,
         data: payload as T,
       };
+    }
+
+    if (req.kind === "ui.reports.balance_history") {
+      const overview = mockOverviewSnapshot();
+      const args = (req.args ?? {}) as {
+        wallet?: unknown;
+        interval?: unknown;
+        limit?: unknown;
+      };
+      const walletRef = typeof args.wallet === "string" ? args.wallet : "";
+      const connection = walletRef
+        ? overview.connections.find(
+            (item) => item.id === walletRef || item.label === walletRef,
+          )
+        : undefined;
+      // Wallet-scoped history ramps up to the connection's current balance so
+      // the Wallet Detail sparkline reflects that wallet rather than the book
+      // total. Unscoped requests fall back to the static fixture.
+      if (walletRef && connection) {
+        const target = connection.balance ?? 0;
+        const months: Array<[number, number]> = [];
+        let year = 2025;
+        let month = 7;
+        for (let i = 0; i < 12; i += 1) {
+          months.push([year, month]);
+          month += 1;
+          if (month > 12) {
+            month = 1;
+            year += 1;
+          }
+        }
+        const rows = months.map(([y, m], index) => {
+          const progress = (index + 1) / months.length;
+          const wobble = 0.82 + 0.36 * ((index % 3) / 3);
+          const quantity =
+            index === months.length - 1
+              ? target
+              : Number((target * progress * wobble).toFixed(8));
+          // Mirror the real report_balance_history row shape (period_start, not
+          // a `bucket` field) so the preview exercises the production code path.
+          return {
+            period_start: `${y}-${String(m).padStart(2, "0")}-01T00:00:00Z`,
+            asset: "BTC",
+            quantity,
+          };
+        });
+        return {
+          kind: "ui.reports.balance_history",
+          schema_version: 1,
+          request_id: req.request_id,
+          data: {
+            rows,
+            filters: { interval: "month", limit: 120, wallet: walletRef },
+            summary: {
+              row_count: rows.length,
+              total_row_count: rows.length,
+              truncated: false,
+            },
+          } as T,
+        };
+      }
     }
 
     if (req.kind === "daemon.lock") {
@@ -3472,6 +3549,33 @@ export const mockDaemon: DaemonTransport = {
         request_id: req.request_id,
         data: { transaction, query } as T,
       };
+    }
+
+    if (req.kind === "ui.transactions.list") {
+      const args = (req.args ?? {}) as { wallet?: unknown };
+      const wallet =
+        typeof args.wallet === "string" && args.wallet.trim()
+          ? args.wallet.trim()
+          : null;
+      if (wallet) {
+        // Mirror the daemon's server-side wallet scoping so the preview's
+        // wallet deep links return that wallet's rows (leg-aware, so a
+        // transfer "Cold Storage -> Vault" is included for "Cold Storage").
+        const base = fixtures["ui.transactions.list"] as {
+          txs: Array<{ account?: string }>;
+          nextCursor: unknown;
+          hasMore: boolean;
+        };
+        const txs = base.txs.filter((tx) =>
+          accountMatchesLabel(tx.account, wallet),
+        );
+        return {
+          kind: "ui.transactions.list",
+          schema_version: 1,
+          request_id: req.request_id,
+          data: { ...base, txs, nextCursor: null, hasMore: false } as T,
+        };
+      }
     }
 
     const fixture = fixtures[req.kind];
