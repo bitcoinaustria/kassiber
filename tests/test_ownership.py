@@ -419,6 +419,73 @@ class CsvHarvestTests(unittest.TestCase):
         self.assertIn(self.BECH32, inputs)
         self.assertEqual(report["results"][0]["status"], "external")  # no wallets seeded
 
+    def test_recognized_column_rejects_non_address_labels(self):
+        # A recognized "wallet address" column with non-address labels (a common
+        # exchange-CSV shape) must NOT promote "internal"/labels to candidates.
+        text = (
+            "type,wallet address,amount\n"
+            "internal,internal,0.5\n"
+            f"out,{self.BECH32},1.0\n"
+            "exchange,SomeExchangeLabel,2.0\n"
+        )
+        self.assertEqual(ownership.extract_candidates_from_csv(text), [self.BECH32])
+
+    def test_base58_checksum_harvest(self):
+        valid = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"  # genesis P2PKH, valid checksum
+        corrupted = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfXX"  # bad checksum
+        text = f"address\n{valid}\n{corrupted}\nVacationFund2024\n"
+        got = ownership.extract_candidates_from_csv(text)
+        self.assertIn(valid, got)
+        self.assertNotIn(corrupted, got)  # checksum-invalid base58 rejected
+        self.assertNotIn("VacationFund2024", got)  # 8+ char plain word rejected
+
+    def test_unbalanced_quote_recovers_buried_token(self):
+        # An unterminated quote swallows later content into one runaway field;
+        # the raw-split safety net must still recover the buried txid.
+        text = f'address,memo\n{self.BECH32},"unterminated\n{self.TXID},ok\n'
+        got = ownership.extract_candidates_from_csv(text)
+        self.assertIn(self.BECH32, got)
+        self.assertIn(self.TXID, got)
+
+    def test_oversize_field_does_not_crash_and_recovers(self):
+        import csv as _csv
+
+        old = _csv.field_size_limit()
+        self.addCleanup(_csv.field_size_limit, old)
+        _csv.field_size_limit(64)
+        text = f"address\n{'a' * 200}\n{self.BECH32}\n"
+        self.assertIn(self.BECH32, ownership.extract_candidates_from_csv(text))
+
+    def test_max_harvest_truncation_warns(self):
+        cap = ownership.MAX_HARVEST_CANDIDATES
+        txids = "\n".join(f"{i:064x}" for i in range(cap + 5))
+        report = ownership.identify(_engine_conn(), "p1", csv_text=txids, scan_to_index=0)
+        self.assertEqual(len(report["results"]), cap)
+        self.assertTrue(report["warnings"])
+        self.assertIn("only the first", report["warnings"][0])
+
+
+class AiCsvStripTests(unittest.TestCase):
+    def test_for_ai_builder_drops_csv_text(self):
+        # The AI surface must never harvest a CSV: build_wallet_identify_snapshot_for_ai
+        # strips csv_text before delegating (defense in depth behind the schema).
+        from unittest import mock
+
+        from kassiber.core import ui_snapshot
+
+        captured: dict = {}
+
+        def _fake(conn, runtime_config, args):
+            captured["args"] = args
+            return {"results": [], "summary": {}, "warnings": []}
+
+        with mock.patch.object(ui_snapshot, "build_wallet_identify_snapshot", _fake):
+            ui_snapshot.build_wallet_identify_snapshot_for_ai(
+                None, None, {"csv_text": "bc1qsneaky", "addresses": ["bc1qkeep"]}
+            )
+        self.assertNotIn("csv_text", captured["args"])
+        self.assertEqual(captured["args"].get("addresses"), ["bc1qkeep"])
+
 
 class IdentifyVerifyTierTests(unittest.TestCase):
     def test_failed_verify_degrades_to_unknown_with_warning(self):

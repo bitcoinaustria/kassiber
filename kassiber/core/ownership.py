@@ -119,8 +119,9 @@ _TXID_HEADER_ALIASES = frozenset(
     }
 )
 
-# Upper bound on tokens harvested from one CSV, so a pathological file can't wedge
-# the (single-threaded) daemon; the caller surfaces a truncation warning.
+# Upper bound on tokens harvested from one CSV. The harvest loop stops once this
+# many are collected (bounding the per-cell validation work on a huge local
+# file), and the caller surfaces a truncation warning.
 MAX_HARVEST_CANDIDATES = 10_000
 
 
@@ -337,9 +338,12 @@ def _read_csv_rows(text: str) -> list[list[str]]:
         for row in reader:
             rows.append([str(cell) for cell in row])
     except csv.Error:
-        # Malformed CSV (e.g. unbalanced quotes): fall back to line/whitespace
-        # splitting so content harvesting can still recover tokens.
-        return [re.split(r"[\s,;|\t]+", line) for line in stripped.splitlines()]
+        # csv raises mid-iteration on e.g. an over-limit field; keep the rows
+        # parsed so far and recover the rest by splitting on delimiters.
+        # (An unbalanced quote does NOT raise — it swallows content into one
+        # runaway field; extract_candidates_from_csv's raw-split safety net
+        # covers that case.)
+        rows.extend(re.split(r"[\s,;|\t]+", line) for line in stripped.splitlines())
     return rows
 
 
@@ -358,43 +362,45 @@ def _recognize_csv_columns(header: Sequence[str]) -> tuple[list[int], list[int]]
 def extract_candidates_from_csv(text: str | None) -> list[str]:
     """Harvest address/txid tokens from arbitrary CSV text.
 
-    Two complementary passes, unioned and de-duplicated in first-seen order:
-
-    1. Header-targeted — cells under a recognized ``address``/``txid`` column are
-       taken verbatim (and validated downstream, so a bad value in a named column
-       still surfaces as ``invalid``).
-    2. Content harvest — every cell that is a strict 64-hex txid or a real
-       address (checksum-validated for base58) is collected, so tokens in
-       unrecognized columns or header-less files are still found without
-       harvesting plain words/amounts/dates.
+    Every candidate is strictly validated as a 64-hex txid or a real address
+    (bech32 HRP, or base58 that checksum-validates), so amounts, dates, memos,
+    and labels are ignored even when they sit under a recognized
+    ``address``/``txid`` header. Recognized columns are scanned first (so a named
+    column is preferred in output order); then every cell is content-scanned, so
+    tokens in unrecognized columns or header-less files are still found; finally
+    a raw delimiter split of the source is unioned in as a safety net so a token
+    swallowed into a malformed (e.g. unbalanced-quote) cell is still recovered.
+    De-duplicated in first-seen order, bounded by ``MAX_HARVEST_CANDIDATES``.
     """
-    rows = _read_csv_rows(text or "")
-    if not rows:
-        return []
-    address_cols, txid_cols = _recognize_csv_columns(rows[0])
-    recognized = bool(address_cols or txid_cols)
+    raw = text or ""
+    rows = _read_csv_rows(raw)
     seen: set[str] = set()
     out: list[str] = []
 
-    def _add(value: str) -> None:
+    def _add_strict(value: Any) -> bool:
+        """Add a strictly-valid token; return True once the harvest cap is hit."""
         token = str(value or "").strip()
-        if token and token not in seen:
+        if token and token not in seen and (_is_txid_token(token) or _looks_like_address(token)):
             seen.add(token)
             out.append(token)
+        return len(out) > MAX_HARVEST_CANDIDATES
 
-    if recognized:
-        for row in rows[1:]:
-            for column in (*address_cols, *txid_cols):
-                if column < len(row):
-                    _add(row[column])
-
-    for row in rows:
-        for cell in row:
-            token = str(cell or "").strip()
-            if not token:
-                continue
-            if _is_txid_token(token) or _looks_like_address(token):
-                _add(token)
+    if rows:
+        address_cols, txid_cols = _recognize_csv_columns(rows[0])
+        if address_cols or txid_cols:
+            for row in rows[1:]:
+                for column in (*address_cols, *txid_cols):
+                    if column < len(row) and _add_strict(row[column]):
+                        return out
+        for row in rows:
+            for cell in row:
+                if _add_strict(cell):
+                    return out
+    # Safety net: a malformed/unbalanced-quote cell can swallow later content into
+    # one runaway field, so also scan the raw text split on delimiters.
+    for token in re.split(r"[\s,;|\t]+", raw):
+        if _add_strict(token):
+            return out
     return out
 
 
@@ -402,14 +408,16 @@ def read_text_file(path: str, *, label: str = "file") -> str:
     """Read a UTF-8 text file, rejecting binary content (NUL bytes)."""
     from pathlib import Path
 
+    # Capitalize only the first character so acronym labels ("CSV file") survive.
+    titled = label[:1].upper() + label[1:]
     try:
         text = Path(path).read_text(encoding="utf-8")
     except FileNotFoundError as exc:
-        raise AppError(f"{label.capitalize()} not found: {path}", code="validation") from exc
+        raise AppError(f"{titled} not found: {path}", code="validation") from exc
     except (OSError, UnicodeDecodeError) as exc:
         raise AppError(f"Could not read {label}: {path}", code="validation") from exc
     if "\x00" in text:
-        raise AppError(f"{label.capitalize()} is not valid UTF-8 text", code="validation")
+        raise AppError(f"{titled} is not valid UTF-8 text", code="validation")
     return text
 
 

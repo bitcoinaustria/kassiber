@@ -227,6 +227,14 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertEqual(get_tool("ui_wallets_list").kind_class, "read_only")
         self.assertEqual(get_tool("ui_wallets_utxos").name, "ui.wallets.utxos")
         self.assertEqual(get_tool("ui_wallets_utxos").kind_class, "read_only")
+        # The AI identify tool must never accept a file/CSV harvest channel:
+        # only addresses/txids/text, with additionalProperties locked off.
+        _identify_params = get_tool("ui_wallets_identify").parameters
+        self.assertEqual(_identify_params.get("additionalProperties"), False)
+        self.assertEqual(
+            set(_identify_params.get("properties", {})),
+            {"addresses", "txids", "text"},
+        )
         self.assertEqual(get_tool("ui_backends_list").kind_class, "read_only")
         self.assertEqual(get_tool("ui_reports_summary").name, "ui.reports.summary")
         self.assertEqual(get_tool("ui_reports_summary").kind_class, "read_only")

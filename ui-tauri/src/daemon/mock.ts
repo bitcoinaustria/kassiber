@@ -902,22 +902,30 @@ export const mockDaemon: DaemonTransport = {
         tokens.push(...args.txids.map((value) => String(value)));
       }
       if (typeof args.csv_text === "string") {
-        // Smart harvest (mock approximation): split into cells and keep only
-        // address/txid-looking tokens, ignoring headers/amounts/dates.
+        // Smart harvest (mock approximation of the daemon harvester): split into
+        // cells and keep only address/txid-looking tokens, ignoring
+        // headers/amounts/dates. The mock can't checksum-validate base58, so it
+        // bounds the length (26-35) to limit false positives on long ids.
         for (const cell of args.csv_text.split(/[\s,;|\t]+/)) {
           const token = cell.trim();
           if (
             /^[0-9a-fA-F]{64}$/.test(token) ||
             /^(bc1|tb1|bcrt1|lq1|tlq1|ex1|tex1|el1|ert1)/i.test(token) ||
-            (/^[13mn2]/.test(token) && token.length >= 26 && /^[0-9A-Za-z]+$/.test(token))
+            (/^[13mn2][0-9A-Za-z]{25,34}$/.test(token))
           ) {
             tokens.push(token);
           }
         }
       }
-      const cleaned = tokens
-        .map((token) => token.trim())
-        .filter((token) => token.length > 0 && !token.startsWith("#"));
+      // De-duplicate in first-seen order to match the real daemon (which dedups
+      // in extract_candidates_from_csv and again in parse_tokens).
+      const cleaned = Array.from(
+        new Set(
+          tokens
+            .map((token) => token.trim())
+            .filter((token) => token.length > 0 && !token.startsWith("#")),
+        ),
+      );
       const ownerWallet = overview.connections[0]?.label ?? "Cold Storage";
       // Deterministic mock: a 64-hex string is a txid, otherwise an address;
       // tokens containing "own"/"mine"/"demo" demo an owned hit. The cache-only

@@ -352,6 +352,10 @@ export function Reconcile() {
     if (!file) return;
     try {
       const content = await file.text();
+      if (!content.trim()) {
+        setErrorMessage("That file is empty — nothing to import.");
+        return;
+      }
       setCsvText(content);
       setCsvName(file.name);
       await runMutation(check, "CSV import failed", content);
