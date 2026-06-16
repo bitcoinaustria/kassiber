@@ -322,7 +322,7 @@ function ProfileList({
                       {profile.taxPolicy}
                     </p>
                     <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-3">
-                      {profile.accounts} buckets · {profile.wallets} wallets
+                      {profile.accounts} accounts · {profile.wallets} wallets
                     </p>
                   </div>
                   <span className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-ink">

@@ -114,7 +114,7 @@ export const SyncExplainer = ({ form }: { form: OnboardingForm }) => (
         key: "default",
         icon: Globe2,
         title: "Built-in public backends",
-        body: "Bundled Esplora, Electrum, and Liquid endpoints. Fast start, but no no-log promise — use Tor/VPN or run your own if privacy matters.",
+        body: "Bundled Explorer API, Electrum / Fulcrum, and Liquid endpoints. Fast start, but the operator can still see your address queries — use Tor/VPN or run your own if privacy matters.",
       },
       {
         key: "custom",

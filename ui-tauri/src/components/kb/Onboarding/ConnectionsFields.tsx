@@ -12,6 +12,7 @@ import { useDaemonMutation } from "@/daemon/client";
 
 import {
   BACKEND_KINDS,
+  BACKEND_KIND_LABELS,
   DEFAULT_BACKEND_NAME,
   DEFAULT_BACKEND_URL,
   DEFAULT_ELECTRUM_SSL_PORT,
@@ -125,7 +126,7 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
         <ChoiceCard
           active={form.backendSetupMode === "default"}
           title="Use built-in public backends"
-          description="Start quickly with the bundled Fulcrum, Esplora, and Liquid endpoints. You can replace them later."
+          description="Start quickly with the bundled Explorer API, Electrum / Fulcrum, and Liquid endpoints. You can replace them later."
           onClick={() => {
             update("backendSetupMode", "default");
             update("backendKind", "electrum");
@@ -137,7 +138,7 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
         <ChoiceCard
           active={customSelected}
           title="Use a custom sync backend"
-          description="Point Kassiber at an Esplora, Electrum/Fulcrum, Bitcoin Core RPC, or Liquid endpoint."
+          description="Point Kassiber at an Explorer API (Esplora/mempool), Electrum / Fulcrum, Bitcoin Core RPC, or Liquid endpoint."
           onClick={() => {
             update("backendSetupMode", "custom");
             if (
@@ -168,6 +169,7 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
             label="Sync protocol"
             value={form.backendKind}
             options={BACKEND_KINDS}
+            optionLabels={BACKEND_KIND_LABELS}
             description="Payment providers and file imports are configured later from Connections."
             onChange={(value) => {
               update("backendKind", value);

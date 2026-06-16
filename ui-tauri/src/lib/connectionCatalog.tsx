@@ -212,7 +212,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "bitcoin-core",
     title: "Bitcoin Core",
-    description: "Bitcoin Core RPC backend for address-based source refresh.",
+    description: "Your own full node over JSON-RPC. Address-based sync only; no transaction links.",
     category: "nodes",
     image: bitcoinIcon,
     imageClassName: "size-7",
@@ -228,7 +228,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "electrum",
     title: "Electrum server",
-    description: "Electrum/Fulcrum backend for descriptor and address refresh.",
+    description: "Electrum protocol over TCP/SSL (e.g. Fulcrum, ElectrumX). Sync-only — no transaction links.",
     category: "nodes",
     image: sourceIcon("EL", "#2563eb", "#ffffff"),
     status: "ready",
@@ -243,7 +243,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "esplora",
     title: "Esplora / mempool",
-    description: "Esplora-compatible HTTP backend for Bitcoin source refresh.",
+    description: "Esplora / mempool.space-type HTTP REST API. Syncs and provides clickable transaction links.",
     category: "nodes",
     image: mempoolIcon,
     imageClassName: "size-7",
@@ -253,7 +253,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     formatLabel: "esplora",
     setupKind: "backend-settings",
     details: [
-      "Kassiber ships with a built-in mempool.space-compatible Bitcoin backend",
+      "Kassiber ships with a built-in Esplora/mempool-API Bitcoin backend",
       "Use Settings to add a self-hosted Esplora endpoint",
     ],
   },
