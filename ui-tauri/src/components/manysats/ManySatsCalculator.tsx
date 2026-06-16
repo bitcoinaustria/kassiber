@@ -217,8 +217,12 @@ export function ManySatsCalculator() {
     undefined,
     { refetchOnWindowFocus: false },
   );
-  const configuredProvider =
-    settingsQuery.data?.data?.settings?.market_rate_provider ?? null;
+  const settings = settingsQuery.data?.data?.settings;
+  const configuredProvider = settings?.market_rate_provider ?? null;
+  const providerFiats =
+    settings?.market_rate_fiats?.length
+      ? settings.market_rate_fiats
+      : [...LIVE_FIATS];
 
   const latestArgs = selectedFiat ? { pair: pairForFiat(selectedFiat) } : undefined;
   const latestQuery = useDaemon<RateLatestData>("ui.rates.latest", latestArgs, {
@@ -235,6 +239,11 @@ export function ManySatsCalculator() {
 
   const rate = rateFromLatest(latestQuery.data?.data);
   const displayFiat = (selectedFiat ?? rate?.fiatCurrency ?? "EUR").toUpperCase();
+  // Always include the active fiat so the Select renders a value even if the
+  // connected provider doesn't list it.
+  const fiatOptions = providerFiats.includes(displayFiat)
+    ? providerFiats
+    : [displayFiat, ...providerFiats];
   const price = rate?.price ?? null;
   const hasPrice = price != null && price > 0;
   // Effective rate the conversion uses, after premium/discount.
@@ -402,7 +411,7 @@ export function ManySatsCalculator() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {LIVE_FIATS.map((code) => (
+                {fiatOptions.map((code) => (
                   <SelectItem key={code} value={code}>
                     {code}
                   </SelectItem>

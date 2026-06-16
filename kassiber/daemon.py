@@ -2618,10 +2618,10 @@ def _rates_latest_payload(
             retryable=False,
         )
     if isinstance(pair_arg, str) and pair_arg.strip():
-        pair = core_rates.require_supported_pair(pair_arg)
+        pair = core_rates.require_spot_pair(pair_arg)
     else:
         _, profile = resolve_scope(conn, None, None)
-        pair = core_rates.transaction_rate_pair("BTC", profile["fiat_currency"])
+        pair = core_rates.spot_rate_pair("BTC", profile["fiat_currency"], source)
         if pair is None:
             raise AppError(
                 f"BTC market rates are not supported for {profile['fiat_currency']}",

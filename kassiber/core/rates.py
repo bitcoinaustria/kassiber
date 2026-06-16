@@ -43,10 +43,41 @@ LIVE_MARKET_RATE_SOURCES = (
     RATE_SOURCE_MEMPOOL,
 )
 MARKET_RATE_PROVIDER_SETTING = "market_rate_provider"
-_COINGECKO_VS = {"USD": "usd", "EUR": "eur"}
+# Live spot pairs the calculator/`ui.rates.latest` may fetch on demand. This is
+# intentionally broader than SUPPORTED_RATE_PAIRS (which still scopes the tax /
+# transaction-pricing / rebuild defaults). Spot fetches are explicit-pair only.
+SPOT_RATE_PAIRS = (
+    "BTC-USD",
+    "BTC-EUR",
+    "BTC-GBP",
+    "BTC-CHF",
+    "BTC-AUD",
+    "BTC-CAD",
+    "BTC-JPY",
+)
+_COINGECKO_VS = {
+    "USD": "usd",
+    "EUR": "eur",
+    "GBP": "gbp",
+    "CHF": "chf",
+    "AUD": "aud",
+    "CAD": "cad",
+    "JPY": "jpy",
+}
 _COINGECKO_COIN = {"BTC": "bitcoin"}
-_COINBASE_EXCHANGE_PRODUCT = {"BTC-USD": "BTC-USD", "BTC-EUR": "BTC-EUR"}
-_MEMPOOL_PRICE_QUOTES = {"USD", "EUR"}
+_COINBASE_EXCHANGE_PRODUCT = {
+    "BTC-USD": "BTC-USD",
+    "BTC-EUR": "BTC-EUR",
+    "BTC-GBP": "BTC-GBP",
+}
+_MEMPOOL_PRICE_QUOTES = {"USD", "EUR", "GBP", "CAD", "CHF", "AUD", "JPY"}
+# Live spot fiats each provider can quote (used to offer a provider-aware
+# currency picker). Subset of SPOT_RATE_PAIRS fiats.
+_PROVIDER_SPOT_FIATS = {
+    RATE_SOURCE_COINBASE_EXCHANGE: ("USD", "EUR", "GBP"),
+    RATE_SOURCE_COINGECKO: ("USD", "EUR", "GBP", "CHF", "AUD", "CAD", "JPY"),
+    RATE_SOURCE_MEMPOOL: ("USD", "EUR", "GBP", "CAD", "CHF", "AUD", "JPY"),
+}
 _RATE_ASSET_ALIASES = {"LBTC": "BTC"}
 _KRAKEN_STABLECOIN_QUOTES = {"DAI", "USDC", "USDT"}
 _KRAKEN_SUPPORTED_QUOTES = {"EUR", "USD"}
@@ -136,6 +167,42 @@ def normalize_market_rate_provider(source=None):
             hint=f"Supported automatic market-rate providers: {', '.join(LIVE_MARKET_RATE_SOURCES)}",
         )
     return normalized
+
+
+def require_spot_pair(pair):
+    """Validate a live-spot pair (broader than require_supported_pair)."""
+    normalized = _normalize_rate_pair(pair)
+    if normalized not in SPOT_RATE_PAIRS:
+        raise AppError(
+            f"Pair '{normalized}' is not a supported live spot pair",
+            code="validation",
+            hint=f"Supported live spot pairs: {', '.join(SPOT_RATE_PAIRS)}",
+        )
+    return normalized
+
+
+def spot_fiats_for_provider(source=None):
+    """Fiat codes a provider can quote live, in display order (USD/EUR first)."""
+    normalized = normalize_market_rate_provider(source)
+    return list(_PROVIDER_SPOT_FIATS.get(normalized, ("USD", "EUR")))
+
+
+def spot_rate_pair(asset, fiat, source=None):
+    """`BTC-<FIAT>` for a live spot fetch, or None when unsupported.
+
+    When ``source`` is given, the fiat must be quotable by that provider.
+    """
+    asset_code = str(asset or "").strip().upper()
+    fiat_code = str(fiat or "").strip().upper()
+    if not asset_code or not fiat_code:
+        return None
+    asset_code = _RATE_ASSET_ALIASES.get(asset_code, asset_code)
+    pair = f"{asset_code}-{fiat_code}"
+    if pair not in SPOT_RATE_PAIRS:
+        return None
+    if source is not None and fiat_code not in spot_fiats_for_provider(source):
+        return None
+    return pair
 
 
 def get_market_rate_provider(conn):
@@ -624,7 +691,7 @@ def _coingecko_market_chart(coin_id, vs, days):
 
 
 def fetch_rates_coingecko(pair, days=30):
-    normalized = require_supported_pair(pair)
+    normalized = require_spot_pair(pair)
     asset, fiat = rate_pair_parts(normalized)
     coin_id = _COINGECKO_COIN.get(asset)
     vs = _COINGECKO_VS.get(fiat)
@@ -632,7 +699,7 @@ def fetch_rates_coingecko(pair, days=30):
         raise AppError(
             f"Pair '{normalized}' has no CoinGecko mapping",
             code="validation",
-            hint=f"Supported pairs: {', '.join(SUPPORTED_RATE_PAIRS)}",
+            hint=f"CoinGecko quotes BTC in: {', '.join(sorted(_COINGECKO_VS))}",
         )
     return _coingecko_market_chart(coin_id, vs, days)
 
@@ -745,13 +812,13 @@ def _mempool_price_from_payload(payload, fiat, *, default_timestamp):
 
 
 def _fetch_mempool_latest_price(conn, pair):
-    normalized = require_supported_pair(pair)
+    normalized = require_spot_pair(pair)
     _, fiat = rate_pair_parts(normalized)
     if fiat not in _MEMPOOL_PRICE_QUOTES:
         raise AppError(
             f"Pair '{normalized}' has no mempool price mapping",
             code="validation",
-            hint=f"Supported pairs: {', '.join(SUPPORTED_RATE_PAIRS)}",
+            hint=f"mempool quotes BTC in: {', '.join(sorted(_MEMPOOL_PRICE_QUOTES))}",
         )
     backend = _mempool_provider_backend(conn)
     fetched_at = _iso_z(datetime.now(timezone.utc))
@@ -834,13 +901,13 @@ def _coinbase_exchange_url(product_id, start, end, granularity):
 
 
 def _coinbase_exchange_candles(pair, start, end, granularity=60):
-    normalized = require_supported_pair(pair)
+    normalized = require_spot_pair(pair)
     product_id = _COINBASE_EXCHANGE_PRODUCT.get(normalized)
     if not product_id:
         raise AppError(
             f"Pair '{normalized}' has no Coinbase Exchange mapping",
             code="validation",
-            hint=f"Supported pairs: {', '.join(SUPPORTED_RATE_PAIRS)}",
+            hint=f"Coinbase Exchange quotes BTC in: {', '.join(sorted(p.split('-')[1] for p in _COINBASE_EXCHANGE_PRODUCT))}",
         )
     payload = http_get_json(
         _coinbase_exchange_url(product_id, start, end, granularity),
@@ -1378,7 +1445,9 @@ def sync_latest_rates(
         else normalize_market_rate_provider(source)
     )
     if pair:
-        pairs = [require_supported_pair(pair)]
+        # Live spot accepts the broader provider-aware set; the no-pair default
+        # stays scoped to SUPPORTED_RATE_PAIRS (used by background warmup).
+        pairs = [require_spot_pair(pair)]
     else:
         pairs = list(SUPPORTED_RATE_PAIRS)
     fetched_at = _iso_z(datetime.now(timezone.utc))
@@ -2112,6 +2181,7 @@ __all__ = [
     "RATE_SOURCE_COINGECKO",
     "RATE_SOURCE_KRAKEN_CSV",
     "RATE_SOURCE_MEMPOOL",
+    "SPOT_RATE_PAIRS",
     "SUPPORTED_RATE_PAIRS",
     "SUPPORTED_RATE_SOURCES",
     "ensure_bundled_kraken_btc_daily_seed",
@@ -2125,8 +2195,11 @@ __all__ = [
     "normalize_market_rate_provider",
     "rate_pair_parts",
     "rebuild_rates_cache",
+    "require_spot_pair",
     "require_supported_pair",
     "set_market_rate_provider",
+    "spot_fiats_for_provider",
+    "spot_rate_pair",
     "set_manual_rate",
     "sync_bundled_kraken_btc_daily",
     "sync_latest_rates",
