@@ -4,6 +4,7 @@ import * as React from "react";
 import { TransactionsDashboard } from "@/components/transactions/dashboard/TransactionsDashboard";
 import {
   readTransactionDetailParams,
+  readTransactionScopeParams,
   type SwapCandidateReference,
 } from "@/components/transactions/dashboard/model";
 import { ScreenNotice, ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
@@ -39,6 +40,10 @@ export function Transactions() {
   const routeSearch = useRouterState({ select: (state) => state.location.search });
   const detailParams = React.useMemo(
     () => readTransactionDetailParams(),
+    [routeSearch],
+  );
+  const scopeParams = React.useMemo(
+    () => readTransactionScopeParams(),
     [routeSearch],
   );
   const transactionArgs = React.useMemo(
@@ -164,6 +169,8 @@ export function Transactions() {
       focusedTransaction={focusedTransaction.data?.data?.transaction ?? null}
       deepLinkedTransactionId={detailParams.transactionId}
       deepLinkedTransactionTab={detailParams.tab}
+      deepLinkedWallet={scopeParams.wallet}
+      deepLinkedQuickFilter={scopeParams.quick}
     />
   );
 }

@@ -6,19 +6,25 @@
  */
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useIsMutating, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import {
   ArrowDownRight,
   ArrowLeft,
   ArrowLeftRight,
+  ArrowRight,
   ArrowUpRight,
+  AlertTriangle,
+  CheckCircle2,
+  CircleDollarSign,
   Database,
+  ListChecks,
   MoreHorizontal,
   Pencil,
   Plus,
   RefreshCw,
   RotateCcw,
+  ShieldCheck,
   Trash2,
   Wallet,
 } from "lucide-react";
@@ -30,6 +36,7 @@ import { DetailRow } from "@/components/kb/DetailRow";
 import { MetricCard } from "@/components/kb/MetricCard";
 import {
   UtxosInventoryPanel,
+  WalletBalanceHistoryCard,
   type WalletUtxosData,
 } from "@/components/kb/wallets";
 import { useOverviewTransactionDetail } from "@/components/overview-dashboard/useOverviewTransactionDetail";
@@ -85,6 +92,8 @@ import { formatShortDate } from "@/lib/date";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 import { editConfigKindForConnection } from "@/lib/connectionEditKind";
 import { describeWalletSyncResult, type SyncResult } from "@/lib/syncResults";
+import { transactionBelongsToConnection } from "@/lib/connectionTransactions";
+import { buildBalanceReconciliation } from "@/lib/walletBalanceReconcile";
 import { MISSING_FIAT_LABEL } from "@/lib/currency";
 import {
   startingSyncProgress,
@@ -94,6 +103,7 @@ import {
 import { detectWalletMaterial } from "@/lib/walletMaterialFormat";
 import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
+import { useConnectionRefreshState } from "@/hooks/useConnectionRefreshState";
 import type {
   Connection,
   ConnectionKind,
@@ -137,6 +147,11 @@ const fmtEurSigned = (amountEur: number | null) =>
     : `${amountEur >= 0 ? "+ " : "- "}${fmtEur(Math.abs(amountEur))}`;
 const fmtShortTxid = (value?: string) =>
   !value ? "no id" : value.length <= 18 ? value : `${value.slice(0, 10)}…${value.slice(-6)}`;
+
+const relatedViewLinkClass =
+  "flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const relatedViewIconClass =
+  "flex size-8 shrink-0 items-center justify-center rounded-md border bg-muted/40 text-muted-foreground";
 
 const PLAINTEXT_CHANGE_ACK = "CHANGE LOCAL DATA";
 const PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA";
@@ -368,9 +383,7 @@ function NodeConnectionContainer({
     ? { ...connection, node: liveSnapshot }
     : connection;
   const walletSyncMutationKey = daemonMutationKey(dataMode, "ui.wallets.sync");
-  const walletSyncsInFlight = useIsMutating({
-    mutationKey: walletSyncMutationKey,
-  });
+  const connectionRefreshing = useConnectionRefreshState(connection);
   // TODO: switch to ui.connections.node.sync (or similar) once #154/#155 land
   // a real node-sync kind. ui.wallets.sync is a mock-only stop-gap — the
   // Python daemon won't execute it for lnd/core-ln/nwc kinds yet.
@@ -395,10 +408,7 @@ function NodeConnectionContainer({
   const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
   const nodeSyncDedupeKey = `node-sync-${connection.id}`;
 
-  const isSyncRunning =
-    syncWallet.isPending ||
-    walletSyncsInFlight > 0 ||
-    connection.status === "syncing";
+  const isSyncRunning = syncWallet.isPending || connectionRefreshing;
 
   const onSync = () => {
     if (
@@ -511,9 +521,7 @@ function ConnectionDetailView({
     useState<string | null>(null);
   const syncNoticeIdRef = useRef<string | null>(null);
   const walletSyncMutationKey = daemonMutationKey(dataMode, "ui.wallets.sync");
-  const walletSyncsInFlight = useIsMutating({
-    mutationKey: walletSyncMutationKey,
-  });
+  const connectionRefreshing = useConnectionRefreshState(connection);
   const progressValueRef = useRef(startingSyncProgress().value ?? 5);
   const syncWallet = useDaemonStreamMutation<
     { results: SyncResult[] },
@@ -577,7 +585,17 @@ function ConnectionDetailView({
   };
   const walletProvenanceRoutes = walletDetail?.btcpay_provenance ?? [];
   const samouraiMetadata = walletDetail?.samourai ?? null;
-  const samouraiInventory = coinsInventoryQuery.data?.data;
+  const inventory = coinsInventoryQuery.data?.data;
+  const samouraiInventory = inventory;
+  // Balance reconciliation: the "Balance" tile sums imported transactions,
+  // while the UTXO inventory is the watch-only on-chain coin set. For a
+  // fully-synced wallet they should match; a gap usually means a stale sync
+  // or excluded/quarantined rows. Only sources that expose a UTXO inventory
+  // can be reconciled (cashu and other unsupported sources cannot).
+  const reconciliation = buildBalanceReconciliation(
+    connection.balance,
+    inventory,
+  );
   const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
   const [syncErrorMessage, setSyncErrorMessage] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -611,13 +629,10 @@ function ConnectionDetailView({
         ? "File import source"
         : "Wallet source";
   const hasGapMetric = connection.gap != null;
-  const txsForConnection = txs
-    .filter((tx) => {
-      const account = tx.account.toLowerCase();
-      const label = connection.label.toLowerCase();
-      return account === label || account.includes(label);
-    })
-    .slice(0, 6);
+  const connectionTxs = txs.filter((tx) =>
+    transactionBelongsToConnection(tx, connection),
+  );
+  const txsForConnection = connectionTxs.slice(0, 6);
 
   useEffect(() => {
     if (!pendingUtxoTransactionId || utxoTransactionQuery.isLoading) return;
@@ -657,11 +672,8 @@ function ConnectionDetailView({
     utxoTransactionQuery.error,
     utxoTransactionQuery.isLoading,
   ]);
-  const txCount = connection.transactionCount ?? txsForConnection.length;
-  const isWalletSyncRunning =
-    syncWallet.isPending ||
-    walletSyncsInFlight > 0 ||
-    connection.status === "syncing";
+  const txCount = connection.transactionCount ?? connectionTxs.length;
+  const isWalletSyncRunning = syncWallet.isPending || connectionRefreshing;
   const refreshButtonLabel = isWalletSyncRunning ? "Refreshing" : "Refresh";
 
   const onSync = (options?: { forceFull?: boolean }) => {
@@ -1073,6 +1085,81 @@ function ConnectionDetailView({
         />
       </div>
 
+      {reconciliation.available ? (
+        <Card
+          className={cn(
+            "rounded-xl py-3",
+            !reconciliation.reconciled &&
+              "border-amber-300 dark:border-amber-900/60",
+          )}
+        >
+          <CardContent className="flex flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
+              {/* On-chain is the authoritative figure for a watch-only wallet;
+                  the books are what we check against it. */}
+              <div>
+                <div className="text-xs text-muted-foreground">
+                  On-chain inventory
+                </div>
+                <div
+                  className={cn(
+                    "font-mono text-sm font-semibold tabular-nums",
+                    blurClass(hideSensitive),
+                  )}
+                >
+                  {fmtBtc(reconciliation.utxoSat / 1e8)}
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  Watch-only source of truth
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">
+                  Recorded in your books
+                </div>
+                <div
+                  className={cn(
+                    "font-mono text-sm font-semibold tabular-nums",
+                    blurClass(hideSensitive),
+                  )}
+                >
+                  {fmtBtc(reconciliation.importedSat / 1e8)}
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  Feeds tax &amp; reports
+                </div>
+              </div>
+            </div>
+            <div className="sm:text-right">
+              {reconciliation.reconciled ? (
+                <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                  <CheckCircle2 className="size-4" aria-hidden="true" />
+                  Books match the chain
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-sm font-medium text-amber-700 dark:text-amber-300">
+                  <AlertTriangle className="size-4" aria-hidden="true" />
+                  {reconciliation.deltaSat < 0
+                    ? `${fmtBtc(Math.abs(reconciliation.deltaSat) / 1e8)} on-chain not in your books`
+                    : `${fmtBtc(Math.abs(reconciliation.deltaSat) / 1e8)} in your books isn't on-chain`}
+                </span>
+              )}
+              <div className="mt-0.5 text-xs text-muted-foreground">
+                {reconciliation.reconciled
+                  ? `Every on-chain sat is accounted for${
+                      reconciliation.lastSyncedAt
+                        ? ` · synced ${formatShortDate(reconciliation.lastSyncedAt)}`
+                        : ""
+                    }`
+                  : reconciliation.deltaSat < 0
+                    ? "An inbound is excluded or the sync is stale — refresh, or unhide excluded transactions."
+                    : "Likely a manual or duplicate entry, or a spend that didn't sync — refresh or review those rows."}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <UtxosInventoryPanel
         inventory={coinsInventoryQuery.data?.data}
         isLoading={coinsInventoryQuery.isLoading}
@@ -1267,13 +1354,37 @@ function ConnectionDetailView({
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.85fr)]">
         <Card>
           <CardHeader className="border-b px-4 pb-3">
-            <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
-              Recent transactions
-              <CountBadge>{txsForConnection.length}</CountBadge>
-            </CardTitle>
-            <CardDescription>
-              Recent transactions for this wallet source.
-            </CardDescription>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+                  Recent transactions
+                  <CountBadge>{txCount.toLocaleString("en-US")}</CountBadge>
+                </CardTitle>
+                <CardDescription>
+                  {connectionTxs.length > txsForConnection.length
+                    ? `Showing the ${txsForConnection.length} most recent for this wallet source.`
+                    : "Recent transactions for this wallet source."}
+                </CardDescription>
+              </div>
+              {connectionTxs.length > 0 ? (
+                <Button
+                  asChild
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                >
+                  <Link
+                    to="/transactions"
+                    search={{ wallet: connection.label }}
+                    hash="transactions-table"
+                  >
+                    Show all
+                    <ArrowRight className="size-4" aria-hidden="true" />
+                  </Link>
+                </Button>
+              ) : null}
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             {txsForConnection.length ? (
@@ -1319,6 +1430,10 @@ function ConnectionDetailView({
         </Card>
 
         <div className="space-y-3">
+          <WalletBalanceHistoryCard
+            walletId={connection.id}
+            hideSensitive={hideSensitive}
+          />
           <Card>
             <CardHeader className="border-b px-4 pb-3">
               <CardTitle className="text-sm sm:text-base">Connection details</CardTitle>
@@ -1367,6 +1482,102 @@ function ConnectionDetailView({
                 mono
               />
               <DetailRow label="Kassiber ID" value={connection.id} mono copy />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="border-b px-4 pb-3">
+              <CardTitle className="text-sm sm:text-base">Related views</CardTitle>
+              <CardDescription>
+                Jump to this wallet&apos;s records across Kassiber.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="divide-y">
+                <Link
+                  to="/transactions"
+                  search={{ wallet: connection.label }}
+                  hash="transactions-table"
+                  className={relatedViewLinkClass}
+                >
+                  <span className={relatedViewIconClass} aria-hidden="true">
+                    <ArrowLeftRight className="size-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium">
+                      All transactions
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {txCount.toLocaleString("en-US")} in this wallet
+                    </span>
+                  </span>
+                  <ArrowRight
+                    className="size-4 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                </Link>
+                <Link
+                  to="/transactions"
+                  search={{ wallet: connection.label, quick: "review_queue" }}
+                  hash="transactions-table"
+                  className={relatedViewLinkClass}
+                >
+                  <span className={relatedViewIconClass} aria-hidden="true">
+                    <ListChecks className="size-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium">
+                      Needs review
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      Rows not yet marked reviewed
+                    </span>
+                  </span>
+                  <ArrowRight
+                    className="size-4 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                </Link>
+                <Link
+                  to="/transactions"
+                  search={{ wallet: connection.label, quick: "missing_price" }}
+                  hash="transactions-table"
+                  className={relatedViewLinkClass}
+                >
+                  <span className={relatedViewIconClass} aria-hidden="true">
+                    <CircleDollarSign className="size-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium">
+                      Missing price
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      Unpriced rows block tax reports
+                    </span>
+                  </span>
+                  <ArrowRight
+                    className="size-4 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                </Link>
+                <Link to="/source-of-funds" className={relatedViewLinkClass}>
+                  <span className={relatedViewIconClass} aria-hidden="true">
+                    <ShieldCheck className="size-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium">
+                      Source of funds
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      Evidence &amp; provenance readiness
+                    </span>
+                  </span>
+                  <ArrowRight
+                    className="size-4 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                </Link>
+              </div>
             </CardContent>
           </Card>
         </div>

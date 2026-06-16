@@ -63,6 +63,15 @@ type TableQuickFilter =
 type BreakdownSelection = {
   dimension: "network" | "wallet";
   key: string;
+  /**
+   * How the wallet `key` matches transaction rows. The breakdown chart buckets
+   * transfers by their full account string ("A → B"), so chart-driven
+   * selections must match exactly to keep the table count equal to the clicked
+   * bar's count. The Wallet dropdown and the "Show all" deep link instead match
+   * by transfer leg (so "Cold Storage" also surfaces "Cold Storage → Vault").
+   * Absent / "exact" = full-string match (chart, network); "leg" = leg-aware.
+   */
+  match?: "exact" | "leg";
 };
 
 type FlowChartClickData = {
@@ -997,6 +1006,35 @@ function readTransactionDetailParams() {
   };
 }
 
+const quickFilterValues: TableQuickFilter[] = [
+  "external_flow",
+  "review_queue",
+  "no_explorer_id",
+  "missing_price",
+  "failed_import",
+];
+
+/**
+ * Read the wallet/quick-filter scope from the URL. Used by Wallet Detail
+ * deep links ("Show all" / "Needs review") that arrive at
+ * `/transactions?wallet=<label>&quick=review_queue#transactions-table`.
+ */
+function readTransactionScopeParams(): {
+  wallet: string | null;
+  quick: TableQuickFilter | null;
+} {
+  if (typeof window === "undefined") return { wallet: null, quick: null };
+  const params = new URLSearchParams(window.location.search);
+  const wallet = params.get("wallet");
+  const quick = params.get("quick");
+  return {
+    wallet: wallet && wallet.trim() ? wallet : null,
+    quick: quickFilterValues.includes(quick as TableQuickFilter)
+      ? (quick as TableQuickFilter)
+      : null,
+  };
+}
+
 function updateTransactionDetailParams(
   transactionId: string | null,
   tab = "details",
@@ -1122,6 +1160,7 @@ export {
   periodLabels,
   quickFilterLabel,
   readTransactionDetailParams,
+  readTransactionScopeParams,
   recordsForPeriod,
   removeAttachmentRecord,
   replaceAttachmentRecord,

@@ -424,6 +424,93 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(len(fetch_calls), 1)
         self.assertEqual(fetch_utxos.call_count, 1)
 
+    def test_esplora_incremental_refetches_when_balance_changes(self):
+        # Companion to test_esplora_checkpoint_skips_unchanged_script_pages:
+        # the unchanged-script skip is rate-limit-safe, but it MUST NOT skip a
+        # script whose on-chain stats changed. A new deposit changes the
+        # fingerprint (funded_txo_sum / tx_count), so the incremental sync has
+        # to re-fetch that script and emit the new record — otherwise the
+        # summed wallet balance would only move on a full rescan. Regression
+        # guard for the reported "balances only update on a full rescan" bug.
+        target = {"address": "bc1qesplora", "script_pubkey": "0014" + "11" * 20}
+        tx1 = {
+            "txid": "11" * 32,
+            "fee": 0,
+            "vin": [],
+            "vout": [{"scriptpubkey": target["script_pubkey"], "value": 12_345}],
+            "status": {"block_time": 1_700_000_000},
+        }
+        tx2 = {
+            "txid": "22" * 32,
+            "fee": 0,
+            "vin": [],
+            "vout": [{"scriptpubkey": target["script_pubkey"], "value": 50_000}],
+            "status": {"block_time": 1_700_100_000},
+        }
+        stats_first = {
+            "chain_stats": {
+                "funded_txo_count": 1,
+                "funded_txo_sum": 12_345,
+                "spent_txo_count": 0,
+                "spent_txo_sum": 0,
+                "tx_count": 1,
+            },
+            "mempool_stats": {"tx_count": 0},
+        }
+        stats_second = {
+            "chain_stats": {
+                "funded_txo_count": 2,
+                "funded_txo_sum": 62_345,
+                "spent_txo_count": 0,
+                "spent_txo_sum": 0,
+                "tx_count": 2,
+            },
+            "mempool_stats": {"tx_count": 0},
+        }
+        backend = {
+            "name": "esplora",
+            "kind": "esplora",
+            "url": "https://esplora.example",
+        }
+        wallet = {"id": "wallet-1"}
+
+        def make_state(checkpoint=None):
+            return WalletSyncState(
+                chain="bitcoin",
+                network="bitcoin",
+                descriptor_plan=None,
+                policy_asset_id="",
+                targets=[target],
+                tracked_scripts={target["script_pubkey"]: target},
+                history_cache={},
+                **({"checkpoint": checkpoint} if checkpoint else {}),
+            )
+
+        with patch(
+            "kassiber.core.sync_backends.esplora_scripthash_stats",
+            side_effect=[stats_first, stats_second],
+        ), patch(
+            "kassiber.core.sync_backends.fetch_esplora_scripthash_transactions",
+            side_effect=[[tx1], [tx1, tx2]],
+        ), patch(
+            "kassiber.core.sync_backends.fetch_esplora_scripthash_utxos",
+            return_value=[],
+        ):
+            records1, meta1 = esplora_sync_adapter(backend, wallet, make_state())
+            records2, meta2 = esplora_sync_adapter(
+                backend, wallet, make_state(meta1["freshness_checkpoint"])
+            )
+
+        # First sync establishes the single deposit.
+        self.assertEqual({record["txid"] for record in records1}, {"11" * 32})
+        # Incremental sync sees the changed fingerprint, re-fetches, and emits
+        # the new deposit so the summed balance grows from 12_345 to 62_345.
+        self.assertEqual(meta2["scripts_unchanged"], 0)
+        self.assertEqual(meta2["scripts_changed"], 1)
+        self.assertEqual(
+            {record["txid"] for record in records2}, {"11" * 32, "22" * 32}
+        )
+
     def test_esplora_descriptor_discovery_rechecks_previously_unused_scripts(self):
         target = {"address": "bc1qgap", "script_pubkey": "0014" + "22" * 20}
         scripthash = scriptpubkey_scripthash(target["script_pubkey"])
