@@ -482,20 +482,32 @@ def upsert_rate(
     }
 
 
-def get_latest_rate(conn, pair):
+def get_latest_rate(conn, pair, source=None):
+    """Latest cached rate for a pair.
+
+    When ``source`` is given, only rows from that provider are considered, so
+    the live spot path can return the just-synced provider row instead of a
+    manual override or a stale row from a different provider that happens to
+    have a newer timestamp.
+    """
     normalized = _normalize_rate_pair(pair)
+    params = [normalized]
+    source_clause = ""
+    if source is not None:
+        source_clause = " AND source = ?"
+        params.append(str(source))
     row = conn.execute(
-        """
+        f"""
         SELECT pair, timestamp, rate, rate_exact, source, fetched_at, granularity, method
         FROM rates_cache
-        WHERE pair = ?
+        WHERE pair = ?{source_clause}
         ORDER BY timestamp DESC,
                  CASE WHEN source = 'manual' THEN 0 ELSE 1 END ASC,
                  fetched_at DESC,
                  source ASC
         LIMIT 1
         """,
-        (normalized,),
+        tuple(params),
     ).fetchone()
     if not row:
         raise AppError(

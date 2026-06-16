@@ -2636,7 +2636,9 @@ def _rates_latest_payload(
         commit=True,
     )
     try:
-        rate = core_rates.get_latest_rate(conn, pair)
+        # Scope to the requested provider so the live converter never shows a
+        # manual override or a stale row from a different provider.
+        rate = core_rates.get_latest_rate(conn, pair, source=source)
     except AppError as exc:
         if exc.code != "not_found":
             raise
