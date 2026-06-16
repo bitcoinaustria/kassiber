@@ -931,8 +931,10 @@ export const mockDaemon: DaemonTransport = {
             index === months.length - 1
               ? target
               : Number((target * progress * wobble).toFixed(8));
+          // Mirror the real report_balance_history row shape (period_start, not
+          // a `bucket` field) so the preview exercises the production code path.
           return {
-            bucket: `${y}-${String(m).padStart(2, "0")}-01T00:00:00Z`,
+            period_start: `${y}-${String(m).padStart(2, "0")}-01T00:00:00Z`,
             asset: "BTC",
             quantity,
           };

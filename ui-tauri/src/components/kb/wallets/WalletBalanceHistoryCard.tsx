@@ -32,7 +32,9 @@ import {
 } from "@/components/overview-dashboard/model";
 
 interface BalanceHistoryRow {
-  bucket: string;
+  /** Real daemon (report_balance_history) emits `period_start`; older mocks used `bucket`. */
+  period_start?: string;
+  bucket?: string;
   asset: string;
   quantity: number | string;
 }
@@ -80,9 +82,11 @@ export function WalletBalanceHistoryCard({
     for (const row of rows) {
       const asset = (row.asset ?? "").toUpperCase();
       if (asset !== "BTC" && asset !== "LBTC" && asset !== "L-BTC") continue;
+      const period = row.period_start ?? row.bucket;
+      if (!period) continue;
       byBucket.set(
-        row.bucket,
-        (byBucket.get(row.bucket) ?? 0) + (Number(row.quantity) || 0),
+        period,
+        (byBucket.get(period) ?? 0) + (Number(row.quantity) || 0),
       );
     }
     return Array.from(byBucket.entries())
