@@ -55,14 +55,22 @@ export function WalletBalanceHistoryCard({
 
   const points = useMemo(() => {
     const rows = query.data?.data?.rows ?? [];
-    const btc = rows.filter((row) => {
+    // balance_history returns one row per asset per period. Aggregate the
+    // BTC-denominated assets by bucket so a wallet with both BTC and L-BTC
+    // activity gets one point per period (and `latest`/`change` reflect the
+    // total, not whichever asset row happened to be last).
+    const byBucket = new Map<string, number>();
+    for (const row of rows) {
       const asset = (row.asset ?? "").toUpperCase();
-      return asset === "BTC" || asset === "LBTC" || asset === "L-BTC";
-    });
-    return btc.map((row) => ({
-      bucket: row.bucket,
-      quantity: Number(row.quantity) || 0,
-    }));
+      if (asset !== "BTC" && asset !== "LBTC" && asset !== "L-BTC") continue;
+      byBucket.set(
+        row.bucket,
+        (byBucket.get(row.bucket) ?? 0) + (Number(row.quantity) || 0),
+      );
+    }
+    return Array.from(byBucket.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([bucket, quantity]) => ({ bucket, quantity }));
   }, [query.data]);
 
   // Nothing meaningful to plot — keep the screen uncluttered for sources with

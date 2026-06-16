@@ -142,7 +142,6 @@ const TransactionsTable = ({
   onChartSelectionChange,
   onQuickFilterChange,
   onBreakdownSelectionChange,
-  onWalletScopeChange,
   resetTableFiltersToken,
   isRefreshing,
   hasMoreRecords = false,
@@ -163,7 +162,6 @@ const TransactionsTable = ({
   onChartSelectionChange: (selection: FlowChartSelection | null) => void;
   onQuickFilterChange: (filter: TableQuickFilter | null) => void;
   onBreakdownSelectionChange: (selection: BreakdownSelection | null) => void;
-  onWalletScopeChange?: (wallet: string | null) => void;
   resetTableFiltersToken: number;
   isRefreshing?: boolean;
   hasMoreRecords?: boolean;
@@ -273,21 +271,18 @@ const TransactionsTable = ({
     if (selectedWalletKey) legs.add(selectedWalletKey);
     return Array.from(legs).sort((a, b) => a.localeCompare(b));
   }, [records, selectedWalletKey]);
-  // Selecting/clearing a wallet drives the parent's wallet-scope state so the
-  // daemon queries re-scope to that wallet (complete history, not a client
-  // filter over the fetched page). breakdownSelection is set in lockstep for
-  // the immediate chip + dropdown state.
+  // Selecting/clearing a leg-mode wallet goes through breakdownSelection; the
+  // dashboard derives the parent's server-side wallet scope from it (so every
+  // clear path stays in sync, not just this dropdown).
   const selectWalletScope = React.useCallback(
-    (key: string) => {
-      onBreakdownSelectionChange({ dimension: "wallet", key, match: "leg" });
-      onWalletScopeChange?.(key);
-    },
-    [onBreakdownSelectionChange, onWalletScopeChange],
+    (key: string) =>
+      onBreakdownSelectionChange({ dimension: "wallet", key, match: "leg" }),
+    [onBreakdownSelectionChange],
   );
-  const clearWalletScope = React.useCallback(() => {
-    onBreakdownSelectionChange(null);
-    onWalletScopeChange?.(null);
-  }, [onBreakdownSelectionChange, onWalletScopeChange]);
+  const clearWalletScope = React.useCallback(
+    () => onBreakdownSelectionChange(null),
+    [onBreakdownSelectionChange],
+  );
   const getDraft = React.useCallback(
     (txn: Transaction) => drafts[txn.id] ?? draftForTransaction(txn),
     [drafts],
@@ -1049,12 +1044,7 @@ const TransactionsTable = ({
             <button
               type="button"
               className={filterChipClassName}
-              onClick={() =>
-                breakdownSelection.dimension === "wallet" &&
-                breakdownSelection.match === "leg"
-                  ? clearWalletScope()
-                  : onBreakdownSelectionChange(null)
-              }
+              onClick={() => onBreakdownSelectionChange(null)}
               aria-label={`Clear ${breakdownSelectionLabel(breakdownSelection)} filter`}
             >
               {breakdownSelectionLabel(breakdownSelection)}

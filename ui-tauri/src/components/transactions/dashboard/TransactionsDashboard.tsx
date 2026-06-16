@@ -203,6 +203,20 @@ const TransactionsDashboard = ({
     setResetTableFiltersToken((token) => token + 1);
   }, []);
 
+  // Keep the parent's wallet scope (which server-scopes the ui.transactions.list
+  // queries) in lockstep with the wallet selection. Deriving it from
+  // breakdownSelection means EVERY clear path propagates — "Clear all", period
+  // change, chart / quick-filter resets — not just the dropdown's own clear, so
+  // the chip and the queried scope never disagree.
+  React.useEffect(() => {
+    onWalletScopeChange?.(
+      breakdownSelection?.dimension === "wallet" &&
+        breakdownSelection.match === "leg"
+        ? breakdownSelection.key
+        : null,
+    );
+  }, [breakdownSelection, onWalletScopeChange]);
+
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
@@ -285,7 +299,6 @@ const TransactionsDashboard = ({
           onChartSelectionChange={setFlowChartSelection}
           onQuickFilterChange={setQuickFilter}
           onBreakdownSelectionChange={setBreakdownSelection}
-          onWalletScopeChange={onWalletScopeChange}
           resetTableFiltersToken={resetTableFiltersToken}
           isRefreshing={showRefreshSkeleton}
           hasMoreRecords={hasMoreTransactions && !useWorkbenchRowsForTable}
