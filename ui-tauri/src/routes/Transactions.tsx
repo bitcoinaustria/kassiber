@@ -53,12 +53,20 @@ export function Transactions() {
   // table. The daemon `wallet` filter matches by wallet_id / label, so it
   // returns the wallet's complete history (including its transfers).
   //
-  // This is plain React state (seeded from the deep-link param at mount) rather
-  // than the URL, so the dropdown/clear mutate it directly and the queries
-  // refetch reliably — the screen's other filters are client state too.
+  // This is plain React state (seeded from the deep-link param) so the
+  // dropdown/clear mutate it directly and the queries refetch reliably.
   const [walletScope, setWalletScope] = React.useState<string | null>(
     scopeParams.wallet ?? null,
   );
+  // Same-route navigations that change only the search string — the sidebar
+  // Transactions link, browser back/forward, or a different wallet deep link —
+  // don't remount this route, so re-sync the query scope from the URL whenever
+  // its `wallet` param changes (the mount-time seed alone would go stale). A
+  // dropdown pick changes `walletScope` without touching the URL, so this won't
+  // clobber it (scopeParams.wallet is unchanged → effect doesn't fire).
+  React.useEffect(() => {
+    setWalletScope(scopeParams.wallet ?? null);
+  }, [scopeParams.wallet]);
   const transactionArgs = React.useMemo(
     () => ({
       limit: TRANSACTIONS_PAGE_LIMIT,
@@ -164,6 +172,11 @@ export function Transactions() {
 
   return (
     <TransactionsDashboard
+      // Re-seed the dashboard's filter state (breakdownSelection / quickFilter)
+      // when the URL scope changes on a same-route navigation. A dropdown pick
+      // mutates client state without touching the URL, so the key is stable and
+      // the dashboard is not remounted in that case.
+      key={`${scopeParams.wallet ?? ""}::${scopeParams.quick ?? ""}`}
       transactions={transactions}
       tableTransactions={tableTransactions}
       nowRate={nowRate}
