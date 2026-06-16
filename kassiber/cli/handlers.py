@@ -2643,20 +2643,7 @@ def identify_wallet_owners(
     if not verify_on_chain:
         return _run(None)
 
-    if not isinstance(runtime_config, dict):
-        raise AppError(
-            "On-chain verification is unavailable without backend configuration",
-            code="validation",
-        )
-    backend = resolve_backend(runtime_config, verify_backend)
-    kind = core_sync.normalize_backend_kind(backend.get("kind"))
-    if kind not in {"esplora", "electrum"}:
-        raise AppError(
-            f"On-chain verification needs an Esplora or Electrum backend, not '{kind}'",
-            code="validation",
-            hint="Pass --verify-backend with an Esplora or Electrum backend name.",
-        )
-
+    backend = core_sync_backends.resolve_verify_backend(runtime_config, verify_backend)
     # One reused connection for the whole batch (Electrum); stateless for Esplora.
     with core_sync_backends.verify_session(backend) as fetcher:
         return _run(fetcher)

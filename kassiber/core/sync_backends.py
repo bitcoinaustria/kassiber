@@ -20,7 +20,7 @@ from urllib import request as urlrequest
 
 from .. import __version__
 from .. import http_client
-from ..backends import backend_batch_size, backend_timeout, backend_value
+from ..backends import backend_batch_size, backend_timeout, backend_value, resolve_backend
 from ..db import APP_NAME
 from ..envelope import json_ready
 from ..errors import AppError
@@ -1038,6 +1038,30 @@ def fetch_transaction_legs(backend, txid, chain=None, *, client=None):
         code="validation",
         hint="Pass --verify-backend pointing at an Esplora or Electrum endpoint.",
     )
+
+
+def resolve_verify_backend(runtime_config, name=None):
+    """Resolve and validate the backend used for on-chain verification.
+
+    Normalizes the kind first (so aliases like ``liquid-esplora`` are accepted)
+    and requires an Esplora or Electrum endpoint. Shared by the CLI
+    ``--verify-on-chain`` handler and the ``ui.wallets.identify_onchain`` daemon
+    kind so the resolution + allowlist live in one place.
+    """
+    if not isinstance(runtime_config, dict):
+        raise AppError(
+            "On-chain verification is unavailable without backend configuration",
+            code="validation",
+        )
+    backend = resolve_backend(runtime_config, name)
+    kind = normalize_backend_kind(backend.get("kind"))
+    if kind not in {"esplora", "electrum"}:
+        raise AppError(
+            f"On-chain verification needs an Esplora or Electrum backend, not '{kind}'",
+            code="validation",
+            hint="Use an Esplora or Electrum backend for verification.",
+        )
+    return backend
 
 
 @contextmanager
@@ -2706,6 +2730,7 @@ __all__ = [
     "fetch_esplora_transaction",
     "fetch_transaction_legs",
     "resolve_wallet_sync_targets",
+    "resolve_verify_backend",
     "verify_session",
     "sync_target_from_address",
     "sync_target_from_derived",

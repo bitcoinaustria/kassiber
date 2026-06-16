@@ -8,7 +8,7 @@ from collections import defaultdict
 from datetime import date, datetime, timezone
 from typing import Any
 
-from ..backends import backend_value, redact_backend_for_output, resolve_backend
+from ..backends import backend_value, redact_backend_for_output
 from ..errors import AppError
 from ..msat import msat_to_btc
 from ..tax_policy import build_tax_policy
@@ -3830,26 +3830,12 @@ def build_wallet_identify_onchain_snapshot(
     context, profile = _active_context_and_profile(conn)
     if profile is None:
         return _empty_identify_payload()
-    if not isinstance(runtime_config, dict):
-        raise AppError(
-            "On-chain verification is unavailable without backend configuration",
-            code="validation",
-            retryable=False,
-        )
     inputs = _identify_inputs(args)
     scan_to_index = inputs["scan_to_index"]
     if scan_to_index is None:
         scan_to_index = core_ownership.DEFAULT_SCAN_TO_INDEX
     backend_name = args.get("backend") if isinstance(args, dict) else None
-    backend = resolve_backend(runtime_config, backend_name)
-    kind = normalize_backend_kind(backend.get("kind"))
-    if kind not in {"esplora", "electrum"}:
-        raise AppError(
-            f"On-chain verification needs an Esplora or Electrum backend, not '{kind}'",
-            code="validation",
-            hint="Choose an Esplora or Electrum backend for verification.",
-            retryable=False,
-        )
+    backend = core_sync_backends.resolve_verify_backend(runtime_config, backend_name)
     with core_sync_backends.verify_session(backend) as fetcher:
         report = core_ownership.identify(
             conn,

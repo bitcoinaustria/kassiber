@@ -619,6 +619,23 @@ class IdentifyVerifyTierTests(unittest.TestCase):
         self.assertEqual(result["external_outputs"], 1)
         self.assertEqual(result["match_source"], "chain")
 
+    def test_verify_validation_error_reraises(self):
+        # A deterministic setup error (e.g. an Electrum backend with no chain)
+        # must fail the run, not be silently degraded to a per-txid "unknown".
+        from kassiber.errors import AppError
+
+        def bad_backend(_txid, _chain):
+            raise AppError("backend needs a chain", code="validation")
+
+        with self.assertRaises(AppError):
+            ownership.identify(
+                _engine_conn(),
+                "p1",
+                txids=["ab" * 32],
+                scan_to_index=0,
+                verify_fetcher=bad_backend,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

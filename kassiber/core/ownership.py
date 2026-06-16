@@ -972,10 +972,18 @@ def identify(
         if legs is None and verify_fetcher is not None:
             # The on-chain tier is best-effort enrichment: an unknown txid is a
             # backend 404 (a urllib HTTPError, not AppError) and is the common
-            # reconciliation case, so a failed lookup must degrade this one
-            # candidate to "unknown" rather than abort the whole batch.
+            # reconciliation case, so a failed lookup degrades this one candidate
+            # to "unknown" rather than aborting the batch. A deterministic
+            # validation AppError (e.g. an Electrum backend with no chain set) is
+            # a broken config, not a per-txid miss — re-raise it so the run fails
+            # loudly instead of silently marking every txid unknown.
             try:
                 legs = verify_fetcher(txid, str(token.get("chain") or ""))
+            except AppError as exc:
+                if exc.code == "validation":
+                    raise
+                warnings.append(f"On-chain verify for {txid[:12]}…: {exc}")
+                legs = None
             except Exception as exc:  # noqa: BLE001 - network enrichment is non-fatal
                 warnings.append(f"On-chain verify for {txid[:12]}…: {exc}")
                 legs = None
