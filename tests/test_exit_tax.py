@@ -403,9 +403,11 @@ class ExitTaxEngineIntegrationTests(unittest.TestCase):
 
         state = handlers.build_ledger_state(conn, profile)
         entry_types = {str(e.get("entry_type")) for e in state["entries"]}
-        self.assertTrue(
-            entry_types <= exit_tax.RECOGNIZED_ENTRY_TYPES,
-            msg=f"RP2 emitted unrecognized entry_type(s) {entry_types - exit_tax.RECOGNIZED_ENTRY_TYPES}; "
+        unexpected_entry_types = entry_types - exit_tax.RECOGNIZED_ENTRY_TYPES
+        self.assertSetEqual(
+            unexpected_entry_types,
+            set(),
+            msg=f"RP2 emitted unrecognized entry_type(s) {unexpected_entry_types}; "
             "update kassiber/core/exit_tax.py RECOGNIZED_ENTRY_TYPES and the walk.",
         )
         for entry in state["entries"]:
