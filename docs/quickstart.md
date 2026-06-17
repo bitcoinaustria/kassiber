@@ -132,6 +132,11 @@ python3 -m kassiber transfers payouts create --tx-out <out-id> \
   --counterparty "recipient or exchange" --policy carrying-value
 ```
 
+When one on-chain spend both returns funds to an owned wallet and pays a
+provider/recipient, add `--out-amount <btc>` to record only the payout portion
+of the source transaction. The remaining source amount can still resolve as the
+same-transaction-id self-transfer instead of being absorbed as a giant fee.
+
 Cross-asset BTC ↔ LBTC peg-ins/peg-outs and submarine swaps:
 
 - **Generic profiles** — pairs are surfaced and audit-linked, but still

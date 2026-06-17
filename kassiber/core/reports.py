@@ -1068,7 +1068,7 @@ def _report_query_rows(conn, profile, wallet=None):
             COALESCE(tout.external_id, '') AS out_transaction_id,
             wout.label AS out_wallet,
             tout.asset AS out_asset,
-            tout.amount AS out_amount,
+            COALESCE(p.out_amount, tout.amount) AS out_amount,
             tout.fee AS out_fee
         FROM direct_swap_payouts p
         JOIN transactions tout ON tout.id = p.out_transaction_id

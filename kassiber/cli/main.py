@@ -1423,6 +1423,12 @@ def build_parser() -> argparse.ArgumentParser:
     transfers_payouts_create.add_argument("--payout-fiat-value", dest="payout_fiat_value")
     transfers_payouts_create.add_argument("--payout-external-id", dest="payout_external_id")
     transfers_payouts_create.add_argument("--counterparty")
+    transfers_payouts_create.add_argument(
+        "--out-amount",
+        dest="out_amount",
+        help="Portion of the outbound (BTC) paid through the direct payout; "
+        "the remainder can still resolve as a same-asset self-transfer.",
+    )
     transfers_payouts_create.add_argument("--policy", choices=list(TRANSFER_PAIR_POLICIES), default="carrying-value")
     transfers_payouts_create.add_argument("--note", dest="note")
     transfers_payouts_delete = transfers_payouts_sub.add_parser("delete")
@@ -3035,6 +3041,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                         counterparty=args.counterparty,
                         policy=args.policy,
                         notes=args.note,
+                        out_amount=args.out_amount,
                     ),
                 )
             if args.payouts_command == "delete":

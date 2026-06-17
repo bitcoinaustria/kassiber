@@ -2639,6 +2639,112 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(audit["cross_asset_pairs"][0]["out_wallet"], "Spend")
         self.assertEqual(audit["cross_asset_pairs"][0]["in_wallet"], "Liq")
 
+    def test_18_split_direct_payout_self_transfer_plus_generic_sale(self):
+        workspace = "SplitPayoutGeneric"
+        self._cli("init")
+        self._cli("workspaces", "create", workspace)
+        self._cli("profiles", "create", "--workspace", workspace,
+                  "--fiat-currency", "USD", "--tax-country", "generic", "SplitPayout")
+        for label in ("Spend", "Keep"):
+            self._cli("wallets", "create", "--workspace", workspace,
+                      "--profile", "SplitPayout", "--label", label, "--kind", "custom")
+        self._cli("wallets", "import-csv", "--workspace", workspace, "--profile", "SplitPayout",
+                  "--wallet", "Spend", "--file", str(self.split_swap_spend_csv))
+        self._cli("wallets", "import-csv", "--workspace", workspace, "--profile", "SplitPayout",
+                  "--wallet", "Keep", "--file", str(self.split_swap_keep_csv))
+
+        payload = self._cli("journals", "process", "--workspace", workspace, "--profile", "SplitPayout")
+        self.assertGreaterEqual(payload["data"]["quarantined"], 1)
+        payload = self._cli("journals", "quarantined", "--workspace", workspace, "--profile", "SplitPayout")
+        self.assertIn("transfer_fee_implausible", [q["reason"] for q in payload["data"]])
+
+        payload = self._cli("transfers", "payouts", "create",
+                            "--workspace", workspace, "--profile", "SplitPayout",
+                            "--tx-out", "splitswap-out",
+                            "--payout-asset", "BTC", "--payout-amount", "0.0198",
+                            "--payout-fiat-value", "1200",
+                            "--payout-external-id", "recipient-txid",
+                            "--counterparty", "external recipient",
+                            "--policy", "taxable",
+                            "--out-amount", "0.02")
+        self._assert_kind(payload, "transfers.payouts.create")
+        self.assertEqual(payload["data"]["out_amount"], 2000000000)
+        self.assertEqual(payload["data"]["swap_fee_msat"], 20000000)
+
+        payload = self._cli("transfers", "payouts", "list",
+                            "--workspace", workspace, "--profile", "SplitPayout")
+        payout = payload["data"][0]
+        self.assertEqual(payout["out"]["amount_msat"], 2000000000)
+        self.assertEqual(payout["out"]["full_amount_msat"], 5000000000)
+
+        payload = self._cli("journals", "process", "--workspace", workspace, "--profile", "SplitPayout")
+        self.assertEqual(payload["data"]["quarantined"], 0)
+        self.assertEqual(payload["data"]["transfers_detected"], 1)
+        self.assertEqual(payload["data"]["direct_swap_payouts"], 1)
+
+        payload = self._cli("reports", "journal-entries",
+                            "--workspace", workspace, "--profile", "SplitPayout")
+        transfer_fees = [
+            entry for entry in payload["data"]
+            if entry["entry_type"] == "transfer_fee"
+        ]
+        self.assertTrue(all(entry["quantity_msat"] < 2000000000 for entry in transfer_fees))
+        disposals = [
+            entry for entry in payload["data"]
+            if entry["entry_type"] == "disposal"
+            and entry["asset"] == "BTC"
+            and entry["quantity_msat"] == -2000000000
+        ]
+        self.assertEqual(len(disposals), 1)
+
+    def test_19_split_direct_payout_austrian_carrying_value_neutral_swap(self):
+        workspace = "SplitPayoutAT"
+        self._cli("init")
+        self._cli("workspaces", "create", workspace)
+        self._cli("profiles", "create", "--workspace", workspace,
+                  "--fiat-currency", "EUR", "--tax-country", "at", "SplitPayoutAT")
+        for label in ("Spend", "Keep"):
+            self._cli("wallets", "create", "--workspace", workspace,
+                      "--profile", "SplitPayoutAT", "--label", label, "--kind", "custom")
+        self._cli("wallets", "import-csv", "--workspace", workspace, "--profile", "SplitPayoutAT",
+                  "--wallet", "Spend", "--file", str(self.split_swap_spend_csv))
+        self._cli("wallets", "import-csv", "--workspace", workspace, "--profile", "SplitPayoutAT",
+                  "--wallet", "Keep", "--file", str(self.split_swap_keep_csv))
+
+        self._cli("journals", "process", "--workspace", workspace, "--profile", "SplitPayoutAT")
+        payload = self._cli("transfers", "payouts", "create",
+                            "--workspace", workspace, "--profile", "SplitPayoutAT",
+                            "--tx-out", "splitswap-out",
+                            "--payout-asset", "LBTC", "--payout-amount", "0.0198",
+                            "--payout-fiat-value", "1188",
+                            "--payout-external-id", "external-lbtc-recipient",
+                            "--counterparty", "external recipient",
+                            "--policy", "carrying-value",
+                            "--out-amount", "0.02")
+        self._assert_kind(payload, "transfers.payouts.create")
+
+        payload = self._cli("journals", "process", "--workspace", workspace, "--profile", "SplitPayoutAT")
+        self.assertEqual(payload["data"]["quarantined"], 0)
+        self.assertEqual(payload["data"]["transfers_detected"], 1)
+        self.assertEqual(payload["data"]["direct_swap_payouts"], 1)
+
+        payload = self._cli("reports", "journal-entries",
+                            "--workspace", workspace, "--profile", "SplitPayoutAT")
+        neu_swap = [
+            entry for entry in payload["data"]
+            if entry.get("at_category") == "neu_swap"
+            and entry["asset"] == "BTC"
+        ]
+        self.assertEqual(len(neu_swap), 1)
+        self.assertAlmostEqual(float(neu_swap[0]["gain_loss"]), 0.0, places=6)
+        taxable = [
+            entry for entry in payload["data"]
+            if entry.get("at_category") == "neu_gain"
+            and entry["asset"] == "LBTC"
+        ]
+        self.assertEqual(len(taxable), 1)
+        self.assertEqual(taxable[0]["asset"], "LBTC")
+
 
 class AccountBucketBehaviorTest(unittest.TestCase):
     def setUp(self):

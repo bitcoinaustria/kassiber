@@ -75,6 +75,9 @@ _DESKTOP_RATE_READ_KINDS = (
 _DESKTOP_SWAP_MATCHING_KINDS = (
     "ui.transfers.suggest",
     "ui.transfers.list",
+    "ui.transfers.payouts.list",
+    "ui.transfers.payouts.create",
+    "ui.transfers.payouts.delete",
     "ui.transfers.pair",
     "ui.transfers.unpair",
     "ui.transfers.bulk_pair",
