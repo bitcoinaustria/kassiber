@@ -686,6 +686,98 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(rows[1]["branch_label"], "change")
         self.assertEqual(len(rows[0]["key_origins"]), 4)
 
+    def test_03c_wallet_identify_classifies_ownership(self):
+        derived = self._cli(
+            "wallets", "derive",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "Vault",
+            "--branch", "receive",
+            "--start", "0",
+            "--count", "1",
+        )
+        owned = derived["data"][0]["address"]
+        external = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
+
+        payload = self._cli(
+            "wallets", "identify",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "Vault",
+            "--address", owned,
+            "--address", external,
+            "--txid", "not-a-valid-txid",
+            "--scan-to-index", "5",
+        )
+        self._assert_kind(payload, "wallets.identify")
+        data = payload["data"]
+        self.assertEqual(data["summary"]["owned"], 1)
+        self.assertEqual(data["summary"]["external"], 1)
+        self.assertEqual(data["summary"]["invalid"], 1)
+        self.assertFalse(data["summary"]["verified_on_chain"])
+
+        by_input = {row["input"]: row for row in data["results"]}
+        self.assertEqual(by_input[owned]["status"], "owned")
+        self.assertEqual(by_input[owned]["matches"][0]["branch"], "receive")
+        self.assertEqual(by_input[owned]["matches"][0]["wallet"], "Vault")
+        self.assertEqual(by_input[external]["status"], "external")
+
+        # --candidate auto-detects address vs txid, and --file reads a mixed
+        # list (with comments/blank lines) — exercise both at the CLI layer.
+        list_file = os.path.join(self._tmp.name, "reconcile.txt")
+        with open(list_file, "w", encoding="utf-8") as handle:
+            handle.write(f"# reconcile list\n{owned}\n\n{external}\n")
+        payload = self._cli(
+            "wallets", "identify",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "Vault",
+            "--candidate", owned,
+            "--file", list_file,
+            "--scan-to-index", "5",
+        )
+        self._assert_kind(payload, "wallets.identify")
+        # owned appears via both --candidate and --file but dedupes to one row.
+        candidate_inputs = [row["input"] for row in payload["data"]["results"]]
+        self.assertEqual(candidate_inputs.count(owned), 1)
+        self.assertEqual(payload["data"]["summary"]["owned"], 1)
+        self.assertEqual(payload["data"]["summary"]["external"], 1)
+
+        # --csv smart-imports a messy spreadsheet (semicolon delimiter, noise
+        # columns, an oddly-named txid column) and harvests only the tokens.
+        csv_file = os.path.join(self._tmp.name, "reconcile.csv")
+        with open(csv_file, "w", encoding="utf-8") as handle:
+            handle.write("Date;Amount;Wallet Address;Memo;Tx Hash\n")
+            handle.write(f"2024-01-01;0.5;{owned};rent;{'a' * 64}\n")
+            handle.write(f"2024-02-01;1.0;{external};coffee;\n")
+        payload = self._cli(
+            "wallets", "identify",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "Vault",
+            "--csv", csv_file,
+            "--scan-to-index", "5",
+        )
+        self._assert_kind(payload, "wallets.identify")
+        csv_summary = payload["data"]["summary"]
+        self.assertEqual(csv_summary["owned"], 1)
+        self.assertEqual(csv_summary["external"], 1)
+        self.assertEqual(csv_summary["unknown"], 1)  # the harvested txid
+        csv_by_input = {row["input"]: row for row in payload["data"]["results"]}
+        self.assertEqual(csv_by_input[owned]["status"], "owned")
+        self.assertNotIn("0.5", csv_by_input)  # amounts/dates/memos are not harvested
+
+        # No candidates is a validation error, not an empty success.
+        error_payload, code = _run(
+            self.data_root,
+            "wallets", "identify",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(error_payload["kind"], "error")
+        self.assertEqual(error_payload["error"]["code"], "validation")
+
     def test_04_phoenix_import(self):
         payload = self._cli(
             "wallets", "import-phoenix",

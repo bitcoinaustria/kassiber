@@ -144,6 +144,11 @@ python3 -m kassiber journals process
 python3 -m kassiber reports summary
 ```
 
+To reconcile old flows, `kassiber wallets identify` (or the desktop **Reconcile**
+screen) checks whether pasted addresses / transaction ids belong to any of your
+wallets — receive or change — and flags the externals, classifying each
+transaction as a self-transfer, outbound payment, or inbound receipt.
+
 For transfer pairing, swap matching, source-of-funds, Austrian E 1kv,
 BTCPay reconciliation, and the concept model, see
 [docs/quickstart.md](docs/quickstart.md). The desktop GUI is optional:

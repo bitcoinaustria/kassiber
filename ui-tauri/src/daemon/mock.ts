@@ -896,6 +896,189 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (
+      req.kind === "ui.wallets.identify" ||
+      req.kind === "ui.wallets.identify_onchain"
+    ) {
+      const verified = req.kind === "ui.wallets.identify_onchain";
+      const overview = mockOverviewSnapshot();
+      const args = (req.args ?? {}) as {
+        text?: unknown;
+        addresses?: unknown;
+        txids?: unknown;
+        csv_text?: unknown;
+      };
+      const tokens: string[] = [];
+      if (typeof args.text === "string") {
+        tokens.push(...args.text.split(/\r?\n/));
+      }
+      if (Array.isArray(args.addresses)) {
+        tokens.push(...args.addresses.map((value) => String(value)));
+      }
+      if (Array.isArray(args.txids)) {
+        tokens.push(...args.txids.map((value) => String(value)));
+      }
+      if (typeof args.csv_text === "string") {
+        // Smart harvest (mock approximation of the daemon harvester): split into
+        // cells and keep only address/txid-looking tokens, ignoring
+        // headers/amounts/dates. The mock can't checksum-validate base58, so it
+        // bounds the length (26-35) to limit false positives on long ids.
+        for (const cell of args.csv_text.split(/[\s,;|\t]+/)) {
+          const token = cell.trim();
+          if (
+            /^[0-9a-fA-F]{64}$/.test(token) ||
+            /^(bc1|tb1|bcrt1|lq1|tlq1|ex1|tex1|el1|ert1)/i.test(token) ||
+            (/^[13mn2][0-9A-Za-z]{25,34}$/.test(token))
+          ) {
+            tokens.push(token);
+          }
+        }
+      }
+      // De-duplicate in first-seen order to match the real daemon (which dedups
+      // in extract_candidates_from_csv and again in parse_tokens).
+      const cleaned = Array.from(
+        new Set(
+          tokens
+            .map((token) => token.trim())
+            .filter((token) => token.length > 0 && !token.startsWith("#")),
+        ),
+      );
+      const ownerWallet = overview.connections[0]?.label ?? "Cold Storage";
+      // Deterministic mock: a 64-hex string is a txid, otherwise an address;
+      // tokens containing "own"/"mine"/"demo" demo an owned hit. The cache-only
+      // kind mirrors the real read surface (owned txid -> touches_wallet, else
+      // unknown); the on-chain kind upgrades txids to a per-leg verdict.
+      let receiveIndex = 0;
+      const results = cleaned.map((token) => {
+        const isTxid = /^[0-9a-fA-F]{64}$/.test(token);
+        const owned = /own|mine|demo/i.test(token);
+        // A txid can't contain "demo" (non-hex), so use a hex-valid sentinel to
+        // demo the owned-txid path (touches_wallet cache-only, self_transfer
+        // once verified); any other 64-hex txid stays unknown/external.
+        const ownedTxid = isTxid && token.toLowerCase().startsWith("dead");
+        if (isTxid) {
+          if (ownedTxid) {
+            return verified
+              ? {
+                  input: token,
+                  type: "txid",
+                  chain: "bitcoin",
+                  status: "owned",
+                  classification: "self_transfer",
+                  wallets: [ownerWallet],
+                  owned_inputs: 1,
+                  owned_outputs: 2,
+                  external_outputs: 0,
+                  legs: [
+                    { side: "input", outpoint: `${token}:0`, owned: true, wallet: ownerWallet },
+                    { side: "output", n: 0, owned: true, wallet: ownerWallet, branch: "change" },
+                  ],
+                  match_source: "chain",
+                  note: "Self-transfer/consolidation: all outputs return to owned addresses.",
+                }
+              : {
+                  input: token,
+                  type: "txid",
+                  chain: "",
+                  status: "owned",
+                  classification: "touches_wallet",
+                  wallets: [ownerWallet],
+                  owned_inputs: null,
+                  owned_outputs: null,
+                  external_outputs: null,
+                  legs: [],
+                  match_source: "inventory",
+                  note: `Recorded against '${ownerWallet}'; per-leg breakdown needs on-chain verification.`,
+                };
+          }
+          return verified
+            ? {
+                input: token,
+                type: "txid",
+                chain: "bitcoin",
+                status: "external",
+                classification: "external",
+                wallets: [],
+                owned_inputs: 0,
+                owned_outputs: 0,
+                external_outputs: 1,
+                legs: [],
+                match_source: "chain",
+                note: "No inputs or outputs belong to this profile.",
+              }
+            : {
+                input: token,
+                type: "txid",
+                chain: "",
+                status: "unknown",
+                classification: "unknown",
+                wallets: [],
+                owned_inputs: null,
+                owned_outputs: null,
+                external_outputs: null,
+                legs: [],
+                match_source: "none",
+                note: "Not in this profile's synced/imported history; on-chain verification is needed for a verdict.",
+              };
+        }
+        if (owned) {
+          const index = receiveIndex++;
+          return {
+            input: token,
+            type: "address",
+            chain: "bitcoin",
+            status: "owned",
+            classification: "owned_address",
+            matches: [
+              {
+                wallet: ownerWallet,
+                account: "treasury",
+                chain: "bitcoin",
+                network: "main",
+                branch: "receive",
+                address_index: index,
+                derivation_path: `m/84'/0'/0'/0/${index}`,
+                match_source: "derived",
+              },
+            ],
+            note: `Owned by '${ownerWallet}' (receive #${index}).`,
+          };
+        }
+        return {
+          input: token,
+          type: "address",
+          chain: "bitcoin",
+          status: "external",
+          classification: "external_address",
+          matches: [],
+          note: "Not derived from or seen by any wallet in this profile.",
+        };
+      });
+      const counts = { owned: 0, external: 0, unknown: 0, invalid: 0 };
+      for (const result of results) {
+        if (result.status in counts) {
+          counts[result.status as keyof typeof counts] += 1;
+        }
+      }
+      return {
+        kind: req.kind,
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          results,
+          summary: {
+            total: results.length,
+            ...counts,
+            wallets_scanned: overview.connections.length,
+            scan_to_index: 500,
+            verified_on_chain: verified,
+          },
+          warnings: [],
+          context: { workspace: "Demo", profile: "Default" },
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.reports.balance_history") {
       const overview = mockOverviewSnapshot();
       const args = (req.args ?? {}) as {

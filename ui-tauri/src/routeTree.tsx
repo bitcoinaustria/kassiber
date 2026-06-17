@@ -64,6 +64,10 @@ const Quarantine = lazyRouteComponent(
   () => import("./routes/Quarantine"),
   "Quarantine",
 );
+const Reconcile = lazyRouteComponent(
+  () => import("./routes/Reconcile"),
+  "Reconcile",
+);
 const Logs = lazyRouteComponent(() => import("./routes/Logs"), "Logs");
 const Books = lazyRouteComponent(() => import("./routes/Books"), "Books");
 const BirdsEye = lazyRouteComponent(
@@ -203,6 +207,12 @@ const quarantineRoute = createRoute({
   component: Quarantine,
 });
 
+const reconcileRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/reconcile",
+  component: Reconcile,
+});
+
 const logsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/logs",
@@ -324,6 +334,7 @@ const routeTree = rootRoute.addChildren([
     transferMatchingRoute,
     taxEventsRoute,
     quarantineRoute,
+    reconcileRoute,
     logsRoute,
     diagnosticsRoute,
     booksRoute,

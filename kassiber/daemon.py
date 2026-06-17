@@ -121,6 +121,9 @@ from .core.ui_snapshot import (
     build_transactions_snapshot,
     build_wallet_utxos_snapshot_for_ai,
     build_wallet_utxos_snapshot,
+    build_wallet_identify_snapshot_for_ai,
+    build_wallet_identify_snapshot,
+    build_wallet_identify_onchain_snapshot,
     build_wallets_list_snapshot,
     build_workspace_health_snapshot,
     build_workspace_overview_snapshot,
@@ -233,6 +236,8 @@ SUPPORTED_KINDS = (
     "ui.attachments.open",
     "ui.wallets.list",
     "ui.wallets.utxos",
+    "ui.wallets.identify",
+    "ui.wallets.identify_onchain",
     "ui.backends.list",
     "ui.backends.options",
     "ui.backends.public_defaults",
@@ -3140,6 +3145,12 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                 payload = build_wallets_list_snapshot(conn, runtime.runtime_config)
             elif entry.daemon_kind == "ui.wallets.utxos":
                 payload = build_wallet_utxos_snapshot_for_ai(
+                    conn,
+                    runtime.runtime_config,
+                    call.arguments,
+                )
+            elif entry.daemon_kind == "ui.wallets.identify":
+                payload = build_wallet_identify_snapshot_for_ai(
                     conn,
                     runtime.runtime_config,
                     call.arguments,
@@ -7925,6 +7936,38 @@ def handle_request(
                 build_envelope(
                     "ui.wallets.utxos",
                     build_wallet_utxos_snapshot(
+                        ctx.conn,
+                        ctx.runtime_config,
+                        request.get("args"),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.wallets.identify":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.wallets.identify",
+                    build_wallet_identify_snapshot(
+                        ctx.conn,
+                        ctx.runtime_config,
+                        request.get("args"),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.wallets.identify_onchain":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.wallets.identify_onchain",
+                    build_wallet_identify_onchain_snapshot(
                         ctx.conn,
                         ctx.runtime_config,
                         request.get("args"),

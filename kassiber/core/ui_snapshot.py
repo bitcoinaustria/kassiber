@@ -23,7 +23,9 @@ from ..wallet_descriptors import (
     normalize_network,
 )
 from . import output_inventory as core_output_inventory
+from . import ownership as core_ownership
 from . import rates as core_rates
+from . import sync_backends as core_sync_backends
 from . import reports as report_builders
 from .samourai import samourai_metadata_from_wallet_config
 from . import transaction_history
@@ -3714,6 +3716,164 @@ def build_wallet_utxos_snapshot_for_ai(
         "utxos": [
             _wallet_utxo_row_for_ai(row)
             for row in payload.get("utxos", [])
+            if isinstance(row, dict)
+        ],
+    }
+
+
+def _identify_inputs(args: Any) -> dict[str, Any]:
+    empty = {
+        "addresses": [],
+        "txids": [],
+        "candidates": [],
+        "text": None,
+        "csv_text": None,
+        "scan_to_index": None,
+    }
+    if args is None:
+        return empty
+    if not isinstance(args, dict):
+        raise AppError(
+            "ui.wallets.identify args must be an object",
+            code="validation",
+            retryable=False,
+        )
+
+    def _as_list(value: Any) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, list):
+            return [str(item) for item in value if isinstance(item, (str, int))]
+        raise AppError(
+            "ui.wallets.identify list fields must be arrays of strings",
+            code="validation",
+            retryable=False,
+        )
+
+    text = args.get("text")
+    csv_text = args.get("csv_text")
+    scan_to_index = args.get("scan_to_index")
+    return {
+        "addresses": _as_list(args.get("addresses")),
+        "txids": _as_list(args.get("txids")),
+        "candidates": _as_list(args.get("candidates")),
+        "text": text if isinstance(text, str) else None,
+        "csv_text": csv_text if isinstance(csv_text, str) else None,
+        "scan_to_index": int(scan_to_index) if isinstance(scan_to_index, int) else None,
+    }
+
+
+def _empty_identify_payload() -> dict[str, Any]:
+    return {
+        "results": [],
+        "summary": {
+            "total": 0,
+            "owned": 0,
+            "external": 0,
+            "unknown": 0,
+            "invalid": 0,
+            "wallets_scanned": 0,
+            "scan_to_index": 0,
+            "verified_on_chain": False,
+        },
+        "warnings": [],
+        "context": {"workspace": None, "profile": None},
+    }
+
+
+def build_wallet_identify_snapshot(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object] | None,
+    args: Any,
+) -> dict[str, Any]:
+    """Reconcile pasted addresses / txids against the active profile's wallets.
+
+    Read-only and cache-only: matches against the watch-only output inventory,
+    imported txids and offline descriptor derivation. It never contacts the
+    network — on-chain verification is the separate ``ui.wallets.identify_onchain``
+    action, so this read surface stays safe to call without consent.
+    """
+    context, profile = _active_context_and_profile(conn)
+    if profile is None:
+        return _empty_identify_payload()
+    inputs = _identify_inputs(args)
+    scan_to_index = inputs["scan_to_index"]
+    if scan_to_index is None:
+        scan_to_index = core_ownership.DEFAULT_SCAN_TO_INDEX
+    report = core_ownership.identify(
+        conn,
+        profile["id"],
+        addresses=inputs["addresses"],
+        txids=inputs["txids"],
+        candidates=inputs["candidates"],
+        file_text=inputs["text"],
+        csv_text=inputs["csv_text"],
+        scan_to_index=scan_to_index,
+        verify_fetcher=None,
+    )
+    report["context"] = {
+        "workspace": context["workspace_label"] or None,
+        "profile": context["profile_label"] or None,
+    }
+    return report
+
+
+def build_wallet_identify_onchain_snapshot(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object] | None,
+    args: Any,
+) -> dict[str, Any]:
+    """Reconcile with the opt-in on-chain tier: txids not in local history are
+    fetched through an Esplora/Electrum backend for a per-leg verdict.
+
+    This contacts the network, so it is a mutating daemon kind (the desktop
+    "Verify on chain" action), never a read tool and never exposed to the AI.
+    """
+    context, profile = _active_context_and_profile(conn)
+    if profile is None:
+        return _empty_identify_payload()
+    inputs = _identify_inputs(args)
+    scan_to_index = inputs["scan_to_index"]
+    if scan_to_index is None:
+        scan_to_index = core_ownership.DEFAULT_SCAN_TO_INDEX
+    backend_name = args.get("backend") if isinstance(args, dict) else None
+    backend = core_sync_backends.resolve_verify_backend(runtime_config, backend_name)
+    with core_sync_backends.verify_session(backend) as fetcher:
+        report = core_ownership.identify(
+            conn,
+            profile["id"],
+            addresses=inputs["addresses"],
+            txids=inputs["txids"],
+            candidates=inputs["candidates"],
+            file_text=inputs["text"],
+            csv_text=inputs["csv_text"],
+            scan_to_index=scan_to_index,
+            verify_fetcher=fetcher,
+        )
+    report["context"] = {
+        "workspace": context["workspace_label"] or None,
+        "profile": context["profile_label"] or None,
+    }
+    return report
+
+
+def build_wallet_identify_snapshot_for_ai(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object] | None,
+    args: Any,
+) -> dict[str, Any]:
+    # Defense in depth: the AI tool schema never exposes csv_text, but strip it
+    # here too so the model can never drive a bulk file/CSV harvest.
+    if isinstance(args, dict) and "csv_text" in args:
+        args = {key: value for key, value in args.items() if key != "csv_text"}
+    payload = build_wallet_identify_snapshot(conn, runtime_config, args)
+    return {
+        **payload,
+        "results": [
+            core_ownership.redact_result_for_ai(row)
+            for row in payload.get("results", [])
             if isinstance(row, dict)
         ],
     }

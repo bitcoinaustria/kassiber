@@ -37,6 +37,7 @@ from ..core import imports as core_imports
 from ..core.lightning import cln as core_lightning_cln
 from ..core import metadata as core_metadata
 from ..core import output_inventory as core_output_inventory
+from ..core import ownership as core_ownership
 from ..core import chat_history as core_chat_history
 from ..core import pricing
 from ..core import rates as core_rates
@@ -2614,6 +2615,74 @@ def derive_wallet_targets(conn, workspace_ref, profile_ref, wallet_ref, branch=N
             end=start + count,
         )
     ]
+
+
+def identify_wallet_owners(
+    conn,
+    workspace_ref,
+    profile_ref,
+    *,
+    wallet_refs=None,
+    addresses=None,
+    txids=None,
+    candidates=None,
+    file=None,
+    csv=None,
+    scan_to_index=None,
+    verify_on_chain=False,
+    verify_backend=None,
+    runtime_config=None,
+):
+    """Reconcile a list of addresses / txids against the profile's wallets.
+
+    Returns a structured report (``results`` + ``summary`` + ``warnings``)
+    classifying each input as owned (naming the wallet, branch and derivation
+    index) or external/unknown. ``--csv`` smart-harvests addresses/txids from a
+    spreadsheet of any common shape. ``--verify-on-chain`` resolves an Esplora or
+    Electrum backend so unseen txids get a per-leg payment/transfer breakdown.
+    """
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+
+    wallet_ids = None
+    if wallet_refs:
+        wallet_ids = [resolve_wallet(conn, profile["id"], ref)["id"] for ref in wallet_refs]
+
+    file_text = core_ownership.read_text_file(file, label="candidate file") if file else None
+    csv_text = core_ownership.read_text_file(csv, label="CSV file") if csv else None
+
+    if scan_to_index is None:
+        scan_to_index = core_ownership.DEFAULT_SCAN_TO_INDEX
+    if scan_to_index < 0:
+        raise AppError("--scan-to-index must be non-negative", code="validation")
+
+    if not any([addresses, txids, candidates, file_text, csv_text]):
+        raise AppError(
+            "Provide at least one --address, --txid, --candidate, --file, or --csv input to check",
+            code="validation",
+            hint="Example: wallets identify --address bc1q... --txid <64-hex>",
+        )
+
+    def _run(verify_fetcher):
+        return core_ownership.identify(
+            conn,
+            profile["id"],
+            addresses=addresses,
+            txids=txids,
+            candidates=candidates,
+            file_text=file_text,
+            csv_text=csv_text,
+            wallet_ids=wallet_ids,
+            scan_to_index=scan_to_index,
+            verify_fetcher=verify_fetcher,
+        )
+
+    if not verify_on_chain:
+        return _run(None)
+
+    backend = core_sync_backends.resolve_verify_backend(runtime_config, verify_backend)
+    # One reused connection for the whole batch (Electrum); stateless for Esplora.
+    with core_sync_backends.verify_session(backend) as fetcher:
+        return _run(fetcher)
 
 
 TRANSACTION_SORT_COLUMNS = {

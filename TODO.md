@@ -83,6 +83,17 @@ Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the 
   Deferred: coordinator-backed mix-status fetches, exact round metadata beyond
   imported/local evidence, and active Whirlpool client behavior remain out of
   scope.
+- [x] Add address/txid **ownership reconciliation** (`wallets identify` +
+  `ui.wallets.identify` + desktop **Reconcile** screen + AI read tool): paste
+  addresses/txids (Bitcoin or Liquid, mixed) and flag which belong to a wallet
+  (receive or change, naming wallet + derivation index) vs external, classifying
+  each transaction as a self-transfer / outbound payment / inbound receipt. Pure
+  engine in [`kassiber/core/ownership.py`](kassiber/core/ownership.py) matches on
+  canonical scriptPubKey (address-string fallback for Liquid confidential
+  addresses), seeds free from inventory + imported txids, derives descriptors
+  offline up to `--scan-to-index`, and accepts an injected on-chain fetcher
+  (`--verify-on-chain`) so read surfaces stay cache-only. AI variant drops
+  scriptPubKeys / derivation paths / address indices.
 - [ ] Design an opt-in encrypted Lightning **evidence vault** for
   operators who need proof-of-payment for legal disputes, full invoice
   replay for corrupted-bookkeeper recovery, or chain-of-custody records

@@ -10,6 +10,7 @@ import socket
 import ssl
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from contextvars import copy_context
 from decimal import Decimal
 from pathlib import Path
@@ -19,7 +20,7 @@ from urllib import request as urlrequest
 
 from .. import __version__
 from .. import http_client
-from ..backends import backend_batch_size, backend_timeout, backend_value
+from ..backends import backend_batch_size, backend_timeout, backend_value, resolve_backend
 from ..db import APP_NAME
 from ..envelope import json_ready
 from ..errors import AppError
@@ -931,6 +932,155 @@ def fetch_esplora_scripthash_utxos(base_url, script_pubkey_hex, timeout=30):
         ),
         timeout=timeout,
     )
+
+
+def fetch_esplora_transaction(base_url, txid, timeout=30):
+    """Fetch one transaction's JSON by txid.
+
+    Esplora returns ``vin`` entries with inline ``prevout`` (including
+    ``scriptpubkey``) plus ``vout`` entries with ``scriptpubkey`` for both
+    Bitcoin and Liquid, so a single call yields every input and output script
+    needed for ownership classification. Routed through the shared retry/backoff
+    HTTP layer like all other backend reads.
+    """
+    return http_get_json(append_url_path(base_url, f"tx/{txid}"), timeout=timeout)
+
+
+def _legs_from_esplora_tx(tx, chain=""):
+    inputs = []
+    for vin in tx.get("vin", []) if isinstance(tx, dict) else []:
+        if not isinstance(vin, dict):
+            continue
+        prevout = vin.get("prevout") or {}
+        outpoint = None
+        if vin.get("txid") is not None and vin.get("vout") is not None:
+            outpoint = f"{str(vin['txid']).lower()}:{int(vin['vout'])}"
+        inputs.append({"outpoint": outpoint, "script": prevout.get("scriptpubkey")})
+    outputs = []
+    for index, vout in enumerate(tx.get("vout", []) if isinstance(tx, dict) else []):
+        if not isinstance(vout, dict):
+            continue
+        outputs.append({"n": index, "script": vout.get("scriptpubkey")})
+    return {"inputs": inputs, "outputs": outputs, "chain": chain, "source": "chain"}
+
+
+def _legs_from_bitcoin_tx(parsed):
+    inputs = [
+        {
+            "outpoint": (
+                f"{str(vin['txid']).lower()}:{int(vin['vout'])}"
+                if vin.get("txid") is not None and vin.get("vout") is not None
+                else None
+            ),
+            "script": None,
+        }
+        for vin in parsed.get("vin", [])
+    ]
+    outputs = [{"n": vout.get("n"), "script": vout.get("script_hex")} for vout in parsed.get("vout", [])]
+    return {"inputs": inputs, "outputs": outputs, "chain": "bitcoin", "source": "chain"}
+
+
+def _legs_from_liquid_tx(decoded):
+    inputs = []
+    for vin in decoded.vin:
+        prev_vout = getattr(vin, "vout", None)
+        outpoint = f"{liquid_input_txid(vin)}:{int(prev_vout)}" if prev_vout is not None else None
+        inputs.append({"outpoint": outpoint, "script": None})
+    outputs = []
+    for index, output in enumerate(decoded.vout):
+        script_hex = output.script_pubkey.data.hex()
+        outputs.append({"n": index, "script": script_hex or None})
+    return {"inputs": inputs, "outputs": outputs, "chain": "liquid", "source": "chain"}
+
+
+def fetch_transaction_legs(backend, txid, chain=None, *, client=None):
+    """Fetch a transaction and reduce it to ownership-matching legs.
+
+    Returns ``{"inputs": [{"outpoint", "script"}], "outputs": [{"n", "script"}],
+    "chain", "source": "chain"}``. Esplora yields full input + output scripts in
+    one request for both chains; Electrum yields output scripts plus input
+    outpoints (input ownership then relies on the local UTXO inventory, since
+    Electrum does not return prevout scripts inline). Liquid output scripts are
+    visible without unblinding, so ownership matching needs no blinding keys.
+
+    ``client`` lets the caller reuse one open ``ElectrumClient`` across a batch
+    of txids instead of reconnecting per call.
+    """
+    kind = normalize_backend_kind(backend.get("kind"))
+    timeout = backend_timeout(backend)
+    # Esplora returns scripts regardless of chain; for Electrum the chain decides
+    # bitcoin vs Liquid decoding, so fall back to the backend's configured chain
+    # when the caller could not infer one from the candidate.
+    chain_source = chain or backend_value(backend, "chain")
+    normalized_chain = normalize_chain_value(chain_source) if chain_source else ""
+    if kind == "esplora":
+        tx = fetch_esplora_transaction(backend["url"], txid, timeout=timeout)
+        return _legs_from_esplora_tx(tx, normalized_chain)
+    if kind == "electrum":
+        # Electrum can't be probed for chain, so a Liquid tx decoded as Bitcoin
+        # (or vice versa) yields garbage; require an explicit chain instead.
+        if normalized_chain not in ("bitcoin", "liquid"):
+            raise AppError(
+                "Electrum on-chain verification needs the backend's chain set to bitcoin or liquid",
+                code="validation",
+                hint="Set the backend chain (e.g. --chain liquid) or use an Esplora backend.",
+            )
+        if client is not None:
+            raw_hex = client.call("blockchain.transaction.get", [txid])
+        else:
+            with ElectrumClient(backend) as owned_client:
+                raw_hex = owned_client.call("blockchain.transaction.get", [txid])
+        if normalized_chain == "liquid":
+            return _legs_from_liquid_tx(decode_liquid_transaction(raw_hex))
+        return _legs_from_bitcoin_tx(decode_raw_transaction(raw_hex))
+    raise AppError(
+        f"On-chain verification needs an Esplora or Electrum backend, not '{kind}'",
+        code="validation",
+        hint="Pass --verify-backend pointing at an Esplora or Electrum endpoint.",
+    )
+
+
+def resolve_verify_backend(runtime_config, name=None):
+    """Resolve and validate the backend used for on-chain verification.
+
+    Normalizes the kind first (so aliases like ``liquid-esplora`` are accepted)
+    and requires an Esplora or Electrum endpoint. Shared by the CLI
+    ``--verify-on-chain`` handler and the ``ui.wallets.identify_onchain`` daemon
+    kind so the resolution + allowlist live in one place.
+    """
+    if not isinstance(runtime_config, dict):
+        raise AppError(
+            "On-chain verification is unavailable without backend configuration",
+            code="validation",
+        )
+    backend = resolve_backend(runtime_config, name)
+    kind = normalize_backend_kind(backend.get("kind"))
+    if kind not in {"esplora", "electrum"}:
+        raise AppError(
+            f"On-chain verification needs an Esplora or Electrum backend, not '{kind}'",
+            code="validation",
+            hint="Use an Esplora or Electrum backend for verification.",
+        )
+    return backend
+
+
+@contextmanager
+def verify_session(backend):
+    """Yield a ``(txid, chain) -> legs`` fetcher for a batch of verifications.
+
+    For Electrum one socket is opened for the whole batch and reused across
+    txids; Esplora is stateless HTTP so each call stands alone. The yielded
+    fetcher matches the ``verify_fetcher`` contract consumed by
+    ``kassiber.core.ownership.identify``.
+    """
+    kind = normalize_backend_kind(backend.get("kind"))
+    if kind == "electrum":
+        with ElectrumClient(backend) as client:
+            yield lambda txid, chain=None: fetch_transaction_legs(
+                backend, txid, chain, client=client
+            )
+    else:
+        yield lambda txid, chain=None: fetch_transaction_legs(backend, txid, chain)
 
 
 def _target_output_metadata(target):
@@ -2569,13 +2719,19 @@ SYNC_BACKEND_ADAPTERS = MappingProxyType(
 
 __all__ = [
     "SYNC_BACKEND_ADAPTERS",
+    "address_to_scriptpubkey",
     "bitcoinrpc_sync_adapter",
     "bitcoinrpc_utxos_for_wallet_name",
+    "decode_raw_transaction",
     "electrum_sync_adapter",
     "electrum_utxos_for_wallet",
     "esplora_sync_adapter",
     "esplora_utxos_for_wallet",
+    "fetch_esplora_transaction",
+    "fetch_transaction_legs",
     "resolve_wallet_sync_targets",
+    "resolve_verify_backend",
+    "verify_session",
     "sync_target_from_address",
     "sync_target_from_derived",
 ]

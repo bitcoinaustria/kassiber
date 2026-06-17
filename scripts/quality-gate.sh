@@ -53,7 +53,9 @@ run py -m unittest tests.test_secrets_smoke -v
 run py -m unittest tests.test_rates_kraken_csv -v
 run py -m unittest tests.test_review_regressions -v
 run py -m unittest tests.test_exit_tax -v
+run py -m unittest tests.test_ownership -v
 run py -m unittest tests.test_sync_backends -v
+run py -m unittest tests.test_sync_backends_legs -v
 run py -m unittest tests.test_sync_htlc_enrichment -v
 run py -m unittest tests.test_sync_btcpay_incremental -v
 run py -m unittest tests.test_freshness -v
