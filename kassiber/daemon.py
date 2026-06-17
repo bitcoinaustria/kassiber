@@ -61,10 +61,12 @@ from .cli.handlers import (
     auto_price_transactions_from_rates_cache,
     apply_transfer_rules,
     bulk_pair_transfers,
+    create_direct_swap_payout,
     create_saved_view_cli,
     create_transaction_pair,
     create_transfer_rule,
     delete_saved_view_cli,
+    delete_direct_swap_payout,
     delete_transaction_pair,
     delete_transfer_rule,
     dismiss_transfer_candidate,
@@ -72,6 +74,7 @@ from .cli.handlers import (
     import_into_profile,
     import_into_wallet,
     list_saved_views_cli,
+    list_direct_swap_payouts,
     list_transaction_pairs,
     list_transfer_rules,
     process_journals,
@@ -302,6 +305,9 @@ SUPPORTED_KINDS = (
     "ui.transfers.suggest",
     "ui.transfers.review_context",
     "ui.transfers.list",
+    "ui.transfers.payouts.list",
+    "ui.transfers.payouts.create",
+    "ui.transfers.payouts.delete",
     "ui.transfers.pair",
     "ui.transfers.unpair",
     "ui.transfers.bulk_pair",
@@ -1282,6 +1288,30 @@ def _ui_swap_matching_payload_from_conn(
         return build_swap_review_context_payload(conn, args)
     if kind == "ui.transfers.list":
         return {"pairs": list_transaction_pairs(conn, workspace, profile)}
+    if kind == "ui.transfers.payouts.list":
+        return {"payouts": list_direct_swap_payouts(conn, workspace, profile)}
+    if kind == "ui.transfers.payouts.create":
+        return create_direct_swap_payout(
+            conn,
+            workspace,
+            profile,
+            args.get("tx_out") or args.get("out_id"),
+            payout_asset=args.get("payout_asset"),
+            payout_amount=args.get("payout_amount"),
+            kind=str(args.get("kind") or "direct-swap-payout"),
+            policy=str(args.get("policy") or "carrying-value"),
+            payout_occurred_at=args.get("payout_occurred_at"),
+            payout_fiat_value=args.get("payout_fiat_value"),
+            payout_external_id=args.get("payout_external_id"),
+            counterparty=args.get("counterparty"),
+            notes=args.get("notes") or args.get("note"),
+            out_amount=args.get("out_amount"),
+        )
+    if kind == "ui.transfers.payouts.delete":
+        payout_id = args.get("payout_id")
+        if not payout_id:
+            raise AppError("ui.transfers.payouts.delete requires payout_id", code="validation")
+        return delete_direct_swap_payout(conn, workspace, profile, str(payout_id))
     if kind == "ui.transfers.pair":
         return create_transaction_pair(
             conn,
@@ -1294,6 +1324,7 @@ def _ui_swap_matching_payload_from_conn(
             notes=args.get("notes") or args.get("note"),
             pair_source=str(args.get("pair_source") or "manual"),
             confidence_at_pair=args.get("confidence_at_pair"),
+            out_amount=args.get("out_amount"),
         )
     if kind == "ui.transfers.unpair":
         pair_id = args.get("pair_id")

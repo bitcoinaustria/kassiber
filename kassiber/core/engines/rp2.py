@@ -1340,7 +1340,16 @@ def _direct_payout_value(record: Mapping[str, Any], out_row: Mapping[str, Any]) 
     value = _row_get(record, "payout_fiat_value")
     if value is not None:
         return dec(value)
-    return _fiat_value_from_row(out_row)
+    row_value = _fiat_value_from_row(out_row)
+    if row_value is not None:
+        return row_value
+    rate = _row_get(out_row, "fiat_rate_exact")
+    if rate in (None, ""):
+        rate = _row_get(out_row, "fiat_rate")
+    amount_msat = int(_row_get(out_row, "amount") or 0)
+    if rate in (None, "") or amount_msat <= 0:
+        return None
+    return dec(rate) * msat_to_btc(amount_msat)
 
 
 def _direct_payout_proceeds_row(
@@ -1377,6 +1386,50 @@ def _direct_payout_proceeds_row(
     return reviewed
 
 
+def _direct_payout_record_out_amount(
+    record: Mapping[str, Any],
+    out_row: Mapping[str, Any],
+) -> int:
+    raw = _row_get(record, "out_amount")
+    if raw in (None, ""):
+        return int(out_row["amount"] or 0)
+    return int(raw)
+
+
+def _split_review_source_row(
+    out_row: Mapping[str, Any],
+    amount_msat: int,
+    *,
+    row_id: str | None = None,
+    external_id: str | None = None,
+    kind: str | None = None,
+) -> dict[str, Any]:
+    full = int(out_row["amount"] or 0)
+    base = dict(out_row)
+    if (
+        _row_get(out_row, "fiat_rate_exact") in (None, "")
+        and _row_get(out_row, "fiat_rate") in (None, "")
+        and full > 0
+    ):
+        fiat_value = _row_get(out_row, "fiat_value_exact") or _row_get(out_row, "fiat_value")
+        if fiat_value not in (None, ""):
+            unit_rate = format(Decimal(str(fiat_value)) / msat_to_btc(full), "f")
+            base["fiat_rate"] = unit_rate
+            base["fiat_rate_exact"] = unit_rate
+    base["amount"] = amount_msat
+    base["fiat_value"] = None
+    base["fiat_value_exact"] = None
+    if row_id is not None:
+        base["id"] = row_id
+        base["journal_transaction_id"] = out_row["id"]
+        base["fee"] = 0
+    if external_id is not None:
+        base["external_id"] = external_id
+    if kind is not None:
+        base["kind"] = kind
+    return base
+
+
 def _direct_payout_audit(record: Mapping[str, Any], out_row: Mapping[str, Any]) -> dict[str, Any]:
     payout_amount_msat = int(record["payout_amount"] or 0)
     return {
@@ -1385,7 +1438,7 @@ def _direct_payout_audit(record: Mapping[str, Any], out_row: Mapping[str, Any]) 
         "policy": record["policy"],
         "out_id": str(record["out_transaction_id"]),
         "out_asset": out_row["asset"],
-        "out_amount_msat": int(out_row["amount"] or 0),
+        "out_amount_msat": _direct_payout_record_out_amount(record, out_row),
         "payout_asset": record["payout_asset"],
         "payout_amount_msat": payout_amount_msat,
         "payout_occurred_at": record["payout_occurred_at"] or out_row["occurred_at"],
@@ -1433,21 +1486,54 @@ def _direct_payout_synthetic_rows(
         out_row = rows_by_id.get(out_id)
         if out_row is None:
             continue
+        reviewed_out_amount_msat = _direct_payout_record_out_amount(record, out_row)
+        full_out_amount_msat = int(out_row["amount"] or 0)
+        if reviewed_out_amount_msat <= 0 or reviewed_out_amount_msat > full_out_amount_msat:
+            quarantines.append(
+                build_tax_quarantine(
+                    profile,
+                    out_row,
+                    "direct_payout_out_amount_invalid",
+                    {
+                        "payout_id": record["id"],
+                        "out_amount_msat": reviewed_out_amount_msat,
+                        "full_out_amount_msat": full_out_amount_msat,
+                    },
+                )
+            )
+            blocked_row_ids.add(out_id)
+            continue
         audit = _direct_payout_audit(record, out_row)
         direct_payouts.append(audit)
         payout_asset = str(record["payout_asset"])
+        source_out_row = out_row
+        source_is_synthetic = reviewed_out_amount_msat < full_out_amount_msat
+        if source_is_synthetic:
+            self_amount_msat = full_out_amount_msat - reviewed_out_amount_msat
+            row_overrides[out_id] = _split_review_source_row(out_row, self_amount_msat)
+            source_out_row = _split_review_source_row(
+                out_row,
+                reviewed_out_amount_msat,
+                row_id=f"direct-payout:{record['id']}:source",
+                external_id=f"direct-payout:{record['id']}:source",
+                kind="sell",
+            )
         is_cross_asset_carry = (
             tax_country == "at"
             and record["policy"] == "carrying-value"
             and out_row["asset"] != payout_asset
         )
         if not is_cross_asset_carry:
-            row_overrides[out_id] = _direct_payout_proceeds_row(record, out_row)
+            proceeds_row = _direct_payout_proceeds_row(record, source_out_row)
+            if source_is_synthetic:
+                rows_for_engine.append(proceeds_row)
+            else:
+                row_overrides[out_id] = proceeds_row
             continue
 
         payout_amount_msat = int(record["payout_amount"] or 0)
         payout_amount = msat_to_btc(payout_amount_msat)
-        payout_value = _direct_payout_value(record, out_row)
+        payout_value = _direct_payout_value(record, source_out_row)
         if (
             payout_amount is None
             or payout_amount <= 0
@@ -1469,6 +1555,8 @@ def _direct_payout_synthetic_rows(
             blocked_row_ids.add(out_id)
             continue
 
+        if source_is_synthetic:
+            rows_for_engine.append(source_out_row)
         payout_rate = payout_value / payout_amount
         payout_at = record["payout_occurred_at"] or out_row["occurred_at"]
         pair_id = f"direct-payout:{record['id']}"
@@ -1481,11 +1569,11 @@ def _direct_payout_synthetic_rows(
         common = {
             "workspace_id": profile["workspace_id"],
             "profile_id": profile["id"],
-            "wallet_id": out_row["wallet_id"],
-            "wallet_label": _row_get(out_row, "wallet_label"),
-            "wallet_account_id": _row_get(out_row, "wallet_account_id"),
-            "account_code": _row_get(out_row, "account_code"),
-            "account_label": _row_get(out_row, "account_label"),
+            "wallet_id": source_out_row["wallet_id"],
+            "wallet_label": _row_get(source_out_row, "wallet_label"),
+            "wallet_account_id": _row_get(source_out_row, "wallet_account_id"),
+            "account_code": _row_get(source_out_row, "account_code"),
+            "account_label": _row_get(source_out_row, "account_label"),
             "asset": payout_asset,
             "amount": payout_amount_msat,
             "fee": 0,
@@ -1526,7 +1614,7 @@ def _direct_payout_synthetic_rows(
                 "pair_id": pair_id,
                 "kind": record["kind"],
                 "policy": record["policy"],
-                "out_id": out_id,
+                "out_id": str(source_out_row["id"]),
                 "in_id": in_id,
                 "out_asset": out_row["asset"],
                 "in_asset": payout_asset,

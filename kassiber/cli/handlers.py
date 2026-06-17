@@ -364,6 +364,7 @@ def _direct_payout_to_dict(row):
     keys = set(row.keys()) if hasattr(row, "keys") else set()
     payout_fiat_value = row["payout_fiat_value"] if "payout_fiat_value" in keys else None
     swap_fee_msat = row["swap_fee_msat"] if "swap_fee_msat" in keys else None
+    out_amount = row["out_amount"] if "out_amount" in keys else None
     return {
         "id": row["id"],
         "workspace_id": row["workspace_id"],
@@ -381,6 +382,7 @@ def _direct_payout_to_dict(row):
         "notes": row["notes"],
         "swap_fee_msat": int(swap_fee_msat) if swap_fee_msat is not None else None,
         "swap_fee_kind": row["swap_fee_kind"],
+        "out_amount": int(out_amount) if out_amount is not None else None,
         "deleted_at": row["deleted_at"],
         "created_at": row["created_at"],
     }
@@ -560,6 +562,7 @@ def create_direct_swap_payout(
     payout_external_id=None,
     counterparty=None,
     notes=None,
+    out_amount=None,
 ):
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
     if kind not in DIRECT_SWAP_PAYOUT_KINDS:
@@ -578,6 +581,16 @@ def create_direct_swap_payout(
     if not target_asset:
         raise AppError("--payout-asset is required", code="validation")
     payout_amount_msat = _positive_btc_amount_msat(payout_amount, "--payout-amount")
+    out_amount_msat = None
+    if out_amount is not None:
+        out_amount_msat = _positive_btc_amount_msat(out_amount, "--out-amount")
+        full_out_msat = int(out_row["amount"] or 0)
+        if out_amount_msat > full_out_msat:
+            raise AppError(
+                f"--out-amount exceeds the outbound amount "
+                f"({out_amount_msat} > {full_out_msat} msat).",
+                code="validation",
+            )
     payout_value = dec(payout_fiat_value) if payout_fiat_value is not None else None
     if payout_value is not None and payout_value < 0:
         raise AppError("--payout-fiat-value must not be negative", code="validation")
@@ -622,7 +635,7 @@ def create_direct_swap_payout(
         )
 
     swap_fee_msat, swap_fee_kind = core_transfer_matching.compute_swap_fee(
-        int(out_row["amount"] or 0),
+        out_amount_msat if out_amount_msat is not None else int(out_row["amount"] or 0),
         payout_amount_msat,
     )
     payout_id = str(uuid.uuid4())
@@ -632,8 +645,8 @@ def create_direct_swap_payout(
             id, workspace_id, profile_id, out_transaction_id, kind, policy,
             payout_asset, payout_amount, payout_occurred_at, payout_fiat_value,
             payout_external_id, counterparty, notes, swap_fee_msat, swap_fee_kind,
-            deleted_at, created_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+            out_amount, deleted_at, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
         """,
         (
             payout_id,
@@ -651,6 +664,7 @@ def create_direct_swap_payout(
             notes,
             swap_fee_msat,
             swap_fee_kind,
+            out_amount_msat,
             now_iso(),
         ),
     )
@@ -670,7 +684,8 @@ def list_direct_swap_payouts(conn, workspace_ref, profile_ref, *, include_delete
             p.*,
             tout.external_id AS out_external_id,
             tout.asset AS out_asset,
-            tout.amount AS out_amount_msat,
+            COALESCE(p.out_amount, tout.amount) AS reviewed_out_amount_msat,
+            tout.amount AS full_out_amount_msat,
             tout.occurred_at AS out_occurred_at,
             wout.label AS out_wallet
         FROM direct_swap_payouts p
@@ -689,8 +704,10 @@ def list_direct_swap_payouts(conn, workspace_ref, profile_ref, *, include_delete
             "external_id": row["out_external_id"] or "",
             "wallet": row["out_wallet"],
             "asset": row["out_asset"],
-            "amount": float(msat_to_btc(row["out_amount_msat"])),
-            "amount_msat": int(row["out_amount_msat"]),
+            "amount": float(msat_to_btc(row["reviewed_out_amount_msat"])),
+            "amount_msat": int(row["reviewed_out_amount_msat"]),
+            "full_amount": float(msat_to_btc(row["full_out_amount_msat"])),
+            "full_amount_msat": int(row["full_out_amount_msat"]),
             "occurred_at": row["out_occurred_at"],
         }
         entry["payout"] = {

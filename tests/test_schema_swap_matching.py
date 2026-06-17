@@ -103,8 +103,15 @@ class FreshSchemaTests(unittest.TestCase):
                     "confidence_at_pair",
                     "pair_source",
                     "deleted_at",
+                    "out_amount",
                 ):
                     self.assertIn(name, pair_cols)
+
+                payout_cols = {
+                    row["name"]
+                    for row in conn.execute("PRAGMA table_info(direct_swap_payouts)").fetchall()
+                }
+                self.assertIn("out_amount", payout_cols)
             finally:
                 conn.close()
 
