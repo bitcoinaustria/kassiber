@@ -35,6 +35,7 @@ import {
   LogOut,
   MessageSquareText,
   Moon,
+  Plane,
   Plus,
   Search,
   Server,
@@ -306,6 +307,15 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       icon: BarChart3,
       searchLabel: "Search reports",
       searchPlaceholder: "Search reports, exports...",
+    },
+  ],
+  [
+    "/exit-tax",
+    {
+      title: "Exit Tax",
+      icon: Plane,
+      searchLabel: "Search exit tax",
+      searchPlaceholder: "Search departure date, destination...",
     },
   ],
   [
@@ -1618,12 +1628,12 @@ function SidebarActions({
                 <SidebarMenuSubItem>
                   <SidebarMenuSubButton
                     asChild
-                    className="w-full cursor-default"
+                    isActive={pathname === "/exit-tax"}
                   >
-                    <button type="button" disabled>
+                    <Link to="/exit-tax">
                       <LogOut className="size-3.5" aria-hidden="true" />
                       <span>Exit-Calculator</span>
-                    </button>
+                    </Link>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
               </SidebarMenuSub>

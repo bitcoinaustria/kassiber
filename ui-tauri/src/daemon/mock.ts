@@ -22,6 +22,7 @@ import type {
   Workspace,
 } from "@/mocks/profiles";
 import { mockWorkspaceOverviewSnapshot } from "@/mocks/workspaceOverview";
+import { buildExitTaxFixture, type ExitTaxDestination } from "@/mocks/exitTax";
 import { MOCK_AI_CHAT_STREAM, fixtures } from "./fixtures";
 
 interface MockChatSession {
@@ -2990,6 +2991,52 @@ export const mockDaemon: DaemonTransport = {
           windowLabel: routing?.windowLabel ?? "No routing window reported",
           summary,
           channels: channelBreakEvens,
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.reports.exit_tax_preview") {
+      const args = (req.args ?? {}) as {
+        departure_date?: unknown;
+        destination?: unknown;
+      };
+      const departureDate =
+        typeof args.departure_date === "string" ? args.departure_date : "2026-06-16";
+      const destination: ExitTaxDestination =
+        args.destination === "third_country" ? "third_country" : "eu_eea";
+      return {
+        kind: "ui.reports.exit_tax_preview",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: buildExitTaxFixture(departureDate, destination) as T,
+      };
+    }
+
+    if (
+      req.kind === "ui.reports.export_exit_tax_pdf" ||
+      req.kind === "ui.reports.export_exit_tax_xlsx"
+    ) {
+      const args = (req.args ?? {}) as {
+        departure_date?: unknown;
+        destination?: unknown;
+      };
+      const departureDate =
+        typeof args.departure_date === "string" ? args.departure_date : "2026-06-16";
+      const destination: ExitTaxDestination =
+        args.destination === "third_country" ? "third_country" : "eu_eea";
+      const format = req.kind === "ui.reports.export_exit_tax_pdf" ? "pdf" : "xlsx";
+      return {
+        kind: req.kind,
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          file: `/mock/exports/kassiber-exit-tax-${departureDate}.${format}`,
+          filename: `kassiber-exit-tax-${departureDate}.${format}`,
+          bytes: format === "pdf" ? 2516 : 9260,
+          format,
+          scope: "exit_tax",
+          departure_date: departureDate,
+          destination,
         } as T,
       };
     }

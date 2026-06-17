@@ -249,6 +249,7 @@ SUPPORTED_KINDS = (
     "ui.reports.portfolio_summary",
     "ui.reports.tax_summary",
     "ui.reports.balance_history",
+    "ui.reports.exit_tax_preview",
     "ui.reports.export_pdf",
     "ui.reports.export_summary_pdf",
     "ui.reports.export_csv",
@@ -257,6 +258,8 @@ SUPPORTED_KINDS = (
     "ui.reports.export_austrian_e1kv_pdf",
     "ui.reports.export_austrian_e1kv_xlsx",
     "ui.reports.export_austrian_e1kv_csv",
+    "ui.reports.export_exit_tax_pdf",
+    "ui.reports.export_exit_tax_xlsx",
     "ui.reports.export_audit_package",
     "ui.source_funds.preview",
     "ui.source_funds.cases.save",
@@ -388,6 +391,7 @@ _AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES = {
     "ui.reports.portfolio_summary",
     "ui.reports.tax_summary",
     "ui.reports.balance_history",
+    "ui.reports.exit_tax_preview",
     "ui.journals.snapshot",
     "ui.journals.quarantine",
     "ui.journals.transfers.list",
@@ -403,6 +407,7 @@ _DIRECT_AUTO_JOURNAL_REFRESH_KINDS = {
     "ui.reports.portfolio_summary",
     "ui.reports.tax_summary",
     "ui.reports.balance_history",
+    "ui.reports.exit_tax_preview",
     "ui.transfers.review_context",
     "ui.report.blockers",
 }
@@ -2253,6 +2258,34 @@ def _ui_report_export_payload(
                 "filename": Path(payload["dir"]).name,
             }
         )
+        return payload
+
+    if kind in {"ui.reports.export_exit_tax_pdf", "ui.reports.export_exit_tax_xlsx"}:
+        departure_date = args.get("departure_date")
+        destination = args.get("destination")
+        suffix = ".pdf" if kind == "ui.reports.export_exit_tax_pdf" else ".xlsx"
+        exporter = (
+            core_reports.export_exit_tax_pdf_report
+            if kind == "ui.reports.export_exit_tax_pdf"
+            else core_reports.export_exit_tax_xlsx_report
+        )
+        path = _managed_report_export_path(
+            ctx.data_root,
+            f"kassiber-exit-tax-{departure_date or 'today'}",
+            suffix,
+        )
+        payload = dict(
+            exporter(
+                conn,
+                None,
+                None,
+                path,
+                hooks,
+                departure_date=departure_date,
+                destination=destination,
+            )
+        )
+        payload["filename"] = Path(payload["file"]).name
         return payload
 
     raise AppError(
@@ -8118,6 +8151,26 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.reports.exit_tax_preview":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.reports.exit_tax_preview",
+                    core_reports.report_exit_tax(
+                        ctx.conn,
+                        None,
+                        None,
+                        _report_hooks(),
+                        departure_date=args.get("departure_date"),
+                        destination=args.get("destination"),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind in {
         "ui.reports.export_pdf",
         "ui.reports.export_summary_pdf",
@@ -8127,6 +8180,8 @@ def handle_request(
         "ui.reports.export_austrian_e1kv_pdf",
         "ui.reports.export_austrian_e1kv_xlsx",
         "ui.reports.export_austrian_e1kv_csv",
+        "ui.reports.export_exit_tax_pdf",
+        "ui.reports.export_exit_tax_xlsx",
         "ui.reports.export_audit_package",
     }:
         return (

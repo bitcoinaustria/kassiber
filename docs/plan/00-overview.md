@@ -85,6 +85,8 @@ See [01-stack-decision.md](01-stack-decision.md) for the stack decision and
 - `07-austrian-tax-open-questions.md`: unresolved AT assumptions and review gates
 - `08-external-document-reconciliation.md`: BTC-side evidence/reconciliation boundary
 - `09-source-of-funds.md`: source-of-funds report boundary and flow-link design
+- `10-secret-management.md`: SQLCipher/backup secret-handling boundary
+- `11-exit-tax-deemed-disposal.md`: Wegzugsbesteuerung / deemed-disposal report design
 
 ## Highest-Risk Drift Points
 

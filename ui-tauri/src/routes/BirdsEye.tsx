@@ -54,7 +54,7 @@ import {
 } from "@/components/overview-dashboard/model";
 import { syncProgressPhaseLabel } from "@/lib/syncProgress";
 
-type BookRoute = "/overview" | "/transactions" | "/journals" | "/quarantine" | "/connections" | "/reports";
+type BookRoute = "/overview" | "/transactions" | "/journals" | "/quarantine" | "/connections" | "/reports" | "/exit-tax";
 
 interface WorkspaceFreshnessProgress {
   workspace?: { id: string; label: string };
