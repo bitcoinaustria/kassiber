@@ -542,6 +542,24 @@ function ExitTaxBody({
           </section>
         </div>
       </div>
+
+      {/*
+        UI-only historical aside. Deliberately NOT part of the report payload,
+        assumptions, or any PDF/XLSX/CLI export — the adviser-facing handoff stays
+        strictly the neutral Wegzugsbesteuerung. Shown for Austrian profiles only.
+      */}
+      {isAt ? (
+        <aside className="rounded-lg border border-dashed bg-muted/20 p-3 text-xs leading-relaxed text-muted-foreground">
+          <span className="font-medium text-foreground/80">Historical note.</span>{" "}
+          Exit taxation has a dark lineage: the &ldquo;Reichsfluchtsteuer&rdquo;
+          (Reich flight tax) began in 1931 as a Weimar-era capital-flight levy, but
+          from 1933 the Nazi regime turned it into an instrument to strip Jews and
+          others of their assets as they fled persecution. Today&rsquo;s
+          Wegzugsbesteuerung (§&nbsp;27 Abs&nbsp;6 EStG) is a distinct, rule-of-law
+          successor — the old name is noted here purely as historical context and
+          never appears in your adviser report.
+        </aside>
+      ) : null}
     </div>
   );
 }
