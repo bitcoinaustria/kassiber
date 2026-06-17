@@ -43,6 +43,11 @@ describe("quarantine row model", () => {
       evidenceHint: "Add a fiat price or rates coverage",
       nextAction: "Set price, then process journals",
       metricFilterIds: ["missing-prices"],
+      transactionAction: {
+        transactionId: "transaction-with-a-long-id",
+        label: "Open pricing",
+        tab: "pricing",
+      },
     });
   });
 
@@ -63,6 +68,31 @@ describe("quarantine row model", () => {
     expect(row.owner).toBe("Active book");
     expect(row.amount).toBe("250,000 sats BTC");
     expect(row.metricFilterIds).toEqual(["basis-or-pairs"]);
+    expect(row.transactionAction).toMatchObject({
+      transactionId: "transaction-with-a-long-id",
+      label: "Open tax review",
+      tab: "tax",
+    });
+  });
+
+  it("describes implausible transfer fees as split-transfer review", () => {
+    const row = quarantineItemToRow(
+      {
+        ...baseItem,
+        reason: "transfer_fee_implausible",
+      },
+      "AT profile",
+    );
+
+    expect(row).toMatchObject({
+      basis: "Split transfer / swap review",
+      evidenceHint: "Review the self-transfer and residual swap or payout leg",
+      nextAction: "Review split transfer/swap, then process journals",
+      transactionAction: {
+        label: "Open transaction",
+        tab: "details",
+      },
+    });
   });
 });
 

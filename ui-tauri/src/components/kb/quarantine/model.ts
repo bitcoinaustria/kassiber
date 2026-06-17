@@ -30,6 +30,11 @@ export function quarantineItemToRow(
     evidenceHint: evidenceHint(reason, item.detail),
     nextAction: nextAction(reason),
     metricFilterIds: quarantineReasonFilterIds(reason),
+    transactionAction: {
+      transactionId: item.transaction_id,
+      label: actionLabel(reason),
+      tab: actionTab(reason),
+    },
   };
 }
 
@@ -131,6 +136,9 @@ function quarantinePriority(reason: string): ReviewTableRow["priority"] {
 
 function basisLabel(reason: string, detail: Record<string, unknown>) {
   const normalized = reason.toLowerCase();
+  if (normalized.includes("transfer_fee_implausible")) {
+    return "Split transfer / swap review";
+  }
   if (normalized.includes("price")) return "Missing fiat price";
   if (normalized.includes("basis") || normalized.includes("lot")) {
     return "Missing cost basis";
@@ -144,6 +152,9 @@ function basisLabel(reason: string, detail: Record<string, unknown>) {
 
 function evidenceHint(reason: string, detail: Record<string, unknown>) {
   const normalized = reason.toLowerCase();
+  if (normalized.includes("transfer_fee_implausible")) {
+    return "Review the self-transfer and residual swap or payout leg";
+  }
   if (normalized.includes("price")) return "Add a fiat price or rates coverage";
   if (normalized.includes("transfer") || normalized.includes("pair")) {
     return "Choose or dismiss the matching movement";
@@ -158,6 +169,9 @@ function evidenceHint(reason: string, detail: Record<string, unknown>) {
 
 function nextAction(reason: string) {
   const normalized = reason.toLowerCase();
+  if (normalized.includes("transfer_fee_implausible")) {
+    return "Review split transfer/swap, then process journals";
+  }
   if (normalized.includes("price")) return "Set price, then process journals";
   if (normalized.includes("transfer") || normalized.includes("pair")) {
     return "Review pair, then process journals";
@@ -166,6 +180,26 @@ function nextAction(reason: string) {
     return "Add missing acquisition context";
   }
   return "Resolve the source issue";
+}
+
+function actionLabel(reason: string) {
+  const normalized = reason.toLowerCase();
+  if (normalized.includes("transfer_fee_implausible")) return "Open transaction";
+  if (normalized.includes("price")) return "Open pricing";
+  if (normalized.includes("transfer") || normalized.includes("pair")) {
+    return "Open pairing";
+  }
+  if (normalized.includes("basis") || normalized.includes("lot")) {
+    return "Open tax review";
+  }
+  return "Open transaction";
+}
+
+function actionTab(reason: string): NonNullable<ReviewTableRow["transactionAction"]>["tab"] {
+  const normalized = reason.toLowerCase();
+  if (normalized.includes("price")) return "pricing";
+  if (normalized.includes("basis") || normalized.includes("lot")) return "tax";
+  return "details";
 }
 
 function formatDirection(direction: string) {

@@ -1,5 +1,6 @@
 import {
   ArrowDownUp,
+  ArrowRight,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -9,6 +10,7 @@ import {
   ShieldAlert,
   X,
 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import {
   useMemo,
   useState,
@@ -49,6 +51,11 @@ export interface ReviewTableRow {
   evidenceHint?: string;
   nextAction?: string;
   metricFilterIds?: string[];
+  transactionAction?: {
+    transactionId: string;
+    label: string;
+    tab?: "details" | "classify" | "pricing" | "tax" | "ledger";
+  };
 }
 
 export interface ReviewMetric {
@@ -626,6 +633,28 @@ function ReviewWorklistRow({
           <p className="mt-1 text-[10px] text-muted-foreground sm:text-xs">
             {nextActionLabel(row)}
           </p>
+          {row.transactionAction ? (
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="mt-2 h-7 gap-1.5 px-2 text-xs"
+            >
+              <Link
+                to="/transactions"
+                search={{
+                  tx: row.transactionAction.transactionId,
+                  ...(row.transactionAction.tab &&
+                  row.transactionAction.tab !== "details"
+                    ? { tab: row.transactionAction.tab }
+                    : {}),
+                }}
+              >
+                {row.transactionAction.label}
+                <ArrowRight className="size-3.5" aria-hidden="true" />
+              </Link>
+            </Button>
+          ) : null}
         </TableCell>
       ) : null}
       <TableCell className="text-right">

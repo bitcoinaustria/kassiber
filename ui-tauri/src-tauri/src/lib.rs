@@ -169,6 +169,10 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.profiles.switch",
     "ui.profiles.reset_data",
     "ui.reports.capital_gains",
+    "ui.reports.summary",
+    "ui.reports.balance_sheet",
+    "ui.reports.portfolio_summary",
+    "ui.reports.balance_history",
     "ui.reports.tax_summary",
     "ui.reports.exit_tax_preview",
     "ui.reports.export_exit_tax_pdf",
@@ -206,6 +210,9 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.rates.kraken_csv.import",
     "ui.rates.latest",
     "ui.rates.rebuild",
+    "ui.maintenance.settings",
+    "ui.maintenance.configure",
+    "ui.maintenance.run",
     "ui.workspace.health",
     "ui.workspace.freshness.run",
     "ui.audit.evidence.summary",
@@ -2435,9 +2442,8 @@ mod tests {
         MENU_SETTINGS_BACKENDS, MENU_SETTINGS_DATA, MENU_SETTINGS_DISPLAY, MENU_SETTINGS_GENERAL,
         MENU_SETTINGS_PRIVACY, MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN,
         MENU_UI_SCALE_DECREASE, MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET,
-        MENU_WORKFLOW_ADD_WALLET, MENU_WORKFLOW_CONNECTIONS_IMPORTS,
-        MENU_WORKFLOW_OPEN_REPORTS, MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL,
-        TERMINAL_COMMAND_MARKER,
+        MENU_WORKFLOW_ADD_WALLET, MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
+        MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL, TERMINAL_COMMAND_MARKER,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -2713,6 +2719,45 @@ mod tests {
             "ui.attachments.rename",
             "ui.attachments.remove",
             "ui.attachments.open",
+        ];
+        for kind in required {
+            assert!(
+                ALLOWED_DAEMON_KINDS.contains(kind),
+                "daemon kind missing from Tauri allowlist: {kind}"
+            );
+        }
+    }
+
+    #[test]
+    fn report_read_daemon_kinds_are_in_allowlist() {
+        // Report panels and post-sync query invalidations call these read
+        // kinds directly from the webview. Missing entries show up as
+        // kind_not_allowed after a refresh, leaving balances/report cards stale.
+        let required: &[&str] = &[
+            "ui.reports.capital_gains",
+            "ui.reports.summary",
+            "ui.reports.balance_sheet",
+            "ui.reports.portfolio_summary",
+            "ui.reports.balance_history",
+            "ui.reports.tax_summary",
+            "ui.reports.lightning_profitability",
+        ];
+        for kind in required {
+            assert!(
+                ALLOWED_DAEMON_KINDS.contains(kind),
+                "daemon kind missing from Tauri allowlist: {kind}"
+            );
+        }
+    }
+
+    #[test]
+    fn maintenance_daemon_kinds_are_in_allowlist() {
+        // SettingsScreen and MarketDataSettingsPanel use these profile
+        // maintenance endpoints to expose rate provider and refresh controls.
+        let required: &[&str] = &[
+            "ui.maintenance.settings",
+            "ui.maintenance.configure",
+            "ui.maintenance.run",
         ];
         for kind in required {
             assert!(
