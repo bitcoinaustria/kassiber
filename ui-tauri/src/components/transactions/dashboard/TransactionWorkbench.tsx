@@ -343,7 +343,7 @@ const TransactionWorkbench = ({
         id: `${period}:all:${segment}:${chartMode}`,
         period,
         bucketKey: null,
-        bucketLabel: periodLabels[period],
+        bucketLabel: t(periodLabels[period]),
         segment,
         mode: chartMode,
       });
@@ -355,6 +355,7 @@ const TransactionWorkbench = ({
       onQuickFilterChange,
       onTableFiltersReset,
       period,
+      t,
     ],
   );
   const handleSummaryFlowClick = React.useCallback(
@@ -366,7 +367,7 @@ const TransactionWorkbench = ({
         id: `${period}:summary:${segment}:all`,
         period,
         bucketKey: null,
-        bucketLabel: periodLabels[period],
+        bucketLabel: t(periodLabels[period]),
         segment,
         mode: "all",
       });
@@ -377,6 +378,7 @@ const TransactionWorkbench = ({
       onQuickFilterChange,
       onTableFiltersReset,
       period,
+      t,
     ],
   );
   const handleNetFlowClick = React.useCallback(() => {

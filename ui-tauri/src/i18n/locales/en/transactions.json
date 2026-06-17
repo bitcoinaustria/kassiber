@@ -18,6 +18,24 @@
     "swap": "Swap",
     "layerTransition": "Layer transition"
   },
+  "detailHeader": {
+    "confirmationsTitle": "{{count}} on-chain confirmations",
+    "paired": "Paired",
+    "pairOut": "Out",
+    "pairIn": "In",
+    "valueThen": "then",
+    "valueNow": "now",
+    "unassignedWallet": "Unassigned wallet",
+    "openExplorer": "Open explorer",
+    "close": "Close transaction detail"
+  },
+  "sourceRecord": {
+    "title": "Source record",
+    "kassiberRow": "Kassiber row",
+    "source": "Source",
+    "noExplorer": "No public explorer",
+    "openOn": "Open {{txid}} on {{explorer}}"
+  },
   "flowOption": {
     "incoming": "Receive",
     "outgoing": "Send",

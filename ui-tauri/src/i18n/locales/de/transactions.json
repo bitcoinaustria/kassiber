@@ -18,6 +18,24 @@
     "swap": "Swap",
     "layerTransition": "Layer-Übergang"
   },
+  "detailHeader": {
+    "confirmationsTitle": "{{count}} on-chain-Bestätigungen",
+    "paired": "Verknüpft",
+    "pairOut": "Quelle",
+    "pairIn": "Ziel",
+    "valueThen": "damals",
+    "valueNow": "jetzt",
+    "unassignedWallet": "Nicht zugewiesene Wallet",
+    "openExplorer": "Explorer öffnen",
+    "close": "Transaktionsdetails schließen"
+  },
+  "sourceRecord": {
+    "title": "Quelldatensatz",
+    "kassiberRow": "Kassiber-Zeile",
+    "source": "Quelle",
+    "noExplorer": "Kein öffentlicher Explorer",
+    "openOn": "{{txid}} auf {{explorer}} öffnen"
+  },
   "flowOption": {
     "incoming": "Empfangen",
     "outgoing": "Senden",
