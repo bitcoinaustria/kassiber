@@ -135,6 +135,7 @@ Related notes:
 | Realized gains/losses, disposals, tax reporting, capital gains | `capital-gains` |
 | Yearly gain/loss buckets, long vs short summary, tax totals by year | `tax-summary` |
 | Austrian E 1kv handoff, FinanzOnline Kennzahlen, Steuerberater review package | `austrian-e1kv` / `austrian-tax-summary` / `export-austrian` / `export-austrian-e1kv-pdf` / `export-austrian-e1kv-xlsx` / `export-austrian-e1kv-csv` |
+| Exit tax / Wegzugsbesteuerung, deemed disposal on leaving the country, departure-date liability | `exit-tax` / `export-exit-tax-pdf` / `export-exit-tax-xlsx` (`--departure-date`, `--destination eu_eea\|third_country`) |
 | Current balances by bucket, asset, or wallet | `balance-sheet` |
 | Balance changes over time, trends, history | `balance-history` |
 | Raw journal export, journal rows, bookkeeping output | `journal-entries` |
