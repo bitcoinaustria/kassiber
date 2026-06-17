@@ -8,6 +8,7 @@
  */
 
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Area,
   AreaChart,
@@ -25,6 +26,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDaemon } from "@/daemon/client";
+import { localeForLanguage } from "@/i18n/config";
 import { cn } from "@/lib/utils";
 import {
   portfolioChartColors,
@@ -45,15 +47,21 @@ interface BalanceHistoryData {
 
 const fmtBtc = (value: number) => `₿ ${value.toFixed(8)}`;
 
-const MONTH_LABELS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-function monthLabel(bucket: string) {
+/**
+ * Localized short month name for a `YYYY-MM` bucket. Month names follow the UI
+ * language (de-AT → „Jän", „Mär", „Dez"), driven by `Intl` rather than a
+ * hardcoded English array.
+ */
+function monthLabel(bucket: string, locale: string) {
   const [year, month] = bucket.split("-");
   const index = Number.parseInt(month ?? "", 10) - 1;
-  return MONTH_LABELS[index] ? `${MONTH_LABELS[index]} ${year}` : bucket.slice(0, 7);
+  if (!Number.isInteger(index) || index < 0 || index > 11) {
+    return bucket.slice(0, 7);
+  }
+  const name = new Intl.DateTimeFormat(locale, { month: "short" }).format(
+    new Date(Date.UTC(2021, index, 15)),
+  );
+  return `${name} ${year}`;
 }
 
 export function WalletBalanceHistoryCard({
@@ -63,6 +71,8 @@ export function WalletBalanceHistoryCard({
   walletId: string;
   hideSensitive: boolean;
 }) {
+  const { t, i18n } = useTranslation("connections");
+  const locale = localeForLanguage(i18n.language);
   const colorMode = useResolvedColorMode();
   const color = portfolioChartColors[colorMode].value;
   const gradientId = `wallet-balance-${walletId}`;
@@ -107,9 +117,13 @@ export function WalletBalanceHistoryCard({
   return (
     <Card>
       <CardHeader className="border-b px-4 pb-3">
-        <CardTitle className="text-sm sm:text-base">Balance history</CardTitle>
+        <CardTitle className="text-sm sm:text-base">
+          {t("detail.balanceHistory.title")}
+        </CardTitle>
         <CardDescription>
-          Imported balance over the last {points.length || 12} months.
+          {t("detail.balanceHistory.description", {
+            count: points.length || 12,
+          })}
         </CardDescription>
       </CardHeader>
       <CardContent className="px-4 pt-4">
@@ -166,7 +180,7 @@ export function WalletBalanceHistoryCard({
                       return (
                         <div className="rounded-md border bg-popover px-2 py-1 text-xs shadow-sm">
                           <div className="text-muted-foreground">
-                            {monthLabel(point.bucket)}
+                            {monthLabel(point.bucket, locale)}
                           </div>
                           <div
                             className={cn(

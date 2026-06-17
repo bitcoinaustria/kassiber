@@ -1,3 +1,6 @@
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+
 import {
   Tool,
   ToolContent,
@@ -12,9 +15,10 @@ interface ChatToolCallProps {
 }
 
 export function ChatToolCall({ toolCall }: ChatToolCallProps) {
+  const { t } = useTranslation("assistant");
   const hasArguments = Object.keys(toolCall.arguments).length > 0;
   const hasResult = toolCall.result !== undefined && toolCall.result !== null;
-  const summary = summarizeToolResult(toolCall.result);
+  const summary = summarizeToolResult(toolCall.result, t);
   const errorText =
     toolCall.status === "error" || toolCall.status === "denied"
       ? toolCall.reason
@@ -30,21 +34,26 @@ export function ChatToolCall({ toolCall }: ChatToolCallProps) {
       <ToolHeader name={toolCall.name} state={toolCall.status} />
       <ToolContent>
         {hasArguments ? <ToolInput input={toolCall.arguments} /> : null}
-        {summary ? <ToolOutput output={summary} label="Summary" /> : null}
+        {summary ? (
+          <ToolOutput output={summary} label={t("tool.summaryLabel")} />
+        ) : null}
         {hasResult && !summary ? (
-          <ToolOutput output={toolCall.result} label="Details" />
+          <ToolOutput output={toolCall.result} label={t("tool.detailsLabel")} />
         ) : null}
         {errorText ? (
           <ToolOutput error={errorText} />
         ) : toolCall.reason ? (
-          <ToolOutput output={toolCall.reason} label="Reason" />
+          <ToolOutput output={toolCall.reason} label={t("tool.reasonLabel")} />
         ) : null}
       </ToolContent>
     </Tool>
   );
 }
 
-function summarizeToolResult(result: unknown): string | null {
+function summarizeToolResult(
+  result: unknown,
+  t: TFunction<"assistant">,
+): string | null {
   const envelope = asRecord(result);
   const kind = typeof envelope?.kind === "string" ? envelope.kind : "";
   const data = asRecord(envelope?.data);
@@ -59,15 +68,19 @@ function summarizeToolResult(result: unknown): string | null {
       const fiat = asRecord(data.fiat);
       const priceEur =
         typeof data.priceEur === "number"
-          ? `BTC/EUR ${formatMoney(data.priceEur)}`
+          ? t("tool.overviewSnapshot.priceEur", {
+              value: formatMoney(data.priceEur),
+            })
           : null;
       const realizedYtd =
         typeof fiat?.eurRealizedYTD === "number"
-          ? `realized YTD ${formatMoney(fiat.eurRealizedYTD)}`
+          ? t("tool.overviewSnapshot.realizedYtd", {
+              value: formatMoney(fiat.eurRealizedYTD),
+            })
           : null;
       return [
-        `${connections.length} connection(s)`,
-        `${txs.length} recent transaction(s)`,
+        t("tool.overviewSnapshot.connections", { count: connections.length }),
+        t("tool.overviewSnapshot.recentTransactions", { count: txs.length }),
         priceEur,
         realizedYtd,
       ]
@@ -75,13 +88,20 @@ function summarizeToolResult(result: unknown): string | null {
         .join("; ");
     }
     case "ui.workspace.health": {
-      const booksSet = asRecord(data.workspace)?.label ?? "No books set";
-      const books = asRecord(data.profile)?.label ?? "No book";
+      const booksSet =
+        asRecord(data.workspace)?.label ?? t("tool.workspaceHealth.noBooksSet");
+      const books =
+        asRecord(data.profile)?.label ?? t("tool.workspaceHealth.noBook");
       const journals = asRecord(data.journals);
       const reports = asRecord(data.reports);
-      return `${booksSet} / ${books}: journals ${journals?.status ?? "unknown"}, reports ${
-        reports?.ready ? "ready" : "not ready"
-      }.`;
+      return t("tool.workspaceHealth.summary", {
+        booksSet,
+        books,
+        journals: journals?.status ?? t("tool.workspaceHealth.statusUnknown"),
+        reports: reports?.ready
+          ? t("tool.workspaceHealth.reportsReady")
+          : t("tool.workspaceHealth.reportsNotReady"),
+      });
     }
     case "ui.next_actions": {
       const suggestions = Array.isArray(data.suggestions)
@@ -91,8 +111,11 @@ function summarizeToolResult(result: unknown): string | null {
         .map((item) => asRecord(item)?.title)
         .filter((title): title is string => typeof title === "string");
       return titles.length
-        ? `${titles.length} suggestion(s): ${titles.join(", ")}.`
-        : "No next action suggestions.";
+        ? t("tool.nextActions.suggestions", {
+            count: titles.length,
+            titles: titles.join(", "),
+          })
+        : t("tool.nextActions.none");
     }
     case "ui.wallets.list": {
       const wallets = Array.isArray(data.wallets) ? data.wallets : [];
@@ -100,82 +123,118 @@ function summarizeToolResult(result: unknown): string | null {
         .map((item) => asRecord(item)?.label)
         .filter((label): label is string => typeof label === "string")
         .slice(0, 4);
-      return `${wallets.length} wallet(s)${labels.length ? `: ${labels.join(", ")}` : ""}.`;
+      const walletsLabel = t("tool.walletsList.wallets", {
+        count: wallets.length,
+      });
+      return labels.length
+        ? t("tool.walletsList.withLabels", {
+            wallets: walletsLabel,
+            labels: labels.join(", "),
+          })
+        : t("tool.walletsList.withoutLabels", { wallets: walletsLabel });
     }
     case "ui.backends.list": {
       const backends = Array.isArray(data.backends) ? data.backends : [];
       const defaultBackend = asRecord(data.summary)?.default_backend;
-      return `${backends.length} backend(s)${
-        typeof defaultBackend === "string" ? `; default ${defaultBackend}` : ""
-      }.`;
+      const backendsLabel = t("tool.backendsList.backends", {
+        count: backends.length,
+      });
+      return typeof defaultBackend === "string"
+        ? t("tool.backendsList.withDefault", {
+            backends: backendsLabel,
+            default: defaultBackend,
+          })
+        : t("tool.backendsList.withoutDefault", { backends: backendsLabel });
     }
     case "ui.journals.quarantine": {
       const summary = asRecord(data.summary);
-      return `${summary?.count ?? 0} quarantined transaction(s).`;
+      return t("tool.quarantine.summary", {
+        count: Number(summary?.count ?? 0),
+      });
     }
     case "ui.journals.transfers.list": {
       const summary = asRecord(data.summary);
       const transferEntries = Number(summary?.journal_transfer_entries ?? 0);
-      return `${summary?.manual_pairs ?? 0} pair(s), ${transferEntries} journal transfer ${
-        transferEntries === 1 ? "entry" : "entries"
-      }.`;
+      const pairs = t("tool.transfersList.pairs", {
+        count: Number(summary?.manual_pairs ?? 0),
+      });
+      return t("tool.transfersList.summary", {
+        count: transferEntries,
+        pairs,
+        transferEntries,
+      });
     }
     case "ui.rates.summary": {
       const pairs = Array.isArray(data.pairs) ? data.pairs : [];
-      return `${pairs.length} cached rate pair(s).`;
+      return t("tool.ratesSummary.pairs", { count: pairs.length });
     }
     case "ui.rates.coverage": {
       const summary = asRecord(data.summary);
-      return `${summary?.missing_price_transactions ?? 0} missing price transaction(s), ${
-        summary?.cache_coverable_missing ?? 0
-      } coverable from cache.`;
+      const missing = Number(summary?.missing_price_transactions ?? 0);
+      return t("tool.ratesCoverage.summary", {
+        count: missing,
+        missing,
+        coverable: Number(summary?.cache_coverable_missing ?? 0),
+      });
     }
     case "ui.report.blockers": {
       const blockers = Array.isArray(data.blockers) ? data.blockers : [];
       return data.ready
-        ? "Reports are ready."
-        : `${blockers.length} report blocker(s).`;
+        ? t("tool.reportBlockers.ready")
+        : t("tool.reportBlockers.blockers", { count: blockers.length });
     }
     case "ui.audit.changes_since_last_answer": {
       const counts = asRecord(data.counts_since);
       if (data.status === "baseline_required") {
-        return "No previous-answer baseline available.";
+        return t("tool.changesSince.baselineRequired");
       }
-      const changed = data.changed ? "changed" : "unchanged";
-      return `Workspace ${changed}; ${counts?.transactions ?? 0} transaction change(s), ${
-        counts?.journal_entries ?? 0
-      } journal change(s).`;
+      const txCount = Number(counts?.transactions ?? 0);
+      return t("tool.changesSince.summary", {
+        count: txCount,
+        state: data.changed
+          ? t("tool.changesSince.changed")
+          : t("tool.changesSince.unchanged"),
+        txCount,
+        journalCount: Number(counts?.journal_entries ?? 0),
+      });
     }
     case "ui.maintenance.settings": {
       const settings = asRecord(data.settings);
       return settings?.auto_sync_before_report_reads
-        ? "Automatic watch-only refresh before report reads is enabled."
-        : "Automatic watch-only refresh before report reads is disabled.";
+        ? t("tool.maintenanceSettings.enabled")
+        : t("tool.maintenanceSettings.disabled");
     }
     case "ui.maintenance.configure": {
       const settings = asRecord(data.settings);
       return settings?.auto_sync_before_report_reads
-        ? "Enabled automatic watch-only refresh before report reads."
-        : "Disabled automatic watch-only refresh before report reads.";
+        ? t("tool.maintenanceConfigure.enabled")
+        : t("tool.maintenanceConfigure.disabled");
     }
     case "ui.maintenance.run": {
       const blockers = Array.isArray(data.blockers) ? data.blockers : [];
       return data.ready
-        ? `Maintenance complete; reports ready.`
-        : `Maintenance complete; ${blockers.length} blocker(s) remain.`;
+        ? t("tool.maintenanceRun.ready")
+        : t("tool.maintenanceRun.blockers", { count: blockers.length });
     }
     case "ui.transactions.list": {
       const txs = Array.isArray(data.txs) ? data.txs : [];
-      return `${txs.length} transaction(s).`;
+      return t("tool.transactionsList.summary", { count: txs.length });
     }
     case "ui.transactions.extremes": {
       const largest = Array.isArray(data.largest) ? data.largest : [];
       const smallest = Array.isArray(data.smallest) ? data.smallest : [];
-      return `${largest.length} largest transaction(s), ${smallest.length} smallest transaction(s).`;
+      return t("tool.transactionsExtremes.summary", {
+        largest: t("tool.transactionsExtremes.largest", {
+          count: largest.length,
+        }),
+        smallest: t("tool.transactionsExtremes.smallest", {
+          count: smallest.length,
+        }),
+      });
     }
     case "ui.transactions.search": {
       const txs = Array.isArray(data.txs) ? data.txs : [];
-      return `${txs.length} matching transaction(s).`;
+      return t("tool.transactionsSearch.summary", { count: txs.length });
     }
     case "ui.reports.summary": {
       const metrics = asRecord(data.metrics);
@@ -184,41 +243,64 @@ function summarizeToolResult(result: unknown): string | null {
       const pairs = Array.isArray(data.transfer_pairs)
         ? data.transfer_pairs
         : [];
-      const activeTransactions = Number(
-        metrics?.active_transactions ?? 0,
-      ).toLocaleString("en-US");
-      return [
-        `${activeTransactions} active transaction(s)`,
-        `${assetFlow.length} asset flow row(s)`,
-        `${wallets.length} wallet flow row(s)`,
-        `${pairs.length} reviewed transfer/swap pair(s)`,
-      ].join(", ") + ".";
+      return t("tool.reportsSummary.summary", {
+        activeTransactions: t("tool.reportsSummary.activeTransactions", {
+          count: Number(metrics?.active_transactions ?? 0),
+        }),
+        assetFlowRows: t("tool.reportsSummary.assetFlowRows", {
+          count: assetFlow.length,
+        }),
+        walletFlowRows: t("tool.reportsSummary.walletFlowRows", {
+          count: wallets.length,
+        }),
+        transferPairs: t("tool.reportsSummary.transferPairs", {
+          count: pairs.length,
+        }),
+      });
     }
     case "ui.reports.balance_sheet": {
       const rows = Array.isArray(data.rows) ? data.rows : [];
       const totals = Array.isArray(data.totals_by_asset)
         ? data.totals_by_asset
         : [];
-      return `${rows.length} balance row(s), ${totals.length} asset total(s).`;
+      return t("tool.balanceSheet.summary", {
+        balanceRows: t("tool.balanceSheet.balanceRows", { count: rows.length }),
+        assetTotals: t("tool.balanceSheet.assetTotals", {
+          count: totals.length,
+        }),
+      });
     }
     case "ui.reports.portfolio_summary": {
       const rows = Array.isArray(data.rows) ? data.rows : [];
       const totals = Array.isArray(data.totals_by_asset)
         ? data.totals_by_asset
         : [];
-      return `${rows.length} wallet holding row(s), ${totals.length} asset total(s).`;
+      return t("tool.portfolioSummary.summary", {
+        holdingRows: t("tool.portfolioSummary.holdingRows", {
+          count: rows.length,
+        }),
+        assetTotals: t("tool.portfolioSummary.assetTotals", {
+          count: totals.length,
+        }),
+      });
     }
     case "ui.reports.tax_summary": {
       const rows = Array.isArray(data.rows) ? data.rows : [];
       const years = Array.isArray(data.available_years)
         ? data.available_years
         : [];
-      return `${rows.length} tax row(s), ${years.length} year(s).`;
+      return t("tool.taxSummary.summary", {
+        taxRows: t("tool.taxSummary.taxRows", { count: rows.length }),
+        years: t("tool.taxSummary.years", { count: years.length }),
+      });
     }
     case "ui.reports.balance_history": {
       const rows = Array.isArray(data.rows) ? data.rows : [];
       const filters = asRecord(data.filters);
-      return `${rows.length} ${filters?.interval ?? "history"} balance bucket(s).`;
+      return t("tool.balanceHistory.buckets", {
+        count: rows.length,
+        interval: filters?.interval ?? t("tool.balanceHistory.intervalFallback"),
+      });
     }
     default:
       return null;

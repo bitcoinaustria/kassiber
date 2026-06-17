@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 
+import i18n from "@/i18n";
+
 import {
   quarantineItemToRow,
   quarantineMetrics,
   quarantineReasonFilterIds,
 } from "./model";
 import type { QuarantineItem } from "./types";
+
+const t = i18n.getFixedT("en", "journals");
 
 const baseItem: QuarantineItem = {
   transaction_id: "transaction-with-a-long-id",
@@ -26,7 +30,7 @@ const baseItem: QuarantineItem = {
 
 describe("quarantine row model", () => {
   it("maps missing price quarantines into review-table rows", () => {
-    const row = quarantineItemToRow(baseItem, "AT profile");
+    const row = quarantineItemToRow(baseItem, "AT profile", t);
 
     expect(row).toMatchObject({
       id: "transactio...",
@@ -56,6 +60,7 @@ describe("quarantine row model", () => {
         reason: "insufficient_lots",
       },
       null,
+      t,
     );
 
     expect(row.status).toBe("Blocked");
@@ -68,18 +73,21 @@ describe("quarantine row model", () => {
 
 describe("quarantine metrics", () => {
   it("groups daemon reason strings into review filters", () => {
-    const metrics = quarantineMetrics({
-      workspace: "Personal",
-      profile: "AT profile",
-      count: 7,
-      limit: 100,
-      by_reason: [
-        { reason: "missing_spot_price", count: 2 },
-        { reason: "transfer_mismatch", count: 1 },
-        { reason: "insufficient_lots", count: 3 },
-        { reason: "unsupported_tax_direction", count: 1 },
-      ],
-    });
+    const metrics = quarantineMetrics(
+      {
+        workspace: "Personal",
+        profile: "AT profile",
+        count: 7,
+        limit: 100,
+        by_reason: [
+          { reason: "missing_spot_price", count: 2 },
+          { reason: "transfer_mismatch", count: 1 },
+          { reason: "insufficient_lots", count: 3 },
+          { reason: "unsupported_tax_direction", count: 1 },
+        ],
+      },
+      t,
+    );
 
     expect(metrics.map((metric) => [metric.label, metric.value])).toEqual([
       ["Quarantined", 7],

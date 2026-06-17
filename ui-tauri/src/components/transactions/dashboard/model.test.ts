@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import i18n from "@/i18n";
+
 import {
   attachmentRecordToItem,
   bucketTransactionDate,
@@ -16,6 +18,8 @@ import {
 } from "./model";
 import type { Tx } from "@/mocks/seed";
 import type { Transaction, TransactionFlow } from "@/components/transactions";
+
+const t = i18n.getFixedT("en", "transactions");
 
 function transaction(
   overrides: Partial<Transaction> = {},
@@ -78,7 +82,7 @@ describe("transaction dashboard chart selection", () => {
       mode: "all",
     };
 
-    expect(flowChartSelectionLabel(selection)).toBe(
+    expect(flowChartSelectionLabel(selection, t)).toBe(
       `${bucket.label} · All flows · All`,
     );
     expect(

@@ -1,5 +1,6 @@
 import { Check, FileText, Link2, Repeat2 } from "lucide-react";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import type { AttachmentItem } from "@/components/transactions/TransactionDetailSheet";
 import type { Transaction } from "@/components/transactions/model";
@@ -57,6 +58,7 @@ export function TransactionEvidenceReuseDialog({
   hideSensitive?: boolean;
   onCopy: (attachmentIds: string[]) => void | Promise<void>;
 }) {
+  const { t } = useTranslation("transactions");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 
   React.useEffect(() => {
@@ -92,23 +94,23 @@ export function TransactionEvidenceReuseDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Reuse evidence</DialogTitle>
+          <DialogTitle>{t("evidenceReuse.title")}</DialogTitle>
           <DialogDescription>
-            Copy selected evidence rows onto the current transaction.
+            {t("evidenceReuse.description")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-1.5">
             <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Source transaction
+              {t("evidenceReuse.sourceTransaction")}
             </div>
             <Select
               value={sourceTransactionId}
               onValueChange={onSourceTransactionIdChange}
             >
               <SelectTrigger className={cn(hideSensitive && "sensitive")}>
-                <SelectValue placeholder="Choose a transaction" />
+                <SelectValue placeholder={t("evidenceReuse.chooseTransaction")} />
               </SelectTrigger>
               <SelectContent>
                 {sourceTransactions.map((transaction) => (
@@ -124,16 +126,16 @@ export function TransactionEvidenceReuseDialog({
             <div className="flex items-center justify-between border-b px-3 py-2">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <Repeat2 className="size-4 text-muted-foreground" aria-hidden="true" />
-                Evidence to copy
+                {t("evidenceReuse.evidenceToCopy")}
               </div>
               <Badge variant="outline" className="rounded-md">
-                {selectedCount} selected
+                {t("evidenceReuse.selectedCount", { count: selectedCount })}
               </Badge>
             </div>
             <div className="max-h-72 overflow-y-auto p-2">
               {isLoadingSourceAttachments ? (
                 <div className="px-2 py-6 text-center text-sm text-muted-foreground">
-                  Loading evidence…
+                  {t("evidenceReuse.loading")}
                 </div>
               ) : sourceAttachments.length ? (
                 <div className="space-y-1.5">
@@ -181,7 +183,7 @@ export function TransactionEvidenceReuseDialog({
                         </span>
                         {attachment.copiedFromAttachmentId ? (
                           <Badge variant="secondary" className="rounded-md">
-                            reused
+                            {t("evidenceReuse.reused")}
                           </Badge>
                         ) : null}
                       </label>
@@ -190,7 +192,7 @@ export function TransactionEvidenceReuseDialog({
                 </div>
               ) : (
                 <div className="px-2 py-6 text-center text-sm text-muted-foreground">
-                  No evidence is attached to the selected transaction.
+                  {t("evidenceReuse.noEvidence")}
                 </div>
               )}
             </div>
@@ -203,7 +205,7 @@ export function TransactionEvidenceReuseDialog({
             variant="outline"
             onClick={() => onOpenChange(false)}
           >
-            Cancel
+            {t("common:actions.cancel")}
           </Button>
           <Button
             type="button"
@@ -216,7 +218,7 @@ export function TransactionEvidenceReuseDialog({
             ) : (
               <Check className="size-4" aria-hidden="true" />
             )}
-            Copy evidence
+            {t("evidenceReuse.copyEvidence")}
           </Button>
         </DialogFooter>
       </DialogContent>

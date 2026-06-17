@@ -20,6 +20,8 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -363,9 +365,9 @@ const CONFIDENCE_LEVELS = ["exact", "strong", "weak", "unknown"];
 const REVEAL_MODES = ["labels_only", "minimal", "standard", "full"];
 const NO_ATTACHMENT = "__none__";
 const WIZARD_STEPS = [
-  { id: "setup", label: "Setup" },
-  { id: "review", label: "Review" },
-  { id: "export", label: "Export" },
+  { id: "setup" },
+  { id: "review" },
+  { id: "export" },
 ] as const;
 
 type WizardStep = (typeof WIZARD_STEPS)[number]["id"];
@@ -459,12 +461,12 @@ function txFlow(row: TransactionRow): TxPickerFlow {
   return "transfer";
 }
 
-function txFlowLabel(row: TransactionRow): string {
+function txFlowLabel(row: TransactionRow, t: SourceFundsTFunction): string {
   const flow = txFlow(row);
-  if (flow === "incoming") return "Incoming";
-  if (flow === "outgoing") return "Outgoing";
-  if (flow === "swap") return "Swap";
-  return "Transfer";
+  if (flow === "incoming") return t("flow.incoming");
+  if (flow === "outgoing") return t("flow.outgoing");
+  if (flow === "swap") return t("flow.swap");
+  return t("flow.transfer");
 }
 
 function txWallet(row: TransactionRow): string {
@@ -525,8 +527,8 @@ function txSearchText(row: TransactionRow): string {
     .toLowerCase();
 }
 
-function txDate(row: TransactionRow): string {
-  return (row.occurred_at || row.date || "").slice(0, 10) || "Unknown date";
+function txDate(row: TransactionRow, t: SourceFundsTFunction): string {
+  return (row.occurred_at || row.date || "").slice(0, 10) || t("fallback.unknownDate");
 }
 
 function txDateFilterValue(row: TransactionRow): string {
@@ -565,6 +567,26 @@ function pretty(value: string) {
   return value.replaceAll("_", " ");
 }
 
+type SourceFundsTFunction = TFunction<"sourceFunds">;
+
+// Enum -> display label. Known enum values resolve through the namespace; any
+// value not enumerated in the bundle falls back to the underscore-stripped form.
+function enumLabel(
+  t: SourceFundsTFunction,
+  group:
+    | "sourceType"
+    | "linkType"
+    | "confidence"
+    | "reveal"
+    | "linkState"
+    | "method",
+  value?: string | null,
+): string {
+  if (!value) return pretty(value ?? "");
+  const translated = t(`${group}.${value}`, { defaultValue: "" });
+  return translated || pretty(value);
+}
+
 function shortId(value?: string | null) {
   if (!value) return "-";
   return value.length > 18 ? `${value.slice(0, 10)}...${value.slice(-6)}` : value;
@@ -593,6 +615,7 @@ function ReportControlFields({
   onAmountChange: (value: string) => void;
   onRevealModeChange: (value: string) => void;
 }) {
+  const { t } = useTranslation("sourceFunds");
   return (
     <>
       <Field label={amountLabel} htmlFor="sof-amount">
@@ -600,10 +623,10 @@ function ReportControlFields({
           id="sof-amount"
           value={targetAmount}
           onChange={(event) => onAmountChange(event.target.value)}
-          placeholder={selectedTx ? txAmount(selectedTx) : "0.00000000"}
+          placeholder={selectedTx ? txAmount(selectedTx) : t("controls.amountPlaceholder")}
         />
       </Field>
-      <Field label="Reveal" htmlFor="sof-reveal">
+      <Field label={t("controls.revealLabel")} htmlFor="sof-reveal">
         <select
           id="sof-reveal"
           className="h-10 w-full rounded-md border bg-background px-3 text-sm"
@@ -612,7 +635,7 @@ function ReportControlFields({
         >
           {REVEAL_MODES.map((mode) => (
             <option key={mode} value={mode}>
-              {pretty(mode)}
+              {enumLabel(t, "reveal", mode)}
             </option>
           ))}
         </select>
@@ -630,6 +653,7 @@ function TransactionTargetRow({
   active: boolean;
   onSelect: () => void;
 }) {
+  const { t } = useTranslation("sourceFunds");
   const flow = txFlow(row);
   const FlowIcon =
     flow === "incoming"
@@ -650,7 +674,8 @@ function TransactionTargetRow({
         ? "text-red-700 dark:text-red-300"
         : "text-muted-foreground";
   const txid = row.external_id || row.externalId || row.id;
-  const description = row.counter || row.description || row.note || txid || "Transaction";
+  const description =
+    row.counter || row.description || row.note || txid || t("transactionRow.fallbackDescription");
 
   return (
     <button
@@ -679,7 +704,7 @@ function TransactionTargetRow({
                 {shortId(txid)}
               </span>
               {row.direction && (
-                <span className="md:hidden">{pretty(txDirection(row))}</span>
+                <span className="md:hidden">{txFlowLabel(row, t)}</span>
               )}
             </div>
           </div>
@@ -688,16 +713,16 @@ function TransactionTargetRow({
           {txSignedAmount(row)}
         </div>
         <div className="text-sm text-muted-foreground">
-          <span className="md:hidden">Wallet: </span>
+          <span className="md:hidden">{t("transactionRow.walletMobile")}</span>
           {txWallet(row)}
         </div>
         <div className="flex flex-wrap items-center gap-2 md:justify-end">
           <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium ${flowClassName}`}>
             <FlowIcon className="size-3.5" aria-hidden="true" />
-            {txFlowLabel(row)}
+            {txFlowLabel(row, t)}
           </span>
           <span className="text-xs text-muted-foreground">
-            {txDate(row)}
+            {txDate(row, t)}
           </span>
         </div>
       </div>
@@ -706,17 +731,19 @@ function TransactionTargetRow({
 }
 
 function TransactionTargetHeader() {
+  const { t } = useTranslation("sourceFunds");
   return (
     <div className="hidden border-b bg-muted/35 px-5 py-2 text-xs font-medium text-muted-foreground md:grid md:grid-cols-[minmax(0,1fr)_140px_150px_130px]">
-      <span>Transaction</span>
-      <span className="text-right">Amount</span>
-      <span>Wallet</span>
-      <span className="text-right">Flow</span>
+      <span>{t("transactionRow.header.transaction")}</span>
+      <span className="text-right">{t("transactionRow.header.amount")}</span>
+      <span>{t("transactionRow.header.wallet")}</span>
+      <span className="text-right">{t("transactionRow.header.flow")}</span>
     </div>
   );
 }
 
 export function SourceFunds() {
+  const { t } = useTranslation("sourceFunds");
   const addNotification = useUiStore((state) => state.addNotification);
   const profileKey = useUiStore(
     (state) => state.identity?.profile ?? "default",
@@ -1027,8 +1054,12 @@ export function SourceFunds() {
   const planned = reportPurpose === "planned_exchange_sale";
   const showStepContext =
     currentStep === "review" || currentStep === "export";
-  const targetLabel = planned ? "Funds history anchor" : "Completed transaction";
-  const amountLabel = planned ? "Planned sale amount" : "Report amount";
+  const targetLabel = planned
+    ? t("setup.targetLabelPlanned")
+    : t("setup.targetLabelExisting");
+  const amountLabel = planned
+    ? t("setup.amountLabelPlanned")
+    : t("setup.amountLabelExisting");
   const stepIndex = WIZARD_STEPS.findIndex((step) => step.id === currentStep);
   const goBack = () => {
     const previous = WIZARD_STEPS[Math.max(0, stepIndex - 1)]?.id ?? "setup";
@@ -1123,8 +1154,10 @@ export function SourceFunds() {
     const inserted = envelope.data?.inserted ?? 0;
     if (showNotification || inserted > 0) {
       addNotification({
-        title: showNotification ? "Suggestions updated" : "Evidence matched",
-        body: `${inserted} new source-funds link${inserted === 1 ? "" : "s"}.`,
+        title: showNotification
+          ? t("toast.suggestionsUpdated")
+          : t("toast.evidenceMatched"),
+        body: t("toast.linksFound", { count: inserted }),
         tone: inserted > 0 ? "success" : "info",
       });
     }
@@ -1138,8 +1171,8 @@ export function SourceFunds() {
     const reviewed = envelope.data?.reviewed ?? 0;
     const skipped = envelope.data?.skipped ?? 0;
     addNotification({
-      title: "Deterministic hops reviewed",
-      body: `${reviewed} reviewed, ${skipped} left for manual review.`,
+      title: t("toast.deterministicReviewed"),
+      body: t("toast.deterministicBody", { reviewed, skipped }),
       tone: reviewed > 0 ? "success" : "info",
     });
   };
@@ -1163,8 +1196,15 @@ export function SourceFunds() {
       });
     }
     addNotification({
-      title: state === "reviewed" ? "Link accepted" : "Link rejected",
-      body: `${pretty(linkForm.link_type)} ${state}.`,
+      title: state === "reviewed" ? t("toast.linkAccepted") : t("toast.linkRejected"),
+      body:
+        state === "reviewed"
+          ? t("toast.linkReviewedBody", {
+              type: enumLabel(t, "linkType", linkForm.link_type),
+            })
+          : t("toast.linkRejectedBody", {
+              type: enumLabel(t, "linkType", linkForm.link_type),
+            }),
       tone: state === "reviewed" ? "success" : "info",
     });
   };
@@ -1194,8 +1234,8 @@ export function SourceFunds() {
       attachment_id: NO_ATTACHMENT,
     }));
     addNotification({
-      title: "Manual link added",
-      body: "The reviewed flow has been updated.",
+      title: t("toast.manualLinkAdded"),
+      body: t("toast.manualLinkBody"),
       tone: "success",
     });
   };
@@ -1239,9 +1279,9 @@ export function SourceFunds() {
     addNotification({
       title:
         sourceForm.source_type === "missing_history"
-          ? "Gap marked reviewed"
-          : "Source linked",
-      body: "The source-funds path has been updated.",
+          ? t("toast.gapMarked")
+          : t("toast.sourceLinked"),
+      body: t("toast.sourcePathBody"),
       tone: "success",
     });
   };
@@ -1254,8 +1294,8 @@ export function SourceFunds() {
             open={showCoverage}
             onOpenChange={setShowCoverage}
             icon={<GitBranch className="size-4" aria-hidden="true" />}
-            title="Historical inbound coverage"
-            summary={coverageSummary(coverageQuery.data?.data)}
+            title={t("coverage.sectionTitle")}
+            summary={coverageSummary(coverageQuery.data?.data, t)}
           >
             <CoveragePanel
               coverage={coverageQuery.data?.data}
@@ -1266,10 +1306,10 @@ export function SourceFunds() {
             <CardHeader className="border-b">
               <CardTitle className="flex items-center gap-2">
                 <GitBranch className="size-4" aria-hidden="true" />
-                Source of Funds
+                {t("header.title")}
               </CardTitle>
               <CardDescription>
-                Pick the purpose first, then review the evidence path.
+                {t("header.description")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 p-4">
@@ -1278,24 +1318,21 @@ export function SourceFunds() {
                 <div className="grid gap-3 md:grid-cols-2">
                 <PurposeButton
                   active={reportPurpose === "planned_exchange_sale"}
-                  title="Planned exchange sale"
-                  body="Prepare a bank or exchange disclosure before the deposit or sale happens."
+                  title={t("purpose.planned.title")}
+                  body={t("purpose.planned.body")}
                   onClick={() => setReportPurpose("planned_exchange_sale")}
                 />
                 <PurposeButton
                   active={reportPurpose === "existing_transaction"}
-                  title="Already happened"
-                  body="Explain a completed sale, exchange deposit, withdrawal, or transfer."
+                  title={t("purpose.existing.title")}
+                  body={t("purpose.existing.body")}
                   onClick={() => setReportPurpose("existing_transaction")}
                 />
                 </div>
               )}
               {currentStep === "setup" && planned && (
                 <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-                  Planned reports prove the reviewed history of the bitcoin you
-                  intend to sell. If those sats were originally bought on an
-                  exchange, attach fiat-funds proof to that purchase source as a
-                  separate evidence item.
+                  {t("purpose.plannedHint")}
                 </div>
               )}
               {currentStep === "setup" && (
@@ -1337,8 +1374,15 @@ export function SourceFunds() {
                     />
                     {selectedTx && (
                       <div className="self-end rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                        Selected: {txDate(selectedTx)} · {txWallet(selectedTx)} ·{" "}
-                        {shortId(selectedTx.external_id || selectedTx.externalId || selectedTx.id)}
+                        {t("setup.selected", {
+                          date: txDate(selectedTx, t),
+                          wallet: txWallet(selectedTx),
+                          txid: shortId(
+                            selectedTx.external_id ||
+                              selectedTx.externalId ||
+                              selectedTx.id,
+                          ),
+                        })}
                       </div>
                     )}
                   </div>
@@ -1347,7 +1391,10 @@ export function SourceFunds() {
                       <div>
                         <div className="text-sm font-medium">{targetLabel}</div>
                         <div className="text-xs text-muted-foreground">
-                          {filteredTargetRows.length} of {rows.length} transactions
+                          {t("setup.transactionCount", {
+                            shown: filteredTargetRows.length,
+                            total: rows.length,
+                          })}
                         </div>
                       </div>
                       <div className="space-y-3">
@@ -1363,7 +1410,7 @@ export function SourceFunds() {
                               onChange={(event) =>
                                 setTargetSearch(event.target.value)
                               }
-                              placeholder="Search txid, wallet, note..."
+                              placeholder={t("setup.searchPlaceholder")}
                               className="h-9 pl-9"
                             />
                           </div>
@@ -1381,7 +1428,7 @@ export function SourceFunds() {
                               className="mr-2 size-4"
                               aria-hidden="true"
                             />
-                            Filters
+                            {t("filters.title")}
                           </Button>
                           {targetFiltersActive && (
                             <Button
@@ -1392,7 +1439,7 @@ export function SourceFunds() {
                               onClick={clearTargetFilters}
                             >
                               <X className="mr-2 size-4" aria-hidden="true" />
-                              Clear
+                              {t("filters.clear")}
                             </Button>
                           )}
                         </div>
@@ -1407,13 +1454,13 @@ export function SourceFunds() {
                               onChange={(event) =>
                                 setTargetDirectionFilter(event.target.value)
                               }
-                              aria-label="Filter by direction"
+                              aria-label={t("filters.direction.ariaLabel")}
                             >
-                              <option value="all">All flows</option>
-                              <option value="incoming">Incoming</option>
-                              <option value="outgoing">Outgoing</option>
-                              <option value="transfer">Transfer</option>
-                              <option value="swap">Swap</option>
+                              <option value="all">{t("filters.direction.all")}</option>
+                              <option value="incoming">{t("flow.incoming")}</option>
+                              <option value="outgoing">{t("flow.outgoing")}</option>
+                              <option value="transfer">{t("flow.transfer")}</option>
+                              <option value="swap">{t("flow.swap")}</option>
                             </select>
                             <select
                               className="h-9 rounded-md border bg-background px-3 text-sm"
@@ -1421,14 +1468,14 @@ export function SourceFunds() {
                               onChange={(event) =>
                                 setTargetDateFilter(event.target.value)
                               }
-                              aria-label="Filter by date"
+                              aria-label={t("filters.date.ariaLabel")}
                             >
-                              <option value="all">All dates</option>
-                              <option value="today">Today</option>
-                              <option value="yesterday">Yesterday</option>
-                              <option value="7days">Last 7 days</option>
-                              <option value="30days">Last 30 days</option>
-                              <option value="older">Older</option>
+                              <option value="all">{t("filters.date.all")}</option>
+                              <option value="today">{t("filters.date.today")}</option>
+                              <option value="yesterday">{t("filters.date.yesterday")}</option>
+                              <option value="7days">{t("filters.date.last7days")}</option>
+                              <option value="30days">{t("filters.date.last30days")}</option>
+                              <option value="older">{t("filters.date.older")}</option>
                             </select>
                             <select
                               className="h-9 rounded-md border bg-background px-3 text-sm"
@@ -1436,12 +1483,12 @@ export function SourceFunds() {
                               onChange={(event) =>
                                 setTargetStatusFilter(event.target.value)
                               }
-                              aria-label="Filter by status"
+                              aria-label={t("filters.status.ariaLabel")}
                             >
-                              <option value="all">All statuses</option>
-                              <option value="confirmed">Confirmed</option>
-                              <option value="pending">Pending</option>
-                              <option value="review">Needs review</option>
+                              <option value="all">{t("filters.status.all")}</option>
+                              <option value="confirmed">{t("filters.status.confirmed")}</option>
+                              <option value="pending">{t("filters.status.pending")}</option>
+                              <option value="review">{t("filters.status.review")}</option>
                             </select>
                             <select
                               className="h-9 rounded-md border bg-background px-3 text-sm"
@@ -1449,9 +1496,9 @@ export function SourceFunds() {
                               onChange={(event) =>
                                 setTargetNetworkFilter(event.target.value)
                               }
-                              aria-label="Filter by network"
+                              aria-label={t("filters.network.ariaLabel")}
                             >
-                              <option value="all">All networks</option>
+                              <option value="all">{t("filters.network.all")}</option>
                               {targetNetworkOptions.map((network) => (
                                 <option key={network} value={network}>
                                   {network}
@@ -1464,9 +1511,9 @@ export function SourceFunds() {
                               onChange={(event) =>
                                 setTargetAssetFilter(event.target.value)
                               }
-                              aria-label="Filter by asset"
+                              aria-label={t("filters.asset.ariaLabel")}
                             >
-                              <option value="all">All assets</option>
+                              <option value="all">{t("filters.asset.all")}</option>
                               {targetAssetOptions.map((asset) => (
                                 <option key={asset} value={asset}>
                                   {asset}
@@ -1479,9 +1526,9 @@ export function SourceFunds() {
                               onChange={(event) =>
                                 setTargetWalletFilter(event.target.value)
                               }
-                              aria-label="Filter by wallet"
+                              aria-label={t("filters.wallet.ariaLabel")}
                             >
-                              <option value="all">All wallets</option>
+                              <option value="all">{t("filters.wallet.all")}</option>
                               {targetWalletOptions.map((wallet) => (
                                 <option key={wallet} value={wallet}>
                                   {wallet}
@@ -1495,7 +1542,7 @@ export function SourceFunds() {
                     <TransactionTargetHeader />
                     <div className="max-h-[430px] overflow-y-auto p-2">
                       {filteredTargetRows.length === 0 ? (
-                        <EmptyState text="No transactions match these filters." />
+                        <EmptyState text={t("setup.noMatches")} />
                       ) : (
                         <div className="space-y-2">
                           {filteredTargetRows.map((row) => (
@@ -1515,20 +1562,20 @@ export function SourceFunds() {
               )}
               {currentStep === "setup" && planned && (
                 <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
-                  <Field label="Exchange or broker" htmlFor="planned-destination">
+                  <Field label={t("setup.exchangeBroker.label")} htmlFor="planned-destination">
                     <Input
                       id="planned-destination"
                       value={plannedDestination}
                       onChange={(event) => setPlannedDestination(event.target.value)}
-                      placeholder="Kraken, Bitpanda, OTC desk..."
+                      placeholder={t("setup.exchangeBroker.placeholder")}
                     />
                   </Field>
-                  <Field label="Bank disclosure note" htmlFor="planned-note">
+                  <Field label={t("setup.bankNote.label")} htmlFor="planned-note">
                     <Input
                       id="planned-note"
                       value={plannedNote}
                       onChange={(event) => setPlannedNote(event.target.value)}
-                      placeholder="Expected EUR proceeds, bank contact, or internal case note"
+                      placeholder={t("setup.bankNote.placeholder")}
                     />
                   </Field>
                 </div>
@@ -1551,7 +1598,7 @@ export function SourceFunds() {
                   disabled={!selectedTarget || suggestLinks.isPending}
                 >
                   <RefreshCw className="mr-2 size-4" aria-hidden="true" />
-                  Find Links
+                  {t("actionsBar.findLinks")}
                 </Button>
                 <Button
                   type="button"
@@ -1564,7 +1611,7 @@ export function SourceFunds() {
                   }
                 >
                   <GitBranch className="mr-2 size-4" aria-hidden="true" />
-                  Review Deterministic Hops
+                  {t("actionsBar.reviewDeterministic")}
                 </Button>
                 <Button
                   type="button"
@@ -1574,22 +1621,22 @@ export function SourceFunds() {
                       ...current,
                       source_type: "missing_history",
                       link_type: "missing_history",
-                      label: current.label || "Reviewed missing history",
+                      label: current.label || t("gapDefaults.label"),
                       amount: current.amount || selectedTargetAmount,
                       description:
-                        current.description ||
-                        "Prior history is missing and has been reviewed as a disclosure gap.",
+                        current.description || t("gapDefaults.description"),
                     }));
                     setShowAdvancedReview(true);
                   }}
                 >
                   <AlertTriangle className="mr-2 size-4" aria-hidden="true" />
-                  Mark Gap
+                  {t("actionsBar.markGap")}
                 </Button>
                 {manualSuggestionCount > 0 && (
                   <div className="basis-full rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                    {manualSuggestionCount} weak or chain-observation suggestion
-                    {manualSuggestionCount === 1 ? "" : "s"} still need manual review.
+                    {t("actionsBar.manualReviewHint", {
+                      count: manualSuggestionCount,
+                    })}
                   </div>
                 )}
               </div>
@@ -1615,9 +1662,7 @@ export function SourceFunds() {
                     onApply={(mode) => setRevealMode(mode)}
                   />
                   <div className="rounded-md border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
-                    Review what the report will expose before exporting. Export
-                    is available only when all blockers are cleared, and the PDF
-                    includes reviewed evidence only.
+                    {t("export.intro")}
                   </div>
                 </div>
               )}
@@ -1629,7 +1674,7 @@ export function SourceFunds() {
                   onClick={goBack}
                   disabled={stepIndex === 0}
                 >
-                  Back
+                  {t("common:actions.back")}
                 </Button>
                 {currentStep === "export" ? (
                   <Button
@@ -1644,11 +1689,13 @@ export function SourceFunds() {
                     }}
                   >
                     <FileDown className="mr-2 size-4" aria-hidden="true" />
-                    {casesSave.isPending ? "Saving case…" : "Save & Export PDF"}
+                    {casesSave.isPending
+                      ? t("export.savingCase")
+                      : t("export.saveAndExport")}
                   </Button>
                 ) : (
                   <Button type="button" onClick={goForward} disabled={!selectedTarget}>
-                    Continue
+                    {t("common:actions.continue")}
                   </Button>
                 )}
               </div>
@@ -1660,24 +1707,27 @@ export function SourceFunds() {
             open={showAdvancedReview}
             onOpenChange={setShowAdvancedReview}
             icon={<SlidersHorizontal className="size-4" aria-hidden="true" />}
-            title="Advanced review editor"
-            summary={`${reviewQueueLinks.length} links, ${sources.length} sources, ${evidence.length} evidence items`}
+            title={t("advancedReview.title")}
+            summary={t("advancedReview.summary", {
+              links: reviewQueueLinks.length,
+              sources: sources.length,
+              evidence: evidence.length,
+            })}
           >
           <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
             <Card>
               <CardHeader className="border-b">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Link2 className="size-4" aria-hidden="true" />
-                  Review Queue
+                  {t("reviewQueue.title")}
                 </CardTitle>
                 <CardDescription>
-                  Matched links for the selected target, plus suggested upstream
-                  hops that can extend the path.
+                  {t("reviewQueue.description")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 p-4">
                 {reviewQueueLinks.length === 0 ? (
-                  <EmptyState text="No matched links yet. Kassiber will look for same-id transfers, reviewed pairs, provider ids, and tight amount/time hints." />
+                  <EmptyState text={t("reviewQueue.empty")} />
                 ) : (
                   reviewQueueLinks.map((link) => (
                     <button
@@ -1695,26 +1745,32 @@ export function SourceFunds() {
                         <StatusPill state={link.state} />
                         <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                           {reachableLinkIds.has(link.id)
-                            ? "Path"
+                            ? t("reviewQueue.badge.path")
                             : link.to_transaction_id === selectedTxId
-                              ? "Target"
-                              : "Suggested"}
+                              ? t("reviewQueue.badge.target")
+                              : t("reviewQueue.badge.suggested")}
                         </span>
-                        <span className="font-medium">{pretty(link.link_type)}</span>
+                        <span className="font-medium">
+                          {enumLabel(t, "linkType", link.link_type)}
+                        </span>
                         <span className="text-muted-foreground">
-                          {pretty(link.method)}
+                          {enumLabel(t, "method", link.method)}
                         </span>
                       </div>
                       <div className="mt-2 grid gap-1 text-xs text-muted-foreground">
                         <span>
-                          {link.from_source_id
-                            ? sourceName(link.from_source_id)
-                            : txName(link.from_transaction_id)}{" "}
-                          {"->"} {txName(link.to_transaction_id)}
+                          {t("reviewQueue.arrow", {
+                            from: link.from_source_id
+                              ? sourceName(link.from_source_id)
+                              : txName(link.from_transaction_id),
+                            to: txName(link.to_transaction_id),
+                          })}
                         </span>
                         <span>
-                          {formatBtc(link.allocation_amount ?? null, link.asset)} ·{" "}
-                          {pretty(link.confidence)}
+                          {t("reviewQueue.amountConfidence", {
+                            amount: formatBtc(link.allocation_amount ?? null, link.asset),
+                            confidence: enumLabel(t, "confidence", link.confidence),
+                          })}
                         </span>
                       </div>
                     </button>
@@ -1727,15 +1783,15 @@ export function SourceFunds() {
               <CardHeader className="border-b">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <FileCheck className="size-4" aria-hidden="true" />
-                  Link Review
+                  {t("linkReview.title")}
                 </CardTitle>
                 <CardDescription>
-                  Accept, reject, allocate, and attach evidence.
+                  {t("linkReview.description")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 p-4">
                 {!selectedLink ? (
-                  <EmptyState text="Select a link to review." />
+                  <EmptyState text={t("linkReview.empty")} />
                 ) : (
                   <>
                     <div className="rounded-md border p-3 text-sm">
@@ -1744,29 +1800,33 @@ export function SourceFunds() {
                           txName(selectedLink.from_transaction_id)}
                       </div>
                       <div className="text-muted-foreground">
-                        to {txName(selectedLink.to_transaction_id)}
+                        {t("linkReview.to", {
+                          target: txName(selectedLink.to_transaction_id),
+                        })}
                       </div>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <SelectField
                         id="review-link-type"
-                        label="Type"
+                        label={t("linkReview.type")}
                         value={linkForm.link_type}
                         options={LINK_TYPES}
+                        group="linkType"
                         onChange={(value) =>
                           setLinkForm((current) => ({ ...current, link_type: value }))
                         }
                       />
                       <SelectField
                         id="review-confidence"
-                        label="Confidence"
+                        label={t("linkReview.confidence")}
                         value={linkForm.confidence}
                         options={CONFIDENCE_LEVELS}
+                        group="confidence"
                         onChange={(value) =>
                           setLinkForm((current) => ({ ...current, confidence: value }))
                         }
                       />
-                      <Field label="Allocation" htmlFor="review-allocation">
+                      <Field label={t("linkReview.allocation")} htmlFor="review-allocation">
                         <Input
                           id="review-allocation"
                           value={linkForm.allocation_amount}
@@ -1778,7 +1838,7 @@ export function SourceFunds() {
                           }
                         />
                       </Field>
-                      <Field label="From amount" htmlFor="review-from-allocation">
+                      <Field label={t("linkReview.fromAmount")} htmlFor="review-from-allocation">
                         <Input
                           id="review-from-allocation"
                           value={linkForm.from_allocation_amount}
@@ -1799,7 +1859,7 @@ export function SourceFunds() {
                         setLinkForm((current) => ({ ...current, attachment_id: value }))
                       }
                     />
-                    <Field label="Review note" htmlFor="review-note">
+                    <Field label={t("linkReview.reviewNote")} htmlFor="review-note">
                       <Textarea
                         id="review-note"
                         value={linkForm.explanation}
@@ -1818,7 +1878,7 @@ export function SourceFunds() {
                         disabled={reviewLink.isPending || attachLink.isPending}
                       >
                         <Check className="mr-2 size-4" aria-hidden="true" />
-                        Accept
+                        {t("linkReview.accept")}
                       </Button>
                       <Button
                         type="button"
@@ -1827,7 +1887,7 @@ export function SourceFunds() {
                         disabled={reviewLink.isPending}
                       >
                         <X className="mr-2 size-4" aria-hidden="true" />
-                        Reject
+                        {t("linkReview.reject")}
                       </Button>
                     </div>
                   </>
@@ -1840,19 +1900,20 @@ export function SourceFunds() {
               <CardHeader className="border-b">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Plus className="size-4" aria-hidden="true" />
-                  Source Or Gap
+                  {t("sourceOrGap.title")}
                 </CardTitle>
                 <CardDescription>
-                  Add a reviewed root source or explicit missing-history stop.
+                  {t("sourceOrGap.description")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 p-4">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <SelectField
                     id="source-type"
-                    label="Source type"
+                    label={t("sourceOrGap.sourceType")}
                     value={sourceForm.source_type}
                     options={SOURCE_TYPES}
+                    group="sourceType"
                     onChange={(value) =>
                       setSourceForm((current) => ({
                         ...current,
@@ -1868,14 +1929,15 @@ export function SourceFunds() {
                   />
                   <SelectField
                     id="source-link-type"
-                    label="Link type"
+                    label={t("sourceOrGap.linkType")}
                     value={sourceForm.link_type}
                     options={LINK_TYPES}
+                    group="linkType"
                     onChange={(value) =>
                       setSourceForm((current) => ({ ...current, link_type: value }))
                     }
                   />
-                  <Field label="Label" htmlFor="source-label">
+                  <Field label={t("sourceOrGap.label")} htmlFor="source-label">
                     <Input
                       id="source-label"
                       value={sourceForm.label}
@@ -1887,7 +1949,7 @@ export function SourceFunds() {
                       }
                     />
                   </Field>
-                  <Field label="Amount" htmlFor="source-amount">
+                  <Field label={t("sourceOrGap.amount")} htmlFor="source-amount">
                     <Input
                       id="source-amount"
                       value={sourceForm.amount}
@@ -1899,7 +1961,7 @@ export function SourceFunds() {
                       }
                     />
                   </Field>
-                  <Field label="Asset" htmlFor="source-asset">
+                  <Field label={t("sourceOrGap.asset")} htmlFor="source-asset">
                     <Input
                       id="source-asset"
                       value={sourceForm.asset}
@@ -1913,7 +1975,7 @@ export function SourceFunds() {
                   </Field>
                   <TransactionSelect
                     id="source-to"
-                    label="Applies to"
+                    label={t("sourceOrGap.appliesTo")}
                     rows={rows}
                     value={sourceForm.to_transaction || selectedTarget}
                     onChange={(value) =>
@@ -1935,7 +1997,7 @@ export function SourceFunds() {
                     }))
                   }
                 />
-                <Field label="Evidence note" htmlFor="source-description">
+                <Field label={t("sourceOrGap.evidenceNote")} htmlFor="source-description">
                   <Textarea
                     id="source-description"
                     value={sourceForm.description}
@@ -1959,7 +2021,7 @@ export function SourceFunds() {
                   }
                 >
                   <Plus className="mr-2 size-4" aria-hidden="true" />
-                  Create Source Link
+                  {t("sourceOrGap.create")}
                 </Button>
               </CardContent>
             </Card>
@@ -1968,17 +2030,17 @@ export function SourceFunds() {
               <CardHeader className="border-b">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Link2 className="size-4" aria-hidden="true" />
-                  Manual Link
+                  {t("manualLink.title")}
                 </CardTitle>
                 <CardDescription>
-                  Connect two known transactions with explicit allocation.
+                  {t("manualLink.description")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 p-4">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <TransactionSelect
                     id="manual-from"
-                    label="From"
+                    label={t("manualLink.from")}
                     rows={rows}
                     value={manualLinkForm.from_transaction}
                     onChange={(value) =>
@@ -1990,7 +2052,7 @@ export function SourceFunds() {
                   />
                   <TransactionSelect
                     id="manual-to"
-                    label="To"
+                    label={t("manualLink.to")}
                     rows={rows}
                     value={manualLinkForm.to_transaction || selectedTarget}
                     onChange={(value) =>
@@ -2002,9 +2064,10 @@ export function SourceFunds() {
                   />
                   <SelectField
                     id="manual-type"
-                    label="Type"
+                    label={t("manualLink.type")}
                     value={manualLinkForm.link_type}
                     options={LINK_TYPES}
+                    group="linkType"
                     onChange={(value) =>
                       setManualLinkForm((current) => ({
                         ...current,
@@ -2014,9 +2077,10 @@ export function SourceFunds() {
                   />
                   <SelectField
                     id="manual-confidence"
-                    label="Confidence"
+                    label={t("manualLink.confidence")}
                     value={manualLinkForm.confidence}
                     options={CONFIDENCE_LEVELS}
+                    group="confidence"
                     onChange={(value) =>
                       setManualLinkForm((current) => ({
                         ...current,
@@ -2024,7 +2088,7 @@ export function SourceFunds() {
                       }))
                     }
                   />
-                  <Field label="Allocation" htmlFor="manual-allocation">
+                  <Field label={t("manualLink.allocation")} htmlFor="manual-allocation">
                     <Input
                       id="manual-allocation"
                       value={manualLinkForm.allocation_amount}
@@ -2036,7 +2100,7 @@ export function SourceFunds() {
                       }
                     />
                   </Field>
-                  <Field label="From amount" htmlFor="manual-from-amount">
+                  <Field label={t("manualLink.fromAmount")} htmlFor="manual-from-amount">
                     <Input
                       id="manual-from-amount"
                       value={manualLinkForm.from_allocation_amount}
@@ -2060,7 +2124,7 @@ export function SourceFunds() {
                     }))
                   }
                 />
-                <Field label="Review note" htmlFor="manual-note">
+                <Field label={t("manualLink.reviewNote")} htmlFor="manual-note">
                   <Textarea
                     id="manual-note"
                     value={manualLinkForm.explanation}
@@ -2083,7 +2147,7 @@ export function SourceFunds() {
                   }
                 >
                   <Plus className="mr-2 size-4" aria-hidden="true" />
-                  Add Reviewed Link
+                  {t("manualLink.add")}
                 </Button>
               </CardContent>
             </Card>
@@ -2099,19 +2163,19 @@ export function SourceFunds() {
             <CardHeader className="border-b">
               <CardTitle className="flex items-center gap-2 text-base">
                 <AlertTriangle className="size-4" aria-hidden="true" />
-                Gates
+                {t("gates.title")}
               </CardTitle>
               <CardDescription>
-                Blockers must clear before export.
+                {t("gates.description")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 p-4">
-              {preview.isLoading && <EmptyState text="Building reviewed flow..." />}
+              {preview.isLoading && <EmptyState text={t("gates.building")} />}
               {preview.isError && (
                 <GateRow
                   finding={{
                     code: "preview_unavailable",
-                    message: "No source-funds report can be built for this target yet.",
+                    message: t("gates.previewUnavailable"),
                   }}
                 />
               )}
@@ -2123,7 +2187,7 @@ export function SourceFunds() {
               ))}
               {report && blockers.length === 0 && warnings.length === 0 && (
                 <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200">
-                  Gates clear.
+                  {t("gates.clear")}
                 </div>
               )}
             </CardContent>
@@ -2135,21 +2199,21 @@ export function SourceFunds() {
             <CardHeader className="border-b">
               <CardTitle className="flex items-center gap-2 text-base">
                 <ShieldAlert className="size-4" aria-hidden="true" />
-                Disclosure
+                {t("disclosure.title")}
               </CardTitle>
-              <CardDescription>Exact report exposure.</CardDescription>
+              <CardDescription>{t("disclosure.description")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 p-4 text-sm">
               <DisclosureNarrative report={report} />
               <DisclosureTxidList report={report} />
               <DisclosureList
-                label="Evidence"
+                label={t("disclosure.evidence")}
                 values={(report?.disclosure_preview.attachments ?? []).map(
                   (item) => item.label,
                 )}
               />
               <DisclosureList
-                label="Excluded"
+                label={t("disclosure.excluded")}
                 values={report?.disclosure_preview.excluded ?? []}
               />
               {report?.disclosure_preview.privacy_note && (
@@ -2169,11 +2233,16 @@ export function SourceFunds() {
                 }}
               >
                 <FileDown className="mr-2 size-4" aria-hidden="true" />
-                {casesSave.isPending ? "Saving case…" : "Save & Export PDF"}
+                {casesSave.isPending
+                  ? t("export.savingCase")
+                  : t("export.saveAndExport")}
               </Button>
               {savedCase && (
                 <p className="text-xs text-muted-foreground">
-                  Saved case {savedCase.id} ({savedCase.status})
+                  {t("export.savedCase", {
+                    id: savedCase.id,
+                    status: savedCase.status,
+                  })}
                 </p>
               )}
               {exportedPdf && (
@@ -2188,7 +2257,7 @@ export function SourceFunds() {
           {currentStep === "export" && (
           <Card>
             <CardHeader className="border-b">
-              <CardTitle className="text-base">Source Mix</CardTitle>
+              <CardTitle className="text-base">{t("sourceMix.title")}</CardTitle>
             </CardHeader>
             <CardContent className="p-4">
               <div className="overflow-hidden rounded-md border">
@@ -2197,7 +2266,7 @@ export function SourceFunds() {
                     key={source.source_type}
                     className="flex items-center justify-between border-b px-3 py-2 text-sm last:border-b-0"
                   >
-                    <span>{pretty(source.source_type)}</span>
+                    <span>{enumLabel(t, "sourceType", source.source_type)}</span>
                     <span className="font-mono tabular-nums">
                       {formatBtc(source.amount)}
                     </span>
@@ -2205,7 +2274,7 @@ export function SourceFunds() {
                 ))}
                 {(report?.source_mix ?? []).length === 0 && (
                   <div className="px-3 py-2 text-sm text-muted-foreground">
-                    No reviewed sources.
+                    {t("sourceMix.empty")}
                   </div>
                 )}
               </div>
@@ -2216,15 +2285,18 @@ export function SourceFunds() {
           {currentStep === "export" && (
           <Card>
             <CardHeader className="border-b">
-              <CardTitle className="text-base">Reviewed Flow</CardTitle>
+              <CardTitle className="text-base">{t("reviewedFlow.title")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 p-4">
               {(report?.graph.edges ?? []).map((edge) => {
                 const id = stringValue(edge.id) || JSON.stringify(edge);
+                const linkType = stringValue(edge.link_type);
                 return (
                   <div key={id} className="rounded-md border px-3 py-2 text-sm">
                     <div className="font-medium">
-                      {pretty(stringValue(edge.link_type) || "link")}
+                      {linkType
+                        ? enumLabel(t, "linkType", linkType)
+                        : t("reviewedFlow.fallbackLinkType")}
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {formatBtc(numberValue(edge.allocation_amount), stringValue(edge.asset) || "BTC")}
@@ -2233,7 +2305,7 @@ export function SourceFunds() {
                 );
               })}
               {(report?.graph.edges ?? []).length === 0 && (
-                <EmptyState text="No reviewed graph edges yet." />
+                <EmptyState text={t("reviewedFlow.empty")} />
               )}
             </CardContent>
           </Card>
@@ -2305,6 +2377,7 @@ function CaseBrief({
   bulkReviewable: number;
   manualReview: number;
 }) {
+  const { t } = useTranslation("sourceFunds");
   const overview = report?.overview;
   const targetAsset = overview?.target_asset || report?.target.asset || "BTC";
   const paragraphs = report?.narrative?.paragraphs ?? [];
@@ -2318,11 +2391,11 @@ function CaseBrief({
       <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h2 className="text-base font-semibold">
-            {overview?.target_label || report?.target.label || "Selected target"}
+            {overview?.target_label || report?.target.label || t("caseBrief.fallbackTarget")}
           </h2>
           <p className="text-sm text-muted-foreground">
             {formatDateTime(overview?.target_date)} ·{" "}
-            {overview?.target_wallet || report?.target.wallet || "No wallet"} ·{" "}
+            {overview?.target_wallet || report?.target.wallet || t("caseBrief.fallbackWallet")} ·{" "}
             {formatBtc(overview?.target_amount ?? report?.target.required_amount, targetAsset)}
             {(jurisdiction || fiatCurrency) && (
               <>
@@ -2337,11 +2410,11 @@ function CaseBrief({
         />
       </div>
       <div className="grid gap-3 md:grid-cols-5">
-        <Metric label="Transactions" value={overview?.transaction_count ?? 0} />
-        <Metric label="Reviewed links" value={overview?.link_count ?? 0} />
-        <Metric label="Sources" value={overview?.source_category_count ?? 0} />
-        <Metric label="Blockers" value={overview?.blocker_count ?? 0} />
-        <Metric label="Batchable" value={bulkReviewable} />
+        <Metric label={t("caseBrief.metric.transactions")} value={overview?.transaction_count ?? 0} />
+        <Metric label={t("caseBrief.metric.reviewedLinks")} value={overview?.link_count ?? 0} />
+        <Metric label={t("caseBrief.metric.sources")} value={overview?.source_category_count ?? 0} />
+        <Metric label={t("caseBrief.metric.blockers")} value={overview?.blocker_count ?? 0} />
+        <Metric label={t("caseBrief.metric.batchable")} value={bulkReviewable} />
       </div>
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-2">
@@ -2353,12 +2426,12 @@ function CaseBrief({
             ))
           ) : (
             <p className="text-sm text-muted-foreground">
-              Local preview data is not available yet.
+              {t("caseBrief.noPreview")}
             </p>
           )}
           {manualReview > 0 && (
             <p className="text-xs text-amber-700 dark:text-amber-300">
-              {manualReview} manual review item{manualReview === 1 ? "" : "s"}.
+              {t("caseBrief.manualReview", { count: manualReview })}
             </p>
           )}
         </div>
@@ -2370,7 +2443,9 @@ function CaseBrief({
                   key={source.source_type}
                   className="flex items-center justify-between gap-3 border-b px-3 py-2 text-sm last:border-b-0"
                 >
-                  <span className="truncate">{pretty(source.source_type)}</span>
+                  <span className="truncate">
+                    {enumLabel(t, "sourceType", source.source_type)}
+                  </span>
                   <span className="font-mono text-xs tabular-nums">
                     {formatBtc(source.amount, targetAsset)}
                   </span>
@@ -2405,6 +2480,7 @@ function FlowPathPreview({
 }: {
   flow?: SourceFundsPreview["simplified_flow"];
 }) {
+  const { t } = useTranslation("sourceFunds");
   const levels = flow?.levels ?? [];
   if (levels.length === 0) {
     return null;
@@ -2412,10 +2488,10 @@ function FlowPathPreview({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold">Simplified flow path</h3>
+        <h3 className="text-sm font-semibold">{t("flowPath.title")}</h3>
         {flow?.deferred_privacy_hops?.length ? (
           <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
-            Privacy hop deferred
+            {t("flowPath.privacyHopDeferred")}
           </span>
         ) : null}
       </div>
@@ -2434,7 +2510,7 @@ function FlowPathPreview({
               >
                 <div className="w-44 rounded-md border bg-background p-2">
                   <div className="mb-2 text-[10px] font-semibold uppercase text-muted-foreground">
-                    {pretty(level.role || "flow")}
+                    {level.role ? pretty(level.role) : t("flowPath.fallbackRole")}
                   </div>
                   <div className="space-y-1">
                     {nodes.map((node) => (
@@ -2462,7 +2538,7 @@ function FlowPathPreview({
                     ))}
                     {hidden > 0 && (
                       <div className="rounded border border-dashed px-2 py-1 text-xs text-muted-foreground">
-                        +{hidden} more
+                        {t("flowPath.more", { count: hidden })}
                       </div>
                     )}
                   </div>
@@ -2500,6 +2576,7 @@ function WizardProgress({
   currentStep: WizardStep;
   onStep: (step: WizardStep) => void;
 }) {
+  const { t } = useTranslation("sourceFunds");
   const currentIndex = WIZARD_STEPS.findIndex((step) => step.id === currentStep);
   return (
     <div className="grid gap-2 md:grid-cols-3">
@@ -2521,9 +2598,11 @@ function WizardProgress({
             onClick={() => onStep(step.id)}
           >
             <span className="block text-xs text-muted-foreground">
-              Step {index + 1}
+              {t("wizard.step", { index: index + 1 })}
             </span>
-            <span className="block font-medium">{step.label}</span>
+            <span className="block font-medium">
+              {t(`wizard.steps.${step.id}`)}
+            </span>
           </button>
         );
       })}
@@ -2579,14 +2658,17 @@ function SelectField({
   label,
   value,
   options,
+  group,
   onChange,
 }: {
   id: string;
   label: string;
   value: string;
   options: string[];
+  group?: "sourceType" | "linkType" | "confidence" | "reveal";
   onChange: (value: string) => void;
 }) {
+  const { t } = useTranslation("sourceFunds");
   return (
     <Field label={label} htmlFor={id}>
       <select
@@ -2597,7 +2679,7 @@ function SelectField({
       >
         {options.map((option) => (
           <option key={option} value={option}>
-            {pretty(option)}
+            {group ? enumLabel(t, group, option) : pretty(option)}
           </option>
         ))}
       </select>
@@ -2618,6 +2700,7 @@ function TransactionSelect({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const { t } = useTranslation("sourceFunds");
   return (
     <Field label={label} htmlFor={id}>
       <select
@@ -2626,7 +2709,7 @@ function TransactionSelect({
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >
-        <option value="">Select transaction</option>
+        <option value="">{t("select.transaction")}</option>
         {rows.map((row) => (
           <option key={txRef(row)} value={txRef(row)}>
             {txLabel(row)}
@@ -2648,15 +2731,16 @@ function EvidenceSelect({
   evidence: EvidenceAttachment[];
   onChange: (value: string) => void;
 }) {
+  const { t } = useTranslation("sourceFunds");
   return (
-    <Field label="Evidence" htmlFor={id}>
+    <Field label={t("evidence.label")} htmlFor={id}>
       <select
         id={id}
         className="h-10 w-full rounded-md border bg-background px-3 text-sm"
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >
-        <option value={NO_ATTACHMENT}>No attachment</option>
+        <option value={NO_ATTACHMENT}>{t("select.noAttachment")}</option>
         {evidence.map((item) => (
           <option key={item.id} value={item.id}>
             {[item.label, item.wallet, item.external_id].filter(Boolean).join(" · ")}
@@ -2668,6 +2752,7 @@ function EvidenceSelect({
 }
 
 function StatusPill({ state }: { state: string }) {
+  const { t } = useTranslation("sourceFunds");
   const className =
     state === "reviewed"
       ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200"
@@ -2676,7 +2761,7 @@ function StatusPill({ state }: { state: string }) {
         : "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200";
   return (
     <span className={`rounded-full border px-2 py-0.5 text-xs ${className}`}>
-      {pretty(state)}
+      {enumLabel(t, "linkState", state)}
     </span>
   );
 }
@@ -2701,12 +2786,19 @@ const COVERAGE_BUCKET_ORDER: (keyof SourceFundsCoverageBuckets)[] = [
   "not_classified",
 ];
 
-const COVERAGE_BUCKET_LABELS: Record<keyof SourceFundsCoverageBuckets, string> = {
-  fully_traced: "Fully traced",
-  attested: "Attested",
-  in_review: "In review",
-  untraced: "Untraced",
-  not_classified: "Not classified",
+const COVERAGE_BUCKET_LABEL_KEYS: Record<
+  keyof SourceFundsCoverageBuckets,
+  | "coverage.bucket.fullyTraced"
+  | "coverage.bucket.attested"
+  | "coverage.bucket.inReview"
+  | "coverage.bucket.untraced"
+  | "coverage.bucket.notClassified"
+> = {
+  fully_traced: "coverage.bucket.fullyTraced",
+  attested: "coverage.bucket.attested",
+  in_review: "coverage.bucket.inReview",
+  untraced: "coverage.bucket.untraced",
+  not_classified: "coverage.bucket.notClassified",
 };
 
 const COVERAGE_BUCKET_TONES: Record<keyof SourceFundsCoverageBuckets, string> = {
@@ -2717,12 +2809,18 @@ const COVERAGE_BUCKET_TONES: Record<keyof SourceFundsCoverageBuckets, string> = 
   not_classified: "text-muted-foreground",
 };
 
-function coverageSummary(coverage?: SourceFundsCoverage) {
+function coverageSummary(
+  coverage: SourceFundsCoverage | undefined,
+  t: SourceFundsTFunction,
+) {
   if (!coverage || coverage.totals.tx_count === 0) {
-    return "No inbound coverage snapshot";
+    return t("coverage.summaryEmpty");
   }
   const traced = coverage.totals.buckets.fully_traced.amount;
-  return `${traced.toFixed(8)} BTC fully traced across ${coverage.totals.tx_count} inbound transactions`;
+  return t("coverage.summary", {
+    amount: traced.toFixed(8),
+    count: coverage.totals.tx_count,
+  });
 }
 
 function CoveragePanel({
@@ -2732,6 +2830,7 @@ function CoveragePanel({
   coverage?: SourceFundsCoverage;
   loading?: boolean;
 }) {
+  const { t } = useTranslation("sourceFunds");
   const totals = coverage?.totals;
   const totalAmount = totals?.amount ?? 0;
   const totalTxCount = totals?.tx_count ?? 0;
@@ -2740,18 +2839,23 @@ function CoveragePanel({
   return (
     <section>
         {loading && !coverage ? (
-          <EmptyState text="Computing coverage..." />
+          <EmptyState text={t("coverage.computing")} />
         ) : !coverage || totalTxCount === 0 ? (
-          <EmptyState text="No inbound transactions in this profile yet." />
+          <EmptyState text={t("coverage.noInbound")} />
         ) : (
           <>
             {coverage.truncation?.truncated && (
               <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
-                Coverage truncated to {totalTxCount} of{" "}
-                {coverage.truncation.inbound_total_count} inbound transactions
-                ({coverage.truncation.not_classified_count} not classified).
-                Run <code className="text-[10px]">source-funds coverage</code>{" "}
-                with a higher --max-transactions to compute the full set.
+                <Trans
+                  t={t}
+                  i18nKey="coverage.truncated"
+                  values={{
+                    shown: totalTxCount,
+                    total: coverage.truncation.inbound_total_count,
+                    notClassified: coverage.truncation.not_classified_count,
+                  }}
+                  components={[<code className="text-[10px]" />]}
+                />
               </div>
             )}
             <div className="grid gap-4 md:grid-cols-5">
@@ -2763,13 +2867,16 @@ function CoveragePanel({
                 return (
                   <div key={name} className="space-y-1">
                     <div className="text-xs uppercase tracking-wide opacity-70">
-                      {COVERAGE_BUCKET_LABELS[name]}
+                      {t(COVERAGE_BUCKET_LABEL_KEYS[name])}
                     </div>
                     <div className={`text-lg font-semibold ${COVERAGE_BUCKET_TONES[name]}`}>
                       {amount.toFixed(8)}
                     </div>
                     <div className="text-xs opacity-80">
-                      {txCount} tx · {percent.toFixed(1)}%
+                      {t("coverage.bucketStats", {
+                        count: txCount,
+                        percent: percent.toFixed(1),
+                      })}
                     </div>
                   </div>
                 );
@@ -2790,22 +2897,24 @@ function RecipientPicker({
   selectedRecipientId: string;
   onSelectRecipient: (recipient: SourceFundsRecipient | null) => void;
 }) {
+  const { t } = useTranslation("sourceFunds");
   if (recipients.length === 0) {
     return (
       <div className="rounded-md border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
-        No recipients defined yet. Run{" "}
-        <code className="text-xs">source-funds recipients create</code> to set
-        a sticky reveal-mode default per recipient.
+        <Trans
+          t={t}
+          i18nKey="recipient.empty"
+          components={[<code className="text-xs" />]}
+        />
       </div>
     );
   }
   const selected = recipients.find((r) => r.id === selectedRecipientId) ?? null;
   return (
     <div className="rounded-md border px-3 py-3 text-sm">
-      <div className="mb-1 font-medium">Recipient</div>
+      <div className="mb-1 font-medium">{t("recipient.title")}</div>
       <div className="mb-2 text-xs text-muted-foreground">
-        The recipient's preferred reveal mode is shown as advisory below;
-        your reveal-mode choice is what gets exported.
+        {t("recipient.hint")}
       </div>
       <select
         className="h-9 w-full rounded-md border bg-background px-3 text-sm"
@@ -2815,15 +2924,19 @@ function RecipientPicker({
           if (next && next.active === false) return;
           onSelectRecipient(next);
         }}
-        aria-label="Recipient"
+        aria-label={t("recipient.ariaLabel")}
       >
-        <option value="">(no recipient)</option>
+        <option value="">{t("recipient.none")}</option>
         {recipients.map((recipient) => {
           const inactive = recipient.active === false;
           return (
             <option key={recipient.id} value={recipient.id} disabled={inactive}>
-              {recipient.label} - {pretty(recipient.kind)} - {pretty(recipient.default_reveal_mode)}
-              {inactive ? " (inactive)" : ""}
+              {t("recipient.option", {
+                label: recipient.label,
+                kind: pretty(recipient.kind),
+                reveal: enumLabel(t, "reveal", recipient.default_reveal_mode),
+              })}
+              {inactive ? t("recipient.inactiveSuffix") : ""}
             </option>
           );
         })}
@@ -2844,17 +2957,26 @@ function RecipientPreferenceAdvisory({
   currentRevealMode: string;
   onApply: (mode: string) => void;
 }) {
+  const { t } = useTranslation("sourceFunds");
   if (!recipient) return null;
   const preferred = recipient.default_reveal_mode;
   if (!preferred || preferred === currentRevealMode) return null;
   return (
     <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2 text-xs">
       <span className="text-muted-foreground">
-        {recipient.label} prefers{" "}
-        <span className="font-medium text-foreground">{pretty(preferred)}</span>
-        . Your current reveal mode is{" "}
-        <span className="font-medium text-foreground">{pretty(currentRevealMode)}</span>
-        .
+        <Trans
+          t={t}
+          i18nKey="recipient.advisory"
+          values={{
+            label: recipient.label,
+            preferred: enumLabel(t, "reveal", preferred),
+            current: enumLabel(t, "reveal", currentRevealMode),
+          }}
+          components={[
+            <span className="font-medium text-foreground" />,
+            <span className="font-medium text-foreground" />,
+          ]}
+        />
       </span>
       <Button
         type="button"
@@ -2862,13 +2984,14 @@ function RecipientPreferenceAdvisory({
         variant="outline"
         onClick={() => onApply(preferred)}
       >
-        Apply preference
+        {t("recipient.applyPreference")}
       </Button>
     </div>
   );
 }
 
 function GateRow({ finding }: { finding: SourceFundsFinding }) {
+  const { t } = useTranslation("sourceFunds");
   const blocker = finding.severity === "blocker";
   const headline = finding.next_step?.headline?.trim();
   const docAnchor = finding.next_step?.doc_anchor?.trim();
@@ -2885,9 +3008,11 @@ function GateRow({ finding }: { finding: SourceFundsFinding }) {
       <div className="mt-1 text-xs opacity-80">{finding.message}</div>
       {headline && (
         <div className="mt-2 text-xs font-medium opacity-90">
-          Next step: {headline}
+          {t("gates.nextStep", { headline })}
           {docAnchor && (
-            <span className="ml-1 opacity-70">(see docs: {docAnchor})</span>
+            <span className="ml-1 opacity-70">
+              {t("gates.seeDocs", { anchor: docAnchor })}
+            </span>
           )}
         </div>
       )}
@@ -2904,63 +3029,66 @@ function EmptyState({ text }: { text: string }) {
 }
 
 function DisclosureNarrative({ report }: { report?: SourceFundsPreview }) {
+  const { t } = useTranslation("sourceFunds");
   const txidCount = report?.disclosure_preview.txids.length ?? 0;
   const evidenceCount = report?.disclosure_preview.attachments.length ?? 0;
   const hiddenCount = report?.disclosure_preview.excluded.length ?? 0;
   const sourceCount = report?.source_mix.length ?? 0;
-  const sourceLabel = sourceCount === 1 ? "source category" : "source categories";
   const reviewedLinkCount = report?.graph.edges.length ?? 0;
   const walletLabels = uniqueSorted(
     (report?.graph.nodes ?? [])
       .map((node) => stringValue(node.wallet))
       .filter(Boolean),
   );
-  const targetLabel = report?.target.label || "the selected target";
-  const purposeLabel = report?.purpose?.label || "source-of-funds report";
-  const revealMode = pretty(report?.reveal_mode || "standard");
+  const targetLabel = report?.target.label || t("disclosure.narrativeTarget");
+  const purposeLabel = report?.purpose?.label || t("disclosure.narrativePurpose");
+  const revealMode = enumLabel(t, "reveal", report?.reveal_mode || "standard");
 
   return (
     <section className="space-y-3 rounded-md border bg-muted/20 p-4">
       <div className="space-y-1">
-        <h2 className="text-base font-semibold">Disclosure Summary</h2>
+        <h2 className="text-base font-semibold">{t("disclosure.summaryTitle")}</h2>
         <p className="text-sm text-muted-foreground">
-          This {purposeLabel} will disclose the reviewed flow for {targetLabel}.
-          It will expose {txidCount} txid{txidCount === 1 ? "" : "s"},{" "}
-          {evidenceCount} evidence item{evidenceCount === 1 ? "" : "s"},{" "}
-          {reviewedLinkCount} reviewed link{reviewedLinkCount === 1 ? "" : "s"},
-          and {sourceCount} {sourceLabel}.
+          {t("disclosure.narrative", {
+            purpose: purposeLabel,
+            target: targetLabel,
+            txids: t("disclosure.txidCount", { count: txidCount }),
+            evidence: t("disclosure.evidenceCount", { count: evidenceCount }),
+            links: t("disclosure.linkCount", { count: reviewedLinkCount }),
+            sources: t("disclosure.sourceCount", { count: sourceCount }),
+          })}
         </p>
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-        <DisclosureMetric label="Txids" value={txidCount} />
-        <DisclosureMetric label="Evidence" value={evidenceCount} />
-        <DisclosureMetric label="Reviewed links" value={reviewedLinkCount} />
-        <DisclosureMetric label="Sources" value={sourceCount} />
-        <DisclosureMetric label="Hidden" value={hiddenCount} />
+        <DisclosureMetric label={t("disclosure.metric.txids")} value={txidCount} />
+        <DisclosureMetric label={t("disclosure.metric.evidence")} value={evidenceCount} />
+        <DisclosureMetric label={t("disclosure.metric.reviewedLinks")} value={reviewedLinkCount} />
+        <DisclosureMetric label={t("disclosure.metric.sources")} value={sourceCount} />
+        <DisclosureMetric label={t("disclosure.metric.hidden")} value={hiddenCount} />
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
         <div className="rounded-md border bg-background px-3 py-2">
           <div className="text-xs font-medium text-muted-foreground">
-            Reveal mode
+            {t("disclosure.revealMode")}
           </div>
           <div className="mt-1 font-medium">{revealMode}</div>
           <p className="mt-1 text-xs text-muted-foreground">
-            {report?.disclosure_preview.privacy_note ||
-              "No disclosure preview is available yet."}
+            {report?.disclosure_preview.privacy_note || t("disclosure.noPreview")}
           </p>
         </div>
         <div className="rounded-md border bg-background px-3 py-2">
           <div className="text-xs font-medium text-muted-foreground">
-            Wallet labels
+            {t("disclosure.walletLabels")}
           </div>
           <div className="mt-1 text-sm">
-            {walletLabels.length > 0 ? walletLabels.join(", ") : "None"}
+            {walletLabels.length > 0
+              ? walletLabels.join(", ")
+              : t("disclosure.walletLabelsNone")}
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            Kassiber does not include descriptors, xpubs, wallet files, seeds,
-            backend tokens, or unrelated wallet history in the PDF.
+            {t("disclosure.walletPrivacyNote")}
           </p>
         </div>
       </div>
@@ -2980,6 +3108,7 @@ function DisclosureMetric({ label, value }: { label: string; value: number }) {
 }
 
 function DisclosureTxidList({ report }: { report?: SourceFundsPreview }) {
+  const { t } = useTranslation("sourceFunds");
   const [openingTxid, setOpeningTxid] = useState<string | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const txids = report?.disclosure_preview.txids ?? [];
@@ -3002,7 +3131,7 @@ function DisclosureTxidList({ report }: { report?: SourceFundsPreview }) {
       setOpenError(
         error instanceof Error && error.message
           ? error.message
-          : "Could not open explorer URL.",
+          : t("disclosure.openError"),
       );
     } finally {
       setOpeningTxid(null);
@@ -3010,11 +3139,11 @@ function DisclosureTxidList({ report }: { report?: SourceFundsPreview }) {
   };
   return (
     <section className="space-y-2">
-      <h2 className="text-sm font-semibold">Txids</h2>
+      <h2 className="text-sm font-semibold">{t("disclosure.txids")}</h2>
       <div className="space-y-1">
         {txids.length === 0 ? (
           <div className="rounded-md border px-3 py-2 text-muted-foreground">
-            None
+            {t("disclosure.none")}
           </div>
         ) : (
           txids.map((txid) => {
@@ -3033,14 +3162,14 @@ function DisclosureTxidList({ report }: { report?: SourceFundsPreview }) {
                     className="h-8 shrink-0"
                     disabled={openingTxid === txid}
                     onClick={() => void onOpen(txid, link.url)}
-                    title={`Open ${txid} on ${link.label}`}
+                    title={t("disclosure.openTitle", { txid, label: link.label })}
                   >
                     <ExternalLink className="mr-2 size-3.5" aria-hidden="true" />
-                    {openingTxid === txid ? "Opening..." : link.label}
+                    {openingTxid === txid ? t("disclosure.opening") : link.label}
                   </Button>
                 ) : (
                   <span className="text-muted-foreground">
-                    No public explorer link
+                    {t("disclosure.noExplorerLink")}
                   </span>
                 )}
               </div>
@@ -3061,13 +3190,14 @@ function DisclosureTxidList({ report }: { report?: SourceFundsPreview }) {
 }
 
 function DisclosureList({ label, values }: { label: string; values: string[] }) {
+  const { t } = useTranslation("sourceFunds");
   return (
     <section className="space-y-2">
       <h2 className="text-sm font-semibold">{label}</h2>
       <div className="space-y-1">
         {values.length === 0 ? (
           <div className="rounded-md border px-3 py-2 text-muted-foreground">
-            None
+            {t("disclosure.none")}
           </div>
         ) : (
           values.map((value) => (

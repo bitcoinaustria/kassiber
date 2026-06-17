@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { History, Trash2 } from "lucide-react";
 
 import { useAssistantSession } from "@/components/ai/assistantSession";
@@ -36,6 +37,7 @@ function formatUpdatedAt(value: string): string {
 }
 
 export function ChatHistoryPanel() {
+  const { t } = useTranslation("assistant");
   const { isStreaming, resumeSession, sessionId, forgetSession } =
     useAssistantSession();
   const [open, setOpen] = React.useState(false);
@@ -69,22 +71,20 @@ export function ChatHistoryPanel() {
       <DropdownMenuTrigger asChild>
         <Button type="button" variant="ghost" size="sm" className="gap-2">
           <History className="size-4" aria-hidden="true" />
-          History
+          {t("history.trigger")}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80">
-        <DropdownMenuLabel>Saved chats</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("history.savedChats")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {list.isLoading ? (
           <div className="px-2 py-3 text-sm text-muted-foreground">
-            Loading…
+            {t("history.loading")}
           </div>
         ) : null}
         {!list.isLoading && sessions.length === 0 ? (
           <div className="px-2 py-3 text-sm text-muted-foreground">
-            {historyEnabled
-              ? "No saved chats yet."
-              : "Chat history is off for this book - see Settings, AI assistant."}
+            {historyEnabled ? t("history.empty") : t("history.disabled")}
           </div>
         ) : null}
         {sessions.map((session) => (
@@ -100,11 +100,15 @@ export function ChatHistoryPanel() {
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-medium">
                 {session.title}
-                {session.id === sessionId ? " (current)" : ""}
+                {session.id === sessionId ? ` ${t("history.current")}` : ""}
               </div>
               <div className="text-xs text-muted-foreground">
-                {formatUpdatedAt(session.updated_at)} ·{" "}
-                {session.message_count ?? 0} messages
+                {t("history.entryMeta", {
+                  date: formatUpdatedAt(session.updated_at),
+                  messages: t("history.messageCount", {
+                    count: session.message_count ?? 0,
+                  }),
+                })}
               </div>
             </div>
             <Button
@@ -112,7 +116,7 @@ export function ChatHistoryPanel() {
               variant="ghost"
               size="icon"
               className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
-              aria-label={`Delete chat "${session.title}"`}
+              aria-label={t("history.deleteChat", { title: session.title })}
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();

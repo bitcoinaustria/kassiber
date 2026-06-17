@@ -8,6 +8,7 @@ import {
   X,
 } from "lucide-react";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ function AttachLinksDialog({
   onOpenChange: (open: boolean) => void;
   onSubmit: (urls: string[]) => void | Promise<void>;
 }) {
+  const { t } = useTranslation("transactions");
   const [text, setText] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
@@ -66,20 +68,20 @@ function AttachLinksDialog({
           u.protocol !== "https:" &&
           u.protocol !== "ipfs:"
         ) {
-          errors.push(`${line} — must start with http://, https://, or ipfs://`);
+          errors.push(t("attachments.linksDialog.invalidProtocol", { url: line }));
           continue;
         }
         urls.push(line);
       } catch {
-        errors.push(`${line} — not a valid URL`);
+        errors.push(t("attachments.linksDialog.invalidUrl", { url: line }));
       }
     }
     return { urls, errors };
-  }, [text]);
+  }, [text, t]);
 
   const submit = async () => {
     if (!parsed.urls.length) {
-      setError("Add at least one URL.");
+      setError(t("attachments.linksDialog.addAtLeastOne"));
       return;
     }
     if (parsed.errors.length) {
@@ -91,7 +93,11 @@ function AttachLinksDialog({
       await onSubmit(parsed.urls);
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not add links.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : t("attachments.linksDialog.couldNotAdd"),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -101,15 +107,13 @@ function AttachLinksDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Attach links</DialogTitle>
+          <DialogTitle>{t("attachments.linksDialog.title")}</DialogTitle>
           <DialogDescription>
-            One URL per line. Links are stored as references — Kassiber does
-            not fetch or index the content. You can edit the link text after
-            attaching.
+            {t("attachments.linksDialog.description")}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-2">
-          <Label htmlFor="attach-links-text">URLs</Label>
+          <Label htmlFor="attach-links-text">{t("attachments.linksDialog.urls")}</Label>
           <Textarea
             id="attach-links-text"
             value={text}
@@ -118,7 +122,7 @@ function AttachLinksDialog({
               setError(null);
             }}
             className="min-h-32 font-mono text-xs"
-            placeholder={"https://btcpay.example/invoice/abc123\nhttps://drive.example/receipt-2026-04.pdf"}
+            placeholder={t("attachments.linksDialog.placeholder")}
             autoFocus
             aria-describedby="attach-links-status"
             aria-invalid={parsed.errors.length > 0}
@@ -131,12 +135,15 @@ function AttachLinksDialog({
               className="text-muted-foreground"
             >
               {parsed.urls.length === 0
-                ? "No URLs yet"
-                : `${parsed.urls.length} URL${parsed.urls.length === 1 ? "" : "s"} ready`}
+                ? t("attachments.linksDialog.noUrls")
+                : t("attachments.linksDialog.urlsReady", {
+                    count: parsed.urls.length,
+                  })}
               {parsed.errors.length ? (
                 <span className="ml-1 text-amber-600 dark:text-amber-400">
-                  · {parsed.errors.length} invalid line
-                  {parsed.errors.length === 1 ? "" : "s"} to fix
+                  {t("attachments.linksDialog.invalidLines", {
+                    count: parsed.errors.length,
+                  })}
                 </span>
               ) : null}
             </span>
@@ -154,7 +161,7 @@ function AttachLinksDialog({
             onClick={() => onOpenChange(false)}
             disabled={submitting}
           >
-            Cancel
+            {t("common:actions.cancel")}
           </Button>
           <Button
             type="button"
@@ -166,10 +173,12 @@ function AttachLinksDialog({
             onClick={submit}
           >
             {submitting
-              ? "Attaching"
+              ? t("attachments.linksDialog.attaching")
               : parsed.urls.length > 1
-                ? `Attach ${parsed.urls.length} links`
-                : "Attach link"}
+                ? t("attachments.linksDialog.attachMany", {
+                    count: parsed.urls.length,
+                  })
+                : t("attachments.linksDialog.attachOne")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -196,6 +205,7 @@ export function AttachmentsPanel({
   onRename?: (item: AttachmentItem, label: string) => void | Promise<void>;
   onRemove?: (item: AttachmentItem) => void;
 }) {
+  const { t } = useTranslation("transactions");
   const [linkDialogOpen, setLinkDialogOpen] = React.useState(false);
   const [pickerBusy, setPickerBusy] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
@@ -215,14 +225,14 @@ export function AttachmentsPanel({
     setPickerBusy(true);
     try {
       const paths = await pickFiles({
-        title: "Attach files to this transaction",
+        title: t("attachments.pickerTitle"),
       });
       if (paths.length) {
         await onAddFiles(paths);
       }
     } catch (err) {
       setPickerError(
-        err instanceof Error ? err.message : "Could not open file picker.",
+        err instanceof Error ? err.message : t("attachments.pickerError"),
       );
     } finally {
       setPickerBusy(false);
@@ -253,12 +263,12 @@ export function AttachmentsPanel({
     if (!onRename) return;
     const label = editingLabel.trim();
     if (!label) {
-      setRenameError("Add link text.");
+      setRenameError(t("attachments.addLinkText"));
       return;
     }
     if (label.length > MAX_ATTACHMENT_LABEL_LENGTH) {
       setRenameError(
-        `Keep link text to ${MAX_ATTACHMENT_LABEL_LENGTH} characters or fewer.`,
+        t("attachments.linkTextTooLong", { max: MAX_ATTACHMENT_LABEL_LENGTH }),
       );
       return;
     }
@@ -273,7 +283,7 @@ export function AttachmentsPanel({
       cancelRename(item.id);
     } catch (err) {
       setRenameError(
-        err instanceof Error ? err.message : "Could not rename link.",
+        err instanceof Error ? err.message : t("attachments.couldNotRename"),
       );
     } finally {
       setSavingRenameId(null);
@@ -288,7 +298,7 @@ export function AttachmentsPanel({
             className="size-4 text-muted-foreground"
             aria-hidden="true"
           />
-          Attachments
+          {t("attachments.title")}
         </div>
         <div className="flex items-center gap-1.5">
           <span className="text-xs tabular-nums text-muted-foreground">
@@ -300,8 +310,8 @@ export function AttachmentsPanel({
               variant="outline"
               size="icon"
               className="size-7 shrink-0"
-              aria-label="Reuse evidence"
-              title="Reuse evidence"
+              aria-label={t("attachments.reuseEvidenceAria")}
+              title={t("attachments.reuseEvidenceAria")}
               onClick={onReuseEvidence}
             >
               <Copy className="size-3.5" aria-hidden="true" />
@@ -313,7 +323,7 @@ export function AttachmentsPanel({
         <ul className="mb-2 space-y-1.5">
           {items.map((item) => {
             const hiddenTitle = hideSensitive
-              ? "Attachment detail hidden"
+              ? t("attachments.detailHidden")
               : item.detail;
             const isEditing = editingId === item.id;
             const canRename = Boolean(
@@ -352,7 +362,9 @@ export function AttachmentsPanel({
                       }}
                       maxLength={MAX_ATTACHMENT_LABEL_LENGTH}
                       className="h-7 text-xs"
-                      aria-label={`Link text for ${item.detail || item.label}`}
+                      aria-label={t("attachments.linkTextAria", {
+                        name: item.detail || item.label,
+                      })}
                       disabled={renameBusy}
                       autoFocus
                     />
@@ -394,7 +406,7 @@ export function AttachmentsPanel({
                     ) : null}
                     {item.copiedFromAttachmentId ? (
                       <Badge variant="secondary" className="mt-1 rounded-md">
-                        reused
+                        {t("attachments.reused")}
                       </Badge>
                     ) : null}
                   </button>
@@ -420,7 +432,7 @@ export function AttachmentsPanel({
                     ) : null}
                     {item.copiedFromAttachmentId ? (
                       <Badge variant="secondary" className="mt-1 rounded-md">
-                        reused
+                        {t("attachments.reused")}
                       </Badge>
                     ) : null}
                   </div>
@@ -432,7 +444,7 @@ export function AttachmentsPanel({
                       variant="ghost"
                       size="icon"
                       className="size-6 shrink-0 text-muted-foreground"
-                      aria-label="Save link text"
+                      aria-label={t("attachments.saveLinkText")}
                       disabled={renameBusy || !editingLabel.trim()}
                       onClick={() => void saveRename(item)}
                     >
@@ -443,7 +455,7 @@ export function AttachmentsPanel({
                       variant="ghost"
                       size="icon"
                       className="size-6 shrink-0 text-muted-foreground"
-                      aria-label="Cancel link text edit"
+                      aria-label={t("attachments.cancelEdit")}
                       disabled={renameBusy}
                       onClick={() => cancelRename(item.id)}
                     >
@@ -456,7 +468,7 @@ export function AttachmentsPanel({
                     variant="ghost"
                     size="icon"
                     className="size-6 shrink-0 text-muted-foreground"
-                    aria-label={`Edit link text for ${item.label}`}
+                    aria-label={t("attachments.editLinkTextAria", { name: item.label })}
                     ref={(node) => {
                       if (node) {
                         renameButtonRefs.current.set(item.id, node);
@@ -476,7 +488,9 @@ export function AttachmentsPanel({
                     size="icon"
                     className="size-6 shrink-0 text-muted-foreground"
                     aria-label={
-                      hideSensitive ? "Remove attachment" : `Remove ${item.label}`
+                      hideSensitive
+                        ? t("attachments.removeAttachment")
+                        : t("attachments.removeNamed", { name: item.label })
                     }
                     onClick={() => onRemove(item)}
                   >
@@ -489,9 +503,7 @@ export function AttachmentsPanel({
         </ul>
       ) : (
         <p className="mb-2 text-xs text-muted-foreground">
-          Attach receipts, invoices, or accountant notes. Add as many as you
-          need — local files are copied into the attachments folder, links
-          stay as references.
+          {t("attachments.emptyBody")}
         </p>
       )}
       {pickerError ? (
@@ -511,13 +523,13 @@ export function AttachmentsPanel({
           disabled={!wired || !filePickerEnabled || pickerBusy}
           title={
             !filePickerEnabled && wired
-              ? "Native file picker not available in this runtime"
+              ? t("attachments.nativePickerUnavailable")
               : undefined
           }
           onClick={handlePickFiles}
         >
           <FileText className="size-3.5" aria-hidden="true" />
-          {pickerBusy ? "Picking…" : "Attach files"}
+          {pickerBusy ? t("attachments.picking") : t("attachments.attachFiles")}
         </Button>
         <Button
           type="button"
@@ -528,7 +540,7 @@ export function AttachmentsPanel({
           onClick={() => setLinkDialogOpen(true)}
         >
           <Link2 className="size-3.5" aria-hidden="true" />
-          Attach links
+          {t("attachments.attachLinks")}
         </Button>
       </div>
       {onAddLinks ? (

@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   ShieldOff,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -42,21 +43,22 @@ export function SecuritySettingsPanel({
   onLockNow: () => void;
   onChangePassphrase: () => void;
 }) {
+  const { t } = useTranslation("settings");
   const biometricActionable = encryptedWorkspace && touchIdPlatformSupported;
   const biometricStatus = touchIdStatusPending
-    ? "Checking enrollment…"
+    ? t("security.biometricChecking")
     : touchIdConfigured
-      ? "Enrolled"
-      : "Not enrolled";
+      ? t("security.biometricEnrolled")
+      : t("security.biometricNotEnrolled");
   const biometricDetail = encryptedWorkspace
     ? touchIdPlatformSupported
       ? touchIdConfigured
-        ? "Saved for these books in this macOS user account."
+        ? t("security.biometricSaved")
         : touchIdStatusReason
-          ? `Not set up: ${touchIdStatusReason}`
-          : "Verify the database passphrase once to save it in macOS Keychain."
-      : "Touch ID unlock is available in the macOS desktop app."
-    : "Available after these books use SQLCipher encryption.";
+          ? t("security.biometricNotSetUpReason", { reason: touchIdStatusReason })
+          : t("security.biometricVerifyHint")
+      : t("security.biometricAvailableMacos")
+    : t("security.biometricNeedsEncryption");
 
   return (
     <div className="space-y-6">
@@ -64,7 +66,9 @@ export function SecuritySettingsPanel({
       <section className="space-y-3">
         <div className="flex items-center gap-2">
           <KeyRound className="size-4" aria-hidden="true" />
-          <h3 className="text-sm font-semibold">Database encryption</h3>
+          <h3 className="text-sm font-semibold">
+            {t("security.encryptionHeading")}
+          </h3>
         </div>
         <div className="rounded-md border bg-background p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -82,12 +86,14 @@ export function SecuritySettingsPanel({
                 ) : (
                   <ShieldOff className="size-3" aria-hidden="true" />
                 )}
-                {encryptedWorkspace ? "Encrypted · SQLCipher" : "Not encrypted"}
+                {encryptedWorkspace
+                  ? t("security.encrypted")
+                  : t("security.notEncrypted")}
               </span>
               <p className="max-w-prose text-sm text-muted-foreground">
                 {encryptedWorkspace
-                  ? "Locking closes the daemon's database handle; unlocking reopens the local SQLCipher database with your passphrase."
-                  : "These books are stored unencrypted on this device. Lock still returns to the lock screen, but the data on disk is not protected by a passphrase."}
+                  ? t("security.encryptedDetail")
+                  : t("security.notEncryptedDetail")}
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
@@ -98,7 +104,7 @@ export function SecuritySettingsPanel({
                 onClick={onLockNow}
               >
                 <Lock className="size-4" aria-hidden="true" />
-                Lock now
+                {t("security.lockNow")}
               </Button>
               <Button
                 type="button"
@@ -108,7 +114,7 @@ export function SecuritySettingsPanel({
                 disabled={!encryptedWorkspace}
               >
                 <KeyRound className="size-4" aria-hidden="true" />
-                Change passphrase
+                {t("security.changePassphrase")}
               </Button>
             </div>
           </div>
@@ -119,14 +125,18 @@ export function SecuritySettingsPanel({
       <section className="space-y-3">
         <div className="flex items-center gap-2">
           <Lock className="size-4" aria-hidden="true" />
-          <h3 className="text-sm font-semibold">App lock</h3>
+          <h3 className="text-sm font-semibold">
+            {t("security.appLockHeading")}
+          </h3>
         </div>
         <div className="rounded-md border bg-background p-3">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
-              <Label className="text-sm font-medium">Auto-lock when idle</Label>
+              <Label className="text-sm font-medium">
+                {t("security.autoLockLabel")}
+              </Label>
               <p className="text-sm text-muted-foreground">
-                Require the passphrase again after a period of inactivity.
+                {t("security.autoLockDescription")}
               </p>
             </div>
             <Switch
@@ -138,7 +148,9 @@ export function SecuritySettingsPanel({
           </div>
           {appLockPolicy.autoLockWhenIdle ? (
             <div className="mt-3 space-y-2 border-t pt-3">
-              <Label className="text-xs text-muted-foreground">Lock after</Label>
+              <Label className="text-xs text-muted-foreground">
+                {t("security.lockAfter")}
+              </Label>
               <div className="flex flex-wrap gap-1.5">
                 {[1, 5, 15, 30, 60].map((minutes) => (
                   <Button
@@ -152,7 +164,7 @@ export function SecuritySettingsPanel({
                     }
                     onClick={() => setAppLockPolicy({ idleMinutes: minutes })}
                   >
-                    {minutes}m
+                    {t("security.minutes", { count: minutes })}
                   </Button>
                 ))}
               </div>
@@ -160,11 +172,11 @@ export function SecuritySettingsPanel({
           ) : null}
         </div>
         <SettingsSwitchRow
-          label="Require passphrase on launch"
+          label={t("security.requireOnLaunchLabel")}
           description={
             encryptedWorkspace
-              ? "Prompt immediately when Kassiber opens; cold starts still need the database passphrase when the daemon is locked."
-              : "Prompt every time Kassiber opens."
+              ? t("security.requireOnLaunchEncrypted")
+              : t("security.requireOnLaunchPlaintext")
           }
           checked={appLockPolicy.requirePassphraseOnLaunch}
           onCheckedChange={(checked) =>
@@ -172,8 +184,8 @@ export function SecuritySettingsPanel({
           }
         />
         <SettingsSwitchRow
-          label="Lock on window close"
-          description="Clear in-memory decrypted state when the app window closes."
+          label={t("security.lockOnCloseLabel")}
+          description={t("security.lockOnCloseDescription")}
           checked={appLockPolicy.lockOnWindowClose}
           onCheckedChange={(checked) =>
             setAppLockPolicy({ lockOnWindowClose: checked })
@@ -185,7 +197,9 @@ export function SecuritySettingsPanel({
       <section className="space-y-3">
         <div className="flex items-center gap-2">
           <Fingerprint className="size-4" aria-hidden="true" />
-          <h3 className="text-sm font-semibold">Biometric unlock</h3>
+          <h3 className="text-sm font-semibold">
+            {t("security.biometricHeading")}
+          </h3>
         </div>
         <div className="rounded-md border bg-background p-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -197,7 +211,9 @@ export function SecuritySettingsPanel({
                     aria-hidden="true"
                   />
                 ) : null}
-                <p className="text-sm font-medium">Touch ID · {biometricStatus}</p>
+                <p className="text-sm font-medium">
+                  {t("security.biometricTitle", { status: biometricStatus })}
+                </p>
               </div>
               <p className="text-sm text-muted-foreground">{biometricDetail}</p>
             </div>
@@ -210,7 +226,7 @@ export function SecuritySettingsPanel({
                 onClick={onRefreshTouchId}
               >
                 <RefreshCw className="size-4" aria-hidden="true" />
-                Refresh
+                {t("common:actions.refresh")}
               </Button>
               {touchIdConfigured ? (
                 <Button
@@ -220,7 +236,7 @@ export function SecuritySettingsPanel({
                   disabled={!biometricActionable}
                   onClick={onForgetTouchId}
                 >
-                  Forget
+                  {t("security.forget")}
                 </Button>
               ) : (
                 <Button
@@ -230,7 +246,7 @@ export function SecuritySettingsPanel({
                   disabled={!biometricActionable}
                   onClick={onEnrollTouchId}
                 >
-                  Set up
+                  {t("security.setUp")}
                 </Button>
               )}
             </div>
@@ -238,11 +254,10 @@ export function SecuritySettingsPanel({
           <div className="mt-3 flex items-start justify-between gap-4 border-t pt-3">
             <div className="min-w-0 space-y-1">
               <Label className="text-sm font-medium">
-                Offer biometric unlock on the lock screen
+                {t("security.offerBiometricLabel")}
               </Label>
               <p className="text-sm text-muted-foreground">
-                Remember this device's biometric unlock preference between
-                sessions.
+                {t("security.offerBiometricDescription")}
               </p>
             </div>
             <Switch

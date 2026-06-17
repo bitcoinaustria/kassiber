@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from "react";
 import { RefreshCw, Github, Heart } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 const PRICE_SAMPLES = [
@@ -19,6 +20,7 @@ const PRICE_SAMPLES = [
 const REFRESH_MS = 60_000;
 
 export function AppFooter() {
+  const { t } = useTranslation("chrome");
   const [priceIdx, setPriceIdx] = useState(0);
   const [updated, setUpdated] = useState(() => Date.now());
   const [refreshing, setRefreshing] = useState(false);
@@ -43,15 +45,19 @@ export function AppFooter() {
   const price = PRICE_SAMPLES[priceIdx];
   const since = Math.floor((Date.now() - updated) / 1000);
   const sinceLabel =
-    since < 5 ? "just now" : since < 60 ? `${since}s ago` : `${Math.floor(since / 60)}m ago`;
+    since < 5
+      ? t("footer.justNow")
+      : since < 60
+        ? t("footer.secondsAgo", { seconds: since })
+        : t("footer.minutesAgo", { minutes: Math.floor(since / 60) });
 
   return (
     <footer className="relative flex h-7 flex-shrink-0 items-center justify-between gap-2 border-t border-line bg-paper px-3 font-mono text-[10px] tracking-[0.05em] text-ink-3 sm:px-4.5">
       <div className="flex min-w-0 items-center gap-2 sm:gap-4.5">
-        <span className="shrink-0">KASSIBER v0.21.0</span>
+        <span className="shrink-0">{t("footer.version")}</span>
         <span className="hidden items-center gap-1.5 md:flex">
           <span className="size-1.5 shrink-0 rounded-full bg-[#3fa66a]" />
-          WATCH-ONLY · LOCAL ENCRYPTED VAULT
+          {t("footer.watchOnly")}
         </span>
       </div>
 
@@ -60,15 +66,15 @@ export function AppFooter() {
         className="absolute left-1/2 top-0 hidden h-full -translate-x-1/2 items-center gap-1.5 whitespace-nowrap border-x border-line bg-paper-2 px-3.5 font-mono text-[10px] uppercase tracking-[0.1em] text-accent no-underline lg:inline-flex"
       >
         <Heart className="size-2.5 fill-accent/20 stroke-accent" />
-        DONATE SATS
+        {t("footer.donateSats")}
       </a>
 
       <div className="flex min-w-0 items-center gap-2 sm:gap-3.5">
         <span
-          title={`Updated ${sinceLabel} · source: Coinbase Exchange`}
+          title={t("footer.rateTitle", { since: sinceLabel })}
           className="inline-flex min-w-0 items-center gap-1.5"
         >
-          <span className="hidden text-ink-3 sm:inline">BTC/EUR</span>
+          <span className="hidden text-ink-3 sm:inline">{t("footer.btcEur")}</span>
           <span className="truncate font-semibold text-ink">
             €
             {price.toLocaleString("de-AT", {
@@ -79,8 +85,8 @@ export function AppFooter() {
           <span className="hidden text-ink-3 md:inline">· COINBASE</span>
           <button
             onClick={refresh}
-            title="Refresh rate"
-            aria-label="Refresh BTC/EUR rate"
+            title={t("footer.refreshRate")}
+            aria-label={t("footer.refreshRateLabel")}
             className="ml-px inline-flex size-4 shrink-0 cursor-pointer items-center justify-center border border-line bg-transparent p-0"
           >
             <RefreshCw
@@ -88,7 +94,7 @@ export function AppFooter() {
             />
           </button>
         </span>
-        <span className="hidden sm:inline">MAINNET</span>
+        <span className="hidden sm:inline">{t("footer.mainnet")}</span>
         <a
           href="https://github.com/bitcoinaustria/kassiber"
           target="_blank"
@@ -96,7 +102,7 @@ export function AppFooter() {
           className="hidden items-center gap-1.5 text-ink-3 no-underline sm:inline-flex"
         >
           <Github className="size-2.5" />
-          GITHUB
+          {t("footer.github")}
         </a>
       </div>
     </footer>

@@ -1,4 +1,5 @@
 import { FileText, Repeat2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import { blurClass, currencyFormatter, formatBtcAmount } from "./model";
 import type { TransactionDetailTabContext } from "./TransactionDetailTabContext";
 
 export function TransactionLinkedTab({ ctx }: { ctx: TransactionDetailTabContext }) {
+  const { t } = useTranslation("transactions");
   const {
     pair,
     onUnpair,
@@ -28,7 +30,7 @@ export function TransactionLinkedTab({ ctx }: { ctx: TransactionDetailTabContext
                               className="size-3"
                               aria-hidden="true"
                             />
-                            Paired movement
+                            {t("linked.pairedMovement")}
                             {pair.policy ? (
                               <Badge
                                 variant="outline"
@@ -46,35 +48,35 @@ export function TransactionLinkedTab({ ctx }: { ctx: TransactionDetailTabContext
                             disabled={!onUnpair || isUnpairing}
                             onClick={() => onUnpair?.(pair.id)}
                           >
-                            {isUnpairing ? "Unpairing..." : "Unpair"}
+                            {isUnpairing ? t("linked.unpairing") : t("linked.unpair")}
                           </Button>
                         </div>
                         <LedgerRow
-                          label="Out wallet"
-                          value={pair.outWallet ?? "Unknown"}
+                          label={t("linked.outWallet")}
+                          value={pair.outWallet ?? t("linked.unknown")}
                           align="right"
                         />
                         <LedgerRow
-                          label="Out amount"
+                          label={t("linked.outAmount")}
                           value={`${Math.abs(
                             (pair.outAmountSat ?? 0) / 100_000_000,
                           ).toFixed(8)} ${pair.outAsset ?? "BTC"}`}
                           align="right"
                         />
                         <LedgerRow
-                          label="In wallet"
-                          value={pair.inWallet ?? "Unknown"}
+                          label={t("linked.inWallet")}
+                          value={pair.inWallet ?? t("linked.unknown")}
                           align="right"
                         />
                         <LedgerRow
-                          label="In amount"
+                          label={t("linked.inAmount")}
                           value={`${Math.abs(
                             (pair.inAmountSat ?? 0) / 100_000_000,
                           ).toFixed(8)} ${pair.inAsset ?? "BTC"}`}
                           align="right"
                         />
                         <LedgerRow
-                          label="Pair fee"
+                          label={t("linked.pairFee")}
                           value={
                             pair.feeSat
                               ? formatBtcAmount(
@@ -84,11 +86,11 @@ export function TransactionLinkedTab({ ctx }: { ctx: TransactionDetailTabContext
                           }
                           align="right"
                           muted
-                          hint="Signed fee computed at pair time."
+                          hint={t("linked.pairFeeHint")}
                         />
                         {pair.kind ? (
                           <LedgerRow
-                            label="Pair kind"
+                            label={t("linked.pairKind")}
                             value={pair.kind}
                             align="right"
                             muted
@@ -102,13 +104,10 @@ export function TransactionLinkedTab({ ctx }: { ctx: TransactionDetailTabContext
                             className="size-4 text-muted-foreground"
                             aria-hidden="true"
                           />
-                          No paired movement
+                          {t("linked.noPairedMovement")}
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          When this tx is the other leg of a transfer, swap, or
-                          peg-in/out, the matched leg shows up here. You can
-                          also create a manual pair from the swap candidate
-                          queue.
+                          {t("linked.noPairedMovementBody")}
                         </p>
                       </div>
                     )}
@@ -119,7 +118,7 @@ export function TransactionLinkedTab({ ctx }: { ctx: TransactionDetailTabContext
                           className="size-3"
                           aria-hidden="true"
                         />
-                        Journal entries
+                        {t("linked.journalEntries")}
                       </div>
                       {journalEvents.length ? (
                         journalEvents.map((entry) => (
@@ -138,8 +137,7 @@ export function TransactionLinkedTab({ ctx }: { ctx: TransactionDetailTabContext
                         ))
                       ) : (
                         <div className="p-3 text-xs text-muted-foreground">
-                          No journal entries for this row yet. Process journals
-                          after metadata or pricing changes.
+                          {t("linked.noJournalEntries")}
                         </div>
                       )}
                     </div>

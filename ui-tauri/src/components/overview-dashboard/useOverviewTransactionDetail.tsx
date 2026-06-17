@@ -231,7 +231,7 @@ export function useOverviewTransactionDetail({
     ],
   );
   const attachmentItems = React.useMemo(
-    () => detailAttachmentRecords.map(attachmentRecordToItem),
+    () => detailAttachmentRecords.map((record) => attachmentRecordToItem(record)),
     [detailAttachmentRecords],
   );
   React.useEffect(() => {
@@ -302,8 +302,8 @@ export function useOverviewTransactionDetail({
   }, [evidenceSourceTransactions, reuseDialogOpen, reuseSourceTransactionId]);
   const reuseSourceAttachmentItems = React.useMemo(
     () =>
-      (reuseSourceAttachmentsQuery.data?.data?.attachments ?? []).map(
-        attachmentRecordToItem,
+      (reuseSourceAttachmentsQuery.data?.data?.attachments ?? []).map((record) =>
+        attachmentRecordToItem(record),
       ),
     [reuseSourceAttachmentsQuery.data],
   );

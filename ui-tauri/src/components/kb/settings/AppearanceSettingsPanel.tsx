@@ -1,14 +1,15 @@
 import { Minus, Monitor, Moon, Plus, Sun } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SUPPORTED_LANGUAGES, type LanguageCode } from "@/i18n/config";
 import {
   DEFAULT_APP_SCALE,
   MAX_APP_SCALE,
   MIN_APP_SCALE,
   type ThemePreference,
 } from "@/store/ui";
-import { PlannedBadge } from "./SettingsControls";
 
 export type CurrencyMode = "btc" | "eur";
 
@@ -21,6 +22,8 @@ export function AppearanceSettingsPanel({
   resetAppScale,
   currency,
   setCurrency,
+  lang,
+  setLang,
 }: {
   theme: ThemePreference;
   setTheme: (theme: ThemePreference) => void;
@@ -30,15 +33,20 @@ export function AppearanceSettingsPanel({
   resetAppScale: () => void;
   currency: CurrencyMode;
   setCurrency: (currency: CurrencyMode) => void;
+  lang: LanguageCode;
+  setLang: (lang: LanguageCode) => void;
 }) {
+  const { t } = useTranslation("settings");
   const scalePercent = Math.round(appScale * 100);
   return (
     <div className="space-y-6">
       <section className="space-y-2">
         <div>
-          <h3 className="text-sm font-semibold">Theme</h3>
+          <h3 className="text-sm font-semibold">
+            {t("appearance.theme.title")}
+          </h3>
           <p className="text-sm text-muted-foreground">
-            Follow the system setting or pin a light or dark appearance.
+            {t("appearance.theme.description")}
           </p>
         </div>
         <Tabs
@@ -48,15 +56,15 @@ export function AppearanceSettingsPanel({
           <TabsList>
             <TabsTrigger value="system">
               <Monitor className="size-4" aria-hidden="true" />
-              System
+              {t("appearance.theme.system")}
             </TabsTrigger>
             <TabsTrigger value="light">
               <Sun className="size-4" aria-hidden="true" />
-              Light
+              {t("appearance.theme.light")}
             </TabsTrigger>
             <TabsTrigger value="dark">
               <Moon className="size-4" aria-hidden="true" />
-              Dark
+              {t("appearance.theme.dark")}
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -64,9 +72,11 @@ export function AppearanceSettingsPanel({
 
       <section className="space-y-2">
         <div>
-          <h3 className="text-sm font-semibold">Denomination</h3>
+          <h3 className="text-sm font-semibold">
+            {t("appearance.denomination.title")}
+          </h3>
           <p className="text-sm text-muted-foreground">
-            Choose how balances and reports are shown across the app.
+            {t("appearance.denomination.description")}
           </p>
         </div>
         <Tabs
@@ -76,11 +86,11 @@ export function AppearanceSettingsPanel({
           <TabsList>
             <TabsTrigger value="eur">
               <span aria-hidden="true">€</span>
-              Euro
+              {t("appearance.denomination.euro")}
             </TabsTrigger>
             <TabsTrigger value="btc">
               <span aria-hidden="true">₿</span>
-              Bitcoin
+              {t("appearance.denomination.bitcoin")}
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -88,9 +98,11 @@ export function AppearanceSettingsPanel({
 
       <section className="space-y-2">
         <div>
-          <h3 className="text-sm font-semibold">Interface scale</h3>
+          <h3 className="text-sm font-semibold">
+            {t("appearance.scale.title")}
+          </h3>
           <p className="text-sm text-muted-foreground">
-            Make every screen denser or larger. Applies across the whole app.
+            {t("appearance.scale.description")}
           </p>
         </div>
         <div className="flex max-w-md items-center gap-2 rounded-md border bg-background p-2">
@@ -98,20 +110,20 @@ export function AppearanceSettingsPanel({
             type="button"
             variant="outline"
             size="icon-sm"
-            aria-label="Decrease interface scale"
+            aria-label={t("appearance.scale.decrease")}
             disabled={appScale <= MIN_APP_SCALE}
             onClick={decreaseAppScale}
           >
             <Minus className="size-4" aria-hidden="true" />
           </Button>
           <div className="flex-1 text-center font-mono text-sm tabular-nums">
-            {scalePercent}%
+            {t("appearance.scale.value", { percent: scalePercent })}
           </div>
           <Button
             type="button"
             variant="outline"
             size="icon-sm"
-            aria-label="Increase interface scale"
+            aria-label={t("appearance.scale.increase")}
             disabled={appScale >= MAX_APP_SCALE}
             onClick={increaseAppScale}
           >
@@ -124,28 +136,30 @@ export function AppearanceSettingsPanel({
             onClick={resetAppScale}
             disabled={appScale === DEFAULT_APP_SCALE}
           >
-            Reset
+            {t("common:actions.reset")}
           </Button>
         </div>
       </section>
 
       <section className="space-y-2">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold">Language</h3>
-          <PlannedBadge />
+        <div>
+          <h3 className="text-sm font-semibold">
+            {t("appearance.language.title")}
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            {t("appearance.language.description")}
+          </p>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Kassiber is English-only today. German (Deutsch) translations are in
-          progress.
-        </p>
-        <Tabs value="en">
+        <Tabs
+          value={lang}
+          onValueChange={(value) => setLang(value as LanguageCode)}
+        >
           <TabsList>
-            <TabsTrigger value="en" disabled>
-              English
-            </TabsTrigger>
-            <TabsTrigger value="de" disabled>
-              Deutsch
-            </TabsTrigger>
+            {SUPPORTED_LANGUAGES.map((language) => (
+              <TabsTrigger key={language.code} value={language.code}>
+                {language.label}
+              </TabsTrigger>
+            ))}
           </TabsList>
         </Tabs>
       </section>

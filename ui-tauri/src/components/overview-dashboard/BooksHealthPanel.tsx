@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { CheckCircle2, FileText } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ export const BooksHealthPanel = ({
   onProcessJournals: () => void;
   isProcessingJournals: boolean;
 }) => {
+  const { t } = useTranslation("overview");
   const healthItems = buildOverviewHealthItems(snapshot);
   const primaryAction = buildPrimaryOverviewAction(snapshot);
   const PrimaryIcon = primaryAction?.icon;
@@ -45,16 +47,16 @@ export const BooksHealthPanel = ({
             variant="outline"
             size="icon"
             className="size-7 shrink-0 sm:size-8"
-            aria-label="Books health"
+            aria-label={t("health.panelAria")}
           >
             <CheckCircle2 className="size-4 text-muted-foreground sm:size-[18px]" />
           </Button>
           <div>
             <span className="text-sm font-medium">
-              Books Health
+              {t("health.title")}
             </span>
             <p className="text-[10px] text-muted-foreground sm:text-xs">
-              What needs attention before reports
+              {t("health.subtitle")}
             </p>
           </div>
         </div>
@@ -74,10 +76,10 @@ export const BooksHealthPanel = ({
             </span>
             <span className="min-w-0">
               <span className="block text-sm font-semibold">
-                {primaryAction.title}
+                {t(primaryAction.title.key, primaryAction.title.params)}
               </span>
               <span className="mt-0.5 block text-xs leading-5 opacity-80">
-                {primaryAction.detail}
+                {t(primaryAction.detail.key, primaryAction.detail.params)}
               </span>
             </span>
           </Link>
@@ -105,16 +107,16 @@ export const BooksHealthPanel = ({
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-xs font-medium text-muted-foreground">
-                    {item.title}
+                    {t(item.title.key, item.title.params)}
                   </span>
                   <span className="mt-0.5 block truncate text-sm font-semibold text-foreground">
                     {isJournalRefresh && isProcessingJournals
-                      ? "Reprocessing"
-                      : item.value}
+                      ? t("health.journals.reprocessing")
+                      : t(item.value.key, item.value.params)}
                   </span>
                 </span>
                 <span className="hidden max-w-[140px] text-right text-[10px] leading-4 text-muted-foreground sm:block">
-                  {item.detail}
+                  {t(item.detail.key, item.detail.params)}
                 </span>
               </>
             );
@@ -146,7 +148,7 @@ export const BooksHealthPanel = ({
         <Button asChild variant="ghost" size="sm" className="h-8 w-full">
           <Link to="/reports">
             <FileText className="size-4" aria-hidden="true" />
-            Reports
+            {t("nav:book.reports")}
           </Link>
         </Button>
       </div>

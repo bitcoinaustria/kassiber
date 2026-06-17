@@ -10,6 +10,7 @@ import {
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 
@@ -44,6 +45,7 @@ const ExplainerShell = ({
   activeKey: string;
   footer: string;
 }) => {
+  const { t } = useTranslation("onboarding");
   return (
     <div className="flex h-full items-start">
       <div className="sticky top-8 w-full max-w-lg">
@@ -82,7 +84,7 @@ const ExplainerShell = ({
                     {optTitle}
                     {active && (
                       <span className="ml-2 font-mono text-[9px] font-medium uppercase tracking-[0.12em] text-[var(--color-accent)]">
-                        Selected
+                        {t("explainer.selected")}
                       </span>
                     )}
                   </p>
@@ -102,64 +104,70 @@ const ExplainerShell = ({
   );
 };
 
-export const SyncExplainer = ({ form }: { form: OnboardingForm }) => (
-  <ExplainerShell
-    icon={Network}
-    eyebrow="Why this matters"
-    title="How syncing works"
-    lead="A sync backend discovers your watch-only addresses and refreshes balances and history from the network. Kassiber stays watch-only — private keys never enter the app."
-    activeKey={form.backendSetupMode}
-    options={[
-      {
-        key: "default",
-        icon: Globe2,
-        title: "Built-in public backends",
-        body: "Bundled Explorer API, Electrum / Fulcrum, and Liquid endpoints. Fast start, but the operator can still see your address queries — use Tor/VPN or run your own if privacy matters.",
-      },
-      {
-        key: "custom",
-        icon: ServerCog,
-        title: "Custom sync backend",
-        body: "Point at your own node or a trusted server. Best privacy and sovereignty; you manage the endpoint.",
-      },
-      {
-        key: "skip",
-        icon: AlertTriangle,
-        title: "Skip for now",
-        body: "Manual imports only. No address discovery or refresh until you add a backend from Settings.",
-      },
-    ]}
-    footer="Whichever you pick, queries reveal which addresses you watch to that server — running your own keeps it private. Credentials are added later, after the encrypted database is open."
-  />
-);
+export const SyncExplainer = ({ form }: { form: OnboardingForm }) => {
+  const { t } = useTranslation("onboarding");
+  return (
+    <ExplainerShell
+      icon={Network}
+      eyebrow={t("explainer.whyThisMatters")}
+      title={t("explainer.sync.title")}
+      lead={t("explainer.sync.lead")}
+      activeKey={form.backendSetupMode}
+      options={[
+        {
+          key: "default",
+          icon: Globe2,
+          title: t("explainer.sync.default.title"),
+          body: t("explainer.sync.default.body"),
+        },
+        {
+          key: "custom",
+          icon: ServerCog,
+          title: t("explainer.sync.custom.title"),
+          body: t("explainer.sync.custom.body"),
+        },
+        {
+          key: "skip",
+          icon: AlertTriangle,
+          title: t("explainer.sync.skip.title"),
+          body: t("explainer.sync.skip.body"),
+        },
+      ]}
+      footer={t("explainer.sync.footer")}
+    />
+  );
+};
 
-export const AiExplainer = ({ form }: { form: OnboardingForm }) => (
-  <ExplainerShell
-    icon={Sparkles}
-    eyebrow="Why this matters"
-    title="How the assistant works"
-    lead="The assistant helps categorize transactions, draft notes, and answer questions about your books. It is optional and can be changed anytime in Settings."
-    activeKey={form.aiSetupMode}
-    options={[
-      {
-        key: "local",
-        icon: BrainCircuit,
-        title: "Local endpoint",
-        body: "Runs against a model on this machine (Ollama by default). Prompts and accounting context stay on-device.",
-      },
-      {
-        key: "remote",
-        icon: ShieldAlert,
-        title: "Remote provider",
-        body: "An OpenAI-compatible endpoint or Claude/Codex CLI. Prompts and accounting context may leave this device.",
-      },
-      {
-        key: "disabled",
-        icon: Power,
-        title: "Disabled",
-        body: "Hides the Assistant and floating chat. You can turn AI back on later in Settings.",
-      },
-    ]}
-    footer="No API keys or secrets are collected during setup. Accounting context — labels, notes, hostnames, report details — can be sensitive; keep that in mind for remote providers."
-  />
-);
+export const AiExplainer = ({ form }: { form: OnboardingForm }) => {
+  const { t } = useTranslation("onboarding");
+  return (
+    <ExplainerShell
+      icon={Sparkles}
+      eyebrow={t("explainer.whyThisMatters")}
+      title={t("explainer.ai.title")}
+      lead={t("explainer.ai.lead")}
+      activeKey={form.aiSetupMode}
+      options={[
+        {
+          key: "local",
+          icon: BrainCircuit,
+          title: t("explainer.ai.local.title"),
+          body: t("explainer.ai.local.body"),
+        },
+        {
+          key: "remote",
+          icon: ShieldAlert,
+          title: t("explainer.ai.remote.title"),
+          body: t("explainer.ai.remote.body"),
+        },
+        {
+          key: "disabled",
+          icon: Power,
+          title: t("explainer.ai.disabled.title"),
+          body: t("explainer.ai.disabled.body"),
+        },
+      ]}
+      footer={t("explainer.ai.footer")}
+    />
+  );
+};

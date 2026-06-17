@@ -15,6 +15,7 @@
  * stays consistent.
  */
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import {
   Dialog,
@@ -158,6 +159,7 @@ export function ChartFullscreen({
   onClose,
   totalBtc,
 }: ChartFullscreenProps) {
+  const { t } = useTranslation("overview");
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const [range, setRange] = React.useState<Range>("ytd");
   const [stacked, setStacked] = React.useState(false);
@@ -361,14 +363,13 @@ export function ChartFullscreen({
         <DialogHeader className="flex h-13 flex-row items-center justify-between gap-2 border-b border-line px-4.5 py-0">
           <div className="flex min-w-0 items-baseline gap-3">
             <DialogTitle className="font-sans text-[17px] font-semibold tracking-[-0.005em] text-ink">
-              Balance &amp; performance
+              {t("balanceChart.title")}
             </DialogTitle>
             <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-ink-3">
-              fullscreen
+              {t("balanceChart.fullscreen")}
             </span>
             <DialogDescription className="sr-only">
-              Expanded view of balance over time, with hover scrubber and
-              optional by-connection composition mode.
+              {t("balanceChart.srDescription")}
             </DialogDescription>
           </div>
 
@@ -431,14 +432,14 @@ export function ChartFullscreen({
                   : "border-line bg-transparent text-ink-2",
               )}
             >
-              {stacked ? "By connection" : "Total"}
+              {stacked ? t("balanceChart.byConnection") : t("balanceChart.total")}
             </button>
 
             {/* close */}
             <button
               type="button"
               onClick={onClose}
-              title="Close (Esc)"
+              title={t("balanceChart.closeEsc")}
               className="ml-1 flex size-7 cursor-pointer items-center justify-center border border-line bg-transparent p-0"
             >
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -449,7 +450,7 @@ export function ChartFullscreen({
                   strokeLinecap="square"
                 />
               </svg>
-              <span className="sr-only">Close</span>
+              <span className="sr-only">{t("balanceChart.close")}</span>
             </button>
           </div>
         </DialogHeader>
@@ -458,7 +459,7 @@ export function ChartFullscreen({
         <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr_1fr] gap-4.5 border-b border-line bg-paper-2 px-4.5 py-3.5">
           <div>
             <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-ink-3">
-              {range.toUpperCase()} · current
+              {t("balanceChart.current", { range: range.toUpperCase() })}
             </div>
             <div
               className={cn(
@@ -471,7 +472,7 @@ export function ChartFullscreen({
           </div>
 
           <KpiBlock
-            label="Change"
+            label={t("balanceChart.change")}
             value={
               <span className={cn(up ? "text-[#3fa66a]" : "text-accent", blurCls)}>
                 {up ? "+ " : "− "}
@@ -486,19 +487,19 @@ export function ChartFullscreen({
           />
 
           <KpiBlock
-            label="High"
+            label={t("balanceChart.high")}
             value={<span className={blurCls}>{fmt(max)}</span>}
             sub={cfg.scrubFmt(maxIdx, n)}
           />
 
           <KpiBlock
-            label="Low"
+            label={t("balanceChart.low")}
             value={<span className={blurCls}>{fmt(min)}</span>}
             sub={cfg.scrubFmt(minIdx, n)}
           />
 
           <KpiBlock
-            label="Spot · BTC/EUR"
+            label={t("balanceChart.spot")}
             value={
               <span className={blurCls}>
                 {"€ " +
@@ -510,7 +511,7 @@ export function ChartFullscreen({
             }
             sub={
               <span className={cn("text-[#3fa66a]", blurCls)}>
-                + 1.42 % · 24h
+                {t("balanceChart.spotChange")}
               </span>
             }
           />
@@ -715,14 +716,14 @@ export function ChartFullscreen({
             ) : (
               <div className="flex items-center gap-2">
                 <span className="inline-block h-0.5 w-3.5 bg-accent" />
-                <span className="font-sans text-xs text-ink">Total balance</span>
+                <span className="font-sans text-xs text-ink">{t("balanceChart.totalBalance")}</span>
                 <span className="ml-2 font-mono text-[10px] text-ink-3">
-                  {n} points · synthesized for demo
+                  {t("balanceChart.pointsSynthesized", { count: n })}
                 </span>
               </div>
             )}
             <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-ink-3">
-              hover for detail · esc to close
+              {t("balanceChart.hoverFooter")}
             </span>
           </div>
         </div>

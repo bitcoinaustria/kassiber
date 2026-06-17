@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { ChevronLeft } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,7 @@ export const OnboardingStepHeader = ({
   goBack,
   showProgress = false,
 }: OnboardingStepHeaderProps) => {
+  const { t } = useTranslation("onboarding");
   return (
     <div className="flex items-start gap-2">
       {goBack && (
@@ -28,7 +30,7 @@ export const OnboardingStepHeader = ({
           size="icon"
           onClick={goBack}
           className="-ml-2 shrink-0 text-ink-2"
-          aria-label="Go back"
+          aria-label={t("frame.goBack")}
         >
           <ChevronLeft className="size-4" />
         </Button>
@@ -36,7 +38,7 @@ export const OnboardingStepHeader = ({
       <div>
         {showProgress && (
           <p className="mb-2 font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-ink-3">
-            Step {stepIndex + 1}/{totalSteps}
+            {t("frame.step", { current: stepIndex + 1, total: totalSteps })}
           </p>
         )}
         <h3 className="text-2xl font-semibold tracking-normal text-ink md:whitespace-nowrap">

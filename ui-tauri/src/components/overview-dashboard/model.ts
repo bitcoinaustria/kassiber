@@ -31,20 +31,72 @@ import {
   type Tx as OverviewTx,
 } from "@/mocks/seed";
 
+// Translator type for the `overview` namespace. Helpers that produce
+// user-facing copy take this (optionally) so the daemon/model layer stays
+// locale-free while the visible strings resolve through i18next at the call
+// site. When omitted, helpers fall back to English so non-UI callers (tests,
+// not-yet-migrated components) keep working.
+export type OverviewTranslate = (key: string, options?: Record<string, unknown>) => string;
+
+// Maps an overview i18n key (+ optional interpolation params) to an English
+// string, used as the fallback when no translator is supplied.
+const OVERVIEW_EN_FALLBACK: Record<string, string> = {
+  "marketRate.noSource": "No source",
+  "marketRate.manual": "Manual",
+  "marketRate.notSynced": "Not synced",
+  "marketRate.justNow": "just now",
+  "marketRate.fetchRates": "Fetch rates",
+  "marketRate.noRate": "No {{currency}} rate",
+  "marketRate.perBtc": "{{value}} / BTC",
+  "marketRate.synced": "Synced {{date}}",
+  "marketRate.minutesAgo": "{{count}}m ago",
+  "marketRate.hoursAgo": "{{count}}h ago",
+  "marketRate.daysAgo": "{{count}}d ago",
+  "recentTx.unassigned": "Unassigned",
+};
+
+function fallbackTranslate(key: string, options?: Record<string, unknown>) {
+  const template = OVERVIEW_EN_FALLBACK[key] ?? key;
+  if (!options) return template;
+  return template.replace(/\{\{(\w+)\}\}/g, (_match, name: string) =>
+    options[name] === undefined ? "" : String(options[name]),
+  );
+}
+
+function resolveTranslate(t?: OverviewTranslate): OverviewTranslate {
+  return t ?? fallbackTranslate;
+}
+
+export type StatId =
+  | "portfolioValue"
+  | "transactions"
+  | "reviewedEvents"
+  | "openReview"
+  | "connections";
+
 export type StatItem = {
-  title: string;
+  // Stable slug for React keys and equality checks; never a translated string.
+  id: StatId;
+  // i18n key in the `overview` namespace for the visible title.
+  titleKey: string;
   previousValue: number;
   value: number;
   changePercent: number;
   isPositive: boolean;
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   format: "currency" | "number";
-  comparisonLabel: string;
+  // i18n key in the `overview` namespace for the comparison caption.
+  comparisonLabelKey: string;
   href: OverviewHref;
 };
 
 export type HoldingsItem = {
+  // Connection label (data) for real sources; for the synthetic aggregate row
+  // this is empty and `nameKey` carries the i18n key instead.
   name: string;
+  // i18n key in the `overview` namespace for synthetic rows (e.g. "Other
+  // sources"); undefined for real connection rows that display `name`.
+  nameKey?: string;
   value: number;
   percent: number;
   color: string;
@@ -52,7 +104,8 @@ export type HoldingsItem = {
 
 export type BalanceDriverItem = {
   key: "incoming" | "outgoing" | "swap" | "fees";
-  label: string;
+  // i18n key in the `overview` namespace for the visible driver label.
+  labelKey: string;
   valueBtc: number;
   count: number;
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
@@ -206,19 +259,26 @@ export type Transaction = {
   date: string;
 };
 
+// i18n key plus optional interpolation params, resolved via `t()` at the call
+// site. Lets the locale-free model layer describe copy without rendering it.
+export type OverviewCopy = {
+  key: string;
+  params?: Record<string, unknown>;
+};
+
 export type OverviewHealthItem = {
   key: string;
-  title: string;
-  value: string;
-  detail: string;
+  title: OverviewCopy;
+  value: OverviewCopy;
+  detail: OverviewCopy;
   href: OverviewHref;
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   tone: OverviewHealthTone;
 };
 
 export type OverviewReadiness = {
-  title: string;
-  detail: string;
+  title: OverviewCopy;
+  detail: OverviewCopy;
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   tone: OverviewHealthTone;
 };
@@ -325,65 +385,95 @@ export function activeMarketFiatRate(snapshot: OverviewSnapshot) {
   return snapshot.priceEur;
 }
 
-export function formatMarketRateValue(snapshot: OverviewSnapshot) {
+export function formatMarketRateValue(
+  snapshot: OverviewSnapshot,
+  translate?: OverviewTranslate,
+) {
+  const t = resolveTranslate(translate);
   const fiatCurrency = activeMarketFiatCurrency(snapshot);
   const rate = snapshot.marketRate?.rate;
   if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0) {
-    return `No ${fiatCurrency} rate`;
+    return t("marketRate.noRate", { currency: fiatCurrency });
   }
-  return `${formatFiatAmount(rate, fiatCurrency)} / BTC`;
+  return t("marketRate.perBtc", { value: formatFiatAmount(rate, fiatCurrency) });
 }
 
+// Provider/product names stay as-is (proper nouns); `manual` is a UI word and
+// resolves through the translator at the call site.
 const MARKET_RATE_SOURCE_LABELS: Record<string, string> = {
   "coinbase-exchange": "Coinbase Exchange",
   "kraken-csv": "Kraken CSV",
   coingecko: "CoinGecko",
-  manual: "Manual",
 };
 
-export function formatMarketRateSource(source: string | null | undefined) {
-  if (!source) return "No source";
+export function formatMarketRateSource(
+  source: string | null | undefined,
+  translate?: OverviewTranslate,
+) {
+  const t = resolveTranslate(translate);
+  if (!source) return t("marketRate.noSource");
   const normalized = source.trim().toLowerCase();
+  if (normalized === "manual") return t("marketRate.manual");
   return MARKET_RATE_SOURCE_LABELS[normalized] ?? source;
 }
 
-export function marketRateSyncLabel(snapshot: OverviewSnapshot) {
+export function marketRateSyncLabel(
+  snapshot: OverviewSnapshot,
+  translate?: OverviewTranslate,
+) {
+  const t = resolveTranslate(translate);
   const syncedAt = snapshot.marketRate?.fetchedAt ?? snapshot.marketRate?.timestamp;
-  return syncedAt ? `Synced ${formatShortDate(syncedAt)}` : "Not synced";
+  return syncedAt
+    ? t("marketRate.synced", { date: formatShortDate(syncedAt) })
+    : t("marketRate.notSynced");
 }
 
 export function formatRelativeMarketRateTime(
   value: string | null | undefined,
   nowMs = Date.now(),
+  translate?: OverviewTranslate,
 ) {
+  const t = resolveTranslate(translate);
   if (!value) return null;
   const thenMs = Date.parse(value);
   if (!Number.isFinite(thenMs)) return null;
   const diffSec = Math.max(0, Math.floor((nowMs - thenMs) / 1000));
-  if (diffSec < 60) return "just now";
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
-  return `${Math.floor(diffSec / 86400)}d ago`;
+  if (diffSec < 60) return t("marketRate.justNow");
+  if (diffSec < 3600) {
+    return t("marketRate.minutesAgo", { count: Math.floor(diffSec / 60) });
+  }
+  if (diffSec < 86400) {
+    return t("marketRate.hoursAgo", { count: Math.floor(diffSec / 3600) });
+  }
+  return t("marketRate.daysAgo", { count: Math.floor(diffSec / 86400) });
 }
 
-export function marketRateCompactLabel(snapshot: OverviewSnapshot) {
+export function marketRateCompactLabel(
+  snapshot: OverviewSnapshot,
+  translate?: OverviewTranslate,
+) {
+  const t = resolveTranslate(translate);
   const syncedAt = snapshot.marketRate?.fetchedAt ?? snapshot.marketRate?.timestamp;
   const source = snapshot.marketRate?.source;
   const sourceLabel = source
-    ? formatMarketRateSource(source).replace(/\s+Exchange$/, "")
+    ? formatMarketRateSource(source, t).replace(/\s+Exchange$/, "")
     : null;
-  if (!syncedAt && !sourceLabel) return "Fetch rates";
-  const timeLabel = formatRelativeMarketRateTime(syncedAt);
+  if (!syncedAt && !sourceLabel) return t("marketRate.fetchRates");
+  const timeLabel = formatRelativeMarketRateTime(syncedAt, Date.now(), t);
   return [sourceLabel, timeLabel].filter(Boolean).join(" · ");
 }
 
-export function marketRateDetailLabel(snapshot: OverviewSnapshot) {
+export function marketRateDetailLabel(
+  snapshot: OverviewSnapshot,
+  translate?: OverviewTranslate,
+) {
+  const t = resolveTranslate(translate);
   const pair = snapshot.marketRate?.pair;
   const source = snapshot.marketRate?.source;
-  if (!pair && !source) return "Fetch rates";
-  if (!pair) return formatMarketRateSource(source);
+  if (!pair && !source) return t("marketRate.fetchRates");
+  if (!pair) return formatMarketRateSource(source, t);
   if (!source) return pair;
-  return `${formatMarketRateSource(source)} · ${pair}`;
+  return `${formatMarketRateSource(source, t)} · ${pair}`;
 }
 
 export function donutCenterValueClass(value: string) {
@@ -474,6 +564,9 @@ export function useResolvedColorMode() {
     : "light";
 }
 
+// Recharts `ChartConfig` `label`s are not surfaced visibly here — the holdings
+// donut renders a custom legend (translated at the call site) and has no
+// recharts `<Tooltip>`. These stay as inert internal config values.
 export const holdingsChartConfig = {
   onchain: { label: "On-chain BTC", color: palette.primary },
   lightning: { label: "Lightning", theme: palette.secondary },
@@ -483,47 +576,51 @@ export const holdingsChartConfig = {
 
 const statsData: StatItem[] = [
   {
-    title: "Portfolio value",
+    id: "portfolioValue",
+    titleKey: "stats.title.portfolioValue",
     previousValue: 198502,
     value: 312842.77,
     changePercent: 27.86,
     isPositive: true,
     icon: CircleDollarSign,
     format: "currency",
-    comparisonLabel: "vs Last Month",
+    comparisonLabelKey: "stats.comparison.vsLastMonth",
     href: "/reports",
   },
   {
-    title: "Transactions",
+    id: "transactions",
+    titleKey: "stats.title.transactions",
     previousValue: 184,
     value: 218,
     changePercent: 18.4,
     isPositive: true,
     icon: ClipboardList,
     format: "number",
-    comparisonLabel: "vs Last Month",
+    comparisonLabelKey: "stats.comparison.vsLastMonth",
     href: "/transactions",
   },
   {
-    title: "Reviewed events",
+    id: "reviewedEvents",
+    titleKey: "stats.title.reviewedEvents",
     previousValue: 412,
     value: 497,
     changePercent: 20.8,
     isPositive: true,
     icon: Users,
     format: "number",
-    comparisonLabel: "vs Last Month",
+    comparisonLabelKey: "stats.comparison.vsLastMonth",
     href: "/connections",
   },
   {
-    title: "Open review",
+    id: "openReview",
+    titleKey: "stats.title.openReview",
     previousValue: 98,
     value: 84,
     changePercent: 13.73,
     isPositive: false,
     icon: CreditCard,
     format: "currency",
-    comparisonLabel: "vs Last Month",
+    comparisonLabelKey: "stats.comparison.vsLastMonth",
     href: "/quarantine",
   },
 ];
@@ -555,11 +652,11 @@ export function buildStatsData(
         ? (snapshot.fiat.eurUnrealized / snapshot.fiat.eurCostBasis) * 100
         : 0,
       isPositive: snapshot.fiat.eurUnrealized >= 0,
-      comparisonLabel: isBitcoinMode
-        ? "Bitcoin balance"
+      comparisonLabelKey: isBitcoinMode
+        ? "stats.comparison.bitcoinBalance"
         : snapshot.fiat.eurCostBasis
-          ? "vs cost basis"
-          : "from loaded rows",
+          ? "stats.comparison.vsCostBasis"
+          : "stats.comparison.fromLoadedRows",
     },
     {
       ...statsData[1],
@@ -567,26 +664,28 @@ export function buildStatsData(
       previousValue: 0,
       changePercent: 0,
       isPositive: true,
-      comparisonLabel: "loaded rows",
+      comparisonLabelKey: "stats.comparison.loadedRows",
     },
     {
       ...statsData[2],
-      title: "Connections",
+      id: "connections",
+      titleKey: "stats.title.connections",
       value: snapshot.connections.length,
       previousValue: 0,
       changePercent: 0,
       isPositive: true,
-      comparisonLabel: "configured",
+      comparisonLabelKey: "stats.comparison.configured",
     },
     {
       ...statsData[3],
-      title: "Open review",
+      id: "openReview",
+      titleKey: "stats.title.openReview",
       value: snapshot.status?.quarantines ?? 0,
       previousValue: 0,
       changePercent: 0,
       isPositive: (snapshot.status?.quarantines ?? 0) === 0,
       format: "number",
-      comparisonLabel: "journal quarantine",
+      comparisonLabelKey: "stats.comparison.journalQuarantine",
     },
   ];
 }
@@ -616,22 +715,23 @@ export const fiveYearData = [
 
 export type TimePeriod = "30days" | "3months" | "ytd" | "1year" | "5years" | "all";
 
-export const periodLabels: Record<TimePeriod, string> = {
-  "30days": "30 Days",
-  "3months": "3 Months",
-  ytd: "YTD",
-  "1year": "1 Year",
-  "5years": "5 Years",
-  all: "All Time",
+// i18n keys in the `overview` namespace, resolved via `t()` at the call site.
+export const periodLabelKeys: Record<TimePeriod, string> = {
+  "30days": "period.30days",
+  "3months": "period.3months",
+  ytd: "period.ytd",
+  "1year": "period.1year",
+  "5years": "period.5years",
+  all: "period.all",
 };
 
-export const periodShortLabels: Record<TimePeriod, string> = {
-  "30days": "30D",
-  "3months": "3M",
-  ytd: "YTD",
-  "1year": "1Y",
-  "5years": "5Y",
-  all: "All",
+export const periodShortLabelKeys: Record<TimePeriod, string> = {
+  "30days": "period.short.30days",
+  "3months": "period.short.3months",
+  ytd: "period.short.ytd",
+  "1year": "period.short.1year",
+  "5years": "period.short.5years",
+  all: "period.short.all",
 };
 
 export const periodKeys: TimePeriod[] = [
@@ -1230,6 +1330,19 @@ export function activityFlowForTx(tx: OverviewTx): ActivityFlow {
   return flowForOverviewTx(tx);
 }
 
+// i18n keys in the `overview` namespace, indexed by activity flow. Resolved via
+// `t()` at the call site.
+export const activityFlowLabelKeys: Record<ActivityFlow, string> = {
+  incoming: "activityFlow.incoming",
+  outgoing: "activityFlow.outgoing",
+  swap: "activityFlow.swap",
+  transfer: "activityFlow.transfer",
+  fee: "activityFlow.fee",
+};
+
+// English fallback labels, kept for call sites not yet migrated to i18n
+// (e.g. ActivityScatterDot's aria-label). Visible overview copy uses
+// `activityFlowLabelKeys` + `t()`.
 export const activityFlowLabels: Record<ActivityFlow, string> = {
   incoming: "Received",
   outgoing: "Spent",
@@ -1736,28 +1849,28 @@ export function buildBalanceRailItems(snapshot: OverviewSnapshot) {
   const items = [
     {
       key: "onchain",
-      label: "On-chain",
+      labelKey: "holdings.rail.onchain",
       value: byRail.onchain,
       percent: percentOf(byRail.onchain, total),
       color: palette.primary,
     },
     {
       key: "lightning",
-      label: "Lightning",
+      labelKey: "holdings.rail.lightning",
       value: byRail.lightning,
       percent: percentOf(byRail.lightning, total),
       color: palette.secondary.light,
     },
     {
       key: "liquid",
-      label: "Liquid",
+      labelKey: "holdings.rail.liquid",
       value: byRail.liquid,
       percent: percentOf(byRail.liquid, total),
       color: palette.tertiary.light,
     },
     {
       key: "other",
-      label: "Other",
+      labelKey: "holdings.rail.other",
       value: byRail.other,
       percent: percentOf(byRail.other, total),
       color: `color-mix(in oklch, var(--muted-foreground) 70%, ${mixBase})`,
@@ -1779,12 +1892,13 @@ export function buildHoldingsBySource(snapshot: OverviewSnapshot): HoldingsItem[
     }))
     .sort((a, b) => b.value - a.value);
   const total = rows.reduce((sum, item) => sum + item.value, 0);
-  const visibleRows =
+  const visibleRows: Array<{ name: string; nameKey?: string; value: number }> =
     rows.length > 4
       ? [
           ...rows.slice(0, 3),
           {
-            name: "Other sources",
+            name: "",
+            nameKey: "holdings.otherSources",
             value: rows.slice(3).reduce((sum, item) => sum + item.value, 0),
           },
         ]
@@ -1797,6 +1911,7 @@ export function buildHoldingsBySource(snapshot: OverviewSnapshot): HoldingsItem[
   ];
   return visibleRows.map((item, index) => ({
     name: item.name,
+    nameKey: item.nameKey,
     value: item.value,
     percent: percentOf(item.value, total),
     color: colors[index] ?? colors[colors.length - 1],
@@ -1842,7 +1957,7 @@ export function buildBalanceDrivers(snapshot: OverviewSnapshot) {
   const items: BalanceDriverItem[] = [
     {
       key: "incoming",
-      label: "Incoming",
+      labelKey: "drivers.incoming",
       valueBtc: totals.incomingBtc,
       count: totals.incomingCount,
       icon: ArrowDownRight,
@@ -1850,7 +1965,7 @@ export function buildBalanceDrivers(snapshot: OverviewSnapshot) {
     },
     {
       key: "outgoing",
-      label: "Outgoing",
+      labelKey: "drivers.outgoing",
       valueBtc: totals.outgoingBtc,
       count: totals.outgoingCount,
       icon: ArrowUpRight,
@@ -1858,7 +1973,7 @@ export function buildBalanceDrivers(snapshot: OverviewSnapshot) {
     },
     {
       key: "swap",
-      label: "Swap volume",
+      labelKey: "drivers.swapVolume",
       valueBtc: totals.swapBtc,
       count: totals.swapCount,
       icon: ArrowLeftRight,
@@ -1866,7 +1981,7 @@ export function buildBalanceDrivers(snapshot: OverviewSnapshot) {
     },
     {
       key: "fees",
-      label: "Fees",
+      labelKey: "drivers.fees",
       valueBtc: totals.feesBtc,
       count: totals.feeCount,
       icon: CircleDollarSign,
@@ -2126,18 +2241,19 @@ export const statusStyles: Record<TransactionStatus, string> = {
     "bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/10 dark:bg-red-900/30 dark:text-red-400 dark:ring-red-400/20",
 };
 
-export const statusLabels: Record<TransactionStatus, string> = {
-  confirmed: "Confirmed",
-  pending: "Pending",
-  review: "Review",
-  failed: "Failed",
+// i18n keys in the `overview` namespace, resolved via `t()` at the call site.
+export const statusLabelKeys: Record<TransactionStatus, string> = {
+  confirmed: "txStatus.confirmed",
+  pending: "txStatus.pending",
+  review: "txStatus.review",
+  failed: "txStatus.failed",
 };
 
-export const overviewFlowLabels: Record<OverviewTransactionFlow, string> = {
-  incoming: "Incoming",
-  outgoing: "Outgoing",
-  transfer: "Transfer",
-  swap: "Swap",
+export const overviewFlowLabelKeys: Record<OverviewTransactionFlow, string> = {
+  incoming: "txFlow.incoming",
+  outgoing: "txFlow.outgoing",
+  transfer: "txFlow.transfer",
+  swap: "txFlow.swap",
 };
 
 export const overviewFlowStyles: Record<OverviewTransactionFlow, string> = {
@@ -2165,7 +2281,11 @@ export function flowForOverviewTx(tx: OverviewTx): OverviewTransactionFlow {
   return tx.amountSat >= 0 ? "incoming" : "outgoing";
 }
 
-export function toDashboardTransaction(tx: OverviewTx, index: number): Transaction {
+export function toDashboardTransaction(
+  tx: OverviewTx,
+  index: number,
+  t?: OverviewTranslate,
+): Transaction {
   const displayAmountSat =
     tx.type === "Consolidation" && tx.amountSat === 0 && tx.feeSat
       ? -Math.abs(tx.feeSat)
@@ -2176,7 +2296,9 @@ export function toDashboardTransaction(tx: OverviewTx, index: number): Transacti
       : tx.rate !== null
         ? (displayAmountSat / 100_000_000) * tx.rate
         : null;
-  const account = tx.account || tx.counter || "Unassigned";
+  const unassignedLabel =
+    typeof t === "function" ? t("recentTx.unassigned") : "Unassigned";
+  const account = tx.account || tx.counter || unassignedLabel;
   const accountLower = account.toLowerCase();
   const paymentMethod = accountLower.includes("liquid")
     ? "Liquid"
@@ -2221,8 +2343,11 @@ export function toDashboardTransaction(tx: OverviewTx, index: number): Transacti
   };
 }
 
-export function overviewTransactions(snapshot: OverviewSnapshot) {
-  return snapshot.txs.map(toDashboardTransaction);
+export function overviewTransactions(
+  snapshot: OverviewSnapshot,
+  t?: OverviewTranslate,
+) {
+  return snapshot.txs.map((tx, index) => toDashboardTransaction(tx, index, t));
 }
 
 export function initials(value: string) {
@@ -2259,16 +2384,21 @@ export function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewRead
   const erroredConnections = snapshot.connections.filter(
     (connection) => connection.status === "error",
   ).length;
-  const sourceDetail = totalConnections
-    ? `${syncedConnections}/${totalConnections} source${
-        totalConnections === 1 ? "" : "s"
-      } current`
-    : "No sources connected";
+  const sourceDetail: OverviewCopy = totalConnections
+    ? {
+        key: "readiness.sourceDetail",
+        params: {
+          count: totalConnections,
+          synced: syncedConnections,
+          total: totalConnections,
+        },
+      }
+    : { key: "readiness.noSources" };
 
   if (!snapshot.txs.length && !totalConnections) {
     return {
-      title: "Connect a source",
-      detail: "Add a watch-only source or import rows to populate this book.",
+      title: { key: "readiness.connectSource.title" },
+      detail: { key: "readiness.connectSource.detail" },
       icon: Plus,
       tone: "neutral",
     };
@@ -2276,10 +2406,11 @@ export function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewRead
 
   if (erroredConnections) {
     return {
-      title: "Source attention",
-      detail: `${erroredConnections} source${
-        erroredConnections === 1 ? "" : "s"
-      } needs attention`,
+      title: { key: "readiness.sourceAttention.title" },
+      detail: {
+        key: "readiness.sourceAttention.detail",
+        params: { count: erroredConnections },
+      },
       icon: WalletCards,
       tone: "alert",
     };
@@ -2287,8 +2418,8 @@ export function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewRead
 
   if (needsJournals) {
     return {
-      title: "Reprocess journals",
-      detail: "Reports need a fresh journal state",
+      title: { key: "readiness.reprocessJournals.title" },
+      detail: { key: "readiness.reprocessJournals.detail" },
       icon: RefreshCw,
       tone: "warning",
     };
@@ -2296,10 +2427,11 @@ export function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewRead
 
   if (quarantines > 0) {
     return {
-      title: "Review queue open",
-      detail: `${quarantines} item${
-        quarantines === 1 ? "" : "s"
-      } before reports`,
+      title: { key: "readiness.reviewQueueOpen.title" },
+      detail: {
+        key: "readiness.reviewQueueOpen.detail",
+        params: { count: quarantines },
+      },
       icon: ShieldAlert,
       tone: "alert",
     };
@@ -2307,7 +2439,7 @@ export function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewRead
 
   if (syncingConnections) {
     return {
-      title: "Sync in progress",
+      title: { key: "readiness.syncInProgress.title" },
       detail: sourceDetail,
       icon: RefreshCw,
       tone: "warning",
@@ -2315,7 +2447,7 @@ export function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewRead
   }
 
   return {
-    title: "Ready for reports",
+    title: { key: "readiness.readyForReports.title" },
     detail: sourceDetail,
     icon: CheckCircle2,
     tone: "good",
@@ -2340,39 +2472,56 @@ export function buildOverviewHealthItems(snapshot: OverviewSnapshot): OverviewHe
   return [
     {
       key: "journals",
-      title: "Journal state",
-      value: needsJournals ? "Reprocess" : "Current",
-      detail: needsJournals
-        ? "Reports should wait for a fresh journal run."
-        : "Reports are ready from the current journal state.",
+      title: { key: "health.journals.title" },
+      value: {
+        key: needsJournals ? "health.journals.reprocess" : "health.journals.current",
+      },
+      detail: {
+        key: needsJournals
+          ? "health.journals.detailReprocess"
+          : "health.journals.detailCurrent",
+      },
       href: "/journals",
       icon: needsJournals ? RefreshCw : CheckCircle2,
       tone: needsJournals ? "warning" : "good",
     },
     {
       key: "review",
-      title: "Review queue",
-      value: quarantines ? `${quarantines} open` : "Clear",
-      detail: quarantines
-        ? "Resolve quarantined rows before tax reporting."
-        : "No quarantined transactions in this book.",
+      title: { key: "health.review.title" },
+      value: quarantines
+        ? { key: "health.review.open", params: { count: quarantines } }
+        : { key: "health.review.clear" },
+      detail: {
+        key: quarantines
+          ? "health.review.detailOpen"
+          : "health.review.detailClear",
+      },
       href: "/quarantine",
       icon: quarantines ? ShieldAlert : CheckCircle2,
       tone: quarantines ? "alert" : "good",
     },
     {
       key: "connections",
-      title: "Connections",
+      title: { key: "health.connections.title" },
       value: erroredConnections
-        ? `${erroredConnections} issue${erroredConnections === 1 ? "" : "s"}`
+        ? { key: "health.connections.issues", params: { count: erroredConnections } }
         : syncingConnections
-          ? `${syncingConnections} refreshing`
+          ? {
+              key: "health.connections.refreshing",
+              params: { count: syncingConnections },
+            }
           : totalConnections
-            ? `${syncedConnections}/${totalConnections} current`
-            : "None yet",
+            ? {
+                key: "health.connections.current",
+                params: { synced: syncedConnections, total: totalConnections },
+              }
+            : { key: "health.connections.none" },
       detail: totalConnections
-        ? `${totalConnections} configured source${totalConnections === 1 ? "" : "s"}`
-        : "Add a watch-only source, exchange, or import source.",
+        ? {
+            key: "health.connections.detail",
+            params: { count: totalConnections },
+          }
+        : { key: "health.connections.detailEmpty" },
       href: "/connections",
       icon: WalletCards,
       tone: erroredConnections
@@ -2393,8 +2542,8 @@ export function buildPrimaryOverviewAction(snapshot: OverviewSnapshot) {
   }
   if ((status?.quarantines ?? 0) > 0) {
     return {
-      title: "Review quarantines",
-      detail: "Clear missing prices or unsupported semantics first.",
+      title: { key: "health.primary.reviewQuarantines.title" } as OverviewCopy,
+      detail: { key: "health.primary.reviewQuarantines.detail" } as OverviewCopy,
       href: "/quarantine",
       icon: ShieldAlert,
       tone: "alert" as const,
@@ -2402,18 +2551,24 @@ export function buildPrimaryOverviewAction(snapshot: OverviewSnapshot) {
   }
   if (snapshot.connections.some((connection) => connection.status === "error")) {
     return {
-      title: "Check connections",
-      detail: "One or more sources need attention before the next sync.",
+      title: { key: "health.primary.checkConnections.title" } as OverviewCopy,
+      detail: { key: "health.primary.checkConnections.detail" } as OverviewCopy,
       href: "/connections",
       icon: WalletCards,
       tone: "alert" as const,
     };
   }
   return {
-    title: snapshot.txs.length ? "Open reports" : "Add a connection",
-    detail: snapshot.txs.length
-      ? "Move from overview into the report package for the current book."
-      : "Connect a source or import rows to start the book.",
+    title: {
+      key: snapshot.txs.length
+        ? "health.primary.openReports.title"
+        : "health.primary.addConnection.title",
+    } as OverviewCopy,
+    detail: {
+      key: snapshot.txs.length
+        ? "health.primary.openReports.detail"
+        : "health.primary.addConnection.detail",
+    } as OverviewCopy,
     href: snapshot.txs.length ? "/reports" : "/connections",
     icon: snapshot.txs.length ? FileText : Plus,
     tone: "good" as const,

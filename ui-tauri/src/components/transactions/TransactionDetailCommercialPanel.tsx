@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -7,15 +9,19 @@ import {
   type CommercialContextData,
 } from "./TransactionDetailSheetParts";
 
-function commercialOriginLabel(origin: CommercialBtcpayMatch["origin"]) {
-  if (!origin) return "Unknown";
-  const labels: Record<string, string> = {
-    pos: "BTCPay POS",
-    app: "BTCPay app",
-    external_order: "External order",
-    payment_request: "Payment request",
+function commercialOriginLabel(
+  origin: CommercialBtcpayMatch["origin"],
+  t: (key: string) => string,
+) {
+  if (!origin) return t("commercial.originLabel.unknown");
+  const labelKeys: Record<string, string> = {
+    pos: "commercial.originLabel.pos",
+    app: "commercial.originLabel.app",
+    external_order: "commercial.originLabel.externalOrder",
+    payment_request: "commercial.originLabel.paymentRequest",
   };
-  return labels[origin.kind] ?? origin.kind.replace(/_/g, " ");
+  const key = labelKeys[origin.kind];
+  return key ? t(key) : origin.kind.replace(/_/g, " ");
 }
 
 export function CommercialProvenancePanel({
@@ -27,15 +33,16 @@ export function CommercialProvenancePanel({
   loading?: boolean;
   hidden?: boolean;
 }) {
+  const { t } = useTranslation("transactions");
   const btcpay = context?.btcpay ?? [];
   const documents = context?.documents ?? [];
   if (loading) {
     return (
       <div className="overflow-hidden rounded-md border">
         <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Commercial provenance
+          {t("commercial.title")}
         </div>
-        <div className="px-3 py-3 text-sm text-muted-foreground">Loading…</div>
+        <div className="px-3 py-3 text-sm text-muted-foreground">{t("commercial.loading")}</div>
       </div>
     );
   }
@@ -43,10 +50,10 @@ export function CommercialProvenancePanel({
     return (
       <div className="overflow-hidden rounded-md border">
         <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Commercial provenance
+          {t("commercial.title")}
         </div>
         <div className="px-3 py-3 text-sm text-muted-foreground">
-          No linked BTCPay or document context.
+          {t("commercial.empty")}
         </div>
       </div>
     );
@@ -54,7 +61,7 @@ export function CommercialProvenancePanel({
   return (
     <div className="overflow-hidden rounded-md border">
       <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-        Commercial provenance
+        {t("commercial.title")}
       </div>
       {btcpay.map((match) => {
         const payment = match.payment;
@@ -62,25 +69,25 @@ export function CommercialProvenancePanel({
         return (
           <div key={match.link.id} className="border-b last:border-b-0">
             <LedgerRow
-              label="BTCPay payment"
+              label={t("commercial.btcpayPayment")}
               value={
                 <span className={cn("truncate", hidden && "sensitive")}>
-                  {payment?.payment_id || "Linked"}
+                  {payment?.payment_id || t("commercial.linked")}
                 </span>
               }
               muted={match.link.state !== "reviewed"}
             />
             <LedgerRow
-              label="Invoice"
+              label={t("commercial.invoice")}
               value={
                 <span className={cn("truncate", hidden && "sensitive")}>
-                  {invoice?.invoice_id || payment?.invoice_id || "Unknown"}
+                  {invoice?.invoice_id || payment?.invoice_id || t("commercial.unknown")}
                 </span>
               }
             />
             {match.payment_request ? (
               <LedgerRow
-                label="Payment request"
+                label={t("commercial.paymentRequest")}
                 value={
                   <span className={cn("truncate", hidden && "sensitive")}>
                     {match.payment_request.label || match.payment_request.id}
@@ -90,17 +97,17 @@ export function CommercialProvenancePanel({
             ) : null}
             {match.origin ? (
               <LedgerRow
-                label="Origin"
+                label={t("commercial.origin")}
                 value={
                   <span className={cn("truncate", hidden && "sensitive")}>
-                    {commercialOriginLabel(match.origin)}
+                    {commercialOriginLabel(match.origin, t)}
                     {match.origin.label ? ` · ${match.origin.label}` : ""}
                   </span>
                 }
               />
             ) : null}
             <LedgerRow
-              label="Review"
+              label={t("commercial.review")}
               value={
                 <span className="inline-flex min-w-0 items-center gap-1.5">
                   <Badge variant="secondary" className="rounded-md">
@@ -120,7 +127,7 @@ export function CommercialProvenancePanel({
       {documents.length ? (
         <div className="border-t bg-muted/20 px-3 py-2">
           <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Documents
+            {t("commercial.documents")}
           </div>
           <div className="flex flex-wrap gap-1.5">
             {documents.map((document) => (

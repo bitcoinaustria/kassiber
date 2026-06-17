@@ -1,4 +1,5 @@
 import { Plus, RefreshCw } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -21,8 +22,10 @@ export const WelcomeSection = ({
   isProcessingJournals: boolean;
   snapshot: OverviewSnapshot;
 }) => {
+  const { t } = useTranslation("overview");
   const readiness = buildOverviewReadiness(snapshot);
   const ReadinessIcon = readiness.icon;
+  const readinessTitle = t(readiness.title.key, readiness.title.params);
   const needsJournals = Boolean(snapshot.status?.needsJournals);
   const readinessClassName = cn(
     "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs font-medium",
@@ -46,16 +49,18 @@ export const WelcomeSection = ({
               className={cn("size-4", isProcessingJournals && "animate-spin")}
               aria-hidden="true"
             />
-            {isProcessingJournals ? "Reprocessing journals" : readiness.title}
+            {isProcessingJournals
+              ? t("welcome.reprocessingJournals")
+              : readinessTitle}
           </button>
         ) : (
           <span className={readinessClassName}>
             <ReadinessIcon className="size-4" aria-hidden="true" />
-            {readiness.title}
+            {readinessTitle}
           </span>
         )}
         <span className="min-w-0 truncate text-xs text-muted-foreground sm:text-sm">
-          {readiness.detail}
+          {t(readiness.detail.key, readiness.detail.params)}
         </span>
       </div>
 
@@ -64,7 +69,7 @@ export const WelcomeSection = ({
           variant="outline"
           size="sm"
           className="h-8 gap-2"
-          aria-label="Refresh wallets and journals"
+          aria-label={t("welcome.refreshAria")}
           onClick={onRefresh}
           disabled={isRefreshing}
         >
@@ -73,17 +78,17 @@ export const WelcomeSection = ({
             aria-hidden="true"
           />
           <span className="hidden sm:inline">
-            {isRefreshing ? "Refreshing" : "Refresh"}
+            {isRefreshing ? t("welcome.refreshing") : t("welcome.refresh")}
           </span>
         </Button>
         <Button
           size="sm"
           className="h-8 gap-2"
-          aria-label="Add connection"
+          aria-label={t("welcome.addConnectionAria")}
           onClick={onAddConnection}
         >
           <Plus className="size-4" aria-hidden="true" />
-          <span className="hidden sm:inline">Add connection</span>
+          <span className="hidden sm:inline">{t("welcome.addConnection")}</span>
         </Button>
       </div>
     </div>

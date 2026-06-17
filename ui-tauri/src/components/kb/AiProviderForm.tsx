@@ -9,6 +9,7 @@
 
 import { Loader2, ShieldAlert, Sparkles } from "lucide-react";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -51,10 +52,10 @@ interface AiProviderFormProps {
   onSaved?: (name: string) => void;
 }
 
-const PROVIDER_KIND_HINTS: Record<AiProviderInput["kind"], string> = {
-  local: "Runs on this machine. No data leaves the device.",
-  remote: "Cloud, LAN, or vendor CLI provider. Prompts may leave the device.",
-  tee: "Provider claims a trusted-execution / attestation path (e.g. Maple AI). Kassiber still treats it as off-device.",
+const PROVIDER_KIND_HINT_KEYS: Record<AiProviderInput["kind"], string> = {
+  local: "aiProvider.kindHint.local",
+  remote: "aiProvider.kindHint.remote",
+  tee: "aiProvider.kindHint.tee",
 };
 
 const CLI_LOCATORS = ["claude-cli://default", "codex-cli://default"] as const;
@@ -92,6 +93,7 @@ export function AiProviderForm({
   onClose,
   onSaved,
 }: AiProviderFormProps) {
+  const { t } = useTranslation("settings");
   const [name, setName] = React.useState(initial?.name ?? "");
   const [baseUrl, setBaseUrl] = React.useState(initial?.base_url ?? "");
   const [apiKey, setApiKey] = React.useState(initial?.api_key ?? "");
@@ -131,15 +133,15 @@ export function AiProviderForm({
     try {
       const trimmedUrl = baseUrl.trim();
       if (!trimmedUrl) {
-        throw new Error("Base URL is required");
+        throw new Error(t("aiProvider.errorBaseUrlRequired"));
       }
       if (!/^https?:\/\//.test(trimmedUrl) && !isCliLocator(trimmedUrl)) {
-        throw new Error("Use http(s)://, claude-cli://default, or codex-cli://default");
+        throw new Error(t("aiProvider.errorUrlScheme"));
       }
       const args: Record<string, unknown> = { base_url: trimmedUrl };
       const trimmedKey = apiKey.trim();
       if (trimmedKey) {
-        throw new Error("Save the provider before testing a new API key.");
+        throw new Error(t("aiProvider.errorSaveBeforeTest"));
       }
       if (editing && initial) {
         // Empty API-key field means "keep current key" — let the daemon
@@ -151,7 +153,7 @@ export function AiProviderForm({
         model_count?: number;
       }>({ kind: "ai.test_connection", args });
       if (envelope.kind === "error" || envelope.error) {
-        throw new Error(envelope.error?.message ?? "Connection test failed");
+        throw new Error(envelope.error?.message ?? t("aiProvider.errorTestFailed"));
       }
       setTestStatus({
         state: "ok",
@@ -171,11 +173,11 @@ export function AiProviderForm({
       const needsRemoteAck =
         kind !== "local" && (!initial || initial.kind === "local" || !initial.acknowledged_at);
       if (kind === "local" && isCliLocator(baseUrl)) {
-        throw new Error("Claude/Codex CLI providers may send prompts off-device. Choose remote or TEE.");
+        throw new Error(t("aiProvider.errorCliLocalPosture"));
       }
       if (needsRemoteAck) {
         if (!remoteAcknowledged) {
-          throw new Error("Acknowledge that prompts may leave this device before saving.");
+          throw new Error(t("aiProvider.errorAckRequired"));
         }
       }
       if (editing && initial) {
@@ -234,17 +236,16 @@ export function AiProviderForm({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="size-4 text-primary" aria-hidden="true" />
-            {editing ? "Edit AI provider" : "Add AI provider"}
+            {editing ? t("aiProvider.editTitle") : t("aiProvider.addTitle")}
           </DialogTitle>
           <DialogDescription>
-            Use an OpenAI-compatible endpoint, or route through Claude/Codex CLI.
-            CLI providers may still send prompts to their configured model service.
+            {t("aiProvider.dialogDescription")}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-4">
           {!editing ? (
             <div className="grid gap-2">
-              <Label>Preset</Label>
+              <Label>{t("aiProvider.presetLabel")}</Label>
               <div className="grid grid-cols-3 gap-2">
                 {PROVIDER_PRESETS.map((preset) => (
                   <button
@@ -257,8 +258,10 @@ export function AiProviderForm({
                       setDefaultModel(preset.default_model);
                       setNotes(
                         preset.kind === "local"
-                          ? "Local Ollama endpoint."
-                          : `${preset.label}; prompts may leave this device.`,
+                          ? t("aiProvider.presetNoteLocal")
+                          : t("aiProvider.presetNoteRemote", {
+                              label: preset.label,
+                            }),
                       );
                       setRemoteAcknowledged(false);
                     }}
@@ -271,7 +274,7 @@ export function AiProviderForm({
             </div>
           ) : null}
           <div className="grid gap-2">
-            <Label htmlFor="ai-form-name">Name</Label>
+            <Label htmlFor="ai-form-name">{t("aiProvider.nameLabel")}</Label>
             <Input
               id="ai-form-name"
               value={name}
@@ -283,7 +286,7 @@ export function AiProviderForm({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="ai-form-url">Base URL or CLI locator</Label>
+            <Label htmlFor="ai-form-url">{t("aiProvider.urlLabel")}</Label>
             <Input
               id="ai-form-url"
               value={baseUrl}
@@ -293,7 +296,7 @@ export function AiProviderForm({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="ai-form-kind">Privacy posture</Label>
+            <Label htmlFor="ai-form-kind">{t("aiProvider.postureLabel")}</Label>
             <div className="grid grid-cols-3 gap-2">
               {(["local", "remote", "tee"] as const).map((option) => (
                 <button
@@ -307,19 +310,21 @@ export function AiProviderForm({
                       : "border-border bg-background text-muted-foreground hover:bg-muted",
                   )}
                 >
-                  {option}
+                  {t(`aiProvider.posture.${option}`)}
                 </button>
               ))}
             </div>
             <p className="text-xs text-muted-foreground">
-              {PROVIDER_KIND_HINTS[kind]}
+              {t(PROVIDER_KIND_HINT_KEYS[kind])}
             </p>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="ai-form-key">
-              API key{" "}
+              {t("aiProvider.apiKeyLabel")}{" "}
               <span className="text-xs text-muted-foreground">
-                {kind === "local" ? "(usually not required)" : "(optional for keyless deployments)"}
+                {kind === "local"
+                  ? t("aiProvider.apiKeyLocalHint")
+                  : t("aiProvider.apiKeyRemoteHint")}
               </span>
             </Label>
             <Input
@@ -329,12 +334,16 @@ export function AiProviderForm({
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
               placeholder={
-                editing && initial?.has_api_key ? "Leave blank to keep current key" : "sk-…"
+                editing && initial?.has_api_key
+                  ? t("aiProvider.apiKeyPlaceholderKeep")
+                  : "sk-…"
               }
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="ai-form-default-model">Default model (optional)</Label>
+            <Label htmlFor="ai-form-default-model">
+              {t("aiProvider.defaultModelLabel")}
+            </Label>
             <Input
               id="ai-form-default-model"
               value={defaultModel}
@@ -343,12 +352,12 @@ export function AiProviderForm({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="ai-form-notes">Notes (optional)</Label>
+            <Label htmlFor="ai-form-notes">{t("aiProvider.notesLabel")}</Label>
             <Input
               id="ai-form-notes"
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
-              placeholder="Notes for your reference"
+              placeholder={t("aiProvider.notesPlaceholder")}
             />
           </div>
           {kind !== "local" ? (
@@ -358,13 +367,7 @@ export function AiProviderForm({
                   className="mt-0.5 size-4 shrink-0"
                   aria-hidden="true"
                 />
-                <span>
-                  Prompts may leave this device. Claude/Codex CLI providers use
-                  your local CLI authentication/config and can forward Kassiber
-                  context to external model services. Do not paste raw
-                  credentials, wallet exports, or private descriptors unless your
-                  threat model allows it.
-                </span>
+                <span>{t("aiProvider.remoteWarning")}</span>
               </div>
               {needsRemoteAck ? (
                 <label
@@ -379,10 +382,7 @@ export function AiProviderForm({
                     }}
                     className="mt-0.5"
                   />
-                  <span>
-                    I understand prompts and selected Kassiber context may leave
-                    this device through this provider.
-                  </span>
+                  <span>{t("aiProvider.remoteAck")}</span>
                 </label>
               ) : null}
             </div>
@@ -404,14 +404,17 @@ export function AiProviderForm({
               {testStatus.state === "running" && (
                 <span className="inline-flex items-center gap-1">
                   <Loader2 className="size-3 animate-spin" aria-hidden="true" />
-                  Testing…
+                  {t("aiProvider.testing")}
                 </span>
               )}
               {testStatus.state === "ok" &&
                 (testStatus.checkKind === "binary_presence"
-                  ? `CLI found — model availability and authentication are checked when chat starts.`
-                  : `Connected — ${testStatus.modelCount} model${testStatus.modelCount === 1 ? "" : "s"} reachable.`)}
-              {testStatus.state === "fail" && `Test failed: ${testStatus.message}`}
+                  ? t("aiProvider.testOkBinary")
+                  : t("aiProvider.testOkConnected", {
+                      count: testStatus.modelCount,
+                    }))}
+              {testStatus.state === "fail" &&
+                t("aiProvider.testFailed", { message: testStatus.message })}
             </p>
           ) : null}
           <DialogFooter className="gap-2">
@@ -421,13 +424,13 @@ export function AiProviderForm({
               onClick={() => void handleTest()}
               disabled={isBusy}
             >
-              Test connection
+              {t("aiProvider.testConnection")}
             </Button>
             <Button type="button" variant="ghost" onClick={onClose} disabled={isBusy}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button type="submit" disabled={!canSubmit}>
-              {editing ? "Save" : "Add provider"}
+              {editing ? t("common:actions.save") : t("aiProvider.addProviderButton")}
             </Button>
           </DialogFooter>
         </form>

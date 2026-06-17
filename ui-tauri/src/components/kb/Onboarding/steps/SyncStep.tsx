@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import { Button } from "@/components/ui/button";
 
 import { ConnectionsFields } from "../ConnectionsFields";
@@ -19,10 +21,11 @@ export const SyncStep = ({
   currentStep,
   totalSteps,
 }: StepComponentProps) => {
+  const { t } = useTranslation("onboarding");
   return (
     <OnboardingStepFrame>
       <OnboardingStepLeftWrapper
-        title="Choose sync connections"
+        title={t("sync.title")}
         currentStep={currentStep}
         totalSteps={totalSteps}
         goBack={goBack}
@@ -38,7 +41,7 @@ export const SyncStep = ({
 
           <OnboardingStepActions>
             <Button type="submit" className="w-full" disabled={!canContinue}>
-              Continue
+              {t("common:actions.continue")}
             </Button>
           </OnboardingStepActions>
         </form>

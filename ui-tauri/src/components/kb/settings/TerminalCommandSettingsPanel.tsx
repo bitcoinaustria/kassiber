@@ -1,4 +1,5 @@
 import { AlertTriangle, CheckCircle2, RefreshCw, Terminal, XCircle } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -21,17 +22,20 @@ export function TerminalCommandSettingsPanel({
   onInstall: () => void;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation("settings");
   const actionLabel = status?.needsRepair
-    ? "Repair command"
+    ? t("terminal.repairAction")
     : status?.installed
-      ? "Reinstall command"
-      : "Install command";
+      ? t("terminal.reinstallAction")
+      : t("terminal.installAction");
   return (
     <section className="space-y-4">
       <p className="max-w-2xl text-sm text-muted-foreground">
-        Installs a user-local launcher for the bundled desktop CLI so you can run{" "}
-        <span className="font-mono">kassiber</span> from your shell. No
-        administrator privileges are required.
+        <Trans
+          i18nKey="terminal.intro"
+          ns="settings"
+          components={[<span className="font-mono" />]}
+        />
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -54,7 +58,7 @@ export function TerminalCommandSettingsPanel({
           disabled={pending}
         >
           <RefreshCw className="size-4" aria-hidden="true" />
-          Refresh
+          {t("common:actions.refresh")}
         </Button>
         {status?.managed ? (
           <Button
@@ -63,7 +67,7 @@ export function TerminalCommandSettingsPanel({
             onClick={onRemove}
             disabled={pending}
           >
-            Remove
+            {t("common:actions.remove")}
           </Button>
         ) : null}
       </div>
@@ -96,32 +100,32 @@ export function TerminalCommandSettingsPanel({
           <div className="grid gap-3 sm:grid-cols-2">
             <PathField
               id="settings-terminal-command"
-              label="Command"
+              label={t("terminal.commandLabel")}
               value={status.commandPath || null}
             />
             <PathField
               id="settings-terminal-target"
-              label="Desktop executable"
+              label={t("terminal.targetLabel")}
               value={status.targetPath || null}
             />
           </div>
 
           <div className="space-y-1.5">
-            <Label>Verify it works</Label>
+            <Label>{t("terminal.verifyLabel")}</Label>
             <CommandLine command="kassiber status" />
           </div>
 
           {!status.pathOnPath ? (
             <PathField
               id="settings-terminal-path"
-              label="PATH update"
+              label={t("terminal.pathLabel")}
               value={status.pathHint || null}
             />
           ) : null}
         </div>
       ) : (
         <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
-          Inspecting desktop command status...
+          {t("terminal.inspecting")}
         </div>
       )}
     </section>

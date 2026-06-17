@@ -7,6 +7,7 @@ import {
   FolderOpen,
   KeyRound,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,7 @@ export function ImportProjectPanel({
   onUnlock,
   onRefreshProfiles,
 }: ImportProjectPanelProps) {
+  const { t } = useTranslation("onboarding");
   const navigate = useNavigate();
   const setIdentity = useUiStore((state) => state.setIdentity);
   const setDataMode = useUiStore((state) => state.setDataMode);
@@ -64,7 +66,7 @@ export function ImportProjectPanel({
         setOpenError(
           unlockError instanceof Error
             ? unlockError.message
-            : "Could not unlock database.",
+            : t("import.errorUnlock"),
         );
       })
       .finally(() => setPassphrase(""));
@@ -82,10 +84,10 @@ export function ImportProjectPanel({
         args: { profile_id: profile.id },
       });
       if (envelope.kind === "auth_required") {
-        throw new Error("Database passphrase is required.");
+        throw new Error(t("import.passphraseRequired"));
       }
       if (envelope.kind === "error" || envelope.error) {
-        throw new Error(envelope.error?.message ?? "Could not open books.");
+        throw new Error(envelope.error?.message ?? t("import.errorOpenBooks"));
       }
 
       const taxCountry = normalizeTaxCountry(profile.taxCountry);
@@ -119,7 +121,7 @@ export function ImportProjectPanel({
       setOpenError(
         profileError instanceof Error
           ? profileError.message
-          : "Could not open books.",
+          : t("import.errorOpenBooks"),
       );
     } finally {
       setOpeningProfileId(null);
@@ -129,7 +131,7 @@ export function ImportProjectPanel({
   return (
     <OnboardingStepFrame>
       <OnboardingStepLeftWrapper
-        title="Open existing books"
+        title={t("import.title")}
         currentStep={0}
         totalSteps={1}
       >
@@ -138,7 +140,9 @@ export function ImportProjectPanel({
             <div className="flex items-start gap-3">
               <Database className="mt-0.5 size-4 shrink-0 text-ink" />
               <div className="min-w-0">
-                <p className="font-medium text-ink">Selected local books</p>
+                <p className="font-medium text-ink">
+                  {t("import.selectedBooks")}
+                </p>
                 <p className="mt-1 break-all font-mono text-xs text-ink-3">
                   {selection.stateRoot}
                 </p>
@@ -146,11 +150,11 @@ export function ImportProjectPanel({
             </div>
             <div className="flex flex-wrap gap-2 text-xs text-ink-2">
               <span className="rounded-md border border-line bg-paper px-2 py-1">
-                {encrypted ? "SQLCipher" : "Plaintext"}
+                {encrypted ? t("import.encrypted") : t("import.plaintext")}
               </span>
               {profileCount > 0 && (
                 <span className="rounded-md border border-line bg-paper px-2 py-1">
-                  {profileCount} book{profileCount === 1 ? "" : "s"}
+                  {t("import.bookCount", { count: profileCount })}
                 </span>
               )}
             </div>
@@ -165,7 +169,9 @@ export function ImportProjectPanel({
               }}
             >
               <div className="space-y-2">
-                <Label htmlFor="import-passphrase">Books passphrase</Label>
+                <Label htmlFor="import-passphrase">
+                  {t("import.passphraseLabel")}
+                </Label>
                 <Input
                   id="import-passphrase"
                   autoFocus
@@ -184,7 +190,7 @@ export function ImportProjectPanel({
                 disabled={!passphrase || loadingProfiles}
               >
                 <KeyRound className="size-4" aria-hidden="true" />
-                Unlock books
+                {t("import.unlock")}
               </Button>
             </form>
           ) : (
@@ -213,7 +219,7 @@ export function ImportProjectPanel({
               onCancel();
             }}
           >
-            Back to new setup
+            {t("import.backToSetup")}
           </Button>
         </div>
       </OnboardingStepLeftWrapper>
@@ -225,11 +231,10 @@ export function ImportProjectPanel({
             </div>
             <div>
               <h3 className="text-xl font-semibold tracking-normal text-ink">
-                Local Kassiber books
+                {t("import.rightTitle")}
               </h3>
               <p className="mt-2 text-sm leading-6 text-ink-2">
-                The desktop daemon now points at this selected data root. Once a
-                book opens, the same local database powers the rest of the app.
+                {t("import.rightBody")}
               </p>
             </div>
           </div>
@@ -256,10 +261,11 @@ function ProfileList({
   onOpen: (workspace: Workspace, profile: Profile) => void;
   onRefresh: () => Promise<void>;
 }) {
+  const { t } = useTranslation("onboarding");
   if (loading) {
     return (
       <div className="rounded-lg border border-border bg-card px-4 py-8 text-center text-sm font-medium text-card-foreground shadow-sm">
-        Loading local books...
+        {t("import.loading")}
       </div>
     );
   }
@@ -267,7 +273,7 @@ function ProfileList({
   if (!snapshot || snapshot.workspaces.length === 0) {
     return (
       <div className="space-y-3 rounded-lg border border-border bg-card p-4 text-sm text-card-foreground shadow-sm">
-        <p>No books were found in this local data root.</p>
+        <p>{t("import.empty")}</p>
         <Button
           type="button"
           variant="outline"
@@ -276,7 +282,7 @@ function ProfileList({
             void onRefresh().catch(() => {});
           }}
         >
-          Refresh
+          {t("common:actions.refresh")}
         </Button>
       </div>
     );
@@ -314,7 +320,7 @@ function ProfileList({
                       {profile.active && (
                         <CheckCircle2
                           className="size-4 shrink-0 text-accent"
-                          aria-label="Active"
+                          aria-label={t("import.active")}
                         />
                       )}
                     </div>
@@ -322,11 +328,14 @@ function ProfileList({
                       {profile.taxPolicy}
                     </p>
                     <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-3">
-                      {profile.accounts} accounts · {profile.wallets} wallets
+                      {t("import.accountsWallets", {
+                        accounts: profile.accounts,
+                        wallets: profile.wallets,
+                      })}
                     </p>
                   </div>
                   <span className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-ink">
-                    {isOpening ? "Opening" : "Open"}
+                    {isOpening ? t("import.opening") : t("common:actions.open")}
                     <ArrowRight className="size-4" aria-hidden="true" />
                   </span>
                 </button>

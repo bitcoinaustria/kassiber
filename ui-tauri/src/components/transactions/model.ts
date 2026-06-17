@@ -272,11 +272,12 @@ export const transactionStatusIcons: Record<
   review: RotateCcw,
 };
 
+// Holds i18n keys (resolved with t() at the call site), not literal labels.
 export const transactionStatusLabels: Record<TransactionStatus, string> = {
-  completed: "Confirmed",
-  pending: "Pending",
-  failed: "Failed",
-  review: "Needs review",
+  completed: "transactions:status.completed",
+  pending: "transactions:status.pending",
+  failed: "transactions:status.failed",
+  review: "transactions:status.review",
 };
 
 export const allTransactionStatuses: TransactionStatus[] = [
@@ -293,12 +294,13 @@ export const allPaymentMethods = [
   "Liquid",
 ] as const;
 
+// Holds i18n keys (resolved with t() at the call site), not literal labels.
 export const transactionFlowLabels: Record<TransactionFlow, string> = {
-  incoming: "Incoming",
-  outgoing: "Outgoing",
-  transfer: "Internal transfer",
-  swap: "Swap",
-  "layer-transition": "Layer transition",
+  incoming: "transactions:flow.incoming",
+  outgoing: "transactions:flow.outgoing",
+  transfer: "transactions:flow.transfer",
+  swap: "transactions:flow.swap",
+  "layer-transition": "transactions:flow.layerTransition",
 };
 
 export const transactionFlowStyles: Record<TransactionFlow, string> = {
@@ -343,6 +345,8 @@ export function explorerForTransaction(
   return null;
 }
 
+// Stable persisted label codes (also stored as tags) — do NOT translate the
+// values themselves. Use `classificationOptionLabel` for display.
 export const classificationOptions = [
   "Unlabeled",
   "Income",
@@ -356,6 +360,23 @@ export const classificationOptions = [
   "Other",
 ];
 
+// Maps each stable classification code to its i18n key (resolved with t() at
+// the call site). Codes without a dedicated key fall back to the raw code.
+export const classificationOptionLabelKeys: Record<string, string> = {
+  Unlabeled: "transactions:classification.unlabeled",
+  Income: "transactions:classification.income",
+  Expense: "transactions:classification.expense",
+  Transfer: "transactions:classification.transfer",
+  Swap: "transactions:classification.swap",
+  Fee: "transactions:classification.fee",
+  "Merchant payment": "transactions:classification.merchantPayment",
+  Gift: "transactions:classification.gift",
+  Review: "transactions:classification.review",
+  Other: "transactions:classification.other",
+};
+
+// Stable tag suggestion codes (persisted as tags) — Bitcoin loanwords
+// (BTCPay/Liquid/Lightning) stay English; the rest carry an i18n key.
 export const tagSuggestions = [
   "Revenue",
   "BTCPay",
@@ -372,34 +393,48 @@ export const tagSuggestions = [
   "accountant",
 ];
 
+export const tagSuggestionLabelKeys: Record<string, string> = {
+  Revenue: "transactions:tagSuggestion.revenue",
+  "needs invoice": "transactions:tagSuggestion.needsInvoice",
+  "client ACME": "transactions:tagSuggestion.clientAcme",
+  Hosting: "transactions:tagSuggestion.hosting",
+  Capex: "transactions:tagSuggestion.capex",
+  Meals: "transactions:tagSuggestion.meals",
+  "Bank fees": "transactions:tagSuggestion.bankFees",
+  Consolidation: "transactions:tagSuggestion.consolidation",
+  "manual review": "transactions:tagSuggestion.manualReview",
+  accountant: "transactions:tagSuggestion.accountant",
+};
+
+// `label`/`description` hold i18n keys (resolved with t() at the call site).
 export const transactionPricingOptions: DraftPricingOption[] = [
   {
     value: "generic_import",
     sourceKind: "generic_import",
     quality: "exact",
-    label: "Source price",
-    description: "Use source-provided price",
+    label: "transactions:pricingOption.sourcePrice.label",
+    description: "transactions:pricingOption.sourcePrice.description",
   },
   {
     value: "fmv_provider",
     sourceKind: "fmv_provider",
     quality: "provider_sample",
-    label: "FMV provider",
-    description: "Use a sampled market rate",
+    label: "transactions:pricingOption.fmvProvider.label",
+    description: "transactions:pricingOption.fmvProvider.description",
   },
   {
     value: "manual_override",
     sourceKind: "manual_override",
     quality: "exact",
-    label: "Manual override",
-    description: "Use invoice or receipt evidence",
+    label: "transactions:pricingOption.manualOverride.label",
+    description: "transactions:pricingOption.manualOverride.description",
   },
   {
     value: "missing",
     sourceKind: null,
     quality: "missing",
-    label: "Missing / review",
-    description: "Keep in review queue",
+    label: "transactions:pricingOption.missing.label",
+    description: "transactions:pricingOption.missing.description",
   },
 ];
 
@@ -426,47 +461,48 @@ export const pricingSourceStyles: Record<PricingSelectionValue, string> = {
     "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-400/20",
 };
 
+// `label` holds an i18n key (resolved with t() at the call site).
 export const newTransactionPricingOptions: DraftPricingOption[] = [
   {
     value: "manual_override",
     sourceKind: "manual_override",
     quality: "exact",
-    label: "Manual entry",
+    label: "transactions:newPricingOption.manualEntry",
     external: false,
   },
   {
     value: "fmv_provider",
     sourceKind: "fmv_provider",
     quality: "provider_sample",
-    label: "FMV provider sample",
+    label: "transactions:newPricingOption.fmvProviderSample",
     external: true,
   },
   {
     value: "exchange_execution",
     sourceKind: "exchange_execution",
     quality: "exact",
-    label: "Exchange execution",
+    label: "transactions:newPricingOption.exchangeExecution",
     external: true,
   },
   {
     value: "btcpay_invoice",
     sourceKind: "btcpay_invoice",
     quality: "exact",
-    label: "BTCPay invoice fiat",
+    label: "transactions:newPricingOption.btcpayInvoice",
     external: true,
   },
   {
     value: "wallet_export",
     sourceKind: "wallet_export",
     quality: "exact",
-    label: "Wallet import exact fiat",
+    label: "transactions:newPricingOption.walletExport",
     external: true,
   },
   {
     value: "missing",
     sourceKind: null,
     quality: "missing",
-    label: "Needs pricing",
+    label: "transactions:newPricingOption.needsPricing",
     external: false,
   },
 ];
@@ -479,58 +515,59 @@ export const austrianTaxClassificationOptions: Array<{
   atCategory: AustrianDraftCategory;
   taxable: boolean;
 }> = [
+  // `label`/`shortLabel` hold i18n keys (resolved with t() at the call site).
   {
     value: "neu:neu_gain",
-    label: "§27b Neu taxable disposal",
-    shortLabel: "Neu gain",
+    label: "transactions:taxClassification.neuGain.label",
+    shortLabel: "transactions:taxClassification.neuGain.short",
     atRegime: "neu",
     atCategory: "neu_gain",
     taxable: true,
   },
   {
     value: "neu:income_general",
-    label: "§27b income receipt",
-    shortLabel: "Income receipt",
+    label: "transactions:taxClassification.incomeGeneral.label",
+    shortLabel: "transactions:taxClassification.incomeGeneral.short",
     atRegime: "neu",
     atCategory: "income_general",
     taxable: true,
   },
   {
     value: "neu:neu_loss",
-    label: "§27b disposal loss / fee review",
-    shortLabel: "Neu loss",
+    label: "transactions:taxClassification.neuLoss.label",
+    shortLabel: "transactions:taxClassification.neuLoss.short",
     atRegime: "neu",
     atCategory: "neu_loss",
     taxable: true,
   },
   {
     value: "outside:none",
-    label: "Own-wallet transfer / outside §27b",
-    shortLabel: "Own-wallet transfer",
+    label: "transactions:taxClassification.ownWalletTransfer.label",
+    shortLabel: "transactions:taxClassification.ownWalletTransfer.short",
     atRegime: "outside",
     atCategory: "none",
     taxable: false,
   },
   {
     value: "neu:neu_swap",
-    label: "§27b carrying-value swap / layer transition",
-    shortLabel: "Neu swap",
+    label: "transactions:taxClassification.neuSwap.label",
+    shortLabel: "transactions:taxClassification.neuSwap.short",
     atRegime: "neu",
     atCategory: "neu_swap",
     taxable: false,
   },
   {
     value: "alt:alt_spekulation",
-    label: "Altbestand within speculation period",
-    shortLabel: "Alt taxable",
+    label: "transactions:taxClassification.altSpekulation.label",
+    shortLabel: "transactions:taxClassification.altSpekulation.short",
     atRegime: "alt",
     atCategory: "alt_spekulation",
     taxable: true,
   },
   {
     value: "alt:alt_taxfree",
-    label: "Altbestand tax-free",
-    shortLabel: "Alt tax-free",
+    label: "transactions:taxClassification.altTaxfree.label",
+    shortLabel: "transactions:taxClassification.altTaxfree.short",
     atRegime: "alt",
     atCategory: "alt_taxfree",
     taxable: false,
@@ -560,32 +597,35 @@ export const mockNewTransactionWalletSourceOptions = [
   "External",
 ];
 
+// `label` holds an i18n key (resolved with t() at the call site).
 export const newTransactionFlowOptions: Array<{
   value: TransactionFlow;
   label: string;
 }> = [
-  { value: "incoming", label: "Receive" },
-  { value: "outgoing", label: "Send" },
-  { value: "transfer", label: "Internal transfer" },
-  { value: "swap", label: "Swap" },
-  { value: "layer-transition", label: "Layer transition" },
+  { value: "incoming", label: "transactions:flowOption.incoming" },
+  { value: "outgoing", label: "transactions:flowOption.outgoing" },
+  { value: "transfer", label: "transactions:flowOption.transfer" },
+  { value: "swap", label: "transactions:flowOption.swap" },
+  { value: "layer-transition", label: "transactions:flowOption.layerTransition" },
 ];
 
+// `labelKey`/`detailKey` hold i18n keys (resolved with t() at the call site);
+// `id` stays a stable lookup key.
 export const mockNewTransactionMovementCandidates = [
   {
     id: "movement-ln-channel-open",
-    label: "Join channel open · Home Node",
-    detail: "tx8 · same wallet · 96% confidence",
+    labelKey: "transactions:movementCandidate.channelOpen.label",
+    detailKey: "transactions:movementCandidate.channelOpen.detail",
   },
   {
     id: "movement-liquid-peg",
-    label: "Join Liquid peg transition",
-    detail: "LBTC leg 8 min apart · 89% confidence",
+    labelKey: "transactions:movementCandidate.liquidPeg.label",
+    detailKey: "transactions:movementCandidate.liquidPeg.detail",
   },
   {
     id: "movement-boltz-swap",
-    label: "Join Boltz swap pair",
-    detail: "payment hash overlap · 82% confidence",
+    labelKey: "transactions:movementCandidate.boltzSwap.label",
+    detailKey: "transactions:movementCandidate.boltzSwap.detail",
   },
 ];
 
@@ -643,13 +683,20 @@ export function pricingSourceLabel(
   return options.find((option) => option.value === value)?.label ?? value;
 }
 
-export function pricingProviderLabel(provider: string | null | undefined) {
+// Provider proper names stay as-is; only the ordinary "Manual" word is
+// localized. Pass `t` to resolve it inline (used inside joined summaries).
+export function pricingProviderLabel(
+  provider: string | null | undefined,
+  t?: (key: string) => string,
+) {
   const normalized = (provider ?? "").trim().toLowerCase();
   if (!normalized) return null;
   if (normalized === "kraken-csv") return "Kraken CSV";
   if (normalized === "coinbase-exchange") return "Coinbase Exchange";
   if (normalized === "coingecko") return "CoinGecko";
-  if (normalized === "manual") return "Manual";
+  if (normalized === "manual") {
+    return t ? t("transactions:pricingProvider.manual") : "Manual";
+  }
   return normalized
     .split(/[-_ ]+/)
     .filter(Boolean)
@@ -657,16 +704,20 @@ export function pricingProviderLabel(provider: string | null | undefined) {
     .join(" ");
 }
 
+// Returns an i18n key (resolved with t() at the call site).
 export function pricingQualityLabel(quality: PricingQuality | null | undefined) {
-  if (quality === "coarse_fallback") return "Coarse fallback";
-  if (quality === "provider_sample") return "Provider sample";
-  if (quality === "exact") return "Exact";
-  return "Missing";
+  if (quality === "coarse_fallback") return "transactions:pricingQuality.coarseFallback";
+  if (quality === "provider_sample") return "transactions:pricingQuality.providerSample";
+  if (quality === "exact") return "transactions:pricingQuality.exact";
+  return "transactions:pricingQuality.missing";
 }
 
-export function pricingCacheSummary(txn: Transaction) {
+export function pricingCacheSummary(
+  txn: Transaction,
+  t?: (key: string) => string,
+) {
   const parts = [
-    pricingProviderLabel(txn.pricingProvider),
+    pricingProviderLabel(txn.pricingProvider, t),
     txn.pricingPair ?? null,
     txn.pricingGranularity ?? null,
   ].filter(Boolean);
@@ -678,12 +729,13 @@ export function pricingCacheSummary(txn: Transaction) {
 // UTC), so those need a one-day shift; other daily sources (CoinGecko, manual)
 // already timestamp the row at the day it represents, so they must not be
 // shifted.
+// `label` holds an i18n key (resolved with t() at the call site).
 export function pricingPriceMoment(txn: Transaction): {
   label: string;
   value: string;
 } {
   const ts = txn.pricingTimestamp;
-  if (!ts) return { label: "Price timestamp", value: "—" };
+  if (!ts) return { label: "transactions:pricePoint.timestamp", value: "—" };
   if (txn.pricingGranularity === "daily") {
     const ms = Date.parse(ts);
     if (!Number.isNaN(ms)) {
@@ -692,12 +744,12 @@ export function pricingPriceMoment(txn: Transaction): {
         txn.pricingMethod === "ohlcvt_csv";
       const dayMs = isKrakenDailyClose ? ms - 24 * 60 * 60 * 1000 : ms;
       return {
-        label: "Trading day",
+        label: "transactions:pricePoint.tradingDay",
         value: new Date(dayMs).toISOString().slice(0, 10),
       };
     }
   }
-  return { label: "Price timestamp", value: formatShortDate(ts) };
+  return { label: "transactions:pricePoint.timestamp", value: formatShortDate(ts) };
 }
 
 export function pricingOptionForValue(

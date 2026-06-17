@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
   BarChart3,
@@ -50,6 +51,7 @@ import {
   activeMarketFiatCurrency,
   activeMarketFiatRate,
   toDashboardTransaction,
+  type OverviewTranslate,
   type Transaction,
 } from "@/components/overview-dashboard/model";
 import { syncProgressPhaseLabel } from "@/lib/syncProgress";
@@ -92,17 +94,41 @@ interface WorkspaceFreshnessRun {
   };
 }
 
+// `id` is the stable slug used for test ids and lookups; `labelKey` indexes the
+// `nav` translation namespace. Keep `id` in sync with the keys in nav.json.
 const BOOK_ROUTES: Array<{
-  label: string;
+  id: string;
+  labelKey:
+    | "book.overview"
+    | "book.transactions"
+    | "book.ledger"
+    | "book.quarantine"
+    | "book.wallets"
+    | "book.reports";
   to: BookRoute;
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
 }> = [
-  { label: "Overview", to: "/overview", icon: Gauge },
-  { label: "Transactions", to: "/transactions", icon: TableProperties },
-  { label: "Ledger", to: "/journals", icon: BookOpen },
-  { label: "Quarantine", to: "/quarantine", icon: ShieldAlert },
-  { label: "Wallets", to: "/connections", icon: WalletCards },
-  { label: "Reports", to: "/reports", icon: BarChart3 },
+  { id: "overview", labelKey: "book.overview", to: "/overview", icon: Gauge },
+  {
+    id: "transactions",
+    labelKey: "book.transactions",
+    to: "/transactions",
+    icon: TableProperties,
+  },
+  { id: "ledger", labelKey: "book.ledger", to: "/journals", icon: BookOpen },
+  {
+    id: "quarantine",
+    labelKey: "book.quarantine",
+    to: "/quarantine",
+    icon: ShieldAlert,
+  },
+  {
+    id: "wallets",
+    labelKey: "book.wallets",
+    to: "/connections",
+    icon: WalletCards,
+  },
+  { id: "reports", labelKey: "book.reports", to: "/reports", icon: BarChart3 },
 ];
 
 function workspaceChartSnapshot(
@@ -191,17 +217,7 @@ export function BirdsEye() {
     return <ScreenSkeleton titleWidth="w-44" metricCount={4} />;
   }
   if (error) {
-    return (
-      <div className={screenShellClassName}>
-        <Card className="border-destructive/30 bg-destructive/10">
-          <CardContent className="py-4 text-sm text-destructive">
-            {error instanceof Error
-              ? error.message
-              : "Could not load Book Set Overview."}
-          </CardContent>
-        </Card>
-      </div>
-    );
+    return <BirdsEyeError error={error} />;
   }
 
   return (
@@ -210,6 +226,19 @@ export function BirdsEye() {
       workspaceId={workspaceId}
       isFetching={isFetching}
     />
+  );
+}
+
+function BirdsEyeError({ error }: { error: unknown }) {
+  const { t } = useTranslation("overview");
+  return (
+    <div className={screenShellClassName}>
+      <Card className="border-destructive/30 bg-destructive/10">
+        <CardContent className="py-4 text-sm text-destructive">
+          {error instanceof Error ? error.message : t("birdsEye.couldNotLoad")}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -222,6 +251,8 @@ export function BirdsEyeView({
   workspaceId: string;
   isFetching?: boolean;
 }) {
+  const { t } = useTranslation("nav");
+  const { t: to } = useTranslation("overview");
   const navigate = useNavigate();
   const switchProfile = useDaemonMutation<{ activeProfileId: string }>(
     "ui.profiles.switch",
@@ -241,20 +272,20 @@ export function BirdsEyeView({
     onProgress: (record) => {
       setProgress((current) => [record, ...current].slice(0, 8));
       if (!noticeRef.current) return;
-      const book = record.profile?.label ?? "book";
+      const book = record.profile?.label ?? to("birdsEye.refreshPanel.fallbackBook");
       const phase = formatPhase(record.phase);
       updateNotification(noticeRef.current, {
         body: `${book}: ${phase}`,
         progress: {
           indeterminate: !hasProgressCounter(record),
-          label: formatWorkspaceProgressLabel(record),
+          label: formatWorkspaceProgressLabel(record, to),
           value: workspaceProgressValue(record),
         },
       });
     },
   });
 
-  const title = snapshot?.workspace?.label ?? "Book set";
+  const title = snapshot?.workspace?.label ?? to("birdsEye.fallbackTitle");
   const fiat = snapshot?.fiat ?? null;
   const books = snapshot?.books ?? [];
   const readyBooks = snapshot?.status.readyBooks ?? books.filter((book) => book.readiness.ready).length;
@@ -285,11 +316,11 @@ export function BirdsEyeView({
     setProgress([]);
     setRefreshSummary(null);
     noticeRef.current = addNotification({
-      title: "Book set refresh started",
-      body: "Refreshing each book in this set.",
+      title: to("birdsEye.toast.refreshStartedTitle"),
+      body: to("birdsEye.toast.refreshStartedBody"),
       tone: "warning",
       dedupeKey: `workspace-refresh-${workspaceId}`,
-      progress: { indeterminate: true, label: "Starting" },
+      progress: { indeterminate: true, label: to("birdsEye.toast.starting") },
     });
     refreshWorkspace.mutate(
       { workspace_id: workspaceId, journals: true, run: true },
@@ -302,11 +333,15 @@ export function BirdsEyeView({
           );
           const notification = {
             title: needsAttention
-              ? "Book set refresh needs attention"
-              : "Book set refresh finished",
+              ? to("birdsEye.toast.refreshNeedsAttentionTitle")
+              : to("birdsEye.toast.refreshFinishedTitle"),
             body: summary
-              ? `${summary.synced_books}/${summary.books} books refreshed; ${summary.reports_blocked} still blocked.`
-              : "Refresh finished.",
+              ? to("birdsEye.toast.refreshFinishedBody", {
+                  synced: summary.synced_books,
+                  total: summary.books,
+                  blocked: summary.reports_blocked,
+                })
+              : to("birdsEye.toast.refreshDoneBody"),
             tone: needsAttention ? "warning" : "success",
             dedupeKey: `workspace-refresh-${workspaceId}`,
             progress: undefined,
@@ -320,11 +355,11 @@ export function BirdsEyeView({
         },
         onError: (refreshError) => {
           const notification = {
-            title: "Book set refresh failed",
+            title: to("birdsEye.toast.refreshFailedTitle"),
             body:
               refreshError instanceof Error
                 ? refreshError.message
-                : "Could not refresh this book set.",
+                : to("birdsEye.toast.refreshFailedBody"),
             tone: "error",
             dedupeKey: `workspace-refresh-${workspaceId}`,
             progress: undefined,
@@ -341,6 +376,7 @@ export function BirdsEyeView({
   }, [
     addNotification,
     refreshWorkspace,
+    to,
     updateNotification,
     workspaceId,
   ]);
@@ -348,13 +384,19 @@ export function BirdsEyeView({
   const openBookRoute = React.useCallback(
     (profileId: string, route: BookRoute) => {
       const book = books.find((candidate) => candidate.profile.id === profileId);
-      const routeLabel = BOOK_ROUTES.find((candidate) => candidate.to === route)?.label ?? "page";
+      const routeEntry = BOOK_ROUTES.find((candidate) => candidate.to === route);
+      const page = routeEntry
+        ? t(routeEntry.labelKey)
+        : t("openBook.fallbackPage");
       void switchProfile
         .mutateAsync({ profile_id: profileId })
         .then(() => {
           addNotification({
-            title: "Active book changed",
-            body: `${book?.profile.label ?? "Selected book"} is now active. Opening ${routeLabel}.`,
+            title: t("openBook.title"),
+            body: t("openBook.body", {
+              book: book?.profile.label ?? t("openBook.fallbackBook"),
+              page,
+            }),
             tone: "info",
             dedupeKey: `birds-eye-active-book-${profileId}`,
           });
@@ -362,17 +404,17 @@ export function BirdsEyeView({
         })
         .catch((switchError: unknown) => {
           addNotification({
-            title: "Could not open book",
+            title: to("birdsEye.toast.couldNotOpenBookTitle"),
             body:
               switchError instanceof Error
                 ? switchError.message
-                : "Kassiber could not switch to that book.",
+                : to("birdsEye.toast.couldNotOpenBookBody"),
             tone: "error",
             dedupeKey: `birds-eye-open-book-${profileId}`,
           });
         });
     },
-    [addNotification, books, navigate, switchProfile],
+    [addNotification, books, navigate, switchProfile, t, to],
   );
 
   const openWorkspaceTransaction = React.useCallback(
@@ -382,8 +424,10 @@ export function BirdsEyeView({
         .mutateAsync({ profile_id: transaction.profileId })
         .then(() => {
           addNotification({
-            title: "Active book changed",
-            body: `${transaction.scopeLabel ?? "Selected book"} is now active. Opening transaction detail.`,
+            title: to("birdsEye.toast.activeBookChangedTitle"),
+            body: to("birdsEye.toast.transactionBody", {
+              book: transaction.scopeLabel ?? to("birdsEye.toast.fallbackBook"),
+            }),
             tone: "info",
             dedupeKey: `birds-eye-active-transaction-${transaction.profileId}`,
           });
@@ -394,17 +438,17 @@ export function BirdsEyeView({
         })
         .catch((switchError: unknown) => {
           addNotification({
-            title: "Could not open transaction",
+            title: to("birdsEye.toast.couldNotOpenTransactionTitle"),
             body:
               switchError instanceof Error
                 ? switchError.message
-                : "Kassiber could not switch to that transaction's book.",
+                : to("birdsEye.toast.couldNotOpenTransactionBody"),
             tone: "error",
             dedupeKey: `birds-eye-open-transaction-${transaction.id}`,
           });
         });
     },
-    [addNotification, navigate, switchProfile],
+    [addNotification, navigate, switchProfile, to],
   );
 
   const openChartTransaction = React.useCallback(
@@ -429,10 +473,12 @@ export function BirdsEyeView({
         <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-2xl font-semibold tracking-tight">
-              Book Set Overview
+              {to("birdsEye.title")}
             </h2>
-            <Badge variant="secondary">Book set</Badge>
-            {fiat?.mixed ? <Badge variant="outline">Mixed fiat</Badge> : null}
+            <Badge variant="secondary">{to("birdsEye.badge")}</Badge>
+            {fiat?.mixed ? (
+              <Badge variant="outline">{to("birdsEye.mixedFiatBadge")}</Badge>
+            ) : null}
           </div>
           <p className="max-w-3xl text-sm text-muted-foreground">
             {title}
@@ -440,7 +486,7 @@ export function BirdsEyeView({
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" asChild>
-            <Link to="/books">Books</Link>
+            <Link to="/books">{to("birdsEye.booksLink")}</Link>
           </Button>
           <Button
             type="button"
@@ -452,47 +498,51 @@ export function BirdsEyeView({
             ) : (
               <RefreshCw className="size-4" aria-hidden="true" />
             )}
-            Refresh book set
+            {to("birdsEye.refresh")}
           </Button>
         </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          label="BTC total"
-          value={hideSensitive ? "Hidden" : formatBtc(fiat?.btcBalance ?? 0)}
-          detail={`${books.length} books`}
+          label={to("birdsEye.metric.btcTotal")}
+          value={hideSensitive ? t("common:state.hidden") : formatBtc(fiat?.btcBalance ?? 0)}
+          detail={to("birdsEye.metric.books", { count: books.length })}
           icon={<Gauge className="size-4" aria-hidden="true" />}
         />
         <MetricCard
-          label={fiat?.mixed ? "Fiat rollup" : "Fiat total"}
+          label={fiat?.mixed ? to("birdsEye.metric.fiatRollup") : to("birdsEye.metric.fiatTotal")}
           value={
             hideSensitive
-              ? "Hidden"
+              ? t("common:state.hidden")
               : fiat?.mixed
-                ? "Mixed"
+                ? to("birdsEye.metric.mixed")
                 : formatFiatAmount(fiat?.eurBalance ?? 0, fiat?.fiatCurrency ?? "EUR")
           }
           detail={
             fiat?.mixed
-              ? fiat.label ?? "Per-book fiat rows only"
-              : fiat?.fiatCurrency ?? "No fiat currency"
+              ? fiat.label ?? to("birdsEye.metric.perBookFiatOnly")
+              : fiat?.fiatCurrency ?? to("birdsEye.metric.noFiatCurrency")
           }
           icon={<BarChart3 className="size-4" aria-hidden="true" />}
         />
         <MetricCard
-          label="Readiness"
+          label={to("birdsEye.metric.readiness")}
           value={`${readyBooks}/${books.length}`}
-          detail={blockedBooks ? `${blockedBooks} books need attention` : "All books ready"}
+          detail={
+            blockedBooks
+              ? to("birdsEye.metric.booksNeedAttention", { count: blockedBooks })
+              : to("birdsEye.metric.allBooksReady")
+          }
           icon={<CheckCircle2 className="size-4" aria-hidden="true" />}
         />
         <MetricCard
-          label="Quarantine"
+          label={to("birdsEye.metric.quarantine")}
           value={String(snapshot?.status.quarantines ?? 0)}
           detail={
             snapshot?.status.needsJournals
-              ? "Journals need processing"
-              : "No stale journals"
+              ? to("birdsEye.metric.journalsNeedProcessing")
+              : to("birdsEye.metric.noStaleJournals")
           }
           icon={<ShieldAlert className="size-4" aria-hidden="true" />}
         />
@@ -508,7 +558,7 @@ export function BirdsEyeView({
 
       <div className="rounded-lg border bg-muted/25 px-3 py-2 text-xs text-muted-foreground">
         <Info className="mr-1.5 inline size-3.5 align-[-2px]" aria-hidden="true" />
-        This read-only rollup keeps book boundaries intact. Opening a book or transaction makes that book active before navigating.
+        {to("birdsEye.readonlyNote")}
       </div>
 
       {chartSnapshot ? (
@@ -524,7 +574,7 @@ export function BirdsEyeView({
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card>
           <CardHeader className="border-b pb-3">
-            <CardTitle className="text-base">Books</CardTitle>
+            <CardTitle className="text-base">{to("birdsEye.booksCard.title")}</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3 pt-4">
             {books.length ? (
@@ -539,7 +589,7 @@ export function BirdsEyeView({
               ))
             ) : (
               <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                This book set does not have any books yet.
+                {to("birdsEye.booksCard.empty")}
               </div>
             )}
           </CardContent>
@@ -547,7 +597,7 @@ export function BirdsEyeView({
 
         <Card>
           <CardHeader className="border-b pb-3">
-            <CardTitle className="text-base">Fiat Rows</CardTitle>
+            <CardTitle className="text-base">{to("birdsEye.fiatCard.title")}</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-2 pt-4">
             {fiat?.books.length ? (
@@ -567,19 +617,31 @@ export function BirdsEyeView({
                     </div>
                     <p className="text-sm font-medium">
                       {hideSensitive
-                        ? "Hidden"
+                        ? t("common:state.hidden")
                         : formatFiatAmount(row.balance, row.fiatCurrency)}
                     </p>
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                    <span>Basis {hideSensitive ? "Hidden" : formatFiatAmount(row.costBasis, row.fiatCurrency)}</span>
-                    <span>YTD {hideSensitive ? "Hidden" : formatFiatAmount(row.realizedYTD, row.fiatCurrency)}</span>
+                    <span>
+                      {to("birdsEye.fiatCard.basis", {
+                        value: hideSensitive
+                          ? t("common:state.hidden")
+                          : formatFiatAmount(row.costBasis, row.fiatCurrency),
+                      })}
+                    </span>
+                    <span>
+                      {to("birdsEye.fiatCard.ytd", {
+                        value: hideSensitive
+                          ? t("common:state.hidden")
+                          : formatFiatAmount(row.realizedYTD, row.fiatCurrency),
+                      })}
+                    </span>
                   </div>
                 </div>
               ))
             ) : (
               <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                No fiat rows yet.
+                {to("birdsEye.fiatCard.empty")}
               </div>
             )}
           </CardContent>
@@ -588,7 +650,7 @@ export function BirdsEyeView({
 
       {chartSnapshot ? (
         <RecentTransactionsTable
-          title="Recent activity by book"
+          title={to("birdsEye.recentActivityTitle")}
           transactions={workspaceTransactions}
           hideSensitive={hideSensitive}
           currency={chartCurrency}
@@ -613,6 +675,7 @@ export function BookRow({
   onOpenRoute: (profileId: string, route: BookRoute) => void;
   disabled: boolean;
 }) {
+  const { t } = useTranslation("overview");
   const ready = book.readiness.ready;
   const fiatCurrency = book.profile.fiatCurrency || book.fiat.fiatCurrency || "EUR";
   const btcBalance = book.connections.reduce(
@@ -631,15 +694,15 @@ export function BookRow({
               ) : (
                 <AlertTriangle className="size-3" aria-hidden="true" />
               )}
-              {ready ? "Ready" : "Attention"}
+              {ready ? t("birdsEye.bookRow.ready") : t("birdsEye.bookRow.attention")}
             </Badge>
             <Badge variant="outline">{fiatCurrency}</Badge>
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            <span>{book.connections.length} wallets</span>
-            <span>{book.status.transactionCount ?? 0} txs</span>
-            <span>{book.journals.journal_entry_count} journal rows</span>
-            <span>{book.journals.quarantine_count} quarantines</span>
+            <span>{t("birdsEye.bookRow.wallets", { count: book.connections.length })}</span>
+            <span>{t("birdsEye.bookRow.txs", { count: book.status.transactionCount ?? 0 })}</span>
+            <span>{t("birdsEye.bookRow.journalRows", { count: book.journals.journal_entry_count })}</span>
+            <span>{t("birdsEye.bookRow.quarantines", { count: book.journals.quarantine_count })}</span>
           </div>
           {!ready ? (
             <p className="text-xs text-amber-700 dark:text-amber-300">
@@ -648,10 +711,10 @@ export function BookRow({
           ) : null}
         </div>
         <div className="grid gap-1 text-left text-sm sm:grid-cols-2 lg:min-w-[260px]">
-          <span>{hideSensitive ? "Hidden" : formatBtc(btcBalance)}</span>
+          <span>{hideSensitive ? t("common:state.hidden") : formatBtc(btcBalance)}</span>
           <span>
             {hideSensitive
-              ? "Hidden"
+              ? t("common:state.hidden")
               : formatFiatAmount(book.fiat.eurBalance, fiatCurrency)}
           </span>
         </div>
@@ -682,18 +745,19 @@ function BookRouteButton({
   disabled: boolean;
   onOpenRoute: () => void;
 }) {
+  const { t } = useTranslation("nav");
   const Icon = route.icon;
   return (
     <Button
       type="button"
       variant="outline"
       size="sm"
-      data-testid={`book-route-${profileId}-${route.label.toLowerCase()}`}
+      data-testid={`book-route-${profileId}-${route.id}`}
       disabled={disabled}
       onClick={onOpenRoute}
     >
       <Icon className="size-3.5" aria-hidden="true" />
-      {route.label}
+      {t(route.labelKey)}
     </Button>
   );
 }
@@ -707,6 +771,7 @@ function RefreshPanel({
   summary: WorkspaceFreshnessRun["summary"] | null;
   isRunning: boolean;
 }) {
+  const { t } = useTranslation("overview");
   return (
     <Card className="border-primary/20 bg-primary/5">
       <CardHeader className="border-b pb-3">
@@ -716,7 +781,7 @@ function RefreshPanel({
           ) : (
             <CheckCircle2 className="size-4" aria-hidden="true" />
           )}
-          Book Set Refresh
+          {t("birdsEye.refreshPanel.title")}
         </CardTitle>
       </CardHeader>
       <CardContent className="grid gap-3 pt-4 md:grid-cols-[minmax(0,1fr)_280px]">
@@ -728,7 +793,7 @@ function RefreshPanel({
                 className="rounded-md border bg-background/80 px-3 py-2 text-sm"
               >
                 <span className="font-medium">
-                  {item.profile?.label ?? "Book"}
+                  {item.profile?.label ?? t("birdsEye.refreshPanel.fallbackBook")}
                 </span>
                 <span className="text-muted-foreground">
                   {" "}
@@ -739,7 +804,7 @@ function RefreshPanel({
             ))
           ) : (
             <div className="rounded-md border bg-background/80 px-3 py-2 text-sm text-muted-foreground">
-              Waiting for refresh progress.
+              {t("birdsEye.refreshPanel.waiting")}
             </div>
           )}
         </div>
@@ -747,15 +812,21 @@ function RefreshPanel({
           {summary ? (
             <div className="space-y-1">
               <p className="font-medium">
-                {summary.synced_books}/{summary.books} books refreshed
+                {t("birdsEye.refreshPanel.booksRefreshed", {
+                  synced: summary.synced_books,
+                  total: summary.books,
+                })}
               </p>
               <p className="text-muted-foreground">
-                {summary.reports_blocked} reports blocked · {summary.rate_limited} rate-limited sources
+                {t("birdsEye.refreshPanel.summaryDetail", {
+                  blocked: summary.reports_blocked,
+                  rateLimited: summary.rate_limited,
+                })}
               </p>
             </div>
           ) : (
             <p className="text-muted-foreground">
-              Per-book sync, rate, and journal status appears here.
+              {t("birdsEye.refreshPanel.placeholder")}
             </p>
           )}
         </div>
@@ -780,7 +851,10 @@ function workspaceProgressValue(progress: WorkspaceFreshnessProgress) {
   );
 }
 
-function formatWorkspaceProgressLabel(progress: WorkspaceFreshnessProgress) {
+function formatWorkspaceProgressLabel(
+  progress: WorkspaceFreshnessProgress,
+  to?: OverviewTranslate,
+) {
   const book = progress.profile?.label;
   const source = progress.source_label;
   const phase = formatPhase(progress.phase);
@@ -793,7 +867,13 @@ function formatWorkspaceProgressLabel(progress: WorkspaceFreshnessProgress) {
       `${progress.processed?.toLocaleString()} / ${progress.total?.toLocaleString()}`,
     );
   } else if (typeof progress.processed === "number") {
-    parts.push(`${progress.processed.toLocaleString()} scanned`);
+    parts.push(
+      to
+        ? to("birdsEye.refreshPanel.scanned", {
+            value: progress.processed.toLocaleString(),
+          })
+        : `${progress.processed.toLocaleString()} scanned`,
+    );
   }
 
   return parts.join(" · ");

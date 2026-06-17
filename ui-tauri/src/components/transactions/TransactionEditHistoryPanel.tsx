@@ -10,6 +10,8 @@ import {
   TerminalSquare,
 } from "lucide-react";
 
+import { useTranslation } from "react-i18next";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -35,10 +37,18 @@ function hiddenClass(hideSensitive: boolean) {
   return hideSensitive ? "blur-sm select-none" : "";
 }
 
-function confirmRevert(target: HistoryRevertTarget, onRevert?: (target: HistoryRevertTarget) => void) {
+function confirmRevert(
+  target: HistoryRevertTarget,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+  onRevert?: (target: HistoryRevertTarget) => void,
+) {
   if (!onRevert) return;
-  const fieldLabel = target.field ? target.field.label : "all fields in this edit";
-  const ok = window.confirm(`Revert ${fieldLabel}? This creates a new edit history entry.`);
+  const fieldLabel = target.field
+    ? target.field.label
+    : t("history.confirmRevertAll");
+  const ok = window.confirm(
+    t("history.confirmRevertField", { label: fieldLabel }),
+  );
   if (!ok) return;
   onRevert(target);
 }
@@ -56,6 +66,7 @@ function FieldDiffRow({
   onRevert?: (target: HistoryRevertTarget) => void;
   isReverting?: boolean;
 }) {
+  const { t } = useTranslation("transactions");
   const added = field.diff?.added ?? [];
   const removed = field.diff?.removed ?? [];
   return (
@@ -71,13 +82,13 @@ function FieldDiffRow({
       </div>
       <div className="grid min-w-0 gap-1 sm:grid-cols-2">
         <div className="min-w-0 rounded border bg-muted/40 px-2 py-1">
-          <div className="text-[10px] uppercase text-muted-foreground">Before</div>
+          <div className="text-[10px] uppercase text-muted-foreground">{t("history.before")}</div>
           <div className={cn("truncate", hiddenClass(hideSensitive))}>
             {field.before_label}
           </div>
         </div>
         <div className="min-w-0 rounded border bg-background px-2 py-1">
-          <div className="text-[10px] uppercase text-muted-foreground">After</div>
+          <div className="text-[10px] uppercase text-muted-foreground">{t("history.after")}</div>
           <div className={cn("truncate", hiddenClass(hideSensitive))}>
             {field.after_label}
           </div>
@@ -98,7 +109,7 @@ function FieldDiffRow({
         ) : null}
         {field.redacted ? (
           <div className="sm:col-span-2 text-[11px] text-muted-foreground">
-            Secret-shaped material was redacted for display.
+            {t("history.redacted")}
           </div>
         ) : null}
       </div>
@@ -109,8 +120,8 @@ function FieldDiffRow({
           size="icon"
           className="size-8 justify-self-end"
           disabled={isReverting}
-          aria-label={`Revert ${field.label}`}
-          onClick={() => confirmRevert({ event, field }, onRevert)}
+          aria-label={t("history.revertFieldAria", { label: field.label })}
+          onClick={() => confirmRevert({ event, field }, t, onRevert)}
         >
           <RotateCcw className="size-3.5" aria-hidden="true" />
         </Button>
@@ -123,7 +134,7 @@ export function TransactionHistoryTimeline({
   events,
   hideSensitive,
   isLoading,
-  emptyLabel = "No edit history yet",
+  emptyLabel,
   showTransaction = false,
   onRevert,
   isReverting,
@@ -136,17 +147,18 @@ export function TransactionHistoryTimeline({
   onRevert?: (target: HistoryRevertTarget) => void;
   isReverting?: boolean;
 }) {
+  const { t } = useTranslation("transactions");
   if (isLoading && events.length === 0) {
     return (
       <div className="rounded-md border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
-        Loading edit history...
+        {t("history.loading")}
       </div>
     );
   }
   if (!events.length) {
     return (
       <div className="rounded-md border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
-        {emptyLabel}
+        {emptyLabel ?? t("history.emptyTimeline")}
       </div>
     );
   }
@@ -181,7 +193,7 @@ export function TransactionHistoryTimeline({
                   ))}
                   {event.report_anchor?.stale_for_reports ? (
                     <Badge variant="outline" className="rounded-md border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
-                      stale reports
+                      {t("history.staleReports")}
                     </Badge>
                   ) : null}
                 </div>
@@ -215,10 +227,10 @@ export function TransactionHistoryTimeline({
                     size="icon"
                     className="size-8"
                     disabled={isReverting}
-                    aria-label="Revert edit"
+                    aria-label={t("history.revertEditAria")}
                     onClick={(clickEvent) => {
                       clickEvent.preventDefault();
-                      confirmRevert({ event }, onRevert);
+                      confirmRevert({ event }, t, onRevert);
                     }}
                   >
                     <RotateCcw className="size-3.5" aria-hidden="true" />
@@ -264,13 +276,14 @@ export function TransactionEditHistoryPanel({
   onProcessJournals?: () => void;
   isProcessingJournals?: boolean;
 }) {
+  const { t } = useTranslation("transactions");
   const staleCount = stale?.edit_count ?? 0;
   return (
     <div className="rounded-md border bg-card p-3">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <History className="size-4 text-muted-foreground" aria-hidden="true" />
-          Edit history
+          {t("history.panelTitle")}
         </div>
         {events?.length ? (
           <Badge variant="secondary" className="rounded-md">
@@ -282,12 +295,12 @@ export function TransactionEditHistoryPanel({
         <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
           <div className="min-w-0 flex-1">
-            <div className="font-medium">{staleCount} edit{staleCount === 1 ? "" : "s"} after the last journal run</div>
+            <div className="font-medium">{t("history.staleCount", { count: staleCount })}</div>
             <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-amber-800 dark:text-amber-300">
               <Clock className="size-3" aria-hidden="true" />
               {stale?.latest_changed_at
                 ? formatHistoryDate(stale.latest_changed_at)
-                : "Reports need a fresh journal state"}
+                : t("history.reportsNeedFreshState")}
             </div>
           </div>
           {onProcessJournals ? (
@@ -300,7 +313,7 @@ export function TransactionEditHistoryPanel({
               onClick={onProcessJournals}
             >
               <RefreshCw className={cn("size-3", isProcessingJournals && "animate-spin")} aria-hidden="true" />
-              Process
+              {t("history.process")}
             </Button>
           ) : null}
         </div>

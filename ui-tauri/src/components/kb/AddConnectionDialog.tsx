@@ -1,4 +1,6 @@
 import * as React from "react";
+import { Trans, useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { useNavigate } from "@tanstack/react-router";
 import { Loader2, ScanLine } from "lucide-react";
 
@@ -229,12 +231,24 @@ const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
 type BullBitcoinWalletNetwork = "bitcoin" | "liquid" | "lightning";
 const BULLBITCOIN_WALLET_NETWORKS: Array<{
   id: BullBitcoinWalletNetwork;
-  label: string;
-  helper: string;
+  labelKey: string;
+  helperKey: string;
 }> = [
-  { id: "bitcoin", label: "Bitcoin", helper: "BTC on-chain and payjoin rows" },
-  { id: "liquid", label: "Liquid", helper: "LBTC wallet and swap rows" },
-  { id: "lightning", label: "Lightning", helper: "Lightning send/receive rows" },
+  {
+    id: "bitcoin",
+    labelKey: "add.bullWallet.networkBitcoin",
+    helperKey: "add.bullWallet.networkBitcoinHelper",
+  },
+  {
+    id: "liquid",
+    labelKey: "add.bullWallet.networkLiquid",
+    helperKey: "add.bullWallet.networkLiquidHelper",
+  },
+  {
+    id: "lightning",
+    labelKey: "add.bullWallet.networkLightning",
+    helperKey: "add.bullWallet.networkLightningHelper",
+  },
 ];
 type SamouraiFormKey =
   | "samouraiDeposit"
@@ -246,39 +260,36 @@ const SAMOURAI_SOURCE_FIELDS: Array<{
   section: SamouraiSection;
   key: SamouraiFormKey;
   id: string;
-  label: string;
-  helper: string;
+  labelKey: string;
+  helperKey: string;
 }> = [
   {
     section: "deposit",
     key: "samouraiDeposit",
     id: "connection-samourai-deposit",
-    label: "Deposit descriptor or xpub",
-    helper:
-      "Paste the Deposit account descriptor, ypub, or zpub. Bare xpub is ambiguous for Deposit; use a descriptor when unsure.",
+    labelKey: "add.samourai.depositLabel",
+    helperKey: "add.samourai.depositHelper",
   },
   {
     section: "badbank",
     key: "samouraiBadbank",
     id: "connection-samourai-badbank",
-    label: "Badbank descriptor or xpub",
-    helper:
-      "Paste the Badbank / Toxic Change account descriptor or account xpub.",
+    labelKey: "add.samourai.badbankLabel",
+    helperKey: "add.samourai.badbankHelper",
   },
   {
     section: "premix",
     key: "samouraiPremix",
     id: "connection-samourai-premix",
-    label: "Premix descriptor or xpub",
-    helper: "Paste the Premix account descriptor or account xpub.",
+    labelKey: "add.samourai.premixLabel",
+    helperKey: "add.samourai.premixHelper",
   },
   {
     section: "postmix",
     key: "samouraiPostmix",
     id: "connection-samourai-postmix",
-    label: "Postmix descriptor or xpub",
-    helper:
-      "Paste the Postmix account descriptor or account xpub; Postmix scans may need a higher gap limit.",
+    labelKey: "add.samourai.postmixLabel",
+    helperKey: "add.samourai.postmixHelper",
   },
 ];
 
@@ -308,58 +319,72 @@ function samouraiSourceFields(form: SetupFormState) {
   };
 }
 
-function fileWalletSourceField(source: ConnectionSource) {
+function fileWalletSourceField(
+  source: ConnectionSource,
+  t: TFunction<"connections">,
+) {
   if (source.sourceFormat === "wasabi_bundle") {
     return {
-      label: "Wasabi JSON bundle path",
-      helper:
-        "Choose a sanitized local bundle with Wasabi gethistory plus listcoins/listunspentcoins data. Kassiber imports it as watch-only accounting evidence.",
+      label: t("add.exportFile.wasabiLabel"),
+      helper: t("add.exportFile.wasabiHelper"),
     };
   }
   return {
-    label: "Export file path",
+    label: t("add.exportFile.label"),
     helper: undefined,
   };
 }
 
-function sourceFileFilters(source: ConnectionSource) {
+function sourceFileFilters(
+  source: ConnectionSource,
+  t: TFunction<"connections">,
+) {
   if (source.sourceFormat === "phoenix_csv") {
-    return [{ name: "Phoenix CSV", extensions: ["csv"] }];
+    return [{ name: t("add.fileFilter.phoenixCsv"), extensions: ["csv"] }];
   }
   if (source.sourceFormat === "river_csv") {
-    return [{ name: "River CSV", extensions: ["csv"] }];
+    return [{ name: t("add.fileFilter.riverCsv"), extensions: ["csv"] }];
   }
   if (source.sourceFormat === "bullbitcoin_csv") {
-    return [{ name: "Bull Bitcoin CSV", extensions: ["csv"] }];
+    return [{ name: t("add.fileFilter.bullbitcoinCsv"), extensions: ["csv"] }];
   }
   if (source.sourceFormat === "bullbitcoin_wallet_csv") {
-    return [{ name: "Bull Bitcoin wallet CSV", extensions: ["csv"] }];
+    return [
+      { name: t("add.fileFilter.bullbitcoinWalletCsv"), extensions: ["csv"] },
+    ];
   }
   if (source.sourceFormat === "coinfinity_csv") {
-    return [{ name: "Coinfinity CSV", extensions: ["csv"] }];
+    return [{ name: t("add.fileFilter.coinfinityCsv"), extensions: ["csv"] }];
   }
   if (source.sourceFormat === "21bitcoin_csv") {
-    return [{ name: "21bitcoin CSV", extensions: ["csv"] }];
+    return [
+      { name: t("add.fileFilter.twentyonebitcoinCsv"), extensions: ["csv"] },
+    ];
   }
   if (source.sourceFormat === "strike_csv") {
-    return [{ name: "Strike CSV", extensions: ["csv"] }];
+    return [{ name: t("add.fileFilter.strikeCsv"), extensions: ["csv"] }];
   }
   if (source.sourceFormat === "wasabi_bundle") {
-    return [{ name: "Wasabi JSON bundle", extensions: ["json"] }];
+    return [{ name: t("add.fileFilter.wasabiBundle"), extensions: ["json"] }];
   }
   if (source.setupKind === "samourai") {
-    return [{ name: "Samourai descriptor source set", extensions: ["json"] }];
+    return [
+      { name: t("add.fileFilter.samouraiSourceSet"), extensions: ["json"] },
+    ];
   }
   if (source.id === "csv") {
-    return [{ name: "CSV or JSON", extensions: ["csv", "json"] }];
+    return [{ name: t("add.fileFilter.csvOrJson"), extensions: ["csv", "json"] }];
   }
   return undefined;
 }
 
-const formDefaultsFor = (source: ConnectionSource): SetupFormState => {
+const formDefaultsFor = (
+  source: ConnectionSource,
+  t: TFunction<"connections">,
+): SetupFormState => {
   const defaultLabel =
     source.id === "csv"
-      ? "Imported file"
+      ? t("add.defaultLabel.importedFile")
       : source.id === "bip329"
         ? ""
         : source.title;
@@ -435,7 +460,7 @@ function renderSetupHelper(helper: React.ReactNode) {
   return <div className="text-xs text-muted-foreground">{helper}</div>;
 }
 
-function InlineCode({ children }: { children: React.ReactNode }) {
+function InlineCode({ children }: { children?: React.ReactNode }) {
   return (
     <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
       {children}
@@ -488,6 +513,7 @@ export function AddConnectionDialog({
   onOpenChange,
   initialSourceId,
 }: AddConnectionDialogProps) {
+  const { t } = useTranslation("connections");
   const navigate = useNavigate();
   const addNotification = useUiStore((state) => state.addNotification);
   const setDeferredConnectionSetup = useUiStore(
@@ -571,7 +597,7 @@ export function AddConnectionDialog({
   const [sourceQuery, setSourceQuery] = React.useState("");
   const [step, setStep] = React.useState<DialogStep>("source");
   const [form, setForm] = React.useState(() =>
-    formDefaultsFor(CONNECTION_SOURCES[0]),
+    formDefaultsFor(CONNECTION_SOURCES[0], t),
   );
   const [setupError, setSetupError] = React.useState<string | null>(null);
   const [lastImportResult, setLastImportResult] =
@@ -734,36 +760,36 @@ export function AddConnectionDialog({
   const missingBackend = requiresBackend && selectedBackendOptions.length === 0;
   const submitLabel =
     setupKind === "backend-settings"
-      ? "Open backend settings"
+      ? t("add.submit.openBackendSettings")
       : syncWallet.isPending
-        ? "Refreshing…"
+        ? t("add.submit.refreshing")
         : importSamourai.isPending
-          ? "Importing Samourai…"
+          ? t("add.submit.importingSamourai")
         : importFile.isPending
-          ? "Importing…"
+          ? t("add.submit.importing")
         : importBip329.isPending
-          ? "Importing labels…"
+          ? t("add.submit.importingLabels")
           : isSubmitting
-            ? "Saving…"
+            ? t("add.submit.saving")
             : setupKind === "btcpay" &&
                 form.btcpaySetupMode === "existing_wallets"
-              ? "Save wallet mapping"
+              ? t("add.submit.saveWalletMapping")
             : setupKind === "btcpay" &&
                 selectedBtcpayPaymentMethodIds.length > 1
-              ? "Create connections"
+              ? t("add.submit.createConnections")
               : setupKind === "bullbitcoin-wallet" &&
                   form.bullWalletSetupMode === "existing_wallets"
-                ? "Save wallet mapping"
+                ? t("add.submit.saveWalletMapping")
               : setupKind === "bullbitcoin-wallet" &&
                   form.bullWalletNetworks.length > 1
-                ? "Create connections"
+                ? t("add.submit.createConnections")
               : setupKind === "file-enrichment"
-                ? "Import pricing"
-              : "Create connection";
+                ? t("add.submit.importPricing")
+              : t("add.submit.createConnection");
   const canContinue = selected.status === "ready" && setupKind !== "planned";
 
   React.useEffect(() => {
-    setForm(formDefaultsFor(selected));
+    setForm(formDefaultsFor(selected, t));
     setSetupError(null);
     setFieldErrors({});
     setLastImportResult(null);
@@ -772,7 +798,7 @@ export function AddConnectionDialog({
     setBtcpayTestStatus(null);
     setBtcpayDiscovery(null);
     setSyncProgress(null);
-  }, [selected]);
+  }, [selected, t]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -790,13 +816,13 @@ export function AddConnectionDialog({
   React.useEffect(() => {
     if (open) return;
     setScannerOpen(false);
-    setForm(formDefaultsFor(selected));
+    setForm(formDefaultsFor(selected, t));
     setFieldErrors({});
     setSetupError(null);
     setLastImportResult(null);
     setPreviewAddresses(null);
     setPreviewError(null);
-  }, [open, selected]);
+  }, [open, selected, t]);
 
   React.useEffect(() => {
     if (!defaultBackendName) return;
@@ -899,12 +925,12 @@ export function AddConnectionDialog({
       setupKind === "bullbitcoin-wallet"
     ) {
       if (!form.label.trim()) {
-        errors.label = "Connection label is required.";
+        errors.label = t("add.validation.labelRequired");
       }
     }
     if (setupKind === "descriptor") {
       if (!form.walletMaterial.trim()) {
-        errors.walletMaterial = "Paste a wallet export, descriptor, or extended public key.";
+        errors.walletMaterial = t("add.validation.pasteWalletMaterial");
       } else {
         const detection = detectWalletMaterial(form.walletMaterial);
         if (detection.kind === "bare-xpub" || detection.kind === "unknown") {
@@ -913,23 +939,27 @@ export function AddConnectionDialog({
       }
       const gapLimit = Number.parseInt(form.gapLimit, 10);
       if (!Number.isFinite(gapLimit) || gapLimit <= 0) {
-        errors.gapLimit = "Gap limit must be a positive integer.";
+        errors.gapLimit = t("add.validation.gapPositive");
       } else if (gapLimit > MAX_DESCRIPTOR_GAP_LIMIT) {
-        errors.gapLimit = `Gap limit must be ${MAX_DESCRIPTOR_GAP_LIMIT.toLocaleString()} or lower.`;
+        errors.gapLimit = t("add.validation.gapMax", {
+          max: MAX_DESCRIPTOR_GAP_LIMIT.toLocaleString(),
+        });
       }
       if (descriptorBackendOptions.length > 0 && !form.backend.trim()) {
-        errors.backend = "Choose a backend.";
+        errors.backend = t("add.validation.chooseBackend");
       }
     }
     if (setupKind === "samourai") {
       const gapLimit = Number.parseInt(form.gapLimit, 10);
       if (!Number.isFinite(gapLimit) || gapLimit <= 0) {
-        errors.gapLimit = "Gap limit must be a positive integer.";
+        errors.gapLimit = t("add.validation.gapPositive");
       } else if (gapLimit > MAX_DESCRIPTOR_GAP_LIMIT) {
-        errors.gapLimit = `Gap limit must be ${MAX_DESCRIPTOR_GAP_LIMIT.toLocaleString()} or lower.`;
+        errors.gapLimit = t("add.validation.gapMax", {
+          max: MAX_DESCRIPTOR_GAP_LIMIT.toLocaleString(),
+        });
       }
       if (descriptorBackendOptions.length > 0 && !form.backend.trim()) {
-        errors.backend = "Choose a backend.";
+        errors.backend = t("add.validation.chooseBackend");
       }
       const sourceSetResult = buildSamouraiSourceSet(
         samouraiSourceFields(form),
@@ -946,8 +976,7 @@ export function AddConnectionDialog({
         sourceSetResult.sourceSet.xpubs.length === 0 &&
         Object.keys(sourceSetResult.errors).length === 0
       ) {
-        errors.samouraiDeposit =
-          "Paste at least one Samourai descriptor or xpub.";
+        errors.samouraiDeposit = t("add.samourai.errorNeedMaterial");
       }
     }
     if (setupKind === "file-wallet") {
@@ -970,76 +999,75 @@ export function AddConnectionDialog({
           errors.wasabiAdditional = wasabiErrors.additional;
         }
       } else if (!form.sourceFile.trim()) {
-        errors.sourceFile = "Pick the export file.";
+        errors.sourceFile = t("add.enrichment.errorPickExportFile");
       }
     }
     if (setupKind === "file-enrichment") {
       if (!isExchangeEvidenceFormat(selected.sourceFormat) && !form.targetWallet.trim()) {
-        errors.targetWallet = "Choose the wallet to enrich.";
+        errors.targetWallet = t("add.enrichment.errorChooseWallet");
       }
       if (!form.sourceFile.trim()) {
-        errors.sourceFile = "Pick the export file.";
+        errors.sourceFile = t("add.enrichment.errorPickExportFile");
       }
     }
     if (setupKind === "bullbitcoin-wallet") {
       if (!form.sourceFile.trim()) {
-        errors.sourceFile = "Pick the Bull Bitcoin wallet export.";
+        errors.sourceFile = t("add.bullWallet.errorPickExport");
       }
       if (form.bullWalletNetworks.length === 0) {
-        errors.sourceFile = "Select at least one Bull wallet network.";
+        errors.sourceFile = t("add.bullWallet.errorSelectNetwork");
       }
       if (form.bullWalletSetupMode === "existing_wallets") {
         if (existingWalletOptions.length === 0) {
-          errors.sourceFile = "Create or import the target wallets first.";
+          errors.sourceFile = t("add.bullWallet.errorCreateWalletsFirst");
         } else if (selectedBullWalletRoutes.some((route) => !route.wallet)) {
-          errors.sourceFile = "Choose a Kassiber wallet for each selected Bull network.";
+          errors.sourceFile = t("add.bullWallet.errorChooseWalletEach");
         }
       }
     }
     if (setupKind === "btcpay") {
       if (form.btcpayInstanceMode === "saved") {
         if (!form.backend.trim()) {
-          errors.backend = "Choose a BTCPay instance.";
+          errors.backend = t("add.btcpay.errorChooseInstance");
         }
       } else {
         if (!form.btcpayInstanceLabel.trim()) {
-          errors.btcpayInstanceLabel = "Instance name is required.";
+          errors.btcpayInstanceLabel = t("add.btcpay.errorInstanceName");
         }
         if (!form.btcpayServerUrl.trim()) {
-          errors.btcpayServerUrl = "Server URL is required.";
+          errors.btcpayServerUrl = t("add.btcpay.errorServerUrl");
         }
         if (!form.btcpayApiKey.trim()) {
-          errors.btcpayApiKey = "API key is required.";
+          errors.btcpayApiKey = t("add.btcpay.errorApiKey");
         }
       }
       if (!form.btcpayStoreId.trim()) {
-        errors.btcpayStoreId = "Enter the BTCPay store ID.";
+        errors.btcpayStoreId = t("add.btcpay.errorStoreId");
       }
       if (
         syncableDiscoveredPaymentMethodOptions.length > 0 &&
         selectedBtcpayPaymentMethodIds.length === 0
       ) {
-        errors.btcpayPaymentMethodId =
-          "Select at least one BTCPay payment method.";
+        errors.btcpayPaymentMethodId = t("add.btcpay.errorSelectMethod");
       }
       if (form.btcpaySetupMode === "existing_wallets") {
         if (!btcpayDiscovery) {
-          errors.btcpayPaymentMethodId =
-            "Discover the BTCPay store to populate settlement mapping.";
+          errors.btcpayPaymentMethodId = t("add.btcpay.errorDiscoverFirst");
         } else if (syncableDiscoveredPaymentMethodOptions.length === 0) {
-          errors.btcpayPaymentMethodId =
-            "No supported on-chain BTCPay payment methods were found for this store.";
+          errors.btcpayPaymentMethodId = t("add.btcpay.errorNoSupportedMethods");
         } else if (existingWalletOptions.length === 0) {
-          errors.btcpayPaymentMethodId =
-            "Create or import the settlement wallet first.";
+          errors.btcpayPaymentMethodId = t(
+            "add.btcpay.errorCreateSettlementFirst",
+          );
         } else if (selectedBtcpayRoutes.some((route) => !route.wallet)) {
-          errors.btcpayPaymentMethodId =
-            "Choose a settlement wallet for each selected BTCPay route.";
+          errors.btcpayPaymentMethodId = t(
+            "add.btcpay.errorChooseSettlementEach",
+          );
         }
       }
     }
     if (setupKind === "bip329" && !form.bip329File.trim()) {
-      errors.bip329File = "Pick the BIP329 label file.";
+      errors.bip329File = t("add.bip329.errorPickFile");
     }
     return errors;
   };
@@ -1048,8 +1076,8 @@ export function AddConnectionDialog({
     event.preventDefault();
     if (setupKind === "planned") {
       addNotification({
-        title: "Connection path is planned",
-        body: `${selected.title} is tracked in the catalog but is not wired yet.`,
+        title: t("add.planned.title"),
+        body: t("add.planned.body", { title: selected.title }),
         tone: "warning",
       });
       return;
@@ -1078,7 +1106,7 @@ export function AddConnectionDialog({
         });
         if (form.syncAfterCreate) {
           startSyncNotice(
-            `${label} is still scanning in watch-only mode. Large descriptors or slow backends can take a bit; Kassiber will update when the daemon finishes.`,
+            t("add.descriptorWallet.stillScanning", { label }),
           );
           try {
             await syncWallet.mutateAsync({ wallet: label });
@@ -1087,8 +1115,8 @@ export function AddConnectionDialog({
           }
         }
         addNotification({
-          title: "Connection added",
-          body: `${label} is configured.`,
+          title: t("add.added.title"),
+          body: t("add.added.body", { label }),
           tone: "success",
         });
       } else if (setupKind === "samourai") {
@@ -1107,7 +1135,7 @@ export function AddConnectionDialog({
         const childLabels = envelope.data?.children.map((child) => child.label) ?? [];
         if (form.syncAfterCreate && childLabels.length > 0) {
           startSyncNotice(
-            `${label} is scanning Samourai watch-only sources. Postmix discovery may take longer on old wallets.`,
+            t("add.samourai.stillScanning", { label }),
           );
           try {
             for (const childLabel of childLabels) {
@@ -1118,8 +1146,16 @@ export function AddConnectionDialog({
           }
         }
         addNotification({
-          title: "Samourai import added",
-          body: `${label} created ${childLabels.length.toLocaleString("en-US")} watch-only sources${form.syncAfterCreate ? " and started scanning" : ""}.`,
+          title: t("add.samourai.importedTitle"),
+          body: form.syncAfterCreate
+            ? t("add.samourai.importedBodyScanning", {
+                label,
+                value: childLabels.length.toLocaleString("en-US"),
+              })
+            : t("add.samourai.importedBody", {
+                label,
+                value: childLabels.length.toLocaleString("en-US"),
+              }),
           tone: "success",
         });
         setForm((current) => ({
@@ -1151,7 +1187,7 @@ export function AddConnectionDialog({
             walletInfo: form.wasabiWalletInfo,
             additional: form.wasabiAdditional,
           });
-          startSyncNotice(`${label} is importing pasted Wasabi RPC output.`);
+          startSyncNotice(t("add.wasabi.importingRpc", { label }));
           try {
             const envelope = await importFile.mutateAsync({
               wallet: label,
@@ -1164,7 +1200,7 @@ export function AddConnectionDialog({
           }
         } else if (form.syncAfterCreate) {
           startSyncNotice(
-            `${label} is still importing from the selected file. Large exports can take a bit; Kassiber will update when the daemon finishes.`,
+            t("add.fileWallet.stillImporting", { label }),
           );
           try {
             const envelope = await syncWallet.mutateAsync({ wallet: label });
@@ -1180,24 +1216,29 @@ export function AddConnectionDialog({
           }
         }
         addNotification({
-          title: "Connection added",
-          body: `${label} is configured${form.syncAfterCreate ? " and imported" : ""}.`,
+          title: t("add.added.title"),
+          body: form.syncAfterCreate
+            ? t("add.added.bodyImported", { label })
+            : t("add.added.body", { label }),
           tone: "success",
         });
       } else if (setupKind === "file-enrichment") {
         const sourceFormat = selected.sourceFormat;
         if (!sourceFormat) {
-          throw new Error("Selected source does not define an import format.");
+          throw new Error(t("add.enrichment.errorNoFormat"));
         }
         const isBookWideImport = isExchangeEvidenceFormat(sourceFormat);
         const isFullBullImport =
           isBookWideImport && form.bullImportMode === "full";
         startSyncNotice(
           isFullBullImport
-            ? `${selected.title} is importing completed orders into this book and flagging reconciliation gaps.`
+            ? t("add.enrichment.matchingFull", { title: selected.title })
             : isBookWideImport
-            ? `${selected.title} is matching the export against existing transactions in this book.`
-            : `${selected.title} is matching the export against existing ${form.targetWallet} transactions.`,
+            ? t("add.enrichment.matchingBook", { title: selected.title })
+            : t("add.enrichment.matchingWallet", {
+                title: selected.title,
+                wallet: form.targetWallet,
+              }),
         );
         let importResult: ImportFileResult | undefined;
         try {
@@ -1213,12 +1254,14 @@ export function AddConnectionDialog({
           clearSyncNotice();
         }
         addNotification({
-          title: "Import finished",
-          body: `${isBookWideImport ? "Book" : form.targetWallet} updated ${(
-            importResult?.updated ?? 0
-          ).toLocaleString("en-US")} rows and skipped ${(
-            importResult?.skipped ?? 0
-          ).toLocaleString("en-US")}.`,
+          title: t("add.enrichment.finishedTitle"),
+          body: t("add.enrichment.finishedBody", {
+            scope: isBookWideImport
+              ? t("add.enrichment.bookScope")
+              : form.targetWallet,
+            updated: (importResult?.updated ?? 0).toLocaleString("en-US"),
+            skipped: (importResult?.skipped ?? 0).toLocaleString("en-US"),
+          }),
           tone: "success",
         });
       } else if (setupKind === "bullbitcoin-wallet") {
@@ -1253,8 +1296,8 @@ export function AddConnectionDialog({
         if (form.syncAfterCreate && walletLabels.length > 0) {
           startSyncNotice(
             form.bullWalletSetupMode === "existing_wallets"
-              ? `${label} is refreshing the mapped wallets so Bull export metadata can reconcile.`
-              : `${label} is importing the selected Bull wallet networks. Large exports can take a bit.`,
+              ? t("add.bullWallet.stillImportingExisting", { label })
+              : t("add.bullWallet.stillImportingSources", { label }),
           );
           try {
             for (const walletLabel of walletLabels) {
@@ -1276,14 +1319,26 @@ export function AddConnectionDialog({
         addNotification({
           title:
             form.bullWalletSetupMode === "existing_wallets"
-              ? "Bull Wallet mapping saved"
+              ? t("add.bullWallet.mappingSavedTitle")
               : walletLabels.length > 1
-                ? "Connections added"
-                : "Connection added",
+                ? t("add.added.titlePlural")
+                : t("add.added.title"),
           body:
             form.bullWalletSetupMode === "existing_wallets"
-              ? `${walletLabels.length} wallet${walletLabels.length === 1 ? "" : "s"} will use Bull export metadata during refresh${form.syncAfterCreate ? " and was refreshed" : ""}.`
-              : `${walletLabels.length} Bull wallet source${walletLabels.length === 1 ? "" : "s"} configured${form.syncAfterCreate ? " and imported" : ""}.`,
+              ? form.syncAfterCreate
+                ? t("add.bullWallet.mappedBodyRefreshed", {
+                    count: walletLabels.length,
+                  })
+                : t("add.bullWallet.mappedBody", {
+                    count: walletLabels.length,
+                  })
+              : form.syncAfterCreate
+                ? t("add.bullWallet.sourcesBodyImported", {
+                    count: walletLabels.length,
+                  })
+                : t("add.bullWallet.sourcesBody", {
+                    count: walletLabels.length,
+                  }),
           tone: "success",
         });
       } else if (setupKind === "btcpay") {
@@ -1316,7 +1371,7 @@ export function AddConnectionDialog({
           .map((wallet) => wallet.label);
         if (form.syncAfterCreate && form.btcpaySetupMode === "wallet_sources") {
           startSyncNotice(
-            `${label} is still refreshing from BTCPay. Large stores can take a moment; Kassiber will update when the daemon finishes.`,
+            t("add.btcpay.stillRefreshing", { label }),
           );
           try {
             for (const createdLabel of createdLabels) {
@@ -1331,7 +1386,7 @@ export function AddConnectionDialog({
             new Set(selectedBtcpayRoutes.map((route) => route.wallet)),
           );
           startSyncNotice(
-            `${label} is refreshing the mapped settlement wallets. Kassiber will update when the daemon finishes.`,
+            t("add.btcpay.refreshingSettlement", { label }),
           );
           try {
             for (const walletLabel of walletsToRefresh) {
@@ -1344,16 +1399,26 @@ export function AddConnectionDialog({
         addNotification({
           title:
             form.btcpaySetupMode === "existing_wallets"
-              ? "BTCPay mapping saved"
+              ? t("add.btcpay.mappingSavedTitle")
               : createdLabels.length > 1
-                ? "Connections added"
-                : "Connection added",
+                ? t("add.added.titlePlural")
+                : t("add.added.title"),
           body:
             form.btcpaySetupMode === "existing_wallets"
-              ? `${createdLabels.length} settlement wallet${createdLabels.length === 1 ? "" : "s"} will use BTCPay provenance during refresh${form.syncAfterCreate ? " and was refreshed" : ""}.`
+              ? form.syncAfterCreate
+                ? t("add.btcpay.mappedBodyRefreshed", {
+                    count: createdLabels.length,
+                  })
+                : t("add.btcpay.mappedBody", { count: createdLabels.length })
               : createdLabels.length > 1
-              ? `${createdLabels.length} BTCPay payment methods are configured as wallet sources${form.syncAfterCreate ? " and refreshed" : ""}.`
-              : `${label} is configured${form.syncAfterCreate ? " and refreshed" : ""}.`,
+              ? form.syncAfterCreate
+                ? t("add.btcpay.methodsBodyRefreshed", {
+                    count: createdLabels.length,
+                  })
+                : t("add.btcpay.methodsBody", { count: createdLabels.length })
+              : form.syncAfterCreate
+                ? t("add.added.bodyRefreshed", { label })
+                : t("add.added.body", { label }),
           tone: "success",
         });
       } else if (setupKind === "bip329") {
@@ -1362,18 +1427,20 @@ export function AddConnectionDialog({
           wallet: form.bip329Wallet.trim() || undefined,
         });
         addNotification({
-          title: "Labels imported",
-          body: `${envelope.data?.records ?? 0} label records processed.`,
+          title: t("add.bip329.labelsImportedTitle"),
+          body: t("add.bip329.labelsImportedBody", {
+            count: envelope.data?.records ?? 0,
+          }),
           tone: "success",
         });
       }
       onOpenChange(false);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Connection setup failed.";
+        error instanceof Error ? error.message : t("add.setupFailed.fallback");
       setSetupError(message);
       addNotification({
-        title: "Connection setup failed",
+        title: t("add.setupFailed.title"),
         body: message,
         tone: "error",
       });
@@ -1398,12 +1465,12 @@ export function AddConnectionDialog({
           required
         >
           <option value="" disabled>
-            Select backend
+            {t("add.field.selectBackend")}
           </option>
           {options.map((backend) => (
             <option key={backend.name} value={backend.name}>
               {backendOptionLabel(backend)}
-              {backend.is_default ? " (default)" : ""}
+              {backend.is_default ? t("add.field.backendOptionDefault") : ""}
               {backend.kind ? ` · ${backend.kind}` : ""}
             </option>
           ))}
@@ -1411,7 +1478,7 @@ export function AddConnectionDialog({
       ) : (
         <div className="space-y-2 rounded-md border bg-background p-3">
           <p className="text-sm text-muted-foreground">
-            No matching backend is configured.
+            {t("add.field.noBackendConfigured")}
           </p>
           <Button
             type="button"
@@ -1419,7 +1486,7 @@ export function AddConnectionDialog({
             size="sm"
             onClick={openBackendSettings}
           >
-            Open backend settings
+            {t("add.field.openBackendSettings")}
           </Button>
         </div>
       )}
@@ -1429,7 +1496,7 @@ export function AddConnectionDialog({
   const renderConnectionLabelField = () => (
     <SetupField
       id="connection-label"
-      label="Connection label"
+      label={t("add.field.connectionLabel")}
       error={fieldErrors.label}
     >
       <Input
@@ -1462,8 +1529,12 @@ export function AddConnectionDialog({
         : "text-emerald-700 dark:text-emerald-300";
     return (
       <p className={cn("text-xs", tone)}>
-        Detected: {detection.label}
-        {detection.hint ? ` — ${detection.hint}` : ""}
+        {detection.hint
+          ? t("add.descriptor.detectedWithHint", {
+              label: detection.label,
+              hint: detection.hint,
+            })
+          : t("add.descriptor.detected", { label: detection.label })}
       </p>
     );
   };
@@ -1480,7 +1551,7 @@ export function AddConnectionDialog({
     return (
       <div className="rounded-md border bg-background p-3 text-xs">
         <p className="mb-2 font-medium text-muted-foreground">
-          First derived addresses
+          {t("add.descriptor.firstDerived")}
         </p>
         <ul className="space-y-1 font-mono">
           {previewAddresses.map((entry) => (
@@ -1489,16 +1560,20 @@ export function AddConnectionDialog({
               className="flex items-center gap-2"
             >
               <span className="w-16 shrink-0 text-muted-foreground">
-                {entry.branch === "change" ? "change/0" : `recv/${entry.index}`}
+                {entry.branch === "change"
+                  ? t("add.descriptor.branchChange")
+                  : t("add.descriptor.branchReceive", { index: entry.index })}
               </span>
               <span className="min-w-0 flex-1 truncate">{entry.address}</span>
               <button
                 type="button"
                 className="rounded border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground hover:bg-muted/40"
                 onClick={() => void copyAddress(entry.address)}
-                title="Copy address"
+                title={t("add.descriptor.copyAddress")}
               >
-                {copiedAddress === entry.address ? "Copied" : "Copy"}
+                {copiedAddress === entry.address
+                  ? t("add.descriptor.copied")
+                  : t("add.descriptor.copy")}
               </button>
             </li>
           ))}
@@ -1508,7 +1583,7 @@ export function AddConnectionDialog({
   };
 
   const renderSetupFields = () => {
-    const sourceFileField = fileWalletSourceField(selected);
+    const sourceFileField = fileWalletSourceField(selected, t);
     const renderSourceFileSetup = (syncLabel?: string) => (
       <>
         <SetupField
@@ -1530,13 +1605,15 @@ export function AddConnectionDialog({
                 variant="outline"
                 onClick={async () => {
                   const picked = await pickFile({
-                    title: `Select ${selected.title} export file`,
-                    filters: sourceFileFilters(selected),
+                    title: t("add.field.selectExportFileTitle", {
+                      title: selected.title,
+                    }),
+                    filters: sourceFileFilters(selected, t),
                   });
                   if (picked) updateForm("sourceFile", picked);
                 }}
               >
-                Browse…
+                {t("add.field.browse")}
               </Button>
             ) : null}
           </div>
@@ -1551,18 +1628,17 @@ export function AddConnectionDialog({
           {renderConnectionLabelField()}
           {renderBackendSelect(
             "connection-backend",
-            "Backend",
+            t("add.field.backend"),
             descriptorBackendOptions,
           )}
           <SetupField
             id="connection-wallet-material"
-            label="Wallet export"
+            label={t("add.descriptor.walletExport")}
             error={fieldErrors.walletMaterial}
           >
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs text-muted-foreground">
-                Paste or scan a descriptor, xpub-family export, Liquid
-                descriptor, or BBQR sequence.
+                {t("add.descriptor.scanHint")}
               </p>
               <Button
                 type="button"
@@ -1572,7 +1648,7 @@ export function AddConnectionDialog({
                 onClick={() => setScannerOpen(true)}
               >
                 <ScanLine className="size-4" aria-hidden="true" />
-                Scan
+                {t("add.descriptor.scan")}
               </Button>
             </div>
             <Textarea
@@ -1590,9 +1666,9 @@ export function AddConnectionDialog({
           </SetupField>
           <SetupField
             id="connection-gap-limit"
-            label="Gap limit"
+            label={t("add.descriptor.gapLimit")}
             error={fieldErrors.gapLimit}
-            helper="Default is 40 unused addresses per branch. Raise it for older or heavily used wallets, up to 5,000; long scans keep running until the daemon finishes."
+            helper={t("add.descriptor.gapLimitHelper")}
           >
             <Input
               id="connection-gap-limit"
@@ -1626,17 +1702,17 @@ export function AddConnectionDialog({
                   setPreviewError(
                     error instanceof Error
                       ? error.message
-                      : "Could not derive addresses.",
+                      : t("add.descriptor.couldNotDerive"),
                   );
                 }
               }}
             >
               {previewDescriptor.isPending
-                ? "Deriving…"
-                : "Preview addresses"}
+                ? t("add.descriptor.deriving")
+                : t("add.descriptor.previewAddresses")}
             </Button>
             <span className="text-xs text-muted-foreground">
-              Derives the first 5 receive addresses without saving.
+              {t("add.descriptor.previewHint")}
             </span>
           </div>
           {renderDescriptorPreview()}
@@ -1650,24 +1726,20 @@ export function AddConnectionDialog({
           {renderConnectionLabelField()}
           {renderBackendSelect(
             "connection-backend",
-            "Backend",
+            t("add.field.backend"),
             descriptorBackendOptions,
           )}
           <div className="space-y-3">
             <div className="rounded-md border bg-muted/25 p-3 text-xs text-muted-foreground">
-              Import public Samourai account material only. Empty accounts are
-              skipped; use all four when available so Kassiber can scan the full
-              Whirlpool history. Get these from Sparrow or another descriptor
-              tool after it has recovered the Samourai accounts; paste only the
-              public descriptors or account xpub-family keys.
+              {t("add.samourai.intro")}
             </div>
             {SAMOURAI_SOURCE_FIELDS.map((field) => (
               <SetupField
                 key={field.key}
                 id={field.id}
-                label={field.label}
+                label={t(field.labelKey)}
                 error={fieldErrors[field.key]}
-                helper={field.helper}
+                helper={t(field.helperKey)}
               >
                 <Textarea
                   id={field.id}
@@ -1682,9 +1754,9 @@ export function AddConnectionDialog({
           </div>
           <SetupField
             id="connection-samourai-gap-limit"
-            label="Gap limit"
+            label={t("add.samourai.gapLimit")}
             error={fieldErrors.gapLimit}
-            helper="Postmix keeps at least 40 unused addresses per branch. Raise this for old wallets with long unused-address runs, up to 5,000."
+            helper={t("add.samourai.gapLimitHelper")}
           >
             <Input
               id="connection-samourai-gap-limit"
@@ -1695,7 +1767,7 @@ export function AddConnectionDialog({
               onChange={(event) => updateForm("gapLimit", event.target.value)}
             />
           </SetupField>
-          {renderSyncAfterCreate("Scan imported sources after setup")}
+          {renderSyncAfterCreate(t("add.samourai.scanAfter"))}
         </>
       );
     }
@@ -1705,12 +1777,15 @@ export function AddConnectionDialog({
         return (
           <>
             {renderConnectionLabelField()}
-            <SetupField id="connection-wasabi-mode" label="Import source">
+            <SetupField
+              id="connection-wasabi-mode"
+              label={t("add.wasabi.importSource")}
+            >
               <div className="grid grid-cols-2 gap-2">
                 {(
                   [
-                    ["rpc", "Paste RPC outputs"],
-                    ["bundle-file", "Bundle file"],
+                    ["rpc", t("add.wasabi.pasteRpc")],
+                    ["bundle-file", t("add.wasabi.bundleFile")],
                   ] as const
                 ).map(([value, text]) => (
                   <Button
@@ -1733,30 +1808,36 @@ export function AddConnectionDialog({
               <div className="space-y-3">
                 <div className="space-y-2 rounded-md border bg-muted/25 p-3 text-xs text-muted-foreground">
                   <p>
-                    Start Wasabi, load the wallet, then copy JSON from the local
-                    RPC endpoint. Default RPC is{" "}
-                    <InlineCode>http://127.0.0.1:37128/WalletName</InlineCode>;
-                    replace <InlineCode>WalletName</InlineCode> with the loaded
-                    Wasabi wallet name.
+                    <Trans
+                      t={t}
+                      i18nKey="add.wasabi.rpcIntro1"
+                      components={{ code: <InlineCode /> }}
+                      values={{
+                        endpoint: "http://127.0.0.1:37128/WalletName",
+                        placeholder: "WalletName",
+                      }}
+                    />
                   </p>
                   <p>
-                    If <InlineCode>JsonRpcUser</InlineCode> and{" "}
-                    <InlineCode>JsonRpcPassword</InlineCode> are set in Wasabi,
-                    add <InlineCode>-u user:password</InlineCode> to the curl
-                    command. Kassiber stores the pasted snapshot, not a live
-                    Wasabi RPC connection.
+                    <Trans
+                      t={t}
+                      i18nKey="add.wasabi.rpcIntro2"
+                      components={{ code: <InlineCode /> }}
+                      values={{
+                        user: "JsonRpcUser",
+                        password: "JsonRpcPassword",
+                        auth: "-u user:password",
+                      }}
+                    />
                   </p>
                 </div>
                 <SetupField
                   id="connection-wasabi-history"
-                  label="gethistory JSON"
+                  label={t("add.wasabi.historyLabel")}
                   error={fieldErrors.wasabiHistory}
                   helper={
                     <div className="space-y-1.5">
-                      <p>
-                        Required. Accepts the raw result array or a JSON-RPC
-                        response object with result.
-                      </p>
+                      <p>{t("add.wasabi.historyHelper")}</p>
                       <CommandSnippet>
                         curl -s --data-binary
                         {' \'{"jsonrpc":"2.0","id":"1","method":"gethistory","params":[]}\''}{" "}
@@ -1777,11 +1858,11 @@ export function AddConnectionDialog({
                 </SetupField>
                 <SetupField
                   id="connection-wasabi-coins"
-                  label="listcoins or listunspentcoins JSON"
+                  label={t("add.wasabi.coinsLabel")}
                   error={fieldErrors.wasabiCoins}
                   helper={
                     <div className="space-y-1.5">
-                      <p>Recommended for Coins/UTXO anonymity state.</p>
+                      <p>{t("add.wasabi.coinsHelper")}</p>
                       <CommandSnippet>
                         curl -s --data-binary
                         {' \'{"jsonrpc":"2.0","id":"1","method":"listcoins","params":[]}\''}{" "}
@@ -1801,11 +1882,11 @@ export function AddConnectionDialog({
                 </SetupField>
                 <SetupField
                   id="connection-wasabi-wallet-info"
-                  label="getwalletinfo JSON"
+                  label={t("add.wasabi.walletInfoLabel")}
                   error={fieldErrors.wasabiWalletInfo}
                   helper={
                     <div className="space-y-1.5">
-                      <p>Optional safe wallet metadata.</p>
+                      <p>{t("add.wasabi.walletInfoHelper")}</p>
                       <CommandSnippet>
                         curl -s --data-binary
                         {' \'{"jsonrpc":"2.0","id":"1","method":"getwalletinfo","params":[]}\''}{" "}
@@ -1825,16 +1906,20 @@ export function AddConnectionDialog({
                 </SetupField>
                 <SetupField
                   id="connection-wasabi-additional"
-                  label="Additional Wasabi sections"
+                  label={t("add.wasabi.additionalLabel")}
                   error={fieldErrors.wasabiAdditional}
                   helper={
                     <span>
-                      Optional JSON object with{" "}
-                      <InlineCode>listkeys</InlineCode>,{" "}
-                      <InlineCode>listpaymentsincoinjoin</InlineCode>, or{" "}
-                      <InlineCode>wallet_json</InlineCode> sections. Run those
-                      Wasabi RPC methods the same way and paste the responses
-                      under matching keys.
+                      <Trans
+                        t={t}
+                        i18nKey="add.wasabi.additionalHelper"
+                        components={{ code: <InlineCode /> }}
+                        values={{
+                          listkeys: "listkeys",
+                          listpayments: "listpaymentsincoinjoin",
+                          walletJson: "wallet_json",
+                        }}
+                      />
                     </span>
                   }
                 >
@@ -1849,7 +1934,7 @@ export function AddConnectionDialog({
                 </SetupField>
               </div>
             ) : (
-              renderSourceFileSetup("Import after setup")
+              renderSourceFileSetup(t("add.wasabi.importAfter"))
             )}
           </>
         );
@@ -1858,7 +1943,10 @@ export function AddConnectionDialog({
         <>
           {renderConnectionLabelField()}
           {selected.id === "csv" ? (
-            <SetupField id="connection-source-format" label="File format">
+            <SetupField
+              id="connection-source-format"
+              label={t("add.fileWallet.fileFormat")}
+            >
               <select
                 id="connection-source-format"
                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
@@ -1867,12 +1955,12 @@ export function AddConnectionDialog({
                   updateForm("sourceFormat", event.target.value as "csv" | "json")
                 }
               >
-                <option value="csv">CSV</option>
-                <option value="json">JSON</option>
+                <option value="csv">{t("add.fileWallet.formatCsv")}</option>
+                <option value="json">{t("add.fileWallet.formatJson")}</option>
               </select>
             </SetupField>
           ) : null}
-          {renderSourceFileSetup("Import after setup")}
+          {renderSourceFileSetup(t("add.fileWallet.importAfter"))}
         </>
       );
     }
@@ -1881,7 +1969,10 @@ export function AddConnectionDialog({
       return (
         <>
           {renderConnectionLabelField()}
-          <SetupField id="connection-bull-wallet-mode" label="Import behavior">
+          <SetupField
+            id="connection-bull-wallet-mode"
+            label={t("add.bullWallet.importBehavior")}
+          >
             <div className="grid grid-cols-2 gap-2">
               <Button
                 type="button"
@@ -1894,7 +1985,7 @@ export function AddConnectionDialog({
                   updateForm("bullWalletSetupMode", "wallet_sources")
                 }
               >
-                Create Bull wallets
+                {t("add.bullWallet.createBullWallets")}
               </Button>
               <Button
                 type="button"
@@ -1907,17 +1998,17 @@ export function AddConnectionDialog({
                   updateForm("bullWalletSetupMode", "existing_wallets")
                 }
               >
-                Map existing wallets
+                {t("add.bullWallet.mapExistingWallets")}
               </Button>
             </div>
           </SetupField>
           <SetupField
             id="connection-bull-wallet-networks"
-            label="Bull wallet networks"
+            label={t("add.bullWallet.networks")}
             helper={
               form.bullWalletSetupMode === "wallet_sources"
-                ? "Kassiber creates one source wallet per network so Bitcoin and Liquid swap legs can pair cleanly."
-                : "Kassiber keeps your descriptor or wallet source authoritative and only enriches matching rows from Bull."
+                ? t("add.bullWallet.networksHelperCreate")
+                : t("add.bullWallet.networksHelperMap")
             }
           >
             <div className="grid gap-2 sm:grid-cols-3">
@@ -1955,9 +2046,9 @@ export function AddConnectionDialog({
                       }}
                     />
                     <span className="grid gap-1">
-                      <span>{network.label}</span>
+                      <span>{t(network.labelKey)}</span>
                       <span className="text-xs text-muted-foreground">
-                        {network.helper}
+                        {t(network.helperKey)}
                       </span>
                     </span>
                   </label>
@@ -1968,15 +2059,16 @@ export function AddConnectionDialog({
           {form.bullWalletSetupMode === "existing_wallets" ? (
             <div className="space-y-3 rounded-md border border-border/70 p-3">
               <div>
-                <p className="text-sm font-medium">Wallet mapping</p>
+                <p className="text-sm font-medium">
+                  {t("add.bullWallet.walletMapping")}
+                </p>
                 <p className="text-xs text-muted-foreground">
-                  Link each selected Bull network to the Kassiber wallet that
-                  already tracks those transactions.
+                  {t("add.bullWallet.walletMappingHelper")}
                 </p>
               </div>
               {selectedBullWalletRoutes.length === 0 ? (
                 <div className="rounded-md border border-dashed border-border/70 p-3 text-sm text-muted-foreground">
-                  Select at least one Bull network to map.
+                  {t("add.bullWallet.selectToMap")}
                 </div>
               ) : (
                 selectedBullWalletRoutes.map((route) => (
@@ -1985,14 +2077,14 @@ export function AddConnectionDialog({
                     className="grid gap-3 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]"
                   >
                     <div className="space-y-2">
-                      <Label>Export network</Label>
+                      <Label>{t("add.bullWallet.exportNetwork")}</Label>
                       <div className="flex h-9 items-center rounded-md border border-border/70 bg-muted/40 px-3 text-sm capitalize">
                         {route.network}
                       </div>
                     </div>
                     <SetupField
                       id={`connection-bull-route-${route.network}`}
-                      label="Kassiber wallet"
+                      label={t("add.bullWallet.kassiberWallet")}
                     >
                       <select
                         id={`connection-bull-route-${route.network}`}
@@ -2010,10 +2102,12 @@ export function AddConnectionDialog({
                         disabled={existingWalletOptions.length === 0}
                       >
                         {existingWalletOptions.length === 0 ? (
-                          <option value="">No wallets yet</option>
+                          <option value="">
+                            {t("add.bullWallet.noWalletsYet")}
+                          </option>
                         ) : (
                           <option value="" disabled>
-                            Select wallet
+                            {t("add.bullWallet.selectWallet")}
                           </option>
                         )}
                         {existingWalletOptions.map((wallet) => (
@@ -2029,7 +2123,7 @@ export function AddConnectionDialog({
               )}
             </div>
           ) : null}
-          {renderSourceFileSetup("Refresh after setup")}
+          {renderSourceFileSetup(t("add.bullWallet.refreshAfter"))}
         </>
       );
     }
@@ -2040,13 +2134,17 @@ export function AddConnectionDialog({
           <>
             <SetupField
               id="connection-bull-import-mode"
-              label="Import mode"
+              label={t("add.enrichment.importMode")}
               helper={
                 form.bullImportMode === "full"
-                  ? `Imports every ${selected.title} row as excluded evidence and flags matched, missing, or ambiguous wallet evidence for this book.`
+                  ? t("add.enrichment.importModeHelperFull", {
+                      title: selected.title,
+                    })
                   : selected.sourceFormat === "21bitcoin_csv"
-                  ? "Only enriches 21bitcoin L1 withdrawal rows that uniquely match existing transactions anywhere in this book."
-                  : `Only enriches ${selected.title} rows that uniquely match existing transactions anywhere in this book.`
+                  ? t("add.enrichment.importModeHelper21bitcoin")
+                  : t("add.enrichment.importModeHelperRelevant", {
+                      title: selected.title,
+                    })
               }
             >
               <select
@@ -2060,15 +2158,19 @@ export function AddConnectionDialog({
                   )
                 }
               >
-                <option value="relevant">Relevant only</option>
-                <option value="full">Full import with flags</option>
+                <option value="relevant">
+                  {t("add.enrichment.relevantOnly")}
+                </option>
+                <option value="full">{t("add.enrichment.fullImport")}</option>
               </select>
             </SetupField>
             <SetupField
               id="connection-source-file"
-              label="CSV path"
+              label={t("add.enrichment.csvPath")}
               error={fieldErrors.sourceFile}
-              helper={`Use the shared ${selected.title} export for this book; full mode keeps rows excluded until reviewed.`}
+              helper={t("add.enrichment.csvPathHelper", {
+                title: selected.title,
+              })}
             >
               <div className="flex gap-2">
                 <Input
@@ -2083,13 +2185,15 @@ export function AddConnectionDialog({
                     variant="outline"
                     onClick={async () => {
                       const picked = await pickFile({
-                        title: `Select ${selected.title} export file`,
-                        filters: sourceFileFilters(selected),
+                        title: t("add.field.selectExportFileTitle", {
+                          title: selected.title,
+                        }),
+                        filters: sourceFileFilters(selected, t),
                       });
                       if (picked) updateForm("sourceFile", picked);
                     }}
                   >
-                    Browse…
+                    {t("add.field.browse")}
                   </Button>
                 ) : null}
               </div>
@@ -2101,9 +2205,9 @@ export function AddConnectionDialog({
         <>
           <SetupField
             id="connection-target-wallet"
-            label="Wallet to enrich"
+            label={t("add.enrichment.walletToEnrich")}
             error={fieldErrors.targetWallet}
-            helper="Only rows matching transactions already in this wallet are applied."
+            helper={t("add.enrichment.walletToEnrichHelper")}
           >
             <select
               id="connection-target-wallet"
@@ -2112,7 +2216,7 @@ export function AddConnectionDialog({
               onChange={(event) => updateForm("targetWallet", event.target.value)}
               required
             >
-              <option value="">Choose wallet</option>
+              <option value="">{t("add.enrichment.chooseWallet")}</option>
               {existingWalletOptions.map((wallet) => (
                 <option key={wallet.label} value={wallet.label}>
                   {wallet.label}
@@ -2122,7 +2226,7 @@ export function AddConnectionDialog({
           </SetupField>
           <SetupField
             id="connection-source-file"
-            label="Export file path"
+            label={t("add.exportFile.label")}
             error={fieldErrors.sourceFile}
           >
             <div className="flex gap-2">
@@ -2138,26 +2242,29 @@ export function AddConnectionDialog({
                   variant="outline"
                   onClick={() => {
                     void pickFile({
-                      title: `Choose ${selected.title} export`,
-                      filters: sourceFileFilters(selected),
+                      title: t("add.field.chooseExportTitle", {
+                        title: selected.title,
+                      }),
+                      filters: sourceFileFilters(selected, t),
                     })
                       .then((path) => {
                         if (path) updateForm("sourceFile", path);
                       })
                       .catch((error) => {
                         addNotification({
-                          title: "File picker unavailable",
-                          body: `${
-                            error instanceof Error
-                              ? error.message
-                              : "The native picker could not open."
-                          } Paste the file path instead.`,
+                          title: t("add.field.filePickerUnavailableTitle"),
+                          body: t("add.field.filePickerUnavailableBody", {
+                            message:
+                              error instanceof Error
+                                ? error.message
+                                : t("add.field.filePickerFallback"),
+                          }),
                           tone: "warning",
                         });
                       });
                   }}
                 >
-                  Browse...
+                  {t("add.field.browseDots")}
                 </Button>
               ) : null}
             </div>
@@ -2191,7 +2298,7 @@ export function AddConnectionDialog({
                 setBtcpayTestStatus(null);
               }}
             >
-              Saved instance
+              {t("add.btcpay.savedInstance")}
             </Button>
             <Button
               type="button"
@@ -2204,13 +2311,13 @@ export function AddConnectionDialog({
                 setBtcpayTestStatus(null);
               }}
             >
-              New instance
+              {t("add.btcpay.newInstance")}
             </Button>
           </div>
           {form.btcpayInstanceMode === "saved" ? (
             <SetupField
               id="connection-btcpay-instance"
-              label="BTCPay instance"
+              label={t("add.btcpay.instance")}
               error={fieldErrors.backend}
             >
               <select
@@ -2225,12 +2332,14 @@ export function AddConnectionDialog({
                 required
               >
                 <option value="" disabled>
-                  Select instance
+                  {t("add.btcpay.selectInstance")}
                 </option>
                 {btcpayBackends.map((backend) => (
                   <option key={backend.name} value={backend.name}>
                     {backendOptionLabel(backend)}
-                    {backend.is_default ? " (default)" : ""}
+                    {backend.is_default
+                      ? t("add.field.backendOptionDefault")
+                      : ""}
                   </option>
                 ))}
               </select>
@@ -2239,7 +2348,7 @@ export function AddConnectionDialog({
             <>
               <SetupField
                 id="connection-btcpay-instance-label"
-                label="Instance name"
+                label={t("add.btcpay.instanceName")}
                 error={fieldErrors.btcpayInstanceLabel}
               >
                 <Input
@@ -2253,7 +2362,7 @@ export function AddConnectionDialog({
               </SetupField>
               <SetupField
                 id="connection-btcpay-url"
-                label="Server URL"
+                label={t("add.btcpay.serverUrl")}
                 error={fieldErrors.btcpayServerUrl}
               >
                 <Input
@@ -2264,13 +2373,13 @@ export function AddConnectionDialog({
                     setBtcpayDiscovery(null);
                     setBtcpayTestStatus(null);
                   }}
-                  placeholder="https://btcpay.example.com"
+                  placeholder={t("add.btcpay.serverUrlPlaceholder")}
                   required
                 />
               </SetupField>
               <SetupField
                 id="connection-btcpay-api-key"
-                label="API key"
+                label={t("add.btcpay.apiKey")}
                 error={fieldErrors.btcpayApiKey}
               >
                 <Input
@@ -2300,7 +2409,7 @@ export function AddConnectionDialog({
                 setBtcpayTestStatus(null);
               }}
             >
-              Create from BTCPay
+              {t("add.btcpay.createFromBtcpay")}
             </Button>
             <Button
               type="button"
@@ -2314,7 +2423,7 @@ export function AddConnectionDialog({
                 setBtcpayTestStatus(null);
               }}
             >
-              Map existing wallets
+              {t("add.btcpay.mapExistingWallets")}
             </Button>
           </div>
           <div className="flex items-center gap-2">
@@ -2378,22 +2487,26 @@ export function AddConnectionDialog({
                     message:
                       error instanceof Error
                         ? error.message
-                        : "BTCPay discovery failed.",
+                        : t("add.btcpay.discoveryFailed"),
                   });
                 }
               }}
             >
-              {discoverBtcpay.isPending ? "Discovering…" : "Discover stores"}
+              {discoverBtcpay.isPending
+                ? t("add.btcpay.discovering")
+                : t("add.btcpay.discoverStores")}
             </Button>
             {btcpayDiscovery ? (
               <span className="text-xs text-muted-foreground">
-                {btcpayDiscovery.stores.length} stores found.
+                {t("add.btcpay.storesFound", {
+                  count: btcpayDiscovery.stores.length,
+                })}
               </span>
             ) : null}
           </div>
           <SetupField
             id="connection-btcpay-store"
-            label="Store ID"
+            label={t("add.btcpay.storeId")}
             error={fieldErrors.btcpayStoreId}
           >
             <Input
@@ -2458,18 +2571,18 @@ export function AddConnectionDialog({
             label={
               form.btcpaySetupMode === "existing_wallets" ||
               discoveredPaymentMethodOptions.length
-                ? "BTCPay payment methods"
-                : "On-chain payment method ID"
+                ? t("add.btcpay.paymentMethods")
+                : t("add.btcpay.onChainPaymentMethodId")
             }
             error={fieldErrors.btcpayPaymentMethodId}
             helper={
               discoveredPaymentMethodOptions.length
                 ? form.btcpaySetupMode === "existing_wallets"
-                  ? "BTCPay supplies these routes. Choose which supported routes enrich Kassiber settlement wallets."
-                  : "Choose each supported BTCPay route Kassiber should create as a wallet source."
+                  ? t("add.btcpay.paymentMethodsHelperMap")
+                  : t("add.btcpay.paymentMethodsHelperCreate")
                 : form.btcpaySetupMode === "existing_wallets"
-                  ? "Run discovery so BTCPay can populate this mapping from the selected store."
-                  : "BTC-CHAIN is the default. LBTC-CHAIN works for Liquid on-chain wallets. BTC-LN needs invoice/settlement sync and is not supported here yet."
+                  ? t("add.btcpay.paymentMethodsHelperDiscoverMap")
+                  : t("add.btcpay.paymentMethodsHelperDefault")
             }
           >
             {discoveredPaymentMethodOptions.length ? (
@@ -2528,7 +2641,9 @@ export function AddConnectionDialog({
                         <span>{method.label}</span>
                         <span className="text-xs text-muted-foreground">
                           {method.payment_method_id}
-                          {!method.sync_supported ? " · not supported yet" : ""}
+                          {!method.sync_supported
+                            ? t("add.btcpay.notSupportedYet")
+                            : ""}
                         </span>
                       </span>
                     </label>
@@ -2537,8 +2652,7 @@ export function AddConnectionDialog({
               </div>
             ) : form.btcpaySetupMode === "existing_wallets" ? (
               <div className="rounded-md border border-dashed border-border/70 p-3 text-sm text-muted-foreground">
-                Discover stores to load BTCPay payment methods for this
-                settlement mapping.
+                {t("add.btcpay.discoverToLoad")}
               </div>
             ) : (
               <Input
@@ -2565,10 +2679,11 @@ export function AddConnectionDialog({
           selectedBtcpayRoutes.length > 0 ? (
             <div className="space-y-3 rounded-md border border-border/70 p-3">
               <div>
-                <p className="text-sm font-medium">Settlement mapping</p>
+                <p className="text-sm font-medium">
+                  {t("add.btcpay.settlementMapping")}
+                </p>
                 <p className="text-xs text-muted-foreground">
-                  Link each BTCPay payment method to the Kassiber wallet that
-                  receives the funds.
+                  {t("add.btcpay.settlementMappingHelper")}
                 </p>
               </div>
               {selectedBtcpayRoutes.map((route) => (
@@ -2577,7 +2692,7 @@ export function AddConnectionDialog({
                   className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]"
                 >
                   <div className="space-y-2">
-                    <Label>BTCPay payment method</Label>
+                    <Label>{t("add.btcpay.paymentMethod")}</Label>
                     <div
                       className="flex h-9 min-w-0 items-center rounded-md border border-border/70 bg-muted/40 px-3 text-sm"
                       title={route.paymentMethodId}
@@ -2587,7 +2702,7 @@ export function AddConnectionDialog({
                   </div>
                   <SetupField
                     id={`connection-btcpay-route-${route.paymentMethodId}`}
-                    label="Kassiber settlement wallet"
+                    label={t("add.btcpay.settlementWallet")}
                   >
                     <select
                       id={`connection-btcpay-route-${route.paymentMethodId}`}
@@ -2606,10 +2721,12 @@ export function AddConnectionDialog({
                       disabled={existingWalletOptions.length === 0}
                     >
                       {existingWalletOptions.length === 0 ? (
-                        <option value="">No settlement wallets yet</option>
+                        <option value="">
+                          {t("add.btcpay.noSettlementWalletsYet")}
+                        </option>
                       ) : (
                         <option value="" disabled>
-                          Select settlement wallet
+                          {t("add.btcpay.selectSettlementWallet")}
                         </option>
                       )}
                       {existingWalletOptions.map((wallet) => (
@@ -2658,17 +2775,21 @@ export function AddConnectionDialog({
                     message:
                       error instanceof Error
                         ? error.message
-                        : "BTCPay test failed.",
+                        : t("add.btcpay.testFailed"),
                   });
                 }
               }}
             >
-              {testBtcpay.isPending ? "Testing…" : "Test connection"}
+              {testBtcpay.isPending
+                ? t("add.btcpay.testing")
+                : t("add.btcpay.testConnection")}
             </Button>
             {btcpayTestStatus?.ok ? (
               <span className="text-xs text-emerald-700 dark:text-emerald-300">
-                {btcpayTestStatus.storeId} ·{" "}
-                {btcpayTestStatus.paymentMethodId} responded.
+                {t("add.btcpay.testResponded", {
+                  store: btcpayTestStatus.storeId,
+                  method: btcpayTestStatus.paymentMethodId,
+                })}
               </span>
             ) : null}
             {btcpayTestStatus && !btcpayTestStatus.ok ? (
@@ -2677,7 +2798,7 @@ export function AddConnectionDialog({
               </span>
             ) : null}
           </div>
-          {renderSyncAfterCreate("Refresh after setup")}
+          {renderSyncAfterCreate(t("add.btcpay.refreshAfter"))}
         </>
       );
     }
@@ -2687,7 +2808,7 @@ export function AddConnectionDialog({
         <>
           <SetupField
             id="connection-bip329-file"
-            label="Label file path"
+            label={t("add.bip329.labelFilePath")}
             error={fieldErrors.bip329File}
           >
             <div className="flex gap-2">
@@ -2703,23 +2824,26 @@ export function AddConnectionDialog({
                   variant="outline"
                   onClick={async () => {
                     const picked = await pickFile({
-                      title: "Select BIP329 label file",
+                      title: t("add.bip329.selectLabelFileTitle"),
                       filters: [
-                        { name: "BIP329 JSONL", extensions: ["jsonl", "json"] },
+                        {
+                          name: t("add.bip329.labelFileFilter"),
+                          extensions: ["jsonl", "json"],
+                        },
                       ],
                     });
                     if (picked) updateForm("bip329File", picked);
                   }}
                 >
-                  Browse…
+                  {t("add.field.browse")}
                 </Button>
               ) : null}
             </div>
           </SetupField>
           <SetupField
             id="connection-bip329-wallet"
-            label="Target wallet label"
-            helper="Optional. When set, label records target this wallet's transactions; otherwise they import without a wallet scope."
+            label={t("add.bip329.targetWalletLabel")}
+            helper={t("add.bip329.targetWalletHelper")}
           >
             <Input
               id="connection-bip329-wallet"
@@ -2734,20 +2858,15 @@ export function AddConnectionDialog({
     if (setupKind === "backend-settings") {
       return (
         <div className="space-y-2 rounded-md border bg-background p-3 text-sm text-muted-foreground">
-          <p>
-            This connection is configured as a backend endpoint in Settings.
-          </p>
-          <p>
-            Wallet setup can then select that backend by name without exposing
-            endpoint URLs or credentials in the connection modal.
-          </p>
+          <p>{t("add.backendSettings.line1")}</p>
+          <p>{t("add.backendSettings.line2")}</p>
         </div>
       );
     }
 
     return (
       <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">
-        Dedicated setup is not wired yet.
+        {t("add.notWired")}
       </div>
     );
   };
@@ -2767,7 +2886,9 @@ export function AddConnectionDialog({
         </div>
         <div className="flex flex-wrap gap-2">
           <Badge variant={selected.status === "ready" ? "secondary" : "outline"}>
-            {selected.status === "ready" ? "Available" : "Planned"}
+            {selected.status === "ready"
+              ? t("add.available")
+              : t("add.plannedLabel")}
           </Badge>
           {selected.docsHref ? (
             <a
@@ -2776,7 +2897,7 @@ export function AddConnectionDialog({
               target="_blank"
               rel="noreferrer"
             >
-              Docs
+              {t("add.docs")}
             </a>
           ) : null}
         </div>
@@ -2856,49 +2977,77 @@ export function AddConnectionDialog({
     const changedCount =
       lastImportResult.imported + (lastImportResult.updated ?? 0);
     const metrics: Array<[string, number | null | undefined]> = [
-      ["Rows read", rowsRead],
-      ["Inserted", lastImportResult.imported],
-      ["Updated", lastImportResult.updated],
-      ["Unchanged", lastImportResult.unchanged],
+      [t("add.summary.metric.rowsRead"), rowsRead],
+      [t("add.summary.metric.inserted"), lastImportResult.imported],
+      [t("add.summary.metric.updated"), lastImportResult.updated],
+      [t("add.summary.metric.unchanged"), lastImportResult.unchanged],
     ];
     if (lastImportResult.matched !== undefined) {
-      metrics.push(["Matched", lastImportResult.matched]);
+      metrics.push([t("add.summary.metric.matched"), lastImportResult.matched]);
     }
     if (lastImportResult.wasabi_coins_observed !== undefined) {
-      metrics.push(["Coins observed", lastImportResult.wasabi_coins_observed]);
+      metrics.push([
+        t("add.summary.metric.coinsObserved"),
+        lastImportResult.wasabi_coins_observed,
+      ]);
     }
     if (lastImportResult.wasabi_coins_active !== undefined) {
-      metrics.push(["Active coins", lastImportResult.wasabi_coins_active]);
+      metrics.push([
+        t("add.summary.metric.activeCoins"),
+        lastImportResult.wasabi_coins_active,
+      ]);
     }
     if (lastImportResult.wasabi_payments_in_coinjoin !== undefined) {
-      metrics.push(["Payments in CoinJoin", lastImportResult.wasabi_payments_in_coinjoin]);
+      metrics.push([
+        t("add.summary.metric.paymentsInCoinjoin"),
+        lastImportResult.wasabi_payments_in_coinjoin,
+      ]);
     }
     if (lastImportResult.skipped_unmatched !== undefined) {
-      metrics.push(["Unmatched", lastImportResult.skipped_unmatched]);
+      metrics.push([
+        t("add.summary.metric.unmatched"),
+        lastImportResult.skipped_unmatched,
+      ]);
     }
     if (lastImportResult.unmatched !== undefined) {
-      metrics.push(["Unmatched", lastImportResult.unmatched]);
+      metrics.push([
+        t("add.summary.metric.unmatched"),
+        lastImportResult.unmatched,
+      ]);
     }
     if (lastImportResult.skipped_ambiguous !== undefined) {
-      metrics.push(["Ambiguous", lastImportResult.skipped_ambiguous]);
+      metrics.push([
+        t("add.summary.metric.ambiguous"),
+        lastImportResult.skipped_ambiguous,
+      ]);
     }
     if (lastImportResult.ambiguous !== undefined) {
-      metrics.push(["Ambiguous", lastImportResult.ambiguous]);
+      metrics.push([
+        t("add.summary.metric.ambiguous"),
+        lastImportResult.ambiguous,
+      ]);
     }
     if (lastImportResult.excluded !== undefined) {
-      metrics.push(["Excluded", lastImportResult.excluded]);
+      metrics.push([
+        t("add.summary.metric.excluded"),
+        lastImportResult.excluded,
+      ]);
     }
     return (
       <div className="space-y-3 rounded-md border bg-background p-3 text-sm">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <p className="font-medium">Import summary</p>
+            <p className="font-medium">{t("add.summary.title")}</p>
             <p className="text-xs text-muted-foreground">
-              {isBookWide ? "Matched against this book" : "Matched against the selected wallet"}
+              {isBookWide
+                ? t("add.summary.matchedBook")
+                : t("add.summary.matchedWallet")}
             </p>
           </div>
           <Badge variant="secondary">
-            {formatImportCount(changedCount)} changed
+            {t("add.summary.changed", {
+              value: formatImportCount(changedCount),
+            })}
           </Badge>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -2920,30 +3069,39 @@ export function AddConnectionDialog({
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="min-w-0 truncate text-xs font-medium">
-                    {record.wallet || "Book"} · {record.external_id || record.transaction_id}
+                    {record.wallet || t("add.summary.recordBook")} ·{" "}
+                    {record.external_id || record.transaction_id}
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {record.status ?? record.pricing_external_ref ?? "Bull order"}
+                    {record.status ??
+                      record.pricing_external_ref ??
+                      t("add.summary.recordBullOrder")}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {record.matched_wallet
-                    ? `Matched wallet ${record.matched_wallet}`
-                    : `Changed ${(record.changed_fields ?? []).join(", ") || "metadata"}`}
+                    ? t("add.summary.matchedWalletRecord", {
+                        wallet: record.matched_wallet,
+                      })
+                    : (record.changed_fields ?? []).length > 0
+                      ? t("add.summary.changedFields", {
+                          fields: (record.changed_fields ?? []).join(", "),
+                        })
+                      : t("add.summary.changedMetadata")}
                 </p>
               </div>
             ))}
             {hiddenRecords > 0 ? (
               <div className="p-2.5 text-xs text-muted-foreground">
-                {formatImportCount(hiddenRecords)} more updated transaction
-                {hiddenRecords === 1 ? "" : "s"}
+                {t("add.summary.moreUpdated", {
+                  count: hiddenRecords,
+                })}
               </div>
             ) : null}
           </div>
         ) : (
           <p className="rounded-md border border-border/60 p-2.5 text-xs text-muted-foreground">
-            No stored transaction data changed. Rows may already have matching
-            pricing, or they may have been unmatched or ambiguous.
+            {t("add.summary.noChange")}
           </p>
         )}
       </div>
@@ -2985,7 +3143,7 @@ export function AddConnectionDialog({
               type="search"
               value={sourceQuery}
               onChange={(event) => setSourceQuery(event.target.value)}
-              placeholder="Search sources (e.g. river, descriptor, btcpay)…"
+              placeholder={t("add.searchPlaceholder")}
               className="h-9 max-w-sm"
             />
           </div>
@@ -2993,8 +3151,8 @@ export function AddConnectionDialog({
           {visibleSources.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               {sourceQuery.trim()
-                ? "No sources match that search."
-                : "No sources match this filter."}
+                ? t("add.noSearchMatch")
+                : t("add.noFilterMatch")}
             </p>
           ) : null}
           {visibleSources.map((source) => {
@@ -3016,7 +3174,9 @@ export function AddConnectionDialog({
                     <Badge
                       variant={source.status === "ready" ? "secondary" : "outline"}
                     >
-                      {source.status === "ready" ? "Ready" : "Planned"}
+                      {source.status === "ready"
+                        ? t("add.ready")
+                        : t("add.plannedLabel")}
                     </Badge>
                   </span>
                   <span className="block text-sm text-muted-foreground">
@@ -3056,11 +3216,13 @@ export function AddConnectionDialog({
             <div className="space-y-1 rounded-md border bg-background p-3 text-xs">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">
-                  Importing {syncProgress.wallet}…
+                  {t("add.progress.importing", { wallet: syncProgress.wallet })}
                 </span>
                 <span className="font-medium tabular-nums">
-                  {syncProgress.processed.toLocaleString()} /{" "}
-                  {syncProgress.total.toLocaleString()} rows
+                  {t("add.progress.rows", {
+                    processed: syncProgress.processed.toLocaleString(),
+                    total: syncProgress.total.toLocaleString(),
+                  })}
                 </span>
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-muted">
@@ -3096,12 +3258,14 @@ export function AddConnectionDialog({
         <DialogContent className="grid h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] sm:h-[740px] sm:max-w-[960px] lg:max-w-[1040px]">
           <DialogHeader>
             <DialogTitle>
-              {isSetupStep ? `Set up ${selected.title}` : "Add connection"}
+              {isSetupStep
+                ? t("add.setupTitle", { title: selected.title })
+                : t("add.title")}
             </DialogTitle>
             <DialogDescription>
               {isSetupStep
-                ? "Enter the local details Kassiber needs for this connection."
-                : "Choose a watch-only wallet, node, exchange, or local file source."}
+                ? t("add.setupDescription")
+                : t("add.description")}
             </DialogDescription>
           </DialogHeader>
 
@@ -3115,7 +3279,7 @@ export function AddConnectionDialog({
                 onClick={() => setStep("source")}
                 disabled={isSubmitting}
               >
-                Back
+                {t("add.back")}
               </Button>
             ) : (
               <span />
@@ -3127,7 +3291,7 @@ export function AddConnectionDialog({
                 onClick={() => onOpenChange(false)}
                 disabled={isSubmitting}
               >
-                Cancel
+                {t("common:actions.cancel")}
               </Button>
               {isSetupStep ? (
                 <Button
@@ -3148,7 +3312,9 @@ export function AddConnectionDialog({
                   disabled={!canContinue}
                   onClick={() => setStep("setup")}
                 >
-                  {selected.status === "ready" ? "Continue" : "Planned"}
+                  {selected.status === "ready"
+                    ? t("add.continue")
+                    : t("add.plannedLabel")}
                 </Button>
               )}
             </div>
@@ -3161,7 +3327,7 @@ export function AddConnectionDialog({
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80">
               <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm shadow-sm">
                 <Loader2 className="size-4 animate-spin" />
-                <span>Opening scanner</span>
+                <span>{t("add.openingScanner")}</span>
               </div>
             </div>
           }
@@ -3169,7 +3335,7 @@ export function AddConnectionDialog({
           <WalletMaterialScannerDialog
             open={scannerOpen}
             onOpenChange={setScannerOpen}
-            title={`Scan ${selected.title}`}
+            title={t("scanner.scanTitle", { title: selected.title })}
             onMaterialScanned={(material) => {
               updateForm("walletMaterial", material);
               setPreviewAddresses(null);

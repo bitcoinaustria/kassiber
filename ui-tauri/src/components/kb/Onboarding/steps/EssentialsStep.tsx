@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { formatFiatAmount } from "@/lib/currency";
@@ -24,11 +26,12 @@ export const EssentialsStep = ({
   currentStep,
   totalSteps,
 }: StepComponentProps) => {
+  const { t } = useTranslation("onboarding");
   const isAustrian = form.taxCountry === "at";
 
   return (
     <OnboardingSingleColumnFrame
-      title="Set up your books"
+      title={t("essentials.title")}
       currentStep={currentStep}
       totalSteps={totalSteps}
       goBack={goBack}
@@ -41,25 +44,28 @@ export const EssentialsStep = ({
         className="space-y-6"
       >
         <TextField
-          label="Books name"
+          label={t("essentials.booksName")}
           name="workspace"
           value={form.workspace}
-          placeholder="My Books"
+          placeholder={t("essentials.booksNamePlaceholder")}
           autoFocus
-          description="Shown in the app header. Add separate private, business, or client books later."
+          description={t("essentials.booksNameDescription")}
           onChange={(value) => update("workspace", value)}
         />
 
         <div className="space-y-4 border-y border-line py-6">
           <SelectField
-            label="Tax jurisdiction"
+            label={t("essentials.taxJurisdiction")}
             value={form.taxCountry}
             options={["at", "generic"] as TaxCountry[]}
-            optionLabels={{ at: "Austria", generic: "Other / generic" }}
+            optionLabels={{
+              at: t("essentials.jurisdictionAustria"),
+              generic: t("essentials.jurisdictionGeneric"),
+            }}
             description={
               isAustrian
-                ? "Austrian crypto-tax workflow — EUR and moving-average rules apply."
-                : "Country-neutral books with FIFO, LIFO, HIFO, or LOFO lot selection."
+                ? t("essentials.jurisdictionDescriptionAt")
+                : t("essentials.jurisdictionDescriptionGeneric")
             }
             onChange={(value) => {
               if (value === form.taxCountry) return;
@@ -75,25 +81,27 @@ export const EssentialsStep = ({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <SelectField
-              label="Fiat currency"
+              label={t("essentials.fiatCurrency")}
               value={form.fiatCurrency}
               options={FIAT_CURRENCIES}
-              description={`Sample: ${formatFiatAmount(1234.56, form.fiatCurrency)}`}
+              description={t("essentials.fiatSample", {
+                sample: formatFiatAmount(1234.56, form.fiatCurrency),
+              })}
               onChange={(value) => update("fiatCurrency", value)}
             />
             {isAustrian ? (
               <div className="space-y-2">
-                <Label>Accounting method</Label>
+                <Label>{t("essentials.accountingMethod")}</Label>
                 <div className="flex h-9 items-center rounded-md border border-line bg-paper-2 px-3 text-sm text-ink">
-                  Moving average
+                  {t("essentials.movingAverage")}
                 </div>
                 <p className="m-0 text-xs leading-5 text-ink-2">
-                  Older holdings can be marked later per wallet.
+                  {t("essentials.movingAverageNote")}
                 </p>
               </div>
             ) : (
               <SelectField
-                label="Lot selection"
+                label={t("essentials.lotSelection")}
                 value={form.gainsAlgorithm}
                 options={gainsAlgorithmsFor(form.taxCountry)}
                 onChange={(value) => update("gainsAlgorithm", value)}
@@ -102,21 +110,21 @@ export const EssentialsStep = ({
           </div>
           {!isAustrian && (
             <NumberField
-              label="Long-term holding days"
+              label={t("essentials.longTermDays")}
               name="taxLongTermDays"
               value={form.taxLongTermDays}
-              placeholder="365"
+              placeholder={t("essentials.longTermDaysPlaceholder")}
               min={1}
               onChange={(value) => update("taxLongTermDays", value)}
               hint={taxLongTermDaysHint(form.taxLongTermDays)}
-              description="Only used by generic books."
+              description={t("essentials.longTermDaysDescription")}
             />
           )}
         </div>
 
         <OnboardingStepActions>
           <Button type="submit" className="w-full" disabled={!canContinue}>
-            Continue
+            {t("common:actions.continue")}
           </Button>
         </OnboardingStepActions>
       </form>

@@ -10,6 +10,7 @@
  * verification is available from the `kassiber wallets identify` CLI.
  */
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import {
   ChevronDown,
   ChevronRight,
@@ -103,34 +104,33 @@ interface IdentifyReport {
 
 type StatusFilter = "all" | "owned" | "external" | "unknown" | "invalid";
 
+// Stable status id → badge variant + translation key. The label is resolved
+// from the `review` namespace at render so test ids/lookups stay decoupled.
 const STATUS_BADGE: Record<
   string,
-  { variant: "default" | "secondary" | "outline" | "destructive"; label: string }
+  {
+    variant: "default" | "secondary" | "outline" | "destructive";
+    labelKey: string;
+  }
 > = {
-  owned: { variant: "default", label: "Owned" },
-  external: { variant: "secondary", label: "External" },
-  unknown: { variant: "outline", label: "Unknown" },
-  invalid: { variant: "destructive", label: "Invalid" },
+  owned: { variant: "default", labelKey: "reconcile.status.owned" },
+  external: { variant: "secondary", labelKey: "reconcile.status.external" },
+  unknown: { variant: "outline", labelKey: "reconcile.status.unknown" },
+  invalid: { variant: "destructive", labelKey: "reconcile.status.invalid" },
 };
 
-const CLASSIFICATION_LABEL: Record<string, string> = {
-  owned_address: "Owned address",
-  external_address: "External address",
-  self_transfer: "Self-transfer",
-  outbound_payment: "Outbound payment",
-  inbound_receipt: "Inbound receipt",
-  touches_wallet: "Touches wallet",
-  external: "External",
-  unknown: "Unknown",
-  undetermined: "Undetermined",
-  invalid: "Invalid",
+const CLASSIFICATION_LABEL_KEY: Record<string, string> = {
+  owned_address: "reconcile.classification.ownedAddress",
+  external_address: "reconcile.classification.externalAddress",
+  self_transfer: "reconcile.classification.selfTransfer",
+  outbound_payment: "reconcile.classification.outboundPayment",
+  inbound_receipt: "reconcile.classification.inboundReceipt",
+  touches_wallet: "reconcile.classification.touchesWallet",
+  external: "reconcile.classification.external",
+  unknown: "reconcile.classification.unknown",
+  undetermined: "reconcile.classification.undetermined",
+  invalid: "reconcile.classification.invalid",
 };
-
-const PLACEHOLDER = [
-  "Paste one address or transaction id per line, for example:",
-  "bc1qexampleaddress…",
-  "a1b2c3…  (64-char transaction id)",
-].join("\n");
 
 function ownerLabel(result: IdentifyResult): string {
   if (result.matches && result.matches.length > 0) {
@@ -223,11 +223,12 @@ function truncateMiddle(value: string, head = 10, tail = 6): string {
 }
 
 function LegRow({ leg, hideSensitive }: { leg: Leg; hideSensitive: boolean }) {
+  const { t } = useTranslation("review");
   const label =
     leg.side === "input"
       ? leg.outpoint
         ? truncateMiddle(leg.outpoint)
-        : "input"
+        : t("reconcile.legs.input")
       : `#${leg.n ?? "?"}`;
   return (
     <div className="flex items-center justify-between gap-2 py-0.5">
@@ -242,7 +243,7 @@ function LegRow({ leg, hideSensitive }: { leg: Leg; hideSensitive: boolean }) {
           {leg.branch ? ` · ${leg.branch}` : ""}
         </span>
       ) : (
-        <span className="text-[11px] text-muted-foreground">external</span>
+        <span className="text-[11px] text-muted-foreground">{t("reconcile.legs.external")}</span>
       )}
     </div>
   );
@@ -280,15 +281,16 @@ function LegsBreakdown({
   legs: Leg[];
   hideSensitive: boolean;
 }) {
+  const { t } = useTranslation("review");
   return (
     <div className="grid gap-4 rounded-md bg-muted/40 p-3 sm:grid-cols-2">
       <LegColumn
-        title="Inputs"
+        title={t("reconcile.legs.inputs")}
         legs={legs.filter((leg) => leg.side === "input")}
         hideSensitive={hideSensitive}
       />
       <LegColumn
-        title="Outputs"
+        title={t("reconcile.legs.outputs")}
         legs={legs.filter((leg) => leg.side === "output")}
         hideSensitive={hideSensitive}
       />
@@ -297,6 +299,7 @@ function LegsBreakdown({
 }
 
 export function Reconcile() {
+  const { t } = useTranslation("review");
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const [input, setInput] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
@@ -354,8 +357,8 @@ export function Reconcile() {
     }
   };
 
-  const onCheck = () => runMutation(check, "Ownership check failed");
-  const onVerify = () => runMutation(verify, "On-chain verification failed");
+  const onCheck = () => runMutation(check, t("reconcile.checkFailed"));
+  const onVerify = () => runMutation(verify, t("reconcile.verifyFailed"));
 
   const onImportCsv = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -364,14 +367,14 @@ export function Reconcile() {
     try {
       const content = await file.text();
       if (!content.trim()) {
-        setErrorMessage("That file is empty — nothing to import.");
+        setErrorMessage(t("reconcile.fileEmpty"));
         return;
       }
       setCsvText(content);
       setCsvName(file.name);
-      await runMutation(check, "CSV import failed", content);
+      await runMutation(check, t("reconcile.csvImportFailed"), content);
     } catch {
-      setErrorMessage("Could not read that file.");
+      setErrorMessage(t("reconcile.fileReadFailed"));
     }
   };
 
@@ -413,20 +416,17 @@ export function Reconcile() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Fingerprint className="size-5 text-primary" />
-            Reconcile addresses &amp; transactions
+            {t("reconcile.title")}
           </CardTitle>
           <CardDescription>
-            Paste addresses or transaction ids to find which belong to a wallet
-            in this book — receive or change — and which are external. Useful for
-            telling apart historic payments from transfers between your own
-            wallets.
+            {t("reconcile.description")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <Textarea
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            placeholder={PLACEHOLDER}
+            placeholder={t("reconcile.placeholder")}
             rows={6}
             spellCheck={false}
             className={`font-mono text-xs ${hiddenSensitiveClassName(hideSensitive)}`}
@@ -438,7 +438,7 @@ export function Reconcile() {
               <button
                 type="button"
                 onClick={clearCsv}
-                aria-label="Remove imported CSV"
+                aria-label={t("reconcile.removeCsvAria")}
                 className="text-muted-foreground hover:text-foreground"
               >
                 <X className="size-3.5" />
@@ -455,9 +455,7 @@ export function Reconcile() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <ShieldCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" />
-              Checked on-device against your wallets — nothing leaves this
-              machine. Transactions not in your synced history can be verified
-              on chain below (that one step contacts your backend).
+              {t("reconcile.onDeviceNote")}
             </p>
             <div className="flex items-center gap-2">
               <Button
@@ -467,7 +465,7 @@ export function Reconcile() {
                 disabled={check.isPending || verify.isPending}
               >
                 <FileSpreadsheet className="size-4" />
-                Import CSV
+                {t("reconcile.importCsv")}
               </Button>
               <Button
                 type="button"
@@ -475,7 +473,7 @@ export function Reconcile() {
                 disabled={!hasInput || check.isPending || verify.isPending}
               >
                 <Search className="size-4" />
-                {check.isPending ? "Checking…" : "Check ownership"}
+                {check.isPending ? t("reconcile.checking") : t("reconcile.checkOwnership")}
               </Button>
             </div>
           </div>
@@ -494,32 +492,32 @@ export function Reconcile() {
         <>
           <div className="flex flex-wrap gap-2">
             <MetricTile
-              label="Checked"
+              label={t("reconcile.metric.checked")}
               value={summary.total}
               active={statusFilter === "all"}
               onClick={() => setStatusFilter("all")}
             />
             <MetricTile
-              label="Owned"
+              label={t("reconcile.metric.owned")}
               value={summary.owned}
               active={statusFilter === "owned"}
               onClick={() => setStatusFilter("owned")}
             />
             <MetricTile
-              label="External"
+              label={t("reconcile.metric.external")}
               value={summary.external}
               active={statusFilter === "external"}
               onClick={() => setStatusFilter("external")}
             />
             <MetricTile
-              label="Unknown"
+              label={t("reconcile.metric.unknown")}
               value={summary.unknown}
               active={statusFilter === "unknown"}
               onClick={() => setStatusFilter("unknown")}
             />
             {summary.invalid > 0 ? (
               <MetricTile
-                label="Invalid"
+                label={t("reconcile.metric.invalid")}
                 value={summary.invalid}
                 active={statusFilter === "invalid"}
                 onClick={() => setStatusFilter("invalid")}
@@ -530,10 +528,13 @@ export function Reconcile() {
           <Card>
             <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
               <CardDescription>
-                Scanned {summary.wallets_scanned}{" "}
-                {summary.wallets_scanned === 1 ? "wallet" : "wallets"} to
-                derivation index {summary.scan_to_index}
-                {summary.verified_on_chain ? " · verified on-chain" : ""}.
+                {t("reconcile.scanned", {
+                  count: summary.wallets_scanned,
+                  index: summary.scan_to_index,
+                  verified: summary.verified_on_chain
+                    ? t("reconcile.verifiedSuffix")
+                    : "",
+                })}
               </CardDescription>
               <div className="flex items-center gap-2">
                 {verifyCount > 0 ? (
@@ -546,8 +547,8 @@ export function Reconcile() {
                   >
                     <Globe className="size-4" />
                     {verify.isPending
-                      ? "Verifying…"
-                      : `Verify ${verifyCount} on chain`}
+                      ? t("reconcile.verifying")
+                      : t("reconcile.verifyOnChain", { count: verifyCount })}
                   </Button>
                 ) : null}
                 <Button
@@ -558,7 +559,7 @@ export function Reconcile() {
                   disabled={results.length === 0}
                 >
                   <ClipboardCopy className="size-4" />
-                  {copied ? "Copied" : "Copy CSV"}
+                  {copied ? t("reconcile.copied") : t("reconcile.copyCsv")}
                 </Button>
               </div>
             </CardHeader>
@@ -566,11 +567,11 @@ export function Reconcile() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Input</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Wallet</TableHead>
-                    <TableHead>Branch</TableHead>
-                    <TableHead>Classification</TableHead>
+                    <TableHead>{t("reconcile.table.input")}</TableHead>
+                    <TableHead>{t("common:field.status")}</TableHead>
+                    <TableHead>{t("reconcile.table.wallet")}</TableHead>
+                    <TableHead>{t("reconcile.table.branch")}</TableHead>
+                    <TableHead>{t("reconcile.table.classification")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -580,7 +581,7 @@ export function Reconcile() {
                         colSpan={5}
                         className="py-6 text-center text-sm text-muted-foreground"
                       >
-                        No matching results.
+                        {t("reconcile.table.noResults")}
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -601,7 +602,7 @@ export function Reconcile() {
                                   <button
                                     type="button"
                                     onClick={() => toggleExpand(rowKey)}
-                                    aria-label={isOpen ? "Hide legs" : "Show legs"}
+                                    aria-label={isOpen ? t("reconcile.hideLegsAria") : t("reconcile.showLegsAria")}
                                     aria-expanded={isOpen}
                                     className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
                                   >
@@ -620,7 +621,7 @@ export function Reconcile() {
                                 >
                                   {result.input}
                                 </span>
-                                <CopyButton value={result.input} ariaLabel="Copy input" />
+                                <CopyButton value={result.input} ariaLabel={t("reconcile.copyInputAria")} />
                               </div>
                               <span className="ml-[1.625rem] text-[11px] uppercase tracking-wide text-muted-foreground">
                                 {result.type}
@@ -628,7 +629,7 @@ export function Reconcile() {
                               </span>
                             </TableCell>
                             <TableCell>
-                              <Badge variant={badge.variant}>{badge.label}</Badge>
+                              <Badge variant={badge.variant}>{t(badge.labelKey)}</Badge>
                             </TableCell>
                             <TableCell className="text-sm">
                               {owner || (
@@ -640,8 +641,9 @@ export function Reconcile() {
                             </TableCell>
                             <TableCell className="text-sm">
                               <span>
-                                {CLASSIFICATION_LABEL[result.classification] ??
-                                  result.classification}
+                                {CLASSIFICATION_LABEL_KEY[result.classification]
+                                  ? t(CLASSIFICATION_LABEL_KEY[result.classification])
+                                  : result.classification}
                               </span>
                               {result.note ? (
                                 <p className="text-xs text-muted-foreground">

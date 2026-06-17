@@ -6,6 +6,7 @@
  */
 import * as React from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -75,12 +76,15 @@ interface SettingsScreenProps {
 }
 
 export function SettingsScreen({ onLock }: SettingsScreenProps) {
+  const { t } = useTranslation("settings");
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const clearClipboard = useUiStore((s) => s.clearClipboard);
   const setClearClipboard = useUiStore((s) => s.setClearClipboard);
   const currency = useUiStore((s) => s.currency);
   const setCurrency = useUiStore((s) => s.setCurrency);
+  const lang = useUiStore((s) => s.lang);
+  const setLang = useUiStore((s) => s.setLang);
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
   const appScale = useUiStore((s) => s.appScale);
@@ -252,16 +256,16 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         setAppLockPolicy({ touchIdUnlock: false });
       } catch (error: unknown) {
         addNotification({
-          title: "Touch ID passphrase was not removed",
+          title: t("touchId.removedTitle"),
           body:
             error instanceof Error
               ? error.message
-              : "macOS Keychain did not remove the saved passphrase.",
+              : t("touchId.removedBody"),
           tone: "warning",
         });
       }
     },
-    [addNotification, setAppLockPolicy, touchIdDataRoot],
+    [addNotification, setAppLockPolicy, t, touchIdDataRoot],
   );
 
   React.useEffect(() => {
@@ -288,11 +292,11 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       const message =
         error instanceof Error
           ? error.message
-          : "Could not inspect terminal command.";
+          : t("terminal.inspectError");
       setTerminalStatusError(message);
       return null;
     }
-  }, []);
+  }, [t]);
 
   React.useEffect(() => {
     void refreshTerminalCommandStatus();
@@ -361,9 +365,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   }, [backendSettingsQuery.isFetched, backends, pendingBackendEditId]);
 
   const onResetWorkspace = () => {
-    const ok = window.confirm(
-      "Reset Welcome state?\n\nThis clears your local identity and returns you to the Welcome screen. Encrypted data on disk is not touched.",
-    );
+    const ok = window.confirm(t("resetWelcome.confirm"));
     if (!ok) return;
     void (async () => {
       if (identity?.importedProject) {
@@ -388,12 +390,12 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   };
 
   const workspaceLabel =
-    status?.current_workspace || identity?.workspace || "current books set";
+    status?.current_workspace || identity?.workspace || t("workspace.fallback");
   const currentBookLabel =
     statusLoaded
       ? status?.current_profile ?? null
       : identity?.profile || identity?.name || null;
-  const bookLabel = currentBookLabel || "current book";
+  const bookLabel = currentBookLabel || t("workspace.bookFallback");
   const resetBookAvailable = Boolean(currentBookLabel);
 
   const openResetBookData = () => {
@@ -481,10 +483,12 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     const affectedWallets = backend.walletRefs ?? [];
     const walletWarning =
       affectedWallets.length > 0
-        ? `\n\nThese wallets will have no backend and cannot sync until you add one back:\n- ${affectedWallets.join("\n- ")}`
+        ? `\n\n${t("deleteBackend.walletWarning", {
+            wallets: affectedWallets.join("\n- "),
+          })}`
         : "";
     const ok = window.confirm(
-      `Delete backend '${backend.name}'?${walletWarning}`,
+      `${t("deleteBackend.confirm", { name: backend.name })}${walletWarning}`,
     );
     if (!ok) return;
     await deleteBackend.mutateAsync({ name: backend.id });
@@ -508,17 +512,17 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       );
       setExplorerSettings(deriveExplorerSettings(refreshedBackends));
       addNotification({
-        title: "Default backend updated",
-        body: `${backend.name} will be used whenever a workflow asks for the default backend.`,
+        title: t("defaultBackend.updatedTitle"),
+        body: t("defaultBackend.updatedBody", { name: backend.name }),
         tone: "success",
       });
     } catch (error) {
       addNotification({
-        title: "Default backend was not changed",
+        title: t("defaultBackend.failedTitle"),
         body:
           error instanceof Error
             ? error.message
-            : "Kassiber could not update the default backend.",
+            : t("defaultBackend.failedBody"),
         tone: "warning",
       });
     } finally {
@@ -535,18 +539,18 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       setTerminalStatusError(null);
       addNotification({
         title: wasRepair
-          ? "Terminal command repaired"
-          : "Terminal command installed",
+          ? t("terminal.repairedTitle")
+          : t("terminal.installedTitle"),
         body: next.pathOnPath
-          ? "Open a new terminal and run kassiber status."
-          : `Add ${next.binDir} to PATH, then open a new terminal.`,
+          ? t("terminal.installedBodyOnPath")
+          : t("terminal.installedBodyOffPath", { binDir: next.binDir }),
         tone: next.pathOnPath ? "success" : "warning",
       });
     } catch (error) {
       setTerminalStatusError(
         error instanceof Error
           ? error.message
-          : "Could not install terminal command.",
+          : t("terminal.installError"),
       );
     } finally {
       setTerminalCommandPending(false);
@@ -560,15 +564,17 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       setTerminalStatus(next);
       setTerminalStatusError(null);
       addNotification({
-        title: "Terminal command removed",
-        body: `${next.commandPath || "The command"} was removed.`,
+        title: t("terminal.removedTitle"),
+        body: t("terminal.removedBody", {
+          command: next.commandPath || t("terminal.removedBodyFallback"),
+        }),
         tone: "success",
       });
     } catch (error) {
       setTerminalStatusError(
         error instanceof Error
           ? error.message
-          : "Could not remove terminal command.",
+          : t("terminal.removeError"),
       );
     } finally {
       setTerminalCommandPending(false);
@@ -603,18 +609,22 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const onDeleteWorkspace = async () => {
     setDeleteError(null);
     if (encryptedWorkspace && !deletePassphrase) {
-      setDeleteError("Enter the database passphrase.");
+      setDeleteError(t("deleteBooks.errorPassphrase"));
       return;
     }
     if (
       !encryptedWorkspace &&
       deletePlaintextAck.trim() !== PLAINTEXT_DELETE_ACK
     ) {
-      setDeleteError(`Type ${PLAINTEXT_DELETE_ACK} to confirm local deletion.`);
+      setDeleteError(
+        t("deleteBooks.errorPlaintext", { challenge: PLAINTEXT_DELETE_ACK }),
+      );
       return;
     }
     if (deleteConfirm.trim() !== workspaceLabel) {
-      setDeleteError(`Type ${workspaceLabel} to confirm deletion.`);
+      setDeleteError(
+        t("deleteBooks.errorConfirm", { workspace: workspaceLabel }),
+      );
       return;
     }
     try {
@@ -634,7 +644,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       window.alert(
         error instanceof Error
           ? error.message
-          : "Books delete failed.",
+          : t("deleteBooks.errorGeneric"),
       );
     }
   };
@@ -642,18 +652,20 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const onResetBookData = async () => {
     setResetDataError(null);
     if (encryptedWorkspace && !resetDataPassphrase) {
-      setResetDataError("Enter the database passphrase.");
+      setResetDataError(t("resetBook.errorPassphrase"));
       return;
     }
     if (
       !encryptedWorkspace &&
       resetDataPlaintextAck.trim() !== PLAINTEXT_DELETE_ACK
     ) {
-      setResetDataError(`Type ${PLAINTEXT_DELETE_ACK} to confirm local reset.`);
+      setResetDataError(
+        t("resetBook.errorPlaintext", { challenge: PLAINTEXT_DELETE_ACK }),
+      );
       return;
     }
     if (resetDataConfirm.trim() !== bookLabel) {
-      setResetDataError(`Type ${bookLabel} to confirm reset.`);
+      setResetDataError(t("resetBook.errorConfirm", { book: bookLabel }));
       return;
     }
     try {
@@ -676,24 +688,44 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         Number(removed.source_funds_cases ?? 0) +
         Number(removed.source_funds_snapshots ?? 0);
       const summary = [
-        `${formatCount(removed.transactions ?? 0)} transactions`,
-        `${formatCount(removed.journal_entries ?? 0)} journal rows`,
-        `${formatCount(removed.transaction_pairs ?? 0)} swap pairs`,
-        `${formatCount(removed.bip329_labels ?? 0)} BIP329 labels`,
+        t("resetBook.summary.transactions", {
+          value: formatCount(removed.transactions ?? 0),
+        }),
+        t("resetBook.summary.journalRows", {
+          value: formatCount(removed.journal_entries ?? 0),
+        }),
+        t("resetBook.summary.swapPairs", {
+          value: formatCount(removed.transaction_pairs ?? 0),
+        }),
+        t("resetBook.summary.labels", {
+          value: formatCount(removed.bip329_labels ?? 0),
+        }),
       ];
       if (attachmentsRemoved > 0) {
-        optionalSummary.push(`${formatCount(attachmentsRemoved)} attachment records/files`);
+        optionalSummary.push(
+          t("resetBook.summary.attachments", {
+            value: formatCount(attachmentsRemoved),
+          }),
+        );
       }
       if (sourceFundsRemoved > 0) {
-        optionalSummary.push(`${formatCount(sourceFundsRemoved)} source-funds records`);
+        optionalSummary.push(
+          t("resetBook.summary.sourceFunds", {
+            value: formatCount(sourceFundsRemoved),
+          }),
+        );
       }
       if (envelope.data?.shared_rates_cleared) {
-        optionalSummary.push(`${formatCount(removed.rates_cache ?? 0)} rate rows`);
+        optionalSummary.push(
+          t("resetBook.summary.rates", {
+            value: formatCount(removed.rates_cache ?? 0),
+          }),
+        );
       }
       summary.push(...optionalSummary);
       addNotification({
-        title: "Book data reset",
-        body: `Cleared ${summary.join(", ")}. Wallet and backend connections were kept.`,
+        title: t("resetBook.notifyTitle"),
+        body: t("resetBook.notifyBody", { summary: summary.join(", ") }),
         tone: "success",
       });
       setResetDataOpen(false);
@@ -703,7 +735,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       setResetDataPlaintextAck("");
     } catch (error) {
       setResetDataError(
-        error instanceof Error ? error.message : "Book reset failed.",
+        error instanceof Error ? error.message : t("resetBook.errorGeneric"),
       );
     }
   };
@@ -711,7 +743,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const onChangePassphrase = async () => {
     setPassphraseError(null);
     if (!currentPassphrase) {
-      setPassphraseError("Enter the current database passphrase.");
+      setPassphraseError(t("changePassphrase.errorCurrent"));
       return;
     }
     const hint = databasePassphraseHint(newPassphrase, newPassphraseConfirm);
@@ -736,8 +768,10 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
           if (!status.configured) {
             throw new Error(
               status.reason
-                ? `Touch ID unlock is not set up: ${status.reason}`
-                : "macOS Keychain did not report the saved Touch ID passphrase.",
+                ? t("touchIdEnroll.errorNotSetUpReason", {
+                    reason: status.reason,
+                  })
+                : t("touchIdEnroll.errorNotSetUp"),
             );
           }
         } catch (error) {
@@ -745,11 +779,11 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
           await forgetTouchIdPassphrase(touchIdDataRoot).catch(() => {});
           await refreshTouchIdStatus();
           addNotification({
-            title: "Touch ID unlock was disabled",
+            title: t("touchId.disabledTitle"),
             body:
               error instanceof Error
                 ? error.message
-                : "The database passphrase changed, but macOS Keychain did not accept the updated Touch ID passphrase.",
+                : t("touchId.disabledBody"),
             tone: "warning",
           });
         }
@@ -762,7 +796,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       setPassphraseError(
         error instanceof Error
           ? error.message
-          : "Could not change database passphrase.",
+          : t("changePassphrase.errorGeneric"),
       );
     }
   };
@@ -770,7 +804,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const onEnrollTouchId = async () => {
     setTouchIdEnrollError(null);
     if (!touchIdEnrollPassphrase) {
-      setTouchIdEnrollError("Enter the database passphrase.");
+      setTouchIdEnrollError(t("touchIdEnroll.errorPassphrase"));
       return;
     }
 
@@ -786,7 +820,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         },
       });
       if (envelope.kind !== "daemon.unlock") {
-        throw new Error("Database passphrase did not unlock these books.");
+        throw new Error(t("touchIdEnroll.errorUnlock"));
       }
       const status = await storeTouchIdPassphrase(
         touchIdEnrollPassphrase,
@@ -796,8 +830,8 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       if (!status.configured) {
         throw new Error(
           status.reason
-            ? `Touch ID unlock is not set up: ${status.reason}`
-            : "macOS Keychain did not report the saved Touch ID passphrase.",
+            ? t("touchIdEnroll.errorNotSetUpReason", { reason: status.reason })
+            : t("touchIdEnroll.errorNotSetUp"),
         );
       }
       await setSessionUnlockPassphrase(touchIdEnrollPassphrase);
@@ -805,8 +839,8 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       setTouchIdEnrollOpen(false);
       setTouchIdEnrollPassphrase("");
       addNotification({
-        title: "Touch ID unlock enabled",
-        body: "The database passphrase was saved in macOS Keychain behind local user presence.",
+        title: t("touchIdEnroll.notifyTitle"),
+        body: t("touchIdEnroll.notifyBody"),
         tone: "success",
       });
     } catch (error) {
@@ -816,7 +850,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       setTouchIdEnrollError(
         error instanceof Error
           ? error.message
-          : "Could not save the database passphrase for Touch ID unlock.",
+          : t("touchIdEnroll.errorGeneric"),
       );
     } finally {
       setTouchIdEnrollPending(false);
@@ -837,6 +871,8 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             resetAppScale={resetAppScale}
             currency={currency}
             setCurrency={setCurrency}
+            lang={lang}
+            setLang={setLang}
           />
         );
       case "network-bitcoin":
@@ -953,21 +989,22 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       <div className={screenPanelClassName}>
         <div className="mx-auto flex w-full max-w-[1500px] min-w-0 flex-col gap-5">
           <div className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {t("page.title")}
+            </h1>
             <p className="text-sm text-muted-foreground">
-              Configure how Kassiber reaches the Bitcoin network, what stays on
-              this machine, and how your books are stored.
+              {t("page.description")}
             </p>
           </div>
 
           {deferredConnectionSetup ? (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
               <span>
-                You came here from connection setup
                 {deferredConnectionSetup.reason
-                  ? ` (${deferredConnectionSetup.reason})`
-                  : ""}
-                . Configure the backend below, then resume.
+                  ? t("page.deferred.bodyWithReason", {
+                      reason: deferredConnectionSetup.reason,
+                    })
+                  : t("page.deferred.body")}
               </span>
               <div className="flex gap-2">
                 <Button
@@ -977,7 +1014,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
                     void navigate({ to: "/connections" });
                   }}
                 >
-                  Resume connection setup
+                  {t("page.deferred.resume")}
                 </Button>
                 <Button
                   type="button"
@@ -985,7 +1022,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
                   variant="ghost"
                   onClick={clearDeferredConnectionSetup}
                 >
-                  Dismiss
+                  {t("page.deferred.dismiss")}
                 </Button>
               </div>
             </div>
@@ -999,12 +1036,12 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             />
             <div className="min-w-0 flex-1">
               <div className="mb-5 space-y-1 border-b pb-4">
-                <p className="kb-mono-caption">{activeMeta.group}</p>
+                <p className="kb-mono-caption">{t(activeMeta.groupKey)}</p>
                 <h2 className="text-lg font-semibold tracking-tight">
-                  {activeMeta.label}
+                  {t(activeMeta.labelKey)}
                 </h2>
                 <p className="max-w-2xl text-sm text-muted-foreground">
-                  {activeMeta.description}
+                  {t(activeMeta.descriptionKey)}
                 </p>
               </div>
               {sectionContent}
@@ -1035,15 +1072,12 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         >
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Reset book data</DialogTitle>
+              <DialogTitle>{t("resetBook.title")}</DialogTitle>
               <DialogDescription>
-                This keeps wallet and backend connections for {bookLabel}, then
-                clears imported/synced rows, journals, swap review state, labels,
-                attachments, and source-funds work. The shared fiat-rate cache
-                is kept unless you explicitly include it below.
+                {t("resetBook.description", { book: bookLabel })}
                 {encryptedWorkspace
-                  ? " Enter the database passphrase and the book name to continue."
-                  : " These plaintext books have no database passphrase; type the explicit local-reset challenge and book name to continue."}
+                  ? t("resetBook.passphraseHint")
+                  : t("resetBook.plaintextHint")}
               </DialogDescription>
             </DialogHeader>
             <form
@@ -1055,7 +1089,9 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             >
               {encryptedWorkspace ? (
                 <div className="space-y-2">
-                  <Label htmlFor="reset-data-passphrase">Passphrase</Label>
+                  <Label htmlFor="reset-data-passphrase">
+                    {t("resetBook.passphraseLabel")}
+                  </Label>
                   <Input
                     id="reset-data-passphrase"
                     type="password"
@@ -1069,7 +1105,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
               ) : (
                 <div className="space-y-2">
                   <Label htmlFor="reset-data-plaintext-ack">
-                    Plaintext reset challenge
+                    {t("resetBook.plaintextLabel")}
                   </Label>
                   <Input
                     id="reset-data-plaintext-ack"
@@ -1082,7 +1118,9 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
                 </div>
               )}
               <div className="space-y-2">
-                <Label htmlFor="reset-data-confirm">Book name</Label>
+                <Label htmlFor="reset-data-confirm">
+                  {t("resetBook.bookNameLabel")}
+                </Label>
                 <Input
                   id="reset-data-confirm"
                   value={resetDataConfirm}
@@ -1102,10 +1140,9 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
                   htmlFor="reset-data-clear-shared-rates"
                   className="grid gap-1 text-sm leading-relaxed"
                 >
-                  <span>Also clear shared fiat-rate cache</span>
+                  <span>{t("resetBook.clearRatesLabel")}</span>
                   <span className="font-normal text-muted-foreground">
-                    This cache is shared across every book in this local data
-                    root. Leave it off to keep existing BTC-EUR/BTC-USD history.
+                    {t("resetBook.clearRatesHint")}
                   </span>
                 </Label>
               </div>
@@ -1120,14 +1157,16 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
                   variant="outline"
                   onClick={() => setResetDataOpen(false)}
                 >
-                  Cancel
+                  {t("common:actions.cancel")}
                 </Button>
                 <Button
                   type="submit"
                   variant="destructive"
                   disabled={resetBookData.isPending}
                 >
-                  {resetBookData.isPending ? "Resetting..." : "Reset"}
+                  {resetBookData.isPending
+                    ? t("resetBook.submitPending")
+                    : t("resetBook.submit")}
                 </Button>
               </DialogFooter>
             </form>
@@ -1143,12 +1182,12 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         >
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Delete books set</DialogTitle>
+              <DialogTitle>{t("deleteBooks.title")}</DialogTitle>
               <DialogDescription>
-                This removes {workspaceLabel} from the local Kassiber database.
+                {t("deleteBooks.description", { workspace: workspaceLabel })}
                 {encryptedWorkspace
-                  ? " Enter the database passphrase and the books set name to continue."
-                  : " These plaintext books have no database passphrase; type the explicit local-delete challenge and books set name to continue."}
+                  ? t("deleteBooks.passphraseHint")
+                  : t("deleteBooks.plaintextHint")}
               </DialogDescription>
             </DialogHeader>
             <form
@@ -1160,7 +1199,9 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             >
               {encryptedWorkspace ? (
                 <div className="space-y-2">
-                  <Label htmlFor="delete-passphrase">Passphrase</Label>
+                  <Label htmlFor="delete-passphrase">
+                    {t("deleteBooks.passphraseLabel")}
+                  </Label>
                   <Input
                     id="delete-passphrase"
                     type="password"
@@ -1174,7 +1215,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
               ) : (
                 <div className="space-y-2">
                   <Label htmlFor="delete-plaintext-ack">
-                    Plaintext delete challenge
+                    {t("deleteBooks.plaintextLabel")}
                   </Label>
                   <Input
                     id="delete-plaintext-ack"
@@ -1187,7 +1228,9 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
                 </div>
               )}
               <div className="space-y-2">
-                <Label htmlFor="delete-confirm">Books set name</Label>
+                <Label htmlFor="delete-confirm">
+                  {t("deleteBooks.nameLabel")}
+                </Label>
                 <Input
                   id="delete-confirm"
                   value={deleteConfirm}
@@ -1204,14 +1247,16 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
                   variant="outline"
                   onClick={() => setDeleteOpen(false)}
                 >
-                  Cancel
+                  {t("common:actions.cancel")}
                 </Button>
                 <Button
                   type="submit"
                   variant="destructive"
                   disabled={deleteWorkspace.isPending}
                 >
-                  {deleteWorkspace.isPending ? "Deleting..." : "Delete"}
+                  {deleteWorkspace.isPending
+                    ? t("deleteBooks.submitPending")
+                    : t("deleteBooks.submit")}
                 </Button>
               </DialogFooter>
             </form>
@@ -1227,10 +1272,9 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         >
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Change database passphrase</DialogTitle>
+              <DialogTitle>{t("changePassphrase.title")}</DialogTitle>
               <DialogDescription>
-                Rekey the local SQLCipher database. The current daemon session
-                is reopened with the new passphrase after rotation.
+                {t("changePassphrase.description")}
               </DialogDescription>
             </DialogHeader>
             <form
@@ -1241,7 +1285,9 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
               }}
             >
               <div className="space-y-2">
-                <Label htmlFor="current-passphrase">Current passphrase</Label>
+                <Label htmlFor="current-passphrase">
+                  {t("changePassphrase.currentLabel")}
+                </Label>
                 <Input
                   id="current-passphrase"
                   type="password"
@@ -1253,7 +1299,9 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="new-passphrase">New passphrase</Label>
+                <Label htmlFor="new-passphrase">
+                  {t("changePassphrase.newLabel")}
+                </Label>
                 <Input
                   id="new-passphrase"
                   type="password"
@@ -1264,7 +1312,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="new-passphrase-confirm">
-                  Confirm new passphrase
+                  {t("changePassphrase.confirmLabel")}
                 </Label>
                 <Input
                   id="new-passphrase-confirm"
@@ -1287,10 +1335,12 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
                   variant="outline"
                   onClick={() => setPassphraseOpen(false)}
                 >
-                  Cancel
+                  {t("common:actions.cancel")}
                 </Button>
                 <Button type="submit" disabled={changePassphrase.isPending}>
-                  {changePassphrase.isPending ? "Changing..." : "Change"}
+                  {changePassphrase.isPending
+                    ? t("changePassphrase.submitPending")
+                    : t("changePassphrase.submit")}
                 </Button>
               </DialogFooter>
             </form>
@@ -1308,11 +1358,9 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         >
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Enable Touch ID unlock</DialogTitle>
+              <DialogTitle>{t("touchIdEnroll.title")}</DialogTitle>
               <DialogDescription>
-                Enter the database passphrase once. Kassiber will verify it
-                locally, then save it in macOS Keychain behind local user
-                presence for these books.
+                {t("touchIdEnroll.description")}
               </DialogDescription>
             </DialogHeader>
             <form
@@ -1324,7 +1372,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             >
               <div className="space-y-2">
                 <Label htmlFor="touch-id-enroll-passphrase">
-                  Database passphrase
+                  {t("touchIdEnroll.passphraseLabel")}
                 </Label>
                 <Input
                   id="touch-id-enroll-passphrase"
@@ -1353,10 +1401,12 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
                     setTouchIdEnrollError(null);
                   }}
                 >
-                  Cancel
+                  {t("common:actions.cancel")}
                 </Button>
                 <Button type="submit" disabled={touchIdEnrollPending}>
-                  {touchIdEnrollPending ? "Saving..." : "Enable Touch ID"}
+                  {touchIdEnrollPending
+                    ? t("touchIdEnroll.submitPending")
+                    : t("touchIdEnroll.submit")}
                 </Button>
               </DialogFooter>
             </form>

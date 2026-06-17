@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import { screenPanelClassName } from "@/lib/screen-layout";
 
 interface QuarantineUnavailableProps {
@@ -5,12 +7,15 @@ interface QuarantineUnavailableProps {
 }
 
 export function QuarantineUnavailable({ message }: QuarantineUnavailableProps) {
+  const { t } = useTranslation("journals");
   return (
     <div className={screenPanelClassName}>
       <div className="rounded-xl border bg-card p-4">
-        <h2 className="text-base font-semibold">Quarantine unavailable</h2>
+        <h2 className="text-base font-semibold">
+          {t("quarantine.unavailable.title")}
+        </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          {message ?? "The daemon did not return quarantine data."}
+          {message ?? t("quarantine.unavailable.fallback")}
         </p>
       </div>
     </div>

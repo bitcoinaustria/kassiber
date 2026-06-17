@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import { TabsContent } from "@/components/ui/tabs";
 import type { Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
@@ -7,6 +9,7 @@ import { blurClass } from "./model";
 import type { TransactionDetailTabContext } from "./TransactionDetailTabContext";
 
 export function TransactionLedgerTab({ ctx }: { ctx: TransactionDetailTabContext }) {
+  const { t } = useTranslation("transactions");
   const {
     feeBtc,
     impactDirection,
@@ -28,16 +31,14 @@ export function TransactionLedgerTab({ ctx }: { ctx: TransactionDetailTabContext
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <div className="flex items-center gap-1.5 text-xs uppercase text-muted-foreground">
-                            Net wallet impact
-                            <InfoHint label="Net wallet impact">
-                              The signed change to this wallet after principal
-                              and fees. This is the bottom-line number for
-                              accounting.
+                            {t("ledger.netWalletImpact")}
+                            <InfoHint label={t("ledger.netWalletImpact")}>
+                              {t("ledger.netWalletImpactHint")}
                             </InfoHint>
                           </div>
                           <div className="mt-1 text-2xl font-semibold tabular-nums">
                             {impactDirection === 0 && !feeBtc ? (
-                              "See paired movement"
+                              t("ledger.seePairedMovement")
                             ) : (
                               <span className={blurClass(hideSensitive)}>
                                 {formatSheetMoney(
@@ -76,14 +77,14 @@ export function TransactionLedgerTab({ ctx }: { ctx: TransactionDetailTabContext
                     {feeBtc > 0 || impactDirection === 0 ? (
                       <div className="overflow-hidden rounded-md border">
                         <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          How it adds up
+                          {t("ledger.howItAddsUp")}
                         </div>
                         <LedgerRow
-                          label="Principal"
+                          label={t("ledger.principal")}
                           value={
                             impactDirection === 0 ? (
                               <span className="text-muted-foreground">
-                                Paired — see Linked tab
+                                {t("ledger.pairedSeeLinked")}
                               </span>
                             ) : (
                               <span className={blurClass(hideSensitive)}>
@@ -97,11 +98,11 @@ export function TransactionLedgerTab({ ctx }: { ctx: TransactionDetailTabContext
                             )
                           }
                           align="right"
-                          hint="Signed principal applied to this wallet."
+                          hint={t("ledger.principalHint")}
                         />
                         {feeBtc > 0 ? (
                           <LedgerRow
-                            label="Fee"
+                            label={t("ledger.fee")}
                             value={
                               <span className={blurClass(hideSensitive)}>
                                 {formatSheetMoney(
@@ -113,11 +114,11 @@ export function TransactionLedgerTab({ ctx }: { ctx: TransactionDetailTabContext
                               </span>
                             }
                             align="right"
-                            hint="Network or settlement fee subtracted from this wallet."
+                            hint={t("ledger.feeHint")}
                           />
                         ) : null}
                         <LedgerRow
-                          label="Net"
+                          label={t("ledger.net")}
                           value={
                             <span
                               className={cn(
@@ -126,7 +127,7 @@ export function TransactionLedgerTab({ ctx }: { ctx: TransactionDetailTabContext
                               )}
                             >
                               {impactDirection === 0 && !feeBtc
-                                ? "See paired movement"
+                                ? t("ledger.seePairedMovement")
                                 : formatSheetMoney(
                                     netImpactEur,
                                     netImpactBtc,

@@ -50,6 +50,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -164,23 +165,26 @@ import {
   type NativeMenuPayload,
 } from "./menuIntent";
 
+// `labelKey` indexes the `nav` namespace (book.*); keep `href` as the stable id.
 type NavItem = {
-  label: string;
+  labelKey: string;
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   href: AppRoutePath;
   children?: NavItem[];
 };
 
+// `titleKey` indexes the `nav` namespace (section.*).
 type NavGroup = {
-  title: string;
+  titleKey: string;
   items: NavItem[];
 };
 
+// `titleKey` indexes `nav:book.*` for the breadcrumb title; the search keys
+// index `chrome:routeMeta.*`. Keep the literal route prefixes as stable lookups.
 type RouteMeta = {
-  title: string;
+  titleKey: string;
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-  searchLabel: string;
-  searchPlaceholder: string;
+  searchKey: string;
 };
 
 type NotificationItem = Omit<AppNotification, "createdAt"> & {
@@ -207,188 +211,173 @@ const appMainClassName =
 
 const NAV_GROUPS: NavGroup[] = [
   {
-    title: "Main",
+    titleKey: "section.main",
     items: [
-      { label: "Overview", icon: Gauge, href: "/overview" },
-      { label: "Transactions", icon: ClipboardList, href: "/transactions" },
-      { label: "Wallets", icon: WalletCards, href: "/connections" },
-      { label: "Reports", icon: BarChart3, href: "/reports" },
-      { label: "Assistant", icon: MessageSquareText, href: "/assistant" },
+      { labelKey: "book.overview", icon: Gauge, href: "/overview" },
+      { labelKey: "book.transactions", icon: ClipboardList, href: "/transactions" },
+      { labelKey: "book.wallets", icon: WalletCards, href: "/connections" },
+      { labelKey: "book.reports", icon: BarChart3, href: "/reports" },
+      { labelKey: "book.assistant", icon: MessageSquareText, href: "/assistant" },
     ],
   },
   {
-    title: "Review",
+    titleKey: "section.review",
     items: [
-      { label: "Quarantine", icon: ShieldAlert, href: "/quarantine" },
-      { label: "Reconcile", icon: Fingerprint, href: "/reconcile" },
-      { label: "Source Funds", icon: BadgeCheck, href: "/source-of-funds" },
-      { label: "Swaps & Transfers", icon: ArrowLeftRight, href: "/swaps" },
-      { label: "Ledger", icon: BookOpen, href: "/journals" },
+      { labelKey: "book.quarantine", icon: ShieldAlert, href: "/quarantine" },
+      { labelKey: "book.reconcile", icon: Fingerprint, href: "/reconcile" },
+      { labelKey: "book.sourceFunds", icon: BadgeCheck, href: "/source-of-funds" },
+      { labelKey: "book.swaps", icon: ArrowLeftRight, href: "/swaps" },
+      { labelKey: "book.ledger", icon: BookOpen, href: "/journals" },
     ],
   },
 ];
 
+// `titleKey` is a fully-qualified i18n key (nav:* for breadcrumb titles that
+// reuse the sidebar names, chrome:routeMeta.* for shell-only titles).
+// `searchKey` is a chrome:routeMeta.* prefix resolved to `.label` / `.placeholder`.
 const ROUTE_META: Array<[string, RouteMeta]> = [
   [
     "/activity",
     {
-      title: "Activity",
+      titleKey: "nav:book.activity",
       icon: History,
-      searchLabel: "Search activity",
-      searchPlaceholder: "Search transactions, wallets...",
+      searchKey: "routeMeta.activity",
     },
   ],
   [
     "/connections/",
     {
-      title: "Wallet Detail",
+      titleKey: "routeMeta.walletDetail.title",
       icon: Wallet,
-      searchLabel: "Search wallets",
-      searchPlaceholder: "Search wallets, books...",
+      searchKey: "routeMeta.walletDetail",
     },
   ],
   [
     "/connections",
     {
-      title: "Wallets",
+      titleKey: "nav:book.wallets",
       icon: Wallet,
-      searchLabel: "Search wallets",
-      searchPlaceholder: "Search wallets, imports, backends...",
+      searchKey: "routeMeta.wallets",
     },
   ],
   [
     "/books/",
     {
-      title: "Book Set Overview",
+      titleKey: "routeMeta.booksOverview.title",
       icon: Users,
-      searchLabel: "Search books",
-      searchPlaceholder: "Search books, wallets, reports...",
+      searchKey: "routeMeta.booksOverview",
     },
   ],
   [
     "/books",
     {
-      title: "Books",
+      titleKey: "routeMeta.books.title",
       icon: Users,
-      searchLabel: "Search books",
-      searchPlaceholder: "Search books, countries...",
+      searchKey: "routeMeta.books",
     },
   ],
   [
     "/journals",
     {
-      title: "Ledger",
+      titleKey: "nav:book.ledger",
       icon: BookOpen,
-      searchLabel: "Search ledger",
-      searchPlaceholder: "Search entries, wallets, assets...",
+      searchKey: "routeMeta.ledger",
     },
   ],
   [
     "/logs",
     {
-      title: "Logs",
+      titleKey: "nav:book.logs",
       icon: TerminalSquare,
-      searchLabel: "Search logs",
-      searchPlaceholder: "Search daemon errors, logs...",
+      searchKey: "routeMeta.logs",
     },
   ],
   [
     "/settings",
     {
-      title: "Settings",
+      titleKey: "nav:book.settings",
       icon: Settings,
-      searchLabel: "Search settings",
-      searchPlaceholder: "Search settings, backends...",
+      searchKey: "routeMeta.settings",
     },
   ],
   [
     "/reports",
     {
-      title: "Reports",
+      titleKey: "nav:book.reports",
       icon: BarChart3,
-      searchLabel: "Search reports",
-      searchPlaceholder: "Search reports, exports...",
+      searchKey: "routeMeta.reports",
     },
   ],
   [
     "/exit-tax",
     {
-      title: "Exit Tax",
+      titleKey: "nav:book.exitTax",
       icon: Plane,
-      searchLabel: "Search exit tax",
-      searchPlaceholder: "Search departure date, destination...",
+      searchKey: "routeMeta.exitTax",
     },
   ],
   [
     "/source-of-funds",
     {
-      title: "Source of Funds",
+      titleKey: "routeMeta.sourceOfFunds.title",
       icon: BadgeCheck,
-      searchLabel: "Search source of funds",
-      searchPlaceholder: "Search sources, wallets...",
+      searchKey: "routeMeta.sourceOfFunds",
     },
   ],
   [
     "/quarantine",
     {
-      title: "Quarantine",
+      titleKey: "nav:book.quarantine",
       icon: ShieldAlert,
-      searchLabel: "Search quarantine",
-      searchPlaceholder: "Search issue, account, source...",
+      searchKey: "routeMeta.quarantine",
     },
   ],
   [
     "/reconcile",
     {
-      title: "Reconcile",
+      titleKey: "nav:book.reconcile",
       icon: Fingerprint,
-      searchLabel: "Search reconcile",
-      searchPlaceholder: "Paste addresses or transaction ids...",
+      searchKey: "routeMeta.reconcile",
     },
   ],
   [
     "/transfers",
     {
-      title: "Swaps & Transfers",
+      titleKey: "nav:book.swaps",
       icon: ArrowLeftRight,
-      searchLabel: "Search swaps and transfers",
-      searchPlaceholder: "Search wallet, asset pair, txid...",
+      searchKey: "routeMeta.swaps",
     },
   ],
   [
     "/swaps",
     {
-      title: "Swaps & Transfers",
+      titleKey: "nav:book.swaps",
       icon: ArrowLeftRight,
-      searchLabel: "Search swaps and transfers",
-      searchPlaceholder: "Search wallet, asset pair, txid...",
+      searchKey: "routeMeta.swaps",
     },
   ],
   [
     "/transactions",
     {
-      title: "Transactions",
+      titleKey: "nav:book.transactions",
       icon: ClipboardList,
-      searchLabel: "Search transactions",
-      searchPlaceholder: "Search counterparty, tag, account...",
+      searchKey: "routeMeta.transactions",
     },
   ],
   [
     "/assistant",
     {
-      title: "Assistant",
+      titleKey: "nav:book.assistant",
       icon: MessageSquareText,
-      searchLabel: "Search assistant",
-      searchPlaceholder: "Search conversation...",
+      searchKey: "routeMeta.assistant",
     },
   ],
   [
     "/overview",
     {
-      title: "Overview",
+      titleKey: "nav:book.overview",
       icon: Gauge,
-      searchLabel: "Search overview",
-      searchPlaceholder: "Search transactions, reports...",
+      searchKey: "routeMeta.overview",
     },
   ],
 ];
@@ -419,14 +408,18 @@ const SEARCH_ICON_BY_KEY: Record<
   wallet: Wallet,
 };
 
-const SEARCH_CATEGORY_LABELS: Record<RankedSearchResult["category"], string> = {
-  action: "Action",
-  page: "Page",
-  report: "Report",
-  review_item: "Review",
-  setting: "Setting",
-  transaction: "Transaction",
-  wallet: "Wallet",
+// Maps a search result category to its `chrome:search.category.*` key.
+const SEARCH_CATEGORY_LABEL_KEYS: Record<
+  RankedSearchResult["category"],
+  string
+> = {
+  action: "action",
+  page: "page",
+  report: "report",
+  review_item: "review_item",
+  setting: "setting",
+  transaction: "transaction",
+  wallet: "wallet",
 };
 
 function searchResultIcon(result: RankedSearchResult) {
@@ -479,6 +472,7 @@ function assistantReturnPathFor(pathname: string): AssistantReturnPath {
 }
 
 export function AppShell() {
+  const { t } = useTranslation("chrome");
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -606,10 +600,9 @@ export function AppShell() {
   const isAssistantRoute = pathname === "/assistant";
   const routeMeta =
     ROUTE_META.find(([prefix]) => pathname.startsWith(prefix))?.[1] ?? {
-      title: "Kassiber",
+      titleKey: "shell.fallbackTitle",
       icon: Gauge,
-      searchLabel: "Search Kassiber",
-      searchPlaceholder: "Search transactions, reports...",
+      searchKey: "shell.fallback",
     };
   const clearDaemonQueryCache = React.useCallback(() => {
     void queryClient.cancelQueries({ queryKey: ["daemon"] });
@@ -688,9 +681,7 @@ export function AppShell() {
         if (importRootBlocked) {
           return {
             ok: false,
-            error:
-              importRootError ??
-              "Kassiber is still opening the selected local books folder.",
+            error: importRootError ?? t("lock.importRootOpening"),
           };
         }
         bumpDaemonSession();
@@ -721,10 +712,10 @@ export function AppShell() {
                 if (!status.configured) {
                   setAppLockPolicy({ touchIdUnlock: false });
                   addNotification({
-                    title: "Touch ID unlock was not saved",
+                    title: t("lock.touchIdNotSavedTitle"),
                     body: status.reason
-                      ? `Touch ID unlock is not set up: ${status.reason}`
-                      : "macOS Keychain did not report the saved passphrase.",
+                      ? t("lock.touchIdNotSavedReason", { reason: status.reason })
+                      : t("lock.touchIdNotSavedKeychain"),
                     tone: "warning",
                   });
                   return;
@@ -735,11 +726,11 @@ export function AppShell() {
               })
               .catch((error: unknown) => {
                 addNotification({
-                  title: "Touch ID unlock was not saved",
+                  title: t("lock.touchIdNotSavedTitle"),
                   body:
                     error instanceof Error
                       ? error.message
-                      : "macOS Keychain did not accept the saved passphrase.",
+                      : t("lock.touchIdNotAcceptedKeychain"),
                   tone: "warning",
                 });
                 void refreshTouchIdStatus();
@@ -759,7 +750,7 @@ export function AppShell() {
           error:
             formatDaemonEnvelopeError(envelope) ??
             (envelope.kind === "auth_required"
-              ? "Database passphrase is required."
+              ? t("lock.passphraseRequiredError")
               : null),
         };
       }
@@ -782,6 +773,7 @@ export function AppShell() {
       refreshTouchIdStatus,
       requiresDaemonUnlock,
       setAppLockPolicy,
+      t,
       touchIdDataRoot,
       touchIdPlatformSupported,
       touchIdStatus?.configured,
@@ -794,8 +786,7 @@ export function AppShell() {
       await refreshTouchIdStatus();
       return {
         ok: false,
-        error:
-          "No Touch ID passphrase was found for these books. Unlock once with the passphrase to save it again.",
+        error: t("lock.touchIdNotFound"),
       };
     }
     return unlockApp(unlocked.passphraseSecret, {
@@ -803,6 +794,7 @@ export function AppShell() {
     });
   }, [
     refreshTouchIdStatus,
+    t,
     touchIdDataRoot,
     unlockApp,
   ]);
@@ -900,8 +892,8 @@ export function AppShell() {
         isDaemonKindMutating("ui.wallets.sync")
       ) {
         addNotification({
-          title: "Book refresh already running",
-          body: "Kassiber is already refreshing sources, rates, or journals.",
+          title: t("notifications.bookRefreshRunning.title"),
+          body: t("notifications.bookRefreshRunning.body"),
           tone: "info",
         });
         return;
@@ -914,6 +906,7 @@ export function AppShell() {
       isDaemonKindMutating,
       isSyncing,
       syncAll,
+      t,
     ],
   );
 
@@ -936,7 +929,7 @@ export function AppShell() {
       if (!action) return;
       event.preventDefault();
       if (action === "add-wallet") {
-        openAddWalletConnection("Opened from keyboard shortcut");
+        openAddWalletConnection(t("search.actionReason.fromKeyboard"));
         return;
       }
       if (action === "process-journals") {
@@ -948,7 +941,7 @@ export function AppShell() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [openAddWalletConnection, runMenuJournalProcessing, runMenuWalletSync]);
+  }, [openAddWalletConnection, runMenuJournalProcessing, runMenuWalletSync, t]);
 
   React.useEffect(() => {
     if (identity) return;
@@ -1035,7 +1028,7 @@ export function AppShell() {
         setImportRootError(
           error instanceof Error
             ? error.message
-            : "Could not open the selected local books folder.",
+            : t("importRoot.couldNotOpen"),
         );
         setLocked(true);
       });
@@ -1048,6 +1041,7 @@ export function AppShell() {
     encryptedWorkspace,
     importedProjectRoot,
     appLockPolicy.requirePassphraseOnLaunch,
+    t,
   ]);
 
   React.useEffect(() => {
@@ -1189,7 +1183,7 @@ export function AppShell() {
               increaseAppScale: store.increaseAppScale,
               resetAppScale: store.resetAppScale,
               runAddWalletConnection: () =>
-                openAddWalletConnection("Opened from native menu"),
+                openAddWalletConnection(t("search.actionReason.fromNativeMenu")),
               runWalletSync: runMenuWalletSync,
               runJournalProcessing: runMenuJournalProcessing,
               addNotification,
@@ -1229,6 +1223,7 @@ export function AppShell() {
     aiFeaturesEnabled,
     addNotification,
     setHideSensitive,
+    t,
   ]);
 
   React.useEffect(() => {
@@ -1296,7 +1291,7 @@ export function AppShell() {
             href="#app-main"
             className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:text-foreground focus:ring-2 focus:ring-ring"
           >
-            Skip to main content
+            {t("shell.skipToContent")}
           </a>
           <AppDashboardHeader
             meta={routeMeta}
@@ -1475,6 +1470,7 @@ function AppSidebar({
   aiFeaturesEnabled: boolean;
   developerToolsEnabled: boolean;
 }) {
+  const { t } = useTranslation("nav");
   const navGroups = React.useMemo(
     () =>
       NAV_GROUPS.map((group) => ({
@@ -1494,12 +1490,12 @@ function AppSidebar({
     >
       <SidebarContent>
         {navGroups.map((group) => (
-          <SidebarGroup key={group.title}>
-            <SidebarGroupLabel>{group.title}</SidebarGroupLabel>
+          <SidebarGroup key={group.titleKey}>
+            <SidebarGroupLabel>{t(group.titleKey)}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {group.items.map((item) => (
-                  <NavMenuItem key={item.label} item={item} pathname={pathname} />
+                  <NavMenuItem key={item.labelKey} item={item} pathname={pathname} />
                 ))}
               </SidebarMenu>
             </SidebarGroupContent>
@@ -1526,6 +1522,7 @@ function SidebarActions({
   pathname: string;
   developerToolsEnabled: boolean;
 }) {
+  const { t } = useTranslation("chrome");
   const dataMode = useUiStore((state) => state.dataMode);
   const setDataMode = useUiStore((state) => state.setDataMode);
   const isRealData = dataMode === "real";
@@ -1537,11 +1534,11 @@ function SidebarActions({
         <SidebarMenuButton
           asChild
           isActive={pathname === "/activity"}
-          tooltip="Activity"
+          tooltip={t("nav:book.activity")}
         >
           <Link to="/activity">
             <History className="size-4" aria-hidden="true" />
-            <span>Activity</span>
+            <span>{t("nav:book.activity")}</span>
           </Link>
         </SidebarMenuButton>
       </SidebarMenuItem>
@@ -1550,11 +1547,11 @@ function SidebarActions({
           <SidebarMenuButton
             asChild
             isActive={pathname === "/logs"}
-            tooltip="Logs"
+            tooltip={t("nav:book.logs")}
           >
             <Link to="/logs">
               <TerminalSquare className="size-4" aria-hidden="true" />
-              <span>Logs</span>
+              <span>{t("nav:book.logs")}</span>
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
@@ -1563,11 +1560,11 @@ function SidebarActions({
         <div className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
           <Server className="size-4 shrink-0" aria-hidden="true" />
           <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">
-            {isRealData ? "Real data" : "Mock data"}
+            {isRealData ? t("shell.dataMode.real") : t("shell.dataMode.mock")}
           </span>
           <Switch
             checked={isRealData}
-            aria-label="Toggle real data mode"
+            aria-label={t("shell.dataMode.toggle")}
             onCheckedChange={(checked) =>
               setDataMode(checked ? "real" : "mock")
             }
@@ -1579,9 +1576,9 @@ function SidebarActions({
         <Collapsible asChild defaultOpen={supportActive} className="group/collapsible">
           <div>
             <CollapsibleTrigger asChild>
-              <SidebarMenuButton isActive={supportActive} tooltip="Support">
+              <SidebarMenuButton isActive={supportActive} tooltip={t("shell.support.title")}>
                 <LifeBuoy className="size-4" aria-hidden="true" />
-                <span>Support</span>
+                <span>{t("shell.support.title")}</span>
                 <ChevronRight className="ml-auto size-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
               </SidebarMenuButton>
             </CollapsibleTrigger>
@@ -1595,7 +1592,7 @@ function SidebarActions({
                       rel="noreferrer"
                     >
                       <Bug className="size-3.5" aria-hidden="true" />
-                      <span>Bug report</span>
+                      <span>{t("shell.support.bugReport")}</span>
                     </a>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
@@ -1603,7 +1600,7 @@ function SidebarActions({
                   <SidebarMenuSubButton asChild>
                     <a href="#donate">
                       <Heart className="size-3.5" aria-hidden="true" />
-                      <span>Donate sats</span>
+                      <span>{t("shell.support.donateSats")}</span>
                     </a>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
@@ -1616,9 +1613,9 @@ function SidebarActions({
         <Collapsible asChild className="group/collapsible">
           <div>
             <CollapsibleTrigger asChild>
-              <SidebarMenuButton tooltip="Extras">
+              <SidebarMenuButton tooltip={t("shell.extras.title")}>
                 <Plus className="size-4" aria-hidden="true" />
-                <span>Extras</span>
+                <span>{t("shell.extras.title")}</span>
                 <ChevronRight className="ml-auto size-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
               </SidebarMenuButton>
             </CollapsibleTrigger>
@@ -1631,7 +1628,7 @@ function SidebarActions({
                   >
                     <button type="button" disabled>
                       <Calculator className="size-3.5" aria-hidden="true" />
-                      <span>ManySats</span>
+                      <span>{t("shell.extras.manySats")}</span>
                     </button>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
@@ -1642,7 +1639,7 @@ function SidebarActions({
                   >
                     <Link to="/exit-tax">
                       <LogOut className="size-3.5" aria-hidden="true" />
-                      <span>Exit-Calculator</span>
+                      <span>{t("shell.extras.exitCalculator")}</span>
                     </Link>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
@@ -1655,11 +1652,11 @@ function SidebarActions({
         <SidebarMenuButton
           asChild
           isActive={pathname === "/settings"}
-          tooltip="Settings"
+          tooltip={t("nav:book.settings")}
         >
           <Link to="/settings">
             <Settings className="size-4" aria-hidden="true" />
-            <span>Settings</span>
+            <span>{t("nav:book.settings")}</span>
           </Link>
         </SidebarMenuButton>
       </SidebarMenuItem>
@@ -1674,6 +1671,7 @@ function NavMenuItem({
   item: NavItem;
   pathname: string;
 }) {
+  const { t } = useTranslation("nav");
   const Icon = item.icon;
   const childActive = item.children?.some(
     (child) => pathname === child.href || pathname.startsWith(`${child.href}/`),
@@ -1691,10 +1689,10 @@ function NavMenuItem({
   if (!item.children?.length) {
     return (
       <SidebarMenuItem>
-        <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
+        <SidebarMenuButton asChild isActive={active} tooltip={t(item.labelKey)}>
           <Link to={item.href}>
             <Icon className="size-4" aria-hidden="true" />
-            <span>{item.label}</span>
+            <span>{t(item.labelKey)}</span>
           </Link>
         </SidebarMenuButton>
       </SidebarMenuItem>
@@ -1710,9 +1708,9 @@ function NavMenuItem({
     >
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
-          <SidebarMenuButton isActive={active} tooltip={item.label}>
+          <SidebarMenuButton isActive={active} tooltip={t(item.labelKey)}>
             <Icon className="size-4" aria-hidden="true" />
-            <span>{item.label}</span>
+            <span>{t(item.labelKey)}</span>
             <ChevronRight className="ml-auto size-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
           </SidebarMenuButton>
         </CollapsibleTrigger>
@@ -1722,10 +1720,10 @@ function NavMenuItem({
               const childActive =
                 pathname === child.href || pathname.startsWith(`${child.href}/`);
               return (
-                <SidebarMenuSubItem key={child.label}>
+                <SidebarMenuSubItem key={child.labelKey}>
                   <SidebarMenuSubButton asChild isActive={childActive}>
                     <Link to={child.href}>
-                      {child.label}
+                      {t(child.labelKey)}
                     </Link>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
@@ -1745,6 +1743,7 @@ function NavUser({
   onLock: () => void;
   daemonEnabled: boolean;
 }) {
+  const { t } = useTranslation("chrome");
   const identity = useUiStore((s) => s.identity);
   const { data } = useDaemon<OverviewSnapshot>(
     "ui.overview.snapshot",
@@ -1752,8 +1751,13 @@ function NavUser({
     { enabled: daemonEnabled },
   );
   const status = data?.data?.status;
-  const name = status?.workspace ?? identity?.workspace ?? "My Books";
-  const detail = status?.profile ?? identity?.profile ?? identity?.name ?? "Private";
+  const name =
+    status?.workspace ?? identity?.workspace ?? t("shell.user.fallbackWorkspace");
+  const detail =
+    status?.profile ??
+    identity?.profile ??
+    identity?.name ??
+    t("shell.user.fallbackProfile");
 
   return (
     <SidebarMenu>
@@ -1814,13 +1818,13 @@ function NavUser({
             <DropdownMenuItem asChild>
               <Link to="/books">
                 <User className="mr-2 size-4" aria-hidden="true" />
-                Books
+                {t("shell.user.books")}
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => onLock()}>
               <LogOut className="mr-2 size-4" aria-hidden="true" />
-              Lock Kassiber
+              {t("shell.lockKassiber")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -1830,6 +1834,7 @@ function NavUser({
 }
 
 function AppVersion() {
+  const { t } = useTranslation("chrome");
   return (
     <a
       href="https://github.com/bitcoinaustria/kassiber"
@@ -1837,13 +1842,18 @@ function AppVersion() {
       rel="noreferrer"
       title={
         APP_IS_DEV_BUILD
-          ? `Kassiber local dev build (${APP_COMMIT})`
-          : `Kassiber v${APP_VERSION} (${APP_COMMIT})`
+          ? t("shell.version.devTitle", { commit: APP_COMMIT })
+          : t("shell.version.releaseTitle", {
+              version: APP_VERSION,
+              commit: APP_COMMIT,
+            })
       }
       className="inline-flex items-center justify-center gap-1 px-2 pb-1 text-center text-[11px] leading-none text-muted-foreground underline-offset-4 hover:text-foreground hover:underline group-data-[collapsible=icon]:hidden"
     >
       <span>
-        {APP_IS_DEV_BUILD ? "Kassiber dev" : `Kassiber v${APP_VERSION}`}
+        {APP_IS_DEV_BUILD
+          ? t("shell.version.devLabel")
+          : t("shell.version.releaseLabel", { version: APP_VERSION })}
       </span>
       <span aria-hidden="true">·</span>
       <span className="font-mono text-[11px] leading-none">
@@ -1862,6 +1872,7 @@ function AppDashboardHeader({
   onLock: () => void;
   daemonEnabled: boolean;
 }) {
+  const { t } = useTranslation("chrome");
   const { state: sidebarState } = useSidebar();
   const navigate = useNavigate();
   const hideSensitive = useUiStore((s) => s.hideSensitive);
@@ -1930,7 +1941,7 @@ function AppDashboardHeader({
         case "import-btcpay":
           setDeferredConnectionSetup({
             sourceId: actionId === "import-btcpay" ? "btcpay" : "descriptor",
-            reason: "Opened from global search",
+            reason: t("search.actionReason.fromSearch"),
           });
           void navigate({ to: "/connections" });
           return;
@@ -1938,7 +1949,7 @@ function AppDashboardHeader({
           exhaustiveSearchAction(actionId);
       }
     },
-    [navigate, runJournalProcessing, setDeferredConnectionSetup],
+    [navigate, runJournalProcessing, setDeferredConnectionSetup, t],
   );
   const activateSearchResult = React.useCallback(
     (result: RankedSearchResult | undefined) => {
@@ -2016,12 +2027,12 @@ function AppDashboardHeader({
       ? [
           {
             id: "journals-stale",
-            title: "Ledger needs processing",
-            body: "Reports are not trusted until journal processing runs.",
+            title: t("notifications.ledgerStale.title"),
+            body: t("notifications.ledgerStale.body"),
             tone: "warning" as const,
             to: "/journals" as const,
             action: "process-journals" as const,
-            actionLabel: "Process now",
+            actionLabel: t("notifications.ledgerStale.action"),
           },
         ]
       : []),
@@ -2029,8 +2040,10 @@ function AppDashboardHeader({
       ? [
           {
             id: "quarantines",
-            title: "Transactions quarantined",
-            body: `${snapshot?.status?.quarantines ?? 0} transactions need review.`,
+            title: t("notifications.quarantined.title"),
+            body: t("notifications.quarantined.body", {
+              count: snapshot?.status?.quarantines ?? 0,
+            }),
             tone: "warning" as const,
             to: "/quarantine" as const,
           },
@@ -2053,7 +2066,9 @@ function AppDashboardHeader({
       item.title.toLowerCase().includes("sync"),
   ).length;
   const bookLabel =
-    snapshot?.status?.profile ?? snapshot?.status?.workspace ?? "Local books";
+    snapshot?.status?.profile ??
+    snapshot?.status?.workspace ??
+    t("shell.booksFallback");
   const reviewCount = snapshot?.status?.quarantines ?? 0;
   const sidebarCollapsed = sidebarState === "collapsed";
   const needsJournals = Boolean(snapshot?.status?.needsJournals);
@@ -2065,8 +2080,8 @@ function AppDashboardHeader({
         : "";
   const notificationLabel =
     notificationCount > 0
-      ? `Notifications (${notificationCount} active)`
-      : "Notifications";
+      ? t("notifications.labelActive", { count: notificationCount })
+      : t("notifications.label");
 
   return (
     <header
@@ -2075,7 +2090,7 @@ function AppDashboardHeader({
       <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
         <Link
           to="/overview"
-          aria-label="Kassiber overview"
+          aria-label={t("shell.overviewLink")}
           className={cn(
             "flex h-8 shrink-0 items-center rounded-md text-sidebar-foreground hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
             sidebarCollapsed ? "w-8 justify-center" : "gap-2 pr-1.5",
@@ -2110,7 +2125,7 @@ function AppDashboardHeader({
             variant="ghost"
             size="icon"
             className={topNavIconButtonClassName}
-            aria-label="Back"
+            aria-label={t("shell.back")}
             onClick={() => window.history.back()}
           >
             <ArrowLeft className="size-4" aria-hidden="true" />
@@ -2120,7 +2135,7 @@ function AppDashboardHeader({
             variant="ghost"
             size="icon"
             className={topNavIconButtonClassName}
-            aria-label="Forward"
+            aria-label={t("shell.forward")}
             onClick={() => window.history.forward()}
           >
             <ArrowRight className="size-4" aria-hidden="true" />
@@ -2133,7 +2148,7 @@ function AppDashboardHeader({
               variant="ghost"
               size="sm"
               className="group flex min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-sidebar-accent/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-              aria-label={`Switch books. Current books: ${bookLabel}`}
+              aria-label={t("shell.switchBooksLabel", { book: bookLabel })}
               aria-haspopup="dialog"
               aria-expanded={bookSwitcherOpen}
               onClick={() => setBookSwitcherOpen(true)}
@@ -2150,7 +2165,7 @@ function AppDashboardHeader({
               /
             </span>
             <span className="hidden truncate text-sm text-sidebar-foreground/65 xl:inline">
-              {meta.title}
+              {t(meta.titleKey)}
             </span>
           </div>
         </div>
@@ -2183,11 +2198,11 @@ function AppDashboardHeader({
             name="header-search"
             inputMode="search"
             autoComplete="off"
-            aria-label={meta.searchLabel}
+            aria-label={t(`${meta.searchKey}.label`)}
             aria-expanded={searchOpen}
             aria-controls={searchListId}
             aria-activedescendant={searchActiveId}
-            placeholder="Search pages, actions, transactions..."
+            placeholder={t(`${meta.searchKey}.placeholder`)}
             value={searchQuery}
             onChange={(event) => {
               setSearchQuery(event.target.value);
@@ -2263,7 +2278,9 @@ function AppDashboardHeader({
                             {result.title}
                           </span>
                           <span className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                            {SEARCH_CATEGORY_LABELS[result.category]}
+                            {t(
+                              `search.category.${SEARCH_CATEGORY_LABEL_KEYS[result.category]}`,
+                            )}
                           </span>
                         </span>
                         {result.subtitle ? (
@@ -2277,7 +2294,7 @@ function AppDashboardHeader({
                 })
               ) : (
                 <div className="px-3 py-2 text-sm text-muted-foreground">
-                  No matches
+                  {t("shell.searchNoMatches")}
                 </div>
               )}
             </div>
@@ -2308,7 +2325,7 @@ function AppDashboardHeader({
           <DropdownMenuContent align="end" className="w-80">
             <div className="flex items-center justify-between gap-2 px-2 py-1.5">
               <DropdownMenuLabel className="p-0">
-                Notifications
+                {t("notifications.label")}
               </DropdownMenuLabel>
               <Button
                 type="button"
@@ -2321,7 +2338,7 @@ function AppDashboardHeader({
                   clearNotifications();
                 }}
               >
-                Clear all
+                {t("notifications.clearAll")}
               </Button>
             </div>
             <DropdownMenuSeparator />
@@ -2386,7 +2403,7 @@ function AppDashboardHeader({
                     }}
                   >
                     {isProcessingJournals
-                      ? "Processing..."
+                      ? t("notifications.processing")
                       : item.actionLabel}
                   </Button>
                 ) : null}
@@ -2404,11 +2421,9 @@ function AppDashboardHeader({
               ? "size-8 bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/85 hover:text-sidebar-foreground"
               : topNavIconButtonClassName
           }
-          aria-label={
-            hideSensitive ? "Show sensitive data" : "Hide sensitive data"
-          }
+          aria-label={hideSensitive ? t("sensitive.show") : t("sensitive.hide")}
           aria-pressed={hideSensitive}
-          title={hideSensitive ? "Show sensitive data" : "Hide sensitive data"}
+          title={hideSensitive ? t("sensitive.show") : t("sensitive.hide")}
           onClick={() => setHideSensitive(!hideSensitive)}
         >
           {hideSensitive ? (
@@ -2422,8 +2437,8 @@ function AppDashboardHeader({
           variant="ghost"
           size="icon"
           className={topNavIconButtonClassName}
-          aria-label="Lock Kassiber"
-          title="Lock Kassiber (Cmd/Ctrl+L)"
+          aria-label={t("shell.lockKassiber")}
+          title={t("shell.lockKassiberTitle")}
           onClick={onLock}
         >
           <LockKeyhole className="size-4" aria-hidden="true" />
@@ -2434,6 +2449,7 @@ function AppDashboardHeader({
 }
 
 function ThemeMenu() {
+  const { t } = useTranslation("chrome");
   const theme = useUiStore((state) => state.theme);
   const setTheme = useUiStore((state) => state.setTheme);
   const Icon = theme === "dark" ? Moon : theme === "light" ? Sun : SunMoon;
@@ -2445,14 +2461,14 @@ function ThemeMenu() {
           variant="ghost"
           size="icon"
           className={topNavIconButtonClassName}
-          aria-label="Theme"
-          title="Theme"
+          aria-label={t("theme.label")}
+          title={t("theme.label")}
         >
           <Icon className="size-4" aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40">
-        <DropdownMenuLabel>Theme</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("theme.label")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuRadioGroup
           value={theme}
@@ -2460,15 +2476,15 @@ function ThemeMenu() {
         >
           <DropdownMenuRadioItem value="system">
             <SunMoon className="size-4" aria-hidden="true" />
-            System
+            {t("theme.system")}
           </DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="light">
             <Sun className="size-4" aria-hidden="true" />
-            Light
+            {t("theme.light")}
           </DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="dark">
             <Moon className="size-4" aria-hidden="true" />
-            Dark
+            {t("theme.dark")}
           </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
@@ -2477,12 +2493,19 @@ function ThemeMenu() {
 }
 
 function CurrencyToggle() {
+  const { t } = useTranslation("chrome");
   const currency = useUiStore((state) => state.currency);
   const setCurrency = useUiStore((state) => state.setCurrency);
   const symbol = currency === "btc" ? "₿" : "€";
-  const currentLabel = currency === "btc" ? "bitcoin" : "euro";
+  const currentLabel =
+    currency === "btc"
+      ? t("currencyToggle.bitcoin")
+      : t("currencyToggle.euro");
   const nextCurrency = currency === "btc" ? "eur" : "btc";
-  const nextLabel = nextCurrency === "btc" ? "bitcoin" : "euro";
+  const nextLabel =
+    nextCurrency === "btc"
+      ? t("currencyToggle.bitcoin")
+      : t("currencyToggle.euro");
 
   return (
     <Button
@@ -2490,9 +2513,15 @@ function CurrencyToggle() {
       variant="ghost"
       size="icon"
       className={topNavIconButtonClassName}
-      aria-label={`Display currency is ${currentLabel}. Switch to ${nextLabel}.`}
+      aria-label={t("currencyToggle.label", {
+        current: currentLabel,
+        next: nextLabel,
+      })}
       aria-pressed={currency === "btc"}
-      title={`Display currency: ${currentLabel}. Switch to ${nextLabel}.`}
+      title={t("currencyToggle.title", {
+        current: currentLabel,
+        next: nextLabel,
+      })}
       onClick={() => setCurrency(nextCurrency)}
     >
       <span aria-hidden="true" className="text-sm font-semibold leading-none">
@@ -2526,6 +2555,7 @@ function LockScreen({
   autoTouchIdPrompt: boolean;
   onReset: () => void;
 }) {
+  const { t } = useTranslation("chrome");
   const [passphrase, setPassphrase] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
@@ -2566,7 +2596,7 @@ function LockScreen({
         rememberWithTouchId: canEnrollTouchId ? enrollTouchId : undefined,
       });
       if (!result.ok) {
-        setError(result.error ?? "Passphrase did not unlock this session.");
+        setError(result.error ?? t("lock.passphraseFailed"));
         setPassphrase("");
         if (passphraseRequired) inputRef.current?.focus();
       }
@@ -2583,7 +2613,7 @@ function LockScreen({
     try {
       const result = await onTouchIdUnlock();
       if (!result.ok) {
-        setError(result.error ?? "Touch ID did not unlock this session.");
+        setError(result.error ?? t("lock.touchIdFailed"));
       } else {
         keepPending = true;
       }
@@ -2592,7 +2622,7 @@ function LockScreen({
         setTouchIdSubmitting(false);
       }
     }
-  }, [onTouchIdUnlock, submitting, touchIdSubmitting]);
+  }, [onTouchIdUnlock, submitting, t, touchIdSubmitting]);
 
   React.useEffect(() => {
     if (!autoTouchIdPrompt || !canUseTouchId) return;
@@ -2616,18 +2646,18 @@ function LockScreen({
           <div>
             <h2 className="text-base font-semibold">
               {passphraseRequired
-                ? "Database passphrase required"
-                : "Books locked"}
+                ? t("lock.passphraseRequiredTitle")
+                : t("lock.booksLocked")}
             </h2>
             <p className="m-0 text-xs text-muted-foreground">
-              {reason ?? "Enter the database passphrase to unlock."}
+              {reason ?? t("lock.defaultReason")}
             </p>
           </div>
         </div>
         {passphraseRequired && touchIdSubmitting ? (
           <div className="mt-5 flex items-center gap-3 rounded-md border bg-background p-3 text-sm text-muted-foreground">
             <Fingerprint className="size-4 text-foreground" aria-hidden="true" />
-            <span>Unlocking with Touch ID...</span>
+            <span>{t("lock.unlockingTouchId")}</span>
           </div>
         ) : passphraseRequired ? (
           <div className="mt-5 space-y-2">
@@ -2635,7 +2665,7 @@ function LockScreen({
               htmlFor="lock-passphrase"
               className="text-sm font-medium text-foreground"
             >
-              Passphrase
+              {t("lock.passphrase")}
             </label>
             <Input
               id="lock-passphrase"
@@ -2652,8 +2682,10 @@ function LockScreen({
             touchIdStatus?.available === false ? (
               <p className="m-0 text-xs text-muted-foreground">
                 {touchIdStatus.reason
-                  ? `Touch ID unlock is unavailable: ${touchIdStatus.reason}`
-                  : "Touch ID unlock is unavailable for this desktop session."}
+                  ? t("lock.touchIdUnavailableReason", {
+                      reason: touchIdStatus.reason,
+                    })
+                  : t("lock.touchIdUnavailable")}
               </p>
             ) : null}
             {touchIdEnabled &&
@@ -2662,8 +2694,10 @@ function LockScreen({
             !touchIdStatus.configured ? (
               <p className="m-0 text-xs text-muted-foreground">
                 {touchIdStatus.reason
-                  ? `Touch ID unlock is not set up: ${touchIdStatus.reason}`
-                  : "No Touch ID passphrase is saved for these books. Unlock once with the passphrase to save it again."}
+                  ? t("lock.touchIdNotSetUpReason", {
+                      reason: touchIdStatus.reason,
+                    })
+                  : t("lock.touchIdNotSetUp")}
               </p>
             ) : null}
             {canEnrollTouchId ? (
@@ -2673,11 +2707,10 @@ function LockScreen({
               >
                 <span className="min-w-0">
                   <span className="block text-sm font-medium text-foreground">
-                    Use Touch ID next time
+                    {t("lock.useTouchIdNextTime")}
                   </span>
                   <span className="block text-xs leading-5 text-muted-foreground">
-                    Save this database passphrase in macOS Keychain behind
-                    local user presence.
+                    {t("lock.useTouchIdNextTimeBody")}
                   </span>
                 </span>
                 <Switch
@@ -2708,8 +2741,8 @@ function LockScreen({
           >
             <Fingerprint className="size-4" aria-hidden="true" />
             {touchIdSubmitting
-              ? "Waiting for Touch ID..."
-              : "Unlock with Touch ID"}
+              ? t("lock.waitingForTouchId")
+              : t("lock.unlockWithTouchId")}
           </Button>
         ) : null}
         <Button
@@ -2718,10 +2751,10 @@ function LockScreen({
           disabled={submitting || touchIdSubmitting}
         >
           {submitting
-            ? "Unlocking..."
+            ? t("lock.unlocking")
             : passphraseRequired
-              ? "Unlock"
-              : "Open books"}
+              ? t("lock.unlock")
+              : t("lock.openBooks")}
         </Button>
         <Button
           className="mt-2 w-full"
@@ -2730,7 +2763,7 @@ function LockScreen({
           disabled={submitting}
           onClick={onReset}
         >
-          Back to setup
+          {t("lock.backToSetup")}
         </Button>
       </form>
     </div>
@@ -2744,6 +2777,7 @@ function ImportRootRestoreScreen({
   error: string | null;
   onReset: () => void;
 }) {
+  const { t } = useTranslation("chrome");
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background px-4 text-foreground">
       <div className="w-full max-w-sm rounded-lg border border-border bg-card p-5 text-card-foreground shadow-xl ring-1 ring-border/60">
@@ -2752,9 +2786,9 @@ function ImportRootRestoreScreen({
             <Database className="size-5" aria-hidden="true" />
           </div>
           <div>
-            <h2 className="text-base font-semibold">Opening local books</h2>
+            <h2 className="text-base font-semibold">{t("importRoot.title")}</h2>
             <p className="m-0 text-xs text-muted-foreground">
-              Restoring the selected Kassiber data root.
+              {t("importRoot.body")}
             </p>
           </div>
         </div>
@@ -2762,7 +2796,7 @@ function ImportRootRestoreScreen({
           <>
             <p className="mt-4 text-xs text-destructive">{error}</p>
             <Button className="mt-5 w-full" type="button" onClick={onReset}>
-              Back to setup
+              {t("importRoot.backToSetup")}
             </Button>
           </>
         ) : (

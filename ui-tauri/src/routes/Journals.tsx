@@ -1,5 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import {
   BookOpen,
   FileText,
@@ -77,6 +79,7 @@ const eur = new Intl.NumberFormat("de-AT", {
 const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
 export function Journals() {
+  const { t } = useTranslation("journals");
   const navigate = useNavigate();
   const { data, isLoading, isError, error } = useDaemon<JournalsSnapshot>(
     "ui.journals.snapshot",
@@ -95,12 +98,13 @@ export function Journals() {
     return (
       <div className={screenPanelClassName}>
         <div className="rounded-xl border bg-card p-4">
-          <h2 className="text-base font-semibold">Ledger unavailable</h2>
+          <h2 className="text-base font-semibold">
+            {t("ledger.unavailable.title")}
+          </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {error instanceof Error
               ? error.message
-              : data?.error?.message ??
-                "The daemon did not return journal data."}
+              : data?.error?.message ?? t("ledger.unavailable.fallback")}
           </p>
         </div>
       </div>
@@ -109,7 +113,7 @@ export function Journals() {
 
   const snapshot = data.data;
   const status = snapshot.status;
-  const readiness = journalReadiness(status);
+  const readiness = journalReadiness(status, t);
   const displayEntryTypes = groupEntryTypesForDisplay(snapshot.entryTypes);
   const maxEntryCount = Math.max(
     ...displayEntryTypes.map((entry) => entry.count),
@@ -123,11 +127,14 @@ export function Journals() {
     : null;
   const filteredJournalEntryCount =
     filteredEntryType?.count ?? status.journalEntryCount;
-  const journalRowsDescription = describeJournalRows({
-    rowCount: filteredRecent.length,
-    totalCount: filteredJournalEntryCount,
-    entryTypeFilter,
-  });
+  const journalRowsDescription = describeJournalRows(
+    {
+      rowCount: filteredRecent.length,
+      totalCount: filteredJournalEntryCount,
+      entryTypeFilter,
+    },
+    t,
+  );
   const openTransaction = (entry: RecentJournalEntry) => {
     if (!entry.transactionId) return;
     void navigate({
@@ -140,8 +147,10 @@ export function Journals() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
-            <TabsTrigger value="state">State</TabsTrigger>
-            <TabsTrigger value="reportable">Ledger entries</TabsTrigger>
+            <TabsTrigger value="state">{t("ledger.tabs.state")}</TabsTrigger>
+            <TabsTrigger value="reportable">
+              {t("ledger.tabs.reportable")}
+            </TabsTrigger>
           </TabsList>
           {activeTab === "state" ? (
             <div className="flex flex-wrap gap-2">
@@ -149,14 +158,14 @@ export function Journals() {
                 <Button asChild variant="outline" className="h-8">
                   <Link to="/quarantine">
                     <ShieldAlert className="size-4" aria-hidden="true" />
-                    Quarantine
+                    {t("nav:book.quarantine")}
                   </Link>
                 </Button>
               ) : null}
               <Button asChild variant="outline" className="h-8">
                 <Link to="/reports">
                   <FileText className="size-4" aria-hidden="true" />
-                  Reports
+                  {t("nav:book.reports")}
                 </Link>
               </Button>
               <Button
@@ -170,7 +179,7 @@ export function Journals() {
                 ) : (
                   <RefreshCw className="size-4" aria-hidden="true" />
                 )}
-                Process journals
+                {t("ledger.actions.processJournals")}
               </Button>
             </div>
           ) : null}
@@ -180,27 +189,31 @@ export function Journals() {
           <div className="rounded-xl border bg-card">
             <div className="grid grid-cols-2 divide-x-0 divide-y divide-border sm:grid-cols-4 sm:divide-x sm:divide-y-0">
               <JournalMetric
-                label="Status"
+                label={t("ledger.metric.status")}
                 value={readiness.label}
                 sub={readiness.detail}
                 tone={readiness.tone}
               />
               <JournalMetric
-                label="Transactions"
+                label={t("ledger.metric.transactions")}
                 value={status.transactionCount.toLocaleString("en-US")}
-                sub="input rows"
+                sub={t("ledger.metric.transactionsSub")}
                 tone="neutral"
               />
               <JournalMetric
-                label="Journal entries"
+                label={t("ledger.metric.journalEntries")}
                 value={status.journalEntryCount.toLocaleString("en-US")}
-                sub="processed rows"
+                sub={t("ledger.metric.journalEntriesSub")}
                 tone={status.journalEntryCount ? "good" : "neutral"}
               />
               <JournalMetric
-                label="Quarantine"
+                label={t("ledger.metric.quarantine")}
                 value={status.quarantines.toLocaleString("en-US")}
-                sub={status.quarantines ? "held from reports" : "clear"}
+                sub={
+                  status.quarantines
+                    ? t("ledger.metric.quarantineHeld")
+                    : t("ledger.metric.quarantineClear")
+                }
                 tone={status.quarantines ? "alert" : "good"}
               />
             </div>
@@ -211,10 +224,10 @@ export function Journals() {
               <div className="border-b p-3 sm:px-4">
                 <h2 className="flex items-center gap-2 text-base font-semibold">
                   <BookOpen className="size-4" aria-hidden="true" />
-                  Entry mix
+                  {t("ledger.entryMix.title")}
                 </h2>
                 <p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">
-                  Current processed journal composition.
+                  {t("ledger.entryMix.description")}
                 </p>
               </div>
               <div className="space-y-2.5 p-3 sm:p-4">
@@ -239,12 +252,16 @@ export function Journals() {
                       <div className="flex items-baseline justify-between gap-3">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium">
-                            {formatEntryType(entry.type)}
+                            {localizedEntryType(entry.type, t)}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {entry.type === "transfer"
-                              ? `${entry.count.toLocaleString("en-US")} in/out rows`
-                              : `${entry.count.toLocaleString("en-US")} rows`}
+                              ? t("ledger.entryMix.transferRows", {
+                                  count: entry.count,
+                                })
+                              : t("ledger.entryMix.rows", {
+                                  count: entry.count,
+                                })}
                           </p>
                         </div>
                         <p
@@ -271,7 +288,7 @@ export function Journals() {
                   ))
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    No processed journal rows yet.
+                    {t("ledger.entryMix.empty")}
                   </p>
                 )}
               </div>
@@ -280,7 +297,9 @@ export function Journals() {
             <div className="min-w-0 rounded-xl border bg-card">
               <div className="flex items-start justify-between gap-3 border-b p-3 sm:px-4">
                 <div className="min-w-0">
-                  <h2 className="text-base font-semibold">Journal entries</h2>
+                  <h2 className="text-base font-semibold">
+                    {t("ledger.entries.title")}
+                  </h2>
                   <p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">
                     {journalRowsDescription}
                   </p>
@@ -293,7 +312,7 @@ export function Journals() {
                     className="h-8 shrink-0"
                     onClick={() => setActiveTab("reportable")}
                   >
-                    View ledger entries
+                    {t("ledger.actions.viewLedgerEntries")}
                   </Button>
                 ) : null}
               </div>
@@ -301,17 +320,23 @@ export function Journals() {
                 <Table className="min-w-[840px]">
                   <TableHeader>
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
-                      <TableHead className="w-[130px]">Date</TableHead>
-                      <TableHead className="w-[150px]">Type</TableHead>
-                      <TableHead className="min-w-[180px]">Wallet</TableHead>
+                      <TableHead className="w-[130px]">
+                        {t("common:field.date")}
+                      </TableHead>
+                      <TableHead className="w-[150px]">
+                        {t("common:field.type")}
+                      </TableHead>
+                      <TableHead className="min-w-[180px]">
+                        {t("ledger.entries.column.wallet")}
+                      </TableHead>
                       <TableHead className="w-[170px] text-right">
-                        Quantity
+                        {t("ledger.entries.column.quantity")}
                       </TableHead>
                       <TableHead className="w-[130px] text-right">
-                        Fiat
+                        {t("ledger.entries.column.fiat")}
                       </TableHead>
                       <TableHead className="w-[130px] text-right">
-                        Gain/Loss
+                        {t("ledger.entries.column.gainLoss")}
                       </TableHead>
                     </TableRow>
                   </TableHeader>
@@ -326,7 +351,12 @@ export function Journals() {
                           tabIndex={canOpenTransaction ? 0 : undefined}
                           aria-label={
                             canOpenTransaction
-                              ? `Open transaction for ${formatEntryType(displayEntryType(entry.type))} journal row`
+                              ? t("ledger.entries.openTransactionAria", {
+                                  type: localizedEntryType(
+                                    displayEntryType(entry.type),
+                                    t,
+                                  ),
+                                })
                               : undefined
                           }
                           className={cn(
@@ -346,12 +376,17 @@ export function Journals() {
                           </TableCell>
                           <TableCell>
                             <div className="grid gap-1">
-                              <span>{formatEntryType(displayEntryType(entry.type))}</span>
+                              <span>
+                                {localizedEntryType(
+                                  displayEntryType(entry.type),
+                                  t,
+                                )}
+                              </span>
                               {isTransferDirection(entry.type) ? (
                                 <span className="text-xs text-muted-foreground">
                                   {entry.type === "transfer_out"
-                                    ? "Outgoing side"
-                                    : "Incoming side"}
+                                    ? t("ledger.entries.outgoingSide")
+                                    : t("ledger.entries.incomingSide")}
                                 </span>
                               ) : null}
                             </div>
@@ -393,8 +428,10 @@ export function Journals() {
                           className="h-24 text-center text-sm text-muted-foreground"
                         >
                           {entryTypeFilter
-                            ? `No recent ${entryTypeDescription(entryTypeFilter)} exposed by the current journal snapshot.`
-                            : "No recent rows exposed by the current journal snapshot."}
+                            ? t("ledger.entries.emptyFiltered", {
+                                label: entryTypeDescription(entryTypeFilter, t),
+                              })
+                            : t("ledger.entries.empty")}
                         </TableCell>
                       </TableRow>
                     )}
@@ -442,35 +479,38 @@ function JournalMetric({
   );
 }
 
-function journalReadiness(status: JournalsSnapshot["status"]): {
+function journalReadiness(
+  status: JournalsSnapshot["status"],
+  t: TFunction<"journals">,
+): {
   label: string;
   detail: string;
   tone: JournalTone;
 } {
   if (status.quarantines > 0) {
     return {
-      label: "Blocked",
-      detail: "review quarantine",
+      label: t("ledger.readiness.blocked"),
+      detail: t("ledger.readiness.blockedDetail"),
       tone: "alert",
     };
   }
   if (status.needsJournals) {
     return {
-      label: "Stale",
-      detail: status.freshnessReason ?? "process before reports",
+      label: t("ledger.readiness.stale"),
+      detail: status.freshnessReason ?? t("ledger.readiness.staleDetail"),
       tone: "warning",
     };
   }
   if (status.journalEntryCount > 0) {
     return {
-      label: "Current",
-      detail: status.freshnessReason ?? "ready for reports",
+      label: t("ledger.readiness.current"),
+      detail: status.freshnessReason ?? t("ledger.readiness.currentDetail"),
       tone: "good",
     };
   }
   return {
-    label: "Empty",
-    detail: "no processed rows",
+    label: t("ledger.readiness.empty"),
+    detail: t("ledger.readiness.emptyDetail"),
     tone: "neutral",
   };
 }
@@ -481,6 +521,25 @@ function formatEntryType(type: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+// Daemon entry-type CODES map to translated labels; unknown codes fall back to
+// a structural humanizer of the code itself (the code is the stable id).
+const ENTRY_TYPE_LABEL_KEYS: Record<string, string> = {
+  acquisition: "ledger.entryType.acquisition",
+  disposal: "ledger.entryType.disposal",
+  income: "ledger.entryType.income",
+  fee: "ledger.entryType.fee",
+  transfer_fee: "ledger.entryType.transferFee",
+  transfer: "ledger.entryType.transfer",
+  transfer_in: "ledger.entryType.transferIn",
+  transfer_out: "ledger.entryType.transferOut",
+  neutral_swap: "ledger.entryType.neutralSwap",
+};
+
+function localizedEntryType(type: string, t: TFunction<"journals">) {
+  const key = ENTRY_TYPE_LABEL_KEYS[type];
+  return key ? t(key) : formatEntryType(type);
+}
+
 function displayEntryType(type: string) {
   return isTransferDirection(type) ? "transfer" : type;
 }
@@ -489,10 +548,12 @@ function isTransferDirection(type: string) {
   return type === "transfer_in" || type === "transfer_out";
 }
 
-function entryTypeDescription(type: string) {
+function entryTypeDescription(type: string, t: TFunction<"journals">) {
   return type === "transfer"
-    ? "transfer in/out rows"
-    : `${formatEntryType(type).toLowerCase()} rows`;
+    ? t("ledger.entries.labelTransferRows")
+    : t("ledger.entries.labelTypedRows", {
+        type: localizedEntryType(type, t),
+      });
 }
 
 function groupEntryTypesForDisplay(
@@ -543,21 +604,24 @@ function sortRecentJournalRows(rows: RecentJournalEntry[]) {
   return [...rows].sort((left, right) => right.date.localeCompare(left.date));
 }
 
-function describeJournalRows({
-  rowCount,
-  totalCount,
-  entryTypeFilter,
-}: {
-  rowCount: number;
-  totalCount: number;
-  entryTypeFilter: string | null;
-}) {
+function describeJournalRows(
+  {
+    rowCount,
+    totalCount,
+    entryTypeFilter,
+  }: {
+    rowCount: number;
+    totalCount: number;
+    entryTypeFilter: string | null;
+  },
+  t: TFunction<"journals">,
+) {
   const total = totalCount.toLocaleString("en-US");
   const rows = rowCount.toLocaleString("en-US");
   const label = entryTypeFilter
-    ? entryTypeDescription(entryTypeFilter)
-    : "processed rows";
-  return `Showing latest ${rows} of ${total} ${label}.`;
+    ? entryTypeDescription(entryTypeFilter, t)
+    : t("ledger.entries.labelProcessedRows");
+  return t("ledger.entries.rowsDescription", { rows, total, label });
 }
 
 const toneTextStyles: Record<JournalTone, string> = {

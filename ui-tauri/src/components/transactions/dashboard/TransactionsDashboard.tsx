@@ -1,5 +1,6 @@
 import { RefreshCw } from "lucide-react";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -71,6 +72,7 @@ const TransactionsDashboard = ({
   deepLinkedQuickFilter?: TableQuickFilter | null;
   onWalletScopeChange?: (wallet: string | null) => void;
 }) => {
+  const { t } = useTranslation("transactions");
   const [period, setPeriod] = React.useState<PeriodKey>(initialPeriodFromUrl);
   const [newTxnOpen, setNewTxnOpen] = React.useState(false);
   const [flowChartSelection, setFlowChartSelection] =
@@ -110,9 +112,9 @@ const TransactionsDashboard = ({
       ) {
         txs.unshift(focusedTransaction);
       }
-      return dashboardRecordsFromTxs(txs);
+      return dashboardRecordsFromTxs(txs, t);
     },
-    [focusedTransaction, transactions.txs],
+    [focusedTransaction, transactions.txs, t],
   );
   const tableSourceRecords = React.useMemo(() => {
     const txs = (tableTransactions ?? transactions).txs.length
@@ -131,8 +133,8 @@ const TransactionsDashboard = ({
     ) {
       txs.unshift(focusedTransaction);
     }
-    return dashboardRecordsFromTxs(txs);
-  }, [focusedTransaction, tableTransactions, transactions]);
+    return dashboardRecordsFromTxs(txs, t);
+  }, [focusedTransaction, tableTransactions, transactions, t]);
   const allPeriodRecords = React.useMemo(
     () => sortTransactionsByDateDesc(records),
     [records],
@@ -244,7 +246,7 @@ const TransactionsDashboard = ({
             variant="outline"
             size="sm"
             className="h-8 gap-2 sm:h-9"
-            aria-label="Refresh book"
+            aria-label={t("dashboard.refreshBook")}
             onClick={() => syncAll()}
             disabled={isSyncing}
           >
@@ -253,7 +255,7 @@ const TransactionsDashboard = ({
               aria-hidden="true"
             />
             <span className="hidden sm:inline">
-              {isSyncing ? "Refreshing" : "Refresh"}
+              {isSyncing ? t("dashboard.refreshing") : t("dashboard.refresh")}
             </span>
           </Button>
           <NewTransactionDialog

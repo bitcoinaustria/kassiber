@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import { cn } from "@/lib/utils";
 import type { ConnectionStatus } from "@/mocks/seed";
 
@@ -6,21 +8,24 @@ interface SyncDotProps {
   className?: string;
 }
 
+// `titleKey` indexes the `chrome:syncDot.*` namespace; keep the keys in sync
+// with the ConnectionStatus union rather than deriving labels from the status.
 const CONFIG: Record<
   ConnectionStatus,
-  { color: string; pulse: boolean; title: string }
+  { color: string; pulse: boolean; titleKey: string }
 > = {
-  synced: { color: "bg-[#3fa66a]", pulse: false, title: "Current" },
-  syncing: { color: "bg-[#c9a43a]", pulse: true, title: "Refreshing" },
-  idle: { color: "bg-ink-3", pulse: false, title: "Idle" },
-  error: { color: "bg-accent", pulse: false, title: "Needs attention" },
+  synced: { color: "bg-[#3fa66a]", pulse: false, titleKey: "synced" },
+  syncing: { color: "bg-[#c9a43a]", pulse: true, titleKey: "syncing" },
+  idle: { color: "bg-ink-3", pulse: false, titleKey: "idle" },
+  error: { color: "bg-accent", pulse: false, titleKey: "error" },
 };
 
 export function SyncDot({ status, className }: SyncDotProps) {
+  const { t } = useTranslation("chrome");
   const cfg = CONFIG[status];
   return (
     <span
-      title={cfg.title}
+      title={t(`syncDot.${cfg.titleKey}`)}
       className={cn(
         "inline-block size-1.5 shrink-0 rounded-full",
         cfg.color,

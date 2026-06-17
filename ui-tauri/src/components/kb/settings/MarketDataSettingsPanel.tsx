@@ -9,6 +9,7 @@ import {
   Upload,
   XCircle,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -51,6 +52,7 @@ import {
 } from "./SettingsModel";
 
 export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
+  const { t } = useTranslation("settings");
   const rateBackends = backends.filter((backend) => backend.net === "FX");
   const maintenanceSettingsQuery = useDaemon<MaintenanceSettingsData>(
     "ui.maintenance.settings",
@@ -87,25 +89,25 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       event.preventDefault();
       void openExternalUrl(url).catch((error) => {
         addNotification({
-          title: "Could not open link",
+          title: t("marketData.openLinkErrorTitle"),
           body:
             error instanceof Error
               ? error.message
-              : "Could not open the link in the default browser.",
+              : t("marketData.openLinkErrorBody"),
           tone: "warning",
         });
       });
     },
-    [addNotification],
+    [addNotification, t],
   );
 
   const chooseKrakenArchive = async () => {
     setKrakenImportError(null);
     const selected = await pickFile({
-      title: "Choose Kraken OHLCVT CSV or ZIP",
+      title: t("marketData.pickArchiveTitle"),
       filters: [
         {
-          name: "Kraken OHLCVT",
+          name: t("marketData.pickArchiveFilterName"),
           extensions: ["zip", "csv"],
         },
       ],
@@ -118,7 +120,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
   const chooseKrakenDirectory = async () => {
     setKrakenImportError(null);
     const selected = await pickFile({
-      title: "Choose extracted Kraken OHLCVT folder",
+      title: t("marketData.pickFolderTitle"),
       directory: true,
     });
     if (selected) {
@@ -140,15 +142,15 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       const selected = await pickFile({
         title:
           operation === "full"
-            ? "Choose extracted Kraken OHLCVT folder"
-            : "Choose Kraken update OHLCVT CSV or ZIP",
+            ? t("marketData.pickFullTitle")
+            : t("marketData.pickUpdateTitle"),
         directory: operation === "full",
         filters:
           operation === "full"
             ? undefined
             : [
                 {
-                  name: "Kraken OHLCVT",
+                  name: t("marketData.pickArchiveFilterName"),
                   extensions: ["zip", "csv"],
                 },
               ],
@@ -159,7 +161,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
     }
 
     if (!options.bundled && !archivePath) {
-      setKrakenImportError("Enter a local Kraken CSV or ZIP path.");
+      setKrakenImportError(t("marketData.importPathError"));
       return;
     }
 
@@ -173,7 +175,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       setKrakenImportResult(envelope.data ?? null);
     } catch (error) {
       setKrakenImportError(
-        error instanceof Error ? error.message : "Kraken import failed.",
+        error instanceof Error ? error.message : t("marketData.importError"),
       );
     } finally {
       setPendingKrakenOperation(null);
@@ -212,12 +214,15 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
     setRateRebuildError(null);
     setRateRebuildResult(null);
     rebuildNoticeRef.current = addNotification({
-      title: "Pricing cache rebuild started",
-      body: `Kassiber is clearing provider-derived prices, fetching fresh ${marketRateProviderLabelText} market rates for ${activeRatePair}, and reprocessing journals.`,
+      title: t("marketData.rebuildStartedTitle"),
+      body: t("marketData.rebuildStartedBody", {
+        provider: marketRateProviderLabelText,
+        pair: activeRatePair,
+      }),
       tone: "warning",
       progress: {
         indeterminate: true,
-        label: "Rebuilding",
+        label: t("marketData.rebuildingProgressLabel"),
       },
     });
     try {
@@ -236,13 +241,17 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
         ) ?? 0;
       const notification = {
         title: journalBlocker
-          ? "Pricing cache rebuilt with journal blocker"
-          : "Pricing cache rebuilt",
+          ? t("marketData.rebuiltBlockedTitle")
+          : t("marketData.rebuiltTitle"),
         body: payload
-          ? `${formatCount(payload.deleted.transaction_prices)} cached transaction prices cleared; ${formatCount(
-              fetchedRows,
-            )} rate rows fetched.${journalBlocker ? ` ${journalBlocker}` : ""}`
-          : `${marketRateProviderLabelText} pricing cache was rebuilt.`,
+          ? t("marketData.rebuiltBody", {
+              cleared: formatCount(payload.deleted.transaction_prices),
+              fetched: formatCount(fetchedRows),
+              blocker: journalBlocker ? ` ${journalBlocker}` : "",
+            })
+          : t("marketData.rebuiltBodyFallback", {
+              provider: marketRateProviderLabelText,
+            }),
         tone: journalBlocker ? "warning" : "success",
         progress: undefined,
       } as const;
@@ -254,10 +263,12 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Could not rebuild pricing cache.";
+        error instanceof Error
+          ? error.message
+          : t("marketData.rebuildFailedError");
       setRateRebuildError(message);
       const notification = {
-        title: "Pricing cache rebuild failed",
+        title: t("marketData.rebuildFailedTitle"),
         body: message,
         tone: "error",
         progress: undefined,
@@ -286,19 +297,21 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
         source_classes: sourceClasses,
       });
       addNotification({
-        title: enabled ? "Automatic price refresh enabled" : "Automatic price refresh disabled",
+        title: enabled
+          ? t("marketData.autoEnabledTitle")
+          : t("marketData.autoDisabledTitle"),
         body: enabled
-          ? "Kassiber will refresh the latest BTC price while the app is open."
-          : "Kassiber will stop scheduling background BTC price refreshes.",
+          ? t("marketData.autoEnabledBody")
+          : t("marketData.autoDisabledBody"),
         tone: "success",
       });
     } catch (error) {
       addNotification({
-        title: "Could not update price refresh",
+        title: t("marketData.autoFailedTitle"),
         body:
           error instanceof Error
             ? error.message
-            : "Kassiber could not save the market-rate refresh setting.",
+            : t("marketData.autoFailedBody"),
         tone: "error",
       });
     }
@@ -313,17 +326,17 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
         envelope.data?.settings.market_rate_provider ?? provider;
       const selectedLabel = marketRateProviderLabel(selectedProvider);
       addNotification({
-        title: "Market-rate provider updated",
-        body: `Automatic price refresh and default rebuilds will use ${selectedLabel}.`,
+        title: t("marketData.providerUpdatedTitle"),
+        body: t("marketData.providerUpdatedBody", { provider: selectedLabel }),
         tone: "success",
       });
     } catch (error) {
       addNotification({
-        title: "Could not update price provider",
+        title: t("marketData.providerFailedTitle"),
         body:
           error instanceof Error
             ? error.message
-            : "Kassiber could not save the market-rate provider.",
+            : t("marketData.providerFailedBody"),
         tone: "error",
       });
     }
@@ -333,19 +346,17 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
   return (
     <section className="space-y-4">
       <p className="max-w-2xl text-sm text-muted-foreground">
-        Fiat reference rates are sourced independently of wallet sync. Kassiber
-        keeps a local price cache so reports never have to query an exchange for
-        every transaction. These lookups reveal pricing interest, not your
-        wallet addresses.
+        {t("marketData.intro")}
       </p>
 
       <div className="rounded-md border bg-background p-3">
         <div className="mb-3 flex flex-col gap-2 border-b pb-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="grid gap-1">
-            <Label htmlFor="market-rate-provider">Price source</Label>
+            <Label htmlFor="market-rate-provider">
+              {t("marketData.priceSourceLabel")}
+            </Label>
             <p className="text-xs text-muted-foreground">
-              Used for automatic latest-price refresh and default pricing cache
-              rebuilds.
+              {t("marketData.priceSourceHint")}
             </p>
           </div>
           <Select
@@ -380,23 +391,21 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
             htmlFor="market-data-auto-refresh"
             className="grid gap-1 text-sm leading-relaxed"
           >
-            <span>Keep BTC price current while the app is open</span>
+            <span>{t("marketData.autoRefreshLabel")}</span>
             <span className="font-normal text-muted-foreground">
-              Fetches a small latest {marketRateProviderLabelText} market window roughly hourly and
-              uses the existing rate-limit backoff if the provider asks Kassiber
-              to wait.
+              {t("marketData.autoRefreshHint", {
+                provider: marketRateProviderLabelText,
+              })}
             </span>
           </Label>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          Wallet/source refresh remains controlled from Connections; this setting
-          only updates market-rate cache rows used for fiat balance display and
-          missing transaction pricing coverage.
+          {t("marketData.autoRefreshFootnote")}
         </p>
       </div>
 
       <div className="space-y-2">
-        <p className="text-sm font-medium">Rate providers</p>
+        <p className="text-sm font-medium">{t("marketData.providersHeading")}</p>
         <div className="grid gap-2">
           {rateBackends.map((backend, index) => (
             <div
@@ -414,7 +423,9 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
                         : "border-border bg-muted text-muted-foreground",
                     )}
                   >
-                    {index === 0 ? "Primary" : "Fallback"}
+                    {index === 0
+                      ? t("marketData.primary")
+                      : t("marketData.fallback")}
                   </span>
                 </div>
                 <p className="truncate font-mono text-xs text-muted-foreground">
@@ -432,11 +443,11 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       <div className="rounded-md border bg-background p-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <p className="text-sm font-medium">Rebuild pricing cache</p>
+            <p className="text-sm font-medium">
+              {t("marketData.rebuildHeading")}
+            </p>
             <p className="text-xs text-muted-foreground">
-              Clear selected provider samples, checked-empty minutes, and
-              cached provider-generated transaction prices, then fetch fresh
-              market rates for {activeRatePair}.
+              {t("marketData.rebuildDescription", { pair: activeRatePair })}
             </p>
           </div>
           <Button
@@ -454,35 +465,32 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
             ) : (
               <Database className="size-4" aria-hidden="true" />
             )}
-            Rebuild cache
+            {t("marketData.rebuildButton")}
           </Button>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          Manual overrides and imported exchange execution prices are kept. Large
-          wallets can take a while because Kassiber refetches missing windows and
-          reprocesses journals afterward.
+          {t("marketData.rebuildFootnote")}
         </p>
         {isRebuildingRates ? (
           <div className="mt-3 rounded-md border border-primary/25 bg-primary/5 p-3">
             <div className="flex items-center justify-between gap-3 text-xs">
               <span className="font-medium text-foreground">
-                Rebuilding provider rates
+                {t("marketData.rebuildingTitle")}
               </span>
               <span className="text-muted-foreground">
-                Counting transaction rates…
+                {t("marketData.rebuildingCounting")}
               </span>
             </div>
             <div
               className="mt-2 h-2 overflow-hidden rounded-full bg-muted"
               role="progressbar"
-              aria-label="Pricing cache rebuild progress"
-              aria-valuetext="Rebuilding pricing cache"
+              aria-label={t("marketData.rebuildProgressAria")}
+              aria-valuetext={t("marketData.rebuildProgressValue")}
             >
               <div className="h-full w-1/2 animate-pulse rounded-full bg-primary" />
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              Kassiber is fetching missing one-minute rates and will report how
-              many transactions have provider rates when journals finish.
+              {t("marketData.rebuildingFootnote")}
             </p>
           </div>
         ) : null}
@@ -498,12 +506,13 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-medium">
                 {rateRebuildJournalBlocker
-                  ? "Pricing refreshed; journals still blocked"
+                  ? t("marketData.resultBlocked")
                   : rateRebuildProgress?.total
-                  ? `${formatCount(rateRebuildProgress.refreshed)} / ${formatCount(
-                      rateRebuildProgress.total,
-                    )} transaction rates refreshed`
-                  : "Pricing cache rebuilt"}
+                  ? t("marketData.resultProgress", {
+                      refreshed: formatCount(rateRebuildProgress.refreshed),
+                      total: formatCount(rateRebuildProgress.total),
+                    })
+                  : t("marketData.resultRebuilt")}
               </span>
               <span
                 className={cn(
@@ -513,8 +522,10 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
                     : "text-emerald-700/80 dark:text-emerald-300/80",
                 )}
               >
-                {rateRebuildResult.pair ?? activeRatePair} ·{" "}
-                {formatCount(rateRebuildSamples)} rate rows fetched
+                {t("marketData.resultRowsFetched", {
+                  pair: rateRebuildResult.pair ?? activeRatePair,
+                  rows: formatCount(rateRebuildSamples),
+                })}
               </span>
             </div>
             <div
@@ -525,7 +536,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
                   : "bg-emerald-950/10 dark:bg-emerald-100/15",
               )}
               role="progressbar"
-              aria-label="Transaction rate refresh progress"
+              aria-label={t("marketData.txRefreshAria")}
               aria-valuemin={0}
               aria-valuemax={rateRebuildProgress?.total ?? 1}
               aria-valuenow={rateRebuildProgress?.refreshed ?? 1}
@@ -550,11 +561,13 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
                   : "text-emerald-700/80 dark:text-emerald-300/80",
               )}
             >
-              Removed {formatCount(rateRebuildResult.deleted.rates)} rate rows,{" "}
-              {formatCount(rateRebuildResult.deleted.checked_minutes)} checked
-              minutes, and{" "}
-              {formatCount(rateRebuildResult.deleted.transaction_prices)} cached
-              transaction prices.
+              {t("marketData.resultRemoved", {
+                rates: formatCount(rateRebuildResult.deleted.rates),
+                minutes: formatCount(rateRebuildResult.deleted.checked_minutes),
+                prices: formatCount(
+                  rateRebuildResult.deleted.transaction_prices,
+                ),
+              })}
             </p>
           </div>
         ) : null}
@@ -563,10 +576,11 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       <div className="rounded-md border bg-background p-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <p className="text-sm font-medium">Kraken offline history</p>
+            <p className="text-sm font-medium">
+              {t("marketData.krakenHeading")}
+            </p>
             <p className="text-xs text-muted-foreground">
-              Bitcoin EUR/USD minute candles from a local Kraken CSV/ZIP
-              archive, plus bundled daily values for fallback coverage.
+              {t("marketData.krakenDescription")}
             </p>
             <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
               <a
@@ -576,7 +590,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
                 }
                 className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
               >
-                Get Kraken archive
+                {t("marketData.krakenGetArchive")}
                 <ExternalLink className="size-3" aria-hidden="true" />
               </a>
               <a
@@ -586,7 +600,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
                 }
                 className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
               >
-                Kraken market data blog
+                {t("marketData.krakenBlog")}
                 <ExternalLink className="size-3" aria-hidden="true" />
               </a>
             </div>
@@ -599,11 +613,10 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
         <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 p-3">
           <div className="min-w-0 space-y-1">
             <p className="text-sm font-medium">
-              Kraken offline history: minute data
+              {t("marketData.krakenMinuteHeading")}
             </p>
             <p className="text-xs text-muted-foreground">
-              Import local Kraken BTC-EUR and BTC-USD one-minute candles for
-              exact transaction pricing windows.
+              {t("marketData.krakenMinuteDescription")}
             </p>
           </div>
 
@@ -611,8 +624,8 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
             <Input
               value={krakenArchivePath}
               onChange={(event) => setKrakenArchivePath(event.target.value)}
-              placeholder="~/Downloads/Kraken_OHLCVT.zip, CSV, or extracted folder"
-              aria-label="Kraken CSV, ZIP, or folder path"
+              placeholder={t("marketData.krakenPathPlaceholder")}
+              aria-label={t("marketData.krakenPathAria")}
               disabled={isImportingKraken}
             />
             <div className="flex gap-2">
@@ -624,12 +637,12 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
                 disabled={!isFilePickerAvailable || isImportingKraken}
                 title={
                   isFilePickerAvailable
-                    ? "Choose CSV or ZIP"
-                    : "Use the path field in browser mode"
+                    ? t("marketData.chooseFileTitle")
+                    : t("marketData.filePickerUnavailable")
                 }
               >
                 <Upload className="size-4" aria-hidden="true" />
-                File
+                {t("marketData.chooseFile")}
               </Button>
               <Button
                 type="button"
@@ -639,12 +652,12 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
                 disabled={!isFilePickerAvailable || isImportingKraken}
                 title={
                   isFilePickerAvailable
-                    ? "Choose extracted folder"
-                    : "Use the path field in browser mode"
+                    ? t("marketData.chooseFolderTitle")
+                    : t("marketData.filePickerUnavailable")
                 }
               >
                 <FileInput className="size-4" aria-hidden="true" />
-                Folder
+                {t("marketData.chooseFolder")}
               </Button>
             </div>
           </div>
@@ -660,7 +673,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
               ) : (
                 <Database className="size-4" aria-hidden="true" />
               )}
-              Full minute history
+              {t("marketData.fullMinuteHistory")}
             </Button>
             <Button
               type="button"
@@ -673,7 +686,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
               ) : (
                 <RefreshCw className="size-4" aria-hidden="true" />
               )}
-              Incremental minute update
+              {t("marketData.incrementalMinuteUpdate")}
             </Button>
           </div>
         </div>
@@ -681,10 +694,11 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
         <div className="mt-3 rounded-md border bg-muted/30 p-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0 space-y-1">
-              <p className="text-sm font-medium">Bundled daily values fallback</p>
+              <p className="text-sm font-medium">
+                {t("marketData.bundledHeading")}
+              </p>
               <p className="text-xs text-muted-foreground">
-                Import bundled Kraken BTC-EUR and BTC-USD daily values from
-                2013 through Q1 2026 for coarse fallback coverage.
+                {t("marketData.bundledDescription")}
               </p>
             </div>
             <Button
@@ -699,7 +713,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
               ) : (
                 <Database className="size-4" aria-hidden="true" />
               )}
-              Import daily values
+              {t("marketData.importDailyValues")}
             </Button>
           </div>
         </div>
@@ -717,10 +731,12 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
               <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
               <span>
                 {importedTotals?.pairs
-                  ? `${formatCount(importedTotals.samples)} rows across ${formatCount(
-                      importedTotals.pairs,
-                    )} pair${importedTotals.pairs === 1 ? "" : "s"}`
-                  : "No Bitcoin rows imported"}
+                  ? t("marketData.importedTotals", {
+                      count: importedTotals.pairs,
+                      rows: formatCount(importedTotals.samples),
+                      pairs: formatCount(importedTotals.pairs),
+                    })
+                  : t("marketData.noRowsImported")}
               </span>
             </div>
             {importedPairs.length ? (
@@ -735,7 +751,10 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
                       {formatKrakenRange(row)}
                     </span>
                     <span className="text-muted-foreground sm:text-right">
-                      {formatCount(row.samples)} {row.granularity ?? ""} rows
+                      {t("marketData.importedRowGranularity", {
+                        rows: formatCount(row.samples),
+                        granularity: row.granularity ?? "",
+                      })}
                     </span>
                   </div>
                 ))}
@@ -743,8 +762,10 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
             ) : null}
             {importedTotals?.skipped_rows || importedTotals?.skipped_files ? (
               <p className="mt-2 text-xs text-muted-foreground">
-                Skipped {formatCount(importedTotals.skipped_rows)} rows and{" "}
-                {formatCount(importedTotals.skipped_files)} files.
+                {t("marketData.skipped", {
+                  rows: formatCount(importedTotals.skipped_rows),
+                  files: formatCount(importedTotals.skipped_files),
+                })}
               </p>
             ) : null}
           </div>
@@ -753,10 +774,12 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       <Dialog open={rateRebuildOpen} onOpenChange={setRateRebuildOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Rebuild pricing cache?</DialogTitle>
+            <DialogTitle>{t("marketData.rebuildDialogTitle")}</DialogTitle>
             <DialogDescription>
-              Kassiber will delete {marketRateProviderLabelText} provider cache rows
-              and refetch market rates for {activeRatePair}.
+              {t("marketData.rebuildDialogDescription", {
+                provider: marketRateProviderLabelText,
+                pair: activeRatePair,
+              })}
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
@@ -766,12 +789,10 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
                 aria-hidden="true"
               />
               <div className="space-y-1">
-                <p className="font-medium">Large wallets can take a while.</p>
-                <p>
-                  The rebuild also clears provider-generated transaction prices
-                  and reprocesses journals. Manual overrides and imported
-                  execution prices are preserved.
+                <p className="font-medium">
+                  {t("marketData.rebuildDialogWarningTitle")}
                 </p>
+                <p>{t("marketData.rebuildDialogWarningBody")}</p>
               </div>
             </div>
           </div>
@@ -785,7 +806,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
               onClick={() => setRateRebuildOpen(false)}
               disabled={isRebuildingRates}
             >
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button
               type="button"
@@ -797,7 +818,9 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
               ) : (
                 <Database className="size-4" aria-hidden="true" />
               )}
-              {isRebuildingRates ? "Rebuilding..." : "Rebuild"}
+              {isRebuildingRates
+                ? t("marketData.rebuildDialogPending")
+                : t("marketData.rebuildDialogSubmit")}
             </Button>
           </DialogFooter>
         </DialogContent>

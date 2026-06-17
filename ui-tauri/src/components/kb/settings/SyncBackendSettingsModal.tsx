@@ -6,6 +6,7 @@ import {
   Trash2,
   XCircle,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
 import coreLightningIcon from "@/assets/integrations/core-lightning.svg";
@@ -187,11 +188,11 @@ export interface SyncBackendNetwork {
   id: SyncBackendTypeId;
   label: string;
   net: Net;
-  desc: string;
+  descKey: string;
   icon: string;
   iconClassName?: string;
   iconFrameClassName?: string;
-  subtitle?: string;
+  subtitleKey?: string;
   presets: SyncBackendPreset[];
 }
 
@@ -200,9 +201,9 @@ export const SYNC_BACKEND_NETWORKS: SyncBackendNetwork[] = [
     id: "bitcoin",
     label: "Bitcoin",
     net: "BTC",
-    desc: "Backends used by Bitcoin watch-only wallets.",
+    descKey: "backendModal.network.bitcoinDesc",
     icon: bitcoinIcon,
-    subtitle: "Bitcoin",
+    subtitleKey: "backendModal.network.bitcoinSubtitle",
     presets: [
       {
         id: "electrum",
@@ -242,11 +243,11 @@ export const SYNC_BACKEND_NETWORKS: SyncBackendNetwork[] = [
     id: "coreln",
     label: "Core-LN",
     net: "LN",
-    desc: "Read-only Core Lightning node accounting sync.",
+    descKey: "backendModal.network.corelnDesc",
     icon: coreLightningIcon,
     iconClassName: "scale-150",
     iconFrameClassName: "border-neutral-600 bg-[#494120]",
-    subtitle: "Lightning",
+    subtitleKey: "backendModal.network.corelnSubtitle",
     presets: [
       {
         id: "core-lightning",
@@ -261,10 +262,10 @@ export const SYNC_BACKEND_NETWORKS: SyncBackendNetwork[] = [
     id: "liquid",
     label: "Liquid",
     net: "LIQUID",
-    desc: "Backends used by Liquid watch-only wallets.",
+    descKey: "backendModal.network.liquidDesc",
     icon: liquidIcon,
     iconClassName: "scale-150",
-    subtitle: "Liquid",
+    subtitleKey: "backendModal.network.liquidSubtitle",
     presets: [
       {
         id: "liquid-bullbitcoin",
@@ -297,10 +298,10 @@ export const SYNC_BACKEND_NETWORKS: SyncBackendNetwork[] = [
     id: "lnd",
     label: "LND",
     net: "LN",
-    desc: "Read-only Lightning node history for profitability reports.",
+    descKey: "backendModal.network.lndDesc",
     icon: lightningLabsIcon,
     iconFrameClassName: "border-neutral-700 bg-neutral-950",
-    subtitle: "Lightning",
+    subtitleKey: "backendModal.network.lndSubtitle",
     presets: [
       {
         id: "lnd",
@@ -330,7 +331,8 @@ export function scopedBackendTypes(
   return SYNC_BACKEND_NETWORKS;
 }
 
-export function backendModalCopy({
+// Returns the i18n key prefix for the modal's title/description/selectorLabel.
+export function backendModalCopyKey({
   isEditing,
   typeId,
   scopedTypes,
@@ -338,52 +340,29 @@ export function backendModalCopy({
   isEditing: boolean;
   typeId: SyncBackendNetwork["id"];
   scopedTypes: SyncBackendNetwork[];
-}): { title: string; description: string; selectorLabel: string } {
+}): string {
   if (isEditing) {
-    return {
-      title: "Edit sync backend",
-      description: "Update this wallet-refresh endpoint.",
-      selectorLabel: "Network",
-    };
+    return "backendModal.edit";
   }
   if (scopedTypes.length === 1) {
     if (typeId === "bitcoin") {
-      return {
-        title: "Add Bitcoin backend",
-        description:
-          "Connect a Bitcoin backend used by watch-only wallets: an Explorer API (Esplora/mempool), Electrum / Fulcrum, or Bitcoin Core RPC.",
-        selectorLabel: "Network",
-      };
+      return "backendModal.addBitcoin";
     }
     if (typeId === "liquid") {
-      return {
-        title: "Add Liquid backend",
-        description:
-          "Connect a Liquid backend used by Liquid watch-only wallets: an Explorer API (Esplora) or Electrum / Fulcrum.",
-        selectorLabel: "Network",
-      };
+      return "backendModal.addLiquid";
     }
   }
   if (scopedTypes.every((candidate) => candidate.net === "LN")) {
-    return {
-      title: "Add Lightning node",
-      description:
-        "Connect a read-only Lightning node for accounting and profitability reports.",
-      selectorLabel: "Node",
-    };
+    return "backendModal.addLightning";
   }
-  return {
-    title: "Add sync backend",
-    description: "Connect a Bitcoin, Liquid, or Lightning backend.",
-    selectorLabel: "Network",
-  };
+  return "backendModal.addGeneric";
 }
 
-export const AUTH_MODES: Array<{ id: string; label: string }> = [
-  { id: "none", label: "None" },
-  { id: "apikey", label: "API key" },
-  { id: "basic", label: "User + pass" },
-  { id: "bearer", label: "Bearer token" },
+export const AUTH_MODES: Array<{ id: string; labelKey: string }> = [
+  { id: "none", labelKey: "backendModal.authMode.none" },
+  { id: "apikey", labelKey: "backendModal.authMode.apikey" },
+  { id: "basic", labelKey: "backendModal.authMode.basic" },
+  { id: "bearer", labelKey: "backendModal.authMode.bearer" },
 ];
 
 export type TestState = "idle" | "testing" | "ok" | "fail";
@@ -420,10 +399,11 @@ export function buildElectrumUrl({ host, port, useSsl }: ElectrumEndpointParts):
 export function customBackendName(
   type: SyncBackendNetwork,
   preset: SyncBackendPreset | null,
+  t: (key: string) => string,
 ): string {
-  if (type.net === "LIQUID") return "My Liquid backend";
-  if (type.net === "BTC") return "My Bitcoin backend";
-  return preset?.name ?? "My backend";
+  if (type.net === "LIQUID") return t("backendModal.customNameLiquid");
+  if (type.net === "BTC") return t("backendModal.customNameBitcoin");
+  return preset?.name ?? t("backendModal.customNameFallback");
 }
 
 export function applyCustomEndpointDefaults(
@@ -479,6 +459,7 @@ export function SyncBackendSettingsModal({
   onDelete,
   onSave,
 }: SyncBackendSettingsModalProps) {
+  const { t } = useTranslation("settings");
   const testElectrum = useDaemonMutation<{
     ok: boolean;
     logs: string[];
@@ -527,11 +508,16 @@ export function SyncBackendSettingsModal({
     () => (isEditing ? SYNC_BACKEND_NETWORKS : scopedBackendTypes(initialTypeId)),
     [initialTypeId, isEditing],
   );
-  const modalCopy = backendModalCopy({
+  const modalCopyKey = backendModalCopyKey({
     isEditing,
     typeId,
     scopedTypes,
   });
+  const modalCopy = {
+    title: t(`${modalCopyKey}.title`),
+    description: t(`${modalCopyKey}.description`),
+    selectorLabel: t(`${modalCopyKey}.selectorLabel`),
+  };
   const publicPresets = React.useMemo(() => publicBackendPresets(type), [type]);
   const showTypePicker = !isEditing && scopedTypes.length > 1;
   const showSourcePicker = !isEditing && type.net !== "LN";
@@ -677,7 +663,7 @@ export function SyncBackendSettingsModal({
         setName(preset.name);
         setInfrastructureOwner(inferredInfrastructureOwnership(preset.url));
       } else {
-        setName(customBackendName(type, preset));
+        setName(customBackendName(type, preset, t));
         applyCustomEndpointDefaults(preset, {
           setUrl,
           setElectrumHost,
@@ -711,7 +697,7 @@ export function SyncBackendSettingsModal({
     setRpcFile("");
     setTestState("idle");
     setTestLog("");
-  }, [backendSource, initial, open, preset, presetId, type]);
+  }, [backendSource, initial, open, preset, presetId, t, type]);
 
   const onPickType = (id: SyncBackendNetwork["id"]) => {
     setTypeId(id);
@@ -729,7 +715,7 @@ export function SyncBackendSettingsModal({
     if (!effectiveUrl) return false;
     if (isCoreLightning) {
       setTestState("ok");
-      setTestLog("Core Lightning read-only connection will be checked during wallet sync.");
+      setTestLog(t("backendModal.clnTestLog"));
       return true;
     }
     setTestState("testing");
@@ -754,7 +740,9 @@ export function SyncBackendSettingsModal({
       } catch (error) {
         setTestState("fail");
         setTestLog(
-          error instanceof Error ? error.message : "Electrum test failed.",
+          error instanceof Error
+            ? error.message
+            : t("backendModal.electrumTestFailed"),
         );
         return false;
       }
@@ -769,7 +757,9 @@ export function SyncBackendSettingsModal({
       return Boolean(data?.ok);
     } catch (error) {
       setTestState("fail");
-      setTestLog(error instanceof Error ? error.message : "HTTP test failed.");
+      setTestLog(
+        error instanceof Error ? error.message : t("backendModal.httpTestFailed"),
+      );
       return false;
     }
   };
@@ -837,7 +827,9 @@ export function SyncBackendSettingsModal({
             : type.net === "LN"
               ? "main"
               : "main",
-        health: initial ? "just checked - ok" : "just added - ok",
+        health: initial
+          ? t("backendModal.healthJustChecked")
+          : t("backendModal.healthJustAdded"),
         on: connected,
         auth: isCoreLightning ? "apikey" : showAuth ? auth : "none",
         authHeader:
@@ -881,7 +873,9 @@ export function SyncBackendSettingsModal({
       });
     } catch (error) {
       setTestState("fail");
-      setTestLog(error instanceof Error ? error.message : "Could not save backend.");
+      setTestLog(
+        error instanceof Error ? error.message : t("backendModal.saveError"),
+      );
     } finally {
       setSaveState("idle");
     }
@@ -907,7 +901,9 @@ export function SyncBackendSettingsModal({
               <section className="space-y-3">
                 <div>
                   <Label>{modalCopy.selectorLabel}</Label>
-                  <p className="text-sm text-muted-foreground">{type.desc}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {t(type.descKey)}
+                  </p>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {scopedTypes.map((backendType) => {
@@ -929,7 +925,9 @@ export function SyncBackendSettingsModal({
                             {backendType.label}
                           </span>
                           <span className="block text-xs leading-tight text-muted-foreground">
-                            {backendType.subtitle ?? backendType.net}
+                            {backendType.subtitleKey
+                              ? t(backendType.subtitleKey)
+                              : backendType.net}
                           </span>
                         </span>
                       </Button>
@@ -943,7 +941,7 @@ export function SyncBackendSettingsModal({
               <section className="flex items-center gap-3 rounded-md border bg-muted/10 p-3">
                 <NetworkMark type={type} />
                 <div className="min-w-0">
-                  <Label>Connection type</Label>
+                  <Label>{t("backendModal.connectionType")}</Label>
                   <p className="text-sm text-muted-foreground">
                     {type.label} · {preset?.label ?? selectedBackendKind}
                   </p>
@@ -954,10 +952,9 @@ export function SyncBackendSettingsModal({
             {showSourcePicker ? (
               <section className="space-y-3">
                 <div>
-                  <Label>Backend source</Label>
+                  <Label>{t("backendModal.backendSourceLabel")}</Label>
                   <p className="text-xs text-muted-foreground">
-                    Use a third-party preset, or enter infrastructure you
-                    operate.
+                    {t("backendModal.backendSourceHint")}
                   </p>
                 </div>
                 <Tabs
@@ -968,9 +965,11 @@ export function SyncBackendSettingsModal({
                 >
                   <TabsList className="w-full justify-start sm:w-fit">
                     <TabsTrigger value="preset">
-                      Third-party presets
+                      {t("backendModal.presetTab")}
                     </TabsTrigger>
-                    <TabsTrigger value="custom">Custom backend</TabsTrigger>
+                    <TabsTrigger value="custom">
+                      {t("backendModal.customTab")}
+                    </TabsTrigger>
                   </TabsList>
                 </Tabs>
               </section>
@@ -979,15 +978,14 @@ export function SyncBackendSettingsModal({
             {showPresetPicker ? (
               <section className="space-y-3">
                 <div>
-                  <Label>Third-party endpoint</Label>
+                  <Label>{t("backendModal.presetEndpointLabel")}</Label>
                   <p className="text-xs text-muted-foreground">
-                    Pick from the bundled allowlist. Providers shown here have
-                    a stated no-log policy.
+                    {t("backendModal.presetEndpointHint")}
                   </p>
                 </div>
                 <Select value={presetId} onValueChange={setPresetId}>
                   <SelectTrigger className="h-auto min-h-12 w-full py-2 text-left *:data-[slot=select-value]:line-clamp-none *:data-[slot=select-value]:justify-start">
-                    <SelectValue placeholder="Choose a provider" />
+                    <SelectValue placeholder={t("backendModal.presetPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
                     {publicPresets.map((backendPreset) => {
@@ -1020,11 +1018,9 @@ export function SyncBackendSettingsModal({
             {showCustomProtocolPicker ? (
               <section className="space-y-3">
                 <div>
-                  <Label>Endpoint type</Label>
+                  <Label>{t("backendModal.endpointTypeLabel")}</Label>
                   <p className="text-xs text-muted-foreground">
-                    Choose the protocol your backend exposes — e.g. an Explorer
-                    API (Esplora/mempool) over HTTP, or Electrum / Fulcrum over
-                    TCP/SSL.
+                    {t("backendModal.endpointTypeHint")}
                   </p>
                 </div>
                 <Tabs value={presetId} onValueChange={setPresetId}>
@@ -1045,25 +1041,29 @@ export function SyncBackendSettingsModal({
 
             <section className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="backend-name">Display name</Label>
+                <Label htmlFor="backend-name">
+                  {t("backendModal.displayNameLabel")}
+                </Label>
                 <Input
                   id="backend-name"
                   value={name}
                   onChange={(event) => setName(event.target.value)}
-                  placeholder="My home node"
+                  placeholder={t("backendModal.displayNamePlaceholder")}
                 />
                 {isEditing ? (
                   <p className="text-xs text-muted-foreground">
-                    Changes the display label only; the backend id stays stable:
-                    {" "}
-                    {initial?.id}
+                    {t("backendModal.displayNameStableHint", {
+                      id: initial?.id,
+                    })}
                   </p>
                 ) : null}
               </div>
               {showElectrumEndpointParts ? (
                 <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
                   <div className="space-y-2">
-                    <Label htmlFor="backend-electrum-host">Host</Label>
+                    <Label htmlFor="backend-electrum-host">
+                      {t("backendModal.hostLabel")}
+                    </Label>
                     <Input
                       id="backend-electrum-host"
                       value={electrumHost}
@@ -1074,14 +1074,16 @@ export function SyncBackendSettingsModal({
                       }}
                       placeholder={
                         type.net === "LIQUID"
-                          ? "liquid-electrum.example"
-                          : "index.bitcoin-austria.at"
+                          ? t("backendModal.hostPlaceholderLiquid")
+                          : t("backendModal.hostPlaceholderBitcoin")
                       }
                       disabled={backendSource === "preset" && !isEditing}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="backend-electrum-port">Port</Label>
+                    <Label htmlFor="backend-electrum-port">
+                      {t("backendModal.portLabel")}
+                    </Label>
                     <Input
                       id="backend-electrum-port"
                       value={electrumPort}
@@ -1097,7 +1099,9 @@ export function SyncBackendSettingsModal({
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <Label htmlFor="backend-url">Endpoint URL</Label>
+                  <Label htmlFor="backend-url">
+                    {t("backendModal.endpointUrlLabel")}
+                  </Label>
                   <Input
                     id="backend-url"
                     value={url}
@@ -1115,9 +1119,7 @@ export function SyncBackendSettingsModal({
 
             {type.net !== "LN" && selectedKindIsExplorerApi ? (
               <div className="rounded-md border border-sky-500/25 bg-sky-500/5 p-3 text-xs text-muted-foreground">
-                This Explorer API (Esplora / mempool.space-type HTTP REST) also
-                provides clickable transaction links. Electrum / Fulcrum
-                backends are sync-only.
+                {t("backendModal.explorerApiNote")}
               </div>
             ) : null}
 
@@ -1144,9 +1146,9 @@ export function SyncBackendSettingsModal({
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <Label>Infrastructure owner</Label>
+                    <Label>{t("backendModal.infraOwnerLabel")}</Label>
                     <p className="text-xs text-muted-foreground">
-                      This only changes privacy labeling; it does not change the endpoint.
+                      {t("backendModal.infraOwnerHint")}
                     </p>
                   </div>
                   <Tabs
@@ -1156,8 +1158,12 @@ export function SyncBackendSettingsModal({
                     }
                   >
                     <TabsList className="w-full sm:w-fit">
-                      <TabsTrigger value="self">Mine</TabsTrigger>
-                      <TabsTrigger value="third_party">Third-party</TabsTrigger>
+                      <TabsTrigger value="self">
+                        {t("backendModal.infraOwnerMine")}
+                      </TabsTrigger>
+                      <TabsTrigger value="third_party">
+                        {t("backendModal.infraOwnerThirdParty")}
+                      </TabsTrigger>
                     </TabsList>
                   </Tabs>
                 </div>
@@ -1167,16 +1173,16 @@ export function SyncBackendSettingsModal({
             {isCoreLightning && (
               <section className="space-y-3">
                 <div>
-                  <Label>Core Lightning access</Label>
+                  <Label>{t("backendModal.corelnAccessLabel")}</Label>
                   <p className="text-xs text-muted-foreground">
-                    Use a restricted commando rune for least-privilege read-only sync,
-                    or point at a local lightning-dir / rpc-file when running on the
-                    same host.
+                    {t("backendModal.corelnAccessHint")}
                   </p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="backend-commando-peer">Commando peer id</Label>
+                    <Label htmlFor="backend-commando-peer">
+                      {t("backendModal.commandoPeerLabel")}
+                    </Label>
                     <Input
                       id="backend-commando-peer"
                       value={commandoPeerId}
@@ -1190,17 +1196,19 @@ export function SyncBackendSettingsModal({
                   </div>
                   <SecretField
                     id="backend-commando-rune"
-                    label="Rune"
+                    label={t("backendModal.runeLabel")}
                     value={authVal}
                     onChange={(value) => {
                       setAuthVal(value);
                       setTestState("idle");
                       setTestLog("");
                     }}
-                    placeholder="readonly rune"
+                    placeholder={t("backendModal.runePlaceholder")}
                   />
                   <div className="space-y-2">
-                    <Label htmlFor="backend-lightning-cli">lightning-cli path</Label>
+                    <Label htmlFor="backend-lightning-cli">
+                      {t("backendModal.lightningCliLabel")}
+                    </Label>
                     <Input
                       id="backend-lightning-cli"
                       value={lightningCli}
@@ -1213,7 +1221,9 @@ export function SyncBackendSettingsModal({
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="backend-lightning-dir">Lightning directory</Label>
+                    <Label htmlFor="backend-lightning-dir">
+                      {t("backendModal.lightningDirLabel")}
+                    </Label>
                     <Input
                       id="backend-lightning-dir"
                       value={lightningDir}
@@ -1226,7 +1236,9 @@ export function SyncBackendSettingsModal({
                     />
                   </div>
                   <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="backend-rpc-file">RPC file</Label>
+                    <Label htmlFor="backend-rpc-file">
+                      {t("backendModal.rpcFileLabel")}
+                    </Label>
                     <Input
                       id="backend-rpc-file"
                       value={rpcFile}
@@ -1238,7 +1250,7 @@ export function SyncBackendSettingsModal({
                       placeholder="lightning-rpc"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Local RPC file access is convenient but broader than a read-only rune.
+                      {t("backendModal.rpcFileHint")}
                     </p>
                   </div>
                 </div>
@@ -1251,17 +1263,19 @@ export function SyncBackendSettingsModal({
                 open={trustSsl || Boolean(certificate) || useProxy || undefined}
               >
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm font-medium">
-                  <span>Advanced connection settings</span>
+                  <span>{t("backendModal.advancedLabel")}</span>
                   <span className="text-xs text-muted-foreground">
-                    TLS certificate and proxy options
+                    {t("backendModal.advancedHint")}
                   </span>
                 </summary>
                 <section className="grid gap-3 border-t p-3 sm:grid-cols-2">
                   <label className="flex items-center justify-between gap-3 rounded-md border bg-background p-3 text-sm">
                     <span>
-                      <span className="block font-medium">Use SSL</span>
+                      <span className="block font-medium">
+                        {t("backendModal.useSslLabel")}
+                      </span>
                       <span className="text-muted-foreground">
-                        Common Electrum SSL port is 50002.
+                        {t("backendModal.useSslHint")}
                       </span>
                     </span>
                     <Switch
@@ -1287,10 +1301,10 @@ export function SyncBackendSettingsModal({
                   <label className="flex items-center justify-between gap-3 rounded-md border bg-background p-3 text-sm">
                     <span>
                       <span className="block font-medium">
-                        Trust self-signed certificate
+                        {t("backendModal.trustSelfSignedLabel")}
                       </span>
                       <span className="text-muted-foreground">
-                        For self-signed or private CA Electrum servers.
+                        {t("backendModal.trustSelfSignedHint")}
                       </span>
                     </span>
                     <Switch
@@ -1304,7 +1318,9 @@ export function SyncBackendSettingsModal({
                     />
                   </label>
                   <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="backend-certificate">Certificate</Label>
+                    <Label htmlFor="backend-certificate">
+                      {t("backendModal.certificateLabel")}
+                    </Label>
                     <Input
                       id="backend-certificate"
                       value={certificate}
@@ -1313,21 +1329,22 @@ export function SyncBackendSettingsModal({
                         setTestState("idle");
                         setTestLog("");
                       }}
-                      placeholder="Optional server certificate (.crt)"
+                      placeholder={t("backendModal.certificatePlaceholder")}
                       disabled={!electrumUseSsl || trustSsl}
                     />
                     {electrumUseSsl && trustSsl ? (
                       <p className="text-xs text-muted-foreground">
-                        Ignored while &ldquo;Trust self-signed certificate&rdquo;
-                        is on.
+                        {t("backendModal.certificateIgnored")}
                       </p>
                     ) : null}
                   </div>
                   <label className="flex items-center justify-between gap-3 rounded-md border bg-background p-3 text-sm sm:col-span-2">
                     <span>
-                      <span className="block font-medium">Use proxy</span>
+                      <span className="block font-medium">
+                        {t("backendModal.useProxyLabel")}
+                      </span>
                       <span className="text-muted-foreground">
-                        Optional Tor or SOCKS proxy for this endpoint.
+                        {t("backendModal.useProxyHint")}
                       </span>
                     </span>
                     <Switch
@@ -1342,7 +1359,9 @@ export function SyncBackendSettingsModal({
                   {useProxy && (
                     <>
                       <div className="space-y-2">
-                        <Label htmlFor="backend-proxy-host">Proxy host</Label>
+                        <Label htmlFor="backend-proxy-host">
+                          {t("backendModal.proxyHostLabel")}
+                        </Label>
                         <Input
                           id="backend-proxy-host"
                           value={proxyHost}
@@ -1355,7 +1374,9 @@ export function SyncBackendSettingsModal({
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="backend-proxy-port">Proxy port</Label>
+                        <Label htmlFor="backend-proxy-port">
+                          {t("backendModal.proxyPortLabel")}
+                        </Label>
                         <Input
                           id="backend-proxy-port"
                           value={proxyPort}
@@ -1378,10 +1399,10 @@ export function SyncBackendSettingsModal({
                 <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm sm:col-span-2">
                   <span>
                     <span className="block font-medium">
-                      Trust self-signed TLS
+                      {t("backendModal.trustTlsLabel")}
                     </span>
                     <span className="text-muted-foreground">
-                      Use only for a local LND REST endpoint you control.
+                      {t("backendModal.trustTlsHint")}
                     </span>
                   </span>
                   <Switch
@@ -1394,7 +1415,9 @@ export function SyncBackendSettingsModal({
                   />
                 </label>
                 <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="backend-lnd-certificate">TLS certificate</Label>
+                  <Label htmlFor="backend-lnd-certificate">
+                    {t("backendModal.tlsCertLabel")}
+                  </Label>
                   <Input
                     id="backend-lnd-certificate"
                     value={certificate}
@@ -1403,7 +1426,7 @@ export function SyncBackendSettingsModal({
                       setTestState("idle");
                       setTestLog("");
                     }}
-                    placeholder="Path to tls.cert or PEM contents"
+                    placeholder={t("backendModal.tlsCertPlaceholder")}
                     disabled={trustSsl}
                   />
                 </div>
@@ -1412,7 +1435,7 @@ export function SyncBackendSettingsModal({
 
             {showAuth && (
               <section className="space-y-3">
-                <Label>RPC authentication</Label>
+                <Label>{t("backendModal.rpcAuthLabel")}</Label>
                 <div className="flex flex-wrap gap-2">
                   {AUTH_MODES.map((mode) => (
                     <Button
@@ -1422,7 +1445,7 @@ export function SyncBackendSettingsModal({
                       size="sm"
                       onClick={() => setAuth(mode.id)}
                     >
-                      {mode.label}
+                      {t(mode.labelKey)}
                     </Button>
                   ))}
                 </div>
@@ -1432,27 +1455,26 @@ export function SyncBackendSettingsModal({
                       id="backend-api-key"
                       label={
                         isLnd
-                          ? "Read-only macaroon hex"
+                          ? t("backendModal.macaroonLabel")
                           : isBtcpay
-                            ? "BTCPay API key"
-                            : "API key"
+                            ? t("backendModal.btcpayKeyLabel")
+                            : t("backendModal.apiKeyLabel")
                       }
                       value={authVal}
                       onChange={setAuthVal}
                       placeholder={
                         isEditing && initial?.auth === "apikey"
-                          ? "Leave blank to keep current key"
+                          ? t("backendModal.apiKeyKeepPlaceholder")
                           : isLnd
                             ? "0201036c6e64..."
                             : isBtcpay
-                              ? "Paste BTCPay API key"
+                              ? t("backendModal.btcpayKeyPlaceholder")
                               : "sk_live_..."
                       }
                     />
                     {isEditing && initial?.auth === "apikey" ? (
                       <p className="text-xs text-muted-foreground">
-                        Leave blank to keep the stored key; enter a new value
-                        to overwrite it.
+                        {t("backendModal.apiKeyKeepHint")}
                       </p>
                     ) : null}
                   </div>
@@ -1460,7 +1482,7 @@ export function SyncBackendSettingsModal({
                 {auth === "bearer" && (
                   <SecretField
                     id="backend-bearer"
-                    label="Bearer token"
+                    label={t("backendModal.bearerLabel")}
                     value={authVal}
                     onChange={setAuthVal}
                     placeholder="eyJ..."
@@ -1469,7 +1491,9 @@ export function SyncBackendSettingsModal({
                 {auth === "basic" && (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="backend-username">Username</Label>
+                      <Label htmlFor="backend-username">
+                        {t("backendModal.usernameLabel")}
+                      </Label>
                       <Input
                         id="backend-username"
                         value={authVal}
@@ -1478,7 +1502,7 @@ export function SyncBackendSettingsModal({
                     </div>
                     <SecretField
                       id="backend-password"
-                      label="Password"
+                      label={t("backendModal.passwordLabel")}
                       value={authVal2}
                       onChange={setAuthVal2}
                     />
@@ -1507,24 +1531,26 @@ export function SyncBackendSettingsModal({
                     )}
                     aria-hidden="true"
                   />
-                  {testState === "testing" ? "Testing" : "Test connection"}
+                  {testState === "testing"
+                    ? t("backendModal.testing")
+                    : t("backendModal.testConnection")}
                 </Button>
                 {testState === "ok" && (
                   <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
                     <CheckCircle2 className="size-4" />
-                    Connected
+                    {t("backendModal.connected")}
                   </span>
                 )}
                 {testState === "fail" && (
                   <span className="inline-flex items-center gap-1 text-destructive">
                     <XCircle className="size-4" />
-                    Could not reach endpoint
+                    {t("backendModal.couldNotReach")}
                   </span>
                 )}
               </div>
               <textarea
                 readOnly
-                aria-label="Backend test connection log"
+                aria-label={t("backendModal.testLogAria")}
                 value={testLog}
                 className="mt-3 min-h-32 w-full resize-none rounded-md border bg-background p-3 font-mono text-xs leading-5"
               />
@@ -1540,8 +1566,10 @@ export function SyncBackendSettingsModal({
                 size="icon-sm"
                 variant="ghost"
                 className="text-muted-foreground hover:text-destructive"
-                aria-label={`Delete ${initial.name}`}
-                title={`Delete ${initial.name}`}
+                aria-label={t("backendModal.deleteBackend", {
+                  name: initial.name,
+                })}
+                title={t("backendModal.deleteBackend", { name: initial.name })}
                 onClick={() => {
                   void onDelete(initial);
                 }}
@@ -1552,7 +1580,7 @@ export function SyncBackendSettingsModal({
           </div>
           <div className="flex items-center gap-2">
             <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button
               type="button"
@@ -1565,12 +1593,12 @@ export function SyncBackendSettingsModal({
                 <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
               ) : null}
               {isSavingBackend
-                ? "Connecting…"
+                ? t("backendModal.connecting")
                 : testState === "ok"
                   ? isEditing
-                    ? "Save backend"
-                    : "Add sync backend"
-                  : "Connect & save"}
+                    ? t("backendModal.saveBackend")
+                    : t("backendModal.addSyncBackend")
+                  : t("backendModal.connectAndSave")}
             </Button>
           </div>
         </DialogFooter>

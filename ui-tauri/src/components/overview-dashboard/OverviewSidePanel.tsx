@@ -5,6 +5,7 @@ import {
   MoreHorizontal,
   PieChartIcon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Cell, Pie, PieChart } from "recharts";
 
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
@@ -39,6 +40,7 @@ export const BalanceDriversCard = ({
   hideSensitive: boolean;
   currency: Currency;
 }) => {
+  const { t } = useTranslation("overview");
   const { rows, maxValueBtc, netBtc, transactionCount } =
     buildBalanceDrivers(snapshot);
   const fiatCurrency = activeMarketFiatCurrency(snapshot);
@@ -59,19 +61,19 @@ export const BalanceDriversCard = ({
             variant="outline"
             size="icon"
             className="size-7 sm:size-8"
-            aria-label="Balance drivers"
+            aria-label={t("drivers.aria")}
           >
             <ArrowLeftRight className="size-4 text-muted-foreground sm:size-[18px]" />
           </Button>
           <div>
-            <span className="text-sm font-medium">Balance Drivers</span>
+            <span className="text-sm font-medium">{t("drivers.title")}</span>
             <p
               className={cn(
                 "text-[10px] text-muted-foreground sm:text-xs",
                 blurClass(hideSensitive),
               )}
             >
-              Latest {transactionCount.toLocaleString("en-US")} transactions
+              {t("drivers.latestTransactions", { count: transactionCount })}
             </p>
           </div>
         </div>
@@ -94,6 +96,7 @@ export const BalanceDriversCard = ({
       <div className="space-y-2.5">
         {rows.map((item) => {
           const Icon = item.icon;
+          const driverLabel = t(item.labelKey);
           const width =
             maxValueBtc > 0 ? Math.max((item.valueBtc / maxValueBtc) * 100, 4) : 0;
           return (
@@ -102,13 +105,13 @@ export const BalanceDriversCard = ({
               to="/transactions"
               search={transactionsDriverSearch(item.key)}
               className="-mx-1 grid gap-1.5 rounded-md px-1 py-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label={`View ${item.label.toLowerCase()} transactions`}
+              aria-label={t("drivers.viewTransactions", { label: driverLabel })}
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-2">
                   <Icon className={cn("size-3.5 shrink-0", item.toneClassName)} />
                   <span className="truncate text-xs text-muted-foreground">
-                    {item.label}
+                    {driverLabel}
                   </span>
                   <span className="text-[10px] text-muted-foreground">
                     {item.count}
@@ -161,6 +164,7 @@ export const HoldingsBySourceChart = ({
   hideSensitive: boolean;
   currency: Currency;
 }) => {
+  const { t } = useTranslation("overview");
   const isBitcoinMode = currency === "btc";
   const fiatCurrency = activeMarketFiatCurrency(snapshot);
   const fiatRate = activeMarketFiatRate(snapshot);
@@ -191,17 +195,17 @@ export const HoldingsBySourceChart = ({
             variant="outline"
             size="icon"
             className="size-7 sm:size-8"
-            aria-label="Holdings by source"
+            aria-label={t("holdings.aria")}
           >
             <PieChartIcon className="size-4 text-muted-foreground sm:size-[18px]" />
           </Button>
           <div className="min-w-0">
             <span className="text-sm font-medium">
-              Holdings by Source
+              {t("holdings.title")}
             </span>
             {isBitcoinMode ? (
               <p className="text-[10px] text-muted-foreground sm:text-xs">
-                BTC allocation
+                {t("holdings.btcAllocation")}
               </p>
             ) : (
               <p className="flex items-center gap-1 text-[10px] text-muted-foreground sm:text-xs">
@@ -225,7 +229,7 @@ export const HoldingsBySourceChart = ({
                   {unrealizedPercent >= 0 ? "+" : ""}
                   {unrealizedPercent.toFixed(1)}%
                 </span>
-                <span>vs cost basis</span>
+                <span>{t("holdings.vsCostBasis")}</span>
               </p>
             )}
           </div>
@@ -234,7 +238,7 @@ export const HoldingsBySourceChart = ({
           variant="ghost"
           size="icon"
           className="size-7 sm:size-8"
-          aria-label="More options"
+          aria-label={t("holdings.moreOptions")}
         >
           <MoreHorizontal className="size-4 text-muted-foreground" />
         </Button>
@@ -251,7 +255,7 @@ export const HoldingsBySourceChart = ({
                 className="size-1.5 rounded-full"
                 style={{ backgroundColor: item.color }}
               />
-              {item.label}
+              {t(item.labelKey)}
               <span
                 className={cn("tabular-nums", blurClass(hideSensitive))}
               >
@@ -275,10 +279,10 @@ export const HoldingsBySourceChart = ({
             />
             <div className="min-w-0">
               <p className="break-words text-sm font-medium leading-5">
-                {singleHolding.name}
+                {singleHolding.nameKey ? t(singleHolding.nameKey) : singleHolding.name}
               </p>
               <p className="text-[10px] text-muted-foreground sm:text-xs">
-                Only active source
+                {t("holdings.onlyActiveSource")}
               </p>
             </div>
           </div>
@@ -329,7 +333,7 @@ export const HoldingsBySourceChart = ({
                 onMouseLeave={() => setHoveredSlice(null)}
               >
                 {holdingsData.map((entry) => (
-                  <Cell key={entry.name} fill={entry.color} />
+                  <Cell key={entry.nameKey ?? entry.name} fill={entry.color} />
                 ))}
               </Pie>
             </PieChart>
@@ -345,7 +349,7 @@ export const HoldingsBySourceChart = ({
               {totalHoldingsLabel}
             </span>
             <span className="text-[8px] text-muted-foreground sm:text-[10px]">
-              Total
+              {t("holdings.total")}
             </span>
           </div>
         </div>
@@ -353,7 +357,7 @@ export const HoldingsBySourceChart = ({
         <div className="flex min-w-0 flex-col gap-2 sm:gap-3">
           {holdingsData.map((item, index) => (
             <div
-              key={item.name}
+              key={item.nameKey ?? item.name}
               className={cn(
                 "flex items-start justify-between gap-2 transition-opacity duration-200 motion-reduce:transition-none",
                 activeSlice !== null && activeSlice !== index && "opacity-50",
@@ -367,7 +371,7 @@ export const HoldingsBySourceChart = ({
                   style={{ backgroundColor: item.color }}
                 />
                 <span className="min-w-0 break-words text-[10px] leading-4 text-muted-foreground sm:text-xs">
-                  {item.name}
+                  {item.nameKey ? t(item.nameKey) : item.name}
                 </span>
               </div>
               <div className="flex shrink-0 flex-wrap justify-end gap-x-1.5 text-[10px] sm:text-xs">

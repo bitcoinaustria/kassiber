@@ -1,4 +1,5 @@
 import { Check } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 
@@ -20,11 +21,12 @@ export const OnboardingStepper = ({
   current,
   onJump,
 }: OnboardingStepperProps) => {
+  const { t } = useTranslation("onboarding");
   return (
-    <nav aria-label="Setup progress" className="w-full max-w-2xl">
+    <nav aria-label={t("stepper.ariaLabel")} className="w-full max-w-2xl">
       <ol className="flex items-center">
         {labels.map((label, index) => {
-          const text = label ?? `Step ${index + 1}`;
+          const text = label ?? t("stepper.stepFallback", { number: index + 1 });
           const done = index < current;
           const active = index === current;
           const isLast = index === labels.length - 1;

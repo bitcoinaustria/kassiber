@@ -6,6 +6,7 @@ import {
   ShieldOff,
   type LucideIcon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -22,32 +23,32 @@ export type ExposureFilter = "first" | "shielded" | "remote";
 
 export const EXPOSURE_FILTERS: Array<{
   id: ExposureFilter;
-  label: string;
-  hint: string;
+  labelKey: string;
+  hintKey: string;
   icon: LucideIcon;
   iconClass: string;
   barClass: string;
 }> = [
   {
     id: "first",
-    label: "First-party",
-    hint: "On your machine or infrastructure you operate",
+    labelKey: "privacy.exposure.firstParty",
+    hintKey: "privacy.exposure.firstPartyHint",
     icon: ShieldCheck,
     iconClass: "text-emerald-600 dark:text-emerald-400",
     barClass: "bg-emerald-500",
   },
   {
     id: "shielded",
-    label: "Tor / proxy",
-    hint: "IP hidden, queries still seen",
+    labelKey: "privacy.exposure.shielded",
+    hintKey: "privacy.exposure.shieldedHint",
     icon: Network,
     iconClass: "text-sky-600 dark:text-sky-400",
     barClass: "bg-sky-500",
   },
   {
     id: "remote",
-    label: "Third-party",
-    hint: "Can observe your queries",
+    labelKey: "privacy.exposure.thirdParty",
+    hintKey: "privacy.exposure.thirdPartyHint",
     icon: ShieldOff,
     iconClass: "text-amber-600 dark:text-amber-400",
     barClass: "bg-amber-500",
@@ -63,8 +64,8 @@ export function backendExposureFilter(backend: Backend): ExposureFilter {
 
 export interface ExposureGroupDef {
   id: string;
-  title: string;
-  subtitle: string;
+  titleKey: string;
+  subtitleKey: string;
   nets: Net[];
   canEdit: boolean;
 }
@@ -74,23 +75,22 @@ export interface ExposureGroupDef {
 export const EXPOSURE_GROUPS: ExposureGroupDef[] = [
   {
     id: "addresses",
-    title: "Addresses & balances",
-    subtitle: "Indexers that resolve the addresses and UTXOs you look up.",
+    titleKey: "privacy.group.addressesTitle",
+    subtitleKey: "privacy.group.addressesSubtitle",
     nets: ["BTC", "LIQUID"],
     canEdit: true,
   },
   {
     id: "lightning",
-    title: "Lightning node",
-    subtitle: "Reads channel and payment history from your own node.",
+    titleKey: "privacy.group.lightningTitle",
+    subtitleKey: "privacy.group.lightningSubtitle",
     nets: ["LN"],
     canEdit: true,
   },
   {
     id: "market",
-    title: "Market prices",
-    subtitle:
-      "Offline history stays local. Live providers see the pair and coarse transaction-time blocks.",
+    titleKey: "privacy.group.marketTitle",
+    subtitleKey: "privacy.group.marketSubtitle",
     nets: ["FX"],
     canEdit: true,
   },
@@ -101,6 +101,7 @@ export function ExposurePostureBar({
 }: {
   counts: Record<ExposureFilter, number>;
 }) {
+  const { t } = useTranslation("settings");
   const total = counts.first + counts.shielded + counts.remote;
   if (total === 0) {
     return (
@@ -114,7 +115,11 @@ export function ExposurePostureBar({
     <div
       className="flex h-2 w-full overflow-hidden rounded-full bg-muted"
       role="img"
-      aria-label={`${counts.first} first-party, ${counts.shielded} Tor or proxy, ${counts.remote} third-party network surfaces`}
+      aria-label={t("privacy.postureBarAria", {
+        first: counts.first,
+        shielded: counts.shielded,
+        remote: counts.remote,
+      })}
     >
       {EXPOSURE_FILTERS.map((filter) =>
         counts[filter.id] > 0 ? (
@@ -140,6 +145,7 @@ export function ExposureFilterTile({
   active: boolean;
   onClick: () => void;
 }) {
+  const { t } = useTranslation("settings");
   const Icon = filter.icon;
   const dim = filter.id === "remote" && count === 0;
   return (
@@ -159,8 +165,8 @@ export function ExposureFilterTile({
         />
         <span className="font-mono text-lg tabular-nums">{count}</span>
       </div>
-      <p className="mt-1 text-sm font-medium">{filter.label}</p>
-      <p className="text-xs text-muted-foreground">{filter.hint}</p>
+      <p className="mt-1 text-sm font-medium">{t(filter.labelKey)}</p>
+      <p className="text-xs text-muted-foreground">{t(filter.hintKey)}</p>
     </button>
   );
 }
@@ -174,6 +180,7 @@ export function ExposureEndpointRow({
   canEdit: boolean;
   onEdit: () => void;
 }) {
+  const { t } = useTranslation("settings");
   const trust = backendTrust(backend);
   const TrustIcon = trust.icon;
   return (
@@ -200,7 +207,7 @@ export function ExposureEndpointRow({
               type="button"
               size="icon-sm"
               variant="ghost"
-              aria-label={`Edit ${backend.name}`}
+              aria-label={t("privacy.editEndpoint", { name: backend.name })}
               onClick={onEdit}
             >
               <Pencil className="size-3.5" aria-hidden="true" />
@@ -233,6 +240,7 @@ export function PrivacySettingsPanel({
   onManageAi: () => void;
   onManageMarketData: () => void;
 }) {
+  const { t } = useTranslation("settings");
   const [filter, setFilter] = React.useState<ExposureFilter | null>(null);
 
   // Only enabled backends actually send traffic off the machine.
@@ -252,30 +260,33 @@ export function PrivacySettingsPanel({
     return next;
   }, [enabled]);
 
-  const activeFilterLabel = EXPOSURE_FILTERS.find(
+  const activeFilterEntry = EXPOSURE_FILTERS.find(
     (entry) => entry.id === filter,
-  )?.label;
+  );
+  const activeFilterLabel = activeFilterEntry
+    ? t(activeFilterEntry.labelKey)
+    : undefined;
 
   return (
     <div className="space-y-6">
       <section className="space-y-3">
-        <h3 className="text-sm font-semibold">On screen</h3>
+        <h3 className="text-sm font-semibold">
+          {t("privacy.onScreenHeading")}
+        </h3>
         <SettingsSwitchRow
-          label="Blur sensitive values"
+          label={t("privacy.blurLabel")}
           description={
-            hideSensitive
-              ? "Balances, addresses, and amounts are blurred until you reveal them."
-              : "Balances, addresses, and amounts are shown in full."
+            hideSensitive ? t("privacy.blurOn") : t("privacy.blurOff")
           }
           checked={hideSensitive}
           onCheckedChange={setHideSensitive}
         />
         <SettingsSwitchRow
-          label="Clear clipboard after copy"
+          label={t("privacy.clipboardLabel")}
           description={
             clearClipboard
-              ? "Copied addresses and keys are cleared from the system clipboard after 30 seconds."
-              : "Copied values stay in the system clipboard until overwritten."
+              ? t("privacy.clipboardOn")
+              : t("privacy.clipboardOff")
           }
           checked={clearClipboard}
           onCheckedChange={setClearClipboard}
@@ -284,10 +295,11 @@ export function PrivacySettingsPanel({
 
       <section className="space-y-3">
         <div>
-          <h3 className="text-sm font-semibold">What leaves this machine</h3>
+          <h3 className="text-sm font-semibold">
+            {t("privacy.leavesHeading")}
+          </h3>
           <p className="text-sm text-muted-foreground">
-            Kassiber is local-first. Network endpoints are grouped by what each
-            one can see; assistant prompt exposure is shown separately below.
+            {t("privacy.leavesDescription")}
           </p>
         </div>
 
@@ -301,12 +313,10 @@ export function PrivacySettingsPanel({
           )}
         >
           {counts.remote > 0
-            ? `${counts.remote} third-party endpoint${
-                counts.remote === 1 ? "" : "s"
-              } can see your queries. Mark your own nodes as yours, or route over Tor.`
+            ? t("privacy.thirdPartyWarning", { count: counts.remote })
             : aiFeaturesEnabled
-              ? "No third-party network endpoints can see your queries. Review assistant providers below for prompt exposure."
-              : "No third-party endpoints can see your queries."}
+              ? t("privacy.noThirdPartyWithAi")
+              : t("privacy.noThirdParty")}
         </p>
 
         <div className="grid gap-2 sm:grid-cols-3">
@@ -325,13 +335,13 @@ export function PrivacySettingsPanel({
 
         {filter ? (
           <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-            <span>Showing {activeFilterLabel} surfaces only.</span>
+            <span>{t("privacy.showingFilter", { label: activeFilterLabel })}</span>
             <button
               type="button"
               className="underline-offset-4 hover:underline"
               onClick={() => setFilter(null)}
             >
-              Clear filter
+              {t("privacy.clearFilter")}
             </button>
           </div>
         ) : null}
@@ -347,9 +357,9 @@ export function PrivacySettingsPanel({
           return (
             <div key={group.id} className="space-y-2">
               <div>
-                <p className="text-sm font-medium">{group.title}</p>
+                <p className="text-sm font-medium">{t(group.titleKey)}</p>
                 <p className="text-xs text-muted-foreground">
-                  {group.subtitle}
+                  {t(group.subtitleKey)}
                 </p>
               </div>
               {rows.length > 0 ? (
@@ -369,7 +379,7 @@ export function PrivacySettingsPanel({
                 </div>
               ) : (
                 <p className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                  None match the {activeFilterLabel} filter.
+                  {t("privacy.noneMatchFilter", { label: activeFilterLabel })}
                 </p>
               )}
             </div>
@@ -378,17 +388,18 @@ export function PrivacySettingsPanel({
 
         <div className="space-y-2">
           <div>
-            <p className="text-sm font-medium">Assistant prompts</p>
+            <p className="text-sm font-medium">
+              {t("privacy.assistantHeading")}
+            </p>
             <p className="text-xs text-muted-foreground">
-              Prompt content — which can include book data — leaves only if you
-              enable a remote or CLI provider.
+              {t("privacy.assistantDescription")}
             </p>
           </div>
           <div className="flex flex-col gap-2 rounded-md border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
               {aiFeaturesEnabled
-                ? "Enabled. Local providers keep prompts on this machine; remote and CLI providers can see prompt content."
-                : "Disabled. Provider settings stay saved without sending prompts."}
+                ? t("privacy.assistantEnabled")
+                : t("privacy.assistantDisabled")}
             </p>
             <Button
               type="button"
@@ -397,7 +408,7 @@ export function PrivacySettingsPanel({
               className="shrink-0"
               onClick={onManageAi}
             >
-              Review AI providers
+              {t("privacy.reviewAi")}
             </Button>
           </div>
         </div>

@@ -9,7 +9,6 @@ import {
   formatSignedDisplayMoney,
   transactionBtc,
   transactionFlow,
-  transactionFlowLabels,
   type Transaction,
   type TransactionDirection,
   type TransactionFlow,
@@ -126,7 +125,13 @@ const flowChartConfig = {
 } satisfies ChartConfig;
 
 
-function toDashboardTransaction(tx: Tx, index: number): Transaction {
+type Translator = (key: string, opts?: Record<string, unknown>) => string;
+
+function toDashboardTransaction(
+  tx: Tx,
+  index: number,
+  t?: Translator,
+): Transaction {
   const tag = tx.tag || "";
   const displayAmountSat =
     tx.type === "Consolidation" && tx.amountSat === 0 && tx.feeSat
@@ -200,11 +205,16 @@ function toDashboardTransaction(tx: Tx, index: number): Transaction {
     excluded: tx.excluded,
     quarantineReason: tx.quarantineReason ?? null,
     pair: tx.pair,
-    counterparty: tx.counter || tx.account || "Unassigned",
+    counterparty:
+      tx.counter ||
+      tx.account ||
+      (t ? t("transactions:fallback.unassigned") : "Unassigned"),
     counterpartyInitials: initials(tx.counter || tx.account || "TX"),
     direction,
     flow,
-    wallet: tx.account || "Unassigned wallet",
+    wallet:
+      tx.account ||
+      (t ? t("transactions:fallback.unassignedWallet") : "Unassigned wallet"),
     tag,
     sourceType: tx.type,
     paymentMethod,
@@ -214,25 +224,42 @@ function toDashboardTransaction(tx: Tx, index: number): Transaction {
   };
 }
 
-function dashboardRecordsFromTxs(txs: Tx[]) {
-  return txs.map(toDashboardTransaction);
+function dashboardRecordsFromTxs(txs: Tx[], t?: Translator) {
+  return txs.map((tx, index) => toDashboardTransaction(tx, index, t));
 }
+
+// Stable English flow labels for the redundancy comparison below. The stored
+// `label` is a persisted code (English), so this must match against stable
+// English, not the translated flow label.
+const flowLabelStableEnglish: Record<TransactionFlow, string> = {
+  incoming: "incoming",
+  outgoing: "outgoing",
+  transfer: "internal transfer",
+  swap: "swap",
+  "layer-transition": "layer transition",
+};
 
 function isRedundantTransactionLabel(label: string, flow: TransactionFlow) {
   const normalized = label.trim().toLowerCase();
   if (!normalized || normalized === "unlabeled") return true;
-  return normalized === transactionFlowLabels[flow].toLowerCase();
+  return normalized === flowLabelStableEnglish[flow];
 }
 
-function pairRailLabel(txn: Transaction) {
+function pairRailLabel(txn: Transaction, t?: Translator) {
   const pair = txn.pair;
   if (!pair) return txn.paymentMethod;
-  const outRail = railLabelForAssetOrWallet(pair.outAsset, pair.outWallet);
-  const inRail = railLabelForAssetOrWallet(pair.inAsset, pair.inWallet);
+  const outRail = railLabelForAssetOrWallet(pair.outAsset, pair.outWallet, t);
+  const inRail = railLabelForAssetOrWallet(pair.inAsset, pair.inWallet, t);
   return outRail === inRail ? outRail : `${outRail} -> ${inRail}`;
 }
 
-function railLabelForAssetOrWallet(asset?: string | null, wallet?: string | null) {
+// Network names stay English (Lightning/Liquid/on-chain); only the "Other"
+// fallback is localized via the optional translator.
+function railLabelForAssetOrWallet(
+  asset?: string | null,
+  wallet?: string | null,
+  t?: Translator,
+) {
   const text = `${asset ?? ""} ${wallet ?? ""}`.toLowerCase();
   if (text.includes("lightning") || text.includes("phoenix") || text.includes("ln")) {
     return "Lightning";
@@ -243,7 +270,7 @@ function railLabelForAssetOrWallet(asset?: string | null, wallet?: string | null
   if (text.includes("btc") || text.includes("onchain") || text.includes("on-chain")) {
     return "On-chain";
   }
-  return "Other";
+  return t ? t("transactions:classification.other") : "Other";
 }
 
 function initials(value: string) {
@@ -320,7 +347,10 @@ function urlAttachmentDetail(
   return rawUrl;
 }
 
-function attachmentRecordToItem(record: AttachmentRecord): AttachmentItem {
+function attachmentRecordToItem(
+  record: AttachmentRecord,
+  t?: (key: string) => string,
+): AttachmentItem {
   const kind = record.attachment_type === "url" ? "url" : "file";
   const size = compactBytes(record.size_bytes);
   const hash = record.sha256 ? `sha256 ${record.sha256.slice(0, 6)}...` : null;
@@ -328,16 +358,26 @@ function attachmentRecordToItem(record: AttachmentRecord): AttachmentItem {
     record.media_type || null,
     size,
     hash,
-    record.exists === false ? "missing file" : null,
+    record.exists === false
+      ? t
+        ? t("transactions:attachment.missingFile")
+        : "missing file"
+      : null,
   ].filter(Boolean);
   const storedLabel = record.label?.trim();
+  const fallbackLinkLabel = t
+    ? t("transactions:attachment.linkLabel")
+    : "Link attachment";
+  const fallbackFileLabel = t
+    ? t("transactions:attachment.fileLabel")
+    : "File attachment";
   const label =
     kind === "url"
-      ? record.display_label || storedLabel || "Link attachment"
+      ? record.display_label || storedLabel || fallbackLinkLabel
       : record.display_label ||
         storedLabel ||
         record.original_filename ||
-        "File attachment";
+        fallbackFileLabel;
   return {
     id: record.id,
     kind,
@@ -406,30 +446,31 @@ function isAttachmentListQueryKeyForTransaction(
   );
 }
 
+// The following label maps hold i18n keys (resolved with t() at the call site).
 const periodLabels: Record<PeriodKey, string> = {
-  ytd: "YTD",
-  "1year": "1 Year",
-  "3months": "3 Months",
-  "30days": "30 Days",
-  "5years": "5 Years",
-  all: "All",
+  ytd: "transactions:period.ytd",
+  "1year": "transactions:period.1year",
+  "3months": "transactions:period.3months",
+  "30days": "transactions:period.30days",
+  "5years": "transactions:period.5years",
+  all: "transactions:period.all",
 };
 
 const flowChartMetricLabels: Record<FlowChartMetric, string> = {
-  amount: "Amount",
-  count: "Count",
+  amount: "transactions:chartMetric.amount",
+  count: "transactions:chartMetric.count",
 };
 
 const flowChartModeLabels: Record<FlowChartMode, string> = {
-  external: "External",
-  all: "All",
+  external: "transactions:chartMode.external",
+  all: "transactions:chartMode.all",
 };
 
 const flowChartSegmentLabels: Record<FlowChartSegment, string> = {
-  incoming: "Incoming",
-  outgoing: "Outgoing",
-  transfers: "Transfers",
-  swaps: "Swaps",
+  incoming: "transactions:chartSegment.incoming",
+  outgoing: "transactions:chartSegment.outgoing",
+  transfers: "transactions:chartSegment.transfers",
+  swaps: "transactions:chartSegment.swaps",
 };
 
 const emptyFlowChartSegmentStats = (): FlowChartSegmentStats => ({
@@ -900,10 +941,17 @@ function formatFlowTooltipValue(
   value: number,
   currency: Currency,
   metric: FlowChartMetric,
+  t?: (key: string, opts?: Record<string, unknown>) => string,
 ) {
   if (metric === "count") {
+    const count = Math.abs(value);
+    if (t) {
+      return value >= 0
+        ? t("transactions:workbench.tooltip.txDeltaPositive", { count })
+        : t("transactions:workbench.tooltip.txDeltaNegative", { count });
+    }
     const prefix = value >= 0 ? "+ " : "− ";
-    return `${prefix}${Math.abs(value)} tx`;
+    return `${prefix}${count} tx`;
   }
   return formatSignedDisplayMoney(value, value, currency);
 }
@@ -978,12 +1026,14 @@ function flowAxisDomain(
   return [-maxAbs * 1.12, maxAbs * 1.12];
 }
 
+// `label` holds an i18n key (resolved with t() at the call site); `value`
+// stays a stable lookup/URL token.
 const dateFilterOptions = [
-  { label: "All", value: "all" },
-  { label: "Today", value: "today" },
-  { label: "Yesterday", value: "yesterday" },
-  { label: "Last 7 days", value: "7days" },
-  { label: "Last 30 days", value: "30days" },
+  { label: "transactions:dateFilter.all", value: "all" },
+  { label: "transactions:dateFilter.today", value: "today" },
+  { label: "transactions:dateFilter.yesterday", value: "yesterday" },
+  { label: "transactions:dateFilter.last7days", value: "7days" },
+  { label: "transactions:dateFilter.last30days", value: "30days" },
 ];
 
 type FeeFilter = "all" | "with-fees";
@@ -1069,27 +1119,36 @@ function matchesTransactionDeepLink(txn: Transaction, transactionId: string) {
     .some((value) => value?.toLowerCase() === target);
 }
 
-function flowChartSelectionLabel(selection: FlowChartSelection) {
+function flowChartSelectionLabel(
+  selection: FlowChartSelection,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+) {
   const segmentLabel = selection.segment
-    ? flowChartSegmentLabels[selection.segment]
-    : "All flows";
-  return `${selection.bucketLabel} · ${segmentLabel} · ${
-    flowChartModeLabels[selection.mode]
-  }`;
+    ? t(flowChartSegmentLabels[selection.segment])
+    : t("transactions:selectionLabel.allFlows");
+  return t("transactions:selectionLabel.flowChart", {
+    bucket: selection.bucketLabel,
+    segment: segmentLabel,
+    mode: t(flowChartModeLabels[selection.mode]),
+  });
 }
 
+// Returns an i18n key (resolved with t() at the call site).
 function quickFilterLabel(filter: TableQuickFilter) {
-  if (filter === "external_flow") return "External flow";
-  if (filter === "review_queue") return "Review queue";
-  if (filter === "no_explorer_id") return "Missing explorer link";
-  if (filter === "missing_price") return "Missing price";
-  return "Failed import";
+  if (filter === "external_flow") return "transactions:quickFilter.externalFlow";
+  if (filter === "review_queue") return "transactions:quickFilter.reviewQueue";
+  if (filter === "no_explorer_id") return "transactions:quickFilter.missingExplorerLink";
+  if (filter === "missing_price") return "transactions:quickFilter.missingPrice";
+  return "transactions:quickFilter.failedImport";
 }
 
-function breakdownSelectionLabel(selection: BreakdownSelection) {
+function breakdownSelectionLabel(
+  selection: BreakdownSelection,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+) {
   return selection.dimension === "network"
-    ? `Network: ${selection.key}`
-    : `Wallet/source: ${selection.key}`;
+    ? t("transactions:selectionLabel.network", { key: selection.key })
+    : t("transactions:selectionLabel.walletSource", { key: selection.key });
 }
 
 function matchesFlowChartSelection(

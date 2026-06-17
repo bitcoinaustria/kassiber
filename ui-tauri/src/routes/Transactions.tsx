@@ -1,5 +1,6 @@
 import { useRouterState } from "@tanstack/react-router";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import { TransactionsDashboard } from "@/components/transactions/dashboard/TransactionsDashboard";
 import {
@@ -37,6 +38,7 @@ function isCrossAssetCandidate(candidate: SwapCandidateReference) {
 }
 
 export function Transactions() {
+  const { t } = useTranslation("transactions");
   const dataMode = useUiStore((state) => state.dataMode);
   const routeSearch = useRouterState({ select: (state) => state.location.search });
   const detailParams = React.useMemo(
@@ -156,12 +158,12 @@ export function Transactions() {
   if (dataMode === "real" && !hasLiveTransactions) {
     return (
       <ScreenNotice
-        title="Transactions unavailable"
+        title={t("route.unavailable.title")}
         body={
           workbenchQuery.error instanceof Error
             ? workbenchQuery.error.message
             : workbenchQuery.data?.error?.message ??
-              "Kassiber could not read real transactions for the current book."
+              t("route.unavailable.body")
         }
       />
     );

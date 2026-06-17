@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { Download, EyeOff, Trash2 } from "lucide-react";
 
 import Ai02 from "@/components/ai-02";
@@ -12,6 +13,7 @@ import { saveChatExport } from "@/lib/chatExport";
 import { cn } from "@/lib/utils";
 
 export function Assistant() {
+  const { t } = useTranslation("assistant");
   const {
     messages,
     isStreaming,
@@ -79,19 +81,20 @@ export function Assistant() {
       )}
     >
       <section
-        aria-label="Assistant conversation"
+        aria-label={t("page.conversationLabel")}
         className="flex min-h-0 flex-1 flex-col bg-background"
       >
         <div className="mx-auto flex w-full max-w-4xl shrink-0 items-center justify-end gap-2 px-1 pb-3">
           {hasMessages ? (
             isStreaming ? (
               <span className="mr-auto rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                Generating
-                {queuedPromptCount > 0 ? ` - ${queuedPromptCount} queued` : ""}
+                {queuedPromptCount > 0
+                  ? t("page.generatingQueued", { count: queuedPromptCount })
+                  : t("page.generating")}
               </span>
             ) : (
               <span className="mr-auto text-xs text-muted-foreground">
-                {messages.length} message{messages.length === 1 ? "" : "s"}
+                {t("page.messageCount", { count: messages.length })}
               </span>
             )
           ) : (
@@ -110,10 +113,10 @@ export function Assistant() {
               )}
               aria-pressed={incognito}
               onClick={() => setIncognito(!incognito)}
-              title="Incognito: do not store this conversation"
+              title={t("page.incognitoTitle")}
             >
               <EyeOff className="size-4" aria-hidden="true" />
-              Incognito
+              {t("page.incognito")}
             </Button>
           ) : null}
           <ChatHistoryPanel />
@@ -127,7 +130,7 @@ export function Assistant() {
                 onClick={exportChat}
               >
                 <Download className="size-4" aria-hidden="true" />
-                Export chat
+                {t("page.exportChat")}
               </Button>
               <Button
                 type="button"
@@ -137,7 +140,7 @@ export function Assistant() {
                 onClick={reset}
               >
                 <Trash2 className="size-4" aria-hidden="true" />
-                Clear chat
+                {t("page.clearChat")}
               </Button>
             </>
           ) : null}
@@ -167,7 +170,7 @@ export function Assistant() {
             ) : (
               <>
                 <h2 className="text-3xl font-medium tracking-normal text-foreground sm:text-4xl">
-                  What needs reviewing today?
+                  {t("page.heading")}
                 </h2>
                 <div className="w-full">{composer}</div>
               </>

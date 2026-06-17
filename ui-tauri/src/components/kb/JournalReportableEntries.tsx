@@ -1,4 +1,6 @@
 import { Loader2, RefreshCw } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import {
   ReviewDataTable,
@@ -64,6 +66,7 @@ const eur = new Intl.NumberFormat("de-AT", {
 });
 
 export function JournalReportableEntries() {
+  const { t } = useTranslation("journals");
   const { data, isLoading, isError, error } = useDaemon<JournalEventsSnapshot>(
     "ui.journals.events.list",
     { limit: REPORTABLE_ENTRY_LIMIT },
@@ -80,13 +83,12 @@ export function JournalReportableEntries() {
       <div className={screenPanelClassName}>
         <div className="rounded-xl border bg-card p-4">
           <h2 className="text-base font-semibold">
-            Ledger entries unavailable
+            {t("reportable.unavailable.title")}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {error instanceof Error
               ? error.message
-              : data?.error?.message ??
-                "The daemon did not return processed ledger entries."}
+              : data?.error?.message ?? t("reportable.unavailable.fallback")}
           </p>
         </div>
       </div>
@@ -95,16 +97,16 @@ export function JournalReportableEntries() {
 
   const snapshot = data.data;
   const rows = snapshot.events.map((event) =>
-    reportableEntryToRow(event, snapshot.summary),
+    reportableEntryToRow(event, snapshot.summary, t),
   );
   const metrics = reportableEntryMetrics(snapshot.summary);
 
   return (
     <ReviewDataTable
       kind="journal-events"
-      eyebrow="Audit · processed ledger"
-      title="Processed Ledger"
-      description="Journal entries produced by processing transactions into tax lots, pricing, basis, proceeds, and gain/loss."
+      eyebrow={t("reportable.eyebrow")}
+      title={t("reportable.title")}
+      description={t("reportable.description")}
       rows={rows}
       metrics={metrics}
       showSummaryBadge={false}
@@ -112,14 +114,14 @@ export function JournalReportableEntries() {
       showPriorityBadge={false}
       badgeLabel={
         snapshot.summary.needsJournals
-          ? "stale"
-          : `${snapshot.summary.count.toLocaleString("en-US")} entries`
+          ? t("reportable.badge.stale")
+          : t("reportable.badge.entries", { count: snapshot.summary.count })
       }
       shellClassName="w-full space-y-3 sm:space-y-4"
-      tableTitle="Processed ledger entries"
+      tableTitle={t("reportable.tableTitle")}
       tableDescriptionDetail={snapshot.summary.freshnessReason}
-      searchPlaceholder="Search wallet, entry, asset, pricing..."
-      emptyMessage="No processed journal entries yet. Process journals after importing transactions."
+      searchPlaceholder={t("reportable.searchPlaceholder")}
+      emptyMessage={t("reportable.empty")}
       actions={
         <Button
           type="button"
@@ -132,7 +134,7 @@ export function JournalReportableEntries() {
           ) : (
             <RefreshCw className="size-4" aria-hidden="true" />
           )}
-          Process journals
+          {t("reportable.actions.processJournals")}
         </Button>
       }
     />
@@ -142,86 +144,132 @@ export function JournalReportableEntries() {
 function reportableEntryToRow(
   event: ReportableJournalEntry,
   summary: JournalEventsSnapshot["summary"],
+  t: TFunction<"journals">,
 ): ReviewTableRow {
   const atLabel =
     event.atKennzahl !== null
-      ? `AT Kennzahl ${event.atKennzahl}`
+      ? t("reportable.atKennzahl", { kennzahl: event.atKennzahl })
       : event.atCategory
-        ? formatEntryType(event.atCategory)
+        ? localizedEntryType(event.atCategory, t)
         : "";
   const status: ReviewTableRow["status"] = summary.needsJournals
     ? "Needs review"
     : "Ready";
   return {
     id: shortId(event.transactionExternalId || event.transactionId || event.id),
-    date: formatDate(event.occurredAt || event.createdAt),
+    date: formatDate(event.occurredAt || event.createdAt, t),
     account: event.accountLabel || event.account || event.wallet,
-    event: eventTitle(event),
+    event: eventTitle(event, t),
     source: [event.wallet, atLabel].filter(Boolean).join(" · "),
     amount: formatMsatAmount(event.quantityMsat, event.asset),
-    basis: basisText(event),
+    basis: basisText(event, t),
     impact:
       event.gainLossEur === null ? eur.format(0) : eur.format(event.gainLossEur),
     status,
     priority: status === "Ready" ? "Low" : "Medium",
-    owner: summary.profile ?? "Active book",
-    evidenceHint: eventEvidenceHint(event, summary),
+    owner: summary.profile ?? t("quarantine.ownerFallback"),
+    evidenceHint: eventEvidenceHint(event, summary, t),
     nextAction: summary.needsJournals
-      ? "Process journals before relying on this entry"
+      ? t("reportable.nextAction.needsJournals")
       : event.atKennzahl !== null
-        ? "Ready for Austrian report mapping"
-        : "Ready for reports",
+        ? t("reportable.nextAction.austrianMapping")
+        : t("reportable.nextAction.reports"),
     metricFilterIds: reportableEntryMetricFilterIds(event),
   };
 }
 
-function eventTitle(event: ReportableJournalEntry) {
-  const typeLabel = formatEntryType(event.entryType);
+function eventTitle(event: ReportableJournalEntry, t: TFunction<"journals">) {
+  const typeLabel = localizedEntryType(event.entryType, t);
   const description = stripJournalMarkers(event.description).trim();
-  return description ? `${typeLabel} · ${description}` : typeLabel;
+  return description
+    ? t("reportable.eventTitle", { type: typeLabel, description })
+    : typeLabel;
 }
 
-function basisText(event: ReportableJournalEntry) {
+// Daemon entry-type CODES map to translated labels; unknown codes fall back to
+// a structural humanizer of the code itself (the code is the stable id).
+const ENTRY_TYPE_LABEL_KEYS: Record<string, string> = {
+  acquisition: "ledger.entryType.acquisition",
+  disposal: "ledger.entryType.disposal",
+  income: "ledger.entryType.income",
+  fee: "ledger.entryType.fee",
+  transfer_fee: "ledger.entryType.transferFee",
+  transfer: "ledger.entryType.transfer",
+  transfer_in: "ledger.entryType.transferIn",
+  transfer_out: "ledger.entryType.transferOut",
+  neutral_swap: "ledger.entryType.neutralSwap",
+};
+
+function localizedEntryType(type: string, t: TFunction<"journals">) {
+  const key = ENTRY_TYPE_LABEL_KEYS[type];
+  return key ? t(key) : formatEntryType(type);
+}
+
+function basisText(event: ReportableJournalEntry, t: TFunction<"journals">) {
   if (event.costBasisEur !== null || event.proceedsEur !== null) {
     return [
-      event.costBasisEur !== null ? `Basis ${eur.format(event.costBasisEur)}` : null,
-      event.proceedsEur !== null ? `Proceeds ${eur.format(event.proceedsEur)}` : null,
+      event.costBasisEur !== null
+        ? t("reportable.basis.amount", { value: eur.format(event.costBasisEur) })
+        : null,
+      event.proceedsEur !== null
+        ? t("reportable.basis.proceeds", {
+            value: eur.format(event.proceedsEur),
+          })
+        : null,
     ]
       .filter(Boolean)
       .join(" · ");
   }
-  if (event.fiatValueEur) return `Value ${eur.format(event.fiatValueEur)}`;
-  return "No fiat impact";
+  if (event.fiatValueEur)
+    return t("reportable.basis.value", {
+      value: eur.format(event.fiatValueEur),
+    });
+  return t("reportable.basis.noFiatImpact");
 }
 
-function pricingSourceLabel(event: ReportableJournalEntry) {
+function pricingSourceLabel(
+  event: ReportableJournalEntry,
+  t: TFunction<"journals">,
+) {
   const source = event.pricingSourceKind;
   const quality = event.pricingQuality;
-  if (!source && !quality) return "Pricing";
-  if (source === "manual_override") return "Manual price";
-  if (source === "source_price") return "Source price";
-  if (source === "rate_cache") return "Cached market rate";
+  if (!source && !quality) return t("reportable.pricing.label");
+  if (source === "manual_override") return t("reportable.pricing.manual");
+  if (source === "source_price") return t("reportable.pricing.source");
+  if (source === "rate_cache") return t("reportable.pricing.cached");
   if (source === "fmv_provider") {
     return quality === "provider_sample"
-      ? "Provider market sample"
-      : "Provider market price";
+      ? t("reportable.pricing.providerSample")
+      : t("reportable.pricing.providerPrice");
   }
   const sourceLabel = formatEntryType(source || "pricing");
-  return quality ? `${sourceLabel} (${formatEntryType(quality)})` : sourceLabel;
+  return quality
+    ? t("reportable.pricing.qualified", {
+        source: sourceLabel,
+        quality: formatEntryType(quality),
+      })
+    : sourceLabel;
 }
 
 // Kept separate so eventEvidenceHint can stay readable while preserving compact row copy.
 function eventEvidenceHint(
   event: ReportableJournalEntry,
   summary: JournalEventsSnapshot["summary"],
+  t: TFunction<"journals">,
 ) {
   if (summary.needsJournals) return summary.freshnessReason;
-  if (event.atKennzahl !== null) return `Austrian form mapping ${event.atKennzahl}`;
-  if (event.pricingSourceKind) return `Priced by ${pricingSourceLabel(event)}`;
+  if (event.atKennzahl !== null)
+    return t("reportable.evidence.austrianMapping", {
+      kennzahl: event.atKennzahl,
+    });
+  if (event.pricingSourceKind)
+    return t("reportable.evidence.pricedBy", {
+      source: pricingSourceLabel(event, t),
+    });
   if (event.entryType === "transfer_in" || event.entryType === "transfer_out") {
-    return "Carried by transfer matching";
+    return t("reportable.evidence.transferMatching");
   }
-  return "Computed by journal processing";
+  return t("reportable.evidence.journalProcessing");
 }
 
 function stripJournalMarkers(description: string) {
@@ -248,8 +296,8 @@ function formatMsatAmount(msat: number, asset: string) {
   return `${sign}${sats.toLocaleString("en-US")} sats ${asset}`.trim();
 }
 
-function formatDate(value: string) {
-  return value ? value.slice(0, 10) : "Unknown";
+function formatDate(value: string, t: TFunction<"journals">) {
+  return value ? value.slice(0, 10) : t("review.unknownDate");
 }
 
 function shortId(value: string) {
