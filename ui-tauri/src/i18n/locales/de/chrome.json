@@ -1,4 +1,8 @@
 {
+  "errorBoundary": {
+    "reload": "Neu laden",
+    "details": "Details werden unter Entwicklerwerkzeuge → Protokoll aufgezeichnet."
+  },
   "shell": {
     "skipToContent": "Zum Hauptinhalt springen",
     "lockKassiber": "Kassiber sperren",

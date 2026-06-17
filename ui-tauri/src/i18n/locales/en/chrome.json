@@ -1,4 +1,8 @@
 {
+  "errorBoundary": {
+    "reload": "Reload",
+    "details": "Details are recorded under Developer tools → Logs."
+  },
   "shell": {
     "skipToContent": "Skip to main content",
     "lockKassiber": "Lock Kassiber",

@@ -36,6 +36,14 @@
     "noExplorer": "Kein öffentlicher Explorer",
     "openOn": "{{txid}} auf {{explorer}} öffnen"
   },
+  "explorerDialog": {
+    "title": "Transaktion im Browser öffnen?",
+    "body": "Dies öffnet {{explorer}} außerhalb von Kassiber. Der Explorer sieht deine IP-Adresse und die angefragte Transaktions-ID.",
+    "fallbackExplorer": "den konfigurierten Explorer",
+    "opening": "Wird geöffnet…",
+    "open": "Explorer öffnen",
+    "openError": "Explorer konnte nicht im Standardbrowser geöffnet werden."
+  },
   "flowOption": {
     "incoming": "Empfangen",
     "outgoing": "Senden",
