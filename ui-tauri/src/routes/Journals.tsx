@@ -79,7 +79,7 @@ const eur = new Intl.NumberFormat("de-AT", {
 const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
 export function Journals() {
-  const { t } = useTranslation("journals");
+  const { t } = useTranslation(["journals", "nav", "common"]);
   const navigate = useNavigate();
   const { data, isLoading, isError, error } = useDaemon<JournalsSnapshot>(
     "ui.journals.snapshot",
@@ -537,7 +537,8 @@ const ENTRY_TYPE_LABEL_KEYS: Record<string, string> = {
 
 function localizedEntryType(type: string, t: TFunction<"journals">) {
   const key = ENTRY_TYPE_LABEL_KEYS[type];
-  return key ? t(key) : formatEntryType(type);
+  // dynamic key
+  return key ? t(key as never) : formatEntryType(type);
 }
 
 function displayEntryType(type: string) {

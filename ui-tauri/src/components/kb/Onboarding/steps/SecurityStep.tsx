@@ -21,7 +21,7 @@ export const SecurityStep = ({
   goBack,
   canContinue = true,
 }: StepComponentProps) => {
-  const { t } = useTranslation("onboarding");
+  const { t } = useTranslation(["onboarding", "common"]);
   const encrypted = form.databaseMode === "sqlcipher";
   const touchIdAvailable = encrypted && canUseTouchIdPassphraseUnlock();
   const passphraseHint = encrypted

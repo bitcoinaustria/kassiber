@@ -202,7 +202,8 @@ const ENTRY_TYPE_LABEL_KEYS: Record<string, string> = {
 
 function localizedEntryType(type: string, t: TFunction<"journals">) {
   const key = ENTRY_TYPE_LABEL_KEYS[type];
-  return key ? t(key) : formatEntryType(type);
+  // dynamic key
+  return key ? t(key as never) : formatEntryType(type);
 }
 
 function basisText(event: ReportableJournalEntry, t: TFunction<"journals">) {

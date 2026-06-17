@@ -250,7 +250,8 @@ const syncModeLabelKeys: Record<string, string> = {
 
 function syncModeLabel(value: string, t: TFunction<"connections">) {
   const key = syncModeLabelKeys[value];
-  return key ? t(key) : undefined;
+  // dynamic key
+  return key ? t(key as never) : undefined;
 }
 
 function formatBackendDetail(
@@ -276,7 +277,8 @@ function samouraiSectionLabel(
     ricochet: "detail.samourai.sectionLabel.ricochet",
   };
   const key = keys[value ?? ""];
-  return key ? t(key) : value ?? t("detail.samourai.groupFallback");
+  // dynamic key
+  return key ? t(key as never) : value ?? t("detail.samourai.groupFallback");
 }
 
 function samouraiSourceLabel(
@@ -530,7 +532,7 @@ function ConnectionDetailView({
   txs,
   hideSensitive,
 }: ConnectionDetailViewProps) {
-  const { t } = useTranslation("connections");
+  const { t } = useTranslation(["connections", "common"]);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const dataMode = useUiStore((state) => state.dataMode);

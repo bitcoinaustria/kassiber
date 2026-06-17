@@ -52,7 +52,7 @@ import {
 } from "./SettingsModel";
 
 export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "common"]);
   const rateBackends = backends.filter((backend) => backend.net === "FX");
   const maintenanceSettingsQuery = useDaemon<MaintenanceSettingsData>(
     "ui.maintenance.settings",

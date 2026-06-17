@@ -251,7 +251,7 @@ export function BirdsEyeView({
   workspaceId: string;
   isFetching?: boolean;
 }) {
-  const { t } = useTranslation("nav");
+  const { t } = useTranslation(["nav", "common"]);
   const { t: to } = useTranslation("overview");
   const navigate = useNavigate();
   const switchProfile = useDaemonMutation<{ activeProfileId: string }>(
@@ -278,7 +278,11 @@ export function BirdsEyeView({
         body: `${book}: ${phase}`,
         progress: {
           indeterminate: !hasProgressCounter(record),
-          label: formatWorkspaceProgressLabel(record, to),
+          // loose translator
+          label: formatWorkspaceProgressLabel(
+            record,
+            to as (key: string, options?: Record<string, unknown>) => string,
+          ),
           value: workspaceProgressValue(record),
         },
       });
@@ -675,7 +679,7 @@ export function BookRow({
   onOpenRoute: (profileId: string, route: BookRoute) => void;
   disabled: boolean;
 }) {
-  const { t } = useTranslation("overview");
+  const { t } = useTranslation(["overview", "common"]);
   const ready = book.readiness.ready;
   const fiatCurrency = book.profile.fiatCurrency || book.fiat.fiatCurrency || "EUR";
   const btcBalance = book.connections.reduce(

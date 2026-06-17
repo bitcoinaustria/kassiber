@@ -1,3 +1,4 @@
+import type { ParseKeys } from "i18next";
 import { Plus, X } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 
@@ -28,7 +29,7 @@ import {
 import type { TransactionDetailTabContext } from "./TransactionDetailTabContext";
 
 export function TransactionClassifyTab({ ctx }: { ctx: TransactionDetailTabContext }) {
-  const { t } = useTranslation("transactions");
+  const { t } = useTranslation(["transactions"]);
   const {
     localDraft,
     dirty,
@@ -69,7 +70,12 @@ export function TransactionClassifyTab({ ctx }: { ctx: TransactionDetailTabConte
                             {classificationOptions.map((label) => (
                               <SelectItem key={label} value={label}>
                                 {classificationOptionLabelKeys[label]
-                                  ? t(classificationOptionLabelKeys[label])
+                                  ? // dynamic key
+                                    t(
+                                      classificationOptionLabelKeys[
+                                        label
+                                      ] as ParseKeys<["transactions"]>,
+                                    )
                                   : label}
                               </SelectItem>
                             ))}
@@ -190,7 +196,12 @@ export function TransactionClassifyTab({ ctx }: { ctx: TransactionDetailTabConte
                             >
                               {t("classify.suggestionPrefix", {
                                 tag: tagSuggestionLabelKeys[tag]
-                                  ? t(tagSuggestionLabelKeys[tag])
+                                  ? // dynamic key
+                                    t(
+                                      tagSuggestionLabelKeys[
+                                        tag
+                                      ] as ParseKeys<["transactions"]>,
+                                    )
                                   : tag,
                               })}
                             </button>

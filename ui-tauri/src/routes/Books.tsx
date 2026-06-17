@@ -556,7 +556,7 @@ export function WorkspaceSection({
   onRename,
   onRenameWorkspace,
 }: WorkspaceSectionProps) {
-  const { t } = useTranslation("onboarding");
+  const { t } = useTranslation(["onboarding", "common"]);
   return (
     <Card>
       <CardHeader className="flex flex-col gap-3 border-b pb-5 md:flex-row md:items-center md:justify-between">
@@ -739,7 +739,7 @@ function CreateProfileDialog({
   onSourceProfileChange,
   onSubmit,
 }: CreateProfileDialogProps) {
-  const { t } = useTranslation("onboarding");
+  const { t } = useTranslation(["onboarding", "common"]);
   const sourceValue = sourceProfile?.id ?? "__default_settings__";
   const sourceOptions = workspace?.profiles ?? [];
 
@@ -884,7 +884,7 @@ function RenameProfileDialog({
   onOpenChange,
   onSubmit,
 }: RenameProfileDialogProps) {
-  const { t } = useTranslation("onboarding");
+  const { t } = useTranslation(["onboarding", "common"]);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -972,7 +972,7 @@ function RenameWorkspaceDialog({
   onOpenChange,
   onSubmit,
 }: RenameWorkspaceDialogProps) {
-  const { t } = useTranslation("onboarding");
+  const { t } = useTranslation(["onboarding", "common"]);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -1057,7 +1057,7 @@ function ProfileSwitchDialog({
   onOpenOverview,
   onSwitchHere,
 }: ProfileSwitchDialogProps) {
-  const { t } = useTranslation("onboarding");
+  const { t } = useTranslation(["onboarding", "common"]);
   const profile = pendingSwitch?.profile;
   const workspace = pendingSwitch?.workspace;
 
@@ -1165,7 +1165,7 @@ function CreateWorkspaceDialog({
   onOpenChange,
   onSubmit,
 }: CreateWorkspaceDialogProps) {
-  const { t } = useTranslation("onboarding");
+  const { t } = useTranslation(["onboarding", "common"]);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">

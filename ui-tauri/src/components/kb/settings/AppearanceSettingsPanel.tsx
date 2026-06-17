@@ -36,7 +36,7 @@ export function AppearanceSettingsPanel({
   lang: LanguageCode;
   setLang: (lang: LanguageCode) => void;
 }) {
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "common"]);
   const scalePercent = Math.round(appScale * 100);
   return (
     <div className="space-y-6">

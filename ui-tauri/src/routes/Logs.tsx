@@ -70,7 +70,7 @@ const SUPPORT_BUNDLE_PREVIEW_LINES = 30;
 const SEARCH_INPUT_ID = "kb-logs-search";
 
 export function Logs() {
-  const { t } = useTranslation("review");
+  const { t } = useTranslation(["review", "nav", "common"]);
   const addNotification = useUiStore((s) => s.addNotification);
   const records = useAppLogRecords();
   const [levelFilter, setLevelFilter] = React.useState<LogLevelFilter>("all");

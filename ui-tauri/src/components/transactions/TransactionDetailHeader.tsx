@@ -73,7 +73,7 @@ export function TransactionDetailHeader({
   onOpenExplorer: (transaction: Transaction) => void;
   onClose: () => void;
 }) {
-  const { t } = useTranslation("transactions");
+  const { t } = useTranslation(["transactions"]);
   const StatusIcon = transactionStatusIcons[reviewStatus];
 
   return (

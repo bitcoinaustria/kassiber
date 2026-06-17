@@ -25,7 +25,8 @@ export const WelcomeSection = ({
   const { t } = useTranslation("overview");
   const readiness = buildOverviewReadiness(snapshot);
   const ReadinessIcon = readiness.icon;
-  const readinessTitle = t(readiness.title.key, readiness.title.params);
+  // dynamic key
+  const readinessTitle = t(readiness.title.key as never, readiness.title.params);
   const needsJournals = Boolean(snapshot.status?.needsJournals);
   const readinessClassName = cn(
     "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs font-medium",
@@ -60,7 +61,8 @@ export const WelcomeSection = ({
           </span>
         )}
         <span className="min-w-0 truncate text-xs text-muted-foreground sm:text-sm">
-          {t(readiness.detail.key, readiness.detail.params)}
+          {/* dynamic key */}
+          {t(readiness.detail.key as never, readiness.detail.params)}
         </span>
       </div>
 

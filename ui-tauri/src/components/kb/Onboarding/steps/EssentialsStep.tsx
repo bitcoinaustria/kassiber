@@ -26,7 +26,7 @@ export const EssentialsStep = ({
   currentStep,
   totalSteps,
 }: StepComponentProps) => {
-  const { t } = useTranslation("onboarding");
+  const { t } = useTranslation(["onboarding", "common"]);
   const isAustrian = form.taxCountry === "at";
 
   return (

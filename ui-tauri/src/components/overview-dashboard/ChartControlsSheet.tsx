@@ -179,7 +179,7 @@ export function ChartControlsSheet({
   onResetMarkerMinimums,
   hideSensitive,
 }: ChartControlsSheetProps) {
-  const { t } = useTranslation("overview");
+  const { t } = useTranslation(["overview", "common"]);
   const markerMinimumsAtDefault =
     incomingMarkerMinimumBtc === DEFAULT_INCOMING_MARKER_MIN_BTC &&
     outgoingMarkerMinimumBtc === DEFAULT_OUTGOING_MARKER_MIN_BTC;

@@ -357,7 +357,7 @@ export function SwapMatching() {
 }
 
 function PairingReview({ mode }: { mode: PairingReviewMode }) {
-  const { t } = useTranslation("review");
+  const { t } = useTranslation(["review", "common"]);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const candidateType = mode === "transfers" ? "transfer" : "swap";
   const savedViewSurface =
@@ -1878,7 +1878,7 @@ function SaveViewDialog({
   onSave,
   isSaving,
 }: SaveViewDialogProps) {
-  const { t } = useTranslation("review");
+  const { t } = useTranslation(["review", "common"]);
   return (
     <Dialog open={open} onOpenChange={(value) => (!value ? onCancel() : undefined)}>
       <DialogContent>
@@ -1928,7 +1928,7 @@ interface CreateRuleDialogProps {
 }
 
 function CreateRuleDialog({ open, onClose, onCreate, isCreating }: CreateRuleDialogProps) {
-  const { t } = useTranslation("review");
+  const { t } = useTranslation(["review", "common"]);
   const [name, setName] = useState("");
   const [outAsset, setOutAsset] = useState("any");
   const [inAsset, setInAsset] = useState("any");
@@ -2126,7 +2126,7 @@ interface KeymapHelpDialogProps {
 }
 
 function KeymapHelpDialog({ open, onClose, bindings }: KeymapHelpDialogProps) {
-  const { t } = useTranslation("review");
+  const { t } = useTranslation(["review", "common"]);
   const grouped = useMemo(() => {
     const groups: Record<string, Keybinding[]> = {};
     for (const binding of bindings) {

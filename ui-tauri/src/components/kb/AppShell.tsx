@@ -1491,7 +1491,7 @@ function AppSidebar({
       <SidebarContent>
         {navGroups.map((group) => (
           <SidebarGroup key={group.titleKey}>
-            <SidebarGroupLabel>{t(group.titleKey)}</SidebarGroupLabel>
+            <SidebarGroupLabel>{t(group.titleKey as never) /* dynamic key */}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {group.items.map((item) => (
@@ -1522,7 +1522,7 @@ function SidebarActions({
   pathname: string;
   developerToolsEnabled: boolean;
 }) {
-  const { t } = useTranslation("chrome");
+  const { t } = useTranslation(["chrome", "nav"]);
   const dataMode = useUiStore((state) => state.dataMode);
   const setDataMode = useUiStore((state) => state.setDataMode);
   const isRealData = dataMode === "real";
@@ -1689,10 +1689,10 @@ function NavMenuItem({
   if (!item.children?.length) {
     return (
       <SidebarMenuItem>
-        <SidebarMenuButton asChild isActive={active} tooltip={t(item.labelKey)}>
+        <SidebarMenuButton asChild isActive={active} tooltip={t(item.labelKey as never) /* dynamic key */}>
           <Link to={item.href}>
             <Icon className="size-4" aria-hidden="true" />
-            <span>{t(item.labelKey)}</span>
+            <span>{t(item.labelKey as never) /* dynamic key */}</span>
           </Link>
         </SidebarMenuButton>
       </SidebarMenuItem>
@@ -1708,9 +1708,9 @@ function NavMenuItem({
     >
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
-          <SidebarMenuButton isActive={active} tooltip={t(item.labelKey)}>
+          <SidebarMenuButton isActive={active} tooltip={t(item.labelKey as never) /* dynamic key */}>
             <Icon className="size-4" aria-hidden="true" />
-            <span>{t(item.labelKey)}</span>
+            <span>{t(item.labelKey as never) /* dynamic key */}</span>
             <ChevronRight className="ml-auto size-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
           </SidebarMenuButton>
         </CollapsibleTrigger>
@@ -1723,7 +1723,7 @@ function NavMenuItem({
                 <SidebarMenuSubItem key={child.labelKey}>
                   <SidebarMenuSubButton asChild isActive={childActive}>
                     <Link to={child.href}>
-                      {t(child.labelKey)}
+                      {t(child.labelKey as never) /* dynamic key */}
                     </Link>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
@@ -2165,7 +2165,7 @@ function AppDashboardHeader({
               /
             </span>
             <span className="hidden truncate text-sm text-sidebar-foreground/65 xl:inline">
-              {t(meta.titleKey)}
+              {t(meta.titleKey as never) /* dynamic key */}
             </span>
           </div>
         </div>
@@ -2198,11 +2198,11 @@ function AppDashboardHeader({
             name="header-search"
             inputMode="search"
             autoComplete="off"
-            aria-label={t(`${meta.searchKey}.label`)}
+            aria-label={t(`${meta.searchKey}.label` as never) /* dynamic key */}
             aria-expanded={searchOpen}
             aria-controls={searchListId}
             aria-activedescendant={searchActiveId}
-            placeholder={t(`${meta.searchKey}.placeholder`)}
+            placeholder={t(`${meta.searchKey}.placeholder` as never) /* dynamic key */}
             value={searchQuery}
             onChange={(event) => {
               setSearchQuery(event.target.value);
@@ -2279,7 +2279,7 @@ function AppDashboardHeader({
                           </span>
                           <span className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                             {t(
-                              `search.category.${SEARCH_CATEGORY_LABEL_KEYS[result.category]}`,
+                              `search.category.${SEARCH_CATEGORY_LABEL_KEYS[result.category]}` as never, // dynamic key
                             )}
                           </span>
                         </span>

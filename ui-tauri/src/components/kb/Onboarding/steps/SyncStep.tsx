@@ -21,7 +21,7 @@ export const SyncStep = ({
   currentStep,
   totalSteps,
 }: StepComponentProps) => {
-  const { t } = useTranslation("onboarding");
+  const { t } = useTranslation(["onboarding", "common"]);
   return (
     <OnboardingStepFrame>
       <OnboardingStepLeftWrapper

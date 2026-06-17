@@ -38,7 +38,7 @@ export function RangeTabs({ value, onChange, className }: RangeTabsProps) {
                 : "border-line bg-transparent text-ink-2",
             )}
           >
-            {t(`range.${labelKey}`)}
+            {t(`range.${labelKey}` as never) /* dynamic key */}
           </button>
         );
       })}

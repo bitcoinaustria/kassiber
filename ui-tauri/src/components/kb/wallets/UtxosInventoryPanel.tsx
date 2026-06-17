@@ -355,7 +355,8 @@ export function explorerButtonTitle(
   t?: TFunction<"connections">,
 ) {
   const translate = t ?? ((key: string, opts?: Record<string, unknown>) =>
-    i18n.t(key, { ns: "connections", ...opts }) as string);
+    // dynamic key
+    i18n.t(key as never, { ns: "connections", ...opts }) as string);
   return translate("utxos.openExplorer", { explorer: target.label });
 }
 
@@ -531,7 +532,7 @@ function UtxoExplorerOpenDialog({
   row: WalletUtxoRow | null;
   target: ExplorerTarget | null;
   onRowChange: (row: WalletUtxoRow | null) => void;
-  t: TFunction<"connections">;
+  t: TFunction<["connections", "common"]>;
 }) {
   const [openError, setOpenError] = useState<string | null>(null);
   const [opening, setOpening] = useState(false);
@@ -656,7 +657,7 @@ export function UtxosInventoryPanel({
   onRefresh,
   onOpenTransaction,
 }: UtxosInventoryPanelProps) {
-  const { t } = useTranslation("connections");
+  const { t } = useTranslation(["connections", "common"]);
   const rows = inventory?.utxos ?? [];
   const walletId = inventory?.wallet?.id ?? null;
   const totalCount = inventory?.summary?.count ?? inventory?.freshness.active_count ?? rows.length;

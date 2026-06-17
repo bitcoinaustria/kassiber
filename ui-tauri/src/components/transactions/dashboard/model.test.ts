@@ -82,7 +82,13 @@ describe("transaction dashboard chart selection", () => {
       mode: "all",
     };
 
-    expect(flowChartSelectionLabel(selection, t)).toBe(
+    // loose translator
+    expect(
+      flowChartSelectionLabel(
+        selection,
+        t as (key: string, opts?: Record<string, unknown>) => string,
+      ),
+    ).toBe(
       `${bucket.label} · All flows · All`,
     );
     expect(

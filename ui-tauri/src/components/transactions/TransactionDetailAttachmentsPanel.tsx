@@ -40,7 +40,7 @@ function AttachLinksDialog({
   onOpenChange: (open: boolean) => void;
   onSubmit: (urls: string[]) => void | Promise<void>;
 }) {
-  const { t } = useTranslation("transactions");
+  const { t } = useTranslation(["transactions", "common"]);
   const [text, setText] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);

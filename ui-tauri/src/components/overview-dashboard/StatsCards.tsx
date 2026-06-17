@@ -132,7 +132,8 @@ export const StatsCards = ({
             : `${stat.isPositive ? "+" : "-"}${stat.changePercent.toFixed(1)}%`;
           const statTitle = isBitcoinPortfolio
             ? t("stats.bitcoinBalance")
-            : t(stat.titleKey);
+            : // dynamic key
+              t(stat.titleKey as never);
 
           return (
             <div
@@ -207,7 +208,8 @@ export const StatsCards = ({
                     <span className="hidden items-center gap-2 text-muted-foreground sm:inline-flex">
                       <span className="size-1 rounded-full bg-muted-foreground" />
                       <span className="xl:whitespace-nowrap">
-                        {t(stat.comparisonLabelKey)}
+                        {/* dynamic key */}
+                        {t(stat.comparisonLabelKey as never)}
                       </span>
                     </span>
                   </div>

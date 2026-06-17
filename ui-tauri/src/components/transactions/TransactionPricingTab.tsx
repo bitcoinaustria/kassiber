@@ -1,3 +1,4 @@
+import type { ParseKeys } from "i18next";
 import { AlertTriangle, Save, SlidersHorizontal } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 
@@ -26,7 +27,7 @@ import {
 import type { TransactionDetailTabContext } from "./TransactionDetailTabContext";
 
 export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContext }) {
-  const { t } = useTranslation("transactions");
+  const { t } = useTranslation(["transactions"]);
   const {
     transaction,
     localDraft,
@@ -73,10 +74,14 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                             }}
                           >
                             <div className="text-sm font-medium">
-                              {t(option.label)}
+                              {/* dynamic key */}
+                              {t(option.label as ParseKeys<["transactions"]>)}
                             </div>
                             <div className="mt-1 text-xs text-muted-foreground">
-                              {option.description ? t(option.description) : null}
+                              {option.description
+                                ? // dynamic key
+                                  t(option.description as ParseKeys<["transactions"]>)
+                                : null}
                             </div>
                           </button>
                         ))}
@@ -106,11 +111,12 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                                 : "text-muted-foreground",
                             )}
                           >
+                            {/* dynamic key */}
                             {t(
                               pricingSourceLabel(
                                 localDraft.pricingSourceKind,
                                 localDraft.pricingQuality,
-                              ),
+                              ) as ParseKeys<["transactions"]>,
                             )}
                           </Badge>
                         </div>
@@ -237,8 +243,10 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                                 {t("pricing.provider")}
                               </span>
                               <br />
-                              {pricingProviderLabel(transaction.pricingProvider, t) ??
-                                t("pricing.providerUnknown")}
+                              {pricingProviderLabel(
+                                transaction.pricingProvider,
+                                t as (key: string) => string, // loose translator
+                              ) ?? t("pricing.providerUnknown")}
                             </div>
                             <div>
                               <span className="font-medium text-foreground">
@@ -251,7 +259,8 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                             </div>
                             <div>
                               <span className="font-medium text-foreground">
-                                {t(pricePoint.label)}
+                                {/* dynamic key */}
+                                {t(pricePoint.label as ParseKeys<["transactions"]>)}
                               </span>
                               <br />
                               {pricePoint.value}

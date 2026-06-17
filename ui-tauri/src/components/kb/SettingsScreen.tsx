@@ -76,7 +76,7 @@ interface SettingsScreenProps {
 }
 
 export function SettingsScreen({ onLock }: SettingsScreenProps) {
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "common"]);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const clearClipboard = useUiStore((s) => s.clearClipboard);
@@ -1036,12 +1036,15 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             />
             <div className="min-w-0 flex-1">
               <div className="mb-5 space-y-1 border-b pb-4">
-                <p className="kb-mono-caption">{t(activeMeta.groupKey)}</p>
+                {/* dynamic key */}
+                <p className="kb-mono-caption">{t(activeMeta.groupKey as never)}</p>
                 <h2 className="text-lg font-semibold tracking-tight">
-                  {t(activeMeta.labelKey)}
+                  {/* dynamic key */}
+                  {t(activeMeta.labelKey as never)}
                 </h2>
                 <p className="max-w-2xl text-sm text-muted-foreground">
-                  {t(activeMeta.descriptionKey)}
+                  {/* dynamic key */}
+                  {t(activeMeta.descriptionKey as never)}
                 </p>
               </div>
               {sectionContent}

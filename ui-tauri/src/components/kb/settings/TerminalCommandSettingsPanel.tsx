@@ -22,7 +22,7 @@ export function TerminalCommandSettingsPanel({
   onInstall: () => void;
   onRemove: () => void;
 }) {
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "common"]);
   const actionLabel = status?.needsRepair
     ? t("terminal.repairAction")
     : status?.installed

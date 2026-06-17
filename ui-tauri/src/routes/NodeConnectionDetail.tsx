@@ -89,25 +89,25 @@ const fmtSatSigned = (value: number) =>
 const fmtPubkey = (value: string) =>
   value.length <= 18 ? value : `${value.slice(0, 8)}…${value.slice(-6)}`;
 
-const channelStateLabelKeys: Record<NodeChannelState, string> = {
+const channelStateLabelKeys = {
   active: "node.channelState.active",
   inactive: "node.channelState.inactive",
   pending_open: "node.channelState.pendingOpen",
   pending_close: "node.channelState.pendingClose",
   closed: "node.channelState.closed",
   force_closed: "node.channelState.forceClosed",
-};
+} as const satisfies Record<NodeChannelState, string>;
 
 const channelStateLabel = (
   state: NodeChannelState,
   t: TFunction<"connections">,
 ) => t(channelStateLabelKeys[state]);
 
-const forwardStatusLabelKeys: Record<NodeForwardStatus, string> = {
+const forwardStatusLabelKeys = {
   settled: "node.forwardStatus.settled",
   failed: "node.forwardStatus.failed",
   offered: "node.forwardStatus.offered",
-};
+} as const satisfies Record<NodeForwardStatus, string>;
 
 const forwardStatusLabel = (
   status: NodeForwardStatus,

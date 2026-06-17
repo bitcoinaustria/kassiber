@@ -33,7 +33,7 @@ export function ProtocolChip({ kind }: { kind: ConnectionKind }) {
   const { t } = useTranslation("chrome");
   return (
     <span className="font-mono text-[8px] font-semibold tracking-[0.14em] text-ink-3">
-      {t(`protocol.${PROTOCOL_LABEL_KEYS[kind]}`)}
+      {t(`protocol.${PROTOCOL_LABEL_KEYS[kind]}` as never) /* dynamic key */}
     </span>
   );
 }

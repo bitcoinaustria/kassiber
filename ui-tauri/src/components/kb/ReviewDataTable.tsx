@@ -123,19 +123,19 @@ const statusOptions: Array<ReviewTableRow["status"] | "All"> = [
   "Ready",
 ];
 
-const statusLabelKey: Record<ReviewTableRow["status"] | "All", string> = {
+const statusLabelKey = {
   All: "review.status.all",
   Ready: "review.status.ready",
   "Needs review": "review.status.needsReview",
   Blocked: "review.status.blocked",
   Resolved: "review.status.resolved",
-};
+} as const satisfies Record<ReviewTableRow["status"] | "All", string>;
 
-const priorityLabelKey: Record<ReviewTableRow["priority"], string> = {
+const priorityLabelKey = {
   Low: "review.priority.low",
   Medium: "review.priority.medium",
   High: "review.priority.high",
-};
+} as const satisfies Record<ReviewTableRow["priority"], string>;
 
 export type ReviewTone = "good" | "warning" | "alert" | "neutral";
 type SortDirection = "desc" | "asc";
@@ -162,7 +162,7 @@ export function ReviewDataTable({
   showPriorityBadge = true,
   shellClassName = screenShellClassName,
 }: ReviewDataTableProps) {
-  const { t } = useTranslation("journals");
+  const { t } = useTranslation(["journals", "common"]);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const [globalFilter, setGlobalFilter] = useState("");
   const [statusFilter, setStatusFilter] =

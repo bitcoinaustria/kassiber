@@ -98,7 +98,7 @@ export const BtcActivityChart = ({
   onOpenTransactionDetail?: (transactionId: string) => void;
   fiatSeriesEnabled?: boolean;
 }) => {
-  const { t } = useTranslation("overview");
+  const { t } = useTranslation(["overview", "common"]);
   const to = t as OverviewTranslate;
   const [period, setPeriod] =
     React.useState<TimePeriod>(initialTimePeriodFromUrl);

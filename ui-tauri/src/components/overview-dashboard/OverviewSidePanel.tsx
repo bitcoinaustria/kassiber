@@ -96,7 +96,8 @@ export const BalanceDriversCard = ({
       <div className="space-y-2.5">
         {rows.map((item) => {
           const Icon = item.icon;
-          const driverLabel = t(item.labelKey);
+          // dynamic key
+          const driverLabel = t(item.labelKey as never);
           const width =
             maxValueBtc > 0 ? Math.max((item.valueBtc / maxValueBtc) * 100, 4) : 0;
           return (
@@ -255,7 +256,8 @@ export const HoldingsBySourceChart = ({
                 className="size-1.5 rounded-full"
                 style={{ backgroundColor: item.color }}
               />
-              {t(item.labelKey)}
+              {/* dynamic key */}
+              {t(item.labelKey as never)}
               <span
                 className={cn("tabular-nums", blurClass(hideSensitive))}
               >
@@ -279,7 +281,8 @@ export const HoldingsBySourceChart = ({
             />
             <div className="min-w-0">
               <p className="break-words text-sm font-medium leading-5">
-                {singleHolding.nameKey ? t(singleHolding.nameKey) : singleHolding.name}
+                {/* dynamic key */}
+                {singleHolding.nameKey ? t(singleHolding.nameKey as never) : singleHolding.name}
               </p>
               <p className="text-[10px] text-muted-foreground sm:text-xs">
                 {t("holdings.onlyActiveSource")}
@@ -371,7 +374,8 @@ export const HoldingsBySourceChart = ({
                   style={{ backgroundColor: item.color }}
                 />
                 <span className="min-w-0 break-words text-[10px] leading-4 text-muted-foreground sm:text-xs">
-                  {item.nameKey ? t(item.nameKey) : item.name}
+                  {/* dynamic key */}
+                  {item.nameKey ? t(item.nameKey as never) : item.name}
                 </span>
               </div>
               <div className="flex shrink-0 flex-wrap justify-end gap-x-1.5 text-[10px] sm:text-xs">

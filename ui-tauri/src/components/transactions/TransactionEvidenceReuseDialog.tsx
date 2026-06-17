@@ -58,7 +58,7 @@ export function TransactionEvidenceReuseDialog({
   hideSensitive?: boolean;
   onCopy: (attachmentIds: string[]) => void | Promise<void>;
 }) {
-  const { t } = useTranslation("transactions");
+  const { t } = useTranslation(["transactions", "common"]);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 
   React.useEffect(() => {

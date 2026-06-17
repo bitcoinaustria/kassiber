@@ -47,7 +47,7 @@ export function WalletsFilters({
   onStatusFilterChange,
   statusFilter,
 }: WalletsFiltersProps) {
-  const { t } = useTranslation("connections");
+  const { t } = useTranslation(["connections", "chrome"]);
   return (
     <>
       <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5">

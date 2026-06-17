@@ -273,12 +273,12 @@ export const transactionStatusIcons: Record<
 };
 
 // Holds i18n keys (resolved with t() at the call site), not literal labels.
-export const transactionStatusLabels: Record<TransactionStatus, string> = {
+export const transactionStatusLabels = {
   completed: "transactions:status.completed",
   pending: "transactions:status.pending",
   failed: "transactions:status.failed",
   review: "transactions:status.review",
-};
+} as const satisfies Record<TransactionStatus, string>;
 
 export const allTransactionStatuses: TransactionStatus[] = [
   "completed",
@@ -295,13 +295,13 @@ export const allPaymentMethods = [
 ] as const;
 
 // Holds i18n keys (resolved with t() at the call site), not literal labels.
-export const transactionFlowLabels: Record<TransactionFlow, string> = {
+export const transactionFlowLabels = {
   incoming: "transactions:flow.incoming",
   outgoing: "transactions:flow.outgoing",
   transfer: "transactions:flow.transfer",
   swap: "transactions:flow.swap",
   "layer-transition": "transactions:flow.layerTransition",
-};
+} as const satisfies Record<TransactionFlow, string>;
 
 export const transactionFlowStyles: Record<TransactionFlow, string> = {
   incoming:

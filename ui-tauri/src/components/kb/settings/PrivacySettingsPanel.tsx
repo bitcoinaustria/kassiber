@@ -165,8 +165,10 @@ export function ExposureFilterTile({
         />
         <span className="font-mono text-lg tabular-nums">{count}</span>
       </div>
-      <p className="mt-1 text-sm font-medium">{t(filter.labelKey)}</p>
-      <p className="text-xs text-muted-foreground">{t(filter.hintKey)}</p>
+      {/* dynamic key */}
+      <p className="mt-1 text-sm font-medium">{t(filter.labelKey as never)}</p>
+      {/* dynamic key */}
+      <p className="text-xs text-muted-foreground">{t(filter.hintKey as never)}</p>
     </button>
   );
 }
@@ -264,7 +266,8 @@ export function PrivacySettingsPanel({
     (entry) => entry.id === filter,
   );
   const activeFilterLabel = activeFilterEntry
-    ? t(activeFilterEntry.labelKey)
+    ? // dynamic key
+      t(activeFilterEntry.labelKey as never)
     : undefined;
 
   return (
@@ -357,9 +360,11 @@ export function PrivacySettingsPanel({
           return (
             <div key={group.id} className="space-y-2">
               <div>
-                <p className="text-sm font-medium">{t(group.titleKey)}</p>
+                {/* dynamic key */}
+                <p className="text-sm font-medium">{t(group.titleKey as never)}</p>
                 <p className="text-xs text-muted-foreground">
-                  {t(group.subtitleKey)}
+                  {/* dynamic key */}
+                  {t(group.subtitleKey as never)}
                 </p>
               </div>
               {rows.length > 0 ? (

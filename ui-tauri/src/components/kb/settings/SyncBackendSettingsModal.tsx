@@ -459,7 +459,7 @@ export function SyncBackendSettingsModal({
   onDelete,
   onSave,
 }: SyncBackendSettingsModalProps) {
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "common"]);
   const testElectrum = useDaemonMutation<{
     ok: boolean;
     logs: string[];
@@ -514,9 +514,12 @@ export function SyncBackendSettingsModal({
     scopedTypes,
   });
   const modalCopy = {
-    title: t(`${modalCopyKey}.title`),
-    description: t(`${modalCopyKey}.description`),
-    selectorLabel: t(`${modalCopyKey}.selectorLabel`),
+    // dynamic key
+    title: t(`${modalCopyKey}.title` as never),
+    // dynamic key
+    description: t(`${modalCopyKey}.description` as never),
+    // dynamic key
+    selectorLabel: t(`${modalCopyKey}.selectorLabel` as never),
   };
   const publicPresets = React.useMemo(() => publicBackendPresets(type), [type]);
   const showTypePicker = !isEditing && scopedTypes.length > 1;
@@ -663,7 +666,8 @@ export function SyncBackendSettingsModal({
         setName(preset.name);
         setInfrastructureOwner(inferredInfrastructureOwnership(preset.url));
       } else {
-        setName(customBackendName(type, preset, t));
+        // loose translator
+        setName(customBackendName(type, preset, t as (key: string) => string));
         applyCustomEndpointDefaults(preset, {
           setUrl,
           setElectrumHost,
@@ -902,7 +906,8 @@ export function SyncBackendSettingsModal({
                 <div>
                   <Label>{modalCopy.selectorLabel}</Label>
                   <p className="text-sm text-muted-foreground">
-                    {t(type.descKey)}
+                    {/* dynamic key */}
+                    {t(type.descKey as never)}
                   </p>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -926,7 +931,8 @@ export function SyncBackendSettingsModal({
                           </span>
                           <span className="block text-xs leading-tight text-muted-foreground">
                             {backendType.subtitleKey
-                              ? t(backendType.subtitleKey)
+                              ? // dynamic key
+                                t(backendType.subtitleKey as never)
                               : backendType.net}
                           </span>
                         </span>
@@ -1445,7 +1451,8 @@ export function SyncBackendSettingsModal({
                       size="sm"
                       onClick={() => setAuth(mode.id)}
                     >
-                      {t(mode.labelKey)}
+                      {/* dynamic key */}
+                      {t(mode.labelKey as never)}
                     </Button>
                   ))}
                 </div>

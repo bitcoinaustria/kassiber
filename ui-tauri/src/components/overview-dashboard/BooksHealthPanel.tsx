@@ -33,7 +33,7 @@ export const BooksHealthPanel = ({
   onProcessJournals: () => void;
   isProcessingJournals: boolean;
 }) => {
-  const { t } = useTranslation("overview");
+  const { t } = useTranslation(["overview", "nav"]);
   const healthItems = buildOverviewHealthItems(snapshot);
   const primaryAction = buildPrimaryOverviewAction(snapshot);
   const PrimaryIcon = primaryAction?.icon;
@@ -76,10 +76,12 @@ export const BooksHealthPanel = ({
             </span>
             <span className="min-w-0">
               <span className="block text-sm font-semibold">
-                {t(primaryAction.title.key, primaryAction.title.params)}
+                {/* dynamic key */}
+                {t(primaryAction.title.key as never, primaryAction.title.params)}
               </span>
               <span className="mt-0.5 block text-xs leading-5 opacity-80">
-                {t(primaryAction.detail.key, primaryAction.detail.params)}
+                {/* dynamic key */}
+                {t(primaryAction.detail.key as never, primaryAction.detail.params)}
               </span>
             </span>
           </Link>
@@ -107,16 +109,18 @@ export const BooksHealthPanel = ({
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-xs font-medium text-muted-foreground">
-                    {t(item.title.key, item.title.params)}
+                    {/* dynamic key */}
+                    {t(item.title.key as never, item.title.params)}
                   </span>
                   <span className="mt-0.5 block truncate text-sm font-semibold text-foreground">
                     {isJournalRefresh && isProcessingJournals
                       ? t("health.journals.reprocessing")
-                      : t(item.value.key, item.value.params)}
+                      : /* dynamic key */ t(item.value.key as never, item.value.params)}
                   </span>
                 </span>
                 <span className="hidden max-w-[140px] text-right text-[10px] leading-4 text-muted-foreground sm:block">
-                  {t(item.detail.key, item.detail.params)}
+                  {/* dynamic key */}
+                  {t(item.detail.key as never, item.detail.params)}
                 </span>
               </>
             );

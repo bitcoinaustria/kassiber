@@ -52,11 +52,11 @@ interface AiProviderFormProps {
   onSaved?: (name: string) => void;
 }
 
-const PROVIDER_KIND_HINT_KEYS: Record<AiProviderInput["kind"], string> = {
+const PROVIDER_KIND_HINT_KEYS = {
   local: "aiProvider.kindHint.local",
   remote: "aiProvider.kindHint.remote",
   tee: "aiProvider.kindHint.tee",
-};
+} as const satisfies Record<AiProviderInput["kind"], string>;
 
 const CLI_LOCATORS = ["claude-cli://default", "codex-cli://default"] as const;
 const PROVIDER_PRESETS = [
@@ -93,7 +93,7 @@ export function AiProviderForm({
   onClose,
   onSaved,
 }: AiProviderFormProps) {
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "common"]);
   const [name, setName] = React.useState(initial?.name ?? "");
   const [baseUrl, setBaseUrl] = React.useState(initial?.base_url ?? "");
   const [apiKey, setApiKey] = React.useState(initial?.api_key ?? "");

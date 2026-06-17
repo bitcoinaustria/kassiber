@@ -37,7 +37,7 @@ const MODE_LABEL_KEYS: Record<string, string> = {
 };
 
 export function ChatHistorySettingsCard() {
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "common"]);
   // Without a `history` arg the configure kind is a pure read of the
   // effective policy state.
   const configQuery = useDaemon<ChatHistoryConfigShape>(
@@ -102,10 +102,14 @@ export function ChatHistorySettingsCard() {
           <SelectContent>
             {(["auto", "on", "off"] as const).map((value) => (
               <SelectItem key={value} value={value}>
-                <span className="font-medium">{t(MODE_LABEL_KEYS[value])}</span>
+                <span className="font-medium">
+                  {/* dynamic key */}
+                  {t(MODE_LABEL_KEYS[value] as never)}
+                </span>
                 <span className="text-muted-foreground">
                   {" — "}
-                  {t(MODE_DESCRIPTION_KEYS[value])}
+                  {/* dynamic key */}
+                  {t(MODE_DESCRIPTION_KEYS[value] as never)}
                 </span>
               </SelectItem>
             ))}

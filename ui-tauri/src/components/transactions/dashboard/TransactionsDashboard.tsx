@@ -112,7 +112,10 @@ const TransactionsDashboard = ({
       ) {
         txs.unshift(focusedTransaction);
       }
-      return dashboardRecordsFromTxs(txs, t);
+      return dashboardRecordsFromTxs(
+        txs,
+        t as (key: string, opts?: Record<string, unknown>) => string,
+      );
     },
     [focusedTransaction, transactions.txs, t],
   );
@@ -133,7 +136,10 @@ const TransactionsDashboard = ({
     ) {
       txs.unshift(focusedTransaction);
     }
-    return dashboardRecordsFromTxs(txs, t);
+    return dashboardRecordsFromTxs(
+        txs,
+        t as (key: string, opts?: Record<string, unknown>) => string,
+      );
   }, [focusedTransaction, tableTransactions, transactions, t]);
   const allPeriodRecords = React.useMemo(
     () => sortTransactionsByDateDesc(records),

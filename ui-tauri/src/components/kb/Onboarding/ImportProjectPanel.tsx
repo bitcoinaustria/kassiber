@@ -261,7 +261,7 @@ function ProfileList({
   onOpen: (workspace: Workspace, profile: Profile) => void;
   onRefresh: () => Promise<void>;
 }) {
-  const { t } = useTranslation("onboarding");
+  const { t } = useTranslation(["onboarding", "common"]);
   if (loading) {
     return (
       <div className="rounded-lg border border-border bg-card px-4 py-8 text-center text-sm font-medium text-card-foreground shadow-sm">

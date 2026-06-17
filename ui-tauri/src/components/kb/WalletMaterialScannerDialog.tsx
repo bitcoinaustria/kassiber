@@ -110,7 +110,7 @@ export function WalletMaterialScannerDialog({
   onMaterialScanned,
   title,
 }: WalletMaterialScannerDialogProps) {
-  const { t } = useTranslation("connections");
+  const { t } = useTranslation(["connections", "common"]);
   const resolvedTitle = title ?? t("scanner.title");
   const STARTING_CAMERA_STATUS = t("scanner.status.startingCamera");
   const videoRef = React.useRef<HTMLVideoElement | null>(null);

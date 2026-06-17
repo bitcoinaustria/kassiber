@@ -32,7 +32,7 @@ export function ExplorerOpenDialog({
   target: ExplorerTarget | null;
   onTransactionChange: (transaction: Transaction | null) => void;
 }) {
-  const { t } = useTranslation("transactions");
+  const { t } = useTranslation(["transactions", "common"]);
   const [openError, setOpenError] = React.useState<string | null>(null);
   const [opening, setOpening] = React.useState(false);
 

@@ -85,7 +85,7 @@ export function NewTransactionDialog({
   onDraftChange: (draft: NewTransactionDraft) => void;
   onSaveDraft: () => void;
 }) {
-  const { t } = useTranslation("transactions");
+  const { t } = useTranslation(["transactions", "common"]);
   const bodyRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
     if (open) bodyRef.current?.scrollTo({ top: 0 });
@@ -161,7 +161,8 @@ export function NewTransactionDialog({
     draft.movementId === "new"
       ? t("newDialog.newMovement")
       : selectedMovement
-        ? t(selectedMovement.labelKey)
+        ? // loose translator
+          (t as (key: string) => string)(selectedMovement.labelKey)
         : t("newDialog.standalone");
   const fromDisplay =
     draft.flow === "incoming"
@@ -249,7 +250,8 @@ export function NewTransactionDialog({
                         )}
                         onClick={() => updateFlow(option.value)}
                       >
-                        {t(option.label)}
+                        {/* loose translator */}
+                        {(t as (key: string) => string)(option.label)}
                       </button>
                     ))}
                   </div>
@@ -614,7 +616,8 @@ export function NewTransactionDialog({
                     <SelectContent>
                       {newTransactionPricingOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
-                          {t(option.label)}
+                          {/* loose translator */}
+                          {(t as (key: string) => string)(option.label)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -640,7 +643,8 @@ export function NewTransactionDialog({
                 <Input
                   value={
                     selectedMovement
-                      ? t(selectedMovement.labelKey)
+                      ? // loose translator
+                        (t as (key: string) => string)(selectedMovement.labelKey)
                       : draft.movementId === "new"
                         ? ""
                         : draft.movementId
@@ -662,10 +666,12 @@ export function NewTransactionDialog({
                       onClick={() => updateDraft({ movementId: candidate.id })}
                     >
                       <span className="block truncate font-medium">
-                        {t(candidate.labelKey)}
+                        {/* loose translator */}
+                        {(t as (key: string) => string)(candidate.labelKey)}
                       </span>
                       <span className="block truncate text-muted-foreground">
-                        {t(candidate.detailKey)}
+                        {/* loose translator */}
+                        {(t as (key: string) => string)(candidate.detailKey)}
                       </span>
                     </button>
                   ))}
@@ -696,7 +702,10 @@ export function NewTransactionDialog({
                       {classificationOptions.map((option) => (
                         <SelectItem key={option} value={option}>
                           {classificationOptionLabelKeys[option]
-                            ? t(classificationOptionLabelKeys[option])
+                            ? // loose translator
+                              (t as (key: string) => string)(
+                                classificationOptionLabelKeys[option],
+                              )
                             : option}
                         </SelectItem>
                       ))}
@@ -725,7 +734,8 @@ export function NewTransactionDialog({
                     <SelectContent>
                       {austrianTaxClassificationOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
-                          {t(option.label)}
+                          {/* loose translator */}
+                          {(t as (key: string) => string)(option.label)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -837,7 +847,8 @@ export function NewTransactionDialog({
                     ],
                   )}
                 >
-                  {t(
+                  {/* loose translator */}
+                  {(t as (key: string) => string)(
                     pricingSourceLabel(
                       draft.pricingSourceKind,
                       draft.pricingQuality,
@@ -959,7 +970,8 @@ export function NewTransactionDialog({
               />
               <PreviewRow
                 label={t("newDialog.preview.pricing")}
-                value={t(
+                // loose translator
+                value={(t as (key: string) => string)(
                   pricingSourceLabel(
                     draft.pricingSourceKind,
                     draft.pricingQuality,
@@ -967,7 +979,13 @@ export function NewTransactionDialog({
                   ),
                 )}
               />
-              <PreviewRow label={t("newDialog.preview.tax")} value={t(taxClassification.shortLabel)} />
+              <PreviewRow
+                label={t("newDialog.preview.tax")}
+                // loose translator
+                value={(t as (key: string) => string)(
+                  taxClassification.shortLabel,
+                )}
+              />
               {primaryEvidence ? (
                 <PreviewRow label={t("newDialog.preview.evidence")} value={primaryEvidence} />
               ) : null}
@@ -997,7 +1015,10 @@ export function NewTransactionDialog({
             <div className="flex flex-wrap gap-1">
               <Badge variant="secondary">
                 {classificationOptionLabelKeys[draft.label]
-                  ? t(classificationOptionLabelKeys[draft.label])
+                  ? // loose translator
+                    (t as (key: string) => string)(
+                      classificationOptionLabelKeys[draft.label],
+                    )
                   : draft.label}
               </Badge>
               <Badge variant={taxClassification.taxable ? "default" : "outline"}>

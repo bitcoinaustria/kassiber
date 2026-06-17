@@ -2,6 +2,7 @@ import { RefreshCw, Wifi, WifiOff } from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -134,7 +135,7 @@ function rowHealthStatus(
   return records[row.id]?.status ?? "unknown";
 }
 
-type TFn = (key: string) => string;
+type TFn = TFunction<"chrome">;
 
 function connectionStatusLabel(status: ConnectionHealthStatus, t: TFn) {
   switch (status) {

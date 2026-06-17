@@ -513,7 +513,7 @@ export function AddConnectionDialog({
   onOpenChange,
   initialSourceId,
 }: AddConnectionDialogProps) {
-  const { t } = useTranslation("connections");
+  const { t } = useTranslation(["connections", "common"]);
   const navigate = useNavigate();
   const addNotification = useUiStore((state) => state.addNotification);
   const setDeferredConnectionSetup = useUiStore(
@@ -1737,9 +1737,9 @@ export function AddConnectionDialog({
               <SetupField
                 key={field.key}
                 id={field.id}
-                label={t(field.labelKey)}
+                label={t(field.labelKey as never) /* dynamic key */}
                 error={fieldErrors[field.key]}
-                helper={t(field.helperKey)}
+                helper={t(field.helperKey as never) /* dynamic key */}
               >
                 <Textarea
                   id={field.id}
@@ -2046,9 +2046,9 @@ export function AddConnectionDialog({
                       }}
                     />
                     <span className="grid gap-1">
-                      <span>{t(network.labelKey)}</span>
+                      <span>{t(network.labelKey as never) /* dynamic key */}</span>
                       <span className="text-xs text-muted-foreground">
-                        {t(network.helperKey)}
+                        {t(network.helperKey as never) /* dynamic key */}
                       </span>
                     </span>
                   </label>

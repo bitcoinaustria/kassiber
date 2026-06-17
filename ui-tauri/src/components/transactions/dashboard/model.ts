@@ -447,31 +447,31 @@ function isAttachmentListQueryKeyForTransaction(
 }
 
 // The following label maps hold i18n keys (resolved with t() at the call site).
-const periodLabels: Record<PeriodKey, string> = {
+const periodLabels = {
   ytd: "transactions:period.ytd",
   "1year": "transactions:period.1year",
   "3months": "transactions:period.3months",
   "30days": "transactions:period.30days",
   "5years": "transactions:period.5years",
   all: "transactions:period.all",
-};
+} as const satisfies Record<PeriodKey, string>;
 
-const flowChartMetricLabels: Record<FlowChartMetric, string> = {
+const flowChartMetricLabels = {
   amount: "transactions:chartMetric.amount",
   count: "transactions:chartMetric.count",
-};
+} as const satisfies Record<FlowChartMetric, string>;
 
-const flowChartModeLabels: Record<FlowChartMode, string> = {
+const flowChartModeLabels = {
   external: "transactions:chartMode.external",
   all: "transactions:chartMode.all",
-};
+} as const satisfies Record<FlowChartMode, string>;
 
-const flowChartSegmentLabels: Record<FlowChartSegment, string> = {
+const flowChartSegmentLabels = {
   incoming: "transactions:chartSegment.incoming",
   outgoing: "transactions:chartSegment.outgoing",
   transfers: "transactions:chartSegment.transfers",
   swaps: "transactions:chartSegment.swaps",
-};
+} as const satisfies Record<FlowChartSegment, string>;
 
 const emptyFlowChartSegmentStats = (): FlowChartSegmentStats => ({
   count: 0,
@@ -941,7 +941,7 @@ function formatFlowTooltipValue(
   value: number,
   currency: Currency,
   metric: FlowChartMetric,
-  t?: (key: string, opts?: Record<string, unknown>) => string,
+  t?: Translator,
 ) {
   if (metric === "count") {
     const count = Math.abs(value);
@@ -1121,7 +1121,7 @@ function matchesTransactionDeepLink(txn: Transaction, transactionId: string) {
 
 function flowChartSelectionLabel(
   selection: FlowChartSelection,
-  t: (key: string, opts?: Record<string, unknown>) => string,
+  t: Translator,
 ) {
   const segmentLabel = selection.segment
     ? t(flowChartSegmentLabels[selection.segment])
@@ -1144,7 +1144,7 @@ function quickFilterLabel(filter: TableQuickFilter) {
 
 function breakdownSelectionLabel(
   selection: BreakdownSelection,
-  t: (key: string, opts?: Record<string, unknown>) => string,
+  t: Translator,
 ) {
   return selection.dimension === "network"
     ? t("transactions:selectionLabel.network", { key: selection.key })

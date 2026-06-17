@@ -43,7 +43,7 @@ export function SecuritySettingsPanel({
   onLockNow: () => void;
   onChangePassphrase: () => void;
 }) {
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "common"]);
   const biometricActionable = encryptedWorkspace && touchIdPlatformSupported;
   const biometricStatus = touchIdStatusPending
     ? t("security.biometricChecking")

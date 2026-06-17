@@ -25,7 +25,7 @@ export function SyncDot({ status, className }: SyncDotProps) {
   const cfg = CONFIG[status];
   return (
     <span
-      title={t(`syncDot.${cfg.titleKey}`)}
+      title={t(`syncDot.${cfg.titleKey}` as never) /* dynamic key */}
       className={cn(
         "inline-block size-1.5 shrink-0 rounded-full",
         cfg.color,

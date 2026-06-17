@@ -100,7 +100,10 @@ export function CommercialProvenancePanel({
                 label={t("commercial.origin")}
                 value={
                   <span className={cn("truncate", hidden && "sensitive")}>
-                    {commercialOriginLabel(match.origin, t)}
+                    {commercialOriginLabel(
+                      match.origin,
+                      t as (key: string) => string, // loose translator
+                    )}
                     {match.origin.label ? ` · ${match.origin.label}` : ""}
                   </span>
                 }

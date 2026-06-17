@@ -299,7 +299,7 @@ function LegsBreakdown({
 }
 
 export function Reconcile() {
-  const { t } = useTranslation("review");
+  const { t } = useTranslation(["review", "common"]);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const [input, setInput] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
@@ -629,7 +629,8 @@ export function Reconcile() {
                               </span>
                             </TableCell>
                             <TableCell>
-                              <Badge variant={badge.variant}>{t(badge.labelKey)}</Badge>
+                              {/* dynamic key */}
+                              <Badge variant={badge.variant}>{t(badge.labelKey as never)}</Badge>
                             </TableCell>
                             <TableCell className="text-sm">
                               {owner || (
@@ -642,7 +643,8 @@ export function Reconcile() {
                             <TableCell className="text-sm">
                               <span>
                                 {CLASSIFICATION_LABEL_KEY[result.classification]
-                                  ? t(CLASSIFICATION_LABEL_KEY[result.classification])
+                                  ? // dynamic key
+                                    t(CLASSIFICATION_LABEL_KEY[result.classification] as never)
                                   : result.classification}
                               </span>
                               {result.note ? (

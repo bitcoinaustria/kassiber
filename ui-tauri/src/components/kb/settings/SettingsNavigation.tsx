@@ -216,7 +216,8 @@ export function SettingsRail({
           return (
             <div key={group} className="space-y-1.5">
               <p className="kb-mono-caption px-2.5">
-                {t(SETTINGS_GROUP_KEYS[group])}
+                {/* dynamic key */}
+                {t(SETTINGS_GROUP_KEYS[group] as never)}
               </p>
               <div className="flex flex-wrap gap-1 lg:flex-col">
                 {items.map((section) => {
@@ -238,7 +239,8 @@ export function SettingsRail({
                     >
                       <Icon className="size-4 shrink-0" aria-hidden="true" />
                       <span className="min-w-0 flex-1 truncate">
-                        {t(section.labelKey)}
+                        {/* dynamic key */}
+                        {t(section.labelKey as never)}
                       </span>
                       {typeof count === "number" && count > 0 ? (
                         <span className="text-xs tabular-nums text-muted-foreground">

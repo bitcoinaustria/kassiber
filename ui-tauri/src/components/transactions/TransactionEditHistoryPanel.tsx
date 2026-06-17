@@ -121,7 +121,13 @@ function FieldDiffRow({
           className="size-8 justify-self-end"
           disabled={isReverting}
           aria-label={t("history.revertFieldAria", { label: field.label })}
-          onClick={() => confirmRevert({ event, field }, t, onRevert)}
+          onClick={() =>
+            confirmRevert(
+              { event, field },
+              t as (key: string, opts?: Record<string, unknown>) => string, // loose translator
+              onRevert,
+            )
+          }
         >
           <RotateCcw className="size-3.5" aria-hidden="true" />
         </Button>
@@ -230,7 +236,11 @@ export function TransactionHistoryTimeline({
                     aria-label={t("history.revertEditAria")}
                     onClick={(clickEvent) => {
                       clickEvent.preventDefault();
-                      confirmRevert({ event }, t, onRevert);
+                      confirmRevert(
+                        { event },
+                        t as (key: string, opts?: Record<string, unknown>) => string, // loose translator
+                        onRevert,
+                      );
                     }}
                   >
                     <RotateCcw className="size-3.5" aria-hidden="true" />

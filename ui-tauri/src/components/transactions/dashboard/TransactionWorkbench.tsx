@@ -105,7 +105,8 @@ const PeriodTabs = ({
               : "text-muted-foreground hover:text-foreground",
           )}
         >
-          {t(periodLabels[key])}
+          {/* loose translator */}
+          {(t as (key: string) => string)(periodLabels[key])}
         </button>
       ))}
     </div>
@@ -343,7 +344,8 @@ const TransactionWorkbench = ({
         id: `${period}:all:${segment}:${chartMode}`,
         period,
         bucketKey: null,
-        bucketLabel: t(periodLabels[period]),
+        // loose translator
+        bucketLabel: (t as (key: string) => string)(periodLabels[period]),
         segment,
         mode: chartMode,
       });
@@ -367,7 +369,8 @@ const TransactionWorkbench = ({
         id: `${period}:summary:${segment}:all`,
         period,
         bucketKey: null,
-        bucketLabel: t(periodLabels[period]),
+        // loose translator
+        bucketLabel: (t as (key: string) => string)(periodLabels[period]),
         segment,
         mode: "all",
       });
@@ -699,7 +702,8 @@ const TransactionWorkbench = ({
                           : "border-border bg-background text-muted-foreground hover:text-foreground",
                       )}
                     >
-                      {t(flowChartMetricLabels[metric])}
+                      {/* loose translator */}
+                      {(t as (key: string) => string)(flowChartMetricLabels[metric])}
                     </button>
                   ),
                 )}
@@ -716,7 +720,8 @@ const TransactionWorkbench = ({
                         : "border-border bg-background text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    {t(flowChartModeLabels[mode])}
+                    {/* loose translator */}
+                    {(t as (key: string) => string)(flowChartModeLabels[mode])}
                   </button>
                 ))}
               </div>
@@ -1036,7 +1041,10 @@ function FlowTooltip({
                 />
                 <span className="text-muted-foreground">
                   {segment
-                    ? t(flowChartSegmentLabels[segment])
+                    ? // loose translator
+                      (t as (key: string) => string)(
+                        flowChartSegmentLabels[segment],
+                      )
                     : String(row.dataKey)}
                 </span>
                 <span
@@ -1045,7 +1053,13 @@ function FlowTooltip({
                     blurClass(hideSensitive),
                   )}
                 >
-                  {formatFlowTooltipValue(Number(row.value), currency, metric, t)}
+                  {formatFlowTooltipValue(
+                    Number(row.value),
+                    currency,
+                    metric,
+                    // loose translator
+                    t as (key: string, opts?: Record<string, unknown>) => string,
+                  )}
                 </span>
               </div>
               {stats && (

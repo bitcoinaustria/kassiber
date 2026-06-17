@@ -41,7 +41,7 @@ function startForDateFilter(filter: DateFilter) {
 }
 
 export function Activity() {
-  const { t } = useTranslation("review");
+  const { t } = useTranslation(["review", "nav", "common"]);
   const hideSensitive = useUiStore((state) => state.hideSensitive);
   const [dateFilter, setDateFilter] = React.useState<DateFilter>("30");
   const [sourceFilter, setSourceFilter] = React.useState("all");

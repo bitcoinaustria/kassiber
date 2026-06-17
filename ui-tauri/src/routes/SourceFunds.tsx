@@ -743,7 +743,7 @@ function TransactionTargetHeader() {
 }
 
 export function SourceFunds() {
-  const { t } = useTranslation("sourceFunds");
+  const { t } = useTranslation(["sourceFunds", "common"]);
   const addNotification = useUiStore((state) => state.addNotification);
   const profileKey = useUiStore(
     (state) => state.identity?.profile ?? "default",

@@ -716,23 +716,23 @@ export const fiveYearData = [
 export type TimePeriod = "30days" | "3months" | "ytd" | "1year" | "5years" | "all";
 
 // i18n keys in the `overview` namespace, resolved via `t()` at the call site.
-export const periodLabelKeys: Record<TimePeriod, string> = {
+export const periodLabelKeys = {
   "30days": "period.30days",
   "3months": "period.3months",
   ytd: "period.ytd",
   "1year": "period.1year",
   "5years": "period.5years",
   all: "period.all",
-};
+} as const satisfies Record<TimePeriod, string>;
 
-export const periodShortLabelKeys: Record<TimePeriod, string> = {
+export const periodShortLabelKeys = {
   "30days": "period.short.30days",
   "3months": "period.short.3months",
   ytd: "period.short.ytd",
   "1year": "period.short.1year",
   "5years": "period.short.5years",
   all: "period.short.all",
-};
+} as const satisfies Record<TimePeriod, string>;
 
 export const periodKeys: TimePeriod[] = [
   "30days",
@@ -1332,13 +1332,13 @@ export function activityFlowForTx(tx: OverviewTx): ActivityFlow {
 
 // i18n keys in the `overview` namespace, indexed by activity flow. Resolved via
 // `t()` at the call site.
-export const activityFlowLabelKeys: Record<ActivityFlow, string> = {
+export const activityFlowLabelKeys = {
   incoming: "activityFlow.incoming",
   outgoing: "activityFlow.outgoing",
   swap: "activityFlow.swap",
   transfer: "activityFlow.transfer",
   fee: "activityFlow.fee",
-};
+} as const satisfies Record<ActivityFlow, string>;
 
 // English fallback labels, kept for call sites not yet migrated to i18n
 // (e.g. ActivityScatterDot's aria-label). Visible overview copy uses
@@ -2242,19 +2242,19 @@ export const statusStyles: Record<TransactionStatus, string> = {
 };
 
 // i18n keys in the `overview` namespace, resolved via `t()` at the call site.
-export const statusLabelKeys: Record<TransactionStatus, string> = {
+export const statusLabelKeys = {
   confirmed: "txStatus.confirmed",
   pending: "txStatus.pending",
   review: "txStatus.review",
   failed: "txStatus.failed",
-};
+} as const satisfies Record<TransactionStatus, string>;
 
-export const overviewFlowLabelKeys: Record<OverviewTransactionFlow, string> = {
+export const overviewFlowLabelKeys = {
   incoming: "txFlow.incoming",
   outgoing: "txFlow.outgoing",
   transfer: "txFlow.transfer",
   swap: "txFlow.swap",
-};
+} as const satisfies Record<OverviewTransactionFlow, string>;
 
 export const overviewFlowStyles: Record<OverviewTransactionFlow, string> = {
   incoming:

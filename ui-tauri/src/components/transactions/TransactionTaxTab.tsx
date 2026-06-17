@@ -1,3 +1,4 @@
+import type { ParseKeys } from "i18next";
 import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +25,7 @@ import {
 import type { TransactionDetailTabContext } from "./TransactionDetailTabContext";
 
 export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext }) {
-  const { t } = useTranslation("transactions");
+  const { t } = useTranslation(["transactions"]);
   const {
     transaction,
     localDraft,
@@ -104,7 +105,8 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                                     key={option.value}
                                     value={option.value}
                                   >
-                                    {t(option.label)}
+                                    {/* dynamic key */}
+                                    {t(option.label as ParseKeys<["transactions"]>)}
                                   </SelectItem>
                                 ),
                               )}

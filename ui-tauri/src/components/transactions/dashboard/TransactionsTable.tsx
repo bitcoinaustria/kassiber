@@ -410,7 +410,11 @@ const TransactionsTable = ({
     ],
   );
   const attachmentItems = React.useMemo(
-    () => detailAttachmentRecords.map((record) => attachmentRecordToItem(record, t)),
+    () =>
+      detailAttachmentRecords.map((record) =>
+        // loose translator
+        attachmentRecordToItem(record, t as (key: string) => string),
+      ),
     [detailAttachmentRecords, t],
   );
   React.useEffect(() => {
@@ -482,7 +486,8 @@ const TransactionsTable = ({
   const reuseSourceAttachmentItems = React.useMemo(
     () =>
       (reuseSourceAttachmentsQuery.data?.data?.attachments ?? []).map((record) =>
-        attachmentRecordToItem(record, t),
+        // loose translator
+        attachmentRecordToItem(record, t as (key: string) => string),
       ),
     [reuseSourceAttachmentsQuery.data, t],
   );
@@ -835,7 +840,8 @@ const TransactionsTable = ({
             <SelectContent>
               {dateFilterOptions.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
-                  {t(option.label)}
+                  {/* loose translator */}
+                  {(t as (key: string) => string)(option.label)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -873,7 +879,8 @@ const TransactionsTable = ({
                   checked={statusFilter === status}
                   onCheckedChange={() => setStatusFilter(status)}
                 >
-                  {t(transactionStatusLabels[status])}
+                  {/* loose translator */}
+                  {(t as (key: string) => string)(transactionStatusLabels[status])}
                 </DropdownMenuCheckboxItem>
               ))}
             </DropdownMenuContent>
@@ -914,7 +921,8 @@ const TransactionsTable = ({
                   checked={flowFilter === flow}
                   onCheckedChange={() => setFlowFilter(flow)}
                 >
-                  {t(transactionFlowLabels[flow])}
+                  {/* loose translator */}
+                  {(t as (key: string) => string)(transactionFlowLabels[flow])}
                 </DropdownMenuCheckboxItem>
               ))}
             </DropdownMenuContent>
@@ -1020,11 +1028,19 @@ const TransactionsTable = ({
               className={filterChipClassName}
               onClick={() => onChartSelectionChange(null)}
               aria-label={t("table.chip.clearChart", {
-                label: flowChartSelectionLabel(chartSelection, t),
+                // loose translator
+                label: flowChartSelectionLabel(
+                  chartSelection,
+                  t as (key: string, opts?: Record<string, unknown>) => string,
+                ),
               })}
             >
               {t("table.chip.chartPrefix", {
-                label: flowChartSelectionLabel(chartSelection, t),
+                // loose translator
+                label: flowChartSelectionLabel(
+                  chartSelection,
+                  t as (key: string, opts?: Record<string, unknown>) => string,
+                ),
               })}
               <X className="size-2.5 sm:size-3" aria-hidden="true" />
             </button>
@@ -1035,10 +1051,14 @@ const TransactionsTable = ({
               className={filterChipClassName}
               onClick={() => onQuickFilterChange(null)}
               aria-label={t("table.chip.clearQuick", {
-                label: t(quickFilterLabel(quickFilter)),
+                // loose translator
+                label: (t as (key: string) => string)(
+                  quickFilterLabel(quickFilter),
+                ),
               })}
             >
-              {t(quickFilterLabel(quickFilter))}
+              {/* loose translator */}
+              {(t as (key: string) => string)(quickFilterLabel(quickFilter))}
               <X className="size-2.5 sm:size-3" aria-hidden="true" />
             </button>
           )}
@@ -1048,10 +1068,18 @@ const TransactionsTable = ({
               className={filterChipClassName}
               onClick={() => onBreakdownSelectionChange(null)}
               aria-label={t("table.chip.clearBreakdown", {
-                label: breakdownSelectionLabel(breakdownSelection, t),
+                // loose translator
+                label: breakdownSelectionLabel(
+                  breakdownSelection,
+                  t as (key: string, opts?: Record<string, unknown>) => string,
+                ),
               })}
             >
-              {breakdownSelectionLabel(breakdownSelection, t)}
+              {/* loose translator */}
+              {breakdownSelectionLabel(
+                breakdownSelection,
+                t as (key: string, opts?: Record<string, unknown>) => string,
+              )}
               <X className="size-2.5 sm:size-3" aria-hidden="true" />
             </button>
           )}
@@ -1061,10 +1089,16 @@ const TransactionsTable = ({
               className={filterChipClassName}
               onClick={() => setStatusFilter("all")}
               aria-label={t("table.chip.clearStatus", {
-                label: t(transactionStatusLabels[statusFilter as TransactionStatus]),
+                // loose translator
+                label: (t as (key: string) => string)(
+                  transactionStatusLabels[statusFilter as TransactionStatus],
+                ),
               })}
             >
-              {t(transactionStatusLabels[statusFilter as TransactionStatus])}
+              {/* loose translator */}
+              {(t as (key: string) => string)(
+                transactionStatusLabels[statusFilter as TransactionStatus],
+              )}
               <X className="size-2.5 sm:size-3" aria-hidden="true" />
             </button>
           )}
@@ -1074,13 +1108,15 @@ const TransactionsTable = ({
               className={filterChipClassName}
               onClick={() => setDateFilter("all")}
               aria-label={t("table.chip.clearDate", {
-                label: t(
+                // loose translator
+                label: (t as (key: string) => string)(
                   dateFilterOptions.find((o) => o.value === dateFilter)?.label ??
                     "",
                 ),
               })}
             >
-              {t(
+              {/* loose translator */}
+              {(t as (key: string) => string)(
                 dateFilterOptions.find((o) => o.value === dateFilter)?.label ??
                   "",
               )}
@@ -1093,10 +1129,16 @@ const TransactionsTable = ({
               className={filterChipClassName}
               onClick={() => setFlowFilter("all")}
               aria-label={t("table.chip.clearFlow", {
-                label: t(transactionFlowLabels[flowFilter as TransactionFlow]),
+                // loose translator
+                label: (t as (key: string) => string)(
+                  transactionFlowLabels[flowFilter as TransactionFlow],
+                ),
               })}
             >
-              {t(transactionFlowLabels[flowFilter as TransactionFlow])}
+              {/* loose translator */}
+              {(t as (key: string) => string)(
+                transactionFlowLabels[flowFilter as TransactionFlow],
+              )}
               <X className="size-2.5 sm:size-3" aria-hidden="true" />
             </button>
           )}
@@ -1214,7 +1256,8 @@ const TransactionsTable = ({
                 const rowPricingSummary =
                   draft.pricingSourceKind === "manual_override"
                     ? null
-                    : pricingCacheSummary(txn, t);
+                    : // loose translator
+                      pricingCacheSummary(txn, t as (key: string) => string);
                 const StatusIcon = transactionStatusIcons[draft.reviewStatus];
                 const explorer = explorerForTransaction(txn, explorerSettings);
                 const flow = displayFlow(txn);
@@ -1225,7 +1268,11 @@ const TransactionsTable = ({
                 const tagPreview = draft.tags;
                 const networkLabel =
                   flow === "swap" || flow === "layer-transition"
-                    ? pairRailLabel(txn, t)
+                    ? // loose translator
+                      pairRailLabel(
+                        txn,
+                        t as (key: string, opts?: Record<string, unknown>) => string,
+                      )
                     : txn.paymentMethod;
                 const amountBtc = transactionBtc(txn);
                 const signedAmountBtc =
@@ -1286,7 +1333,10 @@ const TransactionsTable = ({
                             {showPrimaryLabel ? (
                               <Badge variant="secondary" className="rounded-md">
                                 {classificationOptionLabelKeys[draft.label]
-                                  ? t(classificationOptionLabelKeys[draft.label])
+                                  ? // loose translator
+                                    (t as (key: string) => string)(
+                                      classificationOptionLabelKeys[draft.label],
+                                    )
                                   : draft.label}
                               </Badge>
                             ) : null}
@@ -1379,7 +1429,10 @@ const TransactionsTable = ({
                         )}
                       </div>
                       <p className="mt-1 truncate text-[10px] text-muted-foreground sm:text-xs">
-                        {t(rowTaxClassification.shortLabel)}
+                        {/* loose translator */}
+                        {(t as (key: string) => string)(
+                          rowTaxClassification.shortLabel,
+                        )}
                       </p>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
@@ -1390,7 +1443,8 @@ const TransactionsTable = ({
                             pricingSourceStyles[rowPricingValue],
                           )}
                         >
-                          {t(
+                          {/* loose translator */}
+                          {(t as (key: string) => string)(
                             pricingSourceLabel(
                               draft.pricingSourceKind,
                               draft.pricingQuality,
@@ -1445,7 +1499,10 @@ const TransactionsTable = ({
                         )}
                       >
                         <StatusIcon className="size-3" aria-hidden="true" />
-                        {t(transactionStatusLabels[draft.reviewStatus])}
+                        {/* loose translator */}
+                        {(t as (key: string) => string)(
+                          transactionStatusLabels[draft.reviewStatus],
+                        )}
                       </span>
                       <p className="mt-1 hidden text-[10px] text-muted-foreground sm:block sm:text-xs">
                         {draft.excluded

@@ -1,3 +1,4 @@
+import type { ParseKeys } from "i18next";
 import {
   ArrowRight,
   RotateCcw,
@@ -157,7 +158,7 @@ export function TransactionDetailSheet({
   ) => void | Promise<void>;
   hasNext?: boolean;
 }) {
-  const { t } = useTranslation("transactions");
+  const { t } = useTranslation(["transactions", "common"]);
   const [activeTab, setActiveTab] = React.useState(initialTab);
   const [localDraft, setLocalDraft] =
     React.useState<TransactionEditDraft | null>(draft);
@@ -302,7 +303,10 @@ export function TransactionDetailSheet({
   const hasPricingBlocker = isPricingMissing && !localDraft.excluded;
   const showReviewBanner =
     hasJournalQuarantine || (activeTab !== "pricing" && hasPricingBlocker);
-  const confLabel = confirmationsLabel(transaction.confirmations, t);
+  const confLabel = confirmationsLabel(
+    transaction.confirmations,
+    t as (key: string, opts?: Record<string, unknown>) => string, // loose translator
+  );
   const dirtyTags = dirty.tags;
   const dirtyLabel = dirty.label;
   const dirtyNote = dirty.note;
@@ -367,11 +371,12 @@ export function TransactionDetailSheet({
       label: isPricingMissing
         ? t("sheet.checklist.setPricingSource")
         : t("sheet.checklist.pricedVia", {
+            // dynamic key
             label: t(
               pricingSourceLabel(
                 localDraft.pricingSourceKind,
                 localDraft.pricingQuality,
-              ),
+              ) as ParseKeys<["transactions", "common"]>,
             ),
           }),
       done: !isPricingMissing,
@@ -383,7 +388,12 @@ export function TransactionDetailSheet({
       label: isLabeled
         ? t("sheet.checklist.labeled", {
             label: classificationOptionLabelKeys[localDraft.label]
-              ? t(classificationOptionLabelKeys[localDraft.label])
+              ? // dynamic key
+                t(
+                  classificationOptionLabelKeys[
+                    localDraft.label
+                  ] as ParseKeys<["transactions", "common"]>,
+                )
               : localDraft.label,
           })
         : t("sheet.checklist.pickLabel"),
@@ -394,7 +404,12 @@ export function TransactionDetailSheet({
       key: "tax",
       label: localDraft.excluded
         ? t("sheet.checklist.excludedFromReports")
-        : t("sheet.checklist.taxLabel", { label: t(taxClassification.shortLabel) }),
+        : t("sheet.checklist.taxLabel", {
+            // dynamic key
+            label: t(
+              taxClassification.shortLabel as ParseKeys<["transactions", "common"]>,
+            ),
+          }),
       done: true,
       tab: "tax",
     },
@@ -496,7 +511,10 @@ export function TransactionDetailSheet({
     const treatment = localDraft.excluded
       ? t("tax.narrative.excludedTreatment")
       : t("tax.narrative.currentTreatment", {
-          treatment: t(taxClassification.label),
+          // dynamic key
+          treatment: t(
+            taxClassification.label as ParseKeys<["transactions", "common"]>,
+          ),
         });
     return t("tax.narrative.sentence", {
       action,
