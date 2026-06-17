@@ -52,7 +52,10 @@ run py -m unittest tests.test_daemon_smoke -v
 run py -m unittest tests.test_secrets_smoke -v
 run py -m unittest tests.test_rates_kraken_csv -v
 run py -m unittest tests.test_review_regressions -v
+run py -m unittest tests.test_exit_tax -v
+run py -m unittest tests.test_ownership -v
 run py -m unittest tests.test_sync_backends -v
+run py -m unittest tests.test_sync_backends_legs -v
 run py -m unittest tests.test_sync_htlc_enrichment -v
 run py -m unittest tests.test_sync_btcpay_incremental -v
 run py -m unittest tests.test_freshness -v
@@ -90,6 +93,9 @@ smoke_py -m kassiber reports export-commercial-subledger-csv --help >/dev/null
 smoke_py -m kassiber reports source-funds --help >/dev/null
 smoke_py -m kassiber reports export-source-funds-pdf --help >/dev/null
 smoke_py -m kassiber reports balance-history --help >/dev/null
+smoke_py -m kassiber reports exit-tax --help >/dev/null
+smoke_py -m kassiber reports export-exit-tax-pdf --help >/dev/null
+smoke_py -m kassiber reports export-exit-tax-xlsx --help >/dev/null
 smoke_py -m kassiber rates --help >/dev/null
 smoke_py -m kassiber diagnostics collect --help >/dev/null
 smoke_py -m kassiber chat --help >/dev/null

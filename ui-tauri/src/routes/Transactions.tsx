@@ -4,6 +4,7 @@ import * as React from "react";
 import { TransactionsDashboard } from "@/components/transactions/dashboard/TransactionsDashboard";
 import {
   readTransactionDetailParams,
+  readTransactionScopeParams,
   type SwapCandidateReference,
 } from "@/components/transactions/dashboard/model";
 import { ScreenNotice, ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
@@ -28,6 +29,7 @@ interface OverviewSnapshot {
 
 const TRANSACTIONS_PAGE_LIMIT = 100;
 const TRANSACTIONS_WORKBENCH_LIMIT = 500;
+const TRANSACTIONS_AUTO_PREFETCH_LIMIT = 5000;
 
 function isCrossAssetCandidate(candidate: SwapCandidateReference) {
   if (!candidate.in_asset || !candidate.out_asset) return true;
@@ -41,11 +43,37 @@ export function Transactions() {
     () => readTransactionDetailParams(),
     [routeSearch],
   );
+  const scopeParams = React.useMemo(
+    () => readTransactionScopeParams(),
+    [routeSearch],
+  );
+  // When a wallet deep link is active (Wallet Detail "Show all" / related
+  // links), scope the daemon queries to that wallet instead of filtering the
+  // fetched page client-side. Otherwise a wallet whose transactions are older
+  // than the global page/workbench limits would render an empty or truncated
+  // table. The daemon `wallet` filter matches by wallet_id / label, so it
+  // returns the wallet's complete history (including its transfers).
+  //
+  // This is plain React state (seeded from the deep-link param) so the
+  // dropdown/clear mutate it directly and the queries refetch reliably.
+  const [walletScope, setWalletScope] = React.useState<string | null>(
+    scopeParams.wallet ?? null,
+  );
+  // Same-route navigations that change only the search string — the sidebar
+  // Transactions link, browser back/forward, or a different wallet deep link —
+  // don't remount this route, so re-sync the query scope from the URL whenever
+  // its `wallet` param changes (the mount-time seed alone would go stale). A
+  // dropdown pick changes `walletScope` without touching the URL, so this won't
+  // clobber it (scopeParams.wallet is unchanged → effect doesn't fire).
+  React.useEffect(() => {
+    setWalletScope(scopeParams.wallet ?? null);
+  }, [scopeParams.wallet]);
   const transactionArgs = React.useMemo(
     () => ({
       limit: TRANSACTIONS_PAGE_LIMIT,
+      ...(walletScope ? { wallet: walletScope } : {}),
     }),
-    [],
+    [walletScope],
   );
   const transactionsQuery = useDaemonInfinite<TransactionsList>(
     "ui.transactions.list",
@@ -54,6 +82,7 @@ export function Transactions() {
   );
   const workbenchQuery = useDaemon<TransactionsList>("ui.transactions.list", {
     limit: TRANSACTIONS_WORKBENCH_LIMIT,
+    ...(walletScope ? { wallet: walletScope } : {}),
   });
   const focusedTransaction = useDaemon<{
     transaction?: TransactionsList["txs"][number] | null;
@@ -82,14 +111,36 @@ export function Transactions() {
       txs: pages.flatMap((page) => page.txs),
     };
   }, [transactionsQuery.data]);
+  const loadedTransactions = React.useMemo<TransactionsList | null>(() => {
+    if (!liveTransactions) return workbenchData;
+    if (!workbenchData) return liveTransactions;
+    return liveTransactions.txs.length >= workbenchData.txs.length
+      ? liveTransactions
+      : workbenchData;
+  }, [liveTransactions, workbenchData]);
+  React.useEffect(() => {
+    if (dataMode !== "real") return;
+    if (!transactionsQuery.hasNextPage) return;
+    if (transactionsQuery.isFetchingNextPage) return;
+    if ((liveTransactions?.txs.length ?? 0) >= TRANSACTIONS_AUTO_PREFETCH_LIMIT) {
+      return;
+    }
+    void transactionsQuery.fetchNextPage();
+  }, [
+    dataMode,
+    liveTransactions?.txs.length,
+    transactionsQuery.hasNextPage,
+    transactionsQuery.isFetchingNextPage,
+    transactionsQuery.fetchNextPage,
+  ]);
   const transactions: TransactionsList =
-    hasLiveTransactions && workbenchData
-      ? workbenchData
+    hasLiveTransactions && loadedTransactions
+      ? loadedTransactions
       : dataMode === "real"
         ? { ...MOCK_TRANSACTIONS, txs: [], nextCursor: null, hasMore: false }
         : MOCK_TRANSACTIONS;
   const tableTransactions: TransactionsList =
-    liveTransactions ??
+    loadedTransactions ??
     (hasLiveTableTransactions ? firstPage?.data : null) ??
     transactions;
   const hasMoreTransactions = Boolean(transactionsQuery.hasNextPage);
@@ -144,6 +195,11 @@ export function Transactions() {
 
   return (
     <TransactionsDashboard
+      // Re-seed the dashboard's filter state (breakdownSelection / quickFilter)
+      // when the URL scope changes on a same-route navigation. A dropdown pick
+      // mutates client state without touching the URL, so the key is stable and
+      // the dashboard is not remounted in that case.
+      key={`${scopeParams.wallet ?? ""}::${scopeParams.quick ?? ""}`}
       transactions={transactions}
       tableTransactions={tableTransactions}
       nowRate={nowRate}
@@ -164,6 +220,9 @@ export function Transactions() {
       focusedTransaction={focusedTransaction.data?.data?.transaction ?? null}
       deepLinkedTransactionId={detailParams.transactionId}
       deepLinkedTransactionTab={detailParams.tab}
+      deepLinkedWallet={scopeParams.wallet}
+      deepLinkedQuickFilter={scopeParams.quick}
+      onWalletScopeChange={setWalletScope}
     />
   );
 }

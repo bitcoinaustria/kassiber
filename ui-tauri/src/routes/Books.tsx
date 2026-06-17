@@ -342,7 +342,7 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
         <SummaryCard
           label="Wallets"
           value={walletCount}
-          detail={`${accountCount} buckets`}
+          detail={`${accountCount} accounts`}
           icon={Wallet}
         />
       </div>
@@ -791,7 +791,7 @@ function CreateProfileDialog({
               </Select>
               <p className="text-xs leading-5 text-muted-foreground">
                 Copying settings only copies tax policy, currency, holding
-                period, and lot selection. Wallets, buckets, and transactions
+                period, and lot selection. Wallets, accounts, and transactions
                 stay in the original books.
               </p>
               {sourceProfile && (

@@ -77,8 +77,9 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                             <DirtyDot active={dirty.atRegime || dirty.atCategory} />
                             <InfoHint label="Austrian category">
                               Maps to § 27b EStG buckets. "Neu" covers
-                              post-2022 holdings; "Alt" covers pre-2022
-                              speculation-period inventory; "Own-wallet
+                              holdings acquired on or after 1 Mar 2021; "Alt"
+                              is pre-1 Mar 2021 Altvermögen, taxable only
+                              within the 1-year speculation period; "Own-wallet
                               transfer" stays outside the realization rules.
                             </InfoHint>
                           </Label>

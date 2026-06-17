@@ -34,8 +34,7 @@ support is on the table for later, depending on future resources.
 Tax math runs locally through the open-source
 [RP2](https://github.com/bitcoinaustria/rp2) engine. Kassiber prepares,
 reviews, and explains; RP2 computes. The Kassiber-maintained RP2 fork
-carries a working Austrian (§ 27b EStG) plugin with E 1kv exports — a
-workflow almost nobody else covers.
+carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
 
 ## Why local-first
 

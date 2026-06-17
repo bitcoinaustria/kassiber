@@ -205,6 +205,24 @@ Do not hand-fill domestic-provider or withheld-KESt fields from Kassiber
 output today; Kassiber does not yet store the metadata needed for 171, 173, or
 175.
 
+## Exit tax (Wegzugsbesteuerung)
+
+```bash
+kassiber --format plain reports exit-tax --destination eu_eea
+kassiber --machine reports exit-tax --departure-date 2026-07-01 --destination third_country
+kassiber reports export-exit-tax-pdf --departure-date 2026-07-01 --file exit-tax.pdf --destination eu_eea
+kassiber reports export-exit-tax-xlsx --file exit-tax.xlsx --destination third_country
+```
+
+A deemed-disposal estimate of the Austrian exit tax on remaining holdings if the
+taxpayer gives up residence on `--departure-date` (defaults to today). Neubestand
+unrealized gains are valued at fair market value and taxed at 27.5%; Altbestand
+is excluded (tax-free). `--destination eu_eea` reports the tax as assessed but
+deferred (Nichtfestsetzung); `third_country` reports it as due immediately. The
+amount is the same; only the collection timing differs. Estimate only — it
+requires processed journals and is a draft for a Steuerberater, not a filing.
+See `docs/plan/11-exit-tax-deemed-disposal.md`.
+
 ## Journal entries
 
 ```bash

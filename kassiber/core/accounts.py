@@ -135,7 +135,7 @@ def create_profile(
     if tax_long_term_days < 0:
         raise AppError("Tax long-term days cannot be negative")
     require_tax_country_supported_for_profile_mutation(tax_country)
-    if gains_algorithm.upper() not in RP2_ACCOUNTING_METHODS:
+    if gains_algorithm is not None and gains_algorithm.upper() not in RP2_ACCOUNTING_METHODS:
         raise AppError(
             f"Unsupported gains algorithm '{gains_algorithm}'",
             code="validation",

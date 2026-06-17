@@ -12,6 +12,12 @@ from typing import Any, Callable, Mapping, Sequence
 from . import pricing
 from . import rates as core_rates
 from .austrian import kennzahl_for_disposal_category
+from .exit_tax import (  # re-exported so CLI/daemon reach exit-tax via core_reports.*
+    build_exit_tax_report_lines,
+    compute_deemed_disposal,
+    format_exit_tax_lines,
+    report_exit_tax,
+)
 from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
 from ..tax_policy import require_tax_processing_supported
@@ -1012,7 +1018,10 @@ def _report_query_rows(conn, profile, wallet=None):
             COALESCE(tout.external_id, '') AS out_transaction_id,
             wout.label AS out_wallet,
             tout.asset AS out_asset,
-            tout.amount AS out_amount,
+            -- Split cross-asset pairs cross only `out_amount`; the swap fee is
+            -- measured against that portion, so the Transfers & Swaps sheet must
+            -- report it too (NULL out_amount on whole/same-asset pairs).
+            COALESCE(p.out_amount, tout.amount) AS out_amount,
             tout.fee AS out_fee,
             tin.occurred_at AS in_occurred_at,
             COALESCE(tin.external_id, '') AS in_transaction_id,
@@ -4821,11 +4830,169 @@ def export_summary_pdf_report(
     return written
 
 
+def export_exit_tax_pdf_report(
+    conn,
+    workspace_ref,
+    profile_ref,
+    file_path,
+    hooks: ReportHooks,
+    *,
+    departure_date=None,
+    destination=None,
+):
+    report = report_exit_tax(
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks,
+        departure_date=departure_date,
+        destination=destination,
+    )
+    lines = format_exit_tax_lines(report)
+    title = f"Exit-tax estimate — {report['profile']} ({report['departureDate']})"
+    written = dict(hooks.write_text_pdf(file_path, title, lines))
+    written.update(
+        {
+            "scope": "exit_tax",
+            "format": "pdf",
+            "departure_date": report["departureDate"],
+            "destination": report["destination"],
+        }
+    )
+    return written
+
+
+def _exit_tax_xlsx_specs(report):
+    totals = report["totals"]
+    ccy = report["fiatCurrency"]
+
+    def _btc(sats):
+        return float(Decimal(int(sats)) / Decimal("100000000"))
+
+    overview = [
+        {"field": "Profile", "value": report["profile"]},
+        {"field": "Jurisdiction", "value": report["jurisdictionCode"]},
+        {"field": "Departure date", "value": report["departureDate"]},
+        {"field": "Destination", "value": report["destination"]},
+        {"field": "Collection timing", "value": totals["collectionTiming"]},
+        {"field": "Accounting method", "value": report["method"]},
+        {"field": f"Neubestand gain ({ccy})", "value": totals["neuGain"]},
+        {"field": f"Taxable gain ({ccy})", "value": totals["taxableGain"]},
+        {"field": "Rate", "value": totals["estimatedTaxRate"]},
+        {"field": f"Estimated exit tax ({ccy})", "value": totals["estimatedTax"]},
+        {"field": f"Altbestand market value — excluded ({ccy})", "value": totals["altMarketValue"]},
+    ]
+    lots = [
+        {
+            "asset": lot["asset"],
+            "regime": lot["regime"],
+            "quantity": _btc(lot["quantitySats"]),
+            "cost_basis": lot["costBasis"],
+            "market_value": lot["marketValue"],
+            "gain_loss": lot["gain"],
+            "taxable": "yes" if lot["taxable"] else "no",
+            "kennzahl": lot["kennzahl"],
+        }
+        for lot in report["lots"]
+    ]
+    holdings = [
+        {
+            "asset": holding["asset"],
+            "wallet": holding["wallet"],
+            "quantity": _btc(holding["quantitySats"]),
+            "market_value": holding["marketValue"],
+        }
+        for holding in report["walletHoldings"]
+    ]
+    notes = [{"note": note} for note in report["assumptions"]]
+    notes.append({"note": report["reviewGate"]})
+    return [
+        {
+            "sheet_name": "Overview",
+            "title": f"Exit-tax estimate — {report['profile']}",
+            "headers": ["field", "value"],
+            "rows": overview,
+        },
+        {
+            "sheet_name": "Deemed disposal",
+            "title": "Deemed disposal at fair market value",
+            "headers": ["asset", "regime", "quantity", "cost_basis", "market_value", "gain_loss", "taxable", "kennzahl"],
+            "rows": lots,
+        },
+        {
+            "sheet_name": "Wallet holdings",
+            "title": "Wallet holdings (context)",
+            "headers": ["asset", "wallet", "quantity", "market_value"],
+            "rows": holdings,
+        },
+        {
+            "sheet_name": "Assumptions",
+            "title": "Assumptions & Steuerberater review gate",
+            "headers": ["note"],
+            "rows": notes,
+        },
+    ]
+
+
+def export_exit_tax_xlsx_report(
+    conn,
+    workspace_ref,
+    profile_ref,
+    file_path,
+    hooks: ReportHooks,
+    *,
+    departure_date=None,
+    destination=None,
+):
+    import xlsxwriter
+
+    report = report_exit_tax(
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks,
+        departure_date=departure_date,
+        destination=destination,
+    )
+    path = Path(file_path).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    workbook = xlsxwriter.Workbook(str(path))
+    workbook.set_properties(
+        {
+            "title": f"Kassiber Exit-Tax Estimate — {report['profile']} ({report['departureDate']})",
+            "subject": "Wegzugsbesteuerung deemed-disposal estimate",
+            "author": "Kassiber",
+            "comments": report["reviewGate"],
+        }
+    )
+    formats = _generic_report_xlsx_formats(workbook)
+    specs = _exit_tax_xlsx_specs(report)
+    for spec in specs:
+        _generic_report_xlsx_write_sheet(workbook, spec, formats)
+    workbook.close()
+    return {
+        "file": str(path.resolve()),
+        "bytes": path.stat().st_size,
+        "scope": "exit_tax",
+        "format": "xlsx",
+        "departure_date": report["departureDate"],
+        "destination": report["destination"],
+        "sheets": [spec["sheet_name"] for spec in specs],
+        "rows": len(report["lots"]),
+    }
+
+
 __all__ = [
     "DEFAULT_BALANCE_HISTORY_INTERVAL",
     "INTERVAL_CHOICES",
     "ReportHooks",
     "build_austrian_e1kv_report_lines",
+    "build_exit_tax_report_lines",
+    "compute_deemed_disposal",
+    "export_exit_tax_pdf_report",
+    "export_exit_tax_xlsx_report",
+    "format_exit_tax_lines",
+    "report_exit_tax",
     "build_pdf_report_lines",
     "build_summary_pdf_report_data",
     "export_austrian_e1kv_csv_bundle",

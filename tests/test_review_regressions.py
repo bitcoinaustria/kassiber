@@ -6244,6 +6244,74 @@ class ReviewRegressionTest(unittest.TestCase):
             manual_pair_records=manual_pairs,
         )
 
+    def _direct_austrian_transfer_then_sell_inputs(self):
+        # bitcoinaustria/kassiber#213: Neu BTC acquired in wallet-a, moved to wallet-b (same-asset
+        # transfer), then sold from wallet-b. With per-wallet pools the sale was tagged at_pool=wallet-b
+        # while the lot stayed at_pool=wallet-a, so rp2's moving_average_at found no lots in the
+        # disposal's pool and aborted ("Total in-transaction crypto value < total taxable"). With the
+        # single global per-asset pool both share at_pool=default and the sale resolves cleanly.
+        profile = {
+            "id": "profile-at",
+            "workspace_id": "workspace-main",
+            "label": "FixtureAustrianTransferSell",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "MOVING_AVERAGE_AT",
+        }
+        wallet_refs_by_id = {
+            "wallet-a": {
+                "id": "wallet-a",
+                "label": "Vienna",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+            "wallet-b": {
+                "id": "wallet-b",
+                "label": "Cold",
+                "wallet_account_id": "account-cold",
+                "account_code": "cold",
+                "account_label": "Cold",
+            },
+        }
+
+        def _row(rid, wid, direction, amount, occurred_at, *, fiat_rate, fiat_value, kind, description, external_id):
+            ref = wallet_refs_by_id[wid]
+            return {
+                "id": rid,
+                "wallet_id": wid,
+                "wallet_label": ref["label"],
+                "wallet_account_id": ref["wallet_account_id"],
+                "account_code": ref["account_code"],
+                "account_label": ref["account_label"],
+                "occurred_at": occurred_at,
+                "direction": direction,
+                "asset": "BTC",
+                "amount": amount,
+                "fee": 0,
+                "fiat_rate": fiat_rate,
+                "fiat_value": fiat_value,
+                "kind": kind,
+                "note": None,
+                "description": description,
+                "external_id": external_id,
+                "created_at": occurred_at,
+            }
+
+        rows = [
+            _row("neu-buy", "wallet-a", "inbound", 100_000_000_000, "2024-06-01T10:00:00Z", fiat_rate=30000, fiat_value=30000, kind="deposit", description="Vienna Neu buy", external_id="neu-buy"),
+            # Same-asset A -> B transfer: shared external_id auto-pairs the two legs into a MOVE.
+            _row("xfer-out", "wallet-a", "outbound", 100_000_000_000, "2024-07-01T10:00:00Z", fiat_rate=30000, fiat_value=30000, kind="withdrawal", description="Move A->B", external_id="xfer-1"),
+            _row("xfer-in", "wallet-b", "inbound", 100_000_000_000, "2024-07-01T10:00:00Z", fiat_rate=30000, fiat_value=30000, kind="deposit", description="Move A->B", external_id="xfer-1"),
+            _row("neu-sell", "wallet-b", "outbound", 30_000_000_000, "2025-03-01T09:00:00Z", fiat_rate=50000, fiat_value=15000, kind="withdrawal", description="Sell from B", external_id="neu-sell"),
+        ]
+        return profile, TaxEngineLedgerInputs(
+            rows=rows,
+            wallet_refs_by_id=wallet_refs_by_id,
+            manual_pair_records=[],
+        )
+
     def _direct_austrian_swap_payout_inputs(self):
         profile = {
             "id": "profile-at-payout",
@@ -8946,6 +9014,35 @@ class ReviewRegressionTest(unittest.TestCase):
         actual = self._direct_engine_snapshot(profile, inputs)
         expected = self._load_fixture("austrian_rp2_cross_asset_swap_snapshot.json")
         self.assertEqual(actual, expected)
+
+    def test_austrian_rp2_sale_from_transfer_funded_wallet_uses_global_pool(self):
+        """End-to-end (bitcoinaustria/kassiber#213): a Neu sale from a wallet funded by an internal
+        transfer resolves against the single global per-asset pool instead of aborting the report.
+
+        With the old per-wallet pools the disposal was tagged at_pool=<disposing wallet> while the
+        lot kept at_pool=<acquiring wallet>, so rp2's moving_average_at found no lots in the
+        disposal's pool and raised "Total in-transaction crypto value < total taxable crypto value".
+        """
+        profile, inputs = self._direct_austrian_transfer_then_sell_inputs()
+        state = build_tax_engine(profile).build_ledger_state(inputs)
+        entries = _normalize_engine_entries(state.entries)
+
+        # No quarantine / no crash: the sale from wallet-b computes against the global Neu pool.
+        self.assertEqual(state.quarantines, [])
+        disposals = [e for e in entries if e["entry_type"] == "disposal"]
+        self.assertEqual(len(disposals), 1)
+        sale = disposals[0]
+        self.assertEqual(sale["transaction_id"], "neu-sell")
+        self.assertEqual(sale["wallet_id"], "wallet-b")
+        self.assertEqual(sale["at_category"], "neu_gain")
+        self.assertIn("at_pool=default", sale["description"])
+        # Moving-average basis from the global pool: 0.3 BTC * 30000 avg = 9000; proceeds 15000.
+        self.assertEqual(sale["cost_basis"], 9000.0)
+        self.assertEqual(sale["gain_loss"], 6000.0)
+        # The A->B move is modeled as an intra transfer, not a phantom disposal.
+        self.assertEqual(len(state.intra_audit), 1)
+        self.assertEqual(state.intra_audit[0]["from_wallet_id"], "wallet-a")
+        self.assertEqual(state.intra_audit[0]["to_wallet_id"], "wallet-b")
 
     def test_austrian_direct_swap_payout_carries_then_disposes(self):
         profile, inputs = self._direct_austrian_swap_payout_inputs()

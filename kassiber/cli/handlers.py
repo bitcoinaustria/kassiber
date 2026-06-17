@@ -46,6 +46,7 @@ from ..core import saved_views as core_saved_views
 from ..core import swap_rules as core_swap_rules
 from ..core import sync as core_sync
 from ..core import sync_backends as core_sync_backends
+from ..core import tax_events as core_tax_events
 from ..core import transfer_matching as core_transfer_matching
 from ..core import wallets as core_wallets
 from ..core.engines import TaxEngineLedgerInputs, build_tax_engine
@@ -339,6 +340,7 @@ def _pair_to_dict(row):
     confidence_at_pair = row["confidence_at_pair"] if "confidence_at_pair" in keys else None
     pair_source = row["pair_source"] if "pair_source" in keys else None
     deleted_at = row["deleted_at"] if "deleted_at" in keys else None
+    out_amount = row["out_amount"] if "out_amount" in keys else None
     return {
         "id": row["id"],
         "workspace_id": row["workspace_id"],
@@ -352,6 +354,7 @@ def _pair_to_dict(row):
         "swap_fee_kind": swap_fee_kind,
         "confidence_at_pair": confidence_at_pair,
         "pair_source": pair_source,
+        "out_amount": int(out_amount) if out_amount is not None else None,
         "deleted_at": deleted_at,
         "created_at": row["created_at"],
     }
@@ -402,6 +405,7 @@ def create_transaction_pair(
     *,
     pair_source="manual",
     confidence_at_pair=None,
+    out_amount=None,
     commit=True,
 ):
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
@@ -448,6 +452,23 @@ def create_transaction_pair(
                 code="validation",
                 hint="Re-run with --policy taxable, or use an Austrian profile for cross-asset carrying-value swaps.",
             )
+    out_amount_msat = None
+    if out_amount is not None:
+        if out_row["asset"] == in_row["asset"]:
+            raise AppError(
+                "--out-amount only applies to cross-asset swap pairs: it is the "
+                "portion of the outbound that was swapped, with the remainder "
+                "treated as a same-asset self-transfer.",
+                code="validation",
+            )
+        out_amount_msat = _positive_btc_amount_msat(out_amount, "--out-amount")
+        full_out_msat = int(out_row["amount"] or 0)
+        if out_amount_msat > full_out_msat:
+            raise AppError(
+                f"--out-amount exceeds the outbound amount "
+                f"({out_amount_msat} > {full_out_msat} msat).",
+                code="validation",
+            )
     existing = conn.execute(
         """
         SELECT id FROM transaction_pairs
@@ -480,8 +501,14 @@ def create_transaction_pair(
             hint="Run `kassiber transfers payouts delete --payout-id "
             f"{existing_payout['id']}` first.",
         )
+    # On a split pair only the swapped portion (`out_amount`) crosses to the
+    # other asset, so the persisted swap fee must be measured against that, not
+    # the full outbound (the remainder is a same-asset self-transfer).
+    swap_fee_out_msat = (
+        out_amount_msat if out_amount_msat is not None else int(out_row["amount"] or 0)
+    )
     swap_fee_msat, swap_fee_kind = core_transfer_matching.compute_swap_fee(
-        int(out_row["amount"] or 0),
+        swap_fee_out_msat,
         int(in_row["amount"] or 0),
     )
     pair_id = str(uuid.uuid4())
@@ -490,8 +517,8 @@ def create_transaction_pair(
         INSERT INTO transaction_pairs(
             id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
             kind, policy, notes, swap_fee_msat, swap_fee_kind, confidence_at_pair,
-            pair_source, deleted_at, created_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+            pair_source, out_amount, deleted_at, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
         """,
         (
             pair_id,
@@ -506,6 +533,7 @@ def create_transaction_pair(
             swap_fee_kind,
             confidence_at_pair,
             pair_source,
+            out_amount_msat,
             now_iso(),
         ),
     )
@@ -708,7 +736,11 @@ def list_transaction_pairs(conn, workspace_ref, profile_ref, *, include_deleted=
             p.*,
             tout.external_id AS out_external_id,
             tout.asset AS out_asset,
-            tout.amount AS out_amount_msat,
+            -- On a split cross-asset pair only `out_amount` crossed to the other
+            -- asset; swap_fee_msat was computed from that portion, so the pair's
+            -- out amount must match it. Same-asset / whole pairs keep tout.amount.
+            COALESCE(p.out_amount, tout.amount) AS out_amount_msat,
+            tout.amount AS out_full_amount_msat,
             wout.label AS out_wallet,
             tin.external_id AS in_external_id,
             tin.asset AS in_asset,
@@ -732,8 +764,12 @@ def list_transaction_pairs(conn, workspace_ref, profile_ref, *, include_deleted=
             "external_id": row["out_external_id"] or "",
             "wallet": row["out_wallet"],
             "asset": row["out_asset"],
+            # `amount` is the swapped portion on a split pair; `full_amount`
+            # carries the underlying transaction's total for transparency.
             "amount": float(msat_to_btc(row["out_amount_msat"])),
             "amount_msat": int(row["out_amount_msat"]),
+            "full_amount": float(msat_to_btc(row["out_full_amount_msat"])),
+            "full_amount_msat": int(row["out_full_amount_msat"]),
         }
         entry["in"] = {
             "transaction_id": row["in_transaction_id"],
@@ -3192,6 +3228,10 @@ def process_journals(conn, workspace_ref, profile_ref):
             """,
             journal_entry_rows,
         )
+        # Collapse legs that map to the same real transaction (e.g. multiple
+        # synthetic payout/split legs of one out row) so two rows never collide
+        # on journal_quarantines' PRIMARY KEY and abort the whole run.
+        deduped_quarantines = core_tax_events.dedupe_quarantines(state["quarantines"])
         conn.executemany(
             """
             INSERT INTO journal_quarantines(
@@ -3207,7 +3247,7 @@ def process_journals(conn, workspace_ref, profile_ref):
                     quarantine["detail_json"],
                     created_at,
                 )
-                for quarantine in state["quarantines"]
+                for quarantine in deduped_quarantines
             ],
         )
         conn.executemany(
@@ -3312,7 +3352,7 @@ def process_journals(conn, workspace_ref, profile_ref):
     result = {
         "profile": profile["label"],
         "entries_created": len(state["entries"]),
-        "quarantined": len(state["quarantines"]),
+        "quarantined": len(deduped_quarantines),
         "transfers_detected": len(state.get("intra_audit", [])),
         "cross_asset_pairs": len(state.get("cross_asset_pairs", [])),
         "auto_priced": auto_priced,
@@ -3486,7 +3526,7 @@ def inspect_transfer_audit(conn, workspace_ref, profile_ref):
             "same_asset_transfers": len(intra_transfers),
             "cross_asset_pairs": len(cross_asset_pairs),
             "direct_swap_payouts": len(direct_swap_payouts),
-            "quarantines": len(state["quarantines"]),
+            "quarantines": len(core_tax_events.dedupe_quarantines(state["quarantines"])),
         },
         "same_asset_transfers": intra_transfers,
         "cross_asset_pairs": cross_asset_pairs,

@@ -244,7 +244,7 @@ function ProfileOption({
           ) : null}
         </span>
         <span className="flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          <span>{profile.accounts} buckets</span>
+          <span>{profile.accounts} accounts</span>
           <span>{profile.wallets} wallets</span>
         </span>
         <span className="line-clamp-2 min-w-0 text-xs text-muted-foreground">

@@ -14,7 +14,7 @@ authors = [
 ]
 dependencies = [
   "embit>=0.8.0",
-  "rp2 @ git+https://github.com/bitcoinaustria/rp2.git@12ae085ee1eafab1b54596a65ba2f7760d9cb0be",
+  "rp2 @ git+https://github.com/bitcoinaustria/rp2.git@5e4495710e5bc883da0e1cd0473767c3b7ccbbc7",
   "XlsxWriter>=3.2,<4",
   "reportlab>=4.4,<5",
   "sqlcipher3>=0.6.2,<1",

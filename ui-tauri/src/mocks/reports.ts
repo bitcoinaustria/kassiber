@@ -38,7 +38,7 @@ export const JURISDICTIONS: Record<string, Jurisdiction> = {
     rateLabel: "KESt 27,5 %",
     defaultMethod: "moving_average_at",
     methodLocked: true,
-    methodNote: "ATM - Austria Tax Method (FIFO old stock & AVCO new stock)",
+    methodNote: "ATM - Austrian Tax Method (FIFO old stock & AVCO new stock)",
     internalsNonTaxable: true,
     longTermDays: 365,
     ccy: "€",
@@ -156,7 +156,7 @@ export const MOCK_CAPITAL_GAINS: CapitalGainsReport = {
   kennzahlRows: [
     {
       code: "172",
-      label: "Foreign recurring crypto income",
+      label: "Foreign ongoing crypto income",
       amount: 239.74,
       rowCount: 2,
       source: "mock",

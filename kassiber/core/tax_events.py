@@ -9,6 +9,11 @@ from ..msat import msat_to_btc
 from . import pricing
 from .austrian import infer_outbound_regimes, infer_regime_from_timestamp, resolve_pool_id
 from .privacy_hops import privacy_hop_evidence_from_row
+from .transfer_matching import (
+    DEFAULT_FEE_PCT_MAX,
+    DEFAULT_FEE_SATS_MIN,
+    fee_threshold_msat,
+)
 
 # Austrian tax-semantic markers carried on NormalizedTaxEvent / NormalizedTaxTransfer.
 # The rp2 AT plugin reads these through the `notes` channel of InTransaction /
@@ -70,9 +75,8 @@ class NormalizedTaxTransfer:
     external_id: str | None
     out_row: Mapping[str, Any]
     in_row: Mapping[str, Any]
-    # Pool partition id to preserve across an intra-wallet move when
-    # Kassiber models pools as per-wallet. Intra transfers don't have
-    # a regime or swap-link concept; only the pool marker applies.
+    # Pool partition id to preserve across an intra-wallet move. Intra transfers
+    # don't have a regime or swap-link concept; only the pool marker applies.
     at_pool: Optional[str] = None
     # Optional stable id for one logical movement split out of a multi-output
     # wallet transaction. Journal rows still point at the real out/in rows.
@@ -86,6 +90,16 @@ class NormalizedTaxAssetInputs:
     transfers: Sequence[NormalizedTaxTransfer]
     ordered_items: Sequence[tuple[str, str]]
     quarantines: Sequence[dict[str, Any]]
+    # Earliest occurred_at of any normalize-quarantined acquisition / disposal /
+    # transfer leg for this asset. Any such drop leaves RP2's lot pool
+    # inconsistent (a missing-basis acquisition, an unconsumed disposal, an
+    # un-booked / partial transfer), so from that instant the cost basis a later
+    # disposal would draw is untrustworthy under ANY accounting method. The
+    # engine combines this with its own gate-level drops (unclassified income,
+    # gift/lost) and conservatively quarantines later disposals as
+    # `basis_provenance_incomplete` until the contaminating row is resolved.
+    # None when nothing was quarantined.
+    earliest_lot_contamination_at: Optional[str] = None
 
 
 def build_tax_quarantine(
@@ -94,13 +108,64 @@ def build_tax_quarantine(
     reason: str,
     detail: Mapping[str, Any],
 ) -> dict[str, Any]:
+    # Synthetic, engine-only rows (split / direct-payout legs) carry a
+    # journal_transaction_id pointing at the real transaction. A quarantine must
+    # reference that real id so it satisfies journal_quarantines' FK to
+    # transactions(id) — a synthetic id like "cross-split:...:out" would make the
+    # insert fail and abort the whole `journals process`.
+    transaction_id = _row_get(row, "journal_transaction_id") or row["id"]
     return {
-        "transaction_id": row["id"],
+        "transaction_id": transaction_id,
         "workspace_id": profile["workspace_id"],
         "profile_id": profile["id"],
         "reason": reason,
         "detail_json": json.dumps(detail, sort_keys=True),
     }
+
+
+def dedupe_quarantines(quarantines: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Collapse quarantines that share a ``transaction_id``.
+
+    ``journal_quarantines.transaction_id`` is the PRIMARY KEY. Several engine
+    paths can emit more than one quarantine for the SAME real transaction id —
+    multiple synthetic legs (direct-payout proceeds rows, and on the split
+    branch the ``cross-split:`` peg legs) map back to one real out tx, and any
+    two gate/normalize drops keyed on the same row collide too. Inserting both
+    rows would raise a UNIQUE constraint and abort the ENTIRE ``journals
+    process`` — the exact all-or-nothing failure this hardening exists to
+    remove. Collapse to one row per transaction, preserving the first-seen
+    reason/detail and folding any *distinct* later reasons into
+    ``detail_json['additional_reasons']`` so no review signal is silently lost.
+    Exact duplicates are discarded; first-seen transaction order is preserved.
+    """
+    by_id: dict[str, dict[str, Any]] = {}
+    for quarantine in quarantines:
+        tx_id = quarantine["transaction_id"]
+        existing = by_id.get(tx_id)
+        if existing is None:
+            by_id[tx_id] = dict(quarantine)
+            continue
+        if (
+            quarantine["reason"] == existing["reason"]
+            and quarantine["detail_json"] == existing["detail_json"]
+        ):
+            # Identical quarantine for the same transaction — nothing new.
+            continue
+        try:
+            detail = json.loads(existing["detail_json"])
+        except (ValueError, TypeError):
+            detail = None
+        if not isinstance(detail, dict):
+            detail = {"detail": detail}
+        try:
+            extra_detail: Any = json.loads(quarantine["detail_json"])
+        except (ValueError, TypeError):
+            extra_detail = quarantine["detail_json"]
+        detail.setdefault("additional_reasons", []).append(
+            {"reason": quarantine["reason"], "detail": extra_detail}
+        )
+        existing["detail_json"] = json.dumps(detail, sort_keys=True)
+    return list(by_id.values())
 
 
 def _spot_price_from_row(row: Mapping[str, Any], quantity: Decimal) -> Decimal | None:
@@ -127,6 +192,26 @@ def _row_get(row: Mapping[str, Any], key: str) -> Any:
     if hasattr(row, "get"):
         return row.get(key)
     return row[key]
+
+
+def _positive_fiat_value(row: Mapping[str, Any], fallback: Decimal) -> Decimal:
+    """Recorded ``fiat_value`` only when strictly positive, else ``fallback``.
+
+    A plain ``or`` fallback (the previous form) only catches ``0``/``None`` — a
+    *negative* Decimal is truthy and would pass straight through to RP2's
+    ``type_check_positive_decimal(non_zero=True)``, raising an uncaught
+    ``RP2ValueError`` (the constructors run in the parse phase, outside the
+    ``compute_tax`` try/except) that aborts the entire multi-asset report. A
+    fiat value is never legitimately negative, so clamp to the spot-derived
+    fallback instead of crashing.
+    """
+    value = pricing.decimal_from_exact(
+        _row_get(row, "fiat_value_exact"),
+        _row_get(row, "fiat_value"),
+    )
+    if value is not None and value > 0:
+        return value
+    return fallback
 
 
 def _pricing_needs_review(row: Mapping[str, Any]) -> bool:
@@ -432,6 +517,48 @@ def _collect_samourai_internal_transfers(
     return collected, fee_events
 
 
+def _owned_fanout_row_ids(
+    rows: Sequence[Mapping[str, Any]],
+    pair_by_row: Mapping[str, Any],
+    samourai_internal_row_ids: set[str],
+) -> set[str]:
+    """Ids of rows in a same-(external_id, asset) group that moves coins across
+    two or more owned wallets but is NOT a clean 1-out/1-in self-transfer.
+
+    ``detect_intra_transfers`` only pairs the exactly-one-out/one-in shape, so a
+    fan-out (1->N owned wallets) or consolidation (N->1) is skipped and would
+    otherwise be booked as a standalone SELL plus fresh BUYs — destroying cost
+    basis and inventing a phantom gain. These need explicit per-leg pairing or
+    splitting, so they are quarantined instead. Groups already handled by a pair
+    or the Samourai splitter are left alone.
+    """
+    groups: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
+    for row in rows:
+        external_id = _row_get(row, "external_id")
+        if not external_id:
+            continue
+        groups.setdefault((str(external_id), row["asset"]), []).append(row)
+    fanout_ids: set[str] = set()
+    for group in groups.values():
+        if len(group) < 2:
+            continue
+        if any(
+            row["id"] in samourai_internal_row_ids or row["id"] in pair_by_row
+            for row in group
+        ):
+            continue
+        outs = [
+            row
+            for row in group
+            if _row_get(row, "direction") == "outbound" and (row["amount"] or 0) > 0
+        ]
+        ins = [row for row in group if _row_get(row, "direction") == "inbound"]
+        wallets = {row["wallet_id"] for row in group}
+        if outs and ins and (len(outs) > 1 or len(ins) > 1) and len(wallets) >= 2:
+            fanout_ids.update(row["id"] for row in group)
+    return fanout_ids
+
+
 def normalize_tax_asset_inputs(
     profile: Mapping[str, Any],
     asset: str,
@@ -447,7 +574,7 @@ def normalize_tax_asset_inputs(
     is_at = tax_country == "at"
     regime_map = at_regime_by_row_id or {}
     swap_link_map = at_swap_link_by_row_id or {}
-    outbound_regimes = infer_outbound_regimes(rows) if is_at else {}
+    outbound_regimes = infer_outbound_regimes(rows, intra_pairs) if is_at else {}
     events: list[NormalizedTaxEvent] = []
     transfers: list[NormalizedTaxTransfer] = []
     ordered_items: list[tuple[str, str]] = []
@@ -472,6 +599,7 @@ def normalize_tax_asset_inputs(
         pair_by_row[pair["out"]["id"]] = ("out", pair)
         pair_by_row[pair["in"]["id"]] = ("in", pair)
     handled_pairs: set[tuple[str, str]] = set()
+    fanout_row_ids = _owned_fanout_row_ids(rows, pair_by_row, samourai_internal_row_ids)
 
     for row in rows:
         if row["id"] in samourai_internal_row_ids:
@@ -484,6 +612,24 @@ def normalize_tax_asset_inputs(
             if event is not None:
                 events.append(event)
                 ordered_items.append(("event", row["id"]))
+            continue
+        if row["id"] in fanout_row_ids:
+            # One on-chain tx that moves coins across several owned wallets.
+            # Booking each leg standalone would destroy basis; quarantine the
+            # whole group for explicit pairing/splitting instead.
+            quarantines.append(
+                build_tax_quarantine(
+                    profile,
+                    row,
+                    "owned_fanout_unresolved",
+                    {
+                        "wallet": wallet_refs_by_id[row["wallet_id"]]["label"],
+                        "asset": asset,
+                        "direction": _row_get(row, "direction"),
+                        "external_id": str(_row_get(row, "external_id") or ""),
+                    },
+                )
+            )
             continue
         role_pair = pair_by_row.get(row["id"])
         if role_pair is not None:
@@ -540,6 +686,45 @@ def normalize_tax_asset_inputs(
                 continue
 
             fee = sent - received
+            # The recorded on-chain fee (out_row["fee"]) legitimately explains
+            # part of the implied fee, so only the UNRECOGNIZED outflow — the
+            # amount that left the source beyond what the recipient got and the
+            # recorded miner fee (i.e. out.amount - in.amount) — is suspicious. A
+            # small move with a high recorded network fee is fine; but when this
+            # excess blows past the swap-fee tolerance (max(1%, 2500 sats)) the
+            # outbound almost certainly fanned out to an unrecognized recipient (a
+            # cross-asset peg to a Liquid federation address, or a payment) that
+            # this 1-out/1-in pairing would otherwise absorb as a giant "fee" and
+            # tax as a disposal. Quarantine for explicit review (the user splits
+            # it into the real self-transfer + a cross-asset pair / swap payout).
+            unrecognized_outflow = msat_to_btc(out_row["amount"]) - msat_to_btc(in_row["amount"])
+            fee_ceiling = msat_to_btc(
+                fee_threshold_msat(
+                    int(out_row["amount"] or 0),
+                    DEFAULT_FEE_PCT_MAX,
+                    DEFAULT_FEE_SATS_MIN,
+                )
+            )
+            if unrecognized_outflow > fee_ceiling:
+                quarantines.append(
+                    build_tax_quarantine(
+                        profile,
+                        out_row,
+                        "transfer_fee_implausible",
+                        {
+                            "from_wallet": from_wallet["label"],
+                            "to_wallet": to_wallet["label"],
+                            "asset": asset,
+                            "sent": float(sent),
+                            "received": float(received),
+                            "implied_fee": float(fee),
+                            "unrecognized_outflow": float(unrecognized_outflow),
+                            "fee_ceiling": float(fee_ceiling),
+                            "required_for": "transfer_fee_review",
+                        },
+                    )
+                )
+                continue
             spot_price_row = out_row
             spot_price_wallet_label = from_wallet["label"]
             spot_price = _spot_price_from_row(out_row, msat_to_btc(out_row["amount"]))
@@ -547,6 +732,12 @@ def normalize_tax_asset_inputs(
                 spot_price = _spot_price_from_row(in_row, msat_to_btc(in_row["amount"]))
                 spot_price_row = in_row
                 spot_price_wallet_label = to_wallet["label"]
+            # When the fee can't be priced, quarantine the whole transfer rather
+            # than book a mis-priced fee or emit a partial MOVE: a zero-fee MOVE
+            # would leave the un-moved fee quantity in the source (overstating
+            # holdings / double-spendable). The transfer is deferred until the
+            # fee is priced; the per-account gate quarantines any dependent
+            # destination disposal gracefully in the meantime (no crash).
             if fee > 0 and spot_price is not None and _pricing_needs_review(spot_price_row):
                 quarantines.append(
                     build_tax_quarantine(
@@ -653,10 +844,7 @@ def normalize_tax_asset_inputs(
                     )
                 )
                 continue
-            fiat_value = pricing.decimal_from_exact(
-                _row_get(row, "fiat_value_exact"),
-                _row_get(row, "fiat_value"),
-            ) or amount * spot_price
+            fiat_value = _positive_fiat_value(row, amount * spot_price)
         elif direction == "outbound":
             if _pricing_needs_review(row):
                 quarantines.append(
@@ -687,10 +875,7 @@ def normalize_tax_asset_inputs(
                     )
                 )
                 continue
-            fiat_value = pricing.decimal_from_exact(
-                _row_get(row, "fiat_value_exact"),
-                _row_get(row, "fiat_value"),
-            ) or amount * spot_price
+            fiat_value = _positive_fiat_value(row, amount * spot_price)
         else:
             quarantines.append(
                 build_tax_quarantine(
@@ -745,12 +930,28 @@ def normalize_tax_asset_inputs(
         )
         ordered_items.append(("event", row["id"]))
 
+    # Any quarantined acquisition / disposal / transfer leg leaves the lot pool
+    # inconsistent from its occurred_at on. Derive the earliest such instant
+    # directly from the quarantine set (method-agnostic) rather than enumerating
+    # individual reasons, so a newly-added quarantine reason can't silently slip
+    # past the basis-provenance guard.
+    quarantined_ids = {str(q["transaction_id"]) for q in quarantines}
+    contamination_times = [
+        row["occurred_at"]
+        for row in rows
+        if str(row["id"]) in quarantined_ids
+        and _row_get(row, "direction") in ("inbound", "outbound")
+    ]
+
     return NormalizedTaxAssetInputs(
         asset=asset,
         events=events,
         transfers=transfers,
         ordered_items=ordered_items,
         quarantines=quarantines,
+        earliest_lot_contamination_at=(
+            min(contamination_times) if contamination_times else None
+        ),
     )
 
 

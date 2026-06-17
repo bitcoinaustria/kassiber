@@ -251,6 +251,20 @@ def _add_austrian_e1kv_pdf_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--file", required=True)
 
 
+def _add_exit_tax_report_args(parser: argparse.ArgumentParser) -> None:
+    _add_workspace_profile_args(parser)
+    parser.add_argument(
+        "--departure-date",
+        help="Departure date (YYYY-MM-DD) the deemed disposal is valued at; defaults to today",
+    )
+    parser.add_argument(
+        "--destination",
+        choices=["eu_eea", "third_country"],
+        default="eu_eea",
+        help="Destination jurisdiction class — eu_eea defers collection until sale, third_country is due immediately",
+    )
+
+
 def _lightning_window_days(value: str) -> int:
     """argparse ``type`` for the ``--window-days`` flag.
 
@@ -430,6 +444,38 @@ def _emit_austrian_e1kv_pdf(
             tax_year=args.year,
         ),
     )
+
+
+def _emit_exit_tax_report(
+    args: argparse.Namespace,
+    conn: sqlite3.Connection,
+    report_hooks,
+) -> int:
+    if args.format in {"table", "plain"}:
+        return emit(
+            args,
+            "\n".join(
+                core_reports.build_exit_tax_report_lines(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    report_hooks,
+                    departure_date=args.departure_date,
+                    destination=args.destination,
+                )
+            ),
+        )
+    report = core_reports.report_exit_tax(
+        conn,
+        args.workspace,
+        args.profile,
+        report_hooks,
+        departure_date=args.departure_date,
+        destination=args.destination,
+    )
+    if args.format == "csv":
+        return emit(args, report["lots"])
+    return emit(args, report)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -750,7 +796,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Tax country for the book (CLI profile; currently supported: {', '.join(supported_tax_countries())})",
     )
     profiles_create.add_argument("--tax-long-term-days", type=int, default=DEFAULT_LONG_TERM_DAYS)
-    profiles_create.add_argument("--gains-algorithm", choices=list(RP2_ACCOUNTING_METHODS), default="FIFO")
+    profiles_create.add_argument("--gains-algorithm", choices=list(RP2_ACCOUNTING_METHODS))
 
     profiles_get = profiles_sub.add_parser("get")
     profiles_get.add_argument("--workspace")
@@ -1351,6 +1397,12 @@ def build_parser() -> argparse.ArgumentParser:
     transfers_pair.add_argument("--kind", choices=list(TRANSFER_PAIR_KINDS), default="manual")
     transfers_pair.add_argument("--policy", choices=list(TRANSFER_PAIR_POLICIES), default="carrying-value")
     transfers_pair.add_argument("--note", dest="note")
+    transfers_pair.add_argument(
+        "--out-amount",
+        dest="out_amount",
+        help="Portion of the outbound (BTC) that was swapped on a cross-asset pair; "
+        "the remainder is treated as a same-asset self-transfer (split spend).",
+    )
     transfers_unpair = transfers_sub.add_parser("unpair")
     transfers_unpair.add_argument("--workspace")
     transfers_unpair.add_argument("--profile")
@@ -1754,6 +1806,8 @@ def build_parser() -> argparse.ArgumentParser:
     for report_name in ("austrian-e1kv", "austrian-tax-summary"):
         _add_austrian_e1kv_report_args(reports_sub.add_parser(report_name))
 
+    _add_exit_tax_report_args(reports_sub.add_parser("exit-tax"))
+
     balance_history = reports_sub.add_parser("balance-history")
     balance_history.add_argument("--workspace")
     balance_history.add_argument("--profile")
@@ -1888,6 +1942,11 @@ def build_parser() -> argparse.ArgumentParser:
     export_austrian_e1kv_csv.add_argument("--profile")
     export_austrian_e1kv_csv.add_argument("--year", type=int, required=True, help="Four-digit tax year")
     export_austrian_e1kv_csv.add_argument("--dir", required=True)
+
+    for export_name in ("export-exit-tax-pdf", "export-exit-tax-xlsx"):
+        export_exit_tax = reports_sub.add_parser(export_name)
+        _add_exit_tax_report_args(export_exit_tax)
+        export_exit_tax.add_argument("--file", required=True)
 
     rates = sub.add_parser("rates")
     rates_sub = rates.add_subparsers(dest="rates_command", required=True)
@@ -2949,6 +3008,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     kind=args.kind,
                     policy=args.policy,
                     notes=args.note,
+                    out_amount=args.out_amount,
                 ),
             )
         if args.transfers_command == "unpair":
@@ -3486,6 +3546,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             )
         if args.reports_command in {"austrian-e1kv", "austrian-tax-summary"}:
             return _emit_austrian_e1kv_report(args, conn, report_hooks)
+        if args.reports_command == "exit-tax":
+            return _emit_exit_tax_report(args, conn, report_hooks)
         if args.reports_command == "balance-sheet":
             return emit(
                 args,
@@ -3691,6 +3753,32 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.dir,
                     report_hooks,
                     tax_year=args.year,
+                ),
+            )
+        if args.reports_command == "export-exit-tax-pdf":
+            return emit(
+                args,
+                core_reports.export_exit_tax_pdf_report(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.file,
+                    report_hooks,
+                    departure_date=args.departure_date,
+                    destination=args.destination,
+                ),
+            )
+        if args.reports_command == "export-exit-tax-xlsx":
+            return emit(
+                args,
+                core_reports.export_exit_tax_xlsx_report(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.file,
+                    report_hooks,
+                    departure_date=args.departure_date,
+                    destination=args.destination,
                 ),
             )
     if args.command == "rates":

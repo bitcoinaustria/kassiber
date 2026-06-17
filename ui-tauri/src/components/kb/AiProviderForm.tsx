@@ -54,7 +54,7 @@ interface AiProviderFormProps {
 const PROVIDER_KIND_HINTS: Record<AiProviderInput["kind"], string> = {
   local: "Runs on this machine. No data leaves the device.",
   remote: "Cloud, LAN, or vendor CLI provider. Prompts may leave the device.",
-  tee: "Encrypted attestation provider (e.g. Maple AI). Off-device but with documented confidentiality guarantees.",
+  tee: "Provider claims a trusted-execution / attestation path (e.g. Maple AI). Kassiber still treats it as off-device.",
 };
 
 const CLI_LOCATORS = ["claude-cli://default", "codex-cli://default"] as const;
