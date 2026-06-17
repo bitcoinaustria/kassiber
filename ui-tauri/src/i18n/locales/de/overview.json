@@ -1,0 +1,387 @@
+{
+  "screen": {
+    "unavailableTitle": "Übersicht nicht verfügbar",
+    "unavailableBody": "Kassiber konnte keine echten Übersichtsdaten lesen.",
+    "noRealData": "Für das aktuelle Book sind keine echten Übersichtsdaten verfügbar."
+  },
+  "birdsEye": {
+    "title": "Book-Set-Übersicht",
+    "badge": "Book-Set",
+    "mixedFiatBadge": "Gemischte Fiat",
+    "refresh": "Book-Set aktualisieren",
+    "booksLink": "Books",
+    "readonlyNote": "Diese schreibgeschützte Zusammenführung wahrt die Book-Grenzen. Beim Öffnen eines Books oder einer Transaktion wird dieses Book vor der Navigation aktiv gesetzt.",
+    "couldNotLoad": "Book-Set-Übersicht konnte nicht geladen werden.",
+    "fallbackTitle": "Book-Set",
+    "metric": {
+      "btcTotal": "BTC gesamt",
+      "books_one": "{{count}} Book",
+      "books_other": "{{count}} Books",
+      "fiatRollup": "Fiat-Zusammenführung",
+      "fiatTotal": "Fiat gesamt",
+      "mixed": "Gemischt",
+      "perBookFiatOnly": "Nur Fiat-Zeilen pro Book",
+      "noFiatCurrency": "Keine Fiat-Währung",
+      "readiness": "Bereitschaft",
+      "booksNeedAttention_one": "{{count}} Book braucht Aufmerksamkeit",
+      "booksNeedAttention_other": "{{count}} Books brauchen Aufmerksamkeit",
+      "allBooksReady": "Alle Books bereit",
+      "quarantine": "Quarantäne",
+      "journalsNeedProcessing": "Journale müssen verarbeitet werden",
+      "noStaleJournals": "Keine veralteten Journale"
+    },
+    "booksCard": {
+      "title": "Books",
+      "empty": "Dieses Book-Set hat noch keine Books."
+    },
+    "fiatCard": {
+      "title": "Fiat-Zeilen",
+      "empty": "Noch keine Fiat-Zeilen.",
+      "basis": "Anschaffungskosten {{value}}",
+      "ytd": "Heuer {{value}}"
+    },
+    "bookRow": {
+      "ready": "Bereit",
+      "attention": "Aufmerksamkeit",
+      "wallets_one": "{{count}} Wallet",
+      "wallets_other": "{{count}} Wallets",
+      "txs_one": "{{count}} Tx",
+      "txs_other": "{{count}} Tx",
+      "journalRows_one": "{{count}} Journalzeile",
+      "journalRows_other": "{{count}} Journalzeilen",
+      "quarantines_one": "{{count}} Quarantäne",
+      "quarantines_other": "{{count}} Quarantänen"
+    },
+    "refreshPanel": {
+      "title": "Book-Set-Aktualisierung",
+      "waiting": "Warten auf Aktualisierungsfortschritt.",
+      "fallbackBook": "Book",
+      "booksRefreshed": "{{synced}}/{{total}} Books aktualisiert",
+      "summaryDetail": "{{blocked}} Berichte blockiert · {{rateLimited}} gedrosselte Quellen",
+      "placeholder": "Sync-, Kurs- und Journalstatus pro Book erscheinen hier.",
+      "scanned": "{{value}} gescannt"
+    },
+    "recentActivityTitle": "Letzte Aktivität nach Book",
+    "toast": {
+      "refreshStartedTitle": "Book-Set-Aktualisierung gestartet",
+      "refreshStartedBody": "Jedes Book in diesem Set wird aktualisiert.",
+      "starting": "Wird gestartet…",
+      "refreshNeedsAttentionTitle": "Book-Set-Aktualisierung braucht Aufmerksamkeit",
+      "refreshFinishedTitle": "Book-Set-Aktualisierung abgeschlossen",
+      "refreshFinishedBody": "{{synced}}/{{total}} Books aktualisiert; {{blocked}} weiterhin blockiert.",
+      "refreshDoneBody": "Aktualisierung abgeschlossen.",
+      "refreshFailedTitle": "Book-Set-Aktualisierung fehlgeschlagen",
+      "refreshFailedBody": "Dieses Book-Set konnte nicht aktualisiert werden.",
+      "activeBookChangedTitle": "Aktives Book geändert",
+      "transactionBody": "{{book}} ist jetzt aktiv. Transaktionsdetail wird geöffnet.",
+      "fallbackBook": "Ausgewähltes Book",
+      "couldNotOpenBookTitle": "Book konnte nicht geöffnet werden",
+      "couldNotOpenBookBody": "Kassiber konnte nicht zu diesem Book wechseln.",
+      "couldNotOpenTransactionTitle": "Transaktion konnte nicht geöffnet werden",
+      "couldNotOpenTransactionBody": "Kassiber konnte nicht zum Book dieser Transaktion wechseln."
+    }
+  },
+  "stats": {
+    "btcPrice": "BTC-Kurs",
+    "refreshing": "Wird aktualisiert…",
+    "refreshBtcPrice": "BTC-Kurs aktualisieren",
+    "refreshingStats": "Übersichtsstatistiken werden aktualisiert…",
+    "openStat": "{{title}} öffnen",
+    "bitcoinBalance": "Bitcoin-Guthaben",
+    "title": {
+      "portfolioValue": "Portfoliowert",
+      "transactions": "Transaktionen",
+      "reviewedEvents": "Geprüfte Ereignisse",
+      "openReview": "Offene Prüfung",
+      "connections": "Verbindungen"
+    },
+    "comparison": {
+      "vsLastMonth": "vs. letzter Monat",
+      "bitcoinBalance": "Bitcoin-Guthaben",
+      "vsCostBasis": "vs. Anschaffungskosten",
+      "fromLoadedRows": "aus geladenen Zeilen",
+      "loadedRows": "geladene Zeilen",
+      "configured": "konfiguriert",
+      "journalQuarantine": "Journal-Quarantäne"
+    },
+    "status": {
+      "current": "Aktuell",
+      "clear": "Leer",
+      "estimate": "Schätzung",
+      "loaded": "Geladen",
+      "configured": "Konfiguriert",
+      "open": "Offen"
+    }
+  },
+  "welcome": {
+    "reprocessingJournals": "Journale werden neu verarbeitet…",
+    "refresh": "Aktualisieren",
+    "refreshing": "Wird aktualisiert…",
+    "refreshAria": "Wallets und Journale aktualisieren",
+    "addConnection": "Verbindung hinzufügen",
+    "addConnectionAria": "Verbindung hinzufügen"
+  },
+  "readiness": {
+    "connectSource": {
+      "title": "Quelle verbinden",
+      "detail": "Füge eine Watch-only-Quelle hinzu oder importiere Zeilen, um dieses Book zu befüllen."
+    },
+    "sourceAttention": {
+      "title": "Quelle braucht Aufmerksamkeit",
+      "detail_one": "{{count}} Quelle braucht Aufmerksamkeit",
+      "detail_other": "{{count}} Quellen brauchen Aufmerksamkeit"
+    },
+    "reprocessJournals": {
+      "title": "Journale neu verarbeiten",
+      "detail": "Berichte brauchen einen frischen Journalstand"
+    },
+    "reviewQueueOpen": {
+      "title": "Prüfwarteschlange offen",
+      "detail_one": "{{count}} Eintrag vor den Berichten",
+      "detail_other": "{{count}} Einträge vor den Berichten"
+    },
+    "syncInProgress": {
+      "title": "Sync läuft"
+    },
+    "readyForReports": {
+      "title": "Bereit für Berichte"
+    },
+    "sourceDetail_one": "{{synced}}/{{total}} Quelle aktuell",
+    "sourceDetail_other": "{{synced}}/{{total}} Quellen aktuell",
+    "noSources": "Keine Quellen verbunden"
+  },
+  "health": {
+    "title": "Books-Zustand",
+    "subtitle": "Was vor den Berichten Aufmerksamkeit braucht",
+    "panelAria": "Books-Zustand",
+    "journals": {
+      "title": "Journalstand",
+      "reprocess": "Neu verarbeiten",
+      "current": "Aktuell",
+      "reprocessing": "Wird neu verarbeitet…",
+      "detailReprocess": "Berichte sollten auf einen frischen Journallauf warten.",
+      "detailCurrent": "Berichte sind aus dem aktuellen Journalstand bereit."
+    },
+    "review": {
+      "title": "Prüfwarteschlange",
+      "open_one": "{{count}} offen",
+      "open_other": "{{count}} offen",
+      "clear": "Leer",
+      "detailOpen": "Löse Zeilen in Quarantäne vor der Steuerberichterstattung auf.",
+      "detailClear": "Keine Transaktionen in Quarantäne in diesem Book."
+    },
+    "connections": {
+      "title": "Verbindungen",
+      "issues_one": "{{count}} Problem",
+      "issues_other": "{{count}} Probleme",
+      "refreshing": "{{count}} werden aktualisiert",
+      "current": "{{synced}}/{{total}} aktuell",
+      "none": "Noch keine",
+      "detail_one": "{{count}} konfigurierte Quelle",
+      "detail_other": "{{count}} konfigurierte Quellen",
+      "detailEmpty": "Füge eine Watch-only-Quelle, eine Exchange oder eine Importquelle hinzu."
+    },
+    "primary": {
+      "reviewQuarantines": {
+        "title": "Quarantäne prüfen",
+        "detail": "Behebe zuerst fehlende Kurse oder nicht unterstützte Semantik."
+      },
+      "checkConnections": {
+        "title": "Verbindungen prüfen",
+        "detail": "Eine oder mehrere Quellen brauchen vor dem nächsten Sync Aufmerksamkeit."
+      },
+      "openReports": {
+        "title": "Berichte öffnen",
+        "detail": "Wechsle von der Übersicht ins Berichtspaket für das aktuelle Book."
+      },
+      "addConnection": {
+        "title": "Verbindung hinzufügen",
+        "detail": "Verbinde eine Quelle oder importiere Zeilen, um das Book zu starten."
+      }
+    }
+  },
+  "drivers": {
+    "title": "Guthaben-Treiber",
+    "aria": "Guthaben-Treiber",
+    "latestTransactions_one": "Letzte {{count}} Transaktion",
+    "latestTransactions_other": "Letzte {{count}} Transaktionen",
+    "viewTransactions": "{{label}}-Transaktionen anzeigen",
+    "incoming": "Eingehend",
+    "outgoing": "Ausgehend",
+    "swapVolume": "Swap-Volumen",
+    "fees": "Gebühren"
+  },
+  "holdings": {
+    "title": "Bestände nach Quelle",
+    "aria": "Bestände nach Quelle",
+    "btcAllocation": "BTC-Aufteilung",
+    "vsCostBasis": "vs. Anschaffungskosten",
+    "moreOptions": "Weitere Optionen",
+    "onlyActiveSource": "Einzige aktive Quelle",
+    "total": "Gesamt",
+    "rail": {
+      "onchain": "On-chain",
+      "lightning": "Lightning",
+      "liquid": "Liquid",
+      "other": "Sonstige"
+    },
+    "otherSources": "Sonstige Quellen"
+  },
+  "recentTx": {
+    "title": "Letzte Transaktionen",
+    "showAll": "Alle anzeigen",
+    "filter": "Filtern",
+    "filterByStatus": "Nach Status filtern",
+    "allStatuses": "Alle Status",
+    "empty": "Keine Transaktionen gefunden.",
+    "unassigned": "Nicht zugeordnet",
+    "rangeOfTotal": "{{start}}-{{end}} von {{total}}",
+    "previousPage": "Zur vorherigen Seite",
+    "nextPage": "Zur nächsten Seite"
+  },
+  "txStatus": {
+    "confirmed": "Bestätigt",
+    "pending": "Ausstehend",
+    "review": "Prüfung",
+    "failed": "Fehlgeschlagen"
+  },
+  "txFlow": {
+    "incoming": "Eingehend",
+    "outgoing": "Ausgehend",
+    "transfer": "Transfer",
+    "swap": "Swap"
+  },
+  "activityFlow": {
+    "incoming": "Erhalten",
+    "outgoing": "Ausgegeben",
+    "swap": "Swap",
+    "transfer": "Transfer",
+    "fee": "Gebühr"
+  },
+  "period": {
+    "30days": "30 Tage",
+    "3months": "3 Monate",
+    "ytd": "Heuer",
+    "1year": "1 Jahr",
+    "5years": "5 Jahre",
+    "all": "Gesamte Zeit",
+    "short": {
+      "30days": "30T",
+      "3months": "3M",
+      "ytd": "Heuer",
+      "1year": "1J",
+      "5years": "5J",
+      "all": "Alle"
+    }
+  },
+  "marketRate": {
+    "noRate": "Kein {{currency}}-Kurs",
+    "perBtc": "{{value}} / BTC",
+    "noSource": "Keine Quelle",
+    "manual": "Manuell",
+    "synced": "Synchronisiert {{date}}",
+    "notSynced": "Nicht synchronisiert",
+    "justNow": "gerade eben",
+    "minutesAgo": "vor {{count}} Min.",
+    "hoursAgo": "vor {{count}} Std.",
+    "daysAgo": "vor {{count}} T.",
+    "fetchRates": "Kurse abrufen"
+  },
+  "treasury": {
+    "series": {
+      "bitcoinBalance": "Bitcoin-Guthaben",
+      "btcPrice": "BTC-Kurs",
+      "avgBasis": "Ø Anschaffungskosten",
+      "activity": "Aktivität"
+    },
+    "chartLabel": "BTC-Aktivitätsdiagramm",
+    "title": "BTC-Aktivität",
+    "asOf": "Stand {{date}}",
+    "currentSnapshot": "Aktueller Snapshot",
+    "priced": "bewertet {{time}}",
+    "events_one": "{{count}} Ereignis",
+    "events_other": "{{count}} Ereignisse",
+    "eventsLabel": "Ereignisse",
+    "net": "netto",
+    "in": "ein",
+    "out": "aus",
+    "swap": "Swap",
+    "unrealized": "{{percent}} % unrealisiert ({{currency}})",
+    "toggleControls": "Diagramm-Steuerung umschalten",
+    "expandChart": "BTC-Aktivitätsdiagramm vergrößern",
+    "closeChart": "BTC-Aktivitätsdiagramm schließen",
+    "expandedTitle": "Vergrößertes BTC-Aktivitätsdiagramm",
+    "seriesToggle": "{{label}} {{action}}",
+    "btcPriceAxis": "BTC-Kurs ({{currency}})",
+    "dragHint": "Ziehe das Zeitfenster oder die Griffe, um den Zeitraum anzupassen; Doppelklick zum Zurücksetzen",
+    "stat": {
+      "changeInBalance": "Änderung des Bitcoin-Guthabens",
+      "highestPosition": "Höchste BTC-Position",
+      "lowestPosition": "Niedrigste BTC-Position"
+    }
+  },
+  "tooltip": {
+    "source": "Quelle",
+    "counterparty": "Gegenpartei",
+    "fiatValue": "Fiat-Wert",
+    "btcPrice": "BTC-Kurs",
+    "fee": "Gebühr",
+    "positionAfter": "Position danach",
+    "avgBasisAfter": "Ø Anschaffungskosten danach",
+    "status": "Status",
+    "confirmations_one": "{{count}} Bestätigung",
+    "confirmations_other": "{{count}} Bestätigungen",
+    "unknown": "Unbekannt",
+    "btcBalance": "BTC-Guthaben",
+    "avgBasis": "Ø Anschaffungskosten",
+    "unrealized": "Unrealisiert",
+    "volume": "{{value}} Volumen"
+  },
+  "controls": {
+    "title": "Diagramm-Steuerung",
+    "description": "Zeitraum, Diagrammreihen und BTC-Mindestgrößen für Punkte",
+    "dotsVisible": "{{visible}} von {{total}} Aktivitätspunkten sichtbar",
+    "close": "Diagramm-Steuerung schließen",
+    "timeRange": "Zeitraum",
+    "activityFlows": "Aktivitätsflüsse",
+    "series": "Reihen",
+    "showSeries": "{{label}} anzeigen",
+    "markerSize": "Markergröße",
+    "minBtcSize": "Mindestgröße in BTC für Aktivitätspunkte",
+    "incomingPayments": "Eingehende Zahlungen",
+    "outgoingActivity": "Ausgehende Aktivität",
+    "minSizeWithCount": "Mindestgröße in BTC · {{visible}} von {{total}} Punkten gezeigt",
+    "incomingSliderAria": "Mindestgröße eingehender Zahlungspunkte in BTC",
+    "outgoingSliderAria": "Mindestgröße ausgehender Aktivitätspunkte in BTC",
+    "customMinTitle": "Klicke, um eine eigene BTC-Mindestgröße einzugeben",
+    "customMinAria": "Eigene Marker-Mindestgröße in BTC"
+  },
+  "inspector": {
+    "selectedPoint": "Ausgewählter Punkt",
+    "noPointSelected": "Kein Punkt ausgewählt",
+    "value": "Wert",
+    "btc": "BTC",
+    "costBasis": "Anschaffungskosten",
+    "unrealized": "Unrealisiert",
+    "sincePrevious": "Seit dem vorherigen Punkt",
+    "startOfRange": "Beginn des ausgewählten Zeitraums"
+  },
+  "balanceChart": {
+    "title": "Guthaben & Performance",
+    "fullscreen": "Vollbild",
+    "srDescription": "Vergrößerte Ansicht des Guthabens über die Zeit, mit Hover-Scrubber und optionalem Modus nach Verbindung.",
+    "byConnection": "Nach Verbindung",
+    "total": "Gesamt",
+    "closeEsc": "Schließen (Esc)",
+    "close": "Schließen",
+    "current": "{{range}} · aktuell",
+    "change": "Änderung",
+    "high": "Hoch",
+    "low": "Tief",
+    "spot": "Spot · BTC/EUR",
+    "spotChange": "+ 1,42 % · 24h",
+    "totalBalance": "Gesamtguthaben",
+    "pointsSynthesized": "{{count}} Punkte · für die Demo synthetisiert",
+    "hoverFooter": "Für Details darüberfahren · Esc zum Schließen"
+  }
+}

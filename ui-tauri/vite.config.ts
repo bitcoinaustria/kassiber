@@ -12,7 +12,9 @@ import {
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import { createInterface } from "node:readline";
-import { defineConfig } from "vite";
+// `vitest/config` re-exports vite's `defineConfig` and adds the `test` field;
+// it is a superset, so the Vite build reads this config unchanged.
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { inspectImportProjectDirectory } from "./vite/importProject";
@@ -1009,5 +1011,11 @@ export default defineConfig({
     fs: {
       allow: [UI_ROOT, NODE_MODULES_REALPATH],
     },
+  },
+  test: {
+    // Initialize i18next before any test file so `useTranslation` resolves
+    // real strings under `renderToStaticMarkup`. Environment stays on the
+    // vitest default (node); no test currently needs a DOM.
+    setupFiles: ["./vitest.setup.ts"],
   },
 });

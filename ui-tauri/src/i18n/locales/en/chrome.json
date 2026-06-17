@@ -1,0 +1,331 @@
+{
+  "shell": {
+    "skipToContent": "Skip to main content",
+    "lockKassiber": "Lock Kassiber",
+    "lockKassiberTitle": "Lock Kassiber (Cmd/Ctrl+L)",
+    "overviewLink": "Kassiber overview",
+    "back": "Back",
+    "forward": "Forward",
+    "switchBooksLabel": "Switch books. Current books: {{book}}",
+    "booksFallback": "Local books",
+    "fallbackTitle": "Kassiber",
+    "fallback": {
+      "label": "Search Kassiber",
+      "placeholder": "Search pages, actions, transactions..."
+    },
+    "searchNoMatches": "No matches",
+    "dataMode": {
+      "real": "Real data",
+      "mock": "Mock data",
+      "toggle": "Toggle real data mode"
+    },
+    "support": {
+      "title": "Support",
+      "bugReport": "Bug report",
+      "donateSats": "Donate sats"
+    },
+    "extras": {
+      "title": "Extras",
+      "manySats": "ManySats",
+      "exitCalculator": "Exit-Calculator"
+    },
+    "user": {
+      "fallbackWorkspace": "My Books",
+      "fallbackProfile": "Private",
+      "books": "Books"
+    },
+    "version": {
+      "devTitle": "Kassiber local dev build ({{commit}})",
+      "releaseTitle": "Kassiber v{{version}} ({{commit}})",
+      "devLabel": "Kassiber dev",
+      "releaseLabel": "Kassiber v{{version}}"
+    }
+  },
+  "routeMeta": {
+    "activity": {
+      "label": "Search activity",
+      "placeholder": "Search transactions, wallets..."
+    },
+    "walletDetail": {
+      "title": "Wallet Detail",
+      "label": "Search wallets",
+      "placeholder": "Search wallets, books..."
+    },
+    "wallets": {
+      "label": "Search wallets",
+      "placeholder": "Search wallets, imports, backends..."
+    },
+    "booksOverview": {
+      "title": "Book Set Overview",
+      "label": "Search books",
+      "placeholder": "Search books, wallets, reports..."
+    },
+    "books": {
+      "title": "Books",
+      "label": "Search books",
+      "placeholder": "Search books, countries..."
+    },
+    "ledger": {
+      "label": "Search ledger",
+      "placeholder": "Search entries, wallets, assets..."
+    },
+    "logs": {
+      "label": "Search logs",
+      "placeholder": "Search daemon errors, logs..."
+    },
+    "settings": {
+      "label": "Search settings",
+      "placeholder": "Search settings, backends..."
+    },
+    "reports": {
+      "label": "Search reports",
+      "placeholder": "Search reports, exports..."
+    },
+    "exitTax": {
+      "label": "Search exit tax",
+      "placeholder": "Search departure date, destination..."
+    },
+    "sourceOfFunds": {
+      "title": "Source of Funds",
+      "label": "Search source of funds",
+      "placeholder": "Search sources, wallets..."
+    },
+    "quarantine": {
+      "label": "Search quarantine",
+      "placeholder": "Search issue, account, source..."
+    },
+    "reconcile": {
+      "label": "Search reconcile",
+      "placeholder": "Paste addresses or transaction ids..."
+    },
+    "swaps": {
+      "label": "Search swaps and transfers",
+      "placeholder": "Search wallet, asset pair, txid..."
+    },
+    "transactions": {
+      "label": "Search transactions",
+      "placeholder": "Search counterparty, tag, account..."
+    },
+    "assistant": {
+      "label": "Search assistant",
+      "placeholder": "Search conversation..."
+    },
+    "overview": {
+      "label": "Search overview",
+      "placeholder": "Search transactions, reports..."
+    }
+  },
+  "search": {
+    "category": {
+      "action": "Action",
+      "page": "Page",
+      "report": "Report",
+      "review_item": "Review",
+      "setting": "Setting",
+      "transaction": "Transaction",
+      "wallet": "Wallet"
+    },
+    "actionReason": {
+      "fromSearch": "Opened from global search",
+      "fromKeyboard": "Opened from keyboard shortcut",
+      "fromNativeMenu": "Opened from native menu"
+    }
+  },
+  "notifications": {
+    "label": "Notifications",
+    "labelActive": "Notifications ({{count}} active)",
+    "clearAll": "Clear all",
+    "ledgerStale": {
+      "title": "Ledger needs processing",
+      "body": "Reports are not trusted until journal processing runs.",
+      "action": "Process now"
+    },
+    "quarantined": {
+      "title": "Transactions quarantined",
+      "body_one": "{{count}} transaction needs review.",
+      "body_other": "{{count}} transactions need review."
+    },
+    "processing": "Processing...",
+    "bookRefreshRunning": {
+      "title": "Book refresh already running",
+      "body": "Kassiber is already refreshing sources, rates, or journals."
+    }
+  },
+  "currencyToggle": {
+    "bitcoin": "bitcoin",
+    "euro": "euro",
+    "label": "Display currency is {{current}}. Switch to {{next}}.",
+    "title": "Display currency: {{current}}. Switch to {{next}}."
+  },
+  "sensitive": {
+    "show": "Show sensitive data",
+    "hide": "Hide sensitive data"
+  },
+  "theme": {
+    "label": "Theme",
+    "system": "System",
+    "light": "Light",
+    "dark": "Dark"
+  },
+  "lock": {
+    "touchIdNotSavedTitle": "Touch ID unlock was not saved",
+    "touchIdNotSavedReason": "Touch ID unlock is not set up: {{reason}}",
+    "touchIdNotSavedKeychain": "macOS Keychain did not report the saved passphrase.",
+    "touchIdNotAcceptedKeychain": "macOS Keychain did not accept the saved passphrase.",
+    "importRootOpening": "Kassiber is still opening the selected local books folder.",
+    "passphraseRequiredError": "Database passphrase is required.",
+    "touchIdNotFound": "No Touch ID passphrase was found for these books. Unlock once with the passphrase to save it again.",
+    "passphraseRequiredTitle": "Database passphrase required",
+    "booksLocked": "Books locked",
+    "defaultReason": "Enter the database passphrase to unlock.",
+    "unlockingTouchId": "Unlocking with Touch ID...",
+    "passphrase": "Passphrase",
+    "touchIdUnavailableReason": "Touch ID unlock is unavailable: {{reason}}",
+    "touchIdUnavailable": "Touch ID unlock is unavailable for this desktop session.",
+    "touchIdNotSetUpReason": "Touch ID unlock is not set up: {{reason}}",
+    "touchIdNotSetUp": "No Touch ID passphrase is saved for these books. Unlock once with the passphrase to save it again.",
+    "useTouchIdNextTime": "Use Touch ID next time",
+    "useTouchIdNextTimeBody": "Save this database passphrase in macOS Keychain behind local user presence.",
+    "waitingForTouchId": "Waiting for Touch ID...",
+    "unlockWithTouchId": "Unlock with Touch ID",
+    "unlocking": "Unlocking...",
+    "unlock": "Unlock",
+    "openBooks": "Open books",
+    "backToSetup": "Back to setup",
+    "passphraseFailed": "Passphrase did not unlock this session.",
+    "touchIdFailed": "Touch ID did not unlock this session."
+  },
+  "importRoot": {
+    "title": "Opening local books",
+    "body": "Restoring the selected Kassiber data root.",
+    "backToSetup": "Back to setup",
+    "couldNotOpen": "Could not open the selected local books folder."
+  },
+  "preAlpha": {
+    "label": "Pre-alpha software warning",
+    "message": "Pre-alpha software: unreliable at best. Review everything before relying on reports or exports."
+  },
+  "network": {
+    "outboundConnections": "Outbound connections",
+    "checkConnections": "Check connections",
+    "loading": "Loading connections...",
+    "loadError": "Could not load configured connections.",
+    "noneConfigured": "No outbound connections configured.",
+    "columnState": "State",
+    "columnConnection": "Connection",
+    "columnEndpoint": "Endpoint",
+    "lastChecked": "Last checked {{time}}",
+    "indicator": {
+      "errors": "Connection failures",
+      "warning": "Connection issue",
+      "online": "Connections online",
+      "neutral": "Connections not checked"
+    },
+    "health": {
+      "healthy": "Healthy",
+      "failed": "Failed",
+      "checking": "Checking",
+      "notCheckable": "Not checkable",
+      "notChecked": "Not checked",
+      "skipped": "Check skipped"
+    },
+    "unsupportedTitle": "Saved HTTP explorer endpoints are listed here but not actively probed from the shell. The health checker probes Electrum / Fulcrum backends and approved display-only HTTP checks.",
+    "checkPassed": "Connection check passed.",
+    "checkFailed": "Connection check failed."
+  },
+  "bookSwitcher": {
+    "title": "Switch books",
+    "description": "Pick the active book for every screen in this window.",
+    "loading": "Loading books...",
+    "loadError": "Could not load books.",
+    "empty": "No books were found in this data root.",
+    "manageBooks": "Manage books",
+    "switchError": "Could not switch books.",
+    "bookSetOverview": "Book Set Overview",
+    "openedOn": "Opened {{date}}",
+    "accounts_one": "{{count}} account",
+    "accounts_other": "{{count}} accounts",
+    "wallets_one": "{{count}} wallet",
+    "wallets_other": "{{count}} wallets"
+  },
+  "header": {
+    "nav": {
+      "overview": "Overview",
+      "transactions": "Transactions",
+      "reports": "Reports"
+    },
+    "booksTitle": "Books · {{workspace}} · Book · {{profile}}",
+    "more": "More",
+    "moreOptions": "More options",
+    "display": "Display",
+    "language": "Language",
+    "settings": "Settings",
+    "lockKassiber": "Lock Kassiber"
+  },
+  "footer": {
+    "version": "KASSIBER v0.21.0",
+    "watchOnly": "WATCH-ONLY · LOCAL ENCRYPTED VAULT",
+    "donateSats": "DONATE SATS",
+    "btcEur": "BTC/EUR",
+    "rateTitle": "Updated {{since}} · source: Coinbase Exchange",
+    "justNow": "just now",
+    "secondsAgo": "{{seconds}}s ago",
+    "minutesAgo": "{{minutes}}m ago",
+    "refreshRate": "Refresh rate",
+    "refreshRateLabel": "Refresh BTC/EUR rate",
+    "mainnet": "MAINNET",
+    "github": "GITHUB"
+  },
+  "copyButton": {
+    "copy": "Copy",
+    "copied": "Copied"
+  },
+  "currencyToggleText": {
+    "showBitcoin": "Show amounts in bitcoin",
+    "showFiat": "Show amounts in fiat"
+  },
+  "firstSync": {
+    "defaultTitle": "Setting up your book",
+    "body": "First sync — building your history from your configured sources. This runs once and can take a few minutes.",
+    "preparing": "Preparing source refresh",
+    "working": "Working…",
+    "keepUsing": "You can keep using Kassiber while this finishes.",
+    "continueInBackground": "Continue in background"
+  },
+  "syncDot": {
+    "synced": "Current",
+    "syncing": "Refreshing",
+    "idle": "Idle",
+    "error": "Needs attention"
+  },
+  "connectionStatus": {
+    "synced": "Synced",
+    "syncing": "Syncing",
+    "idle": "Idle",
+    "error": "Error"
+  },
+  "protocol": {
+    "onChain": "ON-CHAIN",
+    "lightning": "LIGHTNING",
+    "nwc": "NWC",
+    "ecash": "ECASH",
+    "merchant": "MERCHANT",
+    "exchange": "EXCHANGE",
+    "platform": "PLATFORM",
+    "custom": "CUSTOM",
+    "file": "FILE",
+    "labels": "LABELS"
+  },
+  "range": {
+    "d": "D",
+    "w": "W",
+    "m": "M",
+    "ytd": "YTD",
+    "1y": "1Y",
+    "5y": "5Y",
+    "all": "ALL"
+  },
+  "screen": {
+    "refreshing": "Refreshing"
+  }
+}

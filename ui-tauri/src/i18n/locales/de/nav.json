@@ -1,0 +1,28 @@
+{
+  "book": {
+    "overview": "Übersicht",
+    "transactions": "Transaktionen",
+    "ledger": "Hauptbuch",
+    "quarantine": "Quarantäne",
+    "wallets": "Wallets",
+    "reports": "Berichte",
+    "assistant": "Assistent",
+    "reconcile": "Abgleich",
+    "sourceFunds": "Mittelherkunft",
+    "swaps": "Swaps & Übertragungen",
+    "activity": "Aktivität",
+    "logs": "Protokoll",
+    "exitTax": "Wegzugsbesteuerung",
+    "settings": "Einstellungen"
+  },
+  "section": {
+    "main": "Allgemein",
+    "review": "Prüfung"
+  },
+  "openBook": {
+    "title": "Aktives Buch geändert",
+    "body": "{{book}} ist jetzt aktiv. {{page}} wird geöffnet.",
+    "fallbackBook": "Ausgewähltes Buch",
+    "fallbackPage": "Seite"
+  }
+}

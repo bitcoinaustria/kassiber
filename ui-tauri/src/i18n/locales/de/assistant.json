@@ -1,0 +1,259 @@
+{
+  "page": {
+    "heading": "Was muss heute überprüft werden?",
+    "conversationLabel": "Assistenten-Unterhaltung",
+    "generating": "Wird generiert",
+    "generatingQueued": "Wird generiert - {{count}} in Warteschlange",
+    "messageCount_one": "{{count}} Nachricht",
+    "messageCount_other": "{{count}} Nachrichten",
+    "incognito": "Incognito",
+    "incognitoTitle": "Incognito: Diese Unterhaltung wird nicht gespeichert",
+    "exportChat": "Chat exportieren",
+    "clearChat": "Chat leeren"
+  },
+  "dock": {
+    "label": "Kassiber-Assistent",
+    "conversation": "Unterhaltung",
+    "openAssistantPage": "Assistenten-Seite öffnen",
+    "collapseConversation": "Unterhaltung einklappen",
+    "expandConversation": "Erhaltene Unterhaltung ausklappen",
+    "conversationHidden": "Unterhaltung verborgen",
+    "preservedForContext_one": "{{count}} Nachricht für den Kontext erhalten",
+    "preservedForContext_other": "{{count}} Nachrichten für den Kontext erhalten"
+  },
+  "composer": {
+    "placeholder": "Frag mich etwas",
+    "stopGenerating": "Generierung stoppen",
+    "sendMessage": "Nachricht senden",
+    "queueMessage": "Nachricht in Warteschlange stellen",
+    "modelContext": "Modell-Kontext",
+    "thinking": "Nachdenken",
+    "effort": {
+      "auto": "Auto",
+      "low": "Niedrig",
+      "medium": "Mittel",
+      "high": "Hoch"
+    }
+  },
+  "prompts": {
+    "reviewQuarantine": {
+      "text": "Quarantäne prüfen",
+      "prompt": "Liste die Transaktionen in Quarantäne oder mit unzureichenden Angaben auf und sag mir, welche Kurs-, Transfer- oder Wallet-Nachweise zur Klärung nötig sind."
+    },
+    "reprocessJournals": {
+      "text": "Journale neu verarbeiten",
+      "prompt": "Prüfe, ob Journale nach den jüngsten Importen, Kursänderungen, Metadaten-Bearbeitungen oder Transfer-Zuordnungen neu verarbeitet werden müssen."
+    },
+    "prepareTaxExport": {
+      "text": "Steuer-Export vorbereiten",
+      "prompt": "Bereite die Checkliste für den österreichischen Steuer-Export vor und weise auf fehlende Journal-, Kurs- oder Bericht-Voraussetzungen hin."
+    }
+  },
+  "thread": {
+    "scrollToLatest": "Zur neuesten Nachricht scrollen"
+  },
+  "message": {
+    "toolUsage": "Tool-Nutzung",
+    "thinking": "Wird nachgedacht",
+    "generating": "Wird generiert",
+    "chatFailed": "Chat fehlgeschlagen",
+    "stoppedByUser": "Von dir gestoppt."
+  },
+  "facts": {
+    "asset": "Asset",
+    "reportReadiness": "Bericht-Bereitschaft",
+    "ready": "Bereit",
+    "blockers_one": "{{count}} Blocker",
+    "blockers_other": "{{count}} Blocker",
+    "summary": "Zusammenfassung",
+    "activeTx": "{{count}} aktive Tx",
+    "assetFlow": "{{asset}} ein {{inbound}}, aus {{outbound}}",
+    "balanceSheet": "Bilanz",
+    "portfolio": "Portfolio",
+    "assetTotals_one": "{{count}} Asset-Summe",
+    "assetTotals_other": "{{count}} Asset-Summen",
+    "assetTotalDetail": "{{asset}} {{quantity}}",
+    "taxSummary": "Steuer-Zusammenfassung",
+    "rows_one": "{{count}} Zeile",
+    "rows_other": "{{count}} Zeilen",
+    "gainLoss": "Gewinn/Verlust {{value}}",
+    "rateCoverage": "Kursabdeckung",
+    "missingPrices_one": "{{count}} fehlender Kurs",
+    "missingPrices_other": "{{count}} fehlende Kurse",
+    "coverableFromCache": "{{count}} aus Cache abdeckbar",
+    "changeAudit": "Änderungsprüfung",
+    "noChangesSinceBaseline": "Keine Änderungen seit der Baseline",
+    "baselineRequired": "Baseline erforderlich",
+    "changedSinceBaseline": "Seit der Baseline geändert",
+    "maintenance": "Wartung",
+    "reportsReady": "Berichte bereit",
+    "syncMode": "Sync {{mode}}"
+  },
+  "provenance": {
+    "localTools_one": "{{count}} lokales Tool",
+    "localTools_other": "{{count}} lokale Tools",
+    "activeTx": "{{count}} aktive Tx",
+    "quarantine": "{{count}} Quarantäne",
+    "missingPrices": "{{count}} fehlende Kurse",
+    "journalsRefreshedAt": "Journale aktualisiert {{time}}",
+    "journalsRefreshed": "Journale aktualisiert",
+    "journalsAt": "Journale {{time}}",
+    "syncFailed": "Sync fehlgeschlagen",
+    "syncChecked": "Sync geprüft",
+    "answeredAt": "beantwortet {{time}}"
+  },
+  "tool": {
+    "summaryLabel": "Zusammenfassung",
+    "detailsLabel": "Details",
+    "reasonLabel": "Grund",
+    "overviewSnapshot": {
+      "connections_one": "{{count}} Verbindung",
+      "connections_other": "{{count}} Verbindungen",
+      "recentTransactions_one": "{{count}} aktuelle Transaktion",
+      "recentTransactions_other": "{{count}} aktuelle Transaktionen",
+      "priceEur": "BTC/EUR {{value}}",
+      "realizedYtd": "realisiert seit Jahresbeginn {{value}}"
+    },
+    "workspaceHealth": {
+      "noBooksSet": "Kein Workspace gesetzt",
+      "noBook": "Kein Profil",
+      "statusUnknown": "unbekannt",
+      "summary": "{{booksSet}} / {{books}}: Journale {{journals}}, Berichte {{reports}}.",
+      "reportsReady": "bereit",
+      "reportsNotReady": "nicht bereit"
+    },
+    "nextActions": {
+      "suggestions_one": "{{count}} Vorschlag: {{titles}}.",
+      "suggestions_other": "{{count}} Vorschläge: {{titles}}.",
+      "none": "Keine Vorschläge für nächste Aktionen."
+    },
+    "walletsList": {
+      "wallets_one": "{{count}} Wallet",
+      "wallets_other": "{{count}} Wallets",
+      "withLabels": "{{wallets}}: {{labels}}.",
+      "withoutLabels": "{{wallets}}."
+    },
+    "backendsList": {
+      "backends_one": "{{count}} Backend",
+      "backends_other": "{{count}} Backends",
+      "withDefault": "{{backends}}; Standard {{default}}.",
+      "withoutDefault": "{{backends}}."
+    },
+    "quarantine": {
+      "summary_one": "{{count}} Transaktion in Quarantäne.",
+      "summary_other": "{{count}} Transaktionen in Quarantäne."
+    },
+    "transfersList": {
+      "pairs_one": "{{count}} Paar",
+      "pairs_other": "{{count}} Paare",
+      "summary_one": "{{pairs}}, {{transferEntries}} Journal-Transfereintrag.",
+      "summary_other": "{{pairs}}, {{transferEntries}} Journal-Transfereinträge."
+    },
+    "ratesSummary": {
+      "pairs_one": "{{count}} gecachtes Kurspaar.",
+      "pairs_other": "{{count}} gecachte Kurspaare."
+    },
+    "ratesCoverage": {
+      "summary_one": "{{missing}} Transaktion mit fehlendem Kurs, {{coverable}} aus Cache abdeckbar.",
+      "summary_other": "{{missing}} Transaktionen mit fehlendem Kurs, {{coverable}} aus Cache abdeckbar."
+    },
+    "reportBlockers": {
+      "ready": "Berichte sind bereit.",
+      "blockers_one": "{{count}} Bericht-Blocker.",
+      "blockers_other": "{{count}} Bericht-Blocker."
+    },
+    "changesSince": {
+      "baselineRequired": "Keine Baseline der vorigen Antwort verfügbar.",
+      "changed": "geändert",
+      "unchanged": "unverändert",
+      "summary_one": "Workspace {{state}}; {{txCount}} Transaktionsänderung, {{journalCount}} Journaländerung.",
+      "summary_other": "Workspace {{state}}; {{txCount}} Transaktionsänderungen, {{journalCount}} Journaländerungen."
+    },
+    "maintenanceSettings": {
+      "enabled": "Automatische Watch-only-Aktualisierung vor dem Lesen von Berichten ist aktiviert.",
+      "disabled": "Automatische Watch-only-Aktualisierung vor dem Lesen von Berichten ist deaktiviert."
+    },
+    "maintenanceConfigure": {
+      "enabled": "Automatische Watch-only-Aktualisierung vor dem Lesen von Berichten aktiviert.",
+      "disabled": "Automatische Watch-only-Aktualisierung vor dem Lesen von Berichten deaktiviert."
+    },
+    "maintenanceRun": {
+      "ready": "Wartung abgeschlossen; Berichte bereit.",
+      "blockers_one": "Wartung abgeschlossen; {{count}} Blocker verbleibt.",
+      "blockers_other": "Wartung abgeschlossen; {{count}} Blocker verbleiben."
+    },
+    "transactionsList": {
+      "summary_one": "{{count}} Transaktion.",
+      "summary_other": "{{count}} Transaktionen."
+    },
+    "transactionsExtremes": {
+      "largest_one": "{{count}} größte Transaktion",
+      "largest_other": "{{count}} größte Transaktionen",
+      "smallest_one": "{{count}} kleinste Transaktion",
+      "smallest_other": "{{count}} kleinste Transaktionen",
+      "summary": "{{largest}}, {{smallest}}."
+    },
+    "transactionsSearch": {
+      "summary_one": "{{count}} passende Transaktion.",
+      "summary_other": "{{count}} passende Transaktionen."
+    },
+    "reportsSummary": {
+      "activeTransactions_one": "{{count}} aktive Transaktion",
+      "activeTransactions_other": "{{count}} aktive Transaktionen",
+      "assetFlowRows_one": "{{count}} Asset-Fluss-Zeile",
+      "assetFlowRows_other": "{{count}} Asset-Fluss-Zeilen",
+      "walletFlowRows_one": "{{count}} Wallet-Fluss-Zeile",
+      "walletFlowRows_other": "{{count}} Wallet-Fluss-Zeilen",
+      "transferPairs_one": "{{count}} geprüftes Transfer-/Swap-Paar",
+      "transferPairs_other": "{{count}} geprüfte Transfer-/Swap-Paare",
+      "summary": "{{activeTransactions}}, {{assetFlowRows}}, {{walletFlowRows}}, {{transferPairs}}."
+    },
+    "balanceSheet": {
+      "balanceRows_one": "{{count}} Saldo-Zeile",
+      "balanceRows_other": "{{count}} Saldo-Zeilen",
+      "assetTotals_one": "{{count}} Asset-Summe",
+      "assetTotals_other": "{{count}} Asset-Summen",
+      "summary": "{{balanceRows}}, {{assetTotals}}."
+    },
+    "portfolioSummary": {
+      "holdingRows_one": "{{count}} Wallet-Bestandszeile",
+      "holdingRows_other": "{{count}} Wallet-Bestandszeilen",
+      "assetTotals_one": "{{count}} Asset-Summe",
+      "assetTotals_other": "{{count}} Asset-Summen",
+      "summary": "{{holdingRows}}, {{assetTotals}}."
+    },
+    "taxSummary": {
+      "taxRows_one": "{{count}} Steuer-Zeile",
+      "taxRows_other": "{{count}} Steuer-Zeilen",
+      "years_one": "{{count}} Jahr",
+      "years_other": "{{count}} Jahre",
+      "summary": "{{taxRows}}, {{years}}."
+    },
+    "balanceHistory": {
+      "buckets_one": "{{count}} {{interval}} Saldo-Bucket.",
+      "buckets_other": "{{count}} {{interval}} Saldo-Buckets.",
+      "intervalFallback": "Verlauf"
+    }
+  },
+  "history": {
+    "trigger": "Verlauf",
+    "savedChats": "Gespeicherte Chats",
+    "loading": "Wird geladen…",
+    "empty": "Noch keine gespeicherten Chats.",
+    "disabled": "Der Chat-Verlauf ist für dieses Profil deaktiviert - siehe Einstellungen, KI-Assistent.",
+    "current": "(aktuell)",
+    "messageCount_one": "{{count}} Nachricht",
+    "messageCount_other": "{{count}} Nachrichten",
+    "entryMeta": "{{date}} · {{messages}}",
+    "deleteChat": "Chat „{{title}}“ löschen"
+  },
+  "modelPicker": {
+    "selectModel": "Modell wählen",
+    "noProviderConfigured": "Kein Provider konfiguriert",
+    "selectAModel": "Ein Modell wählen",
+    "models": "Modelle",
+    "noProviders": "Keine KI-Provider konfiguriert",
+    "noModels": "Keine Modelle gefunden",
+    "refreshModels": "Alle KI-Modelle aktualisieren"
+  }
+}

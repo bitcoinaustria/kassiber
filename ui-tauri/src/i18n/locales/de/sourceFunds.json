@@ -1,0 +1,360 @@
+{
+  "header": {
+    "title": "Mittelherkunft",
+    "description": "Wähle zuerst den Zweck, dann prüfe den Nachweispfad."
+  },
+  "wizard": {
+    "step": "Schritt {{index}}",
+    "steps": {
+      "setup": "Einrichtung",
+      "review": "Prüfung",
+      "export": "Export"
+    }
+  },
+  "purpose": {
+    "planned": {
+      "title": "Geplanter Verkauf über Exchange",
+      "body": "Bereite eine Offenlegung für Bank oder Exchange vor, bevor die Einzahlung oder der Verkauf stattfindet."
+    },
+    "existing": {
+      "title": "Bereits passiert",
+      "body": "Erkläre einen abgeschlossenen Verkauf, eine Exchange-Einzahlung, eine Auszahlung oder einen Transfer."
+    },
+    "plannedHint": "Geplante Berichte belegen die geprüfte Historie der Bitcoin, die du verkaufen möchtest. Wenn diese Sats ursprünglich auf einer Exchange gekauft wurden, hänge den Nachweis der Fiat-Mittel als separaten Beleg an diese Kaufquelle an."
+  },
+  "setup": {
+    "targetLabelPlanned": "Anker der Mittelhistorie",
+    "targetLabelExisting": "Abgeschlossene Transaktion",
+    "amountLabelPlanned": "Geplanter Verkaufsbetrag",
+    "amountLabelExisting": "Berichtsbetrag",
+    "selected": "Ausgewählt: {{date}} · {{wallet}} · {{txid}}",
+    "transactionCount": "{{shown}} von {{total}} Transaktionen",
+    "searchPlaceholder": "txid, Wallet, Notiz suchen…",
+    "noMatches": "Keine Transaktionen passen zu diesen Filtern.",
+    "exchangeBroker": {
+      "label": "Exchange oder Broker",
+      "placeholder": "Kraken, Bitpanda, OTC-Desk…"
+    },
+    "bankNote": {
+      "label": "Notiz zur Bankoffenlegung",
+      "placeholder": "Erwarteter EUR-Erlös, Bankkontakt oder interne Fallnotiz"
+    }
+  },
+  "controls": {
+    "revealLabel": "Offenlegung",
+    "amountPlaceholder": "0,00000000"
+  },
+  "filters": {
+    "title": "Filter",
+    "clear": "Zurücksetzen",
+    "direction": {
+      "ariaLabel": "Nach Richtung filtern",
+      "all": "Alle Flüsse"
+    },
+    "date": {
+      "ariaLabel": "Nach Datum filtern",
+      "all": "Alle Daten",
+      "today": "Heute",
+      "yesterday": "Gestern",
+      "last7days": "Letzte 7 Tage",
+      "last30days": "Letzte 30 Tage",
+      "older": "Älter"
+    },
+    "status": {
+      "ariaLabel": "Nach Status filtern",
+      "all": "Alle Status",
+      "confirmed": "Bestätigt",
+      "pending": "Ausstehend",
+      "review": "Prüfung nötig"
+    },
+    "network": {
+      "ariaLabel": "Nach Netzwerk filtern",
+      "all": "Alle Netzwerke"
+    },
+    "asset": {
+      "ariaLabel": "Nach Asset filtern",
+      "all": "Alle Assets"
+    },
+    "wallet": {
+      "ariaLabel": "Nach Wallet filtern",
+      "all": "Alle Wallets"
+    }
+  },
+  "transactionRow": {
+    "fallbackDescription": "Transaktion",
+    "walletMobile": "Wallet: ",
+    "header": {
+      "transaction": "Transaktion",
+      "amount": "Betrag",
+      "wallet": "Wallet",
+      "flow": "Fluss"
+    }
+  },
+  "flow": {
+    "incoming": "Eingehend",
+    "outgoing": "Ausgehend",
+    "swap": "Swap",
+    "transfer": "Transfer"
+  },
+  "fallback": {
+    "wallet": "Wallet",
+    "unknownDate": "Unbekanntes Datum"
+  },
+  "network": {
+    "lightning": "Lightning",
+    "liquid": "Liquid",
+    "exchange": "Exchange",
+    "onChain": "On-chain"
+  },
+  "actionsBar": {
+    "findLinks": "Verknüpfungen finden",
+    "reviewDeterministic": "Deterministische Hops prüfen",
+    "markGap": "Lücke markieren",
+    "manualReviewHint_one": "{{count}} schwacher Vorschlag bzw. Vorschlag aus On-chain-Beobachtung braucht noch eine manuelle Prüfung.",
+    "manualReviewHint_other": "{{count}} schwache Vorschläge bzw. Vorschläge aus On-chain-Beobachtung brauchen noch eine manuelle Prüfung."
+  },
+  "gapDefaults": {
+    "label": "Geprüfte fehlende Historie",
+    "description": "Die frühere Historie fehlt und wurde als Offenlegungslücke geprüft."
+  },
+  "export": {
+    "intro": "Prüfe vor dem Export, was der Bericht offenlegt. Der Export ist nur möglich, wenn alle Blocker beseitigt sind, und das PDF enthält ausschließlich geprüfte Nachweise.",
+    "savingCase": "Fall wird gespeichert…",
+    "saveAndExport": "Speichern & PDF exportieren",
+    "savedCase": "Gespeicherter Fall {{id}} ({{status}})"
+  },
+  "advancedReview": {
+    "title": "Erweiterter Prüfeditor",
+    "summary": "{{links}} Verknüpfungen, {{sources}} Quellen, {{evidence}} Nachweise"
+  },
+  "reviewQueue": {
+    "title": "Prüfwarteschlange",
+    "description": "Passende Verknüpfungen für das ausgewählte Ziel sowie vorgeschlagene vorgelagerte Hops, die den Pfad verlängern können.",
+    "empty": "Noch keine passenden Verknüpfungen. Kassiber sucht nach Transfers mit gleicher id, geprüften Paaren, Provider-ids und engen Betrags-/Zeit-Hinweisen.",
+    "badge": {
+      "path": "Pfad",
+      "target": "Ziel",
+      "suggested": "Vorgeschlagen"
+    },
+    "arrow": "{{from}} -> {{to}}",
+    "amountConfidence": "{{amount}} · {{confidence}}"
+  },
+  "linkReview": {
+    "title": "Verknüpfung prüfen",
+    "description": "Annehmen, ablehnen, zuteilen und Nachweise anhängen.",
+    "empty": "Wähle eine Verknüpfung zur Prüfung.",
+    "to": "an {{target}}",
+    "type": "Typ",
+    "confidence": "Sicherheit",
+    "allocation": "Zuteilung",
+    "fromAmount": "Quellbetrag",
+    "reviewNote": "Prüfnotiz",
+    "accept": "Annehmen",
+    "reject": "Ablehnen"
+  },
+  "sourceOrGap": {
+    "title": "Quelle oder Lücke",
+    "description": "Füge eine geprüfte Wurzelquelle oder einen expliziten Stopp für fehlende Historie hinzu.",
+    "sourceType": "Quellentyp",
+    "linkType": "Verknüpfungstyp",
+    "label": "Bezeichnung",
+    "amount": "Betrag",
+    "asset": "Asset",
+    "appliesTo": "Gilt für",
+    "evidenceNote": "Nachweisnotiz",
+    "create": "Quellverknüpfung erstellen"
+  },
+  "manualLink": {
+    "title": "Manuelle Verknüpfung",
+    "description": "Verbinde zwei bekannte Transaktionen mit expliziter Zuteilung.",
+    "from": "Von",
+    "to": "An",
+    "type": "Typ",
+    "confidence": "Sicherheit",
+    "allocation": "Zuteilung",
+    "fromAmount": "Quellbetrag",
+    "reviewNote": "Prüfnotiz",
+    "add": "Geprüfte Verknüpfung hinzufügen"
+  },
+  "gates": {
+    "title": "Gates",
+    "description": "Blocker müssen vor dem Export beseitigt sein.",
+    "building": "Geprüfter Fluss wird erstellt…",
+    "previewUnavailable": "Für dieses Ziel kann noch kein Mittelherkunfts-Bericht erstellt werden.",
+    "clear": "Gates frei.",
+    "nextStep": "Nächster Schritt: {{headline}}",
+    "seeDocs": "(siehe Doku: {{anchor}})"
+  },
+  "disclosure": {
+    "title": "Offenlegung",
+    "description": "Genaue Offenlegung des Berichts.",
+    "evidence": "Nachweise",
+    "excluded": "Ausgeschlossen",
+    "summaryTitle": "Offenlegungsübersicht",
+    "narrative": "Dieser {{purpose}} legt den geprüften Fluss für {{target}} offen. Er gibt {{txids}}, {{evidence}}, {{links}} und {{sources}} preis.",
+    "narrativeTarget": "das ausgewählte Ziel",
+    "narrativePurpose": "Mittelherkunfts-Bericht",
+    "txidCount_one": "{{count}} txid",
+    "txidCount_other": "{{count}} txids",
+    "evidenceCount_one": "{{count}} Nachweis",
+    "evidenceCount_other": "{{count}} Nachweise",
+    "linkCount_one": "{{count}} geprüfte Verknüpfung",
+    "linkCount_other": "{{count}} geprüfte Verknüpfungen",
+    "sourceCount_one": "{{count}} Quellenkategorie",
+    "sourceCount_other": "{{count}} Quellenkategorien",
+    "metric": {
+      "txids": "Txids",
+      "evidence": "Nachweise",
+      "reviewedLinks": "Geprüfte Verknüpfungen",
+      "sources": "Quellen",
+      "hidden": "Verborgen"
+    },
+    "revealMode": "Offenlegungsmodus",
+    "noPreview": "Es ist noch keine Offenlegungsvorschau verfügbar.",
+    "walletLabels": "Wallet-Bezeichnungen",
+    "walletLabelsNone": "Keine",
+    "walletPrivacyNote": "Kassiber nimmt keine Descriptors, xpubs, Wallet-Dateien, Seeds, Backend-Tokens oder fremde Wallet-Historie in das PDF auf.",
+    "txids": "Txids",
+    "none": "Keine",
+    "openTitle": "{{txid}} auf {{label}} öffnen",
+    "opening": "Wird geöffnet…",
+    "noExplorerLink": "Kein öffentlicher Explorer-Link",
+    "openError": "Explorer-URL konnte nicht geöffnet werden."
+  },
+  "sourceMix": {
+    "title": "Quellenmix",
+    "empty": "Keine geprüften Quellen."
+  },
+  "reviewedFlow": {
+    "title": "Geprüfter Fluss",
+    "fallbackLinkType": "Verknüpfung",
+    "empty": "Noch keine geprüften Graph-Kanten."
+  },
+  "caseBrief": {
+    "fallbackTarget": "Ausgewähltes Ziel",
+    "fallbackWallet": "Keine Wallet",
+    "metric": {
+      "transactions": "Transaktionen",
+      "reviewedLinks": "Geprüfte Verknüpfungen",
+      "sources": "Quellen",
+      "blockers": "Blocker",
+      "batchable": "Stapelfähig"
+    },
+    "noPreview": "Lokale Vorschaudaten sind noch nicht verfügbar.",
+    "manualReview_one": "{{count}} Eintrag zur manuellen Prüfung.",
+    "manualReview_other": "{{count}} Einträge zur manuellen Prüfung.",
+    "unresolved": "ungeklärt"
+  },
+  "flowPath": {
+    "title": "Vereinfachter Flusspfad",
+    "privacyHopDeferred": "Privacy-Hop zurückgestellt",
+    "fallbackRole": "Fluss",
+    "more": "+{{count}} weitere"
+  },
+  "coverage": {
+    "sectionTitle": "Historische Abdeckung der Zugänge",
+    "summaryEmpty": "Kein Abdeckungs-Snapshot für Zugänge",
+    "summary": "{{amount}} BTC vollständig nachverfolgt über {{count}} eingehende Transaktionen",
+    "computing": "Abdeckung wird berechnet…",
+    "noInbound": "Noch keine eingehenden Transaktionen in diesem Profil.",
+    "truncated": "Abdeckung auf {{shown}} von {{total}} eingehenden Transaktionen gekürzt ({{notClassified}} nicht klassifiziert). Führe <0>source-funds coverage</0> mit einem höheren --max-transactions aus, um den vollständigen Satz zu berechnen.",
+    "bucketStats": "{{count}} tx · {{percent}} %",
+    "bucket": {
+      "fullyTraced": "Vollständig nachverfolgt",
+      "attested": "Bestätigt",
+      "inReview": "In Prüfung",
+      "untraced": "Nicht nachverfolgt",
+      "notClassified": "Nicht klassifiziert"
+    }
+  },
+  "recipient": {
+    "empty": "Noch keine Empfänger definiert. Führe <0>source-funds recipients create</0> aus, um pro Empfänger einen festen Standard-Offenlegungsmodus festzulegen.",
+    "title": "Empfänger",
+    "hint": "Der bevorzugte Offenlegungsmodus des Empfängers wird unten als Hinweis angezeigt; exportiert wird deine Auswahl des Offenlegungsmodus.",
+    "ariaLabel": "Empfänger",
+    "none": "(kein Empfänger)",
+    "option": "{{label}} - {{kind}} - {{reveal}}",
+    "inactiveSuffix": " (inaktiv)",
+    "advisory": "{{label}} bevorzugt <0>{{preferred}}</0>. Dein aktueller Offenlegungsmodus ist <1>{{current}}</1>.",
+    "applyPreference": "Präferenz übernehmen"
+  },
+  "select": {
+    "transaction": "Transaktion wählen",
+    "noAttachment": "Kein Anhang"
+  },
+  "evidence": {
+    "label": "Nachweise"
+  },
+  "sourceType": {
+    "fiat_purchase": "Fiat-Kauf",
+    "exchange_withdrawal": "Exchange-Auszahlung",
+    "mining": "Mining",
+    "income": "Einkünfte",
+    "gift": "Schenkung",
+    "opening_balance_attestation": "Bestätigung Eröffnungsbestand",
+    "missing_history": "Fehlende Historie",
+    "unknown": "Unbekannt",
+    "unresolved": "Ungeklärt"
+  },
+  "linkType": {
+    "self_transfer": "Eigentransfer",
+    "exchange_transfer": "Exchange-Transfer",
+    "trade": "Handel",
+    "swap": "Swap",
+    "peg_in": "Peg-in",
+    "peg_out": "Peg-out",
+    "lightning_funding": "Lightning-Funding",
+    "lightning_close": "Lightning-Close",
+    "lightning_routed": "Lightning-Routing",
+    "lightning_swap": "Lightning-Swap",
+    "coinjoin": "Coinjoin",
+    "payjoin": "Payjoin",
+    "manual_source": "Manuelle Quelle",
+    "missing_history": "Fehlende Historie",
+    "link": "Verknüpfung"
+  },
+  "confidence": {
+    "exact": "Exakt",
+    "strong": "Stark",
+    "weak": "Schwach",
+    "unknown": "Unbekannt"
+  },
+  "reveal": {
+    "labels_only": "Nur Bezeichnungen",
+    "minimal": "Minimal",
+    "standard": "Standard",
+    "full": "Vollständig"
+  },
+  "linkState": {
+    "suggested": "Vorgeschlagen",
+    "reviewed": "Geprüft",
+    "rejected": "Abgelehnt"
+  },
+  "method": {
+    "same_external_id": "Gleiche externe id",
+    "transaction_pair": "Transaktionspaar",
+    "provider_trade_id": "Provider-Trade-id",
+    "provider_order_id": "Provider-Order-id",
+    "provider_payment_id": "Provider-Payment-id",
+    "provider_exchange_order_id": "Provider-Exchange-Order-id",
+    "provider_ledger_id": "Provider-Ledger-id",
+    "manual": "Manuell"
+  },
+  "toast": {
+    "suggestionsUpdated": "Vorschläge aktualisiert",
+    "evidenceMatched": "Nachweis zugeordnet",
+    "linksFound_one": "{{count}} neue Mittelherkunfts-Verknüpfung.",
+    "linksFound_other": "{{count}} neue Mittelherkunfts-Verknüpfungen.",
+    "deterministicReviewed": "Deterministische Hops geprüft",
+    "deterministicBody": "{{reviewed}} geprüft, {{skipped}} für manuelle Prüfung verblieben.",
+    "linkAccepted": "Verknüpfung angenommen",
+    "linkRejected": "Verknüpfung abgelehnt",
+    "linkReviewedBody": "{{type}} geprüft.",
+    "linkRejectedBody": "{{type}} abgelehnt.",
+    "manualLinkAdded": "Manuelle Verknüpfung hinzugefügt",
+    "manualLinkBody": "Der geprüfte Fluss wurde aktualisiert.",
+    "gapMarked": "Lücke als geprüft markiert",
+    "sourceLinked": "Quelle verknüpft",
+    "sourcePathBody": "Der Mittelherkunftspfad wurde aktualisiert."
+  }
+}

@@ -1,0 +1,331 @@
+{
+  "shell": {
+    "skipToContent": "Zum Hauptinhalt springen",
+    "lockKassiber": "Kassiber sperren",
+    "lockKassiberTitle": "Kassiber sperren (Cmd/Ctrl+L)",
+    "overviewLink": "Kassiber-Übersicht",
+    "back": "Zurück",
+    "forward": "Vorwärts",
+    "switchBooksLabel": "Bücher wechseln. Aktuelle Bücher: {{book}}",
+    "booksFallback": "Lokale Bücher",
+    "fallbackTitle": "Kassiber",
+    "fallback": {
+      "label": "Kassiber durchsuchen",
+      "placeholder": "Seiten, Aktionen, Transaktionen suchen…"
+    },
+    "searchNoMatches": "Keine Treffer",
+    "dataMode": {
+      "real": "Echte Daten",
+      "mock": "Mock-Daten",
+      "toggle": "Modus für echte Daten umschalten"
+    },
+    "support": {
+      "title": "Support",
+      "bugReport": "Fehlerbericht",
+      "donateSats": "Sats spenden"
+    },
+    "extras": {
+      "title": "Extras",
+      "manySats": "ManySats",
+      "exitCalculator": "Exit-Calculator"
+    },
+    "user": {
+      "fallbackWorkspace": "Meine Bücher",
+      "fallbackProfile": "Privat",
+      "books": "Bücher"
+    },
+    "version": {
+      "devTitle": "Kassiber lokaler Dev-Build ({{commit}})",
+      "releaseTitle": "Kassiber v{{version}} ({{commit}})",
+      "devLabel": "Kassiber Dev",
+      "releaseLabel": "Kassiber v{{version}}"
+    }
+  },
+  "routeMeta": {
+    "activity": {
+      "label": "Aktivität durchsuchen",
+      "placeholder": "Transaktionen, Wallets suchen…"
+    },
+    "walletDetail": {
+      "title": "Wallet-Detail",
+      "label": "Wallets durchsuchen",
+      "placeholder": "Wallets, Bücher suchen…"
+    },
+    "wallets": {
+      "label": "Wallets durchsuchen",
+      "placeholder": "Wallets, Importe, Backends suchen…"
+    },
+    "booksOverview": {
+      "title": "Buchsatz-Übersicht",
+      "label": "Bücher durchsuchen",
+      "placeholder": "Bücher, Wallets, Berichte suchen…"
+    },
+    "books": {
+      "title": "Bücher",
+      "label": "Bücher durchsuchen",
+      "placeholder": "Bücher, Länder suchen…"
+    },
+    "ledger": {
+      "label": "Hauptbuch durchsuchen",
+      "placeholder": "Einträge, Wallets, Assets suchen…"
+    },
+    "logs": {
+      "label": "Protokoll durchsuchen",
+      "placeholder": "Daemon-Fehler, Logs suchen…"
+    },
+    "settings": {
+      "label": "Einstellungen durchsuchen",
+      "placeholder": "Einstellungen, Backends suchen…"
+    },
+    "reports": {
+      "label": "Berichte durchsuchen",
+      "placeholder": "Berichte, Exporte suchen…"
+    },
+    "exitTax": {
+      "label": "Wegzugsbesteuerung durchsuchen",
+      "placeholder": "Wegzugsdatum, Zielort suchen…"
+    },
+    "sourceOfFunds": {
+      "title": "Mittelherkunft",
+      "label": "Mittelherkunft durchsuchen",
+      "placeholder": "Quellen, Wallets suchen…"
+    },
+    "quarantine": {
+      "label": "Quarantäne durchsuchen",
+      "placeholder": "Problem, Account, Quelle suchen…"
+    },
+    "reconcile": {
+      "label": "Abgleich durchsuchen",
+      "placeholder": "Adressen oder Transaktions-IDs einfügen…"
+    },
+    "swaps": {
+      "label": "Swaps und Übertragungen durchsuchen",
+      "placeholder": "Wallet, Asset-Paar, txid suchen…"
+    },
+    "transactions": {
+      "label": "Transaktionen durchsuchen",
+      "placeholder": "Gegenpartei, Tag, Account suchen…"
+    },
+    "assistant": {
+      "label": "Assistent durchsuchen",
+      "placeholder": "Konversation durchsuchen…"
+    },
+    "overview": {
+      "label": "Übersicht durchsuchen",
+      "placeholder": "Transaktionen, Berichte suchen…"
+    }
+  },
+  "search": {
+    "category": {
+      "action": "Aktion",
+      "page": "Seite",
+      "report": "Bericht",
+      "review_item": "Prüfung",
+      "setting": "Einstellung",
+      "transaction": "Transaktion",
+      "wallet": "Wallet"
+    },
+    "actionReason": {
+      "fromSearch": "Aus der globalen Suche geöffnet",
+      "fromKeyboard": "Über Tastenkürzel geöffnet",
+      "fromNativeMenu": "Aus dem nativen Menü geöffnet"
+    }
+  },
+  "notifications": {
+    "label": "Benachrichtigungen",
+    "labelActive": "Benachrichtigungen ({{count}} aktiv)",
+    "clearAll": "Alle löschen",
+    "ledgerStale": {
+      "title": "Hauptbuch muss verarbeitet werden",
+      "body": "Berichte sind erst vertrauenswürdig, wenn die Journalverarbeitung gelaufen ist.",
+      "action": "Jetzt verarbeiten"
+    },
+    "quarantined": {
+      "title": "Transaktionen in Quarantäne",
+      "body_one": "{{count}} Transaktion muss geprüft werden.",
+      "body_other": "{{count}} Transaktionen müssen geprüft werden."
+    },
+    "processing": "Wird verarbeitet…",
+    "bookRefreshRunning": {
+      "title": "Buch-Aktualisierung läuft bereits",
+      "body": "Kassiber aktualisiert bereits Quellen, Kurse oder Journale."
+    }
+  },
+  "currencyToggle": {
+    "bitcoin": "Bitcoin",
+    "euro": "Euro",
+    "label": "Anzeigewährung ist {{current}}. Zu {{next}} wechseln.",
+    "title": "Anzeigewährung: {{current}}. Zu {{next}} wechseln."
+  },
+  "sensitive": {
+    "show": "Sensible Daten anzeigen",
+    "hide": "Sensible Daten ausblenden"
+  },
+  "theme": {
+    "label": "Erscheinungsbild",
+    "system": "System",
+    "light": "Hell",
+    "dark": "Dunkel"
+  },
+  "lock": {
+    "touchIdNotSavedTitle": "Touch-ID-Entsperrung wurde nicht gespeichert",
+    "touchIdNotSavedReason": "Touch-ID-Entsperrung ist nicht eingerichtet: {{reason}}",
+    "touchIdNotSavedKeychain": "macOS Keychain hat die gespeicherte Passphrase nicht gemeldet.",
+    "touchIdNotAcceptedKeychain": "macOS Keychain hat die gespeicherte Passphrase nicht akzeptiert.",
+    "importRootOpening": "Kassiber öffnet noch den ausgewählten Ordner mit lokalen Büchern.",
+    "passphraseRequiredError": "Die Datenbank-Passphrase ist erforderlich.",
+    "touchIdNotFound": "Für diese Bücher wurde keine Touch-ID-Passphrase gefunden. Entsperre einmal mit der Passphrase, um sie erneut zu speichern.",
+    "passphraseRequiredTitle": "Datenbank-Passphrase erforderlich",
+    "booksLocked": "Bücher gesperrt",
+    "defaultReason": "Gib die Datenbank-Passphrase ein, um zu entsperren.",
+    "unlockingTouchId": "Wird mit Touch ID entsperrt…",
+    "passphrase": "Passphrase",
+    "touchIdUnavailableReason": "Touch-ID-Entsperrung ist nicht verfügbar: {{reason}}",
+    "touchIdUnavailable": "Touch-ID-Entsperrung ist für diese Desktop-Sitzung nicht verfügbar.",
+    "touchIdNotSetUpReason": "Touch-ID-Entsperrung ist nicht eingerichtet: {{reason}}",
+    "touchIdNotSetUp": "Für diese Bücher ist keine Touch-ID-Passphrase gespeichert. Entsperre einmal mit der Passphrase, um sie erneut zu speichern.",
+    "useTouchIdNextTime": "Beim nächsten Mal Touch ID verwenden",
+    "useTouchIdNextTimeBody": "Speichere diese Datenbank-Passphrase im macOS Keychain hinter der lokalen Nutzeranwesenheit.",
+    "waitingForTouchId": "Warten auf Touch ID…",
+    "unlockWithTouchId": "Mit Touch ID entsperren",
+    "unlocking": "Wird entsperrt…",
+    "unlock": "Entsperren",
+    "openBooks": "Bücher öffnen",
+    "backToSetup": "Zurück zur Einrichtung",
+    "passphraseFailed": "Die Passphrase hat diese Sitzung nicht entsperrt.",
+    "touchIdFailed": "Touch ID hat diese Sitzung nicht entsperrt."
+  },
+  "importRoot": {
+    "title": "Lokale Bücher werden geöffnet",
+    "body": "Das ausgewählte Kassiber-Datenverzeichnis wird wiederhergestellt.",
+    "backToSetup": "Zurück zur Einrichtung",
+    "couldNotOpen": "Der ausgewählte Ordner mit lokalen Büchern konnte nicht geöffnet werden."
+  },
+  "preAlpha": {
+    "label": "Warnung: Pre-Alpha-Software",
+    "message": "Pre-Alpha-Software: bestenfalls unzuverlässig. Prüfe alles, bevor du dich auf Berichte oder Exporte verlässt."
+  },
+  "network": {
+    "outboundConnections": "Ausgehende Verbindungen",
+    "checkConnections": "Verbindungen prüfen",
+    "loading": "Verbindungen werden geladen…",
+    "loadError": "Die konfigurierten Verbindungen konnten nicht geladen werden.",
+    "noneConfigured": "Keine ausgehenden Verbindungen konfiguriert.",
+    "columnState": "Status",
+    "columnConnection": "Verbindung",
+    "columnEndpoint": "Endpunkt",
+    "lastChecked": "Zuletzt geprüft {{time}}",
+    "indicator": {
+      "errors": "Verbindungsfehler",
+      "warning": "Verbindungsproblem",
+      "online": "Verbindungen online",
+      "neutral": "Verbindungen nicht geprüft"
+    },
+    "health": {
+      "healthy": "In Ordnung",
+      "failed": "Fehlgeschlagen",
+      "checking": "Wird geprüft",
+      "notCheckable": "Nicht prüfbar",
+      "notChecked": "Nicht geprüft",
+      "skipped": "Prüfung übersprungen"
+    },
+    "unsupportedTitle": "Gespeicherte HTTP-Explorer-Endpunkte werden hier aufgeführt, aber nicht aktiv aus der Shell geprüft. Die Verbindungsprüfung testet Electrum-/Fulcrum-Backends und freigegebene reine Anzeige-HTTP-Prüfungen.",
+    "checkPassed": "Verbindungsprüfung erfolgreich.",
+    "checkFailed": "Verbindungsprüfung fehlgeschlagen."
+  },
+  "bookSwitcher": {
+    "title": "Bücher wechseln",
+    "description": "Wähle das aktive Buch für jeden Bildschirm in diesem Fenster.",
+    "loading": "Bücher werden geladen…",
+    "loadError": "Die Bücher konnten nicht geladen werden.",
+    "empty": "In diesem Datenverzeichnis wurden keine Bücher gefunden.",
+    "manageBooks": "Bücher verwalten",
+    "switchError": "Die Bücher konnten nicht gewechselt werden.",
+    "bookSetOverview": "Buchsatz-Übersicht",
+    "openedOn": "Geöffnet {{date}}",
+    "accounts_one": "{{count}} Account",
+    "accounts_other": "{{count}} Accounts",
+    "wallets_one": "{{count}} Wallet",
+    "wallets_other": "{{count}} Wallets"
+  },
+  "header": {
+    "nav": {
+      "overview": "Übersicht",
+      "transactions": "Transaktionen",
+      "reports": "Berichte"
+    },
+    "booksTitle": "Bücher · {{workspace}} · Buch · {{profile}}",
+    "more": "Mehr",
+    "moreOptions": "Weitere Optionen",
+    "display": "Anzeige",
+    "language": "Sprache",
+    "settings": "Einstellungen",
+    "lockKassiber": "Kassiber sperren"
+  },
+  "footer": {
+    "version": "KASSIBER v0.21.0",
+    "watchOnly": "WATCH-ONLY · LOKALER VERSCHLÜSSELTER TRESOR",
+    "donateSats": "SATS SPENDEN",
+    "btcEur": "BTC/EUR",
+    "rateTitle": "Aktualisiert {{since}} · Quelle: Coinbase Exchange",
+    "justNow": "gerade eben",
+    "secondsAgo": "vor {{seconds}}s",
+    "minutesAgo": "vor {{minutes}}m",
+    "refreshRate": "Kurs aktualisieren",
+    "refreshRateLabel": "BTC/EUR-Kurs aktualisieren",
+    "mainnet": "MAINNET",
+    "github": "GITHUB"
+  },
+  "copyButton": {
+    "copy": "Kopieren",
+    "copied": "Kopiert"
+  },
+  "currencyToggleText": {
+    "showBitcoin": "Beträge in Bitcoin anzeigen",
+    "showFiat": "Beträge in Fiat anzeigen"
+  },
+  "firstSync": {
+    "defaultTitle": "Dein Buch wird eingerichtet",
+    "body": "Erste Synchronisierung — deine Historie wird aus den konfigurierten Quellen aufgebaut. Das läuft einmalig und kann ein paar Minuten dauern.",
+    "preparing": "Quellenaktualisierung wird vorbereitet",
+    "working": "Wird bearbeitet…",
+    "keepUsing": "Du kannst Kassiber weiter nutzen, während das fertig wird.",
+    "continueInBackground": "Im Hintergrund fortsetzen"
+  },
+  "syncDot": {
+    "synced": "Aktuell",
+    "syncing": "Wird aktualisiert",
+    "idle": "Inaktiv",
+    "error": "Benötigt Aufmerksamkeit"
+  },
+  "connectionStatus": {
+    "synced": "Synchronisiert",
+    "syncing": "Wird synchronisiert",
+    "idle": "Inaktiv",
+    "error": "Fehler"
+  },
+  "protocol": {
+    "onChain": "ON-CHAIN",
+    "lightning": "LIGHTNING",
+    "nwc": "NWC",
+    "ecash": "ECASH",
+    "merchant": "HÄNDLER",
+    "exchange": "BÖRSE",
+    "platform": "PLATTFORM",
+    "custom": "BENUTZERDEFINIERT",
+    "file": "DATEI",
+    "labels": "LABELS"
+  },
+  "range": {
+    "d": "T",
+    "w": "W",
+    "m": "M",
+    "ytd": "YTD",
+    "1y": "1J",
+    "5y": "5J",
+    "all": "ALLE"
+  },
+  "screen": {
+    "refreshing": "Wird aktualisiert"
+  }
+}

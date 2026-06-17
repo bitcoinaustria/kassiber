@@ -1,0 +1,794 @@
+{
+  "route": {
+    "unavailable": {
+      "title": "Transaktionen nicht verfügbar",
+      "body": "Kassiber konnte keine echten Transaktionen für das aktuelle Buch lesen."
+    }
+  },
+  "status": {
+    "completed": "Bestätigt",
+    "pending": "Ausstehend",
+    "failed": "Fehlgeschlagen",
+    "review": "Prüfung nötig"
+  },
+  "flow": {
+    "incoming": "Eingehend",
+    "outgoing": "Ausgehend",
+    "transfer": "Interne Übertragung",
+    "swap": "Swap",
+    "layerTransition": "Layer-Übergang"
+  },
+  "flowOption": {
+    "incoming": "Empfangen",
+    "outgoing": "Senden",
+    "transfer": "Interne Übertragung",
+    "swap": "Swap",
+    "layerTransition": "Layer-Übergang"
+  },
+  "classification": {
+    "unlabeled": "Ohne Label",
+    "income": "Einnahme",
+    "expense": "Ausgabe",
+    "transfer": "Übertragung",
+    "swap": "Swap",
+    "fee": "Gebühr",
+    "merchantPayment": "Händlerzahlung",
+    "gift": "Geschenk",
+    "review": "Prüfung",
+    "other": "Sonstiges"
+  },
+  "pricingOption": {
+    "sourcePrice": {
+      "label": "Quellpreis",
+      "description": "Vom Quellsystem gelieferten Preis verwenden"
+    },
+    "fmvProvider": {
+      "label": "FMV-Anbieter",
+      "description": "Einen gesampelten Marktkurs verwenden"
+    },
+    "manualOverride": {
+      "label": "Manuelle Überschreibung",
+      "description": "Beleg von Rechnung oder Quittung verwenden"
+    },
+    "missing": {
+      "label": "Fehlt / Prüfung",
+      "description": "In der Prüfwarteschlange belassen"
+    }
+  },
+  "newPricingOption": {
+    "manualEntry": "Manuelle Eingabe",
+    "fmvProviderSample": "FMV-Anbieter-Sample",
+    "exchangeExecution": "Exchange-Ausführung",
+    "btcpayInvoice": "BTCPay-Rechnung Fiat",
+    "walletExport": "Wallet-Import exakter Fiat",
+    "needsPricing": "Bewertung nötig"
+  },
+  "pricingQuality": {
+    "coarseFallback": "Grober Rückfallwert",
+    "providerSample": "Anbieter-Sample",
+    "exact": "Exakt",
+    "missing": "Fehlt"
+  },
+  "pricingProvider": {
+    "manual": "Manuell"
+  },
+  "pricePoint": {
+    "timestamp": "Preis-Zeitstempel",
+    "tradingDay": "Handelstag"
+  },
+  "taxClassification": {
+    "neuGain": {
+      "label": "§27b Neubestand steuerpflichtige Veräußerung",
+      "short": "Neu Gewinn"
+    },
+    "incomeGeneral": {
+      "label": "§27b Einnahmenzufluss",
+      "short": "Einnahmenzufluss"
+    },
+    "neuLoss": {
+      "label": "§27b Veräußerungsverlust / Gebührenprüfung",
+      "short": "Neu Verlust"
+    },
+    "ownWalletTransfer": {
+      "label": "Eigene Wallet-Übertragung / außerhalb §27b",
+      "short": "Eigene Wallet-Übertragung"
+    },
+    "neuSwap": {
+      "label": "§27b Tausch zum Buchwert / Layer-Übergang",
+      "short": "Neu Tausch"
+    },
+    "altSpekulation": {
+      "label": "Altbestand innerhalb der Spekulationsfrist",
+      "short": "Alt steuerpflichtig"
+    },
+    "altTaxfree": {
+      "label": "Altbestand steuerfrei",
+      "short": "Alt steuerfrei"
+    }
+  },
+  "taxable": {
+    "taxable": "Steuerpflichtig",
+    "notTaxable": "Nicht steuerpflichtig",
+    "excluded": "Ausgenommen"
+  },
+  "tagSuggestion": {
+    "revenue": "Umsatz",
+    "needsInvoice": "Rechnung nötig",
+    "clientAcme": "Kunde ACME",
+    "hosting": "Hosting",
+    "capex": "Investition",
+    "meals": "Verpflegung",
+    "bankFees": "Bankgebühren",
+    "consolidation": "Konsolidierung",
+    "manualReview": "manuelle Prüfung",
+    "accountant": "Steuerberatung"
+  },
+  "movementCandidate": {
+    "channelOpen": {
+      "label": "Mit Channel-Öffnung verbinden · Home Node",
+      "detail": "tx8 · gleiche Wallet · 96 % Konfidenz"
+    },
+    "liquidPeg": {
+      "label": "Mit Liquid-Peg-Übergang verbinden",
+      "detail": "L-BTC-Leg 8 Min. auseinander · 89 % Konfidenz"
+    },
+    "boltzSwap": {
+      "label": "Mit Boltz-Swap-Paar verbinden",
+      "detail": "Payment-Hash-Überschneidung · 82 % Konfidenz"
+    }
+  },
+  "fallback": {
+    "unassigned": "Nicht zugeordnet",
+    "unassignedWallet": "Nicht zugeordnete Wallet"
+  },
+  "attachment": {
+    "linkLabel": "Link-Anhang",
+    "fileLabel": "Datei-Anhang",
+    "missingFile": "Datei fehlt"
+  },
+  "period": {
+    "ytd": "Lfd. Jahr",
+    "1year": "1 Jahr",
+    "3months": "3 Monate",
+    "30days": "30 Tage",
+    "5years": "5 Jahre",
+    "all": "Gesamt"
+  },
+  "chartMetric": {
+    "amount": "Betrag",
+    "count": "Anzahl"
+  },
+  "chartMode": {
+    "external": "Extern",
+    "all": "Alle"
+  },
+  "chartSegment": {
+    "incoming": "Eingehend",
+    "outgoing": "Ausgehend",
+    "transfers": "Übertragungen",
+    "swaps": "Swaps"
+  },
+  "dateFilter": {
+    "all": "Alle",
+    "today": "Heute",
+    "yesterday": "Gestern",
+    "last7days": "Letzte 7 Tage",
+    "last30days": "Letzte 30 Tage"
+  },
+  "quickFilter": {
+    "externalFlow": "Externer Fluss",
+    "reviewQueue": "Prüfwarteschlange",
+    "missingExplorerLink": "Fehlender Explorer-Link",
+    "missingPrice": "Fehlender Preis",
+    "failedImport": "Fehlgeschlagener Import"
+  },
+  "selectionLabel": {
+    "allFlows": "Alle Flüsse",
+    "network": "Netzwerk: {{key}}",
+    "walletSource": "Wallet/Quelle: {{key}}",
+    "flowChart": "{{bucket}} · {{segment}} · {{mode}}"
+  },
+  "dashboard": {
+    "refreshBook": "Buch aktualisieren",
+    "refreshing": "Wird aktualisiert…",
+    "refresh": "Aktualisieren"
+  },
+  "workbench": {
+    "metric": {
+      "incoming": "Eingehend",
+      "outgoing": "Ausgehend",
+      "netFlow": "Nettofluss",
+      "transfers": "Übertragungen",
+      "swaps": "Swaps",
+      "reviewQueue": "Prüfwarteschlange"
+    },
+    "meta": {
+      "txCount": "{{count}} Tx",
+      "moveCount": "{{count}} Bewegungen",
+      "inflow": "Zufluss",
+      "outflow": "Abfluss",
+      "unpairedUnknown": "ungepaart unbekannt",
+      "unpairedAndPaired": "{{unpaired}} ungepaart · {{paired}} gepaart",
+      "unpaired": "{{count}} ungepaart",
+      "paired": "{{count}} gepaart",
+      "reviewAndPending": "{{review}} Prüfung · {{pending}} ausstehend"
+    },
+    "aria": {
+      "showIncoming": "Eingehende Transaktionen anzeigen",
+      "showOutgoing": "Ausgehende Transaktionen anzeigen",
+      "showNetFlow": "Transaktionen mit externem Fluss anzeigen",
+      "showTransfers": "Übertragungs-Transaktionen anzeigen",
+      "openPairingCandidates": "Paarungskandidaten öffnen",
+      "showPairedSwaps": "Gepaarte Swap-Transaktionen anzeigen",
+      "showReviewQueue": "Transaktionen der Prüfwarteschlange anzeigen"
+    },
+    "chart": {
+      "titleDay": "Fluss je aktivem Tag",
+      "titleWeek": "Fluss je aktiver Woche",
+      "titleMonth": "Fluss je aktivem Monat",
+      "titleQuarter": "Fluss je aktivem Quartal",
+      "subtitleDay_one": "{{count}} Tx über {{buckets}} aktiven Tag",
+      "subtitleDay_other": "{{count}} Tx über {{buckets}} aktive Tage",
+      "subtitleWeek_one": "{{count}} Tx über {{buckets}} aktive Woche",
+      "subtitleWeek_other": "{{count}} Tx über {{buckets}} aktive Wochen",
+      "subtitleMonth_one": "{{count}} Tx über {{buckets}} aktiven Monat",
+      "subtitleMonth_other": "{{count}} Tx über {{buckets}} aktive Monate",
+      "subtitleQuarter_one": "{{count}} Tx über {{buckets}} aktives Quartal",
+      "subtitleQuarter_other": "{{count}} Tx über {{buckets}} aktive Quartale"
+    },
+    "tooltip": {
+      "txCount": "{{count}} Tx",
+      "largest": "Größte: {{label}}",
+      "missingPrice": "{{count}} ohne Preis",
+      "review": "{{count}} Prüfung",
+      "failed": "{{count}} fehlgeschlagen",
+      "txDeltaPositive": "+ {{count}} Tx",
+      "txDeltaNegative": "− {{count}} Tx"
+    },
+    "breakdown": {
+      "networkTitle": "Aktivität nach Netzwerk",
+      "networkDescription": "Bewerteter Tx-Wert in diesem Zeitraum, nicht der Bestand.",
+      "walletTitle": "Aktivität nach Wallet/Quelle",
+      "walletDescription": "Bewerteter Tx-Wert in diesem Zeitraum, nicht das Guthaben.",
+      "rowMeta": "{{count}} Tx · {{value}}"
+    },
+    "quality": {
+      "title": "Datenqualität",
+      "missingExplorerLink": "Fehlender Explorer-Link",
+      "missingPrice": "Fehlender Preis",
+      "failedImport": "Fehlgeschlagener Import",
+      "swapCandidates": "Swap-Kandidaten",
+      "none": "Keine Datenqualitätsprobleme"
+    }
+  },
+  "table": {
+    "title": "Transaktionen",
+    "filters": "Filter:",
+    "clearAll": "Alle zurücksetzen",
+    "withFees": "Mit Gebühren",
+    "column": {
+      "transaction": "Transaktion",
+      "amount": "Betrag",
+      "accounting": "Buchhaltung",
+      "pricing": "Bewertung",
+      "network": "Netzwerk",
+      "status": "Status"
+    },
+    "filter": {
+      "dateAria": "Nach Datum filtern",
+      "datePlaceholder": "Datum",
+      "statusAria": "Nach Status filtern",
+      "statusTrigger": "Status",
+      "statusLabel": "Nach Status filtern",
+      "allStatuses": "Alle Status",
+      "flowAria": "Nach Fluss filtern",
+      "flowTrigger": "Fluss",
+      "flowLabel": "Nach Fluss filtern",
+      "allFlows": "Alle Flüsse",
+      "paymentAria": "Nach Zahlungsmethode filtern",
+      "networkTrigger": "Netzwerk",
+      "networkLabel": "Nach Netzwerk filtern",
+      "allNetworks": "Alle Netzwerke",
+      "walletAria": "Nach Wallet oder Quelle filtern",
+      "walletTrigger": "Wallet",
+      "walletLabel": "Nach Wallet / Quelle filtern",
+      "allWallets": "Alle Wallets"
+    },
+    "chip": {
+      "clearChart": "Diagrammfilter {{label}} entfernen",
+      "chartPrefix": "Diagramm: {{label}}",
+      "clearQuick": "Filter {{label}} entfernen",
+      "clearBreakdown": "Filter {{label}} entfernen",
+      "clearStatus": "Filter {{label}} entfernen",
+      "clearDate": "Filter {{label}} entfernen",
+      "clearFlow": "Filter {{label}} entfernen",
+      "clearPayment": "Filter {{label}} entfernen",
+      "clearWithFees": "Filter „Mit Gebühren“ entfernen"
+    },
+    "empty": "Keine Transaktionen gefunden, die deinen Filtern entsprechen.",
+    "value": {
+      "valuePending": "Wert ausstehend",
+      "perBtc": "{{value}} / BTC",
+      "awaitingPrice": "Wartet auf Preis"
+    },
+    "coarse": {
+      "badge": "Grob",
+      "title": "Grober täglicher Rückfallpreis — vor dem Verlassen prüfen"
+    },
+    "row": {
+      "excluded": "Ausgenommen",
+      "taxable": "Steuerpflichtig",
+      "notTaxable": "Nicht steuerpflichtig",
+      "openExplorerTitle": "{{txid}} im {{explorer}} öffnen",
+      "actionsAria": "Aktionen für {{txid}} öffnen",
+      "viewDetails": "Details anzeigen",
+      "classify": "Klassifizieren",
+      "copyId": "ID kopieren",
+      "exclude": "Transaktion ausnehmen",
+      "voidConfirm": "Diese Transaktion stornieren? Das kann nicht rückgängig gemacht werden."
+    },
+    "pagination": {
+      "rowsPerPage": "Zeilen pro Seite:",
+      "refreshing": "Wird aktualisiert…",
+      "rangeOf": "von {{total}}",
+      "loadMore": "Mehr laden",
+      "loading": "Wird geladen…",
+      "firstPage": "Zur ersten Seite",
+      "previousPage": "Zur vorherigen Seite",
+      "nextPage": "Zur nächsten Seite",
+      "lastPage": "Zur letzten Seite"
+    }
+  },
+  "notification": {
+    "editReverted": {
+      "title": "Bearbeitung rückgängig gemacht",
+      "body": "Kassiber hat einen neuen Eintrag in der Bearbeitungshistorie mit dem zurückgesetzten Wert geschrieben."
+    },
+    "filesAttached": {
+      "title": "Dateien angehängt",
+      "body_one": "{{count}} Datei in die Kassiber-Anhänge kopiert.",
+      "body_other": "{{count}} Dateien in die Kassiber-Anhänge kopiert."
+    },
+    "linksAttached": {
+      "title": "Links angehängt",
+      "body_one": "{{count}} Link als Anhang-Referenz gespeichert.",
+      "body_other": "{{count}} Links als Anhang-Referenzen gespeichert."
+    },
+    "linkTextUpdated": {
+      "title": "Link-Text aktualisiert",
+      "body": "Label des Anhang-Links gespeichert."
+    },
+    "attachmentRemoved": {
+      "title": "Anhang entfernt",
+      "fileBody": "Anhang-Eintrag und kopierte Datei entfernt.",
+      "linkBody": "Anhang-Link entfernt."
+    },
+    "pairRemoved": {
+      "title": "Paarung entfernt",
+      "body": "Diese Bewegung ist nicht mehr mit dem anderen Leg verknüpft."
+    },
+    "evidenceReused": {
+      "title": "Beleg wiederverwendet",
+      "body_one": "{{count}} Beleg auf diese Transaktion kopiert.",
+      "body_other": "{{count}} Belege auf diese Transaktion kopiert."
+    }
+  },
+  "save": {
+    "couldNotSaveMetadata": "Metadaten konnten nicht gespeichert werden."
+  },
+  "history": {
+    "panelTitle": "Bearbeitungshistorie",
+    "before": "Vorher",
+    "after": "Nachher",
+    "redacted": "Geheimnisartiges Material wurde für die Anzeige geschwärzt.",
+    "revertFieldAria": "{{label}} zurücksetzen",
+    "revertEditAria": "Bearbeitung zurücksetzen",
+    "staleReports": "veraltete Berichte",
+    "loading": "Bearbeitungshistorie wird geladen…",
+    "emptyTimeline": "Noch keine Bearbeitungshistorie",
+    "confirmRevertField": "{{label}} zurücksetzen? Dadurch wird ein neuer Eintrag in der Bearbeitungshistorie erstellt.",
+    "confirmRevertAll": "alle Felder dieser Bearbeitung",
+    "staleCount_one": "{{count}} Bearbeitung nach dem letzten Journallauf",
+    "staleCount_other": "{{count}} Bearbeitungen nach dem letzten Journallauf",
+    "reportsNeedFreshState": "Berichte brauchen einen frischen Journalstand",
+    "process": "Verarbeiten",
+    "revertReasonField": "{{label}} aus der Bearbeitungshistorie zurückgesetzt",
+    "revertReasonEvent": "Eintrag der Bearbeitungshistorie zurückgesetzt"
+  },
+  "newDialog": {
+    "triggerAria": "Neue Transaktion",
+    "trigger": "Neue Transaktion",
+    "title": "Neue Transaktion",
+    "description": "Manueller Entwurf",
+    "section": {
+      "networkTiming": "Netzwerk und Zeitpunkt",
+      "partiesRoute": "Beteiligte und Route",
+      "amountPricing": "Betrag und Bewertung",
+      "partOfMovement": "Teil einer Bewegung",
+      "classification": "Klassifizierung",
+      "evidence": "Beleg"
+    },
+    "field": {
+      "network": "Netzwerk",
+      "flow": "Fluss",
+      "occurredAt": "Erfolgt am",
+      "confirmedAt": "Bestätigt am",
+      "from": "Von",
+      "to": "An",
+      "swapService": "Swap-Dienst",
+      "swapServicePlaceholder": "Boltz, Exchange, Channel-Peer",
+      "fromExternalPlaceholder": "Externe Partei, Zahler oder Quelle",
+      "toExternalPlaceholder": "Externe Partei oder Ziel",
+      "leg1Out": "Leg 1 raus",
+      "leg2In": "Leg 2 rein",
+      "sendSats": "Sats senden",
+      "sendAsset": "Asset senden",
+      "receiveSats": "Sats empfangen",
+      "receiveAsset": "Asset empfangen",
+      "amountSats": "Betrag Sats",
+      "asset": "Asset",
+      "feeSats": "Gebühr Sats",
+      "pricePerBtc": "Preis / BTC ({{currency}})",
+      "totalValue": "Gesamtwert ({{currency}})",
+      "pricingMethod": "Bewertungsmethode",
+      "label": "Label",
+      "taxTreatment": "Steuerliche Behandlung",
+      "tags": "Tags",
+      "tagsPlaceholder": "Umsatz, BTCPay, Kunde ACME",
+      "note": "Notiz",
+      "notePlaceholder": "Freie Anmerkung zur Prüfung",
+      "movementPlaceholder": "Bewegung, Swap, Channel oder Peg suchen",
+      "evidenceTxid": "Txid oder Permalink",
+      "evidenceTxidPlaceholder": "txid, Payment-Hash oder URL",
+      "evidenceBtcpay": "BTCPay-Rechnungs-ID",
+      "evidenceBtcpayPlaceholder": "Rechnungs-ID",
+      "evidenceExchange": "Exchange-CSV-Zeile",
+      "evidenceExchangePlaceholder": "file.csv:42",
+      "evidenceSwap": "Boltz-Swap-ID",
+      "evidenceSwapPlaceholder": "Swap-ID",
+      "evidencePreimage": "Preimage",
+      "evidencePreimagePlaceholder": "Payment-Preimage"
+    },
+    "newMovement": "Neue Bewegung",
+    "standalone": "Eigenständig",
+    "preview": {
+      "live": "Live-Vorschau",
+      "out": "Raus",
+      "in": "Rein",
+      "net": "Netto {{value}}",
+      "noFiatValue": "Kein {{currency}}-Wert",
+      "network": "Netzwerk",
+      "from": "Von",
+      "to": "An",
+      "service": "Dienst",
+      "movement": "Bewegung",
+      "asset": "Asset",
+      "fee": "Gebühr",
+      "value": "Wert ({{currency}})",
+      "price": "Preis ({{currency}}/BTC)",
+      "pricePerBtc": "{{value}} / BTC",
+      "pricing": "Bewertung",
+      "tax": "Steuer",
+      "evidence": "Beleg"
+    },
+    "status": "Status",
+    "footer": {
+      "demoNote": "Nur Demo: bleibt in dieser UI-Sitzung, wird nicht in die Datenbank geschrieben.",
+      "save": "Lokalen Demo-Entwurf speichern"
+    }
+  },
+  "details": {
+    "transactionId": "Transaktions-ID",
+    "transactionIdHint": "Kanonische on-chain-Kennung oder Import-Zeilen-ID, je nach Quelle.",
+    "priceAtTime": "Preis zum Zeitpunkt",
+    "priceAtTimeHint": "BTC/Fiat-Kurs, mit dem diese Tx zum Zeitpunkt ihres Eintritts bewertet wurde.",
+    "priceMissing": "Fehlt",
+    "perBtc": "{{value}} / BTC",
+    "manualPerBtc": "{{price}} {{currency}}/BTC",
+    "fee": "Gebühr",
+    "feeHint": "Netzwerk- oder Abwicklungsgebühr für diese Transaktion.",
+    "feeNone": "Keine",
+    "sourceRecord": "Quelldatensatz",
+    "type": "Typ",
+    "network": "Netzwerk",
+    "counterparty": "Gegenpartei",
+    "externalId": "Externe ID",
+    "externalIdHint": "Interne ID der Wallet/Exchange. Unterscheidet sich bei off-chain-Quellen von der on-chain-Transaktions-ID.",
+    "bookMetadata": "Buch-Metadaten",
+    "label": "Label",
+    "tags": "Tags",
+    "tagsNone": "Keine",
+    "included": "Einbezogen",
+    "includedYes": "Einbezogen",
+    "includedNo": "Ausgenommen",
+    "note": "Notiz",
+    "notePlaceholder": "Quittung, Rechnung, Gegenpartei oder Prüfkontext"
+  },
+  "commercial": {
+    "title": "Kommerzielle Herkunft",
+    "loading": "Wird geladen…",
+    "empty": "Kein verknüpfter BTCPay- oder Dokumentkontext.",
+    "btcpayPayment": "BTCPay-Zahlung",
+    "linked": "Verknüpft",
+    "invoice": "Rechnung",
+    "unknown": "Unbekannt",
+    "paymentRequest": "Zahlungsanforderung",
+    "origin": "Herkunft",
+    "review": "Prüfung",
+    "documents": "Dokumente",
+    "originLabel": {
+      "unknown": "Unbekannt",
+      "pos": "BTCPay POS",
+      "app": "BTCPay-App",
+      "externalOrder": "Externe Bestellung",
+      "paymentRequest": "Zahlungsanforderung"
+    }
+  },
+  "pricing": {
+    "manualOverride": "Manuelle Preisüberschreibung",
+    "manualOverrideHint": "Speichert eine geprüfte Preisquelle sowie exakten manuellen Kurs/Wert in der Transaktionszeile. Journale nach dem Speichern erneut verarbeiten.",
+    "calculatedFromAmount": "Berechnet aus dem festen Betrag: {{amount}}.",
+    "currency": "Währung",
+    "pricePerBtc": "Preis / BTC",
+    "totalValue": "Gesamtwert",
+    "evidenceSource": "Beleg / Quelle",
+    "evidenceHint": "Der Nachweis für den eingegebenen Preis — Rechnungsnummer, Screenshot eines OTC-Angebots, Bankbeleg oder Notiz der Steuerberatung. Für eine prüfbare manuelle Überschreibung erforderlich.",
+    "evidencePlaceholder": "BTCPay-Rechnung, Bankbeleg, Prüfung der Steuerberatung",
+    "attachHint": "Hänge die eigentliche Datei oder URL über das Panel <0>Anhänge</0> rechts an.",
+    "importedPrice": "Importierter Preis",
+    "importedPriceHint": "Der Preis, der mit dem Import kam. Bleibt hier als Prüfreferenz, auch wenn du ihn überschreibst.",
+    "importedPriceNone": "Keiner",
+    "spotNow": "Spot jetzt",
+    "spotNowHint": "Aktueller zwischengespeicherter Spotkurs. Nützlich, um eine manuelle Überschreibung zu plausibilisieren.",
+    "spotNowUnknown": "Unbekannt",
+    "perBtc": "{{value}} / BTC",
+    "rateCacheSource": "Quelle des Kurs-Caches",
+    "provider": "Anbieter",
+    "providerUnknown": "Unbekannt",
+    "pairGranularity": "Paar / Granularität",
+    "pairGranularityUnknown": "Unbekannt",
+    "method": "Methode: {{method}}",
+    "fallbackOnly": "Nur Rückfallwert",
+    "providerSample": "Anbieter-Sample",
+    "fallbackOnlyBody": "Tägliche Kraken-Werte sind grobe Abdeckung und bleiben prüfbar, bis du eine bessere Quelle bestätigst.",
+    "providerSampleBody": "Minütliche Marktkerzen sind gesampelte Anbieterkurse, kein Beleg einer Exchange-Ausführung.",
+    "exactManualPrice": "Exakter manueller Preis",
+    "openRateSettings": "Kurs-Einstellungen öffnen",
+    "exactEvidence": "Beleg für exakte Bewertung",
+    "exactEvidenceBody": "Diese Zeile ist als exakt markiert, weil sie aus einem geprüften manuellen Wert oder einem vom Quellsystem gelieferten Fiat-Datensatz stammt.",
+    "noCachedSpot": "Noch kein gecachter Spot",
+    "noCachedSpotBody": "Neuere Transaktionen können dem lokalen Kurs-Cache vorauslaufen. Importiere oder hole Kurse oder gib einen exakten geprüften Wert ein.",
+    "manualExactPrice": "Manueller exakter Preis",
+    "manualPricePlaceholder": "69.453,46",
+    "manualValuePlaceholder": "17.086,29"
+  },
+  "tax": {
+    "plainEnglish": "Verständlich erklärt",
+    "plainEnglishHint": "Aus der Tx und deinem aktuellen Entwurf generiert. Nutze das, um die rechtlichen Labels unten zu plausibilisieren.",
+    "handling": "Steuerliche Behandlung",
+    "austrianCategory": "Österreichische Kategorie",
+    "austrianCategoryHint": "Bildet die Töpfe nach § 27b EStG ab. „Neu“ umfasst Bestände, die am oder nach dem 1. März 2021 angeschafft wurden; „Alt“ ist Altvermögen vor dem 1. März 2021, nur innerhalb der einjährigen Spekulationsfrist steuerpflichtig; „Eigene Wallet-Übertragung“ bleibt außerhalb der Realisierungsregeln.",
+    "taxable": "Steuerpflichtig",
+    "taxableHint": "In die Journalverarbeitung einbezogen.",
+    "excluded": "Ausgenommen",
+    "excludedHint": "Von der Journalverarbeitung ausgenommen.",
+    "projectedEffect": "Voraussichtliche Auswirkung",
+    "costBasis": "Anschaffungskosten",
+    "costBasisHint": "Anschaffungswert, der von der Steuer-Engine verwendet wird.",
+    "proceeds": "Veräußerungserlös",
+    "proceedsHint": "Veräußerungswert, der bei ausgehender Tx angewendet wird.",
+    "gainLoss": "Realisierter Gewinn / Verlust",
+    "gainLossPending": "Journallauf ausstehend",
+    "gainLossHint": "Wird von RP2 berechnet, sobald die Journale verarbeitet sind.",
+    "priceEvidence": "Preisbeleg",
+    "sourceMissing": "Quelle fehlt",
+    "narrative": {
+      "received": "erhalten",
+      "sent": "gesendet",
+      "moved": "bewegt",
+      "theCounterparty": "die Gegenpartei",
+      "worthAtTime": "im Wert von {{value}} zum Zeitpunkt",
+      "noFiatYet": "ohne bislang erfassten Fiat-Preis",
+      "excludedTreatment": "Sie ist von der Journalverarbeitung ausgenommen",
+      "currentTreatment": "Sie wird derzeit als {{treatment}} behandelt",
+      "to": "an",
+      "from": "von",
+      "sentence": "Du hast am {{date}} {{amount}} {{direction}} {{counterparty}} {{action}}, {{fiat}}. {{treatment}}."
+    }
+  },
+  "classify": {
+    "label": "Label",
+    "reviewStatus": "Prüfstatus",
+    "reviewStatusHint": "Lokaler Prüfstatus für Filterung und Audit-Workflow. Er ändert nichts an den on-chain-Bestätigungen.",
+    "tags": "Tags",
+    "tagsFocusHint": "(drücke überall <0>t</0> zum Fokussieren)",
+    "noTagsYet": "Noch keine Tags",
+    "removeTagAria": "Tag {{tag}} entfernen",
+    "addTagPlaceholder": "Tag hinzufügen",
+    "addTagAria": "Tag hinzufügen",
+    "suggestionPrefix": "+ {{tag}}",
+    "note": "Notiz",
+    "notePlaceholder": "Quittung, Rechnung, Gegenpartei oder Prüfkontext"
+  },
+  "linked": {
+    "pairedMovement": "Gepaarte Bewegung",
+    "unpairing": "Wird entkoppelt…",
+    "unpair": "Entkoppeln",
+    "outWallet": "Raus-Wallet",
+    "outAmount": "Raus-Betrag",
+    "inWallet": "Rein-Wallet",
+    "inAmount": "Rein-Betrag",
+    "pairFee": "Paar-Gebühr",
+    "pairFeeHint": "Vorzeichenbehaftete Gebühr, berechnet zum Zeitpunkt der Paarung.",
+    "pairKind": "Paar-Art",
+    "unknown": "Unbekannt",
+    "noPairedMovement": "Keine gepaarte Bewegung",
+    "noPairedMovementBody": "Wenn diese Tx das andere Leg einer Übertragung, eines Swaps oder eines Peg-in/out ist, erscheint das passende Leg hier. Du kannst auch eine manuelle Paarung aus der Swap-Kandidaten-Warteschlange erstellen.",
+    "journalEntries": "Journaleinträge",
+    "noJournalEntries": "Noch keine Journaleinträge für diese Zeile. Verarbeite die Journale nach Änderungen an Metadaten oder Bewertung."
+  },
+  "ledger": {
+    "netWalletImpact": "Netto-Wallet-Auswirkung",
+    "netWalletImpactHint": "Die vorzeichenbehaftete Änderung dieser Wallet nach Kapital und Gebühren. Das ist die maßgebliche Zahl für die Buchhaltung.",
+    "seePairedMovement": "Siehe gepaarte Bewegung",
+    "howItAddsUp": "So setzt es sich zusammen",
+    "principal": "Kapital",
+    "principalHint": "Vorzeichenbehaftetes Kapital, das auf diese Wallet angewendet wird.",
+    "pairedSeeLinked": "Gepaart — siehe Tab Verknüpft",
+    "fee": "Gebühr",
+    "feeHint": "Netzwerk- oder Abwicklungsgebühr, die von dieser Wallet abgezogen wird.",
+    "net": "Netto"
+  },
+  "attachments": {
+    "title": "Anhänge",
+    "reuseEvidenceAria": "Beleg wiederverwenden",
+    "detailHidden": "Anhang-Detail verborgen",
+    "reused": "wiederverwendet",
+    "linkTextAria": "Link-Text für {{name}}",
+    "saveLinkText": "Link-Text speichern",
+    "cancelEdit": "Bearbeitung des Link-Texts abbrechen",
+    "editLinkTextAria": "Link-Text für {{name}} bearbeiten",
+    "removeAttachment": "Anhang entfernen",
+    "removeNamed": "{{name}} entfernen",
+    "emptyBody": "Hänge Quittungen, Rechnungen oder Notizen der Steuerberatung an. Hänge so viele an, wie du brauchst — lokale Dateien werden in den Anhang-Ordner kopiert, Links bleiben als Referenzen.",
+    "pickerError": "Dateiauswahl konnte nicht geöffnet werden.",
+    "pickerTitle": "Dateien an diese Transaktion anhängen",
+    "nativePickerUnavailable": "Native Dateiauswahl in dieser Laufzeitumgebung nicht verfügbar",
+    "picking": "Wird ausgewählt…",
+    "attachFiles": "Dateien anhängen",
+    "attachLinks": "Links anhängen",
+    "addLinkText": "Füge einen Link-Text hinzu.",
+    "linkTextTooLong": "Halte den Link-Text auf {{max}} Zeichen oder weniger.",
+    "couldNotRename": "Link konnte nicht umbenannt werden.",
+    "linksDialog": {
+      "title": "Links anhängen",
+      "description": "Eine URL pro Zeile. Links werden als Referenzen gespeichert — Kassiber ruft den Inhalt nicht ab und indexiert ihn nicht. Du kannst den Link-Text nach dem Anhängen bearbeiten.",
+      "urls": "URLs",
+      "placeholder": "https://btcpay.example/invoice/abc123\nhttps://drive.example/receipt-2026-04.pdf",
+      "noUrls": "Noch keine URLs",
+      "urlsReady_one": "{{count}} URL bereit",
+      "urlsReady_other": "{{count}} URLs bereit",
+      "invalidLines_one": " · {{count}} ungültige Zeile zu korrigieren",
+      "invalidLines_other": " · {{count}} ungültige Zeilen zu korrigieren",
+      "addAtLeastOne": "Füge mindestens eine URL hinzu.",
+      "couldNotAdd": "Links konnten nicht hinzugefügt werden.",
+      "invalidProtocol": "{{url}} — muss mit http://, https:// oder ipfs:// beginnen",
+      "invalidUrl": "{{url}} — keine gültige URL",
+      "attaching": "Wird angehängt…",
+      "attachMany": "{{count}} Links anhängen",
+      "attachOne": "Link anhängen"
+    }
+  },
+  "evidenceReuse": {
+    "title": "Beleg wiederverwenden",
+    "description": "Ausgewählte Belegzeilen auf die aktuelle Transaktion kopieren.",
+    "sourceTransaction": "Quelltransaktion",
+    "chooseTransaction": "Eine Transaktion wählen",
+    "evidenceToCopy": "Zu kopierender Beleg",
+    "selectedCount": "{{count}} ausgewählt",
+    "loading": "Beleg wird geladen…",
+    "reused": "wiederverwendet",
+    "noEvidence": "An der ausgewählten Transaktion ist kein Beleg angehängt.",
+    "copyEvidence": "Beleg kopieren"
+  },
+  "sheet": {
+    "tab": {
+      "details": "Details",
+      "classify": "Klassifizieren",
+      "pricing": "Bewertung",
+      "tax": "Steuer",
+      "linked": "Verknüpft",
+      "ledger": "Hauptbuch"
+    },
+    "banner": {
+      "journalQuarantine": "Journal-Quarantäne",
+      "missingFiatPrice": "Fehlender Fiat-Preis",
+      "noPricingSource": "Keine Preisquelle",
+      "pricingFlagged": "Bewertung zur Prüfung markiert",
+      "journalBlocker": "Aktueller Journal-Blocker: {{reason}}.",
+      "noFiatRecorded": "Kein Fiat-Preis für {{date}} erfasst. Füge einen manuellen Preis oder Wert hinzu, um diese Zeile in die Journalverarbeitung einzubeziehen.",
+      "noPersistedSource": "Es ist noch keine gespeicherte Preisquelle verfügbar. Füge einen manuellen Preis hinzu oder wähle eine hinterlegte Preisquelle.",
+      "missingOrUnderReview": "Die Preisquelle ist als fehlend oder in Prüfung markiert. Speichere eine geprüfte Quelle, bevor du die Journale ausführst.",
+      "readinessHint": "Das ist eine Warnung zur Preisbereitschaft aus der Transaktionszeile. Es ist keine aktive Journal-Quarantäne, sofern der Daemon keinen Quarantänegrund zurückgibt.",
+      "viewPricing": "Bewertung ansehen",
+      "openPricing": "Bewertung öffnen",
+      "exclude": "Ausnehmen"
+    },
+    "quarantineHint": "Journal-quarantänisierte Transaktionen werden bei der Journalverarbeitung übersprungen und wirken sich erst auf Steuerberichte aus, wenn der Blocker behoben ist.",
+    "timeline": {
+      "imported": "Importiert",
+      "importedHint": "Transaktion aus einer Wallet, Exchange oder Importdatei gelesen.",
+      "settledOnChain": "On-chain abgewickelt.",
+      "waitingConfirmation": "Wartet auf Bestätigung.",
+      "settlementIssue": "Abwicklungsproblem — Details prüfen.",
+      "needsReview": "Prüfung nötig",
+      "reviewed": "Geprüft",
+      "reviewedHint": "Aus der Prüfwarteschlange entfernt.",
+      "excluded": "Ausgenommen",
+      "quarantined": "In Quarantäne",
+      "pendingJournal": "Journal ausstehend",
+      "journaled": "Journalisiert",
+      "journaledHint": "Wird in das RP2-Journal einbezogen, sobald die Bewertung gesetzt und die Tx nicht ausgenommen ist."
+    },
+    "checklist": {
+      "title": "Prüf-Checkliste",
+      "setPricingSource": "Eine Preisquelle festlegen",
+      "pricedVia": "Bewertet über {{label}}",
+      "pickLabel": "Ein Label wählen",
+      "labeled": "Gelabelt {{label}}",
+      "excludedFromReports": "Aus Steuerberichten ausgenommen",
+      "taxLabel": "Steuer: {{label}}",
+      "resolveQuarantine": "Quarantäne beheben, um in Berichten einbezogen zu werden",
+      "pricingIncomplete": "Bewertung unvollständig",
+      "noQuarantine": "Keine Quarantäne"
+    },
+    "footer": {
+      "unsavedChanges_one": "{{count}} nicht gespeicherte Änderung",
+      "unsavedChanges_other": "{{count}} nicht gespeicherte Änderungen",
+      "shortcutSave": "Speichern",
+      "shortcutTabs": "Tabs",
+      "shortcutExclude": "Ausnehmen",
+      "discard": "Verwerfen",
+      "saving": "Wird gespeichert…",
+      "saveAndNext": "Speichern & weiter",
+      "save": "Speichern"
+    }
+  },
+  "rightRail": {
+    "sourceRecord": "Quelldatensatz",
+    "kassiberRow": "Kassiber-Zeile",
+    "source": "Quelle",
+    "sourceValue": "{{name}} · {{type}}",
+    "explorer": "Explorer",
+    "noPublicExplorer": "Kein öffentlicher Explorer",
+    "openExplorerAria": "{{txid}} im {{explorer}} öffnen",
+    "tags": "Tags"
+  },
+  "header": {
+    "onChainConfirmations": "{{count}} on-chain-Bestätigungen",
+    "paired": "Gepaart · {{out}} → {{in}}",
+    "out": "Raus",
+    "in": "Rein",
+    "then": "damals",
+    "now": "jetzt",
+    "openExplorer": "Explorer öffnen",
+    "close": "Transaktionsdetail schließen"
+  },
+  "confirmations": {
+    "zero": "0 Bestätigungen",
+    "sixPlus": "6+ Best.",
+    "count": "{{count}} Best."
+  },
+  "networkLabel": {
+    "onChain": "Bitcoin · on-chain"
+  },
+  "dirty": {
+    "unsavedChange": "Nicht gespeicherte Änderung"
+  },
+  "infoHint": {
+    "moreInfo": "Mehr Infos",
+    "fieldMeaning": "Was bedeutet „{{label}}“?",
+    "quarantineMeaning": "Was bedeutet „in Quarantäne“?",
+    "copy": "{{label}} kopieren"
+  }
+}

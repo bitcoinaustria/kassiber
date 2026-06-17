@@ -1,0 +1,259 @@
+{
+  "page": {
+    "heading": "What needs reviewing today?",
+    "conversationLabel": "Assistant conversation",
+    "generating": "Generating",
+    "generatingQueued": "Generating - {{count}} queued",
+    "messageCount_one": "{{count}} message",
+    "messageCount_other": "{{count}} messages",
+    "incognito": "Incognito",
+    "incognitoTitle": "Incognito: do not store this conversation",
+    "exportChat": "Export chat",
+    "clearChat": "Clear chat"
+  },
+  "dock": {
+    "label": "Kassiber assistant",
+    "conversation": "Conversation",
+    "openAssistantPage": "Open assistant page",
+    "collapseConversation": "Collapse conversation",
+    "expandConversation": "Expand preserved conversation",
+    "conversationHidden": "Conversation hidden",
+    "preservedForContext_one": "{{count}} message preserved for context",
+    "preservedForContext_other": "{{count}} messages preserved for context"
+  },
+  "composer": {
+    "placeholder": "Ask anything",
+    "stopGenerating": "Stop generating",
+    "sendMessage": "Send message",
+    "queueMessage": "Queue message",
+    "modelContext": "Model context",
+    "thinking": "Thinking",
+    "effort": {
+      "auto": "Auto",
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High"
+    }
+  },
+  "prompts": {
+    "reviewQuarantine": {
+      "text": "Review quarantine",
+      "prompt": "List quarantined or under-specified transactions and tell me which price, transfer, or wallet evidence is needed to resolve them."
+    },
+    "reprocessJournals": {
+      "text": "Reprocess journals",
+      "prompt": "Check whether journals need reprocessing after recent imports, pricing changes, metadata edits, or transfer pairing."
+    },
+    "prepareTaxExport": {
+      "text": "Prepare tax export",
+      "prompt": "Prepare the Austrian tax export checklist and call out missing journal, pricing, or report prerequisites."
+    }
+  },
+  "thread": {
+    "scrollToLatest": "Scroll to latest message"
+  },
+  "message": {
+    "toolUsage": "Tool usage",
+    "thinking": "Thinking",
+    "generating": "Generating",
+    "chatFailed": "Chat failed",
+    "stoppedByUser": "Stopped by user."
+  },
+  "facts": {
+    "asset": "Asset",
+    "reportReadiness": "Report readiness",
+    "ready": "Ready",
+    "blockers_one": "{{count}} blocker",
+    "blockers_other": "{{count}} blockers",
+    "summary": "Summary",
+    "activeTx": "{{count}} active tx",
+    "assetFlow": "{{asset}} in {{inbound}}, out {{outbound}}",
+    "balanceSheet": "Balance sheet",
+    "portfolio": "Portfolio",
+    "assetTotals_one": "{{count}} asset total",
+    "assetTotals_other": "{{count}} asset totals",
+    "assetTotalDetail": "{{asset}} {{quantity}}",
+    "taxSummary": "Tax summary",
+    "rows_one": "{{count}} row",
+    "rows_other": "{{count}} rows",
+    "gainLoss": "gain/loss {{value}}",
+    "rateCoverage": "Rate coverage",
+    "missingPrices_one": "{{count}} missing price",
+    "missingPrices_other": "{{count}} missing prices",
+    "coverableFromCache": "{{count}} coverable from cache",
+    "changeAudit": "Change audit",
+    "noChangesSinceBaseline": "No changes since baseline",
+    "baselineRequired": "Baseline required",
+    "changedSinceBaseline": "Changed since baseline",
+    "maintenance": "Maintenance",
+    "reportsReady": "Reports ready",
+    "syncMode": "sync {{mode}}"
+  },
+  "provenance": {
+    "localTools_one": "{{count}} local tool",
+    "localTools_other": "{{count}} local tools",
+    "activeTx": "{{count}} active tx",
+    "quarantine": "{{count}} quarantine",
+    "missingPrices": "{{count}} missing prices",
+    "journalsRefreshedAt": "journals refreshed {{time}}",
+    "journalsRefreshed": "journals refreshed",
+    "journalsAt": "journals {{time}}",
+    "syncFailed": "sync failed",
+    "syncChecked": "sync checked",
+    "answeredAt": "answered {{time}}"
+  },
+  "tool": {
+    "summaryLabel": "Summary",
+    "detailsLabel": "Details",
+    "reasonLabel": "Reason",
+    "overviewSnapshot": {
+      "connections_one": "{{count}} connection",
+      "connections_other": "{{count}} connections",
+      "recentTransactions_one": "{{count}} recent transaction",
+      "recentTransactions_other": "{{count}} recent transactions",
+      "priceEur": "BTC/EUR {{value}}",
+      "realizedYtd": "realized YTD {{value}}"
+    },
+    "workspaceHealth": {
+      "noBooksSet": "No books set",
+      "noBook": "No book",
+      "statusUnknown": "unknown",
+      "summary": "{{booksSet}} / {{books}}: journals {{journals}}, reports {{reports}}.",
+      "reportsReady": "ready",
+      "reportsNotReady": "not ready"
+    },
+    "nextActions": {
+      "suggestions_one": "{{count}} suggestion: {{titles}}.",
+      "suggestions_other": "{{count}} suggestions: {{titles}}.",
+      "none": "No next action suggestions."
+    },
+    "walletsList": {
+      "wallets_one": "{{count}} wallet",
+      "wallets_other": "{{count}} wallets",
+      "withLabels": "{{wallets}}: {{labels}}.",
+      "withoutLabels": "{{wallets}}."
+    },
+    "backendsList": {
+      "backends_one": "{{count}} backend",
+      "backends_other": "{{count}} backends",
+      "withDefault": "{{backends}}; default {{default}}.",
+      "withoutDefault": "{{backends}}."
+    },
+    "quarantine": {
+      "summary_one": "{{count}} quarantined transaction.",
+      "summary_other": "{{count}} quarantined transactions."
+    },
+    "transfersList": {
+      "pairs_one": "{{count}} pair",
+      "pairs_other": "{{count}} pairs",
+      "summary_one": "{{pairs}}, {{transferEntries}} journal transfer entry.",
+      "summary_other": "{{pairs}}, {{transferEntries}} journal transfer entries."
+    },
+    "ratesSummary": {
+      "pairs_one": "{{count}} cached rate pair.",
+      "pairs_other": "{{count}} cached rate pairs."
+    },
+    "ratesCoverage": {
+      "summary_one": "{{missing}} missing price transaction, {{coverable}} coverable from cache.",
+      "summary_other": "{{missing}} missing price transactions, {{coverable}} coverable from cache."
+    },
+    "reportBlockers": {
+      "ready": "Reports are ready.",
+      "blockers_one": "{{count}} report blocker.",
+      "blockers_other": "{{count}} report blockers."
+    },
+    "changesSince": {
+      "baselineRequired": "No previous-answer baseline available.",
+      "changed": "changed",
+      "unchanged": "unchanged",
+      "summary_one": "Workspace {{state}}; {{txCount}} transaction change, {{journalCount}} journal change.",
+      "summary_other": "Workspace {{state}}; {{txCount}} transaction changes, {{journalCount}} journal changes."
+    },
+    "maintenanceSettings": {
+      "enabled": "Automatic watch-only refresh before report reads is enabled.",
+      "disabled": "Automatic watch-only refresh before report reads is disabled."
+    },
+    "maintenanceConfigure": {
+      "enabled": "Enabled automatic watch-only refresh before report reads.",
+      "disabled": "Disabled automatic watch-only refresh before report reads."
+    },
+    "maintenanceRun": {
+      "ready": "Maintenance complete; reports ready.",
+      "blockers_one": "Maintenance complete; {{count}} blocker remains.",
+      "blockers_other": "Maintenance complete; {{count}} blockers remain."
+    },
+    "transactionsList": {
+      "summary_one": "{{count}} transaction.",
+      "summary_other": "{{count}} transactions."
+    },
+    "transactionsExtremes": {
+      "largest_one": "{{count}} largest transaction",
+      "largest_other": "{{count}} largest transactions",
+      "smallest_one": "{{count}} smallest transaction",
+      "smallest_other": "{{count}} smallest transactions",
+      "summary": "{{largest}}, {{smallest}}."
+    },
+    "transactionsSearch": {
+      "summary_one": "{{count}} matching transaction.",
+      "summary_other": "{{count}} matching transactions."
+    },
+    "reportsSummary": {
+      "activeTransactions_one": "{{count}} active transaction",
+      "activeTransactions_other": "{{count}} active transactions",
+      "assetFlowRows_one": "{{count}} asset flow row",
+      "assetFlowRows_other": "{{count}} asset flow rows",
+      "walletFlowRows_one": "{{count}} wallet flow row",
+      "walletFlowRows_other": "{{count}} wallet flow rows",
+      "transferPairs_one": "{{count}} reviewed transfer/swap pair",
+      "transferPairs_other": "{{count}} reviewed transfer/swap pairs",
+      "summary": "{{activeTransactions}}, {{assetFlowRows}}, {{walletFlowRows}}, {{transferPairs}}."
+    },
+    "balanceSheet": {
+      "balanceRows_one": "{{count}} balance row",
+      "balanceRows_other": "{{count}} balance rows",
+      "assetTotals_one": "{{count}} asset total",
+      "assetTotals_other": "{{count}} asset totals",
+      "summary": "{{balanceRows}}, {{assetTotals}}."
+    },
+    "portfolioSummary": {
+      "holdingRows_one": "{{count}} wallet holding row",
+      "holdingRows_other": "{{count}} wallet holding rows",
+      "assetTotals_one": "{{count}} asset total",
+      "assetTotals_other": "{{count}} asset totals",
+      "summary": "{{holdingRows}}, {{assetTotals}}."
+    },
+    "taxSummary": {
+      "taxRows_one": "{{count}} tax row",
+      "taxRows_other": "{{count}} tax rows",
+      "years_one": "{{count}} year",
+      "years_other": "{{count}} years",
+      "summary": "{{taxRows}}, {{years}}."
+    },
+    "balanceHistory": {
+      "buckets_one": "{{count}} {{interval}} balance bucket.",
+      "buckets_other": "{{count}} {{interval}} balance buckets.",
+      "intervalFallback": "history"
+    }
+  },
+  "history": {
+    "trigger": "History",
+    "savedChats": "Saved chats",
+    "loading": "Loading…",
+    "empty": "No saved chats yet.",
+    "disabled": "Chat history is off for this book - see Settings, AI assistant.",
+    "current": "(current)",
+    "messageCount_one": "{{count}} message",
+    "messageCount_other": "{{count}} messages",
+    "entryMeta": "{{date}} · {{messages}}",
+    "deleteChat": "Delete chat \"{{title}}\""
+  },
+  "modelPicker": {
+    "selectModel": "Select model",
+    "noProviderConfigured": "No provider configured",
+    "selectAModel": "Select a model",
+    "models": "Models",
+    "noProviders": "No AI providers configured",
+    "noModels": "No models found",
+    "refreshModels": "Refresh all AI models"
+  }
+}

@@ -94,6 +94,35 @@ Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the 
   offline up to `--scan-to-index`, and accepts an injected on-chain fetcher
   (`--verify-on-chain`) so read surfaces stay cache-only. AI variant drops
   scriptPubKeys / derivation paths / address indices.
+- [x] **Localize the desktop UI (i18n groundwork)** — added i18next +
+  react-i18next under [`ui-tauri/src/i18n/`](ui-tauri/src/i18n/): English/German
+  resource bundles, type-safe keys, a store-driven language bridge (the UI store
+  `lang` is the single source of truth → i18next + `<html lang>`), a working
+  Settings/header language switcher, an en/de key-parity test, and a vitest i18n
+  setup. Pilot surfaces converted: Settings appearance panel + `BirdsEye`
+  navigation labels. CLI/daemon stay machine-deterministic. Conventions in
+  [docs/reference/i18n.md](docs/reference/i18n.md).
+- [x] **Transcreate the desktop UI into Austrian German (du register)** — main
+  surfaces translated under per-surface namespaces (chrome, overview,
+  transactions, connections, journals, settings, onboarding, assistant,
+  sourceFunds, review) using the researched, BMF-sourced
+  [glossary](docs/reference/i18n-glossary.md): Bitcoin jargon kept English,
+  ordinary words translated, Austrian tax terms (Anschaffungskosten,
+  Veräußerung, gleitender Durchschnittspreis, Wegzugsbesteuerung, Kennzahl,
+  Beilage E 1kv, KESt…), Austrian month/“heuer”. Verified via typecheck, the
+  en/de parity test, build, and live browser screenshots.
+- [ ] **Finish the i18n long tail:**
+  - Reporting surfaces deferred by product call: `routes/Reports.tsx`,
+    `routes/ExitTax.tsx`, `LightningProfitabilityPanel.tsx`, and report-output
+    strings.
+  - Shared `lib/` enum→label maps consumed across surfaces
+    (`lib/connectionDisplay.ts`, `lib/syncProgress.ts`,
+    `lib/connectionCatalog.ts`, journals `model.ts` helpers): thread the active
+    `t`/`TFunction` so the conversion stays consistent across every consumer.
+  - Locale-driven formatting: migrate hardcoded `en-US` `toLocaleString`/`Intl`
+    call sites (chart axes, dates, percentages) to `localeForLanguage(lang)`
+    with AT decimal-comma / space-before-`%` / `Jänner` conventions. This is
+    number/date formatting, not translatable strings.
 - [ ] Design an opt-in encrypted Lightning **evidence vault** for
   operators who need proof-of-payment for legal disputes, full invoice
   replay for corrupted-bookkeeper recovery, or chain-of-custody records

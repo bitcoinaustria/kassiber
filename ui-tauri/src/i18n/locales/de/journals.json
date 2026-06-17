@@ -1,0 +1,241 @@
+{
+  "ledger": {
+    "tabs": {
+      "state": "Status",
+      "reportable": "Hauptbuch-Einträge"
+    },
+    "actions": {
+      "processJournals": "Journale verarbeiten",
+      "viewLedgerEntries": "Hauptbuch-Einträge anzeigen"
+    },
+    "unavailable": {
+      "title": "Hauptbuch nicht verfügbar",
+      "fallback": "Der Daemon hat keine Journaldaten geliefert."
+    },
+    "metric": {
+      "status": "Status",
+      "transactions": "Transaktionen",
+      "transactionsSub": "Eingangszeilen",
+      "journalEntries": "Journaleinträge",
+      "journalEntriesSub": "verarbeitete Zeilen",
+      "quarantine": "Quarantäne",
+      "quarantineHeld": "aus Berichten zurückgehalten",
+      "quarantineClear": "sauber"
+    },
+    "readiness": {
+      "blocked": "Blockiert",
+      "blockedDetail": "Quarantäne prüfen",
+      "stale": "Veraltet",
+      "staleDetail": "vor Berichten verarbeiten",
+      "current": "Aktuell",
+      "currentDetail": "bereit für Berichte",
+      "empty": "Leer",
+      "emptyDetail": "keine verarbeiteten Zeilen"
+    },
+    "entryMix": {
+      "title": "Eintragsverteilung",
+      "description": "Aktuelle verarbeitete Journalzusammensetzung.",
+      "empty": "Noch keine verarbeiteten Journalzeilen.",
+      "transferRows": "{{count}} Ein-/Ausgangszeilen",
+      "rows": "{{count}} Zeilen"
+    },
+    "entries": {
+      "title": "Journaleinträge",
+      "rowsDescription": "Zeige die neuesten {{rows}} von {{total}} {{label}}.",
+      "labelProcessedRows": "verarbeiteten Zeilen",
+      "labelTransferRows": "Transfer-Ein-/Ausgangszeilen",
+      "labelTypedRows": "{{type}}-Zeilen",
+      "outgoingSide": "Ausgehende Seite",
+      "incomingSide": "Eingehende Seite",
+      "openTransactionAria": "Transaktion für {{type}}-Journalzeile öffnen",
+      "emptyFiltered": "Keine aktuellen {{label}} im aktuellen Journal-Snapshot vorhanden.",
+      "empty": "Keine aktuellen Zeilen im aktuellen Journal-Snapshot vorhanden.",
+      "column": {
+        "wallet": "Wallet",
+        "quantity": "Menge",
+        "fiat": "Fiat",
+        "gainLoss": "Gewinn/Verlust"
+      }
+    },
+    "entryType": {
+      "acquisition": "Anschaffung",
+      "disposal": "Veräußerung",
+      "income": "Einkünfte",
+      "fee": "Gebühr",
+      "transferFee": "Transfergebühr",
+      "transfer": "Transfer",
+      "transferIn": "Transfer ein",
+      "transferOut": "Transfer aus",
+      "neutralSwap": "Neutraler Tausch"
+    }
+  },
+  "reportable": {
+    "unavailable": {
+      "title": "Hauptbuch-Einträge nicht verfügbar",
+      "fallback": "Der Daemon hat keine verarbeiteten Hauptbuch-Einträge geliefert."
+    },
+    "eyebrow": "Prüfung · verarbeitetes Hauptbuch",
+    "title": "Verarbeitetes Hauptbuch",
+    "description": "Journaleinträge, die durch das Verarbeiten von Transaktionen in Tranchen, Bewertung, Anschaffungskosten, Erlös und Gewinn/Verlust entstehen.",
+    "badge": {
+      "stale": "veraltet",
+      "entries": "{{count}} Einträge"
+    },
+    "tableTitle": "Verarbeitete Hauptbuch-Einträge",
+    "searchPlaceholder": "Wallet, Eintrag, Asset, Bewertung suchen…",
+    "empty": "Noch keine verarbeiteten Journaleinträge. Verarbeite Journale nach dem Import von Transaktionen.",
+    "actions": {
+      "processJournals": "Journale verarbeiten"
+    },
+    "atKennzahl": "AT Kennzahl {{kennzahl}}",
+    "eventTitle": "{{type}} · {{description}}",
+    "basis": {
+      "amount": "Anschaffungskosten {{value}}",
+      "proceeds": "Erlös {{value}}",
+      "value": "Wert {{value}}",
+      "noFiatImpact": "Keine Fiat-Auswirkung"
+    },
+    "pricing": {
+      "label": "Bewertung",
+      "manual": "Manueller Preis",
+      "source": "Quellenpreis",
+      "cached": "Zwischengespeicherter Marktkurs",
+      "providerSample": "Anbieter-Marktstichprobe",
+      "providerPrice": "Anbieter-Marktpreis",
+      "qualified": "{{source}} ({{quality}})"
+    },
+    "nextAction": {
+      "needsJournals": "Verarbeite Journale, bevor du dich auf diesen Eintrag verlässt",
+      "austrianMapping": "Bereit für österreichische Berichtszuordnung",
+      "reports": "Bereit für Berichte"
+    },
+    "evidence": {
+      "austrianMapping": "Österreichische Formularzuordnung {{kennzahl}}",
+      "pricedBy": "Bewertet durch {{source}}",
+      "transferMatching": "Übernommen durch Transfer-Zuordnung",
+      "journalProcessing": "Berechnet durch Journalverarbeitung"
+    }
+  },
+  "quarantine": {
+    "unavailable": {
+      "title": "Quarantäne nicht verfügbar",
+      "fallback": "Der Daemon hat keine Quarantänedaten geliefert."
+    },
+    "eyebrow": "Prüf-Warteschlange",
+    "title": "Quarantäne",
+    "description": "Blockierte Transaktionen, die aus Journalen und Berichten zurückgehalten werden, bis fehlende Preise, Anschaffungskosten, Assets oder Paar-Nachweise behoben sind.",
+    "badge": {
+      "quarantined": "{{count}} in Quarantäne",
+      "clear": "sauber"
+    },
+    "tableTitle": "Transaktionen in Quarantäne",
+    "tableDescription_one": "{{rows}} angezeigt · {{count}} Grundgruppe",
+    "tableDescription_other": "{{rows}} angezeigt · {{count}} Grundgruppen",
+    "searchPlaceholder": "Wallet, txid, Grund, Betrag suchen…",
+    "empty": "Keine Transaktionen in Quarantäne im aktiven Buch.",
+    "metric": {
+      "quarantined": "In Quarantäne",
+      "quarantinedFilter": "Alle in Quarantäne",
+      "missingPrices": "Fehlende Preise",
+      "basisOrPairs": "Anschaffungskosten oder Paare",
+      "otherReview": "Sonstige Prüfung"
+    },
+    "impact": "Aus Berichten zurückgehalten",
+    "source": "Journal-Quarantäne · {{direction}}",
+    "ownerFallback": "Aktives Buch",
+    "direction": {
+      "inbound": "eingehend",
+      "outbound": "ausgehend",
+      "fallback": "Transaktion"
+    },
+    "basis": {
+      "missingPrice": "Fehlender Fiat-Preis",
+      "missingBasis": "Fehlende Anschaffungskosten",
+      "pairing": "Paarungsentscheidung",
+      "reviewRequired": "Prüfung erforderlich"
+    },
+    "evidence": {
+      "price": "Füge einen Fiat-Preis oder Kursabdeckung hinzu",
+      "pair": "Wähle die passende Bewegung oder verwirf sie",
+      "basis": "Prüfe Anschaffungsverlauf und Anschaffungskosten",
+      "asset": "Ordne das Quell-Asset vor der Meldung zu",
+      "detail": "{{keys}} prüfen",
+      "fallback": "Nachweise prüfen"
+    },
+    "nextAction": {
+      "price": "Preis setzen, dann Journale verarbeiten",
+      "pair": "Paar prüfen, dann Journale verarbeiten",
+      "basis": "Fehlenden Anschaffungskontext ergänzen",
+      "fallback": "Quellproblem beheben"
+    }
+  },
+  "review": {
+    "column": {
+      "event": "Ereignis",
+      "issue": "Problem",
+      "evidence": "Nachweis",
+      "amountBasis": "Betrag / Anschaffungskosten",
+      "impact": "Auswirkung"
+    },
+    "tableTitle": {
+      "review": "Prüfdatensätze",
+      "blocked": "Blockierte Datensätze"
+    },
+    "tableDescription": {
+      "detail": "{{rows}} angezeigt · {{detail}}",
+      "resolved": "{{rows}} angezeigt · {{resolved}} erledigt"
+    },
+    "searchPlaceholder": "Konto, Problem, Quelle suchen…",
+    "empty": "Keine passenden Datensätze.",
+    "unknownDate": "Unbekannt",
+    "badgeOpen": "{{count}} offen",
+    "metricFallback": {
+      "open": "Offen",
+      "needsReview": "Zu prüfen",
+      "blocked": "Blockiert",
+      "highPriority": "Hohe Priorität"
+    },
+    "status": {
+      "all": "Alle",
+      "ready": "Bereit",
+      "needsReview": "Zu prüfen",
+      "blocked": "Blockiert",
+      "resolved": "Erledigt"
+    },
+    "priority": {
+      "low": "Niedrig",
+      "medium": "Mittel",
+      "high": "Hoch"
+    },
+    "filters": {
+      "active": "Filter aktiv",
+      "clearAll": "Alle zurücksetzen",
+      "clearMetricAria": "Filter {{label}} entfernen"
+    },
+    "metricAria": {
+      "showAll": "Alle {{label}} anzeigen",
+      "filter": "{{label}} filtern"
+    },
+    "evidenceHint": {
+      "price": "Benötigt Fiat-Preisnachweis",
+      "pair": "Benötigt Entscheidung über passende Bewegung",
+      "document": "Benötigt Dokumentanhang",
+      "asset": "Benötigt Quell-/Asset-Zuordnung",
+      "fee": "Benötigt steuerliche Einordnung",
+      "fallback": "Benötigt Prüfnachweis"
+    },
+    "nextAction": {
+      "noAction": "Keine Aktion erforderlich",
+      "blocked": "Blockiert vertrauenswürdige Berichte",
+      "needsReview": "Vor Berichten prüfen",
+      "ready": "Bereit für Berichte"
+    },
+    "pagination": {
+      "noRows": "0 Zeilen",
+      "range": "{{from}}-{{to}} von {{total}}",
+      "page": "Seite {{current}} von {{count}}",
+      "previous": "Vorherige Seite",
+      "next": "Nächste Seite"
+    }
+  }
+}
