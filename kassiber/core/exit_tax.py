@@ -183,42 +183,29 @@ def _fmv_at(
     target_iso: str,
     fallback_rates: Mapping[str, Any],
 ) -> tuple[Optional[Decimal], dict[str, Any]]:
-    """Fair market value of one unit of ``asset`` at/just before ``target_iso``."""
+    """Fair market value of one unit of ``asset`` at/just before ``target_iso``.
+
+    Uses the canonical cache lookup ``get_cached_rate_at_or_before`` so the FMV is
+    always bounded by the departure date (a historical departure never picks up a
+    later/future rate) and a reviewed manual override wins over a provider row at
+    the same timestamp. If no rate at-or-before the date exists, fall back to the
+    profile's transaction price, else mark the asset unpriced.
+    """
 
     pair = core_rates.transaction_rate_pair(asset, fiat_currency)
     if pair is not None:
-        row = conn.execute(
-            """
-            SELECT rate, rate_exact, timestamp
-            FROM rates_cache
-            WHERE pair = ? AND timestamp <= ?
-            ORDER BY timestamp DESC, fetched_at DESC
-            LIMIT 1
-            """,
-            (pair, target_iso),
-        ).fetchone()
-        if row is not None:
-            rate = pricing.decimal_from_exact(row["rate_exact"], row["rate"])
-            if rate is not None and rate > 0:
-                return rate, {
-                    "asset": asset,
-                    "rate": float(rate),
-                    "pair": pair,
-                    "asOf": row["timestamp"],
-                    "source": "cache",
-                }
         try:
-            latest = core_rates.get_latest_rate(conn, pair)
+            cached = core_rates.get_cached_rate_at_or_before(conn, pair, target_iso)
         except (AppError, sqlite3.OperationalError):
-            latest = None
-        if latest is not None:
-            rate = pricing.decimal_from_exact(latest.get("rate_exact"), latest.get("rate"))
+            cached = None
+        if cached is not None:
+            rate = pricing.decimal_from_exact(cached.get("rate_exact"), cached.get("rate"))
             if rate is not None and rate > 0:
                 return rate, {
                     "asset": asset,
                     "rate": float(rate),
                     "pair": pair,
-                    "asOf": latest.get("timestamp"),
+                    "asOf": cached.get("timestamp"),
                     "source": "cache",
                 }
     fallback = fallback_rates.get(asset) if fallback_rates else None

@@ -14,9 +14,10 @@ from decimal import Decimal
 from kassiber.core import exit_tax
 
 
-def _conn_with_rate(rate=None):
+def _conn_with_rate(rate=None, *, timestamp="2026-06-15T12:00:00Z", source="manual"):
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
+    # Mirror the columns get_cached_rate_at_or_before selects.
     conn.execute(
         """
         CREATE TABLE rates_cache (
@@ -24,15 +25,18 @@ def _conn_with_rate(rate=None):
             timestamp TEXT NOT NULL,
             rate REAL NOT NULL,
             rate_exact TEXT,
-            fetched_at TEXT NOT NULL
+            source TEXT NOT NULL,
+            fetched_at TEXT NOT NULL,
+            granularity TEXT,
+            method TEXT
         )
         """
     )
     if rate is not None:
         conn.execute(
-            "INSERT INTO rates_cache (pair, timestamp, rate, rate_exact, fetched_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            ("BTC-EUR", "2026-06-15T12:00:00Z", float(rate), str(rate), "2026-06-15T12:00:00Z"),
+            "INSERT INTO rates_cache (pair, timestamp, rate, rate_exact, source, fetched_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            ("BTC-EUR", timestamp, float(rate), str(rate), source, timestamp),
         )
     return conn
 
@@ -232,6 +236,57 @@ class ExitTaxComputeTests(unittest.TestCase):
         }
         report = exit_tax.compute_deemed_disposal(conn, _profile("at"), state)
         self.assertTrue(any("EXIT-004" in note for note in report["assumptions"]))
+
+    def test_historical_departure_ignores_future_cache_rate(self):
+        # P1 guard: the cache only has a rate AFTER the departure date; the FMV
+        # lookup must NOT use it (no transaction fallback => unpriced).
+        conn = _conn_with_rate(Decimal("99999"), timestamp="2026-06-15T12:00:00Z")
+        state = {
+            "entries": [
+                {
+                    "entry_type": "acquisition",
+                    "asset": "BTC",
+                    "occurred_at": "2021-04-01T00:00:00Z",
+                    "quantity": Decimal("1.0"),
+                    "fiat_value": Decimal("30000"),
+                    "cost_basis": None,
+                },
+            ],
+            "wallet_holdings": {
+                ("w1", "Hot", "treasury", "BTC"): {"quantity": Decimal("1.0"), "cost_basis": Decimal("30000")},
+            },
+            "account_holdings": {},
+            "quarantines": [],
+            "latest_rates": {},  # no transaction fallback either
+        }
+        report = exit_tax.compute_deemed_disposal(
+            conn, _profile("at"), state, departure_date="2021-05-01"
+        )
+        neu = next(lot for lot in report["lots"] if lot["regime"] == "neu")
+        self.assertIsNone(neu["marketValue"])  # not valued at the future 99999 rate
+        self.assertTrue(any(source["source"] == "missing" for source in report["fmvSource"]))
+
+    def test_manual_rate_wins_over_later_provider_at_same_timestamp(self):
+        # P2 guard: a reviewed manual override must beat a later-fetched provider
+        # row at the same timestamp.
+        conn = _conn_with_rate(None)
+        ts = "2026-06-15T00:00:00Z"
+        conn.execute(
+            "INSERT INTO rates_cache(pair,timestamp,rate,rate_exact,source,fetched_at) "
+            "VALUES('BTC-EUR',?,50000,'50000','manual',?)",
+            (ts, "2026-06-15T08:00:00Z"),
+        )
+        conn.execute(
+            "INSERT INTO rates_cache(pair,timestamp,rate,rate_exact,source,fetched_at) "
+            "VALUES('BTC-EUR',?,90000,'90000','coinbase',?)",
+            (ts, "2026-06-15T09:00:00Z"),  # fetched later than the manual row
+        )
+        conn.commit()
+        report = exit_tax.compute_deemed_disposal(
+            conn, _profile("at"), _state(), departure_date="2026-06-16"
+        )
+        # Neu 0.4 BTC valued at the manual 50000 (=20000), not the provider 90000.
+        self.assertEqual(report["totals"]["neuMarketValue"], 20000.0)
 
     def test_generic_profile_has_no_special_rate(self):
         conn = _conn_with_rate(Decimal("60000"))
