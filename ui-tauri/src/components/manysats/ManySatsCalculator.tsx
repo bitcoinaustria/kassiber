@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
-import { useDaemon } from "@/daemon/client";
+import { DaemonRequestError, useDaemon } from "@/daemon/client";
 import { formatFiatAmount } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import {
@@ -229,13 +229,20 @@ export function ManySatsCalculator() {
     refetchOnWindowFocus: false,
   });
 
-  // If the profile's fiat has no live spot, fall back to EUR rather than
-  // sitting on the failed no-pair fetch.
+  // Fall back to EUR only when the profile fiat is genuinely not quotable
+  // (the daemon raises a `validation` error before any network call). A
+  // transient provider/network failure must NOT switch the user's currency —
+  // it should retry the profile fiat instead.
   React.useEffect(() => {
-    if (selectedFiat == null && latestQuery.isError) {
+    if (selectedFiat != null) return;
+    const error = latestQuery.error;
+    if (
+      error instanceof DaemonRequestError &&
+      error.envelope?.error?.code === "validation"
+    ) {
       setSelectedFiat("EUR");
     }
-  }, [selectedFiat, latestQuery.isError]);
+  }, [selectedFiat, latestQuery.error]);
 
   const rate = rateFromLatest(latestQuery.data?.data);
   const displayFiat = (selectedFiat ?? rate?.fiatCurrency ?? "EUR").toUpperCase();
