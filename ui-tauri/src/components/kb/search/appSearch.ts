@@ -23,9 +23,41 @@ type BuildAppSearchOptions = {
   resolvedTransaction?: ResolvedTransactionLookup | null;
   isResolvingTransaction?: boolean;
   limit?: number;
+  /**
+   * Translator that can resolve `nav:`, `search:`, and `settings:` prefixed
+   * keys. Localizes result titles/subtitles so a German user's visible-term
+   * query (e.g. "Transaktionen") matches the localized title.
+   *
+   * Typed structurally rather than as a namespace-branded `TFunction` so any
+   * `useTranslation([...])` / `getFixedT` instance can be passed; result keys
+   * are built dynamically and resolved with a `never` cast at each call site.
+   */
+  t: AppTranslate;
 };
 
+/** Minimal translator shape used by the localized builders. */
+type AppTranslate = (key: string) => string;
+
 const SEARCH_LIMIT = 8;
+
+/**
+ * Page id → existing `nav:book.*` title key, reused where the side-nav already
+ * names the surface. Pages with no nav key fall back to `search:page.<id>.title`.
+ */
+const PAGE_NAV_TITLE_KEYS: Record<string, string> = {
+  "page:overview": "nav:book.overview",
+  "page:transactions": "nav:book.transactions",
+  "page:connections": "nav:book.wallets",
+  "page:journals": "nav:book.ledger",
+  "page:reports": "nav:book.reports",
+  "page:quarantine": "nav:book.quarantine",
+  "page:source-of-funds": "nav:book.sourceFunds",
+  "page:swaps-transfers": "nav:book.swaps",
+  "page:logs": "nav:book.logs",
+  "page:assistant": "nav:book.assistant",
+  "page:exit-tax": "nav:book.exitTax",
+  "page:settings": "nav:book.settings",
+};
 
 const PAGE_RESULTS: SearchResult[] = [
   {
@@ -96,6 +128,26 @@ const PAGE_RESULTS: SearchResult[] = [
     keywords: ["csv", "pdf", "xlsx", "tax", "austria", "e1kv"],
     iconKey: "report",
     route: { to: "/reports" },
+    privacyTier: "public",
+  },
+  {
+    id: "page:exit-tax",
+    category: "page",
+    title: "Exit Tax",
+    subtitle: "Wegzugsbesteuerung deemed-disposal estimate",
+    keywords: [
+      "exit",
+      "exit-tax",
+      "wegzug",
+      "wegzugsbesteuerung",
+      "departure",
+      "leaving",
+      "emigration",
+      "relocation",
+      "deemed disposal",
+    ],
+    iconKey: "report",
+    route: { to: "/exit-tax" },
     privacyTier: "public",
   },
   {
@@ -233,6 +285,7 @@ export function buildAppSearchResults({
   resolvedTransaction,
   isResolvingTransaction,
   limit = SEARCH_LIMIT,
+  t,
 }: BuildAppSearchOptions): RankedSearchResult[] {
   if (!query.trim()) return [];
 
@@ -242,12 +295,12 @@ export function buildAppSearchResults({
       if (!aiFeaturesEnabled && result.route?.to === "/assistant") return false;
       if (!developerToolsEnabled && result.route?.to === "/logs") return false;
       return true;
-    }),
+    }).map((result) => localizePageResult(result, t)),
     ...ACTION_RESULTS.filter((result) => {
       if (!developerToolsEnabled && result.id === "action:open-logs") return false;
       return true;
-    }),
-    ...settingsResults(),
+    }).map((result) => localizeActionResult(result, t)),
+    ...settingsResults(t),
     ...snapshotResults(snapshot, query),
   ];
 
@@ -346,28 +399,90 @@ function resolvedTransactionResults(
   ];
 }
 
-function settingsResults(): SearchResult[] {
-  return SETTINGS_SECTIONS.map((section) => ({
-    id: `setting:${section.id}`,
-    category: "setting" as const,
-    title: section.label,
-    subtitle: `${section.group} settings · ${section.description}`,
-    keywords: [
-      "settings",
-      "preferences",
-      section.slug,
-      section.group,
-      section.description,
-      section.label,
-    ],
-    iconKey: "settings",
-    route: { to: "/settings", hash: section.slug },
-    metadata: {
-      settingSection: section.slug as SettingsMenuSection,
-      searchTokens: [section.id, section.slug],
-    },
-    privacyTier: "public" as const,
-  }));
+/** Strip the `page:` / `action:` prefix to get the bare id used in i18n keys. */
+function bareId(resultId: string): string {
+  const sep = resultId.indexOf(":");
+  return sep === -1 ? resultId : resultId.slice(sep + 1);
+}
+
+/**
+ * Append an extra keyword without dropping the existing (English) keywords —
+ * English queries must keep matching even when the UI is German.
+ */
+function withLocalizedKeyword(
+  keywords: readonly string[] | undefined,
+  localizedTitle: string,
+): string[] {
+  const base = keywords ? [...keywords] : [];
+  const extra = localizedTitle.trim().toLowerCase();
+  if (extra && !base.some((kw) => kw.trim().toLowerCase() === extra)) {
+    base.push(localizedTitle);
+  }
+  return base;
+}
+
+function localizePageResult(
+  result: SearchResult,
+  t: AppTranslate,
+): SearchResult {
+  const id = bareId(result.id);
+  const titleKey = PAGE_NAV_TITLE_KEYS[result.id] ?? `search:page.${id}.title`;
+  const title = t(titleKey);
+  const subtitle = t(`search:page.${id}.subtitle`);
+  return {
+    ...result,
+    title,
+    subtitle,
+    keywords: withLocalizedKeyword(result.keywords, title),
+  };
+}
+
+function localizeActionResult(
+  result: SearchResult,
+  t: AppTranslate,
+): SearchResult {
+  const id = bareId(result.id);
+  const title = t(`search:action.${id}.title`);
+  const subtitle = t(`search:action.${id}.subtitle`);
+  return {
+    ...result,
+    title,
+    subtitle,
+    keywords: withLocalizedKeyword(result.keywords, title),
+  };
+}
+
+function settingsResults(t: AppTranslate): SearchResult[] {
+  const groupPrefix = t("search:settings.groupPrefix");
+  return SETTINGS_SECTIONS.map((section) => {
+    const title = t(`settings:${section.labelKey}`);
+    const descKey = section.labelKey.replace(/\.label$/, ".description");
+    const description = t(`settings:${descKey}`);
+    return {
+      id: `setting:${section.id}`,
+      category: "setting" as const,
+      title,
+      subtitle: `${groupPrefix} · ${description}`,
+      keywords: withLocalizedKeyword(
+        [
+          "settings",
+          "preferences",
+          section.slug,
+          section.group,
+          section.description,
+          section.label,
+        ],
+        title,
+      ),
+      iconKey: "settings",
+      route: { to: "/settings", hash: section.slug },
+      metadata: {
+        settingSection: section.slug as SettingsMenuSection,
+        searchTokens: [section.id, section.slug],
+      },
+      privacyTier: "public" as const,
+    };
+  });
 }
 
 function snapshotResults(

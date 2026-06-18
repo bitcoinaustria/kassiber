@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Eye, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,7 @@ export function BookSwitcherPopover({
   open,
   onClose,
 }: BookSwitcherPopoverProps) {
+  const { t } = useTranslation("chrome");
   const { data, error, isLoading } = useDaemon<ProfilesSnapshot>(
     "ui.profiles.snapshot",
     undefined,
@@ -46,9 +48,9 @@ export function BookSwitcherPopover({
     >
       <DialogContent className="flex max-h-[min(82vh,720px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
         <DialogHeader className="border-b px-4 py-3 sm:px-5">
-          <DialogTitle className="text-base">Switch books</DialogTitle>
+          <DialogTitle className="text-base">{t("bookSwitcher.title")}</DialogTitle>
           <DialogDescription>
-            Pick the active book for every screen in this window.
+            {t("bookSwitcher.description")}
           </DialogDescription>
         </DialogHeader>
 
@@ -56,19 +58,19 @@ export function BookSwitcherPopover({
           {isLoading ? (
             <div className="flex min-h-[180px] items-center justify-center text-sm text-muted-foreground">
               <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
-              Loading books...
+              {t("bookSwitcher.loading")}
             </div>
           ) : error ? (
             <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
               {error instanceof Error
                 ? error.message
-                : "Could not load books."}
+                : t("bookSwitcher.loadError")}
             </div>
           ) : data?.data ? (
             <SwitcherBody snapshot={data.data} onClose={onClose} />
           ) : (
             <div className="rounded-lg border bg-muted/35 p-3 text-sm text-muted-foreground">
-              No books were found in this data root.
+              {t("bookSwitcher.empty")}
             </div>
           )}
         </div>
@@ -76,7 +78,7 @@ export function BookSwitcherPopover({
         <DialogFooter className="border-t bg-muted/25 px-4 py-3 sm:px-5">
           <Button variant="outline" size="sm" asChild>
             <Link to="/books" onClick={onClose}>
-              Manage books
+              {t("bookSwitcher.manageBooks")}
             </Link>
           </Button>
         </DialogFooter>
@@ -91,6 +93,7 @@ interface SwitcherBodyProps {
 }
 
 function SwitcherBody({ snapshot, onClose }: SwitcherBodyProps) {
+  const { t } = useTranslation("chrome");
   const switchProfile = useDaemonMutation<{ activeProfileId: string }>(
     "ui.profiles.switch",
   );
@@ -136,7 +139,7 @@ function SwitcherBody({ snapshot, onClose }: SwitcherBodyProps) {
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           {switchProfile.error instanceof Error
             ? switchProfile.error.message
-            : "Could not switch books."}
+            : t("bookSwitcher.switchError")}
         </div>
       ) : null}
     </div>
@@ -160,6 +163,7 @@ function WorkspaceBlock({
   onClose,
   onPick,
 }: WorkspaceBlockProps) {
+  const { t } = useTranslation("chrome");
   return (
     <Card className="gap-3 rounded-lg py-0">
       <CardHeader className="gap-2 px-3 py-3 sm:px-4">
@@ -179,7 +183,7 @@ function WorkspaceBlock({
               onClick={onClose}
             >
               <Eye className="size-3.5" aria-hidden="true" />
-              Book Set Overview
+              {t("bookSwitcher.bookSetOverview")}
             </Link>
           </Button>
         </div>
@@ -215,6 +219,7 @@ function ProfileOption({
   disabled,
   onPick,
 }: ProfileOptionProps) {
+  const { t } = useTranslation("chrome");
   return (
     <Button
       type="button"
@@ -233,7 +238,7 @@ function ProfileOption({
           <span className="min-w-0">
             <span className="block truncate font-medium">{profile.name}</span>
             <span className="mt-0.5 block text-xs text-muted-foreground">
-              Opened {profile.lastOpened}
+              {t("bookSwitcher.openedOn", { date: profile.lastOpened })}
             </span>
           </span>
           {isPending ? (
@@ -244,8 +249,8 @@ function ProfileOption({
           ) : null}
         </span>
         <span className="flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          <span>{profile.accounts} buckets</span>
-          <span>{profile.wallets} wallets</span>
+          <span>{t("bookSwitcher.accounts", { count: profile.accounts })}</span>
+          <span>{t("bookSwitcher.wallets", { count: profile.wallets })}</span>
         </span>
         <span className="line-clamp-2 min-w-0 text-xs text-muted-foreground">
           {profile.taxPolicy}

@@ -1000,6 +1000,26 @@ def _chunked(items, size=900):
         yield chunk
 
 
+def count_coarse_priced_transactions(conn, profile_id):
+    """Count booked (non-excluded) transactions priced from a coarse/daily rate
+    for a profile. Drives the non-blocking "priced from daily rates" notice.
+
+    Coarse (daily) pricing is legally acceptable for Austrian/German crypto tax
+    (no intraday mandate); this is an optional-accuracy signal, not a blocker.
+    """
+    row = conn.execute(
+        """
+        SELECT COUNT(*) AS n
+        FROM transactions
+        WHERE profile_id = ?
+          AND excluded = 0
+          AND pricing_quality = ?
+        """,
+        (profile_id, pricing.QUALITY_COARSE_FALLBACK),
+    ).fetchone()
+    return int(row["n"] if row and row["n"] is not None else 0)
+
+
 def _collect_coinbase_needed_minutes(conn, pairs):
     pair_set = set(pairs)
     needed = {pair: set() for pair in pair_set}

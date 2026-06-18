@@ -151,6 +151,124 @@ class FreshnessTest(unittest.TestCase):
         self.assertTrue(cold["blocking_reports"])
         self.assertEqual(snapshot["summary"]["rate_limited"], 1)
 
+    def test_failed_job_is_logged_for_the_logs_screen(self):
+        # A hard job failure (e.g. the RP2 tax-calc guard) must reach the RAM
+        # log ring via the stdlib logging bridge, so it shows on the Logs
+        # screen — not only in structured job state. We assert the ERROR log
+        # carries the message + source label; RingHandler delivers it to /logs.
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            job_type=freshness.JOB_ONCHAIN_WALLET,
+            source_key="onchain_wallet:cold",
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Journal refresh",
+            priority=10,
+        )
+        conn.commit()
+
+        def boom(conn, job, progress, check_cancelled):
+            raise AppError(
+                "RP2 multi-asset tax calculation failed", code="tax_failed"
+            )
+
+        with self.assertLogs("kassiber.core.freshness", level="ERROR") as captured:
+            results = freshness.run_due_jobs(
+                conn,
+                {freshness.JOB_ONCHAIN_WALLET: boom},
+                profile_id=profile_id,
+                limit=1,
+            )
+
+        self.assertEqual(results[0]["status"], freshness.JOB_ERROR)
+        # The source label + error code reach the ring (so /logs shows which
+        # source failed and why)...
+        self.assertTrue(
+            any("Journal refresh" in line for line in captured.output),
+            captured.output,
+        )
+        self.assertTrue(
+            any("tax_failed" in line for line in captured.output),
+            captured.output,
+        )
+        # ...but NOT the raw exception text, which could carry operational data
+        # (URLs/secrets) on sync errors that the keyed redactor would miss.
+        self.assertFalse(
+            any(
+                "RP2 multi-asset tax calculation failed" in line
+                for line in captured.output
+            ),
+            captured.output,
+        )
+
+    def test_failed_job_error_message_url_is_scrubbed_in_ui_snapshot(self):
+        # A backend exception message can embed the backend URL (and inline
+        # credentials) — httpx ConnectError / HTTPSConnectionPool strings do.
+        # build_snapshot's structured redactor only scrubs secret *keys*, so a
+        # URL inside the free-text last_error_message survives. The daemon render
+        # boundary (_freshness_snapshot_for_ui) must scrub it before the UI.
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            job_type=freshness.JOB_ONCHAIN_WALLET,
+            source_key="onchain_wallet:cold",
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Cold wallet",
+            priority=10,
+        )
+        conn.commit()
+
+        def boom(conn, job, progress, check_cancelled):
+            raise AppError(
+                "ConnectError: could not reach "
+                "https://user:pass@private-node.local:50002/rpc",
+                code="backend_unreachable",
+                retryable=True,
+            )
+
+        freshness.run_due_jobs(
+            conn,
+            {freshness.JOB_ONCHAIN_WALLET: boom},
+            profile_id=profile_id,
+            limit=1,
+        )
+
+        # The raw URL is stored in the source state (kept for audit, encrypted
+        # at rest) — this is the gap the render boundary must close.
+        state = freshness.get_source_state(conn, profile_id, "onchain_wallet:cold")
+        self.assertIn("private-node.local", state["last_error_message"])
+
+        # ...but the UI-facing snapshot must NOT leak host / path / credentials.
+        ui_encoded = json.dumps(
+            daemon_freshness._freshness_snapshot_for_ui(conn, profile_id),
+            sort_keys=True,
+        )
+        self.assertNotIn("private-node.local", ui_encoded)
+        self.assertNotIn("user:pass", ui_encoded)
+        self.assertNotIn("/rpc", ui_encoded)
+        self.assertIn("<backend-url>", ui_encoded)
+
+    def test_sync_text_scrubber_redacts_schemeless_host(self):
+        # Defense in depth: an HTTP-client connection-error repr (urllib3/httpx)
+        # embeds the host schemeless as host='…', which the scheme-form URL
+        # pattern does not catch.
+        scrubbed = daemon_freshness._redact_sync_text_for_ui(
+            "HTTPSConnectionPool(host='private-node.local', port=50002): Max retries"
+        )
+        self.assertNotIn("private-node.local", scrubbed)
+        self.assertIn("<backend-host>", scrubbed)
+        # scheme-form URLs (and inline credentials) are still scrubbed.
+        url_scrubbed = daemon_freshness._redact_sync_text_for_ui(
+            "see https://user:pass@node.local/rpc"
+        )
+        self.assertNotIn("user:pass", url_scrubbed)
+        self.assertNotIn("node.local", url_scrubbed)
+        self.assertIn("<backend-url>", url_scrubbed)
+
     def test_cancelled_job_leaves_blocking_partial_state(self):
         conn = self._db()
         profile_id = _seed_profile(conn)

@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 
 import { Wordmark } from "@/components/kb/Wordmark";
 import { Button } from "@/components/ui/button";
@@ -58,30 +59,42 @@ interface OnboardingProps {
 const DEFAULT_STEPS: OnboardingStep[] = [
   {
     component: EssentialsStep,
-    label: "Your books",
+    label: "essentials",
     isComplete: essentialsStepComplete,
   },
   {
     component: SyncStep,
-    label: "Sync",
+    label: "sync",
     isComplete: syncStepComplete,
   },
   {
     component: AiStep,
-    label: "AI",
+    label: "ai",
     isComplete: aiStepComplete,
   },
   {
     component: SecurityStep,
-    label: "Security",
+    label: "security",
     isComplete: securityStepComplete,
   },
   {
     component: ReviewStep,
-    label: "Review",
+    label: "review",
     isComplete: reviewStepComplete,
   },
 ];
+
+/** Stable step ids mapped to their `steps.*` label key in the onboarding bundle. */
+const DEFAULT_STEP_LABEL_KEYS: Record<
+  string,
+  "steps.essentials" | "steps.sync" | "steps.ai" | "steps.security" | "steps.review"
+> = {
+  essentials: "steps.essentials",
+  sync: "steps.sync",
+  ai: "steps.ai",
+  security: "steps.security",
+  review: "steps.review",
+};
 
 const SECURITY_STEP_INDEX = DEFAULT_STEPS.findIndex(
   (entry) => entry.component === SecurityStep,
@@ -107,6 +120,7 @@ const DEV_MOCK_IDENTITY: Identity = {
 };
 
 export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) => {
+  const { t } = useTranslation("onboarding");
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const setIdentity = useUiStore((state) => state.setIdentity);
@@ -201,11 +215,11 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       });
       if (envelope.kind === "error" || envelope.error) {
         throw new Error(
-          envelope.error?.message ?? "Could not initialize SQLCipher database.",
+          envelope.error?.message ?? t("shell.errorInitSqlcipher"),
         );
       }
       if (envelope.kind === "auth_required") {
-        throw new Error("Database passphrase is required.");
+        throw new Error(t("shell.passphraseRequired"));
       }
       // Best-effort: enroll the just-created passphrase for Touch ID unlock.
       // Non-fatal — the encrypted DB already exists, so a Keychain failure
@@ -274,10 +288,10 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     });
     if (onboarding.kind === "auth_required") {
       handleAuthRequired(onboarding);
-      throw new Error("Database passphrase is required.");
+      throw new Error(t("shell.passphraseRequired"));
     }
     if (onboarding.kind === "error" || onboarding.error) {
-      throw new Error(onboarding.error?.message ?? "Could not finish onboarding.");
+      throw new Error(onboarding.error?.message ?? t("shell.finishError"));
     }
     const identity: Identity = {
       name: form.profile.trim() || "Private",
@@ -357,7 +371,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     void finish()
       .catch((error: unknown) => {
         setFinishError(
-          error instanceof Error ? error.message : "Could not finish onboarding.",
+          error instanceof Error ? error.message : t("shell.finishError"),
         );
       })
       .finally(() => setSubmitting(false));
@@ -399,17 +413,17 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       });
       if (envelope.kind === "auth_required") {
         handleAuthRequired(envelope);
-        throw new Error("Database passphrase is required.");
+        throw new Error(t("shell.passphraseRequired"));
       }
       if (envelope.kind === "error" || envelope.error) {
-        throw new Error(envelope.error?.message ?? "Could not load books.");
+        throw new Error(envelope.error?.message ?? t("shell.errorLoadBooks"));
       }
       setImportSnapshot(
         envelope.data ?? { workspaces: [], activeProfileId: "" },
       );
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Could not load books.";
+        error instanceof Error ? error.message : t("shell.errorLoadBooks");
       setImportError(message);
       throw error;
     } finally {
@@ -438,16 +452,16 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       });
       if (envelope.kind === "auth_required") {
         handleAuthRequired(envelope);
-        throw new Error("Database passphrase is required.");
+        throw new Error(t("shell.passphraseRequired"));
       }
       if (envelope.kind === "error" || envelope.error) {
-        throw new Error(envelope.error?.message ?? "Could not open project.");
+        throw new Error(envelope.error?.message ?? t("shell.errorOpenProject"));
       }
       await setSessionUnlockPassphrase(selection.encrypted ? passphrase : null);
       await refreshImportedProfiles();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Could not open project.";
+        error instanceof Error ? error.message : t("shell.errorOpenProject");
       setImportError(message);
       throw error;
     } finally {
@@ -488,7 +502,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
           void setSessionUnlockPassphrase(null);
         }
         setImportError(
-          error instanceof Error ? error.message : "Could not import project.",
+          error instanceof Error ? error.message : t("shell.errorImportProject"),
         );
       })
       .finally(() => setImporting(false));
@@ -515,7 +529,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
         setImportError(
           error instanceof Error
             ? error.message
-            : "Could not return to the default project root.",
+            : t("shell.errorReturnDefaultRoot"),
         );
       })
       .finally(() => setLoadingImportProfiles(false));
@@ -545,7 +559,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
               size="sm"
               onClick={skipToMockPreview}
             >
-              Mock-only preview
+              {t("shell.mockPreview")}
             </Button>
           )}
         </div>
@@ -574,7 +588,12 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
         ) : (
           <>
             <OnboardingStepper
-              labels={activeSteps.map((entry) => entry.label)}
+              labels={activeSteps.map((entry) => {
+                const labelKey = entry.label
+                  ? DEFAULT_STEP_LABEL_KEYS[entry.label]
+                  : undefined;
+                return labelKey ? t(labelKey) : entry.label;
+              })}
               current={currentStep}
               onJump={(index) => {
                 setFinishError(null);
@@ -606,9 +625,9 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
         )}
 
         <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-ink-3">
-          <span>Private keys never enter Kassiber.</span>
-          <span>State stays under ~/.kassiber unless overridden.</span>
-          <span>Dodge the SaaS honeypots.</span>
+          <span>{t("shell.footer.privateKeys")}</span>
+          <span>{t("shell.footer.stateLocation")}</span>
+          <span>{t("shell.footer.noSaas")}</span>
         </div>
       </div>
     </section>

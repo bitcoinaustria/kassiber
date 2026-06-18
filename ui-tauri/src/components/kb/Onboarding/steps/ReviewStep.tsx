@@ -1,4 +1,6 @@
 import { Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
 
@@ -20,8 +22,16 @@ const STEP_INDEX = {
   security: 3,
 } as const;
 
+type ReviewArea =
+  | "books"
+  | "tax"
+  | "sync"
+  | "ai"
+  | "storage"
+  | "secrets";
+
 interface ReviewRow {
-  area: string;
+  areaKey: ReviewArea;
   value: string;
   note: string;
   step: keyof typeof STEP_INDEX;
@@ -44,11 +54,12 @@ export const ReviewStep = ({
   canContinue = true,
   submitting = false,
 }: StepComponentProps) => {
-  const rows = reviewRows(form, backendPreviewRows);
+  const { t } = useTranslation("onboarding");
+  const rows = reviewRows(t, form, backendPreviewRows);
 
   return (
     <OnboardingSingleColumnFrame
-      title="Review security setup"
+      title={t("review.title")}
       currentStep={currentStep}
       totalSteps={totalSteps}
       goBack={goBack}
@@ -61,21 +72,18 @@ export const ReviewStep = ({
         }}
         className="space-y-5"
       >
-        <p className="m-0 text-sm leading-6 text-ink-2">
-          Confirm the choices that affect local storage, network visibility,
-          and whether data can leave this machine.
-        </p>
+        <p className="m-0 text-sm leading-6 text-ink-2">{t("review.intro")}</p>
 
         <div className="overflow-hidden rounded-lg border border-line">
           <table className="w-full border-collapse text-left text-sm">
             <tbody>
               {rows.map((row) => (
                 <tr
-                  key={row.area}
+                  key={row.areaKey}
                   className="border-b border-line last:border-b-0"
                 >
                   <th className="w-32 bg-paper-2 px-4 py-3 align-top font-medium text-ink">
-                    {row.area}
+                    {t(`review.area.${row.areaKey}`)}
                   </th>
                   <td className="px-4 py-3 align-top">
                     <div className="flex items-start justify-between gap-4">
@@ -107,10 +115,12 @@ export const ReviewStep = ({
                         variant="ghost"
                         size="sm"
                         className="shrink-0"
-                        aria-label={`Change ${row.area}`}
+                        aria-label={t("review.changeArea", {
+                          area: t(`review.area.${row.areaKey}`),
+                        })}
                         onClick={() => onJump?.(STEP_INDEX[row.step])}
                       >
-                        Change
+                        {t("review.change")}
                       </Button>
                     </div>
                   </td>
@@ -129,10 +139,10 @@ export const ReviewStep = ({
             {submitting ? (
               <>
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                Creating books...
+                {t("review.creatingBooks")}
               </>
             ) : (
-              "Create local books"
+              t("review.createLocalBooks")
             )}
           </Button>
         </OnboardingStepActions>
@@ -142,75 +152,85 @@ export const ReviewStep = ({
 };
 
 function reviewRows(
+  t: TFunction<"onboarding">,
   form: OnboardingForm,
   backendPreviewRows: ReviewDetailSource[],
 ): ReviewRow[] {
   return [
     {
-      area: "Books",
-      value: `${form.workspace.trim() || "My Books"} / ${
-        form.profile.trim() || "Private"
-      }`,
-      note: "Creates one local books set with one active book.",
+      areaKey: "books",
+      value: t("review.books.value", {
+        workspace: form.workspace.trim() || "My Books",
+        profile: form.profile.trim() || "Private",
+      }),
+      note: t("review.books.note"),
       step: "books",
     },
     {
-      area: "Tax",
+      areaKey: "tax",
       value:
         form.taxCountry === "at"
-          ? "Austria, EUR, moving average"
-          : `Generic, ${form.fiatCurrency}, ${form.gainsAlgorithm}`,
+          ? t("review.tax.valueAt")
+          : t("review.tax.valueGeneric", {
+              currency: form.fiatCurrency,
+              algorithm: form.gainsAlgorithm,
+            }),
       note:
         form.taxCountry === "at"
-          ? "Austrian reporting currency and method are jurisdiction defaults."
-          : `${form.taxLongTermDays || "365"} long-term holding days.`,
+          ? t("review.tax.noteAt")
+          : t("review.tax.noteGeneric", {
+              days: form.taxLongTermDays || "365",
+            }),
       step: "books",
     },
     {
-      area: "Sync",
-      value: syncValue(form),
-      note: syncNote(form, backendPreviewRows),
+      areaKey: "sync",
+      value: syncValue(t, form),
+      note: syncNote(t, form, backendPreviewRows),
       step: "sync",
       details: syncDetails(form, backendPreviewRows),
     },
     {
-      area: "AI",
-      value: aiValue(form),
-      note: aiNote(form),
+      areaKey: "ai",
+      value: aiValue(t, form),
+      note: aiNote(t, form),
       step: "ai",
     },
     {
-      area: "Storage",
+      areaKey: "storage",
       value:
         form.databaseMode === "sqlcipher"
-          ? "SQLCipher encrypted database"
-          : "Plaintext database",
+          ? t("review.storage.valueEncrypted")
+          : t("review.storage.valuePlaintext"),
       note:
         form.databaseMode === "sqlcipher"
-          ? `Passphrase required. Touch ID ${
-              form.enableTouchId ? "enabled" : "not enabled"
-            }. No recovery path.`
-          : "Evaluation only. Anyone with disk access can read wallet data.",
+          ? t("review.storage.noteEncrypted", {
+              touchId: form.enableTouchId
+                ? t("review.storage.touchIdEnabled")
+                : t("review.storage.touchIdNotEnabled"),
+            })
+          : t("review.storage.notePlaintext"),
       step: "security",
     },
     {
-      area: "Secrets",
+      areaKey: "secrets",
       value:
         form.databaseMode === "sqlcipher" && form.migrateCredentials
-          ? "Encrypted credential storage"
-          : "No credentials collected during setup",
+          ? t("review.secrets.valueEncrypted")
+          : t("review.secrets.valueNone"),
       note:
         form.databaseMode === "sqlcipher" && form.migrateCredentials
-          ? "Existing backends.env credentials migrate if present; new secrets are added later."
-          : "Backend API keys, cookies, and passwords are added later.",
+          ? t("review.secrets.noteEncrypted")
+          : t("review.secrets.noteNone"),
       step: "security",
     },
   ];
 }
 
-function syncValue(form: OnboardingForm): string {
-  if (form.backendSetupMode === "skip") return "Manual imports only";
-  if (form.backendSetupMode === "default") return "Built-in public backends";
+function syncValue(t: TFunction<"onboarding">, form: OnboardingForm): string {
+  if (form.backendSetupMode === "skip") return t("review.sync.valueManual");
+  if (form.backendSetupMode === "default")
+    return t("review.sync.valueDefault");
   const kind = BACKEND_KIND_LABELS[form.backendKind] ?? form.backendKind;
   const endpoint =
     form.backendKind === "electrum"
@@ -220,9 +240,10 @@ function syncValue(form: OnboardingForm): string {
           useSsl: form.backendUseSsl,
         })
       : form.backendUrl.trim();
-  return `${form.backendName.trim() || "Custom backend"} (${kind}${
-    endpoint ? `, ${endpoint}` : ""
-  })`;
+  return t("review.sync.valueCustom", {
+    name: form.backendName.trim() || t("review.sync.customFallbackName"),
+    detail: `${kind}${endpoint ? `, ${endpoint}` : ""}`,
+  });
 }
 
 interface ReviewDetailSource {
@@ -232,22 +253,23 @@ interface ReviewDetailSource {
 }
 
 function syncNote(
+  t: TFunction<"onboarding">,
   form: OnboardingForm,
   backendPreviewRows: ReviewDetailSource[],
 ): string {
   if (form.backendSetupMode === "skip") {
-    return "No address discovery or watch-only refresh until Settings adds a backend.";
+    return t("review.sync.noteSkip");
   }
   if (form.backendSetupMode === "default") {
     if (backendPreviewRows.length === 0) {
-      return "Backend addresses are loading from Kassiber.";
+      return t("review.sync.noteDefaultLoading");
     }
-    return "Public operators can see address queries; no no-log promise.";
+    return t("review.sync.noteDefault");
   }
   if (form.backendKind === "electrum" && form.backendUseProxy) {
-    return "Custom Electrum backend routed through the configured proxy.";
+    return t("review.sync.noteCustomProxy");
   }
-  return "Custom backend. Use your own infrastructure or a trusted operator.";
+  return t("review.sync.noteCustom");
 }
 
 function syncDetails(
@@ -266,19 +288,22 @@ function backendKindLabel(kind: string): string {
   return BACKEND_KIND_LABELS[kind as keyof typeof BACKEND_KIND_LABELS] ?? kind;
 }
 
-function aiValue(form: OnboardingForm): string {
-  if (form.aiSetupMode === "disabled") return "Disabled";
+function aiValue(t: TFunction<"onboarding">, form: OnboardingForm): string {
+  if (form.aiSetupMode === "disabled") return t("review.ai.valueDisabled");
   const kind =
     AI_PROVIDER_KIND_LABELS[form.aiProviderKind] ?? form.aiProviderKind;
-  return `${kind}: ${form.aiProviderName.trim() || "assistant"}`;
+  return t("review.ai.value", {
+    kind,
+    name: form.aiProviderName.trim() || t("review.ai.fallbackName"),
+  });
 }
 
-function aiNote(form: OnboardingForm): string {
+function aiNote(t: TFunction<"onboarding">, form: OnboardingForm): string {
   if (form.aiSetupMode === "disabled") {
-    return "No assistant calls during normal app use.";
+    return t("review.ai.noteDisabled");
   }
   if (form.aiSetupMode === "remote") {
-    return "Remote provider can receive selected book context after consent.";
+    return t("review.ai.noteRemote");
   }
-  return "Local provider endpoint; book context stays on your machine unless configured otherwise.";
+  return t("review.ai.noteLocal");
 }

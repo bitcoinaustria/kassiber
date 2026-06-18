@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
+import i18n from "@/i18n";
 import { emitAppLog } from "@/lib/appLogs";
 import { stackHead } from "@/lib/globalErrorCapture";
 
@@ -47,16 +48,16 @@ export class AppErrorBoundary extends React.Component<
       <div className="flex min-h-screen items-center justify-center bg-background p-6">
         <div className="w-full max-w-md space-y-4 rounded-xl border bg-card p-6 text-center shadow-sm">
           <h1 className="text-lg font-semibold tracking-tight">
-            Something went wrong
+            {i18n.t("common:state.somethingWentWrong")}
           </h1>
           <p className="text-sm break-words text-muted-foreground">
             {this.state.error.message || String(this.state.error)}
           </p>
           <Button type="button" onClick={() => window.location.reload()}>
-            Reload
+            {i18n.t("chrome:errorBoundary.reload")}
           </Button>
           <p className="text-xs text-muted-foreground">
-            Details are recorded under Developer tools &rarr; Logs.
+            {i18n.t("chrome:errorBoundary.details")}
           </p>
         </div>
       </div>

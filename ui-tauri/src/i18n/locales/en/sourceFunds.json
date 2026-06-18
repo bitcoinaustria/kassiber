@@ -1,0 +1,360 @@
+{
+  "header": {
+    "title": "Source of Funds",
+    "description": "Pick the purpose first, then review the evidence path."
+  },
+  "wizard": {
+    "step": "Step {{index}}",
+    "steps": {
+      "setup": "Setup",
+      "review": "Review",
+      "export": "Export"
+    }
+  },
+  "purpose": {
+    "planned": {
+      "title": "Planned exchange sale",
+      "body": "Prepare a bank or exchange disclosure before the deposit or sale happens."
+    },
+    "existing": {
+      "title": "Already happened",
+      "body": "Explain a completed sale, exchange deposit, withdrawal, or transfer."
+    },
+    "plannedHint": "Planned reports prove the reviewed history of the bitcoin you intend to sell. If those sats were originally bought on an exchange, attach fiat-funds proof to that purchase source as a separate evidence item."
+  },
+  "setup": {
+    "targetLabelPlanned": "Funds history anchor",
+    "targetLabelExisting": "Completed transaction",
+    "amountLabelPlanned": "Planned sale amount",
+    "amountLabelExisting": "Report amount",
+    "selected": "Selected: {{date}} · {{wallet}} · {{txid}}",
+    "transactionCount": "{{shown}} of {{total}} transactions",
+    "searchPlaceholder": "Search txid, wallet, note…",
+    "noMatches": "No transactions match these filters.",
+    "exchangeBroker": {
+      "label": "Exchange or broker",
+      "placeholder": "Kraken, Bitpanda, OTC desk…"
+    },
+    "bankNote": {
+      "label": "Bank disclosure note",
+      "placeholder": "Expected EUR proceeds, bank contact, or internal case note"
+    }
+  },
+  "controls": {
+    "revealLabel": "Reveal",
+    "amountPlaceholder": "0.00000000"
+  },
+  "filters": {
+    "title": "Filters",
+    "clear": "Clear",
+    "direction": {
+      "ariaLabel": "Filter by direction",
+      "all": "All flows"
+    },
+    "date": {
+      "ariaLabel": "Filter by date",
+      "all": "All dates",
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "last7days": "Last 7 days",
+      "last30days": "Last 30 days",
+      "older": "Older"
+    },
+    "status": {
+      "ariaLabel": "Filter by status",
+      "all": "All statuses",
+      "confirmed": "Confirmed",
+      "pending": "Pending",
+      "review": "Needs review"
+    },
+    "network": {
+      "ariaLabel": "Filter by network",
+      "all": "All networks"
+    },
+    "asset": {
+      "ariaLabel": "Filter by asset",
+      "all": "All assets"
+    },
+    "wallet": {
+      "ariaLabel": "Filter by wallet",
+      "all": "All wallets"
+    }
+  },
+  "transactionRow": {
+    "fallbackDescription": "Transaction",
+    "walletMobile": "Wallet: ",
+    "header": {
+      "transaction": "Transaction",
+      "amount": "Amount",
+      "wallet": "Wallet",
+      "flow": "Flow"
+    }
+  },
+  "flow": {
+    "incoming": "Incoming",
+    "outgoing": "Outgoing",
+    "swap": "Swap",
+    "transfer": "Transfer"
+  },
+  "fallback": {
+    "wallet": "Wallet",
+    "unknownDate": "Unknown date"
+  },
+  "network": {
+    "lightning": "Lightning",
+    "liquid": "Liquid",
+    "exchange": "Exchange",
+    "onChain": "On-chain"
+  },
+  "actionsBar": {
+    "findLinks": "Find Links",
+    "reviewDeterministic": "Review Deterministic Hops",
+    "markGap": "Mark Gap",
+    "manualReviewHint_one": "{{count}} weak or chain-observation suggestion still needs manual review.",
+    "manualReviewHint_other": "{{count}} weak or chain-observation suggestions still need manual review."
+  },
+  "gapDefaults": {
+    "label": "Reviewed missing history",
+    "description": "Prior history is missing and has been reviewed as a disclosure gap."
+  },
+  "export": {
+    "intro": "Review what the report will expose before exporting. Export is available only when all blockers are cleared, and the PDF includes reviewed evidence only.",
+    "savingCase": "Saving case…",
+    "saveAndExport": "Save & Export PDF",
+    "savedCase": "Saved case {{id}} ({{status}})"
+  },
+  "advancedReview": {
+    "title": "Advanced review editor",
+    "summary": "{{links}} links, {{sources}} sources, {{evidence}} evidence items"
+  },
+  "reviewQueue": {
+    "title": "Review Queue",
+    "description": "Matched links for the selected target, plus suggested upstream hops that can extend the path.",
+    "empty": "No matched links yet. Kassiber will look for same-id transfers, reviewed pairs, provider ids, and tight amount/time hints.",
+    "badge": {
+      "path": "Path",
+      "target": "Target",
+      "suggested": "Suggested"
+    },
+    "arrow": "{{from}} -> {{to}}",
+    "amountConfidence": "{{amount}} · {{confidence}}"
+  },
+  "linkReview": {
+    "title": "Link Review",
+    "description": "Accept, reject, allocate, and attach evidence.",
+    "empty": "Select a link to review.",
+    "to": "to {{target}}",
+    "type": "Type",
+    "confidence": "Confidence",
+    "allocation": "Allocation",
+    "fromAmount": "From amount",
+    "reviewNote": "Review note",
+    "accept": "Accept",
+    "reject": "Reject"
+  },
+  "sourceOrGap": {
+    "title": "Source Or Gap",
+    "description": "Add a reviewed root source or explicit missing-history stop.",
+    "sourceType": "Source type",
+    "linkType": "Link type",
+    "label": "Label",
+    "amount": "Amount",
+    "asset": "Asset",
+    "appliesTo": "Applies to",
+    "evidenceNote": "Evidence note",
+    "create": "Create Source Link"
+  },
+  "manualLink": {
+    "title": "Manual Link",
+    "description": "Connect two known transactions with explicit allocation.",
+    "from": "From",
+    "to": "To",
+    "type": "Type",
+    "confidence": "Confidence",
+    "allocation": "Allocation",
+    "fromAmount": "From amount",
+    "reviewNote": "Review note",
+    "add": "Add Reviewed Link"
+  },
+  "gates": {
+    "title": "Gates",
+    "description": "Blockers must clear before export.",
+    "building": "Building reviewed flow…",
+    "previewUnavailable": "No source-funds report can be built for this target yet.",
+    "clear": "Gates clear.",
+    "nextStep": "Next step: {{headline}}",
+    "seeDocs": "(see docs: {{anchor}})"
+  },
+  "disclosure": {
+    "title": "Disclosure",
+    "description": "Exact report exposure.",
+    "evidence": "Evidence",
+    "excluded": "Excluded",
+    "summaryTitle": "Disclosure Summary",
+    "narrative": "This {{purpose}} will disclose the reviewed flow for {{target}}. It will expose {{txids}}, {{evidence}}, {{links}}, and {{sources}}.",
+    "narrativeTarget": "the selected target",
+    "narrativePurpose": "source-of-funds report",
+    "txidCount_one": "{{count}} txid",
+    "txidCount_other": "{{count}} txids",
+    "evidenceCount_one": "{{count}} evidence item",
+    "evidenceCount_other": "{{count}} evidence items",
+    "linkCount_one": "{{count}} reviewed link",
+    "linkCount_other": "{{count}} reviewed links",
+    "sourceCount_one": "{{count}} source category",
+    "sourceCount_other": "{{count}} source categories",
+    "metric": {
+      "txids": "Txids",
+      "evidence": "Evidence",
+      "reviewedLinks": "Reviewed links",
+      "sources": "Sources",
+      "hidden": "Hidden"
+    },
+    "revealMode": "Reveal mode",
+    "noPreview": "No disclosure preview is available yet.",
+    "walletLabels": "Wallet labels",
+    "walletLabelsNone": "None",
+    "walletPrivacyNote": "Kassiber does not include descriptors, xpubs, wallet files, seeds, backend tokens, or unrelated wallet history in the PDF.",
+    "txids": "Txids",
+    "none": "None",
+    "openTitle": "Open {{txid}} on {{label}}",
+    "opening": "Opening…",
+    "noExplorerLink": "No public explorer link",
+    "openError": "Could not open explorer URL."
+  },
+  "sourceMix": {
+    "title": "Source Mix",
+    "empty": "No reviewed sources."
+  },
+  "reviewedFlow": {
+    "title": "Reviewed Flow",
+    "fallbackLinkType": "link",
+    "empty": "No reviewed graph edges yet."
+  },
+  "caseBrief": {
+    "fallbackTarget": "Selected target",
+    "fallbackWallet": "No wallet",
+    "metric": {
+      "transactions": "Transactions",
+      "reviewedLinks": "Reviewed links",
+      "sources": "Sources",
+      "blockers": "Blockers",
+      "batchable": "Batchable"
+    },
+    "noPreview": "Local preview data is not available yet.",
+    "manualReview_one": "{{count}} manual review item.",
+    "manualReview_other": "{{count}} manual review items.",
+    "unresolved": "unresolved"
+  },
+  "flowPath": {
+    "title": "Simplified flow path",
+    "privacyHopDeferred": "Privacy hop deferred",
+    "fallbackRole": "flow",
+    "more": "+{{count}} more"
+  },
+  "coverage": {
+    "sectionTitle": "Historical inbound coverage",
+    "summaryEmpty": "No inbound coverage snapshot",
+    "summary": "{{amount}} BTC fully traced across {{count}} inbound transactions",
+    "computing": "Computing coverage…",
+    "noInbound": "No inbound transactions in this profile yet.",
+    "truncated": "Coverage truncated to {{shown}} of {{total}} inbound transactions ({{notClassified}} not classified). Run <0>source-funds coverage</0> with a higher --max-transactions to compute the full set.",
+    "bucketStats": "{{count}} tx · {{percent}} %",
+    "bucket": {
+      "fullyTraced": "Fully traced",
+      "attested": "Attested",
+      "inReview": "In review",
+      "untraced": "Untraced",
+      "notClassified": "Not classified"
+    }
+  },
+  "recipient": {
+    "empty": "No recipients defined yet. Run <0>source-funds recipients create</0> to set a sticky reveal-mode default per recipient.",
+    "title": "Recipient",
+    "hint": "The recipient's preferred reveal mode is shown as advisory below; your reveal-mode choice is what gets exported.",
+    "ariaLabel": "Recipient",
+    "none": "(no recipient)",
+    "option": "{{label}} - {{kind}} - {{reveal}}",
+    "inactiveSuffix": " (inactive)",
+    "advisory": "{{label}} prefers <0>{{preferred}}</0>. Your current reveal mode is <1>{{current}}</1>.",
+    "applyPreference": "Apply preference"
+  },
+  "select": {
+    "transaction": "Select transaction",
+    "noAttachment": "No attachment"
+  },
+  "evidence": {
+    "label": "Evidence"
+  },
+  "sourceType": {
+    "fiat_purchase": "Fiat purchase",
+    "exchange_withdrawal": "Exchange withdrawal",
+    "mining": "Mining",
+    "income": "Income",
+    "gift": "Gift",
+    "opening_balance_attestation": "Opening balance attestation",
+    "missing_history": "Missing history",
+    "unknown": "Unknown",
+    "unresolved": "Unresolved"
+  },
+  "linkType": {
+    "self_transfer": "Self transfer",
+    "exchange_transfer": "Exchange transfer",
+    "trade": "Trade",
+    "swap": "Swap",
+    "peg_in": "Peg-in",
+    "peg_out": "Peg-out",
+    "lightning_funding": "Lightning funding",
+    "lightning_close": "Lightning close",
+    "lightning_routed": "Lightning routed",
+    "lightning_swap": "Lightning swap",
+    "coinjoin": "Coinjoin",
+    "payjoin": "Payjoin",
+    "manual_source": "Manual source",
+    "missing_history": "Missing history",
+    "link": "Link"
+  },
+  "confidence": {
+    "exact": "Exact",
+    "strong": "Strong",
+    "weak": "Weak",
+    "unknown": "Unknown"
+  },
+  "reveal": {
+    "labels_only": "Labels only",
+    "minimal": "Minimal",
+    "standard": "Standard",
+    "full": "Full"
+  },
+  "linkState": {
+    "suggested": "Suggested",
+    "reviewed": "Reviewed",
+    "rejected": "Rejected"
+  },
+  "method": {
+    "same_external_id": "Same external id",
+    "transaction_pair": "Transaction pair",
+    "provider_trade_id": "Provider trade id",
+    "provider_order_id": "Provider order id",
+    "provider_payment_id": "Provider payment id",
+    "provider_exchange_order_id": "Provider exchange order id",
+    "provider_ledger_id": "Provider ledger id",
+    "manual": "Manual"
+  },
+  "toast": {
+    "suggestionsUpdated": "Suggestions updated",
+    "evidenceMatched": "Evidence matched",
+    "linksFound_one": "{{count}} new source-funds link.",
+    "linksFound_other": "{{count}} new source-funds links.",
+    "deterministicReviewed": "Deterministic hops reviewed",
+    "deterministicBody": "{{reviewed}} reviewed, {{skipped}} left for manual review.",
+    "linkAccepted": "Link accepted",
+    "linkRejected": "Link rejected",
+    "linkReviewedBody": "{{type}} reviewed.",
+    "linkRejectedBody": "{{type}} rejected.",
+    "manualLinkAdded": "Manual link added",
+    "manualLinkBody": "The reviewed flow has been updated.",
+    "gapMarked": "Gap marked reviewed",
+    "sourceLinked": "Source linked",
+    "sourcePathBody": "The source-funds path has been updated."
+  }
+}

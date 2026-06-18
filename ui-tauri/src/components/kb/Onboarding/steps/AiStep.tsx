@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import { Button } from "@/components/ui/button";
 
 import { AiFields } from "../AiFields";
@@ -19,10 +21,11 @@ export const AiStep = ({
   currentStep,
   totalSteps,
 }: StepComponentProps) => {
+  const { t } = useTranslation(["onboarding", "common"]);
   return (
     <OnboardingStepFrame>
       <OnboardingStepLeftWrapper
-        title="Choose AI assistance"
+        title={t("aiStep.title")}
         currentStep={currentStep}
         totalSteps={totalSteps}
         goBack={goBack}
@@ -38,7 +41,7 @@ export const AiStep = ({
 
           <OnboardingStepActions>
             <Button type="submit" className="w-full" disabled={!canContinue}>
-              Continue
+              {t("common:actions.continue")}
             </Button>
           </OnboardingStepActions>
         </form>

@@ -283,6 +283,45 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         summary_template="Read wallet coins",
     ),
     ToolEntry(
+        name="ui.wallets.identify",
+        description=(
+            "Reconcile a list of addresses and/or transaction ids against the "
+            "active profile's wallets: for each input, report whether it belongs "
+            "to a wallet (naming the wallet) or is external/unknown, and classify "
+            "each transaction as a self-transfer, outbound payment, or inbound "
+            "receipt. Matches local data only (synced inventory, imported "
+            "transactions, offline descriptor derivation) and does NOT contact "
+            "the network. Receive-vs-change branch and derivation geometry are "
+            "intentionally not exposed; never returns descriptors, xpubs, "
+            "scriptPubKeys, derivation paths, address indices, blinding keys, "
+            "backend URLs/tokens, or raw wallet config."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "addresses": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Addresses to check.",
+                },
+                "txids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Transaction ids to check.",
+                },
+                "text": {
+                    "type": "string",
+                    "description": "Free-form text with one address or txid per line.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_wallets_identify",
+        daemon_kind="ui.wallets.identify",
+        summary_template="Identify owners",
+    ),
+    ToolEntry(
         name="ui.backends.list",
         description=(
             "Read sync backends referenced by the active profile with coarse URL "
@@ -1042,6 +1081,13 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                     "enum": ["carrying-value", "taxable"],
                 },
                 "notes": {"type": "string"},
+                "out_amount": {
+                    "type": "string",
+                    "description": (
+                        "Optional BTC amount from the outbound used by the cross-asset "
+                        "swap; the remainder can resolve as a same-asset self-transfer."
+                    ),
+                },
             },
         },
         kind_class="mutating",
@@ -1327,7 +1373,7 @@ export or back up.
 
 Before answering workspace-specific questions, use safe read tools such as
 ui.workspace.health, ui.next_actions, ui.wallets.list, ui.wallets.utxos,
-ui.backends.list,
+ui.wallets.identify, ui.backends.list,
 ui.transactions.list, ui.transactions.extremes, ui.transactions.search,
 ui.journals.quarantine, ui.journals.events.list,
 ui.journals.transfers.list, ui.transfers.review_context, ui.rates.summary,

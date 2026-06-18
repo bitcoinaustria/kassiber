@@ -8,6 +8,7 @@ import {
   Filter,
 } from "lucide-react";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { Button } from "@/components/ui/button";
@@ -29,9 +30,9 @@ import { cn } from "@/lib/utils";
 import {
   blurClass,
   formatSignedDisplayMoney,
-  overviewFlowLabels,
+  overviewFlowLabelKeys,
   overviewFlowStyles,
-  statusLabels,
+  statusLabelKeys,
   statusStyles,
   transactionBtc,
   transactionDetailHref,
@@ -42,13 +43,13 @@ import {
 
 export const RecentTransactionsTable = ({
   className,
-  title = "Recent Transactions",
+  title,
   transactions,
   hideSensitive,
   currency,
   priceEur,
   fiatCurrency = "EUR",
-  showAllLabel = "Show all",
+  showAllLabel,
   showAllTo = "/transactions",
   onOpenTransaction,
 }: {
@@ -63,6 +64,9 @@ export const RecentTransactionsTable = ({
   showAllTo?: "/transactions" | null;
   onOpenTransaction?: (transaction: Transaction) => void;
 }) => {
+  const { t } = useTranslation("overview");
+  const resolvedTitle = title ?? t("recentTx.title");
+  const resolvedShowAllLabel = showAllLabel ?? t("recentTx.showAll");
   const [statusFilter, setStatusFilter] = React.useState<
     TransactionStatus | "all"
   >("all");
@@ -142,7 +146,7 @@ export const RecentTransactionsTable = ({
       <div className="flex items-center justify-between gap-3 px-3 pt-3 sm:px-4">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">
-            {title}
+            {resolvedTitle}
           </span>
           <span className="ml-1 inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-[10px] font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
             {filteredTransactions.length}
@@ -152,7 +156,7 @@ export const RecentTransactionsTable = ({
         <div className="flex items-center gap-2">
           {showAllTo ? (
             <Button asChild variant="ghost" size="sm" className="h-8 sm:h-9">
-              <Link to={showAllTo}>{showAllLabel}</Link>
+              <Link to={showAllTo}>{resolvedShowAllLabel}</Link>
             </Button>
           ) : null}
           <DropdownMenu>
@@ -163,16 +167,16 @@ export const RecentTransactionsTable = ({
                 className="h-8 gap-1.5 sm:h-9 sm:gap-2"
               >
                 <Filter className="size-3.5 sm:size-4" aria-hidden="true" />
-                <span className="hidden sm:inline">Filter</span>
+                <span className="hidden sm:inline">{t("recentTx.filter")}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-[180px]">
-              <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
+              <DropdownMenuLabel>{t("recentTx.filterByStatus")}</DropdownMenuLabel>
               <DropdownMenuCheckboxItem
                 checked={statusFilter === "all"}
                 onCheckedChange={() => setStatusFilter("all")}
               >
-                All Statuses
+                {t("recentTx.allStatuses")}
               </DropdownMenuCheckboxItem>
               {transactionStatuses.map((status) => (
                 <DropdownMenuCheckboxItem
@@ -180,7 +184,7 @@ export const RecentTransactionsTable = ({
                   checked={statusFilter === status}
                   onCheckedChange={() => setStatusFilter(status)}
                 >
-                  {statusLabels[status]}
+                  {t(statusLabelKeys[status])}
                 </DropdownMenuCheckboxItem>
               ))}
             </DropdownMenuContent>
@@ -191,34 +195,34 @@ export const RecentTransactionsTable = ({
       <div className="px-3 pt-2.5 pb-3 sm:px-4">
         {paginatedTransactions.length === 0 ? (
           <div className="flex h-24 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
-            No transactions found.
+            {t("recentTx.empty")}
           </div>
         ) : (
           <div className="divide-y rounded-lg border bg-background/50">
-            {paginatedTransactions.map((t) => {
-              const flow = t.flow ?? "incoming";
+            {paginatedTransactions.map((tx) => {
+              const flow = tx.flow ?? "incoming";
               const FlowIcon =
                 flow === "incoming"
                   ? ArrowDownRight
                   : flow === "outgoing"
                     ? ArrowUpRight
                     : ArrowLeftRight;
-              const amountBtc = transactionBtc(t, priceEur);
-              const rowFiatCurrency = t.fiatCurrency ?? fiatCurrency;
+              const amountBtc = transactionBtc(tx, priceEur);
+              const rowFiatCurrency = tx.fiatCurrency ?? fiatCurrency;
               const primaryAmount =
                 currency === "btc"
                   ? formatBtc(amountBtc, { sign: true })
                   : formatSignedDisplayMoney(
-                      t.amount,
+                      tx.amount,
                       priceEur,
                       currency,
                       rowFiatCurrency,
                     );
               const secondaryAmount =
                 currency === "btc"
-                  ? t.amount === null
+                  ? tx.amount === null
                     ? MISSING_FIAT_LABEL
-                    : formatFiatAmount(Math.abs(t.amount), rowFiatCurrency)
+                    : formatFiatAmount(Math.abs(tx.amount), rowFiatCurrency)
                   : formatBtc(amountBtc);
               const amountTone =
                 flow === "incoming"
@@ -226,8 +230,9 @@ export const RecentTransactionsTable = ({
                   : flow === "outgoing"
                     ? "text-red-700 dark:text-red-300"
                     : "text-muted-foreground";
-              const primaryTag = t.tags[0] ?? overviewFlowLabels[flow];
-              const extraTags = Math.max(0, t.tags.length - 1);
+              const flowLabel = t(overviewFlowLabelKeys[flow]);
+              const primaryTag = tx.tags[0] ?? flowLabel;
+              const extraTags = Math.max(0, tx.tags.length - 1);
               const rowClassName =
                 "group flex min-w-0 items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
               const rowContent = (
@@ -248,7 +253,7 @@ export const RecentTransactionsTable = ({
                         blurClass(hideSensitive),
                       )}
                     >
-                      {t.counterparty}
+                      {tx.counterparty}
                     </span>
                     <span className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
                       <span
@@ -267,22 +272,22 @@ export const RecentTransactionsTable = ({
                       <span
                         className={cn(
                           "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium",
-                          statusStyles[t.status],
+                          statusStyles[tx.status],
                         )}
                       >
-                        {statusLabels[t.status]}
+                        {t(statusLabelKeys[tx.status])}
                       </span>
                       <span className="truncate text-[10px] text-muted-foreground">
-                        {t.date}
+                        {tx.date}
                       </span>
-                      {t.scopeLabel ? (
+                      {tx.scopeLabel ? (
                         <span
                           className={cn(
                             "truncate text-[10px] font-medium text-muted-foreground",
                             blurClass(hideSensitive),
                           )}
                         >
-                          {t.scopeLabel}
+                          {tx.scopeLabel}
                         </span>
                       ) : null}
                     </span>
@@ -292,7 +297,7 @@ export const RecentTransactionsTable = ({
                         blurClass(hideSensitive),
                       )}
                     >
-                      {overviewFlowLabels[flow]} · {t.txid}
+                      {flowLabel} · {tx.txid}
                     </span>
                   </span>
                   <span className="ml-auto flex shrink-0 flex-col items-end gap-0.5 pl-2 text-right">
@@ -319,10 +324,10 @@ export const RecentTransactionsTable = ({
               if (onOpenTransaction) {
                 return (
                   <button
-                    key={t.id}
+                    key={tx.id}
                     type="button"
                     className={cn(rowClassName, "w-full")}
-                    onClick={() => onOpenTransaction(t)}
+                    onClick={() => onOpenTransaction(tx)}
                   >
                     {rowContent}
                   </button>
@@ -330,8 +335,8 @@ export const RecentTransactionsTable = ({
               }
               return (
                 <Link
-                  key={t.id}
-                  to={transactionDetailHref(t.id)}
+                  key={tx.id}
+                  to={transactionDetailHref(tx.id)}
                   className={rowClassName}
                 >
                   {rowContent}
@@ -344,7 +349,11 @@ export const RecentTransactionsTable = ({
 
       <div className="flex items-center justify-between border-t px-3 py-2.5 text-[10px] text-muted-foreground sm:px-4 sm:text-xs">
         <span>
-          {startRow}-{endRow} of {filteredTransactions.length}
+          {t("recentTx.rangeOfTotal", {
+            start: startRow,
+            end: endRow,
+            total: filteredTransactions.length,
+          })}
         </span>
         <div className="flex items-center gap-1">
           <Button
@@ -353,7 +362,7 @@ export const RecentTransactionsTable = ({
             className="size-7"
             onClick={() => goToPage(currentPage - 1)}
             disabled={currentPage === 1}
-            aria-label="Go to previous page"
+            aria-label={t("recentTx.previousPage")}
           >
             <ChevronLeft className="size-3.5" />
           </Button>
@@ -363,7 +372,7 @@ export const RecentTransactionsTable = ({
             className="size-7"
             onClick={() => goToPage(currentPage + 1)}
             disabled={currentPage === totalPages}
-            aria-label="Go to next page"
+            aria-label={t("recentTx.nextPage")}
           >
             <ChevronRight className="size-3.5" />
           </Button>

@@ -168,6 +168,45 @@ def set_transaction_excluded(
     }
 
 
+def _guard_excluding_paired_leg(conn, profile_id, tx_id):
+    """Refuse to exclude a transaction that is still a leg of an active pair or
+    direct swap payout.
+
+    The journal pipeline filters excluded rows but loads pair/payout records by
+    ``deleted_at IS NULL`` only, so excluding one leg orphans the survivor into a
+    phantom disposal (or a fresh-basis acquisition with the original basis lost).
+    Require the user to unpair / delete the payout first.
+    """
+    pair = conn.execute(
+        "SELECT id FROM transaction_pairs WHERE profile_id = ? AND deleted_at IS NULL "
+        "AND (out_transaction_id = ? OR in_transaction_id = ?) LIMIT 1",
+        (profile_id, tx_id, tx_id),
+    ).fetchone()
+    if pair:
+        pair_id = pair["id"] if hasattr(pair, "keys") else pair[0]
+        raise AppError(
+            f"Transaction is a leg of active pair {pair_id}; excluding it would "
+            f"orphan the other leg into a phantom journal entry.",
+            code="conflict",
+            hint=f"Unpair first: `kassiber transfers unpair --pair-id {pair_id}`.",
+            retryable=False,
+        )
+    payout = conn.execute(
+        "SELECT id FROM direct_swap_payouts WHERE profile_id = ? AND deleted_at IS NULL "
+        "AND out_transaction_id = ? LIMIT 1",
+        (profile_id, tx_id),
+    ).fetchone()
+    if payout:
+        payout_id = payout["id"] if hasattr(payout, "keys") else payout[0]
+        raise AppError(
+            f"Transaction has an active direct swap payout {payout_id}; excluding it "
+            f"would drop the payout's synthetic swap legs.",
+            code="conflict",
+            hint=f"Delete it first: `kassiber transfers payouts delete --payout-id {payout_id}`.",
+            retryable=False,
+        )
+
+
 def _clean_transaction_note(note):
     if note is None:
         return None
@@ -469,6 +508,8 @@ def update_transaction_metadata(
     clean_tags = _clean_transaction_tags(tags)
     if excluded is not None and not isinstance(excluded, bool):
         raise AppError("excluded must be a boolean", code="validation", retryable=False)
+    if excluded is True:
+        _guard_excluding_paired_leg(conn, profile["id"], tx["id"])
     if taxable_set and taxable is not None and not isinstance(taxable, bool):
         raise AppError("taxable must be a boolean", code="validation", retryable=False)
     clean_review_status = (

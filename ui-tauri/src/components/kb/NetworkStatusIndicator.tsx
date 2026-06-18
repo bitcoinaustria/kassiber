@@ -1,6 +1,8 @@
 import { RefreshCw, Wifi, WifiOff } from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -133,42 +135,46 @@ function rowHealthStatus(
   return records[row.id]?.status ?? "unknown";
 }
 
-function connectionStatusLabel(status: ConnectionHealthStatus) {
+type TFn = TFunction<"chrome">;
+
+function connectionStatusLabel(status: ConnectionHealthStatus, t: TFn) {
   switch (status) {
     case "healthy":
-      return "Healthy";
+      return t("network.health.healthy");
     case "unhealthy":
-      return "Failed";
+      return t("network.health.failed");
     case "checking":
-      return "Checking";
+      return t("network.health.checking");
     case "unavailable":
-      return "Not checkable";
+      return t("network.health.notCheckable");
     case "unknown":
     default:
-      return "Not checked";
+      return t("network.health.notChecked");
   }
 }
 
 function connectionStatusText(
   row: ConnectionHealthRow,
   status: ConnectionHealthStatus,
+  t: TFn,
 ) {
   if (status === "unavailable" && row.probeKind === "unsupported") {
-    return "Check skipped";
+    return t("network.health.skipped");
   }
-  return connectionStatusLabel(status);
+  return connectionStatusLabel(status, t);
 }
 
 function connectionStatusTitle(
   row: ConnectionHealthRow,
   status: ConnectionHealthStatus,
+  t: TFn,
   record?: ConnectionHealthRecord,
 ) {
   if (record?.message) return record.message;
   if (status === "unavailable" && row.probeKind === "unsupported") {
-    return "Saved HTTP explorer endpoints are listed here but not actively probed from the shell. The health checker probes Electrum/Fulcrum backends and approved display-only HTTP checks.";
+    return t("network.unsupportedTitle");
   }
-  return connectionStatusLabel(status);
+  return connectionStatusLabel(status, t);
 }
 
 function connectionDotClassName(status: ConnectionHealthStatus) {
@@ -201,17 +207,17 @@ function connectionIndicatorClassName(tone: ConnectionIndicatorTone) {
   }
 }
 
-function connectionIndicatorLabel(tone: ConnectionIndicatorTone) {
+function connectionIndicatorLabel(tone: ConnectionIndicatorTone, t: TFn) {
   switch (tone) {
     case "error":
-      return "Connection failures";
+      return t("network.indicator.errors");
     case "warning":
-      return "Connection issue";
+      return t("network.indicator.warning");
     case "online":
-      return "Connections online";
+      return t("network.indicator.online");
     case "neutral":
     default:
-      return "Connections not checked";
+      return t("network.indicator.neutral");
   }
 }
 
@@ -224,6 +230,7 @@ export function NetworkStatusIndicator({
 }: {
   daemonEnabled: boolean;
 }) {
+  const { t } = useTranslation("chrome");
   const navigate = useNavigate();
   const [status, setStatus] = React.useState<NetworkStatus>(() =>
     readNetworkStatus(),
@@ -276,7 +283,7 @@ export function NetworkStatusIndicator({
   const label =
     status === "offline"
       ? networkStatusLabel(status)
-      : connectionIndicatorLabel(indicatorTone);
+      : connectionIndicatorLabel(indicatorTone, t);
   const Icon = status === "offline" ? WifiOff : Wifi;
   const lastCheckedAt = Object.values(healthRecords)
     .map((record) => record.checkedAt)
@@ -344,8 +351,8 @@ export function NetworkStatusIndicator({
                 message:
                   payload?.logs?.at(-1) ??
                   (payload?.ok
-                    ? "Connection check passed."
-                    : "Connection check failed."),
+                    ? t("network.checkPassed")
+                    : t("network.checkFailed")),
                 checkedAt: now,
               },
             ];
@@ -358,7 +365,7 @@ export function NetworkStatusIndicator({
                 message:
                   error instanceof Error
                     ? error.message
-                    : "Connection check failed.",
+                    : t("network.checkFailed"),
                 checkedAt: now,
               },
             ];
@@ -374,7 +381,7 @@ export function NetworkStatusIndicator({
       return next;
     });
     setChecking(false);
-  }, [canCheckConnections, checkableRows, testElectrum, testHttp]);
+  }, [canCheckConnections, checkableRows, t, testElectrum, testHttp]);
 
   React.useEffect(() => {
     if (!shouldRunImmediateCheck) return;
@@ -439,7 +446,7 @@ export function NetworkStatusIndicator({
       >
         <div className="flex items-center justify-between gap-2 px-2 py-1.5">
           <DropdownMenuLabel className="p-0">
-            Outbound connections
+            {t("network.outboundConnections")}
           </DropdownMenuLabel>
           <Button
             type="button"
@@ -447,8 +454,8 @@ export function NetworkStatusIndicator({
             size="icon"
             className="size-7"
             disabled={!canCheckConnections}
-            aria-label="Check connections"
-            title="Check connections"
+            aria-label={t("network.checkConnections")}
+            title={t("network.checkConnections")}
             onClick={(event) => {
               event.preventDefault();
               void runConnectionChecks();
@@ -464,33 +471,34 @@ export function NetworkStatusIndicator({
         <div className="px-1 py-1">
           {backendSettingsQuery.isLoading ? (
             <div className="px-2 py-4 text-sm text-muted-foreground">
-              Loading connections...
+              {t("network.loading")}
             </div>
           ) : backendSettingsQuery.error ? (
             <div className="px-2 py-4 text-sm text-red-700 dark:text-red-300">
-              Could not load configured connections.
+              {t("network.loadError")}
             </div>
           ) : connectionRows.length === 0 ? (
             <div className="px-2 py-4 text-sm text-muted-foreground">
-              No outbound connections configured.
+              {t("network.noneConfigured")}
             </div>
           ) : (
             <Table className="table-fixed">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-8">State</TableHead>
-                  <TableHead className="w-[42%]">Connection</TableHead>
-                  <TableHead className="hidden sm:table-cell">Endpoint</TableHead>
+                  <TableHead className="w-8">{t("network.columnState")}</TableHead>
+                  <TableHead className="w-[42%]">{t("network.columnConnection")}</TableHead>
+                  <TableHead className="hidden sm:table-cell">{t("network.columnEndpoint")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {connectionRows.map((row) => {
                   const rowStatus = rowHealthStatus(row, healthRecords);
                   const record = healthRecords[row.id];
-                  const rowStatusText = connectionStatusText(row, rowStatus);
+                  const rowStatusText = connectionStatusText(row, rowStatus, t);
                   const rowStatusTitle = connectionStatusTitle(
                     row,
                     rowStatus,
+                    t,
                     record,
                   );
                   return (
@@ -541,7 +549,9 @@ export function NetworkStatusIndicator({
         </div>
         {lastCheckedAt ? (
           <div className="border-t px-3 py-2 text-[11px] text-muted-foreground">
-            Last checked {new Date(lastCheckedAt).toLocaleTimeString()}
+            {t("network.lastChecked", {
+              time: new Date(lastCheckedAt).toLocaleTimeString(),
+            })}
           </div>
         ) : null}
       </DropdownMenuContent>

@@ -9,6 +9,7 @@
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { ArrowDown } from "lucide-react";
 
 import { ChatMessage } from "./ChatMessage";
@@ -29,6 +30,7 @@ export function ChatThread({
   className,
   scrollable = true,
 }: ChatThreadProps) {
+  const { t } = useTranslation("assistant");
   const containerRef = React.useRef<HTMLDivElement>(null);
   const messageCountRef = React.useRef(messages.length);
   const stickyRef = React.useRef(true);
@@ -87,8 +89,8 @@ export function ChatThread({
           size="icon-lg"
           className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-border/70 bg-background/90 text-foreground shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur hover:bg-muted dark:bg-zinc-950/80"
           onClick={() => scrollToBottom("smooth")}
-          aria-label="Scroll to latest message"
-          title="Scroll to latest message"
+          aria-label={t("thread.scrollToLatest")}
+          title={t("thread.scrollToLatest")}
         >
           <ArrowDown className="h-5 w-5" aria-hidden="true" />
         </Button>

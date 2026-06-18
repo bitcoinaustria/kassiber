@@ -74,6 +74,7 @@ from .handlers import (
     derive_wallet_targets,
     emit,
     get_journal_event,
+    identify_wallet_owners,
     import_into_wallet,
     inspect_transfer_audit,
     list_direct_swap_payouts,
@@ -103,6 +104,7 @@ from ..core import commercial as core_commercial
 from ..core import lightning as core_lightning
 from ..core.lightning import lnd as _core_lightning_lnd  # noqa: F401 — registers the LND adapter on import.
 from ..core import metadata as core_metadata
+from ..core import ownership as core_ownership
 from ..core import rates as core_rates
 from ..core import reports as core_reports
 from ..core import samourai as core_samourai
@@ -249,6 +251,20 @@ def _add_austrian_e1kv_pdf_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--file", required=True)
 
 
+def _add_exit_tax_report_args(parser: argparse.ArgumentParser) -> None:
+    _add_workspace_profile_args(parser)
+    parser.add_argument(
+        "--departure-date",
+        help="Departure date (YYYY-MM-DD) the deemed disposal is valued at; defaults to today",
+    )
+    parser.add_argument(
+        "--destination",
+        choices=["eu_eea", "third_country"],
+        default="eu_eea",
+        help="Destination jurisdiction class — eu_eea defers collection until sale, third_country is due immediately",
+    )
+
+
 def _lightning_window_days(value: str) -> int:
     """argparse ``type`` for the ``--window-days`` flag.
 
@@ -367,6 +383,16 @@ def _source_funds_hooks() -> core_source_funds.SourceFundsHooks:
     )
 
 
+def _emit_wallet_identify(args: argparse.Namespace, report) -> int:
+    """JSON keeps the full report (rich per-leg detail); table/plain/csv get
+    flat, column-aligned rows — the paste-list-in / annotated-list-out shape
+    that drives spreadsheet reconciliation."""
+    if getattr(args, "format", "table") == "json":
+        return emit(args, report)
+    rows = [core_ownership.flatten_result_row(item) for item in report.get("results", [])]
+    return emit(args, rows)
+
+
 def _emit_austrian_e1kv_report(
     args: argparse.Namespace,
     conn: sqlite3.Connection,
@@ -418,6 +444,38 @@ def _emit_austrian_e1kv_pdf(
             tax_year=args.year,
         ),
     )
+
+
+def _emit_exit_tax_report(
+    args: argparse.Namespace,
+    conn: sqlite3.Connection,
+    report_hooks,
+) -> int:
+    if args.format in {"table", "plain"}:
+        return emit(
+            args,
+            "\n".join(
+                core_reports.build_exit_tax_report_lines(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    report_hooks,
+                    departure_date=args.departure_date,
+                    destination=args.destination,
+                )
+            ),
+        )
+    report = core_reports.report_exit_tax(
+        conn,
+        args.workspace,
+        args.profile,
+        report_hooks,
+        departure_date=args.departure_date,
+        destination=args.destination,
+    )
+    if args.format == "csv":
+        return emit(args, report["lots"])
+    return emit(args, report)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -738,7 +796,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Tax country for the book (CLI profile; currently supported: {', '.join(supported_tax_countries())})",
     )
     profiles_create.add_argument("--tax-long-term-days", type=int, default=DEFAULT_LONG_TERM_DAYS)
-    profiles_create.add_argument("--gains-algorithm", choices=list(RP2_ACCOUNTING_METHODS), default="FIFO")
+    profiles_create.add_argument("--gains-algorithm", choices=list(RP2_ACCOUNTING_METHODS))
 
     profiles_get = profiles_sub.add_parser("get")
     profiles_get.add_argument("--workspace")
@@ -755,6 +813,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     profiles_set.add_argument("--tax-long-term-days", type=int)
     profiles_set.add_argument("--gains-algorithm", choices=list(RP2_ACCOUNTING_METHODS))
+    profiles_set.add_argument(
+        "--require-coarse-review",
+        dest="require_coarse_review",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Quarantine coarse (daily/monthly) priced events for manual review "
+        "instead of accepting them at the coarse spot price (default: accept).",
+    )
 
     accounts = sub.add_parser(
         "accounts",
@@ -985,6 +1051,50 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_derive.add_argument("--branch", default="all")
     wallets_derive.add_argument("--start", type=int, default=0)
     wallets_derive.add_argument("--count", type=int)
+    wallets_identify = wallets_sub.add_parser(
+        "identify",
+        help="Check whether addresses / txids belong to any wallet (reconciliation)",
+    )
+    wallets_identify.add_argument("--workspace")
+    wallets_identify.add_argument("--profile")
+    wallets_identify.add_argument(
+        "--wallet",
+        action="append",
+        help="Restrict to this wallet id/label (repeatable; default: all wallets)",
+    )
+    wallets_identify.add_argument(
+        "--address", action="append", help="Address to check (repeatable)"
+    )
+    wallets_identify.add_argument(
+        "--txid", action="append", help="Transaction id to check (repeatable)"
+    )
+    wallets_identify.add_argument(
+        "--candidate",
+        action="append",
+        help="Address or txid, auto-detected (repeatable)",
+    )
+    wallets_identify.add_argument(
+        "--file", help="File with one address/txid per line (# comments allowed)"
+    )
+    wallets_identify.add_argument(
+        "--csv",
+        help="CSV/spreadsheet to smart-import: harvests addresses/txids from any common shape",
+    )
+    wallets_identify.add_argument(
+        "--scan-to-index",
+        type=int,
+        default=core_ownership.DEFAULT_SCAN_TO_INDEX,
+        help="Max derivation index per branch when scanning descriptor wallets",
+    )
+    wallets_identify.add_argument(
+        "--verify-on-chain",
+        action="store_true",
+        help="Fetch txids not in local history from a backend for per-leg classification",
+    )
+    wallets_identify.add_argument(
+        "--verify-backend",
+        help="Backend name for --verify-on-chain (default: active backend)",
+    )
 
     transactions = sub.add_parser("transactions")
     tx_sub = transactions.add_subparsers(dest="transactions_command", required=True)
@@ -1295,6 +1405,12 @@ def build_parser() -> argparse.ArgumentParser:
     transfers_pair.add_argument("--kind", choices=list(TRANSFER_PAIR_KINDS), default="manual")
     transfers_pair.add_argument("--policy", choices=list(TRANSFER_PAIR_POLICIES), default="carrying-value")
     transfers_pair.add_argument("--note", dest="note")
+    transfers_pair.add_argument(
+        "--out-amount",
+        dest="out_amount",
+        help="Portion of the outbound (BTC) that was swapped on a cross-asset pair; "
+        "the remainder is treated as a same-asset self-transfer (split spend).",
+    )
     transfers_unpair = transfers_sub.add_parser("unpair")
     transfers_unpair.add_argument("--workspace")
     transfers_unpair.add_argument("--profile")
@@ -1315,6 +1431,12 @@ def build_parser() -> argparse.ArgumentParser:
     transfers_payouts_create.add_argument("--payout-fiat-value", dest="payout_fiat_value")
     transfers_payouts_create.add_argument("--payout-external-id", dest="payout_external_id")
     transfers_payouts_create.add_argument("--counterparty")
+    transfers_payouts_create.add_argument(
+        "--out-amount",
+        dest="out_amount",
+        help="Portion of the outbound (BTC) paid through the direct payout; "
+        "the remainder can still resolve as a same-asset self-transfer.",
+    )
     transfers_payouts_create.add_argument("--policy", choices=list(TRANSFER_PAIR_POLICIES), default="carrying-value")
     transfers_payouts_create.add_argument("--note", dest="note")
     transfers_payouts_delete = transfers_payouts_sub.add_parser("delete")
@@ -1698,6 +1820,8 @@ def build_parser() -> argparse.ArgumentParser:
     for report_name in ("austrian-e1kv", "austrian-tax-summary"):
         _add_austrian_e1kv_report_args(reports_sub.add_parser(report_name))
 
+    _add_exit_tax_report_args(reports_sub.add_parser("exit-tax"))
+
     balance_history = reports_sub.add_parser("balance-history")
     balance_history.add_argument("--workspace")
     balance_history.add_argument("--profile")
@@ -1832,6 +1956,11 @@ def build_parser() -> argparse.ArgumentParser:
     export_austrian_e1kv_csv.add_argument("--profile")
     export_austrian_e1kv_csv.add_argument("--year", type=int, required=True, help="Four-digit tax year")
     export_austrian_e1kv_csv.add_argument("--dir", required=True)
+
+    for export_name in ("export-exit-tax-pdf", "export-exit-tax-xlsx"):
+        export_exit_tax = reports_sub.add_parser(export_name)
+        _add_exit_tax_report_args(export_exit_tax)
+        export_exit_tax.add_argument("--file", required=True)
 
     rates = sub.add_parser("rates")
     rates_sub = rates.add_subparsers(dest="rates_command", required=True)
@@ -2087,12 +2216,13 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 "tax_country": args.tax_country,
                 "tax_long_term_days": args.tax_long_term_days,
                 "gains_algorithm": args.gains_algorithm,
+                "require_coarse_review": args.require_coarse_review,
             }
             if all(v is None for v in updates.values()):
                 raise AppError(
                     "profiles set requires at least one field to update",
                     code="validation",
-                    hint="Pass one or more of --label, --fiat-currency, --tax-country, --tax-long-term-days, --gains-algorithm",
+                    hint="Pass one or more of --label, --fiat-currency, --tax-country, --tax-long-term-days, --gains-algorithm, --require-coarse-review",
                 )
             return emit(
                 args,
@@ -2399,6 +2529,25 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     branch=args.branch,
                     start=args.start,
                     count=args.count,
+                ),
+            )
+        if args.wallets_command == "identify":
+            return _emit_wallet_identify(
+                args,
+                identify_wallet_owners(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    wallet_refs=args.wallet,
+                    addresses=args.address,
+                    txids=args.txid,
+                    candidates=args.candidate,
+                    file=args.file,
+                    csv=args.csv,
+                    scan_to_index=args.scan_to_index,
+                    verify_on_chain=args.verify_on_chain,
+                    verify_backend=args.verify_backend,
+                    runtime_config=getattr(args, "runtime_config", None),
                 ),
             )
     if args.command == "transactions":
@@ -2874,6 +3023,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     kind=args.kind,
                     policy=args.policy,
                     notes=args.note,
+                    out_amount=args.out_amount,
                 ),
             )
         if args.transfers_command == "unpair":
@@ -2900,6 +3050,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                         counterparty=args.counterparty,
                         policy=args.policy,
                         notes=args.note,
+                        out_amount=args.out_amount,
                     ),
                 )
             if args.payouts_command == "delete":
@@ -3411,6 +3562,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             )
         if args.reports_command in {"austrian-e1kv", "austrian-tax-summary"}:
             return _emit_austrian_e1kv_report(args, conn, report_hooks)
+        if args.reports_command == "exit-tax":
+            return _emit_exit_tax_report(args, conn, report_hooks)
         if args.reports_command == "balance-sheet":
             return emit(
                 args,
@@ -3616,6 +3769,32 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.dir,
                     report_hooks,
                     tax_year=args.year,
+                ),
+            )
+        if args.reports_command == "export-exit-tax-pdf":
+            return emit(
+                args,
+                core_reports.export_exit_tax_pdf_report(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.file,
+                    report_hooks,
+                    departure_date=args.departure_date,
+                    destination=args.destination,
+                ),
+            )
+        if args.reports_command == "export-exit-tax-xlsx":
+            return emit(
+                args,
+                core_reports.export_exit_tax_xlsx_report(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.file,
+                    report_hooks,
+                    departure_date=args.departure_date,
+                    destination=args.destination,
                 ),
             )
     if args.command == "rates":

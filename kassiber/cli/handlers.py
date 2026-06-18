@@ -37,6 +37,7 @@ from ..core import imports as core_imports
 from ..core.lightning import cln as core_lightning_cln
 from ..core import metadata as core_metadata
 from ..core import output_inventory as core_output_inventory
+from ..core import ownership as core_ownership
 from ..core import chat_history as core_chat_history
 from ..core import pricing
 from ..core import rates as core_rates
@@ -45,6 +46,7 @@ from ..core import saved_views as core_saved_views
 from ..core import swap_rules as core_swap_rules
 from ..core import sync as core_sync
 from ..core import sync_backends as core_sync_backends
+from ..core import tax_events as core_tax_events
 from ..core import transfer_matching as core_transfer_matching
 from ..core import wallets as core_wallets
 from ..core.engines import TaxEngineLedgerInputs, build_tax_engine
@@ -338,6 +340,7 @@ def _pair_to_dict(row):
     confidence_at_pair = row["confidence_at_pair"] if "confidence_at_pair" in keys else None
     pair_source = row["pair_source"] if "pair_source" in keys else None
     deleted_at = row["deleted_at"] if "deleted_at" in keys else None
+    out_amount = row["out_amount"] if "out_amount" in keys else None
     return {
         "id": row["id"],
         "workspace_id": row["workspace_id"],
@@ -351,6 +354,7 @@ def _pair_to_dict(row):
         "swap_fee_kind": swap_fee_kind,
         "confidence_at_pair": confidence_at_pair,
         "pair_source": pair_source,
+        "out_amount": int(out_amount) if out_amount is not None else None,
         "deleted_at": deleted_at,
         "created_at": row["created_at"],
     }
@@ -360,6 +364,7 @@ def _direct_payout_to_dict(row):
     keys = set(row.keys()) if hasattr(row, "keys") else set()
     payout_fiat_value = row["payout_fiat_value"] if "payout_fiat_value" in keys else None
     swap_fee_msat = row["swap_fee_msat"] if "swap_fee_msat" in keys else None
+    out_amount = row["out_amount"] if "out_amount" in keys else None
     return {
         "id": row["id"],
         "workspace_id": row["workspace_id"],
@@ -377,6 +382,7 @@ def _direct_payout_to_dict(row):
         "notes": row["notes"],
         "swap_fee_msat": int(swap_fee_msat) if swap_fee_msat is not None else None,
         "swap_fee_kind": row["swap_fee_kind"],
+        "out_amount": int(out_amount) if out_amount is not None else None,
         "deleted_at": row["deleted_at"],
         "created_at": row["created_at"],
     }
@@ -401,6 +407,7 @@ def create_transaction_pair(
     *,
     pair_source="manual",
     confidence_at_pair=None,
+    out_amount=None,
     commit=True,
 ):
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
@@ -447,6 +454,23 @@ def create_transaction_pair(
                 code="validation",
                 hint="Re-run with --policy taxable, or use an Austrian profile for cross-asset carrying-value swaps.",
             )
+    out_amount_msat = None
+    if out_amount is not None:
+        if out_row["asset"] == in_row["asset"]:
+            raise AppError(
+                "--out-amount only applies to cross-asset swap pairs: it is the "
+                "portion of the outbound that was swapped, with the remainder "
+                "treated as a same-asset self-transfer.",
+                code="validation",
+            )
+        out_amount_msat = _positive_btc_amount_msat(out_amount, "--out-amount")
+        full_out_msat = int(out_row["amount"] or 0)
+        if out_amount_msat > full_out_msat:
+            raise AppError(
+                f"--out-amount exceeds the outbound amount "
+                f"({out_amount_msat} > {full_out_msat} msat).",
+                code="validation",
+            )
     existing = conn.execute(
         """
         SELECT id FROM transaction_pairs
@@ -479,8 +503,14 @@ def create_transaction_pair(
             hint="Run `kassiber transfers payouts delete --payout-id "
             f"{existing_payout['id']}` first.",
         )
+    # On a split pair only the swapped portion (`out_amount`) crosses to the
+    # other asset, so the persisted swap fee must be measured against that, not
+    # the full outbound (the remainder is a same-asset self-transfer).
+    swap_fee_out_msat = (
+        out_amount_msat if out_amount_msat is not None else int(out_row["amount"] or 0)
+    )
     swap_fee_msat, swap_fee_kind = core_transfer_matching.compute_swap_fee(
-        int(out_row["amount"] or 0),
+        swap_fee_out_msat,
         int(in_row["amount"] or 0),
     )
     pair_id = str(uuid.uuid4())
@@ -489,8 +519,8 @@ def create_transaction_pair(
         INSERT INTO transaction_pairs(
             id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
             kind, policy, notes, swap_fee_msat, swap_fee_kind, confidence_at_pair,
-            pair_source, deleted_at, created_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+            pair_source, out_amount, deleted_at, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
         """,
         (
             pair_id,
@@ -505,6 +535,7 @@ def create_transaction_pair(
             swap_fee_kind,
             confidence_at_pair,
             pair_source,
+            out_amount_msat,
             now_iso(),
         ),
     )
@@ -531,6 +562,7 @@ def create_direct_swap_payout(
     payout_external_id=None,
     counterparty=None,
     notes=None,
+    out_amount=None,
 ):
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
     if kind not in DIRECT_SWAP_PAYOUT_KINDS:
@@ -549,6 +581,16 @@ def create_direct_swap_payout(
     if not target_asset:
         raise AppError("--payout-asset is required", code="validation")
     payout_amount_msat = _positive_btc_amount_msat(payout_amount, "--payout-amount")
+    out_amount_msat = None
+    if out_amount is not None:
+        out_amount_msat = _positive_btc_amount_msat(out_amount, "--out-amount")
+        full_out_msat = int(out_row["amount"] or 0)
+        if out_amount_msat > full_out_msat:
+            raise AppError(
+                f"--out-amount exceeds the outbound amount "
+                f"({out_amount_msat} > {full_out_msat} msat).",
+                code="validation",
+            )
     payout_value = dec(payout_fiat_value) if payout_fiat_value is not None else None
     if payout_value is not None and payout_value < 0:
         raise AppError("--payout-fiat-value must not be negative", code="validation")
@@ -593,7 +635,7 @@ def create_direct_swap_payout(
         )
 
     swap_fee_msat, swap_fee_kind = core_transfer_matching.compute_swap_fee(
-        int(out_row["amount"] or 0),
+        out_amount_msat if out_amount_msat is not None else int(out_row["amount"] or 0),
         payout_amount_msat,
     )
     payout_id = str(uuid.uuid4())
@@ -603,8 +645,8 @@ def create_direct_swap_payout(
             id, workspace_id, profile_id, out_transaction_id, kind, policy,
             payout_asset, payout_amount, payout_occurred_at, payout_fiat_value,
             payout_external_id, counterparty, notes, swap_fee_msat, swap_fee_kind,
-            deleted_at, created_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+            out_amount, deleted_at, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
         """,
         (
             payout_id,
@@ -622,6 +664,7 @@ def create_direct_swap_payout(
             notes,
             swap_fee_msat,
             swap_fee_kind,
+            out_amount_msat,
             now_iso(),
         ),
     )
@@ -641,7 +684,8 @@ def list_direct_swap_payouts(conn, workspace_ref, profile_ref, *, include_delete
             p.*,
             tout.external_id AS out_external_id,
             tout.asset AS out_asset,
-            tout.amount AS out_amount_msat,
+            COALESCE(p.out_amount, tout.amount) AS reviewed_out_amount_msat,
+            tout.amount AS full_out_amount_msat,
             tout.occurred_at AS out_occurred_at,
             wout.label AS out_wallet
         FROM direct_swap_payouts p
@@ -660,8 +704,10 @@ def list_direct_swap_payouts(conn, workspace_ref, profile_ref, *, include_delete
             "external_id": row["out_external_id"] or "",
             "wallet": row["out_wallet"],
             "asset": row["out_asset"],
-            "amount": float(msat_to_btc(row["out_amount_msat"])),
-            "amount_msat": int(row["out_amount_msat"]),
+            "amount": float(msat_to_btc(row["reviewed_out_amount_msat"])),
+            "amount_msat": int(row["reviewed_out_amount_msat"]),
+            "full_amount": float(msat_to_btc(row["full_out_amount_msat"])),
+            "full_amount_msat": int(row["full_out_amount_msat"]),
             "occurred_at": row["out_occurred_at"],
         }
         entry["payout"] = {
@@ -707,7 +753,11 @@ def list_transaction_pairs(conn, workspace_ref, profile_ref, *, include_deleted=
             p.*,
             tout.external_id AS out_external_id,
             tout.asset AS out_asset,
-            tout.amount AS out_amount_msat,
+            -- On a split cross-asset pair only `out_amount` crossed to the other
+            -- asset; swap_fee_msat was computed from that portion, so the pair's
+            -- out amount must match it. Same-asset / whole pairs keep tout.amount.
+            COALESCE(p.out_amount, tout.amount) AS out_amount_msat,
+            tout.amount AS out_full_amount_msat,
             wout.label AS out_wallet,
             tin.external_id AS in_external_id,
             tin.asset AS in_asset,
@@ -731,8 +781,12 @@ def list_transaction_pairs(conn, workspace_ref, profile_ref, *, include_deleted=
             "external_id": row["out_external_id"] or "",
             "wallet": row["out_wallet"],
             "asset": row["out_asset"],
+            # `amount` is the swapped portion on a split pair; `full_amount`
+            # carries the underlying transaction's total for transparency.
             "amount": float(msat_to_btc(row["out_amount_msat"])),
             "amount_msat": int(row["out_amount_msat"]),
+            "full_amount": float(msat_to_btc(row["out_full_amount_msat"])),
+            "full_amount_msat": int(row["out_full_amount_msat"]),
         }
         entry["in"] = {
             "transaction_id": row["in_transaction_id"],
@@ -2580,6 +2634,74 @@ def derive_wallet_targets(conn, workspace_ref, profile_ref, wallet_ref, branch=N
     ]
 
 
+def identify_wallet_owners(
+    conn,
+    workspace_ref,
+    profile_ref,
+    *,
+    wallet_refs=None,
+    addresses=None,
+    txids=None,
+    candidates=None,
+    file=None,
+    csv=None,
+    scan_to_index=None,
+    verify_on_chain=False,
+    verify_backend=None,
+    runtime_config=None,
+):
+    """Reconcile a list of addresses / txids against the profile's wallets.
+
+    Returns a structured report (``results`` + ``summary`` + ``warnings``)
+    classifying each input as owned (naming the wallet, branch and derivation
+    index) or external/unknown. ``--csv`` smart-harvests addresses/txids from a
+    spreadsheet of any common shape. ``--verify-on-chain`` resolves an Esplora or
+    Electrum backend so unseen txids get a per-leg payment/transfer breakdown.
+    """
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+
+    wallet_ids = None
+    if wallet_refs:
+        wallet_ids = [resolve_wallet(conn, profile["id"], ref)["id"] for ref in wallet_refs]
+
+    file_text = core_ownership.read_text_file(file, label="candidate file") if file else None
+    csv_text = core_ownership.read_text_file(csv, label="CSV file") if csv else None
+
+    if scan_to_index is None:
+        scan_to_index = core_ownership.DEFAULT_SCAN_TO_INDEX
+    if scan_to_index < 0:
+        raise AppError("--scan-to-index must be non-negative", code="validation")
+
+    if not any([addresses, txids, candidates, file_text, csv_text]):
+        raise AppError(
+            "Provide at least one --address, --txid, --candidate, --file, or --csv input to check",
+            code="validation",
+            hint="Example: wallets identify --address bc1q... --txid <64-hex>",
+        )
+
+    def _run(verify_fetcher):
+        return core_ownership.identify(
+            conn,
+            profile["id"],
+            addresses=addresses,
+            txids=txids,
+            candidates=candidates,
+            file_text=file_text,
+            csv_text=csv_text,
+            wallet_ids=wallet_ids,
+            scan_to_index=scan_to_index,
+            verify_fetcher=verify_fetcher,
+        )
+
+    if not verify_on_chain:
+        return _run(None)
+
+    backend = core_sync_backends.resolve_verify_backend(runtime_config, verify_backend)
+    # One reused connection for the whole batch (Electrum); stateless for Esplora.
+    with core_sync_backends.verify_session(backend) as fetcher:
+        return _run(fetcher)
+
+
 TRANSACTION_SORT_COLUMNS = {
     "occurred-at": "t.occurred_at",
     "amount": "t.amount",
@@ -3123,6 +3245,10 @@ def process_journals(conn, workspace_ref, profile_ref):
             """,
             journal_entry_rows,
         )
+        # Collapse legs that map to the same real transaction (e.g. multiple
+        # synthetic payout/split legs of one out row) so two rows never collide
+        # on journal_quarantines' PRIMARY KEY and abort the whole run.
+        deduped_quarantines = core_tax_events.dedupe_quarantines(state["quarantines"])
         conn.executemany(
             """
             INSERT INTO journal_quarantines(
@@ -3138,7 +3264,7 @@ def process_journals(conn, workspace_ref, profile_ref):
                     quarantine["detail_json"],
                     created_at,
                 )
-                for quarantine in state["quarantines"]
+                for quarantine in deduped_quarantines
             ],
         )
         conn.executemany(
@@ -3243,7 +3369,7 @@ def process_journals(conn, workspace_ref, profile_ref):
     result = {
         "profile": profile["label"],
         "entries_created": len(state["entries"]),
-        "quarantined": len(state["quarantines"]),
+        "quarantined": len(deduped_quarantines),
         "transfers_detected": len(state.get("intra_audit", [])),
         "cross_asset_pairs": len(state.get("cross_asset_pairs", [])),
         "auto_priced": auto_priced,
@@ -3417,7 +3543,7 @@ def inspect_transfer_audit(conn, workspace_ref, profile_ref):
             "same_asset_transfers": len(intra_transfers),
             "cross_asset_pairs": len(cross_asset_pairs),
             "direct_swap_payouts": len(direct_swap_payouts),
-            "quarantines": len(state["quarantines"]),
+            "quarantines": len(core_tax_events.dedupe_quarantines(state["quarantines"])),
         },
         "same_asset_transfers": intra_transfers,
         "cross_asset_pairs": cross_asset_pairs,

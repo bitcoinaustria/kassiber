@@ -4,7 +4,7 @@
 
 - Kassiber is a local-first Bitcoin accounting suite with a desktop GUI and a CLI, both backed by the same Python daemon.
 - The CLI entrypoint lives in [kassiber/cli/main.py](kassiber/cli/main.py). The remaining command implementation surface lives in [kassiber/cli/handlers.py](kassiber/cli/handlers.py).
-- Desktop UI: Tauri 2 + React + TypeScript with a Python sidecar daemon. Stack decision lives in [docs/plan/01-stack-decision.md](docs/plan/01-stack-decision.md); implementation plan lives in [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md). [docs/plan/00-overview.md](docs/plan/00-overview.md) remains the orientation map. The Vite + React 19 + TS + Tailwind v4 + TanStack + Zustand frontend lives at [ui-tauri/](ui-tauri/); Claude Design source mockups are staged under `ui-tauri/claude-design/`. The Tauri supervisor (`ui-tauri/src-tauri/`) keeps one Python daemon process and demuxes JSONL responses by `request_id`; typed UI snapshot kinds and the AI provider/chat surface flow through that daemon boundary.
+- Desktop UI: Tauri 2 + React + TypeScript with a Python sidecar daemon. Stack decision lives in [docs/plan/01-stack-decision.md](docs/plan/01-stack-decision.md); implementation plan lives in [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md). [docs/plan/00-overview.md](docs/plan/00-overview.md) remains the orientation map. The Vite + React 19 + TS + Tailwind v4 + TanStack + Zustand frontend lives at [ui-tauri/](ui-tauri/); Claude Design source mockups are staged under `ui-tauri/claude-design/`. The Tauri supervisor (`ui-tauri/src-tauri/`) keeps one Python daemon process and demuxes JSONL responses by `request_id`; typed UI snapshot kinds and the AI provider/chat surface flow through that daemon boundary. The desktop UI is localized (English/German, expandable) with i18next under [ui-tauri/src/i18n/](ui-tauri/src/i18n/); the UI store's `lang` is the single source of truth and the CLI/daemon stay machine-deterministic (the UI translates their stable codes). Conventions live in [docs/reference/i18n.md](docs/reference/i18n.md).
 - External-document reconciliation scope and architecture are captured in [docs/plan/08-external-document-reconciliation.md](docs/plan/08-external-document-reconciliation.md).
 - Supporting modules (bottom-up — no back-edges into the CLI layer):
   - [kassiber/errors.py](kassiber/errors.py) — `AppError` typed exception carrying `code`, `hint`, `details`, `retryable`.
@@ -26,6 +26,7 @@
   - [kassiber/core/sync.py](kassiber/core/sync.py) — wallet sync orchestration above backend-specific transport details.
   - [kassiber/core/sync_backends.py](kassiber/core/sync_backends.py) — descriptor target discovery plus `esplora`, `electrum`, and `bitcoinrpc` live-sync adapters.
   - [kassiber/core/output_inventory.py](kassiber/core/output_inventory.py) — durable watch-only coin/UTXO inventory model updated by chain-backed wallet sync; stores current/spent outpoints, amounts, confirmation state, receive/change metadata, and source freshness without exposing descriptors, xpubs, backend URLs/tokens, raw wallet config, or raw wallet files through UI/AI surfaces.
+  - [kassiber/core/ownership.py](kassiber/core/ownership.py) — pure address/txid ownership reconciliation engine behind `wallets identify`, `ui.wallets.identify` (cache-only) and `ui.wallets.identify_onchain` (verify). Given pasted addresses/txids it matches them (by canonical scriptPubKey, with address-string fallback for Liquid confidential addresses) against the watch-only inventory, imported txids, and offline descriptor derivation (receive + change, floored at the synced index, capped by `--scan-to-index`), naming the owning wallet/branch/index and flagging externals; clearly-malformed inputs are flagged `invalid`. A smart CSV importer (`extract_candidates_from_csv`: delimiter sniffing, common `address`/`txid` header aliases, plus strict content-harvest of 64-hex/real-address cells) feeds the same pipeline from `--csv` (CLI) and a desktop "Import CSV" button that sends file content as `csv_text` — never exposed to the AI tool. txids get a per-leg payment/transfer/receipt classification — locally from `transactions.raw_json` (both esplora and Electrum decode shapes) and, for unseen txids, via the opt-in caller-injected fetcher (`fetch_transaction_legs` / `verify_session` in sync_backends; the empty-script Liquid fee output is not counted). The AI variant drops scriptPubKeys, derivation paths, address indices and branch labels.
   - [kassiber/core/reports.py](kassiber/core/reports.py) — extracted report builders, balance-history calculations, and PDF export assembly behind hookable journal/runtime dependencies. `reports tax-summary` rows include `row_type=swap_fees_year` / `swap_fees_total` summarising persisted `transaction_pairs.swap_fee_msat` and `direct_swap_payouts.swap_fee_msat`.
   - [kassiber/core/transfer_matching.py](kassiber/core/transfer_matching.py) — pure swap-candidate matcher with `payment_hash` (exact) and time + amount (strong) confidence bands, signed fee computation, conflict cluster ids plus match-time `conflict_size` (stamped over the full candidate set so filtered views cannot make a cluster member look solo), and pair/dismissal suppression. Defaults: 24h time window, fee tolerance `max(1%, 2500 sats)`.
   - [kassiber/core/lightning/](kassiber/core/lightning/) — read-only Lightning scaffold: typed `NodeSnapshot` / `NodeChannel` / `NodeForward` shapes, `LightningAdapter` Protocol, registry (`register_adapter` / `resolve_adapter` / `registered_kinds`), and the generic `build_profitability_report` / `profitability_csv_rows` helpers. Node adapters (LND, Core Lightning, NWC, …) live in sibling modules and register themselves with the registry; the daemon kinds `ui.connections.node.snapshot` and `ui.reports.lightning_profitability` plus the `reports lightning-profitability` / `reports export-lightning-profitability-csv` CLI commands dispatch through the registry. The desktop / CLI path returns the full payload (`snapshot_to_dict` / `LightningProfitabilityReport.to_envelope_payload`); the AI tool dispatch swaps in redacted variants (`snapshot_to_dict_for_ai` / `to_ai_envelope_payload`) that drop the Tier-3 identity graph (operator pubkey, channel funding outpoints, peer pubkeys / aliases, short channel ids on channels and forwards, per-channel covers-open-cost rows). Adapters MUST follow the discard policy in [docs/reference/lightning-opsec.md](docs/reference/lightning-opsec.md): drop preimages, payment_secrets, full encoded bolt11 strings, route hop pubkey lists, route hints from received invoices, and `failure_source_pubkey` at the adapter boundary; pass `None` for `NodeChannel.peer_pubkey` on private channels (enforced at construction by `__post_init__`). `NodeChannel.__post_init__` enforces the `None`-for-private rule on `peer_pubkey` and runs format-only checks on `short_channel_id` / `funding_outpoint` so smuggling fails at the dataclass boundary; `NodeForward.failure_reason` is a categorical `NodeForwardFailureReason` Literal so adapters cannot smuggle raw node error blobs.
@@ -63,7 +64,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   - attachments
   - metadata (notes, tags, inclusion)
   - journals (RP2 processing + quarantine)
-  - reports (summary, tax-summary, balance-sheet, portfolio-summary, capital-gains, journal-entries, balance-history, austrian-e1kv, austrian-tax-summary, export-pdf, export-summary-pdf, export-csv, export-xlsx, export-austrian, export-austrian-e1kv-pdf, export-austrian-e1kv-xlsx, export-austrian-e1kv-csv)
+  - reports (summary, tax-summary, balance-sheet, portfolio-summary, capital-gains, journal-entries, balance-history, austrian-e1kv, austrian-tax-summary, exit-tax, export-pdf, export-summary-pdf, export-csv, export-xlsx, export-austrian, export-austrian-e1kv-pdf, export-austrian-e1kv-xlsx, export-austrian-e1kv-csv, export-exit-tax-pdf, export-exit-tax-xlsx)
   - rates (local cache + Coinbase Exchange sync + CoinGecko fallback + Kraken CSV archive ingest + manual override)
   - diagnostics (public-safe bug-report collection)
 - Every command accepts `--format {table,plain,json,csv}`, `--output <path>`, `--machine` (= `--format json`), `--debug`, `--diagnostics-out <path|auto>`, and `--db-passphrase-fd FD` (used to unlock a SQLCipher-encrypted database non-interactively).
@@ -113,7 +114,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ui.rates.coverage`, `ui.report.blockers`,
   `ui.audit.changes_since_last_answer`, `ui.audit.evidence.summary`,
   `ui.transactions.history`, `ui.activity.history`, `ui.activity.stale`,
-  `ui.wallets.utxos`, `ui.maintenance.settings`, `ui.workspace.health`,
+  `ui.wallets.utxos`, `ui.wallets.identify`, `ui.maintenance.settings`, `ui.workspace.health`,
   `ui.next_actions`, and virtual
   `read_skill_reference`. Lightning kinds require a registered adapter
   (`kassiber.core.lightning.register_adapter`); LND ships an adapter that
@@ -127,7 +128,11 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ui.onboarding.complete`, `ui.wallets.create`, `ui.connections.btcpay.create`,
   `ui.connections.bullbitcoin_wallet.create`,
   `ui.wallets.import_samourai`,
-  `ui.connections.btcpay.discover`, and
+  `ui.connections.btcpay.discover`,
+  `ui.wallets.identify_onchain` (the desktop Reconcile "Verify on chain"
+  action: same reconciliation as the read-only `ui.wallets.identify`, but
+  fetches unseen txids through an Esplora/Electrum backend — network access, so
+  it is a mutating kind and is not exposed to the AI), and
   `ui.metadata.bip329.import`; transaction editor metadata saves use
   `ui.transactions.metadata.update` and append grouped transaction edit
   history rows in the same SQLite transaction when a real value changes;
@@ -188,7 +193,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `workspaces {list,create}`
 - `profiles {list,create,get,set}`
 - `accounts {list,create}`
-- `wallets {kinds,list,create,get,update,delete,reveal-descriptor,sync,sync-btcpay,attach-btcpay,attach-bullbitcoin-wallet,derive,import-json,import-csv,import-btcpay,import-phoenix,import-river,import-bull,import-coinfinity,import-21bitcoin,import-strike,import-samourai}`
+- `wallets {kinds,list,create,get,update,delete,reveal-descriptor,sync,sync-btcpay,attach-btcpay,attach-bullbitcoin-wallet,derive,identify,import-json,import-csv,import-btcpay,import-phoenix,import-river,import-bull,import-coinfinity,import-21bitcoin,import-strike,import-samourai}`
 - `backends {kinds,list,get,create,update,delete,reveal-token,set-default,clear-default}`
 - `transactions {list}`
 - `attachments {add,list,remove,verify,gc}`
@@ -198,7 +203,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `transfers {pair,list,unpair,payouts {list,create,delete},suggest,bulk-pair,dismiss,rules {list,create,apply,delete,enable,disable}}`
 - `views {list,create,delete}` — generic saved-view CRUD; ``swap_candidates`` is the first surface consumer
 - `source-funds {sources {list,create,attach},links {list,create,review,attach,bulk-review},suggest,cases {list}}`
-- `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,lightning-profitability,source-funds,austrian-e1kv,austrian-tax-summary,export-pdf,export-summary-pdf,export-csv,export-xlsx,export-lightning-profitability-csv,export-source-funds-pdf,export-austrian,export-austrian-e1kv-pdf,export-austrian-e1kv-xlsx,export-austrian-e1kv-csv}`
+- `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,lightning-profitability,source-funds,austrian-e1kv,austrian-tax-summary,exit-tax,export-pdf,export-summary-pdf,export-csv,export-xlsx,export-lightning-profitability-csv,export-source-funds-pdf,export-austrian,export-austrian-e1kv-pdf,export-austrian-e1kv-xlsx,export-austrian-e1kv-csv,export-exit-tax-pdf,export-exit-tax-xlsx}`
 - `rates {pairs,sync,rebuild,latest,range,set}`
 - `diagnostics {collect}`
 - `ai providers {list,get,create,update,delete,set-default,clear-default}`
@@ -231,6 +236,17 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 ## Working rules
 
 - Keep the project local-first.
+- For user-facing desktop UI strings, add keys to the i18n resource bundles
+  (English + German in lockstep) and render via `t(...)` instead of hardcoding
+  literals; keep the CLI/daemon English and machine-deterministic. Migrate a
+  whole surface at a time so a screen is never half-translated. German is
+  Austrian German in the informal `du` register — use the canonical terms in
+  [docs/reference/i18n-glossary.md](docs/reference/i18n-glossary.md) (Bitcoin
+  jargon stays English; Austrian BMF tax wording), and the mechanics in
+  [docs/reference/i18n.md](docs/reference/i18n.md). Verify UI string changes
+  from `ui-tauri/` with `pnpm typecheck` (type-safe keys catch typos/missing
+  keys) and `pnpm test --run` (the en/de key-parity guard catches a
+  half-translated namespace); both run in CI under the `verify` check.
 - Treat code, README, AGENTS.md, and TODO.md as current truth. Treat
   `docs/plan/` as concise guardrails; if code and plans drift, inspect code and
   update the docs in the same change.
@@ -291,7 +307,9 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
   requirement, risks, and step plan before editing.
 - Prefer the repo-local `skills/kassiber/` references before generic
   agent habits when working on Kassiber-specific flows.
-- Before calling work push-ready, run `./scripts/quality-gate.sh`.
+- Before calling work push-ready, run `./scripts/quality-gate.sh`. That gate is
+  Python-only; for `ui-tauri/` changes also run `pnpm typecheck && pnpm test --run && pnpm lint`
+  there (the desktop UI's typecheck, en/de i18n key-parity, and lint).
 - When adding a new runtime dependency, update both the README dependency story and `THIRD_PARTY_LICENSES.md`.
 - Keep `THIRD_PARTY_LICENSES.md` concise: direct dependencies and notable license constraints matter more than a hand-maintained transitive dump.
 
@@ -352,6 +370,7 @@ uv run python -m kassiber --machine status
 uv run python -m kassiber backends list
 uv run python -m kassiber wallets kinds
 uv run python -m kassiber wallets sync-btcpay --help
+uv run python -m kassiber wallets identify --help
 uv run python -m kassiber wallets import-river --help
 uv run python -m kassiber wallets import-coinfinity --help
 uv run python -m kassiber wallets import-21bitcoin --help

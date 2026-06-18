@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import { connectionStatusStyles } from "@/lib/connectionDisplay";
 import { cn } from "@/lib/utils";
 import type { ConnectionStatus } from "@/mocks/seed";
@@ -17,6 +19,7 @@ export function ConnectionStatusPill({
   hideWhenSynced = true,
   className,
 }: ConnectionStatusPillProps) {
+  const { t } = useTranslation("chrome");
   if (hideWhenSynced && status === "synced") return null;
   return (
     <span
@@ -26,7 +29,7 @@ export function ConnectionStatusPill({
         className,
       )}
     >
-      {status}
+      {t(`connectionStatus.${status}`)}
     </span>
   );
 }

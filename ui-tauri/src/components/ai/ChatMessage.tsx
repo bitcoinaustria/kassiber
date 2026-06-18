@@ -8,6 +8,8 @@
  */
 
 import { Wrench } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { ChatLoader } from "./ChatLoader";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -26,6 +28,7 @@ interface ChatMessageProps {
 }
 
 export function ChatMessage({ message }: ChatMessageProps) {
+  const { t } = useTranslation("assistant");
   if (message.role === "user") {
     return (
       <div className="flex w-full justify-end">
@@ -44,7 +47,8 @@ export function ChatMessage({ message }: ChatMessageProps) {
     !hasAnswer &&
     (message.status === "pending" || message.status === "streaming");
   const loaderLabel =
-    message.activityLabel ?? (message.thinking ? "Thinking" : "Generating");
+    message.activityLabel ??
+    (message.thinking ? t("message.thinking") : t("message.generating"));
 
   return (
     <div className="flex w-full justify-start">
@@ -65,7 +69,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
           >
             <ChainOfThought>
               <ChainOfThoughtHeader icon={Wrench}>
-                Tool usage
+                {t("message.toolUsage")}
               </ChainOfThoughtHeader>
               <ChainOfThoughtContent>
                 <div className="mt-2 space-y-3 border-l border-border/70 py-1 pl-4">
@@ -78,16 +82,18 @@ export function ChatMessage({ message }: ChatMessageProps) {
           </div>
         ) : null}
         {hasAnswer ? <ChatMarkdown content={message.content} /> : null}
-        {hasAnswer ? <DeterministicAnswerFacts message={message} /> : null}
+        {hasAnswer ? (
+          <DeterministicAnswerFacts message={message} t={t} />
+        ) : null}
         {message.provenance ? (
-          <AnswerProvenance provenance={message.provenance} />
+          <AnswerProvenance provenance={message.provenance} t={t} />
         ) : null}
         {showLoader ? (
           <ChatLoader className="mt-1" label={loaderLabel} />
         ) : null}
         {message.status === "error" ? (
           <p className="text-sm text-destructive">
-            {message.errorMessage ?? "Chat failed"}
+            {message.errorMessage ?? t("message.chatFailed")}
             {message.errorCode ? (
               <span className="ml-2 rounded-md bg-destructive/10 px-1.5 py-0.5 font-mono text-[10px] uppercase">
                 {message.errorCode}
@@ -97,7 +103,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
         ) : null}
         {message.status === "cancelled" ? (
           <p className="mt-1 text-xs italic text-muted-foreground">
-            Stopped by user.
+            {t("message.stoppedByUser")}
           </p>
         ) : null}
       </div>
@@ -105,8 +111,14 @@ export function ChatMessage({ message }: ChatMessageProps) {
   );
 }
 
-function DeterministicAnswerFacts({ message }: { message: AiChatMessage }) {
-  const facts = collectDeterministicFacts(message).slice(0, 4);
+function DeterministicAnswerFacts({
+  message,
+  t,
+}: {
+  message: AiChatMessage;
+  t: TFunction<"assistant">;
+}) {
+  const facts = collectDeterministicFacts(message, t).slice(0, 4);
   if (facts.length === 0) return null;
   return (
     <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -134,10 +146,12 @@ function DeterministicAnswerFacts({ message }: { message: AiChatMessage }) {
 
 function AnswerProvenance({
   provenance,
+  t,
 }: {
   provenance: NonNullable<AiChatMessage["provenance"]>;
+  t: TFunction<"assistant">;
 }) {
-  const parts = provenanceParts(provenance);
+  const parts = provenanceParts(provenance, t);
   if (parts.length === 0) return null;
   return (
     <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
@@ -159,7 +173,10 @@ interface DeterministicFact {
   detail?: string;
 }
 
-function collectDeterministicFacts(message: AiChatMessage): DeterministicFact[] {
+function collectDeterministicFacts(
+  message: AiChatMessage,
+  t: TFunction<"assistant">,
+): DeterministicFact[] {
   const facts: DeterministicFact[] = [];
   for (const toolCall of message.toolCalls ?? []) {
     const envelope = asRecord(toolCall.result);
@@ -169,8 +186,10 @@ function collectDeterministicFacts(message: AiChatMessage): DeterministicFact[] 
     if (kind === "ui.report.blockers") {
       const blockers = Array.isArray(data.blockers) ? data.blockers : [];
       facts.push({
-        source: "Report readiness",
-        label: data.ready ? "Ready" : `${blockers.length} blocker(s)`,
+        source: t("facts.reportReadiness"),
+        label: data.ready
+          ? t("facts.ready")
+          : t("facts.blockers", { count: blockers.length }),
         detail: blockers
           .map((item) => asRecord(item)?.title)
           .filter((title): title is string => typeof title === "string")
@@ -182,12 +201,16 @@ function collectDeterministicFacts(message: AiChatMessage): DeterministicFact[] 
       const assetFlow = Array.isArray(data.asset_flow) ? data.asset_flow : [];
       const firstAsset = asRecord(assetFlow[0]);
       facts.push({
-        source: "Summary",
-        label: `${formatCount(metrics?.active_transactions)} active tx`,
+        source: t("facts.summary"),
+        label: t("facts.activeTx", {
+          count: Number(metrics?.active_transactions ?? 0),
+        }),
         detail: firstAsset
-          ? `${firstAsset.asset ?? "Asset"} in ${formatSat(
-              firstAsset.inbound_amount_sat,
-            )}, out ${formatSat(firstAsset.outbound_amount_sat)}`
+          ? t("facts.assetFlow", {
+              asset: firstAsset.asset ?? t("facts.asset"),
+              inbound: formatSat(firstAsset.inbound_amount_sat),
+              outbound: formatSat(firstAsset.outbound_amount_sat),
+            })
           : undefined,
       });
     } else if (
@@ -200,10 +223,15 @@ function collectDeterministicFacts(message: AiChatMessage): DeterministicFact[] 
       const firstTotal = asRecord(totals[0]);
       facts.push({
         source:
-          kind === "ui.reports.balance_sheet" ? "Balance sheet" : "Portfolio",
-        label: `${totals.length} asset total(s)`,
+          kind === "ui.reports.balance_sheet"
+            ? t("facts.balanceSheet")
+            : t("facts.portfolio"),
+        label: t("facts.assetTotals", { count: totals.length }),
         detail: firstTotal
-          ? `${firstTotal.asset ?? "Asset"} ${formatSat(firstTotal.quantity_sat)}`
+          ? t("facts.assetTotalDetail", {
+              asset: firstTotal.asset ?? t("facts.asset"),
+              quantity: formatSat(firstTotal.quantity_sat),
+            })
           : undefined,
       });
     } else if (kind === "ui.reports.tax_summary") {
@@ -211,39 +239,45 @@ function collectDeterministicFacts(message: AiChatMessage): DeterministicFact[] 
       const rows = Array.isArray(data.rows) ? data.rows : [];
       const firstRow = asRecord(rows[0]);
       facts.push({
-        source: "Tax summary",
-        label: `${formatCount(summary?.row_count)} row(s)`,
+        source: t("facts.taxSummary"),
+        label: t("facts.rows", { count: Number(summary?.row_count ?? 0) }),
         detail:
           typeof firstRow?.gain_loss === "number"
-            ? `gain/loss ${formatMoney(firstRow.gain_loss)}`
+            ? t("facts.gainLoss", { value: formatMoney(firstRow.gain_loss) })
             : undefined,
       });
     } else if (kind === "ui.rates.coverage") {
       const summary = asRecord(data.summary);
       facts.push({
-        source: "Rate coverage",
-        label: `${formatCount(summary?.missing_price_transactions)} missing price(s)`,
-        detail: `${formatCount(summary?.cache_coverable_missing)} coverable from cache`,
+        source: t("facts.rateCoverage"),
+        label: t("facts.missingPrices", {
+          count: Number(summary?.missing_price_transactions ?? 0),
+        }),
+        detail: t("facts.coverableFromCache", {
+          count: Number(summary?.cache_coverable_missing ?? 0),
+        }),
       });
     } else if (kind === "ui.audit.changes_since_last_answer") {
-      let label = "No changes since baseline";
+      let label = t("facts.noChangesSinceBaseline");
       if (data.status === "baseline_required") {
-        label = "Baseline required";
+        label = t("facts.baselineRequired");
       } else if (data.changed) {
-        label = "Changed since baseline";
+        label = t("facts.changedSinceBaseline");
       }
       facts.push({
-        source: "Change audit",
+        source: t("facts.changeAudit"),
         label,
       });
     } else if (kind === "ui.maintenance.run") {
       const blockers = Array.isArray(data.blockers) ? data.blockers : [];
       facts.push({
-        source: "Maintenance",
-        label: data.ready ? "Reports ready" : `${blockers.length} blocker(s)`,
+        source: t("facts.maintenance"),
+        label: data.ready
+          ? t("facts.reportsReady")
+          : t("facts.blockers", { count: blockers.length }),
         detail:
           typeof data.sync_mode === "string"
-            ? `sync ${data.sync_mode}`
+            ? t("facts.syncMode", { mode: data.sync_mode })
             : undefined,
       });
     }
@@ -253,45 +287,64 @@ function collectDeterministicFacts(message: AiChatMessage): DeterministicFact[] 
 
 function provenanceParts(
   provenance: NonNullable<AiChatMessage["provenance"]>,
+  t: TFunction<"assistant">,
 ): string[] {
   const parts: string[] = [];
   const toolCount = provenance.tools_used?.length ?? 0;
   if (toolCount > 0) {
-    parts.push(`${toolCount} local tool${toolCount === 1 ? "" : "s"}`);
+    parts.push(t("provenance.localTools", { count: toolCount }));
   }
   if (
     provenance.active_transactions !== null &&
     provenance.active_transactions !== undefined
   ) {
-    parts.push(`${formatCount(provenance.active_transactions)} active tx`);
+    parts.push(
+      t("provenance.activeTx", {
+        count: Number(provenance.active_transactions),
+      }),
+    );
   }
   if (provenance.quarantines !== null && provenance.quarantines !== undefined) {
-    parts.push(`${formatCount(provenance.quarantines)} quarantine`);
+    parts.push(
+      t("provenance.quarantine", { count: Number(provenance.quarantines) }),
+    );
   }
   if (
     provenance.missing_price_transactions !== null &&
     provenance.missing_price_transactions !== undefined
   ) {
     parts.push(
-      `${formatCount(provenance.missing_price_transactions)} missing prices`,
+      t("provenance.missingPrices", {
+        count: Number(provenance.missing_price_transactions),
+      }),
     );
   }
   if (provenance.auto_journal_processed) {
     parts.push(
       provenance.journals_processed_at
-        ? `journals refreshed ${shortTime(provenance.journals_processed_at)}`
-        : "journals refreshed",
+        ? t("provenance.journalsRefreshedAt", {
+            time: shortTime(provenance.journals_processed_at),
+          })
+        : t("provenance.journalsRefreshed"),
     );
   } else if (provenance.journals_processed_at) {
-    parts.push(`journals ${shortTime(provenance.journals_processed_at)}`);
+    parts.push(
+      t("provenance.journalsAt", {
+        time: shortTime(provenance.journals_processed_at),
+      }),
+    );
   }
   if (provenance.auto_sync_attempted) {
     parts.push(
-      provenance.auto_sync_ok === false ? "sync failed" : "sync checked",
+      provenance.auto_sync_ok === false
+        ? t("provenance.syncFailed")
+        : t("provenance.syncChecked"),
     );
   }
   if (provenance.generated_at) {
-    parts.push(`answered ${shortTime(provenance.generated_at)}`);
+    parts.push(
+      t("provenance.answeredAt", { time: shortTime(provenance.generated_at) }),
+    );
   }
   return parts;
 }

@@ -1,12 +1,15 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import type { LanguageCode } from "@/i18n/config";
 import {
   DEFAULT_EXPLORER_SETTINGS,
   type ExplorerSettings,
 } from "@/lib/explorer";
 
-type Lang = "en" | "de";
+// The supported language set lives in `@/i18n/config` so adding a language is
+// a one-place change; the store type follows it.
+type Lang = LanguageCode;
 type Currency = "btc" | "eur";
 export type DataMode = "mock" | "real";
 export type ThemePreference = "system" | "light" | "dark";
@@ -169,6 +172,12 @@ export interface UiState {
    * progress line.
    */
   firstSyncDone: Record<string, true>;
+  /**
+   * Book keys whose in-progress first-sync card the user collapsed via
+   * "Continue in background". Ephemeral (not persisted): re-opening from the
+   * book-refresh notification clears it, and a completed sync makes it moot.
+   */
+  firstSyncCardDismissed: Record<string, true>;
   sourceFundsDrafts: Record<string, SourceFundsDraft>;
   deferredConnectionSetup: DeferredConnectionSetup | null;
   setLang: (lang: Lang) => void;
@@ -200,6 +209,8 @@ export interface UiState {
   ) => void;
   clearActiveMaintenanceProgress: (id?: string) => void;
   markFirstSyncDone: (bookKey: string) => void;
+  dismissFirstSyncCard: (bookKey: string) => void;
+  reopenFirstSyncCard: (bookKey: string) => void;
   clearNotification: (id: string) => void;
   clearNotifications: () => void;
   setSourceFundsDraft: (profileKey: string, draft: SourceFundsDraft) => void;
@@ -310,6 +321,7 @@ export const useUiStore = create<UiState>()(
       notifications: [],
       activeMaintenanceProgress: null,
       firstSyncDone: {},
+      firstSyncCardDismissed: {},
       sourceFundsDrafts: {},
       setLang: (lang) => set({ lang }),
       setCurrency: (currency) => set({ currency }),
@@ -409,6 +421,24 @@ export const useUiStore = create<UiState>()(
             ? state
             : { firstSyncDone: { ...state.firstSyncDone, [bookKey]: true } },
         ),
+      dismissFirstSyncCard: (bookKey) =>
+        set((state) =>
+          state.firstSyncCardDismissed[bookKey]
+            ? state
+            : {
+                firstSyncCardDismissed: {
+                  ...state.firstSyncCardDismissed,
+                  [bookKey]: true,
+                },
+              },
+        ),
+      reopenFirstSyncCard: (bookKey) =>
+        set((state) => {
+          if (!state.firstSyncCardDismissed[bookKey]) return state;
+          const next = { ...state.firstSyncCardDismissed };
+          delete next[bookKey];
+          return { firstSyncCardDismissed: next };
+        }),
       clearNotification: (id) =>
         set((state) => ({
           notifications: state.notifications.filter(

@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import { Skeleton } from "@/components/ui/skeleton";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
@@ -112,8 +114,10 @@ export function ScreenNotice({ className, title, body }: ScreenNoticeProps) {
 
 export function ScreenRefreshSkeleton({
   className,
-  label = "Refreshing",
+  label,
 }: ScreenRefreshSkeletonProps) {
+  const { t } = useTranslation("chrome");
+  const refreshingLabel = label ?? t("screen.refreshing");
   return (
     <div
       className={cn(
@@ -138,7 +142,7 @@ export function ScreenRefreshSkeleton({
           <Skeleton key={index} className="h-9 w-full" />
         ))}
       </div>
-      <span className="sr-only">{label}</span>
+      <span className="sr-only">{refreshingLabel}</span>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import {
   ListChecks,
 } from "lucide-react";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -76,11 +77,14 @@ export function networkLabel(transaction: Transaction): string {
   return transaction.paymentMethod;
 }
 
-export function confirmationsLabel(conf: number | undefined) {
+export function confirmationsLabel(
+  conf: number | undefined,
+  t?: (key: string, opts?: Record<string, unknown>) => string,
+) {
   if (conf === undefined) return null;
-  if (conf <= 0) return "0 confirmations";
-  if (conf >= 6) return "6+ conf";
-  return `${conf} conf`;
+  if (conf <= 0) return t ? t("transactions:confirmations.zero") : "0 confirmations";
+  if (conf >= 6) return t ? t("transactions:confirmations.sixPlus") : "6+ conf";
+  return t ? t("transactions:confirmations.count", { count: conf }) : `${conf} conf`;
 }
 
 export function formatRateAtTime(rate: number | null | undefined) {
@@ -96,11 +100,12 @@ export function rateChangePct(now: number | null | undefined, then: number | nul
 // ─── helper components ─────────────────────────────────────────────────
 
 export function DirtyDot({ active }: { active?: boolean }) {
+  const { t } = useTranslation("transactions");
   if (!active) return null;
   return (
     <span
-      aria-label="Unsaved change"
-      title="Unsaved change"
+      aria-label={t("dirty.unsavedChange")}
+      title={t("dirty.unsavedChange")}
       className="inline-block size-1.5 shrink-0 rounded-full bg-amber-500"
     />
   );
@@ -113,13 +118,14 @@ export function InfoHint({
   children: React.ReactNode;
   label?: string;
 }) {
+  const { t } = useTranslation("transactions");
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <button
           type="button"
           className="inline-flex size-4 items-center justify-center rounded text-current opacity-60 hover:opacity-100"
-          aria-label={label || "More info"}
+          aria-label={label || t("infoHint.moreInfo")}
           tabIndex={-1}
         >
           <Info className="size-3" aria-hidden="true" />
@@ -147,6 +153,7 @@ export function DetailField({
   dirty?: boolean;
   hint?: React.ReactNode;
 }) {
+  const { t } = useTranslation("transactions");
   return (
     <div className="min-w-0 rounded-md border bg-background p-3">
       <div className="mb-1 flex items-center justify-between gap-2">
@@ -155,7 +162,7 @@ export function DetailField({
             {label}
           </span>
           {hint ? (
-            <InfoHint label={`What does "${label}" mean?`}>{hint}</InfoHint>
+            <InfoHint label={t("infoHint.fieldMeaning", { label })}>{hint}</InfoHint>
           ) : null}
           <DirtyDot active={dirty} />
         </div>
@@ -165,7 +172,7 @@ export function DetailField({
             variant="ghost"
             size="icon"
             className="size-6 text-muted-foreground"
-            aria-label={`Copy ${label}`}
+            aria-label={t("infoHint.copy", { label })}
             onClick={() => copyText(copyValue)}
           >
             <Copy className="size-3.5" aria-hidden="true" />
@@ -241,6 +248,7 @@ export function SourceRecordRow({
     onClick: () => void;
   };
 }) {
+  const { t } = useTranslation("transactions");
   return (
     <div className="flex min-w-0 items-center gap-2 rounded-md border px-2 py-2">
       <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
@@ -265,7 +273,7 @@ export function SourceRecordRow({
           variant="ghost"
           size="icon"
           className="size-7 shrink-0 text-muted-foreground"
-          aria-label={`Copy ${label}`}
+          aria-label={t("infoHint.copy", { label })}
           onClick={() => copyText(copyValue)}
         >
           <Copy className="size-3.5" aria-hidden="true" />
@@ -380,6 +388,7 @@ export function QuarantineBanner({
   onPrimaryAction?: () => void;
   onExclude?: () => void;
 }) {
+  const { t } = useTranslation("transactions");
   return (
     <div
       role="status"
@@ -392,9 +401,8 @@ export function QuarantineBanner({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 text-sm font-medium text-amber-700 dark:text-amber-300">
           {title}
-          <InfoHint label="What does quarantined mean?">
-            {hint ??
-              "Journal-quarantined transactions are skipped during journal processing and don't affect tax reports until the blocker is resolved."}
+          <InfoHint label={t("infoHint.quarantineMeaning")}>
+            {hint ?? t("sheet.quarantineHint")}
           </InfoHint>
         </div>
         <div className="mt-0.5 text-xs text-amber-700/80 dark:text-amber-300/80">
@@ -421,7 +429,7 @@ export function QuarantineBanner({
             type="button"
             onClick={onExclude}
           >
-            Exclude
+            {t("sheet.banner.exclude")}
           </Button>
         ) : null}
       </div>
@@ -444,6 +452,7 @@ export function ReviewChecklist({
   items: Array<ChecklistItem & { tab?: string }>;
   onJump?: (tab: string) => void;
 }) {
+  const { t } = useTranslation("transactions");
   const completed = items.filter((i) => i.done).length;
   return (
     <div className="rounded-md border bg-card p-3">
@@ -453,7 +462,7 @@ export function ReviewChecklist({
             className="size-4 text-muted-foreground"
             aria-hidden="true"
           />
-          Review checklist
+          {t("sheet.checklist.title")}
         </div>
         <span className="text-xs tabular-nums text-muted-foreground">
           {completed} / {items.length}

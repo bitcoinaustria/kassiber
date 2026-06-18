@@ -30,6 +30,10 @@ AT_NEU_CUTOFF = datetime(2021, 3, 1, 0, 0, 0, tzinfo=ZoneInfo("Europe/Vienna"))
 REGIME_ALT: Literal["alt"] = "alt"
 REGIME_NEU: Literal["neu"] = "neu"
 
+# Single global moving-average pool id per asset (see resolve_pool_id). Matches
+# rp2.plugin.country.at.AT_DEFAULT_POOL and rp2's absent-marker fallback.
+AT_DEFAULT_POOL = "default"
+
 # Quarantine reason emitted when a reviewed Neu cross-asset swap cannot be
 # marked and fed into rp2's native carry path safely. The engine adds a
 # `reason_code` in the detail so callers can distinguish missing pricing,
@@ -77,38 +81,148 @@ def infer_regime_from_timestamp(occurred_at: str) -> Literal["alt", "neu"]:
     return REGIME_ALT if when < AT_NEU_CUTOFF else REGIME_NEU
 
 
-def infer_outbound_regimes(rows: Sequence[Mapping[str, Any]]) -> dict[str, Literal["alt", "neu"]]:
+def _availability_key(wallet_id: Any) -> str:
+    if wallet_id is None:
+        return AT_DEFAULT_POOL
+    text = str(wallet_id)
+    return text if text else AT_DEFAULT_POOL
+
+
+def _deplete_available(
+    available_msat_by_key: dict[str, int],
+    key: str,
+    amount_msat: int,
+) -> int:
+    if amount_msat <= 0:
+        return 0
+    available = available_msat_by_key.get(key, 0)
+    taken = min(available, amount_msat)
+    available_msat_by_key[key] = max(0, available - taken)
+    return taken
+
+
+def _move_transfer_availability(
+    alt_available_msat_by_key: dict[str, int],
+    neu_available_msat_by_key: dict[str, int],
+    out_row: Mapping[str, Any],
+    in_row: Mapping[str, Any],
+) -> None:
+    from_key = _availability_key(_row_value(out_row, "wallet_id"))
+    to_key = _availability_key(_row_value(in_row, "wallet_id"))
+    sent_msat = int(_row_value(out_row, "amount") or 0) + int(
+        _row_value(out_row, "fee") or 0
+    )
+    received_msat = int(_row_value(in_row, "amount") or 0)
+    if sent_msat <= 0 or received_msat <= 0:
+        return
+
+    preferred_regime = infer_regime_from_timestamp(str(out_row["occurred_at"]))
+    if (
+        preferred_regime == REGIME_NEU
+        and alt_available_msat_by_key.get(from_key, 0) > 0
+        and neu_available_msat_by_key.get(from_key, 0) <= 0
+    ):
+        preferred_regime = REGIME_ALT
+
+    moved: dict[str, int] = {REGIME_ALT: 0, REGIME_NEU: 0}
+    remaining_sent = sent_msat
+    regime_order = (
+        (REGIME_NEU, REGIME_ALT)
+        if preferred_regime == REGIME_NEU
+        else (REGIME_ALT, REGIME_NEU)
+    )
+    for regime in regime_order:
+        bucket = (
+            neu_available_msat_by_key
+            if regime == REGIME_NEU
+            else alt_available_msat_by_key
+        )
+        taken = _deplete_available(bucket, from_key, remaining_sent)
+        moved[regime] += taken
+        remaining_sent -= taken
+        if remaining_sent <= 0:
+            break
+
+    remaining_received = received_msat
+    for regime in regime_order:
+        carried = min(moved[regime], remaining_received)
+        if carried <= 0:
+            continue
+        bucket = (
+            neu_available_msat_by_key
+            if regime == REGIME_NEU
+            else alt_available_msat_by_key
+        )
+        bucket[to_key] += carried
+        remaining_received -= carried
+        if remaining_received <= 0:
+            break
+
+
+def infer_outbound_regimes(
+    rows: Sequence[Mapping[str, Any]],
+    intra_pairs: Optional[Sequence[Mapping[str, Mapping[str, Any]]]] = None,
+) -> dict[str, Literal["alt", "neu"]]:
     """Infer Austrian disposal regimes from the rows seen so far.
 
     v1 keeps the branch's existing bias toward Neu for post-cutoff disposals
     when a Neu pool is still populated, but it must not force `at_regime=neu`
-    once only Alt inventory remains. The result is a best-effort per-row map
-    that callers can reuse both for normal outbound events and for cross-asset
-    swap classification.
+    once only Alt inventory remains in the disposing wallet. The emitted rp2
+    moving-average pool is global, but regime availability stays wallet-aware
+    and explicit same-asset internal transfers move availability between wallets.
+    The result is a best-effort per-row map that callers can reuse both for
+    normal outbound events and for cross-asset swap classification.
     """
 
-    alt_available_msat = 0
-    neu_available_msat_by_pool: dict[str, int] = defaultdict(int)
+    alt_available_msat_by_key: dict[str, int] = defaultdict(int)
+    neu_available_msat_by_key: dict[str, int] = defaultdict(int)
     regimes_by_row_id: dict[str, Literal["alt", "neu"]] = {}
+    transfer_by_row_id: dict[str, Mapping[str, Mapping[str, Any]]] = {}
+    for pair in intra_pairs or ():
+        out_row = pair.get("out")
+        in_row = pair.get("in")
+        if out_row is None or in_row is None:
+            continue
+        transfer_by_row_id[str(out_row["id"])] = pair
+        transfer_by_row_id[str(in_row["id"])] = pair
+    handled_transfer_keys: set[tuple[str, str]] = set()
 
     for row in rows:
+        transfer_pair = transfer_by_row_id.get(str(row["id"]))
+        if transfer_pair is not None:
+            out_row = transfer_pair["out"]
+            in_row = transfer_pair["in"]
+            pair_key = (str(out_row["id"]), str(in_row["id"]))
+            if pair_key not in handled_transfer_keys:
+                handled_transfer_keys.add(pair_key)
+                _move_transfer_availability(
+                    alt_available_msat_by_key,
+                    neu_available_msat_by_key,
+                    out_row,
+                    in_row,
+                )
+            continue
+
         direction = str(_row_value(row, "direction") or "").strip().lower()
         amount_msat = int(_row_value(row, "amount") or 0)
         fee_msat = int(_row_value(row, "fee") or 0)
+        availability_key = _availability_key(_row_value(row, "wallet_id"))
         if direction == "inbound":
             regime = infer_regime_from_timestamp(str(row["occurred_at"]))
             if regime == REGIME_ALT:
-                alt_available_msat += amount_msat
+                alt_available_msat_by_key[availability_key] += amount_msat
             else:
-                pool_id = resolve_pool_id(_row_value(row, "wallet_id"))
-                neu_available_msat_by_pool[pool_id] += amount_msat
+                neu_available_msat_by_key[availability_key] += amount_msat
             continue
         if direction != "outbound":
             continue
 
-        pool_id = resolve_pool_id(_row_value(row, "wallet_id"))
         regime = infer_regime_from_timestamp(str(row["occurred_at"]))
-        if regime == REGIME_NEU and alt_available_msat > 0 and neu_available_msat_by_pool.get(pool_id, 0) <= 0:
+        if (
+            regime == REGIME_NEU
+            and alt_available_msat_by_key.get(availability_key, 0) > 0
+            and neu_available_msat_by_key.get(availability_key, 0) <= 0
+        ):
             regime = REGIME_ALT
         regimes_by_row_id[str(row["id"])] = regime
 
@@ -116,24 +230,31 @@ def infer_outbound_regimes(rows: Sequence[Mapping[str, Any]]) -> dict[str, Liter
         if needed_msat <= 0:
             continue
         if regime == REGIME_ALT:
-            alt_available_msat = max(0, alt_available_msat - needed_msat)
+            _deplete_available(alt_available_msat_by_key, availability_key, needed_msat)
         else:
-            neu_available_msat_by_pool[pool_id] = max(0, neu_available_msat_by_pool.get(pool_id, 0) - needed_msat)
+            _deplete_available(neu_available_msat_by_key, availability_key, needed_msat)
 
     return regimes_by_row_id
 
 
-def resolve_pool_id(wallet_id: Optional[str]) -> str:
-    """One pool per wallet. Falls back to `"default"` when wallet_id is missing.
+def resolve_pool_id(wallet_id: Optional[str]) -> str:  # wallet_id reserved as a future per-wallet seam; intentionally unused
+    """Single global Neuvermögen moving-average pool per asset.
 
-    v1 choice — documented in docs/austrian-handoff.md. Future multi-wallet
-    pool schemes (e.g. one pool per exchange account, one global pool) must
-    feed the same wallet_id-keyed output shape so upstream consumers don't
-    change.
+    The gleitender Durchschnittspreis (§ 2 KryptowährungsVO) is computed over the
+    taxpayer's *entire holding of each cryptocurrency*, not per wallet. rp2 runs one
+    accounting pass per asset, so a single constant pool id == the whole per-asset
+    holding. This also keeps the Austrian cost-basis pool consistent with the rest of
+    the engine, where cost basis is global (universal-application FIFO) and only the
+    *availability* gate is per-`(exchange, holder)` — see kassiber/core/engines/rp2.py.
+
+    Returning one pool id regardless of wallet fixes the multi-wallet hazard where coins
+    acquired in one wallet and sold from another were tagged with different `at_pool`s, so
+    rp2's `moving_average_at` found no lots in the disposal's pool (bitcoinaustria/kassiber#213,
+    bitcoinaustria/rp2#7). `wallet_id` is retained as the seam for a hypothetical future
+    per-wallet scheme; it is intentionally unused today. The wallet-keyed *output shape*
+    (a single pool-id string) is preserved, so upstream consumers do not change.
     """
-    if not wallet_id:
-        return "default"
-    return str(wallet_id)
+    return AT_DEFAULT_POOL
 
 
 def kennzahl_for_disposal_category(category: Optional[str]) -> int | None:
@@ -144,6 +265,7 @@ def kennzahl_for_disposal_category(category: Optional[str]) -> int | None:
 
 __all__ = [
     "AT_CATEGORY_TO_KENNZAHL",
+    "AT_DEFAULT_POOL",
     "AT_NEU_CUTOFF",
     "AT_SWAP_QUARANTINE_REASON",
     "REGIME_ALT",

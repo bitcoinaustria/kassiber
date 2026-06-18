@@ -1,5 +1,6 @@
 import { Plus } from "lucide-react";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ import {
   btcFromSatsInput,
   calculateNewTransactionPricing,
   classificationOptions,
+  classificationOptionLabelKeys,
   formatAssetAmount,
   formatBtcAmount,
   formatDraftFiat,
@@ -83,6 +85,7 @@ export function NewTransactionDialog({
   onDraftChange: (draft: NewTransactionDraft) => void;
   onSaveDraft: () => void;
 }) {
+  const { t } = useTranslation(["transactions", "common"]);
   const bodyRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
     if (open) bodyRef.current?.scrollTo({ top: 0 });
@@ -156,16 +159,19 @@ export function NewTransactionDialog({
   );
   const movementLabel =
     draft.movementId === "new"
-      ? "New movement"
-      : selectedMovement?.label || "Standalone";
+      ? t("newDialog.newMovement")
+      : selectedMovement
+        ? // loose translator
+          (t as (key: string) => string)(selectedMovement.labelKey)
+        : t("newDialog.standalone");
   const fromDisplay =
     draft.flow === "incoming"
       ? draft.fromExternal || "External"
-      : draft.fromWallet || "Unassigned";
+      : draft.fromWallet || t("fallback.unassigned");
   const toDisplay =
     draft.flow === "outgoing"
       ? draft.toExternal || "External"
-      : draft.toWallet || "Unassigned";
+      : draft.toWallet || t("fallback.unassigned");
   const primaryEvidence =
     draft.evidence.txidOrPermalink ||
     draft.evidence.btcpayInvoiceId ||
@@ -176,15 +182,15 @@ export function NewTransactionDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm" className="h-8 gap-2 sm:h-9" aria-label="New transaction">
+        <Button size="sm" className="h-8 gap-2 sm:h-9" aria-label={t("newDialog.triggerAria")}>
           <Plus className="size-4" aria-hidden="true" />
-          <span className="hidden sm:inline">New transaction</span>
+          <span className="hidden sm:inline">{t("newDialog.trigger")}</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="flex max-h-[calc(100vh-1rem)] flex-col overflow-hidden p-0 sm:max-w-[80rem]">
         <DialogHeader className="shrink-0 px-5 pt-4 pb-2 pr-12">
-          <DialogTitle>New transaction</DialogTitle>
-          <DialogDescription>Manual draft</DialogDescription>
+          <DialogTitle>{t("newDialog.title")}</DialogTitle>
+          <DialogDescription>{t("newDialog.description")}</DialogDescription>
         </DialogHeader>
 
         <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto px-5 pb-3">
@@ -192,12 +198,12 @@ export function NewTransactionDialog({
           <div className="space-y-3">
             <section className="rounded-lg border p-2">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold">Network and timing</h3>
+                <h3 className="text-sm font-semibold">{t("newDialog.section.networkTiming")}</h3>
                 <Badge variant="outline">{draft.network}</Badge>
               </div>
               <div className="grid gap-2 md:grid-cols-2">
                 <div className="space-y-1.5 md:col-span-2">
-                  <Label>Network</Label>
+                  <Label>{t("newDialog.field.network")}</Label>
                   <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1 sm:grid-cols-3 xl:grid-cols-6">
                     {newTransactionNetworkOptions.map((network) => (
                       <button
@@ -230,7 +236,7 @@ export function NewTransactionDialog({
                 </div>
 
                 <div className="space-y-1.5 md:col-span-2">
-                  <Label>Flow</Label>
+                  <Label>{t("newDialog.field.flow")}</Label>
                   <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1 sm:grid-cols-3 xl:grid-cols-5">
                     {newTransactionFlowOptions.map((option) => (
                       <button
@@ -244,14 +250,15 @@ export function NewTransactionDialog({
                         )}
                         onClick={() => updateFlow(option.value)}
                       >
-                        {option.label}
+                        {/* loose translator */}
+                        {(t as (key: string) => string)(option.label)}
                       </button>
                     ))}
                   </div>
                 </div>
 
                 <div className="grid gap-1.5">
-                  <Label htmlFor="new-txn-occurred-at">Occurred at</Label>
+                  <Label htmlFor="new-txn-occurred-at">{t("newDialog.field.occurredAt")}</Label>
                   <Input
                     id="new-txn-occurred-at"
                     type="datetime-local"
@@ -261,7 +268,7 @@ export function NewTransactionDialog({
                 </div>
                 {showConfirmedAt ? (
                   <div className="grid gap-1.5">
-                    <Label htmlFor="new-txn-confirmed-at">Confirmed at</Label>
+                    <Label htmlFor="new-txn-confirmed-at">{t("newDialog.field.confirmedAt")}</Label>
                     <Input
                       id="new-txn-confirmed-at"
                       type="datetime-local"
@@ -276,11 +283,11 @@ export function NewTransactionDialog({
             </section>
 
             <section className="rounded-lg border p-2">
-              <h3 className="mb-2 text-sm font-semibold">Parties and route</h3>
+              <h3 className="mb-2 text-sm font-semibold">{t("newDialog.section.partiesRoute")}</h3>
               {twoLegFlow ? (
                 <div className="grid gap-2 md:grid-cols-3">
                   <div className="grid gap-1.5">
-                    <Label htmlFor="new-txn-from-wallet">From</Label>
+                    <Label htmlFor="new-txn-from-wallet">{t("newDialog.field.from")}</Label>
                     <Select
                       value={draft.fromWallet}
                       onValueChange={(value) =>
@@ -300,7 +307,7 @@ export function NewTransactionDialog({
                     </Select>
                   </div>
                   <div className="grid gap-1.5">
-                    <Label htmlFor="new-txn-to-wallet">To</Label>
+                    <Label htmlFor="new-txn-to-wallet">{t("newDialog.field.to")}</Label>
                     <Select
                       value={draft.toWallet}
                       onValueChange={(value) => updateDraft({ toWallet: value })}
@@ -318,14 +325,14 @@ export function NewTransactionDialog({
                     </Select>
                   </div>
                   <div className="grid gap-1.5">
-                    <Label htmlFor="new-txn-swap-service">Swap service</Label>
+                    <Label htmlFor="new-txn-swap-service">{t("newDialog.field.swapService")}</Label>
                     <Input
                       id="new-txn-swap-service"
                       value={draft.swapService}
                       onChange={(event) =>
                         updateDraft({ swapService: event.target.value })
                       }
-                      placeholder="Boltz, exchange, channel peer"
+                      placeholder={t("newDialog.field.swapServicePlaceholder")}
                     />
                   </div>
                 </div>
@@ -334,7 +341,7 @@ export function NewTransactionDialog({
                   {draft.flow === "incoming" ? (
                     <>
                       <div className="grid gap-1.5">
-                        <Label htmlFor="new-txn-from-external">From</Label>
+                        <Label htmlFor="new-txn-from-external">{t("newDialog.field.from")}</Label>
                         <Input
                           id="new-txn-from-external"
                           value={draft.fromExternal}
@@ -344,11 +351,11 @@ export function NewTransactionDialog({
                               counterparty: event.target.value,
                             })
                           }
-                          placeholder="External party, payer, or source"
+                          placeholder={t("newDialog.field.fromExternalPlaceholder")}
                         />
                       </div>
                       <div className="grid gap-1.5">
-                        <Label htmlFor="new-txn-to-wallet">To</Label>
+                        <Label htmlFor="new-txn-to-wallet">{t("newDialog.field.to")}</Label>
                         <Select
                           value={draft.toWallet}
                           onValueChange={(value) =>
@@ -371,7 +378,7 @@ export function NewTransactionDialog({
                   ) : draft.flow === "outgoing" ? (
                     <>
                       <div className="grid gap-1.5">
-                        <Label htmlFor="new-txn-from-wallet">From</Label>
+                        <Label htmlFor="new-txn-from-wallet">{t("newDialog.field.from")}</Label>
                         <Select
                           value={draft.fromWallet}
                           onValueChange={(value) =>
@@ -391,7 +398,7 @@ export function NewTransactionDialog({
                         </Select>
                       </div>
                       <div className="grid gap-1.5">
-                        <Label htmlFor="new-txn-to-external">To</Label>
+                        <Label htmlFor="new-txn-to-external">{t("newDialog.field.to")}</Label>
                         <Input
                           id="new-txn-to-external"
                           value={draft.toExternal}
@@ -401,14 +408,14 @@ export function NewTransactionDialog({
                               counterparty: event.target.value,
                             })
                           }
-                          placeholder="External party or destination"
+                          placeholder={t("newDialog.field.toExternalPlaceholder")}
                         />
                       </div>
                     </>
                   ) : (
                     <>
                       <div className="grid gap-1.5">
-                        <Label htmlFor="new-txn-from-wallet">From</Label>
+                        <Label htmlFor="new-txn-from-wallet">{t("newDialog.field.from")}</Label>
                         <Select
                           value={draft.fromWallet}
                           onValueChange={(value) =>
@@ -428,7 +435,7 @@ export function NewTransactionDialog({
                         </Select>
                       </div>
                       <div className="grid gap-1.5">
-                        <Label htmlFor="new-txn-to-wallet">To</Label>
+                        <Label htmlFor="new-txn-to-wallet">{t("newDialog.field.to")}</Label>
                         <Select
                           value={draft.toWallet}
                           onValueChange={(value) => updateDraft({ toWallet: value })}
@@ -452,16 +459,16 @@ export function NewTransactionDialog({
             </section>
 
             <section className="rounded-lg border p-2">
-              <h3 className="mb-2 text-sm font-semibold">Amount and pricing</h3>
+              <h3 className="mb-2 text-sm font-semibold">{t("newDialog.section.amountPricing")}</h3>
               {twoLegFlow ? (
                 <div className="grid gap-2 md:grid-cols-2">
                   <div className="rounded-md border bg-background p-2">
                     <h4 className="mb-2 text-xs font-semibold text-muted-foreground">
-                      Leg 1 out
+                      {t("newDialog.field.leg1Out")}
                     </h4>
                     <div className="grid gap-2 sm:grid-cols-2">
                       <div className="grid gap-1.5">
-                        <Label htmlFor="new-txn-send-amount">Send sats</Label>
+                        <Label htmlFor="new-txn-send-amount">{t("newDialog.field.sendSats")}</Label>
                         <Input
                           id="new-txn-send-amount"
                           inputMode="numeric"
@@ -473,7 +480,7 @@ export function NewTransactionDialog({
                         />
                       </div>
                       <div className="grid gap-1.5">
-                        <Label htmlFor="new-txn-send-asset">Send asset</Label>
+                        <Label htmlFor="new-txn-send-asset">{t("newDialog.field.sendAsset")}</Label>
                         <Input
                           id="new-txn-send-asset"
                           value={draft.sendAsset}
@@ -487,11 +494,11 @@ export function NewTransactionDialog({
                   </div>
                   <div className="rounded-md border bg-background p-2">
                     <h4 className="mb-2 text-xs font-semibold text-muted-foreground">
-                      Leg 2 in
+                      {t("newDialog.field.leg2In")}
                     </h4>
                     <div className="grid gap-2 sm:grid-cols-2">
                       <div className="grid gap-1.5">
-                        <Label htmlFor="new-txn-receive-amount">Receive sats</Label>
+                        <Label htmlFor="new-txn-receive-amount">{t("newDialog.field.receiveSats")}</Label>
                         <Input
                           id="new-txn-receive-amount"
                           inputMode="numeric"
@@ -503,7 +510,7 @@ export function NewTransactionDialog({
                         />
                       </div>
                       <div className="grid gap-1.5">
-                        <Label htmlFor="new-txn-receive-asset">Receive asset</Label>
+                        <Label htmlFor="new-txn-receive-asset">{t("newDialog.field.receiveAsset")}</Label>
                         <Input
                           id="new-txn-receive-asset"
                           value={draft.receiveAsset}
@@ -522,7 +529,7 @@ export function NewTransactionDialog({
                 {!twoLegFlow ? (
                   <>
                     <div className="grid gap-1.5">
-                      <Label htmlFor="new-txn-amount">Amount sats</Label>
+                      <Label htmlFor="new-txn-amount">{t("newDialog.field.amountSats")}</Label>
                       <Input
                         id="new-txn-amount"
                         inputMode="numeric"
@@ -535,7 +542,7 @@ export function NewTransactionDialog({
                     </div>
                     {showSingleAsset ? (
                       <div className="grid gap-1.5">
-                        <Label htmlFor="new-txn-asset">Asset</Label>
+                        <Label htmlFor="new-txn-asset">{t("newDialog.field.asset")}</Label>
                         <Input
                           id="new-txn-asset"
                           value={draft.asset}
@@ -548,7 +555,7 @@ export function NewTransactionDialog({
                   </>
                 ) : null}
                 <div className="grid gap-1.5">
-                  <Label htmlFor="new-txn-fee">Fee sats</Label>
+                  <Label htmlFor="new-txn-fee">{t("newDialog.field.feeSats")}</Label>
                   <Input
                     id="new-txn-fee"
                     inputMode="numeric"
@@ -559,7 +566,7 @@ export function NewTransactionDialog({
                 </div>
                 <div className="grid gap-1.5">
                   <Label htmlFor="new-txn-price">
-                    Price / BTC ({draft.fiatCurrency})
+                    {t("newDialog.field.pricePerBtc", { currency: draft.fiatCurrency })}
                   </Label>
                   <Input
                     id="new-txn-price"
@@ -573,7 +580,7 @@ export function NewTransactionDialog({
                 </div>
                 <div className="grid gap-1.5">
                   <Label htmlFor="new-txn-value">
-                    Total value ({draft.fiatCurrency})
+                    {t("newDialog.field.totalValue", { currency: draft.fiatCurrency })}
                   </Label>
                   <Input
                     id="new-txn-value"
@@ -586,7 +593,7 @@ export function NewTransactionDialog({
                   />
                 </div>
                 <div className="grid gap-1.5 md:col-span-2 xl:col-span-1">
-                  <Label>Pricing method</Label>
+                  <Label>{t("newDialog.field.pricingMethod")}</Label>
                   <Select
                     value={pricingSelectionValue(
                       draft.pricingSourceKind,
@@ -609,7 +616,8 @@ export function NewTransactionDialog({
                     <SelectContent>
                       {newTransactionPricingOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
-                          {option.label}
+                          {/* loose translator */}
+                          {(t as (key: string) => string)(option.label)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -620,7 +628,7 @@ export function NewTransactionDialog({
 
             <section className="rounded-lg border p-2">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold">Part of movement</h3>
+                <h3 className="text-sm font-semibold">{t("newDialog.section.partOfMovement")}</h3>
                 <Button
                   type="button"
                   variant={draft.movementId === "new" ? "default" : "outline"}
@@ -628,19 +636,23 @@ export function NewTransactionDialog({
                   className="h-7"
                   onClick={() => updateDraft({ movementId: "new" })}
                 >
-                  New movement
+                  {t("newDialog.newMovement")}
                 </Button>
               </div>
               <div className="grid gap-2">
                 <Input
                   value={
-                    selectedMovement?.label ??
-                    (draft.movementId === "new" ? "" : draft.movementId)
+                    selectedMovement
+                      ? // loose translator
+                        (t as (key: string) => string)(selectedMovement.labelKey)
+                      : draft.movementId === "new"
+                        ? ""
+                        : draft.movementId
                   }
                   onChange={(event) =>
                     updateDraft({ movementId: event.target.value })
                   }
-                  placeholder="Search movement, swap, channel, or peg"
+                  placeholder={t("newDialog.field.movementPlaceholder")}
                 />
                 <div className="grid gap-1 sm:grid-cols-3">
                   {mockNewTransactionMovementCandidates.map((candidate) => (
@@ -654,10 +666,12 @@ export function NewTransactionDialog({
                       onClick={() => updateDraft({ movementId: candidate.id })}
                     >
                       <span className="block truncate font-medium">
-                        {candidate.label}
+                        {/* loose translator */}
+                        {(t as (key: string) => string)(candidate.labelKey)}
                       </span>
                       <span className="block truncate text-muted-foreground">
-                        {candidate.detail}
+                        {/* loose translator */}
+                        {(t as (key: string) => string)(candidate.detailKey)}
                       </span>
                     </button>
                   ))}
@@ -667,14 +681,16 @@ export function NewTransactionDialog({
 
             <section className="rounded-lg border p-2">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold">Classification</h3>
+                <h3 className="text-sm font-semibold">{t("newDialog.section.classification")}</h3>
                 <Badge variant={taxClassification.taxable ? "default" : "outline"}>
-                  {taxClassification.taxable ? "Taxable" : "Not taxable"}
+                  {taxClassification.taxable
+                    ? t("taxable.taxable")
+                    : t("taxable.notTaxable")}
                 </Badge>
               </div>
               <div className="grid gap-2 md:grid-cols-[minmax(150px,0.8fr)_minmax(220px,1.2fr)]">
                 <div className="grid gap-1.5">
-                  <Label>Label</Label>
+                  <Label>{t("newDialog.field.label")}</Label>
                   <Select
                     value={draft.label}
                     onValueChange={(value) => updateDraft({ label: value })}
@@ -685,14 +701,19 @@ export function NewTransactionDialog({
                     <SelectContent>
                       {classificationOptions.map((option) => (
                         <SelectItem key={option} value={option}>
-                          {option}
+                          {classificationOptionLabelKeys[option]
+                            ? // loose translator
+                              (t as (key: string) => string)(
+                                classificationOptionLabelKeys[option],
+                              )
+                            : option}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="grid gap-1.5">
-                  <Label>Tax treatment</Label>
+                  <Label>{t("newDialog.field.taxTreatment")}</Label>
                   <Select
                     value={austrianSelectionValue(
                       draft.atRegime,
@@ -713,87 +734,88 @@ export function NewTransactionDialog({
                     <SelectContent>
                       {austrianTaxClassificationOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
-                          {option.label}
+                          {/* loose translator */}
+                          {(t as (key: string) => string)(option.label)}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="grid gap-1.5">
-                  <Label htmlFor="new-txn-tags">Tags</Label>
+                  <Label htmlFor="new-txn-tags">{t("newDialog.field.tags")}</Label>
                   <Input
                     id="new-txn-tags"
                     value={draft.tags}
                     onChange={(event) => updateDraft({ tags: event.target.value })}
-                    placeholder="Revenue, BTCPay, client ACME"
+                    placeholder={t("newDialog.field.tagsPlaceholder")}
                   />
                 </div>
                 <div className="grid gap-1.5">
-                  <Label htmlFor="new-txn-note">Note</Label>
+                  <Label htmlFor="new-txn-note">{t("newDialog.field.note")}</Label>
                   <Textarea
                     id="new-txn-note"
                     value={draft.note}
                     onChange={(event) => updateDraft({ note: event.target.value })}
-                    placeholder="Freeform review commentary"
+                    placeholder={t("newDialog.field.notePlaceholder")}
                   />
                 </div>
               </div>
             </section>
 
             <section className="rounded-lg border p-2">
-              <h3 className="mb-2 text-sm font-semibold">Evidence</h3>
+              <h3 className="mb-2 text-sm font-semibold">{t("newDialog.section.evidence")}</h3>
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                 <div className="grid gap-1.5">
-                  <Label htmlFor="new-txn-evidence-txid">Txid or permalink</Label>
+                  <Label htmlFor="new-txn-evidence-txid">{t("newDialog.field.evidenceTxid")}</Label>
                   <Input
                     id="new-txn-evidence-txid"
                     value={draft.evidence.txidOrPermalink}
                     onChange={(event) =>
                       updateEvidence({ txidOrPermalink: event.target.value })
                     }
-                    placeholder="txid, payment hash, or URL"
+                    placeholder={t("newDialog.field.evidenceTxidPlaceholder")}
                   />
                 </div>
                 <div className="grid gap-1.5">
-                  <Label htmlFor="new-txn-evidence-btcpay">BTCPay invoice ID</Label>
+                  <Label htmlFor="new-txn-evidence-btcpay">{t("newDialog.field.evidenceBtcpay")}</Label>
                   <Input
                     id="new-txn-evidence-btcpay"
                     value={draft.evidence.btcpayInvoiceId}
                     onChange={(event) =>
                       updateEvidence({ btcpayInvoiceId: event.target.value })
                     }
-                    placeholder="invoice id"
+                    placeholder={t("newDialog.field.evidenceBtcpayPlaceholder")}
                   />
                 </div>
                 <div className="grid gap-1.5">
-                  <Label htmlFor="new-txn-evidence-exchange">Exchange CSV row</Label>
+                  <Label htmlFor="new-txn-evidence-exchange">{t("newDialog.field.evidenceExchange")}</Label>
                   <Input
                     id="new-txn-evidence-exchange"
                     value={draft.evidence.exchangeCsvRow}
                     onChange={(event) =>
                       updateEvidence({ exchangeCsvRow: event.target.value })
                     }
-                    placeholder="file.csv:42"
+                    placeholder={t("newDialog.field.evidenceExchangePlaceholder")}
                   />
                 </div>
                 <div className="grid gap-1.5">
-                  <Label htmlFor="new-txn-evidence-swap">Boltz swap ID</Label>
+                  <Label htmlFor="new-txn-evidence-swap">{t("newDialog.field.evidenceSwap")}</Label>
                   <Input
                     id="new-txn-evidence-swap"
                     value={draft.evidence.swapId}
                     onChange={(event) => updateEvidence({ swapId: event.target.value })}
-                    placeholder="swap id"
+                    placeholder={t("newDialog.field.evidenceSwapPlaceholder")}
                   />
                 </div>
                 <div className="grid gap-1.5 md:col-span-2">
-                  <Label htmlFor="new-txn-evidence-preimage">Preimage</Label>
+                  <Label htmlFor="new-txn-evidence-preimage">{t("newDialog.field.evidencePreimage")}</Label>
                   <Input
                     id="new-txn-evidence-preimage"
                     value={draft.evidence.preimage}
                     onChange={(event) =>
                       updateEvidence({ preimage: event.target.value })
                     }
-                    placeholder="payment preimage"
+                    placeholder={t("newDialog.field.evidencePreimagePlaceholder")}
                   />
                 </div>
               </div>
@@ -803,9 +825,9 @@ export function NewTransactionDialog({
           <aside className="space-y-2.5 rounded-lg border bg-muted/20 p-2.5 lg:sticky lg:top-0 lg:self-start">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">Live preview</p>
+                <p className="text-xs text-muted-foreground">{t("newDialog.preview.live")}</p>
                 <p className="truncate text-lg font-semibold">
-                  {transactionFlowLabels[draft.flow]}
+                  {t(transactionFlowLabels[draft.flow])}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
                   {fromDisplay} → {toDisplay}
@@ -825,10 +847,13 @@ export function NewTransactionDialog({
                     ],
                   )}
                 >
-                  {pricingSourceLabel(
-                    draft.pricingSourceKind,
-                    draft.pricingQuality,
-                    newTransactionPricingOptions,
+                  {/* loose translator */}
+                  {(t as (key: string) => string)(
+                    pricingSourceLabel(
+                      draft.pricingSourceKind,
+                      draft.pricingQuality,
+                      newTransactionPricingOptions,
+                    ),
                   )}
                 </Badge>
               ) : null}
@@ -838,13 +863,13 @@ export function NewTransactionDialog({
               {twoLegFlow ? (
                 <div className="grid gap-2 text-sm">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-muted-foreground">Out</span>
+                    <span className="text-muted-foreground">{t("newDialog.preview.out")}</span>
                     <span className="truncate text-right font-semibold">
                       {formatAssetAmount(sendLegBtc, draft.sendAsset)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-muted-foreground">In</span>
+                    <span className="text-muted-foreground">{t("newDialog.preview.in")}</span>
                     <span className="truncate text-right font-semibold">
                       {formatAssetAmount(
                         receiveLegBtc,
@@ -873,26 +898,30 @@ export function NewTransactionDialog({
                     {formatBtcAmount(Math.abs(movementBtc))}
                   </p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Net {formatBtc(signedBtc, { sign: true })}
+                    {t("newDialog.preview.net", {
+                      value: formatBtc(signedBtc, { sign: true }),
+                    })}
                   </p>
                 </>
               )}
               <p className="mt-2 text-sm text-muted-foreground">
                 {totalValue !== null
                   ? formatDraftFiat(totalValue, draft.fiatCurrency)
-                  : `No ${draft.fiatCurrency} value`}
+                  : t("newDialog.preview.noFiatValue", {
+                      currency: draft.fiatCurrency,
+                    })}
               </p>
             </div>
 
             <div className="grid gap-2 text-sm">
-              <PreviewRow label="Network" value={draft.network} />
-              <PreviewRow label="From" value={fromDisplay} />
-              <PreviewRow label="To" value={toDisplay} />
+              <PreviewRow label={t("newDialog.preview.network")} value={draft.network} />
+              <PreviewRow label={t("newDialog.preview.from")} value={fromDisplay} />
+              <PreviewRow label={t("newDialog.preview.to")} value={toDisplay} />
               {draft.swapService ? (
-                <PreviewRow label="Service" value={draft.swapService} />
+                <PreviewRow label={t("newDialog.preview.service")} value={draft.swapService} />
               ) : null}
               <PreviewRow
-                label="Movement"
+                label={t("newDialog.preview.movement")}
                 value={
                   <button
                     type="button"
@@ -908,7 +937,7 @@ export function NewTransactionDialog({
                 }
               />
               <PreviewRow
-                label="Asset"
+                label={t("newDialog.preview.asset")}
                 value={
                   twoLegFlow
                     ? `${draft.sendAsset || "BTC"} → ${
@@ -918,11 +947,11 @@ export function NewTransactionDialog({
                 }
               />
               <PreviewRow
-                label="Fee"
+                label={t("newDialog.preview.fee")}
                 value={feeBtc ? formatBtcAmount(feeBtc) : "-"}
               />
               <PreviewRow
-                label={`Value (${draft.fiatCurrency})`}
+                label={t("newDialog.preview.value", { currency: draft.fiatCurrency })}
                 value={
                   totalValue !== null
                     ? formatDraftFiat(totalValue, draft.fiatCurrency)
@@ -930,29 +959,40 @@ export function NewTransactionDialog({
                 }
               />
               <PreviewRow
-                label={`Price (${draft.fiatCurrency}/BTC)`}
+                label={t("newDialog.preview.price", { currency: draft.fiatCurrency })}
                 value={
                   priceValue !== null
-                    ? `${formatDraftFiat(priceValue, draft.fiatCurrency)} / BTC`
+                    ? t("newDialog.preview.pricePerBtc", {
+                        value: formatDraftFiat(priceValue, draft.fiatCurrency),
+                      })
                     : "-"
                 }
               />
               <PreviewRow
-                label="Pricing"
-                value={pricingSourceLabel(
-                  draft.pricingSourceKind,
-                  draft.pricingQuality,
-                  newTransactionPricingOptions,
+                label={t("newDialog.preview.pricing")}
+                // loose translator
+                value={(t as (key: string) => string)(
+                  pricingSourceLabel(
+                    draft.pricingSourceKind,
+                    draft.pricingQuality,
+                    newTransactionPricingOptions,
+                  ),
                 )}
               />
-              <PreviewRow label="Tax" value={taxClassification.shortLabel} />
+              <PreviewRow
+                label={t("newDialog.preview.tax")}
+                // loose translator
+                value={(t as (key: string) => string)(
+                  taxClassification.shortLabel,
+                )}
+              />
               {primaryEvidence ? (
-                <PreviewRow label="Evidence" value={primaryEvidence} />
+                <PreviewRow label={t("newDialog.preview.evidence")} value={primaryEvidence} />
               ) : null}
             </div>
 
             <div className="grid gap-1.5">
-              <Label>Status</Label>
+              <Label>{t("newDialog.status")}</Label>
               <Select
                 value={draft.reviewStatus}
                 onValueChange={(value) =>
@@ -965,7 +1005,7 @@ export function NewTransactionDialog({
                 <SelectContent>
                   {allTransactionStatuses.map((status) => (
                     <SelectItem key={status} value={status}>
-                      {transactionStatusLabels[status]}
+                      {t(transactionStatusLabels[status])}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -973,9 +1013,18 @@ export function NewTransactionDialog({
             </div>
 
             <div className="flex flex-wrap gap-1">
-              <Badge variant="secondary">{draft.label}</Badge>
+              <Badge variant="secondary">
+                {classificationOptionLabelKeys[draft.label]
+                  ? // loose translator
+                    (t as (key: string) => string)(
+                      classificationOptionLabelKeys[draft.label],
+                    )
+                  : draft.label}
+              </Badge>
               <Badge variant={taxClassification.taxable ? "default" : "outline"}>
-                {taxClassification.taxable ? "Taxable" : "Not taxable"}
+                {taxClassification.taxable
+                  ? t("taxable.taxable")
+                  : t("taxable.notTaxable")}
               </Badge>
               {tags.map((tag) => (
                 <Badge key={tag} variant="outline">
@@ -989,15 +1038,15 @@ export function NewTransactionDialog({
 
         <DialogFooter className="shrink-0 border-t bg-background/95 px-5 py-2.5 backdrop-blur sm:items-center sm:justify-between">
           <div className="text-left text-xs text-muted-foreground">
-            Demo only: kept in this UI session, not written to the database.
+            {t("newDialog.footer.demoNote")}
           </div>
           <DialogClose asChild>
             <Button type="button" variant="outline">
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
           </DialogClose>
           <Button type="button" onClick={onSaveDraft}>
-            Save local demo draft
+            {t("newDialog.footer.save")}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -228,6 +228,8 @@ export interface MaintenanceFreshnessSettings {
   market_rate_fiats?: string[];
   active_rate_pair?: string | null;
   auto_sync_before_report_reads?: boolean;
+  require_coarse_review?: boolean;
+  coarse_priced_count?: number;
   setting_key?: string;
 }
 

@@ -7,6 +7,7 @@ import {
   X,
 } from "lucide-react";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -68,6 +69,7 @@ export function LogsTableControls({
   onRedactedChange,
   onRegexChange,
 }: LogsTableControlsProps) {
+  const { t } = useTranslation("review");
   const levelCounts = React.useMemo(() => countByLevel(records), [records]);
   const sortedModuleCounts = React.useMemo(
     () =>
@@ -85,36 +87,37 @@ export function LogsTableControls({
           <>
             {levelFilter !== "all" ? (
               <ActiveFilterChip
-                ariaLabel={`Clear ${levelFilter} level filter`}
+                ariaLabel={t("logsControls.clearLevelAria", { level: levelFilter })}
                 onClick={() => onLevelFilterChange("all")}
               >
-                Level: {levelFilter.toUpperCase()}
+                {t("logsControls.levelChip", { level: levelFilter.toUpperCase() })}
               </ActiveFilterChip>
             ) : null}
             {moduleFilter ? (
               <ActiveFilterChip
-                ariaLabel={`Clear ${moduleFilter} module filter`}
+                ariaLabel={t("logsControls.clearModuleAria", { module: moduleFilter })}
                 onClick={() => onModuleFilterChange(null)}
               >
-                Module: {moduleFilter}
+                {t("logsControls.moduleChip", { module: moduleFilter })}
               </ActiveFilterChip>
             ) : null}
             {trimmedQuery ? (
               <ActiveFilterChip
-                ariaLabel="Clear log search filter"
+                ariaLabel={t("logsControls.clearSearchAria")}
                 onClick={() => {
                   onQueryChange("");
                   onRegexChange(false);
                 }}
               >
-                Search: {regex ? "regex:" : ""}
-                {trimmedQuery}
+                {t("logsControls.searchChip", {
+                  query: `${regex ? t("logsControls.searchRegexPrefix") : ""}${trimmedQuery}`,
+                })}
               </ActiveFilterChip>
             ) : null}
           </>
         ) : (
           <span className="font-mono text-xs text-muted-foreground">
-            All captured records
+            {t("logsControls.allCaptured")}
           </span>
         )}
       </div>
@@ -124,7 +127,7 @@ export function LogsTableControls({
           id={searchInputId}
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="Search logs ( / )"
+          placeholder={t("logsControls.searchPlaceholder")}
           className="h-8 w-44 font-mono text-xs"
         />
         <LogFilterMenu
@@ -173,6 +176,7 @@ function LogFilterMenu({
   onLevelFilterChange: (level: LogLevelFilter) => void;
   onModuleFilterChange: (module: string | null) => void;
 }) {
+  const { t } = useTranslation("review");
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -181,20 +185,20 @@ function LogFilterMenu({
           size="icon"
           variant={hasTableFilters ? "secondary" : "outline"}
           className={cn("relative size-8", hasTableFilters && "border-primary")}
-          aria-label="Filter logs"
-          title="Filter logs"
+          aria-label={t("logsControls.filterLogsAria")}
+          title={t("logsControls.filterLogsAria")}
         >
           <Filter className="size-4" aria-hidden="true" />
           {hasTableFilters ? <ActiveDot /> : null}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel>Filter logs</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("logsControls.filterLogsLabel")}</DropdownMenuLabel>
         <DropdownMenuCheckboxItem
           checked={levelFilter === "all"}
           onCheckedChange={() => onLevelFilterChange("all")}
         >
-          <span>All levels</span>
+          <span>{t("logsControls.allLevels")}</span>
           <span className="ml-auto text-xs text-muted-foreground">{recordsCount}</span>
         </DropdownMenuCheckboxItem>
         {LEVEL_FILTER_ORDER.map((item) => (
@@ -210,12 +214,12 @@ function LogFilterMenu({
           </DropdownMenuCheckboxItem>
         ))}
         <DropdownMenuSeparator />
-        <DropdownMenuLabel>Module</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("logsControls.module")}</DropdownMenuLabel>
         <DropdownMenuCheckboxItem
           checked={moduleFilter === null}
           onCheckedChange={() => onModuleFilterChange(null)}
         >
-          <span>All modules</span>
+          <span>{t("logsControls.allModules")}</span>
           <span className="ml-auto text-xs text-muted-foreground">{recordsCount}</span>
         </DropdownMenuCheckboxItem>
         {sortedModuleCounts.map(([module, count]) => (
@@ -235,7 +239,7 @@ function LogFilterMenu({
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onClearFilters}>
               <X className="size-4" aria-hidden="true" />
-              Clear filters
+              {t("logsControls.clearFilters")}
             </DropdownMenuItem>
           </>
         ) : null}
@@ -261,6 +265,7 @@ function LogSettingsMenu({
   onRedactedChange: (redacted: boolean) => void;
   onRegexChange: (regex: boolean) => void;
 }) {
+  const { t } = useTranslation("review");
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -269,25 +274,25 @@ function LogSettingsMenu({
           size="icon"
           variant={settingsActive ? "secondary" : "outline"}
           className={cn("relative size-8", settingsActive && "border-primary")}
-          aria-label="Log settings"
-          title="Log settings"
+          aria-label={t("logsControls.logSettingsAria")}
+          title={t("logsControls.logSettingsAria")}
         >
           <Settings className="size-4" aria-hidden="true" />
           {settingsActive ? <ActiveDot /> : null}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel>Log settings</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("logsControls.logSettingsLabel")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="font-mono text-xs text-muted-foreground">
-          Search
+          {t("logsControls.search")}
         </DropdownMenuLabel>
         <DropdownMenuCheckboxItem
           checked={regex}
           onCheckedChange={(checked) => onRegexChange(Boolean(checked))}
         >
           <Regex className="size-4" aria-hidden="true" />
-          Regex search
+          {t("logsControls.regexSearch")}
         </DropdownMenuCheckboxItem>
         <DropdownMenuSeparator />
         <DropdownMenuCheckboxItem
@@ -295,14 +300,14 @@ function LogSettingsMenu({
           onCheckedChange={(checked) => onRedactedChange(Boolean(checked))}
         >
           <Shield className="size-4" aria-hidden="true" />
-          Redacted view
+          {t("logsControls.redactedView")}
         </DropdownMenuCheckboxItem>
         <DropdownMenuCheckboxItem
           checked={maskAmounts}
           onCheckedChange={(checked) => onMaskAmountsChange(Boolean(checked))}
         >
           <Eye className="size-4" aria-hidden="true" />
-          Mask amounts
+          {t("logsControls.maskAmounts")}
         </DropdownMenuCheckboxItem>
       </DropdownMenuContent>
     </DropdownMenu>

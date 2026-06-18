@@ -11,6 +11,8 @@ All `scripts/` paths in this skill are relative to the directory containing this
 
 Kassiber accounts are wallet/reporting buckets, not a double-entry chart of accounts. Keep explanations simple unless the user explicitly asks for accounting theory.
 
+Kassiber's CLI and daemon output are English and machine-deterministic, independent of any GUI language. The desktop app (`ui-tauri/`) is separately localized (English + Austrian German); the CLI is not. Don't translate CLI/`--machine` output or expect localized CLI responses. If you change UI strings, see [docs/reference/i18n.md](../../docs/reference/i18n.md).
+
 ## Fast Paths
 
 Use these without opening extra references when the request clearly matches:
@@ -135,6 +137,7 @@ Related notes:
 | Realized gains/losses, disposals, tax reporting, capital gains | `capital-gains` |
 | Yearly gain/loss buckets, long vs short summary, tax totals by year | `tax-summary` |
 | Austrian E 1kv handoff, FinanzOnline Kennzahlen, Steuerberater review package | `austrian-e1kv` / `austrian-tax-summary` / `export-austrian` / `export-austrian-e1kv-pdf` / `export-austrian-e1kv-xlsx` / `export-austrian-e1kv-csv` |
+| Exit tax / Wegzugsbesteuerung, deemed disposal on leaving the country, departure-date liability | `exit-tax` / `export-exit-tax-pdf` / `export-exit-tax-xlsx` (`--departure-date`, `--destination eu_eea\|third_country`) |
 | Current balances by bucket, asset, or wallet | `balance-sheet` |
 | Balance changes over time, trends, history | `balance-history` |
 | Raw journal export, journal rows, bookkeeping output | `journal-entries` |

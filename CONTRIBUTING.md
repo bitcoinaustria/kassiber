@@ -32,6 +32,24 @@ That covers:
 - review regression suite
 - key CLI help/smoke checks
 
+### Desktop UI (frontend)
+
+The Python quality gate does not cover the Tauri/React frontend. For changes
+under `ui-tauri/`, run from that directory:
+
+```bash
+pnpm typecheck      # incl. type-safe i18n keys
+pnpm test --run     # incl. the en/de key-parity guard
+pnpm lint
+```
+
+The UI is bilingual (English + Austrian German). When you touch a user-facing
+string, update `ui-tauri/src/i18n/locales/en/<ns>.json` **and**
+`de/<ns>.json` in lockstep (the parity test enforces it) and follow the term
+glossary. See [`docs/reference/i18n.md`](docs/reference/i18n.md) (dev workflow)
+and [`docs/reference/i18n-glossary.md`](docs/reference/i18n-glossary.md). The
+CLI/daemon stay English and machine-deterministic — do not localize them.
+
 ## Prerelease binaries
 
 `.github/workflows/prerelease-binaries.yml` builds unsigned CLI binaries on
@@ -74,6 +92,7 @@ If behavior changes, check whether these also need updates:
 - `AGENTS.md`
 - `TODO.md`
 - `skills/kassiber/`
+- `docs/reference/i18n.md` + `docs/reference/i18n-glossary.md` when UI strings or German terminology change
 - `SECURITY.md` when privacy or external I/O changes
 
 ## Testing philosophy

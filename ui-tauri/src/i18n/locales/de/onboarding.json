@@ -1,0 +1,398 @@
+{
+  "shell": {
+    "mockPreview": "Nur-Mock-Vorschau",
+    "footer": {
+      "privateKeys": "Private Keys gelangen nie in Kassiber.",
+      "stateLocation": "Der Zustand bleibt unter ~/.kassiber, sofern nicht anders festgelegt.",
+      "noSaas": "Umgehe die SaaS-Honeypots."
+    },
+    "finishError": "Onboarding konnte nicht abgeschlossen werden.",
+    "passphraseRequired": "Datenbank-Passphrase ist erforderlich.",
+    "errorInitSqlcipher": "SQLCipher-Datenbank konnte nicht initialisiert werden.",
+    "errorLoadBooks": "Bücher konnten nicht geladen werden.",
+    "errorOpenProject": "Projekt konnte nicht geöffnet werden.",
+    "errorImportProject": "Projekt konnte nicht importiert werden.",
+    "errorReturnDefaultRoot": "Rückkehr zum Standard-Projektordner nicht möglich."
+  },
+  "books": {
+    "title": "Bücher",
+    "intro": "Jedes Buch hat eigene Steuer- und Währungseinstellungen. Nutze getrennte Bücher für private und geschäftliche Aktivität; nutze getrennte Kassiber-Dateien für verschiedene Klient:innen.",
+    "newBookSet": "Neues Bücher-Set",
+    "summary": {
+      "sets": "Sets",
+      "setsDetail": "Bücher-Sets",
+      "books": "Bücher",
+      "booksDetail": "Einzelne Bücher",
+      "wallets": "Wallets",
+      "walletsDetail": "{{count}} Accounts"
+    },
+    "meta": {
+      "since": "seit {{date}}"
+    },
+    "workspace": {
+      "overview": "Bücher-Set-Übersicht",
+      "newBook": "Neues Buch"
+    },
+    "profileCard": {
+      "editName": "Namen von {{name}} bearbeiten",
+      "current": "Aktuelle Bücher: {{name}}",
+      "switchTo": "Zu den Büchern {{name}} wechseln",
+      "opened": "Geöffnet {{date}}",
+      "active": "Aktiv",
+      "taxPolicy": "Steuerprofil",
+      "buckets": "Buckets",
+      "wallets": "Wallets",
+      "currentLabel": "Aktuell",
+      "switchLabel": "Wechseln"
+    },
+    "create": {
+      "title": "Neues Buch",
+      "descriptionFromSource": "Lege ein eigenes Buch in {{workspace}} aus den Steuereinstellungen von {{source}} an.",
+      "descriptionInWorkspace": "Lege ein eigenes Buch in {{workspace}} an.",
+      "descriptionDefault": "Lege ein eigenes Buch mit Standardeinstellungen an.",
+      "startFrom": "Ausgehen von",
+      "defaultSettings": "Standardeinstellungen",
+      "copyHint": "Beim Kopieren der Einstellungen werden nur Steuerprofil, Währung, Behaltedauer und Tranchen-Auswahl übernommen. Wallets, Accounts und Transaktionen bleiben in den ursprünglichen Büchern.",
+      "nameLabel": "Buchname",
+      "namePlaceholder": "Buchname",
+      "submit": "Buch erstellen",
+      "errorEmptyName": "Gib einen Buchnamen ein.",
+      "errorGeneric": "Buch konnte nicht erstellt werden."
+    },
+    "renameProfile": {
+      "title": "Buch bearbeiten",
+      "description": "Benenne das Buch um oder ändere seine Buchhaltungsmethode. Eine Methodenänderung verarbeitet die Journale neu, damit die Berichte neu berechnet werden.",
+      "nameLabel": "Buchname",
+      "methodLabel": "Buchhaltungsmethode",
+      "submit": "Speichern",
+      "errorEmptyName": "Gib einen Buchnamen ein.",
+      "errorGeneric": "Buch konnte nicht gespeichert werden."
+    },
+    "method": {
+      "MOVING_AVERAGE_AT": "Gleitender Durchschnittspreis (österreichisch)",
+      "FIFO": "FIFO (First In, First Out)",
+      "LIFO": "LIFO (Last In, First Out)",
+      "HIFO": "HIFO (Highest In, First Out)",
+      "LOFO": "LOFO (Lowest In, First Out)"
+    },
+    "renameWorkspace": {
+      "title": "Bücher-Set-Namen bearbeiten",
+      "description": "Benenne dieses Bücher-Set um. Bücher, Wallets und Transaktionen bleiben unverändert.",
+      "nameLabel": "Bücher-Set-Name",
+      "submit": "Namen speichern",
+      "errorEmptyName": "Gib einen Bücher-Set-Namen ein.",
+      "errorGeneric": "Bücher-Set konnte nicht umbenannt werden."
+    },
+    "createWorkspace": {
+      "title": "Neues Bücher-Set",
+      "description": "Lege ein eigenes Set auf oberster Ebene in dieser lokalen Datenbank an und füge dann das erste Buch hinzu. Die meisten brauchen nur eines.",
+      "nameLabel": "Bücher-Set-Name",
+      "namePlaceholder": "Bücher-Set-Name",
+      "submit": "Set erstellen",
+      "errorEmptyName": "Gib einen Bücher-Set-Namen ein.",
+      "errorGeneric": "Bücher-Set konnte nicht erstellt werden."
+    },
+    "switch": {
+      "title": "Bücher wechseln?",
+      "descriptionFromTo": "Von {{current}} zu {{next}} wechseln.",
+      "descriptionGeneric": "Zu diesen Büchern wechseln.",
+      "taxPolicy": "Steuerprofil",
+      "buckets": "Buckets",
+      "wallets": "Wallets",
+      "switchHere": "Hier wechseln",
+      "switchAndOpenOverview": "Wechseln und Übersicht öffnen",
+      "errorGeneric": "Bücher konnten nicht gewechselt werden."
+    }
+  },
+  "frame": {
+    "goBack": "Zurück",
+    "step": "Schritt {{current}}/{{total}}"
+  },
+  "stepper": {
+    "ariaLabel": "Setup-Fortschritt",
+    "stepFallback": "Schritt {{number}}"
+  },
+  "steps": {
+    "essentials": "Deine Bücher",
+    "sync": "Sync",
+    "ai": "AI",
+    "security": "Sicherheit",
+    "review": "Prüfen"
+  },
+  "start": {
+    "title": "Öffne deine lokalen Bücher",
+    "createNew": {
+      "title": "Neue Bücher erstellen",
+      "body": "Lege eine neue lokale Kassiber-Datenbank mit sinnvollen Standardwerten an."
+    },
+    "openExisting": {
+      "titleOpening": "Bücher werden geöffnet…",
+      "title": "Bestehende Bücher öffnen",
+      "body": "Öffne einen Kassiber-State-Root oder Datenordner und wähle lokale Bücher.",
+      "desktopOnly": "nur Desktop-App",
+      "tooltipAvailable": "Bestehende lokale Kassiber-Bücher öffnen",
+      "tooltipUnavailable": "Bestehende Bücher öffnen ist in der Desktop-App verfügbar"
+    },
+    "quickStart": "Oder mit empfohlenen Standardwerten erstellen",
+    "privacyNote": "Kassiber speichert reine Watch-only-Buchhaltungsdaten lokal. Private Keys gelangen nie in die App.",
+    "highlights": {
+      "localDatabase": {
+        "title": "Eine lokale Datenbank",
+        "body": "Standardmäßig ~/.kassiber oder ein importierter Kassiber-Ordner."
+      },
+      "encrypted": {
+        "title": "Standardmäßig verschlüsselt",
+        "body": "SQLCipher schützt echte Bücher im Ruhezustand."
+      },
+      "importLocal": {
+        "title": "Import bleibt lokal",
+        "body": "Bestehende Bücher werden aufgelistet, sobald der gewählte Ordner geöffnet ist."
+      }
+    }
+  },
+  "import": {
+    "title": "Bestehende Bücher öffnen",
+    "selectedBooks": "Ausgewählte lokale Bücher",
+    "encrypted": "SQLCipher",
+    "plaintext": "Klartext",
+    "bookCount_one": "{{count}} Buch",
+    "bookCount_other": "{{count}} Bücher",
+    "passphraseLabel": "Bücher-Passphrase",
+    "unlock": "Bücher entsperren",
+    "backToSetup": "Zurück zum neuen Setup",
+    "rightTitle": "Lokale Kassiber-Bücher",
+    "rightBody": "Der Desktop-Daemon zeigt jetzt auf diesen gewählten Datenordner. Sobald ein Buch geöffnet ist, betreibt dieselbe lokale Datenbank den Rest der App.",
+    "loading": "Lokale Bücher werden geladen…",
+    "empty": "In diesem lokalen Datenordner wurden keine Bücher gefunden.",
+    "accountsWallets": "{{accounts}} Accounts · {{wallets}} Wallets",
+    "opening": "Wird geöffnet",
+    "active": "Aktiv",
+    "errorUnlock": "Datenbank konnte nicht entsperrt werden.",
+    "errorOpenBooks": "Bücher konnten nicht geöffnet werden.",
+    "passphraseRequired": "Datenbank-Passphrase ist erforderlich."
+  },
+  "connections": {
+    "default": {
+      "title": "Eingebaute öffentliche Backends nutzen",
+      "description": "Starte schnell mit den mitgelieferten Endpunkten für Explorer API, Electrum / Fulcrum und Liquid. Du kannst sie später ersetzen."
+    },
+    "custom": {
+      "title": "Eigenes Sync-Backend nutzen",
+      "description": "Richte Kassiber auf eine Explorer API (Esplora/mempool), Electrum / Fulcrum, Bitcoin Core RPC oder einen Liquid-Endpunkt."
+    },
+    "skip": {
+      "title": "Verbindungen vorerst überspringen",
+      "description": "Mach mit reinen manuellen Importen weiter. Die Watch-only-Aktualisierung lässt sich später in den Einstellungen konfigurieren."
+    },
+    "protocolLabel": "Sync-Protokoll",
+    "protocolDescription": "Payment-Provider und Datei-Importe werden später unter Verbindungen konfiguriert.",
+    "displayName": "Anzeigename",
+    "displayNamePlaceholder": "home-node",
+    "displayNameDescription": "Eine kurze Bezeichnung, die in den Einstellungen und bei der Verbindungsaktualisierung angezeigt wird.",
+    "host": "Host",
+    "hostPlaceholder": "index.bitcoin-austria.at",
+    "port": "Port",
+    "useSsl": "SSL verwenden",
+    "useSslDescription": "Nutze TLS für die Electrum-Verbindung; gängige Server lauschen auf 50002.",
+    "trustSsl": "Selbstsigniertem Zertifikat vertrauen",
+    "trustSslDescription": "Nur für einen Server verwenden, den du selbst betreibst oder anderweitig verifiziert hast.",
+    "certificate": "Zertifikat",
+    "certificatePlaceholder": "Optionales Server-Zertifikat (.crt)",
+    "certificateIgnored": "Wird ignoriert, solange „Selbstsigniertem Zertifikat vertrauen“ aktiviert ist.",
+    "certificateSystemStore": "Leer lassen, um den System-Zertifikatsspeicher zu verwenden.",
+    "useProxy": "Proxy verwenden",
+    "useProxyDescription": "Optionaler Tor- oder SOCKS-Proxy für die Electrum-Verbindung.",
+    "proxyHost": "Proxy-Host",
+    "proxyHostPlaceholder": "127.0.0.1",
+    "proxyPortPlaceholder": "9050",
+    "testConnection": "Verbindung testen",
+    "testing": "Wird getestet",
+    "testHint": "Optional — prüfe, ob der Endpunkt erreichbar ist.",
+    "testLogLabel": "Protokoll des Electrum-Verbindungstests",
+    "validationFailed": "Validierung fehlgeschlagen",
+    "endpointRequired": "Endpunkt ist erforderlich.",
+    "testFailed": "Electrum-Test fehlgeschlagen.",
+    "endpointUrl": "Endpunkt-URL",
+    "endpointUrlPlaceholder": "https://… oder ssl://…",
+    "credentialsWarning": "Füge hier keine API-Tokens, RPC-Passwörter, Cookies oder Bearer-Header ein. Zugangsdaten sollten erst hinzugefügt werden, nachdem die verschlüsselte Datenbank geöffnet ist.",
+    "skipWarningTitle": "Die Watch-only-Aktualisierung ist noch nicht bereit.",
+    "skipWarningBody": "Du kannst weiterhin Dateien importieren, aber Adress-Discovery, Wallet-Aktualisierung und Node-gestützte Historie bleiben deaktiviert, bis ein Backend konfiguriert ist.",
+    "skipAck": "Mir ist klar, dass Sync später ein Backend benötigt.",
+    "skipAckDescription": "Die Einstellungen können nach dem Onboarding Bitcoin- oder Liquid-Sync-Backends hinzufügen."
+  },
+  "ai": {
+    "local": {
+      "title": "Lokalen Endpunkt nutzen",
+      "description": "Standardmäßig Ollama auf diesem Rechner. Du kannst dies auf einen anderen lokalen OpenAI-kompatiblen Server richten."
+    },
+    "remote": {
+      "title": "Remote-Provider nutzen",
+      "description": "Bereite einen OpenAI-kompatiblen Endpunkt oder die Claude/Codex CLI vor. Prompts und Buchhaltungskontext können dieses Gerät verlassen."
+    },
+    "disabled": {
+      "title": "AI vorerst deaktivieren",
+      "description": "Blende den Assistenten und den schwebenden Chat aus. Du kannst AI später in den Einstellungen wieder aktivieren."
+    },
+    "providerPrivacy": "Provider-Privatsphäre",
+    "providerPrivacyDescription": "TEE bedeutet, dass der Provider einen Trusted-Execution-Pfad behauptet; Kassiber behandelt ihn dennoch als off-device.",
+    "providerName": "Providername",
+    "providerNamePlaceholderLocal": "ollama",
+    "providerNamePlaceholderRemote": "openai oder maple",
+    "providerNameDescription": "Eine kurze Bezeichnung, die in den AI-Provider-Einstellungen angezeigt wird.",
+    "baseUrl": "Basis-URL",
+    "baseUrlPlaceholderRemote": "https://…/v1 oder claude-cli://default",
+    "baseUrlDescription": "Verwende einen OpenAI-kompatiblen /v1-Endpunkt oder einen unterstützten CLI-Locator.",
+    "remoteAck": "Mir ist klar, dass Prompts dieses Gerät verlassen können.",
+    "remoteAckDescription": "Buchhaltungskontext, Labels, Notizen, Backend-Hostnamen und Berichtsdetails können sensibel sein.",
+    "disabledNote": "Dies blendet den Assistenten-Bildschirm und den schwebenden Chat nach dem Onboarding aus. Du kannst AI-Funktionen später in den Einstellungen aktivieren."
+  },
+  "explainer": {
+    "whyThisMatters": "Warum das wichtig ist",
+    "selected": "Ausgewählt",
+    "sync": {
+      "title": "So funktioniert Sync",
+      "lead": "Ein Sync-Backend findet deine Watch-only-Adressen und aktualisiert Guthaben und Historie aus dem Netzwerk. Kassiber bleibt Watch-only — Private Keys gelangen nie in die App.",
+      "default": {
+        "title": "Eingebaute öffentliche Backends",
+        "body": "Mitgelieferte Endpunkte für Explorer API, Electrum / Fulcrum und Liquid. Schneller Start, aber der Betreiber kann deine Adressabfragen weiterhin sehen — nutze Tor/VPN oder betreibe einen eigenen, wenn dir Privatsphäre wichtig ist."
+      },
+      "custom": {
+        "title": "Eigenes Sync-Backend",
+        "body": "Richte es auf deinen eigenen Node oder einen vertrauenswürdigen Server. Beste Privatsphäre und Souveränität; du verwaltest den Endpunkt."
+      },
+      "skip": {
+        "title": "Vorerst überspringen",
+        "body": "Nur manuelle Importe. Keine Adress-Discovery oder Aktualisierung, bis du in den Einstellungen ein Backend hinzufügst."
+      },
+      "footer": "Was du auch wählst: Abfragen verraten diesem Server, welche Adressen du beobachtest — ein eigener Node hält das privat. Zugangsdaten werden später hinzugefügt, nachdem die verschlüsselte Datenbank geöffnet ist."
+    },
+    "ai": {
+      "title": "So funktioniert der Assistent",
+      "lead": "Der Assistent hilft, Transaktionen zu kategorisieren, Notizen zu entwerfen und Fragen zu deinen Büchern zu beantworten. Er ist optional und kann jederzeit in den Einstellungen geändert werden.",
+      "local": {
+        "title": "Lokaler Endpunkt",
+        "body": "Läuft gegen ein Modell auf diesem Rechner (standardmäßig Ollama). Prompts und Buchhaltungskontext bleiben on-device."
+      },
+      "remote": {
+        "title": "Remote-Provider",
+        "body": "Ein OpenAI-kompatibler Endpunkt oder die Claude/Codex CLI. Prompts und Buchhaltungskontext können dieses Gerät verlassen."
+      },
+      "disabled": {
+        "title": "Deaktiviert",
+        "body": "Blendet den Assistenten und den schwebenden Chat aus. Du kannst AI später in den Einstellungen wieder aktivieren."
+      },
+      "footer": "Während des Setups werden keine API-Keys oder Geheimnisse erfasst. Buchhaltungskontext — Labels, Notizen, Hostnamen, Berichtsdetails — kann sensibel sein; behalte das bei Remote-Providern im Hinterkopf."
+    }
+  },
+  "essentials": {
+    "title": "Richte deine Bücher ein",
+    "booksName": "Bücher-Name",
+    "booksNamePlaceholder": "Meine Bücher",
+    "booksNameDescription": "Wird im App-Header angezeigt. Getrennte private, geschäftliche oder Klient:innen-Bücher kannst du später hinzufügen.",
+    "taxJurisdiction": "Steuerjurisdiktion",
+    "jurisdictionAustria": "Österreich",
+    "jurisdictionGeneric": "Andere / generisch",
+    "jurisdictionDescriptionAt": "Österreichischer Krypto-Steuer-Workflow — EUR und Regeln zum gleitenden Durchschnittspreis gelten.",
+    "jurisdictionDescriptionGeneric": "Länderneutrale Bücher mit Tranchen-Auswahl FIFO, LIFO, HIFO oder LOFO.",
+    "fiatCurrency": "Fiat-Währung",
+    "fiatSample": "Beispiel: {{sample}}",
+    "accountingMethod": "Bewertungsmethode",
+    "movingAverage": "Gleitender Durchschnittspreis",
+    "movingAverageNote": "Altbestand kann später pro Wallet markiert werden.",
+    "lotSelection": "Tranchen-Auswahl",
+    "longTermDays": "Tage für langfristige Behaltedauer",
+    "longTermDaysPlaceholder": "365",
+    "longTermDaysDescription": "Wird nur von generischen Büchern verwendet."
+  },
+  "security": {
+    "title": "Schütze deine Bücher",
+    "encrypt": {
+      "title": "Diese Bücher verschlüsseln",
+      "description": "Empfohlen für echte Daten. Die lokale SQLite-Datenbank öffnet sich nur mit deiner Passphrase."
+    },
+    "plaintext": {
+      "title": "Unverschlüsselt lassen",
+      "description": "Nur für eine wegwerfbare Evaluierung sinnvoll. Wer Zugriff auf die Festplatte hat, kann die Datenbank lesen."
+    },
+    "databasePassphrase": "Datenbank-Passphrase",
+    "passphrase": "Passphrase",
+    "passphrasePlaceholder": "Mindestens 12 Zeichen",
+    "confirmPassphrase": "Passphrase bestätigen",
+    "confirmPassphrasePlaceholder": "Passphrase wiederholen",
+    "passphraseNote": "Wird nur an den lokalen Daemon gesendet, um die Datenbank zu entsperren — nie in der Oberfläche gespeichert.",
+    "recoveryAck": "Mir ist klar, dass es keinen Wiederherstellungspfad für die Passphrase gibt.",
+    "recoveryAckDescription": "Geht die Passphrase verloren, kann die SQLCipher-Datenbank nicht geöffnet werden.",
+    "touchId": "Mit Touch ID entsperren",
+    "touchIdDescription": "Speichere die Passphrase im macOS-Keychain, damit du statt zu tippen mit Touch ID entsperren kannst. Du kannst sie jederzeit in den Einstellungen entfernen.",
+    "existingCredentials": "Bestehende Backend-Zugangsdaten",
+    "migrateCredentials": "Zugangsdaten aus backends.env in die verschlüsselte DB übernehmen.",
+    "migrateCredentialsDescription": "Nützlich beim Upgrade eines bestehenden CLI-Setups. Bei neuen Büchern kann dies bedenkenlos aktiviert bleiben.",
+    "plaintextAck": "Mir ist klar, dass der Klartextmodus nicht für echte Wallet-Daten gedacht ist.",
+    "plaintextAckDescription": "Guthaben, Adressen, Tags und Backend-Metadaten sind für alles mit Festplattenzugriff lesbar."
+  },
+  "sync": {
+    "title": "Sync-Verbindungen wählen"
+  },
+  "aiStep": {
+    "title": "AI-Unterstützung wählen"
+  },
+  "review": {
+    "title": "Setup prüfen",
+    "intro": "Bestätige die Entscheidungen, die die lokale Speicherung, die Netzwerk-Sichtbarkeit und die Frage betreffen, ob Daten dieses Gerät verlassen können.",
+    "change": "Ändern",
+    "changeArea": "{{area}} ändern",
+    "creatingBooks": "Bücher werden erstellt…",
+    "createLocalBooks": "Lokale Bücher erstellen",
+    "area": {
+      "books": "Bücher",
+      "tax": "Steuer",
+      "sync": "Sync",
+      "ai": "AI",
+      "storage": "Speicherung",
+      "secrets": "Geheimnisse"
+    },
+    "books": {
+      "value": "{{workspace}} / {{profile}}",
+      "note": "Erstellt ein lokales Bücher-Set mit einem aktiven Buch."
+    },
+    "tax": {
+      "valueAt": "Österreich, EUR, gleitender Durchschnittspreis",
+      "valueGeneric": "Generisch, {{currency}}, {{algorithm}}",
+      "noteAt": "Österreichische Berichtswährung und Methode sind Standardwerte der Jurisdiktion.",
+      "noteGeneric": "{{days}} Tage langfristige Behaltedauer."
+    },
+    "sync": {
+      "valueManual": "Nur manuelle Importe",
+      "valueDefault": "Eingebaute öffentliche Backends",
+      "valueCustom": "{{name}} ({{detail}})",
+      "customFallbackName": "Eigenes Backend",
+      "noteSkip": "Keine Adress-Discovery oder Watch-only-Aktualisierung, bis die Einstellungen ein Backend hinzufügen.",
+      "noteDefaultLoading": "Backend-Adressen werden von Kassiber geladen.",
+      "noteDefault": "Öffentliche Betreiber können deine Adressabfragen sehen. Nutze Tor oder einen eigenen Node, falls dir das wichtig ist.",
+      "noteCustomProxy": "Eigenes Electrum-Backend über den konfigurierten Proxy geleitet.",
+      "noteCustom": "Eigenes Backend. Nutze deine eigene Infrastruktur oder einen vertrauenswürdigen Betreiber."
+    },
+    "ai": {
+      "valueDisabled": "Deaktiviert",
+      "value": "{{kind}}: {{name}}",
+      "fallbackName": "Assistent",
+      "noteDisabled": "Keine Assistenten-Aufrufe im normalen App-Betrieb.",
+      "noteRemote": "Der Remote-Provider kann nach Zustimmung ausgewählten Buch-Kontext erhalten.",
+      "noteLocal": "Lokaler Provider-Endpunkt; der Buch-Kontext bleibt auf deinem Rechner, sofern nicht anders konfiguriert."
+    },
+    "storage": {
+      "valueEncrypted": "SQLCipher-verschlüsselte Datenbank",
+      "valuePlaintext": "Klartext-Datenbank",
+      "noteEncrypted": "Passphrase erforderlich. Touch ID {{touchId}}. Kein Wiederherstellungspfad.",
+      "touchIdEnabled": "aktiviert",
+      "touchIdNotEnabled": "nicht aktiviert",
+      "notePlaintext": "Nur zur Evaluierung. Wer Zugriff auf die Festplatte hat, kann Wallet-Daten lesen."
+    },
+    "secrets": {
+      "valueEncrypted": "Verschlüsselte Speicherung von Zugangsdaten",
+      "valueNone": "Während des Setups keine Zugangsdaten erfasst",
+      "noteEncrypted": "Bestehende backends.env-Zugangsdaten werden migriert, falls vorhanden; neue Geheimnisse werden später hinzugefügt.",
+      "noteNone": "Backend-API-Keys, Cookies und Passwörter werden später hinzugefügt."
+    }
+  }
+}

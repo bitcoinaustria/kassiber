@@ -34,8 +34,7 @@ support is on the table for later, depending on future resources.
 Tax math runs locally through the open-source
 [RP2](https://github.com/bitcoinaustria/rp2) engine. Kassiber prepares,
 reviews, and explains; RP2 computes. The Kassiber-maintained RP2 fork
-carries a working Austrian (§ 27b EStG) plugin with E 1kv exports — a
-workflow almost nobody else covers.
+carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
 
 ## Why local-first
 
@@ -94,6 +93,8 @@ workflow almost nobody else covers.
 - **Two surfaces, one daemon** — desktop GUI (Tauri 2 + React) for
   day-to-day work; CLI with deterministic JSON envelopes for scripting,
   automation, and power users; both backed by the same Python daemon.
+- **Localized desktop UI** — English and German, switchable in Settings or the
+  header, with the i18n layer built to expand to more languages.
 
 ## Install
 
@@ -145,6 +146,11 @@ python3 -m kassiber journals process
 python3 -m kassiber reports summary
 ```
 
+To reconcile old flows, `kassiber wallets identify` (or the desktop **Reconcile**
+screen) checks whether pasted addresses / transaction ids belong to any of your
+wallets — receive or change — and flags the externals, classifying each
+transaction as a self-transfer, outbound payment, or inbound receipt.
+
 For transfer pairing, swap matching, source-of-funds, Austrian E 1kv,
 BTCPay reconciliation, and the concept model, see
 [docs/quickstart.md](docs/quickstart.md). The desktop GUI is optional:
@@ -170,6 +176,8 @@ overview.
   [Imports](docs/reference/imports.md) ·
   [Tax & journals](docs/reference/tax.md) ·
   [Desktop](docs/reference/desktop.md) ·
+  [Localization](docs/reference/i18n.md) ·
+  [AT glossary](docs/reference/i18n-glossary.md) ·
   [Daemon](docs/reference/daemon.md) ·
   [Machine output](docs/reference/machine-output.md) ·
   [Prerelease binaries](docs/reference/prerelease-binaries.md) ·

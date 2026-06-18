@@ -1,5 +1,6 @@
 import { type ComponentProps, useState } from "react";
 import { Check, Copy } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { copyTextWithPolicy } from "@/lib/clipboard";
@@ -10,7 +11,7 @@ import { copyTextWithPolicy } from "@/lib/clipboard";
  */
 export function CopyButton({
   value,
-  ariaLabel = "Copy",
+  ariaLabel,
   className,
   variant = "outline",
   size = "icon-xs",
@@ -21,6 +22,8 @@ export function CopyButton({
   variant?: ComponentProps<typeof Button>["variant"];
   size?: ComponentProps<typeof Button>["size"];
 }) {
+  const { t } = useTranslation("chrome");
+  const copyLabel = ariaLabel ?? t("copyButton.copy");
   const [copied, setCopied] = useState(false);
   const onCopy = async () => {
     try {
@@ -37,7 +40,7 @@ export function CopyButton({
       variant={variant}
       size={size}
       className={className}
-      aria-label={copied ? "Copied" : ariaLabel}
+      aria-label={copied ? t("copyButton.copied") : copyLabel}
       onClick={onCopy}
     >
       {copied ? (

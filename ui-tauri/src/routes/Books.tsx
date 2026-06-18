@@ -9,6 +9,8 @@ import {
   type SVGProps,
 } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import {
   ArrowRight,
   BriefcaseBusiness,
@@ -51,7 +53,27 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { gainsAlgorithmsFor } from "@/components/kb/Onboarding/constants";
 import type { ProfilesSnapshot, Profile, Workspace } from "@/mocks/profiles";
+
+const ACCOUNTING_METHOD_LABEL_KEYS = {
+  MOVING_AVERAGE_AT: "books.method.MOVING_AVERAGE_AT",
+  FIFO: "books.method.FIFO",
+  LIFO: "books.method.LIFO",
+  HIFO: "books.method.HIFO",
+  LOFO: "books.method.LOFO",
+} as const satisfies Record<string, string>;
+
+const accountingMethodLabel = (
+  method: string,
+  t: TFunction<"onboarding">,
+): string => {
+  const key =
+    ACCOUNTING_METHOD_LABEL_KEYS[
+      method.toUpperCase() as keyof typeof ACCOUNTING_METHOD_LABEL_KEYS
+    ];
+  return key ? t(key) : method;
+};
 
 export function Books() {
   const { data, isLoading } = useDaemon<ProfilesSnapshot>(
@@ -66,6 +88,7 @@ export function Books() {
 }
 
 function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
+  const { t } = useTranslation("onboarding");
   const navigate = useNavigate();
   const switchProfile = useDaemonMutation<{ activeProfileId: string }>(
     "ui.profiles.switch",
@@ -78,6 +101,9 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
     profile: { id: string; name: string };
     workspace: { id: string };
   }>("ui.profiles.rename");
+  const updateProfile = useDaemonMutation<{ id: string }>(
+    "ui.profiles.update",
+  );
   const createWorkspace = useDaemonMutation<{
     activeProfileId: string;
     activeWorkspaceId: string;
@@ -96,6 +122,7 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
   const [renameTarget, setRenameTarget] =
     useState<PendingProfileRename | null>(null);
   const [renameProfileName, setRenameProfileName] = useState("");
+  const [renameProfileMethod, setRenameProfileMethod] = useState("");
   const [renameWorkspaceTarget, setRenameWorkspaceTarget] =
     useState<Workspace | null>(null);
   const [renameWorkspaceName, setRenameWorkspaceName] = useState("");
@@ -153,6 +180,10 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
   const requestRenameProfile = (workspace: Workspace, profile: Profile) => {
     setRenameProfileError(null);
     setRenameProfileName(profile.name);
+    setRenameProfileMethod(
+      profile.gainsAlgorithm ??
+        gainsAlgorithmsFor(profile.taxCountry ?? "generic")[0],
+    );
     setRenameTarget({ workspace, profile });
   };
 
@@ -166,7 +197,7 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
     if (!profileWorkspace || createProfile.isPending) return;
     const label = profileName.trim();
     if (!label) {
-      setProfileError("Enter a book name.");
+      setProfileError(t("books.create.errorEmptyName"));
       return;
     }
     setProfileError(null);
@@ -185,7 +216,9 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
         },
         onError: (error) => {
           setProfileError(
-            error instanceof Error ? error.message : "Could not create book.",
+            error instanceof Error
+              ? error.message
+              : t("books.create.errorGeneric"),
           );
         },
       },
@@ -208,45 +241,57 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
         },
         onError: (error) => {
           setSwitchError(
-            error instanceof Error ? error.message : "Could not switch books.",
+            error instanceof Error
+              ? error.message
+              : t("books.switch.errorGeneric"),
           );
         },
       },
     );
   };
 
-  const submitRenameProfile = () => {
-    if (!renameTarget || renameProfile.isPending) return;
+  const submitRenameProfile = async () => {
+    if (!renameTarget || renameProfile.isPending || updateProfile.isPending)
+      return;
     const label = renameProfileName.trim();
     if (!label) {
-      setRenameProfileError("Enter a book name.");
+      setRenameProfileError(t("books.renameProfile.errorEmptyName"));
       return;
     }
     setRenameProfileError(null);
-    renameProfile.mutate(
-      {
-        profile_id: renameTarget.profile.id,
-        label,
-      },
-      {
-        onSuccess: () => {
-          setRenameTarget(null);
-          setRenameProfileName("");
-        },
-        onError: (error) => {
-          setRenameProfileError(
-            error instanceof Error ? error.message : "Could not rename book.",
-          );
-        },
-      },
-    );
+    const profileId = renameTarget.profile.id;
+    const nameChanged = label !== renameTarget.profile.name;
+    const methodChanged =
+      renameProfileMethod !== (renameTarget.profile.gainsAlgorithm ?? "");
+    try {
+      // Method first: update_profile enforces the Austrian method + invalidates
+      // journals so reports recompute.
+      if (methodChanged) {
+        await updateProfile.mutateAsync({
+          profile_id: profileId,
+          gains_algorithm: renameProfileMethod,
+        });
+      }
+      if (nameChanged) {
+        await renameProfile.mutateAsync({ profile_id: profileId, label });
+      }
+      setRenameTarget(null);
+      setRenameProfileName("");
+      setRenameProfileMethod("");
+    } catch (error) {
+      setRenameProfileError(
+        error instanceof Error
+          ? error.message
+          : t("books.renameProfile.errorGeneric"),
+      );
+    }
   };
 
   const submitRenameWorkspace = () => {
     if (!renameWorkspaceTarget || renameWorkspace.isPending) return;
     const label = renameWorkspaceName.trim();
     if (!label) {
-      setRenameWorkspaceError("Enter a book set name.");
+      setRenameWorkspaceError(t("books.renameWorkspace.errorEmptyName"));
       return;
     }
     setRenameWorkspaceError(null);
@@ -264,7 +309,7 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
           setRenameWorkspaceError(
             error instanceof Error
               ? error.message
-              : "Could not rename book set.",
+              : t("books.renameWorkspace.errorGeneric"),
           );
         },
       },
@@ -275,7 +320,7 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
     if (createWorkspace.isPending) return;
     const label = workspaceName.trim();
     if (!label) {
-      setWorkspaceError("Enter a book set name.");
+      setWorkspaceError(t("books.createWorkspace.errorEmptyName"));
       return;
     }
     setWorkspaceError(null);
@@ -291,7 +336,7 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
           setWorkspaceError(
             error instanceof Error
               ? error.message
-              : "Could not create book set.",
+              : t("books.createWorkspace.errorGeneric"),
           );
         },
       },
@@ -303,12 +348,10 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0 space-y-2">
           <h2 className="text-2xl font-semibold tracking-tight">
-            Books
+            {t("books.title")}
           </h2>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Each book has its own tax and currency settings. Use separate
-            books for private and business activity; use separate Kassiber
-            files for different clients.
+            {t("books.intro")}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -321,28 +364,28 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
             }}
           >
             <FolderPlus className="size-4" aria-hidden="true" />
-            New book set
+            {t("books.newBookSet")}
           </Button>
         </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">
         <SummaryCard
-          label="Sets"
+          label={t("books.summary.sets")}
           value={workspaces.length}
-          detail="Book sets"
+          detail={t("books.summary.setsDetail")}
           icon={BriefcaseBusiness}
         />
         <SummaryCard
-          label="Books"
+          label={t("books.summary.books")}
           value={profileCount}
-          detail="Individual books"
+          detail={t("books.summary.booksDetail")}
           icon={Users}
         />
         <SummaryCard
-          label="Wallets"
+          label={t("books.summary.wallets")}
           value={walletCount}
-          detail={`${accountCount} buckets`}
+          detail={t("books.summary.walletsDetail", { count: accountCount })}
           icon={Wallet}
         />
       </div>
@@ -407,8 +450,23 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
       />
       <RenameProfileDialog
         errorMessage={renameProfileError}
-        isSubmitting={renameProfile.isPending}
+        isSubmitting={renameProfile.isPending || updateProfile.isPending}
         name={renameProfileName}
+        method={renameProfileMethod}
+        methodOptions={
+          renameTarget
+            ? Array.from(
+                new Set<string>([
+                  ...(renameTarget.profile.gainsAlgorithm
+                    ? [renameTarget.profile.gainsAlgorithm]
+                    : []),
+                  ...gainsAlgorithmsFor(
+                    renameTarget.profile.taxCountry ?? "generic",
+                  ),
+                ]),
+              )
+            : []
+        }
         open={Boolean(renameTarget)}
         profile={renameTarget?.profile ?? null}
         workspace={renameTarget?.workspace ?? null}
@@ -416,11 +474,16 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
           setRenameProfileName(value);
           if (renameProfileError) setRenameProfileError(null);
         }}
+        onMethodChange={(value) => {
+          setRenameProfileMethod(value);
+          if (renameProfileError) setRenameProfileError(null);
+        }}
         onOpenChange={(open) => {
-          if (renameProfile.isPending) return;
+          if (renameProfile.isPending || updateProfile.isPending) return;
           if (!open) {
             setRenameTarget(null);
             setRenameProfileName("");
+            setRenameProfileMethod("");
             setRenameProfileError(null);
           }
         }}
@@ -491,6 +554,7 @@ function findProfile(workspaces: Workspace[], profileId: string) {
 }
 
 function formatWorkspaceMeta(
+  t: TFunction<"onboarding">,
   workspace: Workspace,
   options: { includeCreated?: boolean } = {},
 ) {
@@ -498,7 +562,9 @@ function formatWorkspaceMeta(
   const parts = [
     workspace.currency,
     workspace.jurisdiction,
-    includeCreated && workspace.created ? `since ${workspace.created}` : null,
+    includeCreated && workspace.created
+      ? t("books.meta.since", { date: workspace.created })
+      : null,
   ].filter(Boolean);
   return parts.join(" · ");
 }
@@ -546,6 +612,7 @@ export function WorkspaceSection({
   onRename,
   onRenameWorkspace,
 }: WorkspaceSectionProps) {
+  const { t } = useTranslation(["onboarding", "common"]);
   return (
     <Card>
       <CardHeader className="flex flex-col gap-3 border-b pb-5 md:flex-row md:items-center md:justify-between">
@@ -555,7 +622,7 @@ export function WorkspaceSection({
             {workspace.name}
           </CardTitle>
           <CardDescription>
-            {formatWorkspaceMeta(workspace)}
+            {formatWorkspaceMeta(t, workspace)}
           </CardDescription>
         </div>
         <div className="flex items-center gap-2">
@@ -567,7 +634,7 @@ export function WorkspaceSection({
             onClick={onOpenBirdsEye}
           >
             <Eye className="size-4" aria-hidden="true" />
-            Book Set Overview
+            {t("books.workspace.overview")}
           </Button>
           <Button
             type="button"
@@ -577,7 +644,7 @@ export function WorkspaceSection({
             onClick={onRenameWorkspace}
           >
             <Pencil className="size-4" aria-hidden="true" />
-            Edit
+            {t("common:actions.edit")}
           </Button>
           <Button
             type="button"
@@ -586,7 +653,7 @@ export function WorkspaceSection({
             onClick={onCreateProfile}
           >
             <Plus className="size-4" aria-hidden="true" />
-            New book
+            {t("books.workspace.newBook")}
           </Button>
         </div>
       </CardHeader>
@@ -618,6 +685,7 @@ function ProfileCard({
   onPick,
   onRename,
 }: ProfileCardProps) {
+  const { t } = useTranslation("onboarding");
   return (
     <div
       className={cn(
@@ -630,7 +698,7 @@ function ProfileCard({
         variant="ghost"
         size="icon"
         className="absolute top-3 right-3 z-10 size-8"
-        aria-label={`Edit ${profile.name} name`}
+        aria-label={t("books.profileCard.editName", { name: profile.name })}
         onClick={onRename}
       >
         <Pencil className="size-3.5" aria-hidden="true" />
@@ -640,8 +708,8 @@ function ProfileCard({
         aria-current={isActive ? "true" : undefined}
         aria-label={
           isActive
-            ? `Current books: ${profile.name}`
-            : `Switch to ${profile.name} books`
+            ? t("books.profileCard.current", { name: profile.name })
+            : t("books.profileCard.switchTo", { name: profile.name })
         }
         onClick={onPick}
         className="flex flex-1 flex-col justify-between text-left"
@@ -651,20 +719,20 @@ function ProfileCard({
             <div className="min-w-0">
               <p className="truncate font-medium">{profile.name}</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Opened {profile.lastOpened}
+                {t("books.profileCard.opened", { date: profile.lastOpened })}
               </p>
             </div>
             {isActive && (
               <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
                 <CheckCircle2 className="size-3" aria-hidden="true" />
-                Active
+                {t("books.profileCard.active")}
               </span>
             )}
           </div>
 
           <div className="rounded-lg border bg-muted/30 p-3">
             <p className="text-xs font-medium text-muted-foreground">
-              Tax policy
+              {t("books.profileCard.taxPolicy")}
             </p>
             <p className="mt-1 text-sm">{profile.taxPolicy}</p>
           </div>
@@ -674,13 +742,13 @@ function ProfileCard({
           <div className="flex gap-4 text-sm">
             <span>
               <span className="block text-xs text-muted-foreground">
-                Buckets
+                {t("books.profileCard.buckets")}
               </span>
               {profile.accounts}
             </span>
             <span>
               <span className="block text-xs text-muted-foreground">
-                Wallets
+                {t("books.profileCard.wallets")}
               </span>
               {profile.wallets}
             </span>
@@ -691,7 +759,9 @@ function ProfileCard({
               isActive ? "text-foreground" : "text-muted-foreground",
             )}
           >
-            {isActive ? "Current" : "Switch"}
+            {isActive
+              ? t("books.profileCard.currentLabel")
+              : t("books.profileCard.switchLabel")}
             <ArrowRight className="size-4" aria-hidden="true" />
           </span>
         </div>
@@ -725,6 +795,7 @@ function CreateProfileDialog({
   onSourceProfileChange,
   onSubmit,
 }: CreateProfileDialogProps) {
+  const { t } = useTranslation(["onboarding", "common"]);
   const sourceValue = sourceProfile?.id ?? "__default_settings__";
   const sourceOptions = workspace?.profiles ?? [];
 
@@ -739,13 +810,18 @@ function CreateProfileDialog({
           }}
         >
           <DialogHeader>
-            <DialogTitle>New book</DialogTitle>
+            <DialogTitle>{t("books.create.title")}</DialogTitle>
             <DialogDescription>
               {workspace && sourceProfile
-                ? `Create a separate book in ${workspace.name} from ${sourceProfile.name}'s tax settings.`
+                ? t("books.create.descriptionFromSource", {
+                    workspace: workspace.name,
+                    source: sourceProfile.name,
+                  })
                 : workspace
-                  ? `Create a separate book in ${workspace.name}.`
-                  : "Create a separate book using default settings."}
+                  ? t("books.create.descriptionInWorkspace", {
+                      workspace: workspace.name,
+                    })
+                  : t("books.create.descriptionDefault")}
             </DialogDescription>
           </DialogHeader>
 
@@ -753,14 +829,16 @@ function CreateProfileDialog({
             <div className="rounded-lg border bg-muted/25 p-3 text-sm">
               <p className="font-medium">{workspace.name}</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {formatWorkspaceMeta(workspace, { includeCreated: false })}
+                {formatWorkspaceMeta(t, workspace, { includeCreated: false })}
               </p>
             </div>
           )}
 
           {workspace && sourceOptions.length > 0 && (
             <div className="space-y-2">
-              <Label htmlFor="books-source">Start from</Label>
+              <Label htmlFor="books-source">
+                {t("books.create.startFrom")}
+              </Label>
               <Select
                 value={sourceValue}
                 disabled={isSubmitting}
@@ -780,7 +858,7 @@ function CreateProfileDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__default_settings__">
-                    Default settings
+                    {t("books.create.defaultSettings")}
                   </SelectItem>
                   {sourceOptions.map((profile) => (
                     <SelectItem key={profile.id} value={profile.id}>
@@ -790,9 +868,7 @@ function CreateProfileDialog({
                 </SelectContent>
               </Select>
               <p className="text-xs leading-5 text-muted-foreground">
-                Copying settings only copies tax policy, currency, holding
-                period, and lot selection. Wallets, buckets, and transactions
-                stay in the original books.
+                {t("books.create.copyHint")}
               </p>
               {sourceProfile && (
                 <p className="rounded-md border bg-muted/25 px-2 py-1 text-xs">
@@ -803,14 +879,14 @@ function CreateProfileDialog({
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="profile-name">Book name</Label>
+            <Label htmlFor="profile-name">{t("books.create.nameLabel")}</Label>
             <Input
               id="profile-name"
               data-testid="profile-name-input"
               autoFocus
               aria-invalid={Boolean(errorMessage)}
               disabled={isSubmitting}
-              placeholder="Book name"
+              placeholder={t("books.create.namePlaceholder")}
               value={name}
               onChange={(event) => onNameChange(event.currentTarget.value)}
             />
@@ -829,10 +905,10 @@ function CreateProfileDialog({
               disabled={isSubmitting}
               onClick={() => onOpenChange(false)}
             >
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              Create book
+              {t("books.create.submit")}
             </Button>
           </DialogFooter>
         </form>
@@ -845,10 +921,13 @@ interface RenameProfileDialogProps {
   errorMessage: string | null;
   isSubmitting: boolean;
   name: string;
+  method: string;
+  methodOptions: string[];
   open: boolean;
   profile: Profile | null;
   workspace: Workspace | null;
   onNameChange: (value: string) => void;
+  onMethodChange: (value: string) => void;
   onOpenChange: (open: boolean) => void;
   onSubmit: () => void;
 }
@@ -857,13 +936,17 @@ function RenameProfileDialog({
   errorMessage,
   isSubmitting,
   name,
+  method,
+  methodOptions,
   open,
   profile,
   workspace,
   onNameChange,
+  onMethodChange,
   onOpenChange,
   onSubmit,
 }: RenameProfileDialogProps) {
+  const { t } = useTranslation(["onboarding", "common"]);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -875,10 +958,9 @@ function RenameProfileDialog({
           }}
         >
           <DialogHeader>
-            <DialogTitle>Edit book name</DialogTitle>
+            <DialogTitle>{t("books.renameProfile.title")}</DialogTitle>
             <DialogDescription>
-              Rename this book. Tax settings, wallets, and transactions stay
-              unchanged.
+              {t("books.renameProfile.description")}
             </DialogDescription>
           </DialogHeader>
 
@@ -893,7 +975,9 @@ function RenameProfileDialog({
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="rename-profile-name">Book name</Label>
+            <Label htmlFor="rename-profile-name">
+              {t("books.renameProfile.nameLabel")}
+            </Label>
             <Input
               id="rename-profile-name"
               autoFocus
@@ -902,6 +986,34 @@ function RenameProfileDialog({
               value={name}
               onChange={(event) => onNameChange(event.currentTarget.value)}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="rename-profile-method">
+              {t("books.renameProfile.methodLabel")}
+            </Label>
+            <Select
+              value={method}
+              disabled={isSubmitting || methodOptions.length <= 1}
+              onValueChange={onMethodChange}
+            >
+              <SelectTrigger id="rename-profile-method">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {methodOptions.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {accountingMethodLabel(option, t)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {profile?.taxCountry === "at" ? (
+              <p className="text-xs text-muted-foreground">
+                Austrian books use the moving-average method (gleitender
+                Durchschnittspreis); other methods aren&apos;t valid for Austria.
+              </p>
+            ) : null}
           </div>
 
           {errorMessage && (
@@ -917,10 +1029,10 @@ function RenameProfileDialog({
               disabled={isSubmitting}
               onClick={() => onOpenChange(false)}
             >
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              Save name
+              {t("books.renameProfile.submit")}
             </Button>
           </DialogFooter>
         </form>
@@ -950,6 +1062,7 @@ function RenameWorkspaceDialog({
   onOpenChange,
   onSubmit,
 }: RenameWorkspaceDialogProps) {
+  const { t } = useTranslation(["onboarding", "common"]);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -961,10 +1074,9 @@ function RenameWorkspaceDialog({
           }}
         >
           <DialogHeader>
-            <DialogTitle>Edit book set name</DialogTitle>
+            <DialogTitle>{t("books.renameWorkspace.title")}</DialogTitle>
             <DialogDescription>
-              Rename this book set. Books, wallets, and transactions stay
-              unchanged.
+              {t("books.renameWorkspace.description")}
             </DialogDescription>
           </DialogHeader>
 
@@ -972,13 +1084,15 @@ function RenameWorkspaceDialog({
             <div className="rounded-lg border bg-muted/25 p-3 text-sm">
               <p className="font-medium">{workspace.name}</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {formatWorkspaceMeta(workspace, { includeCreated: false })}
+                {formatWorkspaceMeta(t, workspace, { includeCreated: false })}
               </p>
             </div>
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="rename-workspace-name">Book set name</Label>
+            <Label htmlFor="rename-workspace-name">
+              {t("books.renameWorkspace.nameLabel")}
+            </Label>
             <Input
               id="rename-workspace-name"
               autoFocus
@@ -1002,10 +1116,10 @@ function RenameWorkspaceDialog({
               disabled={isSubmitting}
               onClick={() => onOpenChange(false)}
             >
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              Save name
+              {t("books.renameWorkspace.submit")}
             </Button>
           </DialogFooter>
         </form>
@@ -1033,6 +1147,7 @@ function ProfileSwitchDialog({
   onOpenOverview,
   onSwitchHere,
 }: ProfileSwitchDialogProps) {
+  const { t } = useTranslation(["onboarding", "common"]);
   const profile = pendingSwitch?.profile;
   const workspace = pendingSwitch?.workspace;
 
@@ -1043,11 +1158,14 @@ function ProfileSwitchDialog({
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Switch books?</DialogTitle>
+          <DialogTitle>{t("books.switch.title")}</DialogTitle>
           <DialogDescription>
             {currentProfile && profile
-              ? `Switch from ${currentProfile.name} to ${profile.name}.`
-              : "Switch to these books."}
+              ? t("books.switch.descriptionFromTo", {
+                  current: currentProfile.name,
+                  next: profile.name,
+                })
+              : t("books.switch.descriptionGeneric")}
           </DialogDescription>
         </DialogHeader>
 
@@ -1064,19 +1182,21 @@ function ProfileSwitchDialog({
             </div>
             <div className="mt-3 rounded-md border bg-background/70 p-3">
               <p className="text-xs font-medium text-muted-foreground">
-                Tax policy
+                {t("books.switch.taxPolicy")}
               </p>
               <p className="mt-1 text-sm">{profile.taxPolicy}</p>
             </div>
             <div className="mt-3 flex gap-4 text-sm">
               <span>
                 <span className="block text-xs text-muted-foreground">
-                  Buckets
+                  {t("books.switch.buckets")}
                 </span>
                 {profile.accounts}
               </span>
               <span>
-                <span className="block text-xs text-muted-foreground">Wallets</span>
+                <span className="block text-xs text-muted-foreground">
+                  {t("books.switch.wallets")}
+                </span>
                 {profile.wallets}
               </span>
             </div>
@@ -1096,7 +1216,7 @@ function ProfileSwitchDialog({
             disabled={isSubmitting}
             onClick={onCancel}
           >
-            Cancel
+            {t("common:actions.cancel")}
           </Button>
           <Button
             type="button"
@@ -1104,10 +1224,10 @@ function ProfileSwitchDialog({
             disabled={isSubmitting}
             onClick={onSwitchHere}
           >
-            Switch here
+            {t("books.switch.switchHere")}
           </Button>
           <Button type="button" disabled={isSubmitting} onClick={onOpenOverview}>
-            Switch and open Overview
+            {t("books.switch.switchAndOpenOverview")}
             <ArrowRight className="size-4" aria-hidden="true" />
           </Button>
         </DialogFooter>
@@ -1135,6 +1255,7 @@ function CreateWorkspaceDialog({
   onOpenChange,
   onSubmit,
 }: CreateWorkspaceDialogProps) {
+  const { t } = useTranslation(["onboarding", "common"]);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -1146,22 +1267,23 @@ function CreateWorkspaceDialog({
           }}
         >
           <DialogHeader>
-            <DialogTitle>New book set</DialogTitle>
+            <DialogTitle>{t("books.createWorkspace.title")}</DialogTitle>
             <DialogDescription>
-              Create a separate top-level set in this local database, then add
-              its first book. Most users only need one.
+              {t("books.createWorkspace.description")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-2">
-            <Label htmlFor="workspace-name">Book set name</Label>
+            <Label htmlFor="workspace-name">
+              {t("books.createWorkspace.nameLabel")}
+            </Label>
             <Input
               id="workspace-name"
               data-testid="workspace-name-input"
               autoFocus
               aria-invalid={Boolean(errorMessage)}
               disabled={isSubmitting}
-              placeholder="Book set name"
+              placeholder={t("books.createWorkspace.namePlaceholder")}
               value={name}
               onChange={(event) => onNameChange(event.currentTarget.value)}
             />
@@ -1180,10 +1302,10 @@ function CreateWorkspaceDialog({
               disabled={isSubmitting}
               onClick={() => onOpenChange(false)}
             >
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              Create set
+              {t("books.createWorkspace.submit")}
             </Button>
           </DialogFooter>
         </form>

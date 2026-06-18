@@ -13,6 +13,15 @@ surface. See [../quickstart.md](../quickstart.md) for the end-to-end
 workflows and [machine-output.md](machine-output.md) for the JSON envelope
 contract the shell consumes through the daemon.
 
+The desktop UI is bilingual — English and Austrian German (informal `du`) — via
+i18next. The active language lives in the UI store's `lang` (the single source
+of truth) and is switchable from Settings → Appearance or the header overflow
+menu; first run defaults to English. The CLI and Python daemon stay English and
+machine-deterministic (the UI translates their stable codes). For how
+translations are organized and the workflow for keeping English/German in sync,
+see [i18n.md](i18n.md); for the Austrian-German terminology (Bitcoin jargon kept
+English, BMF tax wording, `du` register), see [i18n-glossary.md](i18n-glossary.md).
+
 Current development modes:
 
 - `pnpm dev` in `ui-tauri/` runs the browser dashboard against the

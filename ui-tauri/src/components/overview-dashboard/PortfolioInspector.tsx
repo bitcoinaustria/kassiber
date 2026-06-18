@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import { formatBtc, type Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +25,7 @@ export function PortfolioInspector({
   fiatCurrency: string;
   chartCurrency: Currency;
 }) {
+  const { t } = useTranslation("overview");
   const isBtc = chartCurrency === "btc";
   const priorValueEur = previousPoint?.valueEur ?? point?.valueEur ?? 0;
   const pointValueEur = point?.valueEur ?? 0;
@@ -52,16 +55,16 @@ export function PortfolioInspector({
     <aside className="flex min-h-0 flex-col gap-3 rounded-lg border bg-background/65 p-3 xl:max-h-[min(64vh,620px)] xl:overflow-y-auto">
       <div>
         <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-          Selected point
+          {t("inspector.selectedPoint")}
         </p>
         <p className="mt-1 text-sm font-semibold">
-          {point?.detailLabel ?? "No point selected"}
+          {point?.detailLabel ?? t("inspector.noPointSelected")}
         </p>
       </div>
 
       <div className="grid gap-2">
         <InspectorMetric
-          label="Value"
+          label={t("inspector.value")}
           value={formatPortfolioMoney(
             point?.valueEur ?? 0,
             priceEur,
@@ -71,12 +74,12 @@ export function PortfolioInspector({
           hidden={hideSensitive}
         />
         <InspectorMetric
-          label="BTC"
+          label={t("inspector.btc")}
           value={formatBtc(point?.balanceBtc ?? 0, { precision: 8 })}
           hidden={hideSensitive}
         />
         <InspectorMetric
-          label="Cost basis"
+          label={t("inspector.costBasis")}
           value={formatPortfolioMoney(
             point?.costBasisEur ?? 0,
             priceEur,
@@ -86,7 +89,7 @@ export function PortfolioInspector({
           hidden={hideSensitive}
         />
         <InspectorMetric
-          label="Unrealized"
+          label={t("inspector.unrealized")}
           value={`${(point?.unrealizedEur ?? 0) >= 0 ? "+ " : "− "}${formatPortfolioMoney(
             Math.abs(point?.unrealizedEur ?? 0),
             priceEur,
@@ -100,7 +103,7 @@ export function PortfolioInspector({
 
       <div className="rounded-md border bg-muted/20 p-2.5">
         <p className="text-[10px] font-medium text-muted-foreground">
-          Since previous point
+          {t("inspector.sincePrevious")}
         </p>
         <div
           className={cn(
@@ -119,7 +122,7 @@ export function PortfolioInspector({
         </div>
         <p className="mt-1 text-[10px] text-muted-foreground">
           {deltaPct === null
-            ? "Start of selected range"
+            ? t("inspector.startOfRange")
             : `${deltaPct >= 0 ? "+" : "−"}${Math.abs(deltaPct).toFixed(1)}%`}{" "}
           · {secondaryLabel}
         </p>

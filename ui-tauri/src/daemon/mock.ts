@@ -14,6 +14,7 @@ import type {
   DaemonTransport,
 } from "./transport";
 import { DEFAULT_OPEN_COST_SAT } from "@/lib/lightning";
+import { accountMatchesLabel } from "@/lib/connectionTransactions";
 import { MOCK_PROFILES } from "@/mocks/profiles";
 import type {
   ProfileGainsAlgorithm,
@@ -21,6 +22,7 @@ import type {
   Workspace,
 } from "@/mocks/profiles";
 import { mockWorkspaceOverviewSnapshot } from "@/mocks/workspaceOverview";
+import { buildExitTaxFixture, type ExitTaxDestination } from "@/mocks/exitTax";
 import { MOCK_AI_CHAT_STREAM, fixtures } from "./fixtures";
 
 interface MockChatSession {
@@ -447,6 +449,8 @@ type MockConnection = {
   syncMode?: string;
   syncSource?: string;
   gap?: number;
+  /** balance in BTC (float) — present on overview-snapshot connection rows. */
+  balance?: number;
 };
 
 const mockOverviewSnapshot = () =>
@@ -870,6 +874,19 @@ export const mockDaemon: DaemonTransport = {
           active_count: 0,
         };
         payload.summary.count = 0;
+      } else {
+        // Keep the on-chain inventory total consistent with the connection's
+        // imported-transaction balance so the Wallet Detail balance
+        // reconciliation renders its healthy (reconciled) state by default.
+        const balanceSat = Math.round((connection?.balance ?? 0) * 1e8);
+        payload.totals = [
+          {
+            asset: "BTC",
+            amount: (connection?.balance ?? 0).toFixed(8),
+            amount_sat: balanceSat,
+            amount_msat: balanceSat * 1000,
+          },
+        ];
       }
       return {
         kind: "ui.wallets.utxos",
@@ -877,6 +894,250 @@ export const mockDaemon: DaemonTransport = {
         request_id: req.request_id,
         data: payload as T,
       };
+    }
+
+    if (
+      req.kind === "ui.wallets.identify" ||
+      req.kind === "ui.wallets.identify_onchain"
+    ) {
+      const verified = req.kind === "ui.wallets.identify_onchain";
+      const overview = mockOverviewSnapshot();
+      const args = (req.args ?? {}) as {
+        text?: unknown;
+        addresses?: unknown;
+        txids?: unknown;
+        csv_text?: unknown;
+      };
+      const tokens: string[] = [];
+      if (typeof args.text === "string") {
+        tokens.push(...args.text.split(/\r?\n/));
+      }
+      if (Array.isArray(args.addresses)) {
+        tokens.push(...args.addresses.map((value) => String(value)));
+      }
+      if (Array.isArray(args.txids)) {
+        tokens.push(...args.txids.map((value) => String(value)));
+      }
+      if (typeof args.csv_text === "string") {
+        // Smart harvest (mock approximation of the daemon harvester): split into
+        // cells and keep only address/txid-looking tokens, ignoring
+        // headers/amounts/dates. The mock can't checksum-validate base58, so it
+        // bounds the length (26-35) to limit false positives on long ids.
+        for (const cell of args.csv_text.split(/[\s,;|\t]+/)) {
+          const token = cell.trim();
+          if (
+            /^[0-9a-fA-F]{64}$/.test(token) ||
+            /^(bc1|tb1|bcrt1|lq1|tlq1|ex1|tex1|el1|ert1)/i.test(token) ||
+            (/^[13mn2][0-9A-Za-z]{25,34}$/.test(token))
+          ) {
+            tokens.push(token);
+          }
+        }
+      }
+      // De-duplicate in first-seen order to match the real daemon (which dedups
+      // in extract_candidates_from_csv and again in parse_tokens).
+      const cleaned = Array.from(
+        new Set(
+          tokens
+            .map((token) => token.trim())
+            .filter((token) => token.length > 0 && !token.startsWith("#")),
+        ),
+      );
+      const ownerWallet = overview.connections[0]?.label ?? "Cold Storage";
+      // Deterministic mock: a 64-hex string is a txid, otherwise an address;
+      // tokens containing "own"/"mine"/"demo" demo an owned hit. The cache-only
+      // kind mirrors the real read surface (owned txid -> touches_wallet, else
+      // unknown); the on-chain kind upgrades txids to a per-leg verdict.
+      let receiveIndex = 0;
+      const results = cleaned.map((token) => {
+        const isTxid = /^[0-9a-fA-F]{64}$/.test(token);
+        const owned = /own|mine|demo/i.test(token);
+        // A txid can't contain "demo" (non-hex), so use a hex-valid sentinel to
+        // demo the owned-txid path (touches_wallet cache-only, self_transfer
+        // once verified); any other 64-hex txid stays unknown/external.
+        const ownedTxid = isTxid && token.toLowerCase().startsWith("dead");
+        if (isTxid) {
+          if (ownedTxid) {
+            return verified
+              ? {
+                  input: token,
+                  type: "txid",
+                  chain: "bitcoin",
+                  status: "owned",
+                  classification: "self_transfer",
+                  wallets: [ownerWallet],
+                  owned_inputs: 1,
+                  owned_outputs: 2,
+                  external_outputs: 0,
+                  legs: [
+                    { side: "input", outpoint: `${token}:0`, owned: true, wallet: ownerWallet },
+                    { side: "output", n: 0, owned: true, wallet: ownerWallet, branch: "change" },
+                  ],
+                  match_source: "chain",
+                  note: "Self-transfer/consolidation: all outputs return to owned addresses.",
+                }
+              : {
+                  input: token,
+                  type: "txid",
+                  chain: "",
+                  status: "owned",
+                  classification: "touches_wallet",
+                  wallets: [ownerWallet],
+                  owned_inputs: null,
+                  owned_outputs: null,
+                  external_outputs: null,
+                  legs: [],
+                  match_source: "inventory",
+                  note: `Recorded against '${ownerWallet}'; per-leg breakdown needs on-chain verification.`,
+                };
+          }
+          return verified
+            ? {
+                input: token,
+                type: "txid",
+                chain: "bitcoin",
+                status: "external",
+                classification: "external",
+                wallets: [],
+                owned_inputs: 0,
+                owned_outputs: 0,
+                external_outputs: 1,
+                legs: [],
+                match_source: "chain",
+                note: "No inputs or outputs belong to this profile.",
+              }
+            : {
+                input: token,
+                type: "txid",
+                chain: "",
+                status: "unknown",
+                classification: "unknown",
+                wallets: [],
+                owned_inputs: null,
+                owned_outputs: null,
+                external_outputs: null,
+                legs: [],
+                match_source: "none",
+                note: "Not in this profile's synced/imported history; on-chain verification is needed for a verdict.",
+              };
+        }
+        if (owned) {
+          const index = receiveIndex++;
+          return {
+            input: token,
+            type: "address",
+            chain: "bitcoin",
+            status: "owned",
+            classification: "owned_address",
+            matches: [
+              {
+                wallet: ownerWallet,
+                account: "treasury",
+                chain: "bitcoin",
+                network: "main",
+                branch: "receive",
+                address_index: index,
+                derivation_path: `m/84'/0'/0'/0/${index}`,
+                match_source: "derived",
+              },
+            ],
+            note: `Owned by '${ownerWallet}' (receive #${index}).`,
+          };
+        }
+        return {
+          input: token,
+          type: "address",
+          chain: "bitcoin",
+          status: "external",
+          classification: "external_address",
+          matches: [],
+          note: "Not derived from or seen by any wallet in this profile.",
+        };
+      });
+      const counts = { owned: 0, external: 0, unknown: 0, invalid: 0 };
+      for (const result of results) {
+        if (result.status in counts) {
+          counts[result.status as keyof typeof counts] += 1;
+        }
+      }
+      return {
+        kind: req.kind,
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          results,
+          summary: {
+            total: results.length,
+            ...counts,
+            wallets_scanned: overview.connections.length,
+            scan_to_index: 500,
+            verified_on_chain: verified,
+          },
+          warnings: [],
+          context: { workspace: "Demo", profile: "Default" },
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.reports.balance_history") {
+      const overview = mockOverviewSnapshot();
+      const args = (req.args ?? {}) as {
+        wallet?: unknown;
+        interval?: unknown;
+        limit?: unknown;
+      };
+      const walletRef = typeof args.wallet === "string" ? args.wallet : "";
+      const connection = walletRef
+        ? overview.connections.find(
+            (item) => item.id === walletRef || item.label === walletRef,
+          )
+        : undefined;
+      // Wallet-scoped history ramps up to the connection's current balance so
+      // the Wallet Detail sparkline reflects that wallet rather than the book
+      // total. Unscoped requests fall back to the static fixture.
+      if (walletRef && connection) {
+        const target = connection.balance ?? 0;
+        const months: Array<[number, number]> = [];
+        let year = 2025;
+        let month = 7;
+        for (let i = 0; i < 12; i += 1) {
+          months.push([year, month]);
+          month += 1;
+          if (month > 12) {
+            month = 1;
+            year += 1;
+          }
+        }
+        const rows = months.map(([y, m], index) => {
+          const progress = (index + 1) / months.length;
+          const wobble = 0.82 + 0.36 * ((index % 3) / 3);
+          const quantity =
+            index === months.length - 1
+              ? target
+              : Number((target * progress * wobble).toFixed(8));
+          // Mirror the real report_balance_history row shape (period_start, not
+          // a `bucket` field) so the preview exercises the production code path.
+          return {
+            period_start: `${y}-${String(m).padStart(2, "0")}-01T00:00:00Z`,
+            asset: "BTC",
+            quantity,
+          };
+        });
+        return {
+          kind: "ui.reports.balance_history",
+          schema_version: 1,
+          request_id: req.request_id,
+          data: {
+            rows,
+            filters: { interval: "month", limit: 120, wallet: walletRef },
+            summary: {
+              row_count: rows.length,
+              total_row_count: rows.length,
+              truncated: false,
+            },
+          } as T,
+        };
+      }
     }
 
     if (req.kind === "daemon.lock") {
@@ -1395,6 +1656,74 @@ export const mockDaemon: DaemonTransport = {
           profile: { id: profileId, name: label },
           workspace: { id: workspace.id },
         } as T,
+      };
+    }
+
+    if (req.kind === "ui.profiles.update") {
+      const args = (req.args ?? {}) as {
+        profile_id?: unknown;
+        gains_algorithm?: unknown;
+      };
+      const profileId =
+        typeof args.profile_id === "string" ? args.profile_id : "";
+      const workspace = mockProfilesSnapshot.workspaces.find((candidate) =>
+        candidate.profiles.some((profile) => profile.id === profileId),
+      );
+      const profile = workspace?.profiles.find(
+        (candidate) => candidate.id === profileId,
+      );
+      if (!workspace || !profile) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "book not found",
+            retryable: false,
+          },
+        };
+      }
+      const requested =
+        typeof args.gains_algorithm === "string"
+          ? args.gains_algorithm.trim()
+          : "";
+      // Mirror the real daemon's validation (daemon.py: "Accounting method is
+      // required."); the method-change dialog always sends a non-empty method.
+      if (!requested) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "Accounting method is required.",
+            retryable: false,
+          },
+        };
+      }
+      // Mirror the daemon's per-country enforcement: Austrian books are always
+      // coerced to moving-average regardless of the requested method.
+      const nextAlgorithm: ProfileGainsAlgorithm =
+        profile.taxCountry === "at"
+          ? "MOVING_AVERAGE_AT"
+          : (requested as ProfileGainsAlgorithm);
+      mockProfilesSnapshot = {
+        ...mockProfilesSnapshot,
+        workspaces: mockProfilesSnapshot.workspaces.map((candidate) => ({
+          ...candidate,
+          profiles: candidate.profiles.map((existing) =>
+            existing.id === profileId
+              ? { ...existing, gainsAlgorithm: nextAlgorithm }
+              : existing,
+          ),
+        })),
+      };
+      return {
+        kind: "ui.profiles.update",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: { id: profileId } as T,
       };
     }
 
@@ -2917,6 +3246,52 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.reports.exit_tax_preview") {
+      const args = (req.args ?? {}) as {
+        departure_date?: unknown;
+        destination?: unknown;
+      };
+      const departureDate =
+        typeof args.departure_date === "string" ? args.departure_date : "2026-06-16";
+      const destination: ExitTaxDestination =
+        args.destination === "third_country" ? "third_country" : "eu_eea";
+      return {
+        kind: "ui.reports.exit_tax_preview",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: buildExitTaxFixture(departureDate, destination) as T,
+      };
+    }
+
+    if (
+      req.kind === "ui.reports.export_exit_tax_pdf" ||
+      req.kind === "ui.reports.export_exit_tax_xlsx"
+    ) {
+      const args = (req.args ?? {}) as {
+        departure_date?: unknown;
+        destination?: unknown;
+      };
+      const departureDate =
+        typeof args.departure_date === "string" ? args.departure_date : "2026-06-16";
+      const destination: ExitTaxDestination =
+        args.destination === "third_country" ? "third_country" : "eu_eea";
+      const format = req.kind === "ui.reports.export_exit_tax_pdf" ? "pdf" : "xlsx";
+      return {
+        kind: req.kind,
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          file: `/mock/exports/kassiber-exit-tax-${departureDate}.${format}`,
+          filename: `kassiber-exit-tax-${departureDate}.${format}`,
+          bytes: format === "pdf" ? 2516 : 9260,
+          format,
+          scope: "exit_tax",
+          departure_date: departureDate,
+          destination,
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.backends.electrum.test") {
       const args = (req.args ?? {}) as {
         url?: unknown;
@@ -3472,6 +3847,33 @@ export const mockDaemon: DaemonTransport = {
         request_id: req.request_id,
         data: { transaction, query } as T,
       };
+    }
+
+    if (req.kind === "ui.transactions.list") {
+      const args = (req.args ?? {}) as { wallet?: unknown };
+      const wallet =
+        typeof args.wallet === "string" && args.wallet.trim()
+          ? args.wallet.trim()
+          : null;
+      if (wallet) {
+        // Mirror the daemon's server-side wallet scoping so the preview's
+        // wallet deep links return that wallet's rows (leg-aware, so a
+        // transfer "Cold Storage -> Vault" is included for "Cold Storage").
+        const base = fixtures["ui.transactions.list"] as {
+          txs: Array<{ account?: string }>;
+          nextCursor: unknown;
+          hasMore: boolean;
+        };
+        const txs = base.txs.filter((tx) =>
+          accountMatchesLabel(tx.account, wallet),
+        );
+        return {
+          kind: "ui.transactions.list",
+          schema_version: 1,
+          request_id: req.request_id,
+          data: { ...base, txs, nextCursor: null, hasMore: false } as T,
+        };
+      }
     }
 
     const fixture = fixtures[req.kind];

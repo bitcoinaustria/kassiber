@@ -586,9 +586,9 @@ export const fixtures: Record<string, unknown> = {
   },
   "ui.reports.balance_history": {
     rows: [
-      { bucket: "2026-01-01T00:00:00Z", asset: "BTC", quantity: 0.12 },
-      { bucket: "2026-02-01T00:00:00Z", asset: "BTC", quantity: 0.18 },
-      { bucket: "2026-03-01T00:00:00Z", asset: "BTC", quantity: 0.27 },
+      { period_start: "2026-01-01T00:00:00Z", asset: "BTC", quantity: 0.12 },
+      { period_start: "2026-02-01T00:00:00Z", asset: "BTC", quantity: 0.18 },
+      { period_start: "2026-03-01T00:00:00Z", asset: "BTC", quantity: 0.27 },
     ],
     filters: { interval: "month", limit: 120 },
     summary: { row_count: 3, total_row_count: 3, truncated: false },
@@ -1484,6 +1484,8 @@ export const fixtures: Record<string, unknown> = {
       market_rate_fiats: ["USD", "EUR", "GBP", "CHF", "AUD", "CAD", "JPY"],
       active_rate_pair: "BTC-EUR",
       auto_sync_before_report_reads: false,
+      require_coarse_review: false,
+      coarse_priced_count: 3,
       setting_key: "ai.auto_sync_before_report_reads.profile.mock-profile",
     },
   },

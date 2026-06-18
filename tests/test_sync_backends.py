@@ -424,6 +424,93 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(len(fetch_calls), 1)
         self.assertEqual(fetch_utxos.call_count, 1)
 
+    def test_esplora_incremental_refetches_when_balance_changes(self):
+        # Companion to test_esplora_checkpoint_skips_unchanged_script_pages:
+        # the unchanged-script skip is rate-limit-safe, but it MUST NOT skip a
+        # script whose on-chain stats changed. A new deposit changes the
+        # fingerprint (funded_txo_sum / tx_count), so the incremental sync has
+        # to re-fetch that script and emit the new record — otherwise the
+        # summed wallet balance would only move on a full rescan. Regression
+        # guard for the reported "balances only update on a full rescan" bug.
+        target = {"address": "bc1qesplora", "script_pubkey": "0014" + "11" * 20}
+        tx1 = {
+            "txid": "11" * 32,
+            "fee": 0,
+            "vin": [],
+            "vout": [{"scriptpubkey": target["script_pubkey"], "value": 12_345}],
+            "status": {"block_time": 1_700_000_000},
+        }
+        tx2 = {
+            "txid": "22" * 32,
+            "fee": 0,
+            "vin": [],
+            "vout": [{"scriptpubkey": target["script_pubkey"], "value": 50_000}],
+            "status": {"block_time": 1_700_100_000},
+        }
+        stats_first = {
+            "chain_stats": {
+                "funded_txo_count": 1,
+                "funded_txo_sum": 12_345,
+                "spent_txo_count": 0,
+                "spent_txo_sum": 0,
+                "tx_count": 1,
+            },
+            "mempool_stats": {"tx_count": 0},
+        }
+        stats_second = {
+            "chain_stats": {
+                "funded_txo_count": 2,
+                "funded_txo_sum": 62_345,
+                "spent_txo_count": 0,
+                "spent_txo_sum": 0,
+                "tx_count": 2,
+            },
+            "mempool_stats": {"tx_count": 0},
+        }
+        backend = {
+            "name": "esplora",
+            "kind": "esplora",
+            "url": "https://esplora.example",
+        }
+        wallet = {"id": "wallet-1"}
+
+        def make_state(checkpoint=None):
+            return WalletSyncState(
+                chain="bitcoin",
+                network="bitcoin",
+                descriptor_plan=None,
+                policy_asset_id="",
+                targets=[target],
+                tracked_scripts={target["script_pubkey"]: target},
+                history_cache={},
+                **({"checkpoint": checkpoint} if checkpoint else {}),
+            )
+
+        with patch(
+            "kassiber.core.sync_backends.esplora_scripthash_stats",
+            side_effect=[stats_first, stats_second],
+        ), patch(
+            "kassiber.core.sync_backends.fetch_esplora_scripthash_transactions",
+            side_effect=[[tx1], [tx1, tx2]],
+        ), patch(
+            "kassiber.core.sync_backends.fetch_esplora_scripthash_utxos",
+            return_value=[],
+        ):
+            records1, meta1 = esplora_sync_adapter(backend, wallet, make_state())
+            records2, meta2 = esplora_sync_adapter(
+                backend, wallet, make_state(meta1["freshness_checkpoint"])
+            )
+
+        # First sync establishes the single deposit.
+        self.assertEqual({record["txid"] for record in records1}, {"11" * 32})
+        # Incremental sync sees the changed fingerprint, re-fetches, and emits
+        # the new deposit so the summed balance grows from 12_345 to 62_345.
+        self.assertEqual(meta2["scripts_unchanged"], 0)
+        self.assertEqual(meta2["scripts_changed"], 1)
+        self.assertEqual(
+            {record["txid"] for record in records2}, {"11" * 32, "22" * 32}
+        )
+
     def test_esplora_descriptor_discovery_rechecks_previously_unused_scripts(self):
         target = {"address": "bc1qgap", "script_pubkey": "0014" + "22" * 20}
         scripthash = scriptpubkey_scripthash(target["script_pubkey"])
@@ -751,6 +838,63 @@ class SyncBackendsTest(unittest.TestCase):
 
         self.assertEqual([target["address_index"] for target in targets], [0, 1, 2, 3, 4])
         self.assertEqual(checked, [3, 4])
+
+    def test_first_sync_scans_full_gap_depth_following_used_addresses(self):
+        # A first sync (no stored checkpoint, highest_used=None) must walk the
+        # FULL active range, not a fixed shallow window: every used address
+        # resets the trailing-gap counter so discovery extends as deep as
+        # activity goes, stopping only after gap_limit consecutive unused. This
+        # pins the "first Refresh reaches the entire gap limit" trust property
+        # (the original Issue #1 complaint) so it cannot silently regress.
+        class FakeDescriptor:
+            is_wildcard = True
+
+        plan = DescriptorPlan(
+            chain="bitcoin",
+            network="bitcoin",
+            gap_limit=3,
+            descriptor_fingerprint="fp",
+            branches=(DescriptorBranch(0, "receive", FakeDescriptor()),),
+        )
+        used_indices = {0, 3, 6}
+
+        def fake_derive(plan, branch_index=None, start=0, end=0):
+            del plan
+            return [
+                DerivedTarget(
+                    chain="bitcoin",
+                    network="bitcoin",
+                    branch_index=branch_index,
+                    branch_label="receive",
+                    address_index=index,
+                    address=f"bc1q{index}",
+                    unconfidential_address=None,
+                    script_pubkey=f"{index:064x}",
+                    derivation_path=f"m/0/{index}",
+                    derivation_paths=(f"m/0/{index}",),
+                    key_origins=(),
+                )
+                for index in range(start, end)
+            ]
+
+        def target_used_batch(targets):
+            return [target["address_index"] in used_indices for target in targets]
+
+        with patch(
+            "kassiber.core.sync_backends.derive_descriptor_targets",
+            side_effect=fake_derive,
+        ):
+            targets = scan_descriptor_targets(
+                plan,
+                target_used_batch=target_used_batch,
+                scan_batch_size=1,
+                highest_used=None,  # first sync: derive from index 0
+            )
+
+        scanned = [target["address_index"] for target in targets]
+        # Used at 0/3/6 keep the walk alive past a naive shallow scan; it stops
+        # only after gap_limit(3) trailing unused (7, 8, 9), reaching index 9.
+        self.assertEqual(scanned, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
 
     def test_electrum_call_raises_app_error_for_non_json_response(self):
         client = ElectrumClient({"name": "electrum", "url": "tcp://electrum.example:50001"})

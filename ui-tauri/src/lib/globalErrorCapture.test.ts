@@ -114,7 +114,7 @@ describe("global error capture", () => {
   });
 
   it("flushes the duplicate summary when a different message arrives", () => {
-    let at = 0;
+    const at = 0;
     installGlobalErrorCapture({ now: () => at });
 
     for (let index = 0; index < 8; index += 1) {

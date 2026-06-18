@@ -12,7 +12,9 @@ import {
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import { createInterface } from "node:readline";
-import { defineConfig } from "vite";
+// `vitest/config` re-exports vite's `defineConfig` and adds the `test` field;
+// it is a superset, so the Vite build reads this config unchanged.
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { inspectImportProjectDirectory } from "./vite/importProject";
@@ -56,10 +58,18 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.onboarding.complete",
   "ui.profiles.create",
   "ui.profiles.rename",
+  "ui.profiles.update",
   "ui.profiles.switch",
   "ui.profiles.reset_data",
   "ui.reports.capital_gains",
+  "ui.reports.summary",
+  "ui.reports.balance_sheet",
+  "ui.reports.portfolio_summary",
+  "ui.reports.balance_history",
   "ui.reports.tax_summary",
+  "ui.reports.exit_tax_preview",
+  "ui.reports.export_exit_tax_pdf",
+  "ui.reports.export_exit_tax_xlsx",
   "ui.reports.export_pdf",
   "ui.reports.export_summary_pdf",
   "ui.reports.export_csv",
@@ -76,6 +86,9 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.journals.process",
   "ui.transfers.suggest",
   "ui.transfers.list",
+  "ui.transfers.payouts.list",
+  "ui.transfers.payouts.create",
+  "ui.transfers.payouts.delete",
   "ui.transfers.pair",
   "ui.transfers.unpair",
   "ui.transfers.bulk_pair",
@@ -93,6 +106,9 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.rates.kraken_csv.import",
   "ui.rates.latest",
   "ui.rates.rebuild",
+  "ui.maintenance.settings",
+  "ui.maintenance.configure",
+  "ui.maintenance.run",
   "ui.workspace.health",
   "ui.workspace.freshness.run",
   "ui.workspace.create",
@@ -1006,5 +1022,11 @@ export default defineConfig({
     fs: {
       allow: [UI_ROOT, NODE_MODULES_REALPATH],
     },
+  },
+  test: {
+    // Initialize i18next before any test file so `useTranslation` resolves
+    // real strings under `renderToStaticMarkup`. Environment stays on the
+    // vitest default (node); no test currently needs a DOM.
+    setupFiles: ["./vitest.setup.ts"],
   },
 });

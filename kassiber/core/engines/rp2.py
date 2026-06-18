@@ -49,6 +49,33 @@ _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE = {
     "staking": "STAKING",
     "wages": "WAGES",
 }
+# Inbound kinds that look like income but are NOT in the map above. Defaulting
+# them to BUY (a plain acquisition) silently drops the income declaration, so
+# they are quarantined for explicit income-vs-acquisition classification.
+_INCOME_LIKE_KIND_TOKENS = (
+    "reward",
+    "referral",
+    "bonus",
+    "cashback",
+    "rebate",
+    "dividend",
+    "yield",
+)
+# Outbound kinds that are dispositions but NOT market sales. RP2 taxes every
+# OutTransaction at full market value, so booking a gift/donation/lost coin as a
+# SELL overstates gains. Quarantine for explicit handling (exclude, or apply a
+# taxability/category override) instead of guessing the jurisdiction's rule.
+_NON_SALE_DISPOSAL_KIND_TOKENS = (
+    "gift",
+    "donat",
+    "lost",
+    "stolen",
+    "theft",
+)
+
+
+def _kind_has_token(kind: str, tokens: tuple[str, ...]) -> bool:
+    return bool(kind) and any(token in kind for token in tokens)
 
 
 @dataclass(frozen=True)
@@ -431,6 +458,33 @@ def _transaction_row_sort_key(row: Mapping[str, Any]) -> tuple[str, str, str]:
     )
 
 
+def _earliest_lot_contamination(dropped_acquisition_at, events) -> str | None:
+    """Earliest instant the asset's lot state becomes uncertain.
+
+    Combines normalize's earliest dropped-acquisition timestamp (missing/coarse
+    pricing) with the gate-level drops that also leave RP2's lots inconsistent:
+    unclassified-income inbounds (never enter the lot pool) and quarantined
+    non-sale disposals (gift / donation / lost — a real outflow that is not
+    booked). Any same-asset disposal at or after this instant cannot be trusted
+    to select the right lot under any accounting method. ``None`` when nothing
+    contaminates the lots.
+    """
+    earliest = dropped_acquisition_at
+    for event in events:
+        kind = _normalized_event_kind(event)
+        contaminates = (
+            event.direction == "inbound"
+            and kind not in _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE
+            and _kind_has_token(kind, _INCOME_LIKE_KIND_TOKENS)
+        ) or (
+            event.direction == "outbound"
+            and _kind_has_token(kind, _NON_SALE_DISPOSAL_KIND_TOKENS)
+        )
+        if contaminates and (earliest is None or event.occurred_at < earliest):
+            earliest = event.occurred_at
+    return earliest
+
+
 def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInputs, configuration) -> _RP2PreparedInput:
     """Build RP2 ``InputData`` for one asset without running ``compute_tax``.
 
@@ -451,8 +505,32 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
     out_set = TransactionSet(configuration, "OUT", asset)
     intra_set = TransactionSet(configuration, "INTRA", asset)
     holder = profile["label"]
-    total_available = Decimal("0")
+    # Quantity balances are tracked PER ACCOUNT (wallet label; holder is constant
+    # within a profile) to mirror rp2's BalanceSet, which enforces non-negative
+    # balances per (exchange, holder). The old single global pool let an
+    # account-local over-sell pass this gate and then crash compute_tax with an
+    # uncatchable "balance went negative", aborting the whole report instead of
+    # quarantining the one offending row.
+    account_available: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    # Cost basis, by contrast, is assigned by rp2's universal-application FIFO
+    # GLOBALLY across accounts, so the priced/cost-basis pool stays global.
     priced_available = Decimal("0")
+    # Basis-provenance guard. When the lot state for this asset becomes
+    # uncertain — an acquisition dropped for missing/coarse pricing, an
+    # unclassified-income inbound, or a quarantined non-sale disposal (gift /
+    # donation / lost) that is NOT booked into RP2's lots — every later disposal
+    # is computed against a lot the engine can no longer trust. Which lot is
+    # wrong depends on the accounting method (FIFO picks an older lot,
+    # moving-average folds the missing lot into the pool, LIFO/HIFO pick
+    # differently), so rather than assume FIFO we conservatively quarantine ANY
+    # same-asset disposal at or after the earliest contamination instant. The
+    # user resolves the contaminating row (price it, classify it, or exclude it)
+    # and re-runs. `_earliest_lot_contamination` folds the gate-level income /
+    # gift drops in with normalize's quarantine-derived contamination instant.
+    first_drop_at = _earliest_lot_contamination(
+        normalized_inputs.earliest_lot_contamination_at,
+        normalized_inputs.events,
+    )
     quarantines = list(normalized_inputs.quarantines)
     intra_audit = []
     row_index = 1
@@ -462,11 +540,29 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
         for transfer in normalized_inputs.transfers
     }
 
-    for item_kind, item_id in normalized_inputs.ordered_items:
+    # Walk the ledger in rp2's own order — by timestamp, and within a timestamp
+    # IN before INTRA before OUT — so this gate's availability decision matches
+    # the BalanceSet (which concatenates IN+INTRA+OUT then stable-sorts by
+    # timestamp). The original-stream index is the final, deterministic tiebreak,
+    # replacing the previous nondeterministic random-uuid order that could flip a
+    # same-timestamp buy/sell between re-imports. row_index then follows the same
+    # order rp2 itself processes in.
+    def _gate_order_key(indexed_item):
+        index, (kind, ident) = indexed_item
+        if kind == "transfer":
+            return (transfers_by_id[ident].occurred_at, 1, index)
+        ev = events_by_id[ident]
+        return (ev.occurred_at, 0 if ev.direction == "inbound" else 2, index)
+
+    for _, (item_kind, item_id) in sorted(
+        enumerate(normalized_inputs.ordered_items), key=_gate_order_key
+    ):
         if item_kind == "transfer":
             transfer = transfers_by_id[item_id]
             transfer_id = _transfer_item_id(transfer)
-            if total_available < transfer.sent:
+            from_account = transfer.from_wallet_label
+            to_account = transfer.to_wallet_label
+            if account_available[from_account] < transfer.sent:
                 quarantines.append(
                     build_tax_quarantine(
                         profile,
@@ -476,7 +572,7 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                             "from_wallet": transfer.from_wallet_label,
                             "asset": asset,
                             "required": float(transfer.sent),
-                            "available": float(total_available),
+                            "available": float(account_available[from_account]),
                         },
                     )
                 )
@@ -514,7 +610,11 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                 )
             )
             row_index += 1
-            total_available -= transfer.fee
+            # The transfer debits `sent` from the source account and credits
+            # `received` to the destination; the difference (the fee) is the only
+            # quantity that leaves the global priced pool. Matches BalanceSet.
+            account_available[from_account] -= transfer.sent
+            account_available[to_account] += transfer.received
             priced_available -= transfer.fee
             audit_row = {
                 "out_id": transfer.out_transaction_id,
@@ -538,7 +638,29 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
 
         event = events_by_id[item_id]
         if event.direction == "inbound":
-            total_available += event.amount
+            kind = _normalized_event_kind(event)
+            if (
+                kind not in _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE
+                and _kind_has_token(kind, _INCOME_LIKE_KIND_TOKENS)
+            ):
+                # Looks like income but isn't a recognized earn type. Defaulting
+                # to BUY would silently drop the income declaration, so quarantine
+                # for explicit income-vs-acquisition classification.
+                quarantines.append(
+                    build_tax_quarantine(
+                        profile,
+                        event.raw_row,
+                        "unclassified_income_kind",
+                        {
+                            "wallet": event.wallet_label,
+                            "asset": asset,
+                            "direction": "inbound",
+                            "kind": kind,
+                        },
+                    )
+                )
+                continue
+            account_available[event.wallet_label] += event.amount
             in_set.add_entry(
                 InTransaction(
                     configuration=configuration,
@@ -564,11 +686,36 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
         needed = event.amount + event.fee
         if needed <= 0:
             continue
+        disposal_kind = _normalized_event_kind(event)
+        if _kind_has_token(disposal_kind, _NON_SALE_DISPOSAL_KIND_TOKENS):
+            # Gift / donation / lost-or-stolen: a disposition, but not a market
+            # sale. rp2 taxes every OutTransaction at full market value, so
+            # booking it as a SELL overstates gains. Quarantine for explicit
+            # handling (exclude, or apply a taxability/category override).
+            quarantines.append(
+                build_tax_quarantine(
+                    profile,
+                    event.raw_row,
+                    "non_sale_disposal_kind",
+                    {
+                        "wallet": event.wallet_label,
+                        "asset": asset,
+                        "direction": "outbound",
+                        "kind": disposal_kind,
+                    },
+                )
+            )
+            # Don't touch availability: the row isn't emitted, so RP2 keeps the
+            # lot. Debiting here would diverge the gate from RP2 and over- or
+            # under-gate a later sale depending on method. Instead the gift's
+            # timestamp contaminates lot provenance (see _earliest_lot_contamination),
+            # so any later disposal is quarantined until the gift is resolved.
+            continue
         # Marked Austrian swap-outs can depend on another asset's same-timestamp
         # swap-in. Feed the full graph to rp2's native runner instead of applying
         # Kassiber's single-asset availability gate first.
         is_marked_at_swap = bool(getattr(event, "at_swap_link", None))
-        if total_available < needed and not is_marked_at_swap:
+        if account_available[event.wallet_label] < needed and not is_marked_at_swap:
             quarantines.append(
                 build_tax_quarantine(
                     profile,
@@ -578,7 +725,7 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                         "wallet": event.wallet_label,
                         "asset": asset,
                         "required": float(needed),
-                        "available": float(total_available),
+                        "available": float(account_available[event.wallet_label]),
                     },
                 )
             )
@@ -594,6 +741,30 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                         "asset": asset,
                         "required": float(needed),
                         "priced_available": float(priced_available),
+                    },
+                )
+            )
+            continue
+        if (
+            first_drop_at is not None
+            and not is_marked_at_swap
+            and event.occurred_at >= first_drop_at
+        ):
+            # The lot state is contaminated from first_drop_at (a dropped /
+            # unpriced acquisition, an unclassified income lot, or a quarantined
+            # gift not booked into the pool). Which lot this disposal would draw
+            # from is method-dependent and untrustworthy, so quarantine it until
+            # the contaminating row is resolved rather than book a wrong basis.
+            quarantines.append(
+                build_tax_quarantine(
+                    profile,
+                    event.raw_row,
+                    "basis_provenance_incomplete",
+                    {
+                        "wallet": event.wallet_label,
+                        "asset": asset,
+                        "required": float(needed),
+                        "lot_state_uncertain_since": first_drop_at,
                     },
                 )
             )
@@ -616,7 +787,7 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                 notes=_compose_event_notes(event),
             )
         )
-        total_available -= needed
+        account_available[event.wallet_label] -= needed
         priced_available -= needed
         row_index += 1
 
@@ -1169,7 +1340,16 @@ def _direct_payout_value(record: Mapping[str, Any], out_row: Mapping[str, Any]) 
     value = _row_get(record, "payout_fiat_value")
     if value is not None:
         return dec(value)
-    return _fiat_value_from_row(out_row)
+    row_value = _fiat_value_from_row(out_row)
+    if row_value is not None:
+        return row_value
+    rate = _row_get(out_row, "fiat_rate_exact")
+    if rate in (None, ""):
+        rate = _row_get(out_row, "fiat_rate")
+    amount_msat = int(_row_get(out_row, "amount") or 0)
+    if rate in (None, "") or amount_msat <= 0:
+        return None
+    return dec(rate) * msat_to_btc(amount_msat)
 
 
 def _direct_payout_proceeds_row(
@@ -1206,6 +1386,50 @@ def _direct_payout_proceeds_row(
     return reviewed
 
 
+def _direct_payout_record_out_amount(
+    record: Mapping[str, Any],
+    out_row: Mapping[str, Any],
+) -> int:
+    raw = _row_get(record, "out_amount")
+    if raw in (None, ""):
+        return int(out_row["amount"] or 0)
+    return int(raw)
+
+
+def _split_review_source_row(
+    out_row: Mapping[str, Any],
+    amount_msat: int,
+    *,
+    row_id: str | None = None,
+    external_id: str | None = None,
+    kind: str | None = None,
+) -> dict[str, Any]:
+    full = int(out_row["amount"] or 0)
+    base = dict(out_row)
+    if (
+        _row_get(out_row, "fiat_rate_exact") in (None, "")
+        and _row_get(out_row, "fiat_rate") in (None, "")
+        and full > 0
+    ):
+        fiat_value = _row_get(out_row, "fiat_value_exact") or _row_get(out_row, "fiat_value")
+        if fiat_value not in (None, ""):
+            unit_rate = format(Decimal(str(fiat_value)) / msat_to_btc(full), "f")
+            base["fiat_rate"] = unit_rate
+            base["fiat_rate_exact"] = unit_rate
+    base["amount"] = amount_msat
+    base["fiat_value"] = None
+    base["fiat_value_exact"] = None
+    if row_id is not None:
+        base["id"] = row_id
+        base["journal_transaction_id"] = out_row["id"]
+        base["fee"] = 0
+    if external_id is not None:
+        base["external_id"] = external_id
+    if kind is not None:
+        base["kind"] = kind
+    return base
+
+
 def _direct_payout_audit(record: Mapping[str, Any], out_row: Mapping[str, Any]) -> dict[str, Any]:
     payout_amount_msat = int(record["payout_amount"] or 0)
     return {
@@ -1214,7 +1438,7 @@ def _direct_payout_audit(record: Mapping[str, Any], out_row: Mapping[str, Any]) 
         "policy": record["policy"],
         "out_id": str(record["out_transaction_id"]),
         "out_asset": out_row["asset"],
-        "out_amount_msat": int(out_row["amount"] or 0),
+        "out_amount_msat": _direct_payout_record_out_amount(record, out_row),
         "payout_asset": record["payout_asset"],
         "payout_amount_msat": payout_amount_msat,
         "payout_occurred_at": record["payout_occurred_at"] or out_row["occurred_at"],
@@ -1262,21 +1486,54 @@ def _direct_payout_synthetic_rows(
         out_row = rows_by_id.get(out_id)
         if out_row is None:
             continue
+        reviewed_out_amount_msat = _direct_payout_record_out_amount(record, out_row)
+        full_out_amount_msat = int(out_row["amount"] or 0)
+        if reviewed_out_amount_msat <= 0 or reviewed_out_amount_msat > full_out_amount_msat:
+            quarantines.append(
+                build_tax_quarantine(
+                    profile,
+                    out_row,
+                    "direct_payout_out_amount_invalid",
+                    {
+                        "payout_id": record["id"],
+                        "out_amount_msat": reviewed_out_amount_msat,
+                        "full_out_amount_msat": full_out_amount_msat,
+                    },
+                )
+            )
+            blocked_row_ids.add(out_id)
+            continue
         audit = _direct_payout_audit(record, out_row)
         direct_payouts.append(audit)
         payout_asset = str(record["payout_asset"])
+        source_out_row = out_row
+        source_is_synthetic = reviewed_out_amount_msat < full_out_amount_msat
+        if source_is_synthetic:
+            self_amount_msat = full_out_amount_msat - reviewed_out_amount_msat
+            row_overrides[out_id] = _split_review_source_row(out_row, self_amount_msat)
+            source_out_row = _split_review_source_row(
+                out_row,
+                reviewed_out_amount_msat,
+                row_id=f"direct-payout:{record['id']}:source",
+                external_id=f"direct-payout:{record['id']}:source",
+                kind="sell",
+            )
         is_cross_asset_carry = (
             tax_country == "at"
             and record["policy"] == "carrying-value"
             and out_row["asset"] != payout_asset
         )
         if not is_cross_asset_carry:
-            row_overrides[out_id] = _direct_payout_proceeds_row(record, out_row)
+            proceeds_row = _direct_payout_proceeds_row(record, source_out_row)
+            if source_is_synthetic:
+                rows_for_engine.append(proceeds_row)
+            else:
+                row_overrides[out_id] = proceeds_row
             continue
 
         payout_amount_msat = int(record["payout_amount"] or 0)
         payout_amount = msat_to_btc(payout_amount_msat)
-        payout_value = _direct_payout_value(record, out_row)
+        payout_value = _direct_payout_value(record, source_out_row)
         if (
             payout_amount is None
             or payout_amount <= 0
@@ -1298,6 +1555,8 @@ def _direct_payout_synthetic_rows(
             blocked_row_ids.add(out_id)
             continue
 
+        if source_is_synthetic:
+            rows_for_engine.append(source_out_row)
         payout_rate = payout_value / payout_amount
         payout_at = record["payout_occurred_at"] or out_row["occurred_at"]
         pair_id = f"direct-payout:{record['id']}"
@@ -1310,11 +1569,11 @@ def _direct_payout_synthetic_rows(
         common = {
             "workspace_id": profile["workspace_id"],
             "profile_id": profile["id"],
-            "wallet_id": out_row["wallet_id"],
-            "wallet_label": _row_get(out_row, "wallet_label"),
-            "wallet_account_id": _row_get(out_row, "wallet_account_id"),
-            "account_code": _row_get(out_row, "account_code"),
-            "account_label": _row_get(out_row, "account_label"),
+            "wallet_id": source_out_row["wallet_id"],
+            "wallet_label": _row_get(source_out_row, "wallet_label"),
+            "wallet_account_id": _row_get(source_out_row, "wallet_account_id"),
+            "account_code": _row_get(source_out_row, "account_code"),
+            "account_label": _row_get(source_out_row, "account_label"),
             "asset": payout_asset,
             "amount": payout_amount_msat,
             "fee": 0,
@@ -1355,7 +1614,7 @@ def _direct_payout_synthetic_rows(
                 "pair_id": pair_id,
                 "kind": record["kind"],
                 "policy": record["policy"],
-                "out_id": out_id,
+                "out_id": str(source_out_row["id"]),
                 "in_id": in_id,
                 "out_asset": out_row["asset"],
                 "in_asset": payout_asset,
@@ -1370,6 +1629,109 @@ def _direct_payout_synthetic_rows(
     rows_for_engine = sorted(rows_for_engine, key=_transaction_row_sort_key)
 
     return rows_for_engine, cross_asset_pairs, direct_payouts, quarantines, blocked_row_ids
+
+
+def _pair_record_out_amount(record: Mapping[str, Any]) -> Any:
+    if hasattr(record, "keys"):
+        return record["out_amount"] if "out_amount" in record.keys() else None
+    return record.get("out_amount")
+
+
+def _apply_cross_asset_splits(
+    rows_for_engine: list[Mapping[str, Any]],
+    manual_pair_records: Sequence[Mapping[str, Any]],
+) -> tuple[list[Mapping[str, Any]], list[Mapping[str, Any]], dict[str, str]]:
+    """Split one outbound across a same-asset self-transfer + a cross-asset peg.
+
+    A cross-asset pair may carry only PART of its out leg (``out_amount`` < the
+    row's amount) when a single spend both returned change to an owned wallet
+    and pegged the rest to another asset. Reduce the real out row to the
+    self-transfer remainder — so it auto-pairs with the same-txid change as a
+    clean MOVE — and synthesize a separate outbound for the pegged portion that
+    the cross-asset pair carries (carrying-value basis carry / taxable SELL+BUY,
+    per the pair's policy). The pair record is rewritten to point at the
+    synthetic leg, leaving the real reduced row free to auto-pair.
+
+    No-ops for whole-row pairs (``out_amount`` unset / >= the row amount) and
+    same-asset pairs. Returns ``(rows_for_engine, manual_pair_records,
+    synthetic_out_id -> real_out_id)``; the first two are unchanged and the map
+    empty when no split applies. The map lets callers show the real out tx in
+    audits while the engine carries the synthetic leg.
+    """
+    rows_by_id = {str(row["id"]): row for row in rows_for_engine}
+    overrides: dict[str, dict[str, Any]] = {}
+    synthetic_rows: list[dict[str, Any]] = []
+    rewritten: list[Mapping[str, Any]] = []
+    out_id_to_real: dict[str, str] = {}
+    changed = False
+    for record in manual_pair_records:
+        raw = _pair_record_out_amount(record)
+        out_id = str(record["out_transaction_id"])
+        in_id = str(record["in_transaction_id"])
+        out_row = rows_by_id.get(out_id)
+        in_row = rows_by_id.get(in_id)
+        if (
+            raw in (None, "")
+            or out_row is None
+            or in_row is None
+            or out_row["asset"] == in_row["asset"]
+        ):
+            rewritten.append(record)
+            continue
+        peg = int(raw)
+        full = int(out_row["amount"] or 0)
+        self_amt = full - peg
+        if peg <= 0 or self_amt <= 0:
+            # Whole-row swap (or nothing left to self-transfer): existing path.
+            rewritten.append(record)
+            continue
+        changed = True
+        pair_id = (
+            str(record["id"])
+            if hasattr(record, "keys") and "id" in record.keys()
+            else f"{out_id}->{in_id}"
+        )
+        # The per-unit rate survives the amount change, so each leg reprices from
+        # its own amount once the (now-wrong) absolute fiat value is dropped. But
+        # a row priced by value ALONE (no fiat_rate) would lose its only pricing
+        # evidence — materialize a unit rate from value/amount first so it doesn't
+        # become a false missing-price quarantine.
+        base = dict(out_row)
+        if (
+            _row_get(out_row, "fiat_rate_exact") in (None, "")
+            and _row_get(out_row, "fiat_rate") in (None, "")
+            and full > 0
+        ):
+            fiat_value = _row_get(out_row, "fiat_value_exact") or _row_get(out_row, "fiat_value")
+            if fiat_value not in (None, ""):
+                # format("f") keeps plain decimal notation (no "6E+3") so the
+                # derived rate matches how exact rates are stored elsewhere.
+                unit_rate = format(Decimal(str(fiat_value)) / msat_to_btc(full), "f")
+                base["fiat_rate"] = unit_rate
+                base["fiat_rate_exact"] = unit_rate
+        base["fiat_value"] = None
+        base["fiat_value_exact"] = None
+        overrides[out_id] = {**base, "amount": self_amt}
+        swap_out_id = f"cross-split:{pair_id}:out"
+        out_id_to_real[swap_out_id] = out_id
+        synthetic_rows.append(
+            {
+                **base,
+                "id": swap_out_id,
+                "amount": peg,
+                "fee": 0,
+                "external_id": f"cross-split:{pair_id}",
+                "direction": "outbound",
+                "kind": "sell",
+                "journal_transaction_id": out_id,
+            }
+        )
+        rewritten.append({**dict(record), "out_transaction_id": swap_out_id})
+    if not changed:
+        return rows_for_engine, list(manual_pair_records), {}
+    new_rows = [overrides.get(str(row["id"]), row) for row in rows_for_engine]
+    new_rows.extend(synthetic_rows)
+    return new_rows, rewritten, out_id_to_real
 
 
 class GenericRP2TaxEngine:
@@ -1416,13 +1778,27 @@ class GenericRP2TaxEngine:
             wallet_refs_by_label = {
                 ref["label"]: ref for ref in inputs.wallet_refs_by_id.values()
             }
+            # Split spends (part same-asset self-transfer, part cross-asset peg)
+            # are decomposed before pairing: the real out row is reduced to the
+            # self-transfer remainder (auto-pairs with its change) and a synthetic
+            # outbound carries the pegged portion into the cross-asset pair.
+            rows_for_engine, split_pair_records, split_out_id_to_real = _apply_cross_asset_splits(
+                rows_for_engine,
+                inputs.manual_pair_records,
+            )
             auto_pairs, _ = detect_intra_transfers(rows_for_engine)
             all_pairs, manual_cross_asset_pairs = apply_manual_pairs(
                 rows_for_engine,
                 auto_pairs,
-                inputs.manual_pair_records,
+                split_pair_records,
             )
-            manual_cross_asset_pairs_all = manual_cross_asset_pairs
+            # The engine carries the synthetic split leg (so it can mark the
+            # cross-asset swap-out without touching the self-transfer remainder),
+            # but the result/audit should reference the real out tx — map it back.
+            manual_cross_asset_pairs_all = [
+                {**pair, "out_id": split_out_id_to_real.get(str(pair["out_id"]), pair["out_id"])}
+                for pair in manual_cross_asset_pairs
+            ]
             engine_cross_asset_pairs.extend(manual_cross_asset_pairs)
             rows_by_asset = defaultdict(list)
             for row in rows_for_engine:

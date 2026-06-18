@@ -1,0 +1,77 @@
+{
+  "page": {
+    "overview": {
+      "subtitle": "Portfolio, Guthaben, Aktivität"
+    },
+    "transactions": {
+      "subtitle": "Transaktionszeilen und Filter"
+    },
+    "connections": {
+      "subtitle": "Wallets, Importe, Backends und Sync"
+    },
+    "books": {
+      "title": "Bücher",
+      "subtitle": "Bücher, Bücher-Set-Übersicht und Steuereinstellungen"
+    },
+    "source-of-funds": {
+      "subtitle": "Wallet-Quellen und lokale Herkunftsübersichten"
+    },
+    "journals": {
+      "subtitle": "Verarbeitetes Steuer-Hauptbuch"
+    },
+    "reports": {
+      "subtitle": "Realisierte Gewinne/Verluste und Exporte"
+    },
+    "exit-tax": {
+      "subtitle": "Schätzung der fiktiven Veräußerung (Wegzugsbesteuerung)"
+    },
+    "quarantine": {
+      "subtitle": "Mehrdeutige Zeilen prüfen"
+    },
+    "swaps-transfers": {
+      "subtitle": "Mögliche Swap- und Übertragungs-Paarungen prüfen"
+    },
+    "settings": {
+      "subtitle": "Einstellungen, Integrationen, lokale Daten"
+    },
+    "logs": {
+      "subtitle": "Typisierter lokaler Log-Stream und redigierter Troubleshooting-Export"
+    },
+    "assistant": {
+      "subtitle": "Kassiber fragen"
+    }
+  },
+  "action": {
+    "process-journals": {
+      "title": "Journale verarbeiten",
+      "subtitle": "Lokalen, berichtsfertigen Journalstand aktualisieren"
+    },
+    "sync-wallets": {
+      "title": "Wallets syncen",
+      "subtitle": "Verbindungen öffnen, um Watch-only-Quellen zu aktualisieren"
+    },
+    "add-wallet": {
+      "title": "Wallet hinzufügen",
+      "subtitle": "Dialog zur Wallet-Verbindung öffnen"
+    },
+    "import-btcpay": {
+      "title": "BTCPay importieren",
+      "subtitle": "BTCPay-Wallet-Quellen-Setup öffnen"
+    },
+    "export-report": {
+      "title": "Bericht exportieren",
+      "subtitle": "Werkzeuge für den Berichtsexport öffnen"
+    },
+    "open-logs": {
+      "title": "Logs öffnen",
+      "subtitle": "Redigierte lokale Troubleshooting-Logs öffnen"
+    },
+    "change-passphrase": {
+      "title": "Passphrase ändern",
+      "subtitle": "Einstellungen für Lock und Verschlüsselung öffnen"
+    }
+  },
+  "settings": {
+    "groupPrefix": "Einstellungen"
+  }
+}

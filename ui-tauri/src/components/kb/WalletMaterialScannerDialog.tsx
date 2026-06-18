@@ -1,4 +1,6 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { Camera, Loader2, ScanLine, VideoOff } from "lucide-react";
 import QrScanner from "qr-scanner";
 import qrScannerWorkerUrl from "qr-scanner/qr-scanner-worker.min.js?url";
@@ -24,8 +26,6 @@ import {
 
 QrScanner.WORKER_PATH = qrScannerWorkerUrl;
 
-const STARTING_CAMERA_STATUS = "Starting camera.";
-
 interface WalletMaterialScannerDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -33,10 +33,10 @@ interface WalletMaterialScannerDialogProps {
   title?: string;
 }
 
-function scanModeLabel(mode: QrScanMode) {
-  if (mode === "bbqr") return "BBQR";
-  if (mode === "single") return "Single QR";
-  return "Auto";
+function scanModeLabel(mode: QrScanMode, t: TFunction<"connections">) {
+  if (mode === "bbqr") return t("scanner.mode.bbqr");
+  if (mode === "single") return t("scanner.mode.single");
+  return t("scanner.mode.auto");
 }
 
 function calculateScanRegion(video: HTMLVideoElement): QrScanner.ScanRegion {
@@ -69,40 +69,50 @@ function isTransientScannerError(error: Error | string) {
   );
 }
 
-function scannerPreviewLabel({
-  error,
-  isStarting,
-  progress,
-  scanMode,
-  scannedMaterial,
-}: {
-  error: string | null;
-  isStarting: boolean;
-  progress: BbqrProgress | null;
-  scanMode: QrScanMode;
-  scannedMaterial: string | null;
-}) {
-  if (scannedMaterial) return "Ready to use";
-  if (error) return "Camera blocked";
-  if (isStarting) return "Starting camera";
-  if (progress) return `BBQR ${progress.received}/${progress.total}`;
-  if (scanMode === "bbqr") return "Collecting BBQR";
-  if (scanMode === "single") return "Scanning QR";
-  return "Scanning wallet QR";
+function scannerPreviewLabel(
+  {
+    error,
+    isStarting,
+    progress,
+    scanMode,
+    scannedMaterial,
+  }: {
+    error: string | null;
+    isStarting: boolean;
+    progress: BbqrProgress | null;
+    scanMode: QrScanMode;
+    scannedMaterial: string | null;
+  },
+  t: TFunction<"connections">,
+) {
+  if (scannedMaterial) return t("scanner.preview.ready");
+  if (error) return t("scanner.preview.cameraBlocked");
+  if (isStarting) return t("scanner.preview.startingCamera");
+  if (progress)
+    return t("scanner.preview.bbqrProgress", {
+      received: progress.received,
+      total: progress.total,
+    });
+  if (scanMode === "bbqr") return t("scanner.preview.collectingBbqr");
+  if (scanMode === "single") return t("scanner.preview.scanningQr");
+  return t("scanner.preview.scanningWallet");
 }
 
-function scanningStatusFor(mode: QrScanMode) {
-  if (mode === "bbqr") return "Looking for BBQR frames.";
-  if (mode === "single") return "Looking for a single QR.";
-  return "Looking for a wallet QR.";
+function scanningStatusFor(mode: QrScanMode, t: TFunction<"connections">) {
+  if (mode === "bbqr") return t("scanner.status.lookingBbqr");
+  if (mode === "single") return t("scanner.status.lookingSingle");
+  return t("scanner.status.lookingWallet");
 }
 
 export function WalletMaterialScannerDialog({
   open,
   onOpenChange,
   onMaterialScanned,
-  title = "Scan wallet export",
+  title,
 }: WalletMaterialScannerDialogProps) {
+  const { t } = useTranslation(["connections", "common"]);
+  const resolvedTitle = title ?? t("scanner.title");
+  const STARTING_CAMERA_STATUS = t("scanner.status.startingCamera");
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const scannerRef = React.useRef<QrScanner | null>(null);
   const lastScannedRef = React.useRef<string | null>(null);
@@ -116,19 +126,24 @@ export function WalletMaterialScannerDialog({
     emptyBbqrCollectorState(),
   );
   const [progress, setProgress] = React.useState<BbqrProgress | null>(null);
-  const [status, setStatus] = React.useState("Camera is idle.");
+  const [status, setStatus] = React.useState(() =>
+    t("scanner.status.cameraIdle"),
+  );
   const [error, setError] = React.useState<string | null>(null);
   const [isStarting, setIsStarting] = React.useState(false);
   const [scannedMaterial, setScannedMaterial] = React.useState<string | null>(
     null,
   );
-  const previewLabel = scannerPreviewLabel({
-    error,
-    isStarting,
-    progress,
-    scanMode,
-    scannedMaterial,
-  });
+  const previewLabel = scannerPreviewLabel(
+    {
+      error,
+      isStarting,
+      progress,
+      scanMode,
+      scannedMaterial,
+    },
+    t,
+  );
 
   const stopScanner = React.useCallback(() => {
     scannerRef.current?.stop();
@@ -159,15 +174,15 @@ export function WalletMaterialScannerDialog({
     setScannedMaterial(null);
     lastScannedRef.current = null;
     setStatus(STARTING_CAMERA_STATUS);
-  }, [open, stopScanner]);
+  }, [open, stopScanner, STARTING_CAMERA_STATUS]);
 
   React.useEffect(() => {
     if (!open) return;
     setCollectorState(emptyBbqrCollectorState());
     setProgress(null);
     lastScannedRef.current = null;
-    setStatus(scanningStatusFor(scanMode));
-  }, [open, scanMode]);
+    setStatus(scanningStatusFor(scanMode, t));
+  }, [open, scanMode, t]);
 
   React.useEffect(() => {
     if (!open || scannedMaterialRef.current) return;
@@ -184,7 +199,7 @@ export function WalletMaterialScannerDialog({
         if (cancelled) return;
         const video = videoRef.current;
         if (!video) {
-          setStatus("Camera preview unavailable.");
+          setStatus(t("scanner.status.previewUnavailable"));
           return;
         }
         stopScanner();
@@ -205,14 +220,17 @@ export function WalletMaterialScannerDialog({
                 scannerRef.current?.stop();
                 setScannedMaterial(processed.material);
                 setProgress(null);
-                setStatus("Wallet QR scanned.");
+                setStatus(t("scanner.status.walletScanned"));
                 setError(null);
                 return emptyBbqrCollectorState();
               }
               if (processed.status === "bbqr_progress") {
                 setProgress(processed.progress);
                 setStatus(
-                  `BBQR ${processed.progress.received} / ${processed.progress.total} frames scanned.`,
+                  t("scanner.status.bbqrFrames", {
+                    received: processed.progress.received,
+                    total: processed.progress.total,
+                  }),
                 );
                 setError(null);
                 return processed.state;
@@ -222,7 +240,10 @@ export function WalletMaterialScannerDialog({
                 setScannedMaterial(processed.material);
                 setProgress(processed.progress);
                 setStatus(
-                  `BBQR complete: ${processed.progress.received} / ${processed.progress.total} frames scanned.`,
+                  t("scanner.status.bbqrComplete", {
+                    received: processed.progress.received,
+                    total: processed.progress.total,
+                  }),
                 );
                 setError(null);
                 return processed.state;
@@ -232,7 +253,7 @@ export function WalletMaterialScannerDialog({
                 return current;
               }
               setError(processed.message);
-              setStatus("Scan failed.");
+              setStatus(t("scanner.status.scanFailed"));
               return current;
             });
           },
@@ -269,7 +290,7 @@ export function WalletMaterialScannerDialog({
           setSelectedDeviceId((current) => current || nextDevices[0]?.id || "");
           setStatus((current) =>
             current === STARTING_CAMERA_STATUS
-              ? scanningStatusFor(scanModeRef.current)
+              ? scanningStatusFor(scanModeRef.current, t)
               : current,
           );
         }
@@ -283,9 +304,9 @@ export function WalletMaterialScannerDialog({
           setError(
             startError instanceof Error
               ? startError.message
-              : "Could not start the camera.",
+              : t("scanner.couldNotStart"),
           );
-          setStatus("Camera unavailable.");
+          setStatus(t("scanner.status.cameraUnavailable"));
         }
       } finally {
         if (!cancelled) setIsStarting(false);
@@ -298,7 +319,7 @@ export function WalletMaterialScannerDialog({
       cancelled = true;
       stopScanner();
     };
-  }, [open, stopScanner]);
+  }, [open, stopScanner, t, STARTING_CAMERA_STATUS]);
 
   const useScannedMaterial = () => {
     if (!scannedMaterial) return;
@@ -310,10 +331,9 @@ export function WalletMaterialScannerDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[640px]">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle>{resolvedTitle}</DialogTitle>
           <DialogDescription>
-            Scan a descriptor, xpub-family export, Liquid descriptor, or BBQR
-            sequence from a wallet display.
+            {t("scanner.description")}
           </DialogDescription>
         </DialogHeader>
 
@@ -330,7 +350,7 @@ export function WalletMaterialScannerDialog({
                   setScannedMaterial(null);
                 }}
               >
-                {scanModeLabel(mode)}
+                {scanModeLabel(mode, t)}
               </Button>
             ))}
             <Badge variant="outline" className="ml-auto">
@@ -386,14 +406,15 @@ export function WalletMaterialScannerDialog({
                       setError(
                         cameraError instanceof Error
                           ? cameraError.message
-                          : "Could not switch camera.",
+                          : t("scanner.couldNotSwitch"),
                       );
                     });
                   }}
                 >
                   {devices.map((device, index) => (
                     <option key={device.id} value={device.id}>
-                      {device.label || `Camera ${index + 1}`}
+                      {device.label ||
+                        t("scanner.cameraFallback", { index: index + 1 })}
                     </option>
                   ))}
                 </select>
@@ -405,7 +426,7 @@ export function WalletMaterialScannerDialog({
             <div className="space-y-2 rounded-md border bg-background p-3 text-xs">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-muted-foreground">
-                  BBQR type {progress.fileType}
+                  {t("scanner.bbqrType", { type: progress.fileType })}
                 </span>
                 <span className="font-medium tabular-nums">
                   {progress.received} / {progress.total}
@@ -427,7 +448,7 @@ export function WalletMaterialScannerDialog({
 
           {scannedMaterial ? (
             <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
-              Wallet material scanned. Review the pasted field after applying it.
+              {t("scanner.scannedNote")}
             </div>
           ) : null}
           {error ? (
@@ -443,14 +464,14 @@ export function WalletMaterialScannerDialog({
             variant="outline"
             onClick={() => onOpenChange(false)}
           >
-            Cancel
+            {t("common:actions.cancel")}
           </Button>
           <Button
             type="button"
             onClick={useScannedMaterial}
             disabled={!scannedMaterial}
           >
-            Use scanned text
+            {t("scanner.useScannedText")}
           </Button>
         </DialogFooter>
       </DialogContent>

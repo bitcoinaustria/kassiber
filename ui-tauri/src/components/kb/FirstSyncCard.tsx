@@ -11,6 +11,7 @@
  * the top progress line (see `RouteTopProgressLine` in AppShell).
  */
 import { Check, Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import type { RouteProgressState } from "@/components/kb/progressIndicator";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ export function FirstSyncCard({
   title,
   onDismiss,
 }: FirstSyncCardProps) {
+  const { t } = useTranslation("chrome");
   const rawValue = progress?.value;
   const hasValue = typeof rawValue === "number" && Number.isFinite(rawValue);
   const isDeterminate = hasValue && !progress?.indeterminate;
@@ -51,8 +53,17 @@ export function FirstSyncCard({
 
   return (
     <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center px-4 pb-28">
+      {/* Subtle scrim over the content area to focus the card. It captures
+          pointer events (pointer-events-auto) so background hover/animations go
+          inert while the card is open — only the modal is in focus. Scoped to
+          this content region, so the sidebar/top bar stay usable; "Continue in
+          background" collapses the card to resume working in this area. */}
       <div
-        className="pointer-events-auto w-full max-w-md rounded-[28px] border border-white/70 bg-muted/85 p-5 shadow-[0_24px_90px_rgba(15,23,42,0.26),0_3px_18px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.80)] ring-1 ring-zinc-950/10 backdrop-blur-2xl backdrop-saturate-150 dark:border-border dark:bg-card dark:shadow-[0_18px_48px_rgba(0,0,0,0.28)] dark:ring-border/70 dark:backdrop-blur-none dark:backdrop-saturate-100"
+        aria-hidden="true"
+        className="pointer-events-auto absolute inset-0 bg-background/30 backdrop-blur-sm"
+      />
+      <div
+        className="relative pointer-events-auto w-full max-w-md rounded-[28px] border border-white/70 bg-muted/85 p-5 shadow-[0_24px_90px_rgba(15,23,42,0.26),0_3px_18px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.80)] ring-1 ring-zinc-950/10 backdrop-blur-2xl backdrop-saturate-150 dark:border-border dark:bg-card dark:shadow-[0_18px_48px_rgba(0,0,0,0.28)] dark:ring-border/70 dark:backdrop-blur-none dark:backdrop-saturate-100"
       >
         <div className="flex items-start gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -63,11 +74,10 @@ export function FirstSyncCard({
           </span>
           <div className="min-w-0 flex-1">
             <h2 className="text-sm font-semibold text-foreground">
-              {title ?? "Setting up your book"}
+              {title ?? t("firstSync.defaultTitle")}
             </h2>
             <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-              First sync — building your history from your configured sources.
-              This runs once and can take a few minutes.
+              {t("firstSync.body")}
             </p>
           </div>
         </div>
@@ -82,10 +92,10 @@ export function FirstSyncCard({
             className="mb-1.5 flex items-center justify-between gap-3 text-[11px] font-medium leading-none"
           >
             <span className="min-w-0 truncate text-primary">
-              {progress?.label ?? "Preparing source refresh"}
+              {progress?.label ?? t("firstSync.preparing")}
             </span>
             <span className="shrink-0 tabular-nums text-muted-foreground">
-              {isDeterminate ? `${Math.round(value)}%` : "Working…"}
+              {isDeterminate ? `${Math.round(value)}%` : t("firstSync.working")}
             </span>
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-primary/15">
@@ -146,18 +156,18 @@ export function FirstSyncCard({
           })}
         </ul>
 
-        <div className="mt-5 flex items-center justify-between gap-3">
-          <p className="text-[11px] leading-snug text-muted-foreground">
-            You can keep using Kassiber while this finishes.
+        <div className="mt-5 flex flex-col items-center gap-2.5 border-t border-border/60 pt-4">
+          <p className="text-center text-[11px] leading-snug text-muted-foreground">
+            {t("firstSync.keepUsing")}
           </p>
           <Button
             type="button"
-            variant="ghost"
+            variant="secondary"
             size="sm"
-            className="shrink-0 rounded-full text-xs"
+            className="rounded-full text-xs"
             onClick={onDismiss}
           >
-            Continue in background
+            {t("firstSync.continueInBackground")}
           </Button>
         </div>
       </div>

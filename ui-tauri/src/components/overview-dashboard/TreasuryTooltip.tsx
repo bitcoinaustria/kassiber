@@ -1,14 +1,16 @@
+import { useTranslation } from "react-i18next";
+
 import { formatBtc } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
 import {
   activityFlowColors,
-  activityFlowLabels,
+  activityFlowLabelKeys,
   blurClass,
   compactEventId,
   formatFiatPrice,
   formatPortfolioMoney,
-  statusLabels,
+  statusLabelKeys,
   type TreasuryChartPoint,
 } from "./model";
 
@@ -39,6 +41,7 @@ export function TreasuryTooltip({
   fiatCurrency,
   fiatSeriesEnabled = true,
 }: TreasuryTooltipProps) {
+  const { t } = useTranslation("overview");
   if ((!active || !payload?.length) && !activityPointOverride) return null;
 
   const payloadPoint =
@@ -60,7 +63,9 @@ export function TreasuryTooltip({
         : "neutral";
   const eventAmount =
     eventFlow === "swap"
-      ? `${formatBtc(point.activityBtc, { precision: 8 })} volume`
+      ? t("tooltip.volume", {
+          value: formatBtc(point.activityBtc, { precision: 8 }),
+        })
       : eventFlow === "fee"
         ? formatBtc(-(point.eventFeeBtc || point.activityBtc), {
             precision: 8,
@@ -84,7 +89,7 @@ export function TreasuryTooltip({
                 aria-hidden="true"
               />
               <span className="font-semibold text-foreground">
-                {activityFlowLabels[eventFlow]}
+                {t(activityFlowLabelKeys[eventFlow])}
               </span>
               {point.eventType && (
                 <span className="rounded border bg-muted/30 px-1.5 py-0.5 text-[10px] text-muted-foreground">
@@ -111,14 +116,14 @@ export function TreasuryTooltip({
         <div className="mt-3 space-y-1.5">
           {point.eventAccount && (
             <TooltipMetricRow
-              label="Source"
+              label={t("tooltip.source")}
               value={point.eventAccount}
               hidden={false}
             />
           )}
           {point.eventCounter && (
             <TooltipMetricRow
-              label="Counterparty"
+              label={t("tooltip.counterparty")}
               value={point.eventCounter}
               hidden={false}
             />
@@ -126,7 +131,7 @@ export function TreasuryTooltip({
           {fiatSeriesEnabled ? (
             <>
               <TooltipMetricRow
-                label="Fiat value"
+                label={t("tooltip.fiatValue")}
                 value={formatPortfolioMoney(
                   point.eventFiatValueEur ?? 0,
                   priceEur,
@@ -136,7 +141,7 @@ export function TreasuryTooltip({
                 hidden={hideSensitive}
               />
               <TooltipMetricRow
-                label="BTC price"
+                label={t("tooltip.btcPrice")}
                 value={formatFiatPrice(point.bitcoinPriceEur, fiatCurrency)}
                 hidden={hideSensitive}
               />
@@ -144,19 +149,19 @@ export function TreasuryTooltip({
           ) : null}
           {(point.eventFeeBtc ?? 0) > 0 && (
             <TooltipMetricRow
-              label="Fee"
+              label={t("tooltip.fee")}
               value={formatBtc(point.eventFeeBtc ?? 0, { precision: 8 })}
               hidden={hideSensitive}
             />
           )}
           <TooltipMetricRow
-            label="Position after"
+            label={t("tooltip.positionAfter")}
             value={formatBtc(point.balanceBtc, { precision: 8 })}
             hidden={hideSensitive}
           />
           {fiatSeriesEnabled ? (
             <TooltipMetricRow
-              label="Avg basis after"
+              label={t("tooltip.avgBasisAfter")}
               value={
                 point.avgCostEur === null
                   ? "—"
@@ -166,13 +171,15 @@ export function TreasuryTooltip({
             />
           ) : null}
           <TooltipMetricRow
-            label="Status"
+            label={t("tooltip.status")}
             value={
               point.eventStatus === "confirmed"
-                ? `${point.eventConfirmations?.toLocaleString("en-US") ?? 0} confirmations`
+                ? t("tooltip.confirmations", {
+                    count: point.eventConfirmations ?? 0,
+                  })
                 : point.eventStatus
-                  ? statusLabels[point.eventStatus]
-                  : "Unknown"
+                  ? t(statusLabelKeys[point.eventStatus])
+                  : t("tooltip.unknown")
             }
             hidden={false}
           />
@@ -202,19 +209,19 @@ export function TreasuryTooltip({
       </p>
       <div className="space-y-1.5">
         <TooltipMetricRow
-          label="BTC balance"
+          label={t("tooltip.btcBalance")}
           value={formatBtc(point.balanceBtc, { precision: 8 })}
           hidden={hideSensitive}
         />
         {fiatSeriesEnabled ? (
           <>
             <TooltipMetricRow
-              label="BTC price"
+              label={t("tooltip.btcPrice")}
               value={formatFiatPrice(point.bitcoinPriceEur, fiatCurrency)}
               hidden={hideSensitive}
             />
             <TooltipMetricRow
-              label="Avg basis"
+              label={t("tooltip.avgBasis")}
               value={
                 point.avgCostEur === null
                   ? "—"
@@ -223,7 +230,7 @@ export function TreasuryTooltip({
               hidden={hideSensitive}
             />
             <TooltipMetricRow
-              label="Unrealized"
+              label={t("tooltip.unrealized")}
               value={`${point.unrealizedEur >= 0 ? "+ " : "− "}${formatPortfolioMoney(
                 Math.abs(point.unrealizedEur),
                 priceEur,

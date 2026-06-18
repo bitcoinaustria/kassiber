@@ -47,6 +47,7 @@ const Activity = lazyRouteComponent(
   "Activity",
 );
 const Reports = lazyRouteComponent(() => import("./routes/Reports"), "Reports");
+const ExitTax = lazyRouteComponent(() => import("./routes/ExitTax"), "ExitTax");
 const SourceFunds = lazyRouteComponent(
   () => import("./routes/SourceFunds"),
   "SourceFunds",
@@ -62,6 +63,10 @@ const SwapMatching = lazyRouteComponent(
 const Quarantine = lazyRouteComponent(
   () => import("./routes/Quarantine"),
   "Quarantine",
+);
+const Reconcile = lazyRouteComponent(
+  () => import("./routes/Reconcile"),
+  "Reconcile",
 );
 const Logs = lazyRouteComponent(() => import("./routes/Logs"), "Logs");
 const Books = lazyRouteComponent(() => import("./routes/Books"), "Books");
@@ -160,6 +165,12 @@ const reportsRoute = createRoute({
   component: Reports,
 });
 
+const exitTaxRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/exit-tax",
+  component: ExitTax,
+});
+
 const sourceFundsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/source-of-funds",
@@ -198,6 +209,12 @@ const quarantineRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/quarantine",
   component: Quarantine,
+});
+
+const reconcileRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/reconcile",
+  component: Reconcile,
 });
 
 const logsRoute = createRoute({
@@ -320,12 +337,14 @@ const routeTree = rootRoute.addChildren([
     transactionsRoute,
     activityRoute,
     reportsRoute,
+    exitTaxRoute,
     sourceFundsRoute,
     journalsRoute,
     swapMatchingRoute,
     transferMatchingRoute,
     taxEventsRoute,
     quarantineRoute,
+    reconcileRoute,
     logsRoute,
     diagnosticsRoute,
     booksRoute,

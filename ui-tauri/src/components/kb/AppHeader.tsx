@@ -10,19 +10,22 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Eye, EyeOff, MoreHorizontal, Settings, Lock } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Wordmark } from "./Wordmark";
 import { BookSwitcherPopover } from "./BookSwitcherPopover";
 import { useUiStore } from "@/store/ui";
 import { cn } from "@/lib/utils";
 
+// `to` is the stable route; `labelKey` indexes `chrome:header.nav.*`.
 const NAV_ITEMS = [
-  { to: "/overview", label: "Overview" },
-  { to: "/transactions", label: "Transactions" },
-  { to: "/reports", label: "Reports" },
+  { to: "/overview", labelKey: "overview" },
+  { to: "/transactions", labelKey: "transactions" },
+  { to: "/reports", labelKey: "reports" },
 ] as const;
 
 export function AppHeader() {
+  const { t } = useTranslation("chrome");
   const identity = useUiStore((s) => s.identity);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
@@ -48,7 +51,7 @@ export function AppHeader() {
                 active ? "text-ink" : "text-ink-3 hover:text-ink-2",
               )}
             >
-              {item.label}
+              {t(`header.nav.${item.labelKey}`)}
               {active && (
                 <span className="absolute -bottom-[17px] left-0 right-0 h-0.5 bg-accent" />
               )}
@@ -61,7 +64,10 @@ export function AppHeader() {
         {identity && (
           <button
             onClick={() => setProfileSwitcherOpen(true)}
-            title={`Books · ${identity.workspace} · Book · ${identity.profile ?? identity.name}`}
+            title={t("header.booksTitle", {
+              workspace: identity.workspace,
+              profile: identity.profile ?? identity.name,
+            })}
             className="hidden h-6.5 max-w-[200px] cursor-pointer items-center gap-1.5 border border-line bg-transparent px-2.5 md:flex"
           >
             <span className="size-1 shrink-0 bg-accent" />
@@ -91,7 +97,9 @@ export function AppHeader() {
 
         <button
           onClick={() => setHideSensitive(!hideSensitive)}
-          title={hideSensitive ? "Show sensitive data" : "Hide sensitive data"}
+          title={
+            hideSensitive ? t("sensitive.show") : t("sensitive.hide")
+          }
           className={cn(
             "flex size-6.5 cursor-pointer items-center justify-center border",
             hideSensitive
@@ -113,6 +121,7 @@ export function AppHeader() {
 }
 
 function OverflowMenu() {
+  const { t } = useTranslation("chrome");
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -136,8 +145,8 @@ function OverflowMenu() {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        title="More"
-        aria-label="More options"
+        title={t("header.more")}
+        aria-label={t("header.moreOptions")}
         className={cn(
           "flex size-6.5 cursor-pointer items-center justify-center border",
           open ? "border-ink bg-ink" : "border-line bg-transparent",
@@ -150,7 +159,7 @@ function OverflowMenu() {
 
       {open && (
         <div className="absolute right-0 top-8 z-50 flex w-[230px] flex-col gap-2.5 border border-ink bg-paper p-2.5 shadow-hard-ink">
-          <MenuRow label="Display">
+          <MenuRow label={t("header.display")}>
             <PillToggle
               options={[
                 { value: "btc", label: "₿" },
@@ -160,7 +169,7 @@ function OverflowMenu() {
               onChange={(v) => setCurrency(v as "btc" | "eur")}
             />
           </MenuRow>
-          <MenuRow label="Language">
+          <MenuRow label={t("header.language")}>
             <PillToggle
               options={[
                 { value: "en", label: "EN" },
@@ -180,14 +189,14 @@ function OverflowMenu() {
             }}
             icon={<Settings className="size-3.5 text-ink-2" />}
           >
-            Settings
+            {t("header.settings")}
           </MenuButton>
           <MenuButton
             onClick={() => setOpen(false)}
             icon={<Lock className="size-3.5 text-ink-2" />}
             shortcut="⌘L"
           >
-            Lock Kassiber
+            {t("header.lockKassiber")}
           </MenuButton>
         </div>
       )}

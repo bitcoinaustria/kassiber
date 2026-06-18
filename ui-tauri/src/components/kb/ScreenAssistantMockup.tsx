@@ -10,6 +10,7 @@
 
 import * as React from "react";
 import { Link } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import {
   ChevronDown,
   ChevronUp,
@@ -35,6 +36,7 @@ export function ScreenAssistantMockup({
   className,
   collapsed = false,
 }: ScreenAssistantMockupProps) {
+  const { t } = useTranslation("assistant");
   const [isInteracting, setIsInteracting] = React.useState(false);
   const [isThreadCollapsed, setIsThreadCollapsed] = React.useState(false);
   const {
@@ -73,7 +75,7 @@ export function ScreenAssistantMockup({
 
   return (
     <section
-      aria-label="Kassiber assistant"
+      aria-label={t("dock.label")}
       className={cn(
         "pointer-events-none relative z-30 px-3 pb-3 sm:px-4 sm:pb-4 md:px-6",
         compact ? "md:pb-3" : "md:pb-5",
@@ -100,14 +102,15 @@ export function ScreenAssistantMockup({
           <div className="min-h-0 overflow-hidden rounded-2xl border border-border/70 bg-background/92 shadow-none backdrop-blur-md">
             <div className="flex items-center gap-2 border-b border-border/60 px-3 py-2 text-xs text-muted-foreground">
               <MessageSquareText className="h-3.5 w-3.5" aria-hidden="true" />
-              <span className="font-medium text-foreground">Conversation</span>
-              <span>
-                {messages.length} {messages.length === 1 ? "message" : "messages"}
+              <span className="font-medium text-foreground">
+                {t("dock.conversation")}
               </span>
+              <span>{t("page.messageCount", { count: messages.length })}</span>
               {isStreaming ? (
                 <span className="ml-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase text-primary">
-                  Generating
-                  {queuedPromptCount > 0 ? ` - ${queuedPromptCount} queued` : ""}
+                  {queuedPromptCount > 0
+                    ? t("page.generatingQueued", { count: queuedPromptCount })
+                    : t("page.generating")}
                 </span>
               ) : null}
               <Button
@@ -118,8 +121,8 @@ export function ScreenAssistantMockup({
               >
                 <Link
                   to="/assistant"
-                  aria-label="Open assistant page"
-                  title="Open assistant page"
+                  aria-label={t("dock.openAssistantPage")}
+                  title={t("dock.openAssistantPage")}
                 >
                   <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
                 </Link>
@@ -130,8 +133,8 @@ export function ScreenAssistantMockup({
                 size="icon-xs"
                 className="rounded-full text-muted-foreground hover:text-destructive"
                 onClick={reset}
-                aria-label="Clear chat"
-                title="Clear chat"
+                aria-label={t("page.clearChat")}
+                title={t("page.clearChat")}
               >
                 <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
               </Button>
@@ -141,8 +144,8 @@ export function ScreenAssistantMockup({
                 size="icon-xs"
                 className="rounded-full"
                 onClick={() => setIsThreadCollapsed(true)}
-                aria-label="Collapse conversation"
-                title="Collapse conversation"
+                aria-label={t("dock.collapseConversation")}
+                title={t("dock.collapseConversation")}
               >
                 <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
               </Button>
@@ -159,24 +162,23 @@ export function ScreenAssistantMockup({
               type="button"
               className="flex min-w-0 flex-1 items-center gap-2 rounded-xl px-1 py-1 text-left transition-colors hover:bg-muted/60"
               onClick={() => setIsThreadCollapsed(false)}
-              aria-label="Expand preserved conversation"
+              aria-label={t("dock.expandConversation")}
             >
               <MessageSquareText
                 className="h-3.5 w-3.5 shrink-0"
                 aria-hidden="true"
               />
               <span className="font-medium text-foreground">
-                Conversation hidden
+                {t("dock.conversationHidden")}
               </span>
               <span className="min-w-0 flex-1 truncate">
-                {messages.length}{" "}
-                {messages.length === 1 ? "message" : "messages"} preserved for
-                context
+                {t("dock.preservedForContext", { count: messages.length })}
               </span>
               {isStreaming ? (
                 <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase text-primary">
-                  Generating
-                  {queuedPromptCount > 0 ? ` - ${queuedPromptCount} queued` : ""}
+                  {queuedPromptCount > 0
+                    ? t("page.generatingQueued", { count: queuedPromptCount })
+                    : t("page.generating")}
                 </span>
               ) : null}
               <ChevronUp className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -189,8 +191,8 @@ export function ScreenAssistantMockup({
             >
               <Link
                 to="/assistant"
-                aria-label="Open assistant page"
-                title="Open assistant page"
+                aria-label={t("dock.openAssistantPage")}
+                title={t("dock.openAssistantPage")}
               >
                 <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
               </Link>

@@ -175,11 +175,36 @@ def _redact_sync_payload_for_ui(value: Any) -> Any:
     return value
 
 
+def _freshness_snapshot_for_ui(
+    conn: sqlite3.Connection, profile_id: str
+) -> dict[str, Any]:
+    """Render-time chokepoint for every freshness snapshot that reaches the UI.
+
+    ``core_freshness.build_snapshot`` carries raw job/source error strings
+    (e.g. ``last_error_message`` = ``str(exc)``) that can embed backend URLs and
+    inline credentials. The structured ``redact_freshness_payload`` only scrubs
+    secret *keys*, not URLs inside a free-text ``message``/``last_error_message``
+    value — so the snapshot must go through the free-text URL scrubber before it
+    is surfaced. Routing every consumer through here keeps that guarantee in one
+    place instead of relying on each call site to remember.
+    """
+    return _redact_sync_payload_for_ui(
+        core_freshness.build_snapshot(conn, profile_id)
+    )
+
+
 _SYNC_URL_RE = re.compile(
     r"\b[a-zA-Z][a-zA-Z0-9+.-]*://"
     r"(?:\[[^\]\s]+\][^\s,;)\"'\]]*|[^\s,;)\"'\]]+)"
 )
 _SYNC_URL_TRAILING_PUNCTUATION = ":.!?"
+# Defense in depth: HTTP-client connection-error reprs (urllib3/requests/httpx)
+# render the host schemeless as host='…' / host="…", which the scheme-form
+# pattern above does not catch. The stdlib client kassiber uses today always
+# embeds scheme-form URLs (kassiber/http_client.py), so this is not reachable in
+# practice — but a future client swap, or a schemeless str(exc) routed through
+# the generic freshness catch-all, would otherwise leak the host.
+_SYNC_HOST_KW_RE = re.compile(r"\bhost\s*=\s*['\"]?[^\s,;)'\"]+['\"]?", re.IGNORECASE)
 
 
 def _redact_sync_text_for_ui(value: str) -> str:
@@ -188,7 +213,8 @@ def _redact_sync_text_for_ui(value: str) -> str:
         suffix = url[len(url.rstrip(_SYNC_URL_TRAILING_PUNCTUATION)) :]
         return f"<backend-url>{suffix}"
 
-    return _SYNC_URL_RE.sub(replace, value)
+    scrubbed = _SYNC_URL_RE.sub(replace, value)
+    return _SYNC_HOST_KW_RE.sub("host=<backend-host>", scrubbed)
 
 
 def _sync_error_rows(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -264,6 +290,15 @@ def _row_int(row: sqlite3.Row, key: str, default: int = 0) -> int:
     except (IndexError, KeyError):
         return default
     return int(value or default)
+
+
+def _profile_require_coarse_review(row: sqlite3.Row) -> bool:
+    try:
+        if "require_coarse_review" not in row.keys():
+            return False
+        return bool(row["require_coarse_review"])
+    except (IndexError, KeyError):
+        return False
 
 
 def _wallet_lookup_sql(wallet_ref: str | None = None) -> tuple[str, tuple[Any, ...]]:
@@ -654,7 +689,7 @@ def _freshness_status_payload(conn: sqlite3.Connection) -> dict[str, Any]:
     profile = _active_profile_row(conn)
     if profile is None:
         return {"profile": None, "policy": core_freshness.default_policy().to_payload(), "sources": [], "jobs": []}
-    snapshot = core_freshness.build_snapshot(conn, profile["id"])
+    snapshot = _freshness_snapshot_for_ui(conn, profile["id"])
     return {
         "profile": {"id": profile["id"], "label": profile["label"]},
         **snapshot,
@@ -932,7 +967,7 @@ def _freshness_background_tick(
                 "profile": {"id": profile_id, "label": profile["label"]},
                 "enqueued": enqueued,
                 "completed": completed,
-                **core_freshness.build_snapshot(conn, profile_id),
+                **_freshness_snapshot_for_ui(conn, profile_id),
             },
         )
 
@@ -1117,7 +1152,7 @@ def _freshness_run_payload(
         )
     profile = _active_profile_row(conn)
     if profile is None:
-        return {"profile": None, "enqueued": [], "completed": [], **core_freshness.build_snapshot(conn, "")}
+        return {"profile": None, "enqueued": [], "completed": [], **_freshness_snapshot_for_ui(conn, "")}
     wallet = args.get("wallet")
     if wallet is not None and (not isinstance(wallet, str) or not wallet.strip()):
         raise AppError("ui.freshness.run wallet must be a non-empty string", code="validation", retryable=False)
@@ -1191,7 +1226,7 @@ def _freshness_run_payload(
                 else None
             ),
         )
-    snapshot = core_freshness.build_snapshot(conn, profile["id"])
+    snapshot = _freshness_snapshot_for_ui(conn, profile["id"])
     return {
         "profile": {"id": profile["id"], "label": profile["label"]},
         "results": _sync_results_from_freshness_jobs(completed),
@@ -1312,7 +1347,7 @@ def _workspace_freshness_run_payload(
                 limit=limit,
                 progress_observer=_book_progress,
             )
-        snapshot = core_freshness.build_snapshot(conn, profile["id"])
+        snapshot = _freshness_snapshot_for_ui(conn, profile["id"])
         result_errors = [
             job
             for job in completed
@@ -1403,7 +1438,7 @@ def _maintenance_settings_payload(conn: sqlite3.Connection) -> dict[str, Any]:
             "freshness": {"sources": [], "jobs": []},
         }
     policy = core_freshness.get_policy(conn, profile["id"])
-    snapshot = core_freshness.build_snapshot(conn, profile["id"])
+    snapshot = _freshness_snapshot_for_ui(conn, profile["id"])
     return {
         "workspace": context.get("workspace_label") or None,
         "profile": {
@@ -1414,6 +1449,10 @@ def _maintenance_settings_payload(conn: sqlite3.Connection) -> dict[str, Any]:
             **policy.to_payload(),
             **_market_rate_provider_settings(conn, profile),
             "auto_sync_before_report_reads": policy.report_read_sync,
+            "require_coarse_review": _profile_require_coarse_review(profile),
+            "coarse_priced_count": core_rates.count_coarse_priced_transactions(
+                conn, profile["id"]
+            ),
             "setting_key": core_freshness.policy_setting_key(profile["id"]),
         },
         "freshness": snapshot,
@@ -1431,6 +1470,7 @@ def _maintenance_configure_payload(
             "background_enabled",
             "market_rate_provider",
             "report_read_sync",
+            "require_coarse_review",
             "source_classes",
         }
     )
@@ -1448,7 +1488,26 @@ def _maintenance_configure_payload(
             code="validation",
             retryable=False,
         )
-    payload = _freshness_configure_payload(conn, raw_args)
+    require_coarse_review = raw_args.get("require_coarse_review")
+    if require_coarse_review is not None:
+        if not isinstance(require_coarse_review, bool):
+            raise AppError(
+                "ui.maintenance.configure require_coarse_review must be a boolean",
+                code="validation",
+                details={"type": type(require_coarse_review).__name__},
+                retryable=False,
+            )
+        # Reuse update_profile so the change is journal-invalidated consistently.
+        from .core import accounts as core_accounts
+
+        core_accounts.update_profile(
+            conn,
+            profile["workspace_id"],
+            profile["id"],
+            {"require_coarse_review": require_coarse_review},
+        )
+    freshness_args = {k: v for k, v in raw_args.items() if k != "require_coarse_review"}
+    payload = _freshness_configure_payload(conn, freshness_args)
     return {**_maintenance_settings_payload(conn), "configured": payload["settings"]}
 
 
@@ -1552,7 +1611,7 @@ def _auto_sync_wallets_if_enabled(
             "results": _sync_results_from_freshness_jobs(completed),
             "enqueued": enqueued,
             "completed": completed,
-            "freshness": core_freshness.build_snapshot(conn, profile["id"]),
+            "freshness": _freshness_snapshot_for_ui(conn, profile["id"]),
         }
         payload = _redact_sync_payload_for_ui(payload)
         ok = not _sync_payload_has_errors(payload)
