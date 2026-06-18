@@ -9,20 +9,20 @@
     "finishError": "Onboarding konnte nicht abgeschlossen werden.",
     "passphraseRequired": "Datenbank-Passphrase ist erforderlich.",
     "errorInitSqlcipher": "SQLCipher-Datenbank konnte nicht initialisiert werden.",
-    "errorLoadBooks": "Books konnten nicht geladen werden.",
+    "errorLoadBooks": "Bücher konnten nicht geladen werden.",
     "errorOpenProject": "Projekt konnte nicht geöffnet werden.",
     "errorImportProject": "Projekt konnte nicht importiert werden.",
     "errorReturnDefaultRoot": "Rückkehr zum Standard-Projektordner nicht möglich."
   },
   "books": {
-    "title": "Books",
-    "intro": "Jedes Book hat eigene Steuer- und Währungseinstellungen. Nutze getrennte Books für private und geschäftliche Aktivität; nutze getrennte Kassiber-Dateien für verschiedene Klient:innen.",
-    "newBookSet": "Neues Book-Set",
+    "title": "Bücher",
+    "intro": "Jedes Buch hat eigene Steuer- und Währungseinstellungen. Nutze getrennte Bücher für private und geschäftliche Aktivität; nutze getrennte Kassiber-Dateien für verschiedene Klient:innen.",
+    "newBookSet": "Neues Bücher-Set",
     "summary": {
       "sets": "Sets",
-      "setsDetail": "Book-Sets",
-      "books": "Books",
-      "booksDetail": "Einzelne Books",
+      "setsDetail": "Bücher-Sets",
+      "books": "Bücher",
+      "booksDetail": "Einzelne Bücher",
       "wallets": "Wallets",
       "walletsDetail": "{{count}} Accounts"
     },
@@ -30,13 +30,13 @@
       "since": "seit {{date}}"
     },
     "workspace": {
-      "overview": "Book-Set-Übersicht",
-      "newBook": "Neues Book"
+      "overview": "Bücher-Set-Übersicht",
+      "newBook": "Neues Buch"
     },
     "profileCard": {
       "editName": "Namen von {{name}} bearbeiten",
-      "current": "Aktuelle Books: {{name}}",
-      "switchTo": "Zu den Books {{name}} wechseln",
+      "current": "Aktuelle Bücher: {{name}}",
+      "switchTo": "Zu den Büchern {{name}} wechseln",
       "opened": "Geöffnet {{date}}",
       "active": "Aktiv",
       "taxPolicy": "Steuerprofil",
@@ -46,54 +46,54 @@
       "switchLabel": "Wechseln"
     },
     "create": {
-      "title": "Neues Book",
-      "descriptionFromSource": "Lege ein eigenes Book in {{workspace}} aus den Steuereinstellungen von {{source}} an.",
-      "descriptionInWorkspace": "Lege ein eigenes Book in {{workspace}} an.",
-      "descriptionDefault": "Lege ein eigenes Book mit Standardeinstellungen an.",
+      "title": "Neues Buch",
+      "descriptionFromSource": "Lege ein eigenes Buch in {{workspace}} aus den Steuereinstellungen von {{source}} an.",
+      "descriptionInWorkspace": "Lege ein eigenes Buch in {{workspace}} an.",
+      "descriptionDefault": "Lege ein eigenes Buch mit Standardeinstellungen an.",
       "startFrom": "Ausgehen von",
       "defaultSettings": "Standardeinstellungen",
-      "copyHint": "Beim Kopieren der Einstellungen werden nur Steuerprofil, Währung, Behaltedauer und Tranchen-Auswahl übernommen. Wallets, Accounts und Transaktionen bleiben in den ursprünglichen Books.",
-      "nameLabel": "Book-Name",
-      "namePlaceholder": "Book-Name",
-      "submit": "Book erstellen",
-      "errorEmptyName": "Gib einen Book-Namen ein.",
-      "errorGeneric": "Book konnte nicht erstellt werden."
+      "copyHint": "Beim Kopieren der Einstellungen werden nur Steuerprofil, Währung, Behaltedauer und Tranchen-Auswahl übernommen. Wallets, Accounts und Transaktionen bleiben in den ursprünglichen Büchern.",
+      "nameLabel": "Buchname",
+      "namePlaceholder": "Buchname",
+      "submit": "Buch erstellen",
+      "errorEmptyName": "Gib einen Buchnamen ein.",
+      "errorGeneric": "Buch konnte nicht erstellt werden."
     },
     "renameProfile": {
-      "title": "Book-Namen bearbeiten",
-      "description": "Benenne dieses Book um. Steuereinstellungen, Wallets und Transaktionen bleiben unverändert.",
-      "nameLabel": "Book-Name",
+      "title": "Buchnamen bearbeiten",
+      "description": "Benenne dieses Buch um. Steuereinstellungen, Wallets und Transaktionen bleiben unverändert.",
+      "nameLabel": "Buchname",
       "submit": "Namen speichern",
-      "errorEmptyName": "Gib einen Book-Namen ein.",
-      "errorGeneric": "Book konnte nicht umbenannt werden."
+      "errorEmptyName": "Gib einen Buchnamen ein.",
+      "errorGeneric": "Buch konnte nicht umbenannt werden."
     },
     "renameWorkspace": {
-      "title": "Book-Set-Namen bearbeiten",
-      "description": "Benenne dieses Book-Set um. Books, Wallets und Transaktionen bleiben unverändert.",
-      "nameLabel": "Book-Set-Name",
+      "title": "Bücher-Set-Namen bearbeiten",
+      "description": "Benenne dieses Bücher-Set um. Bücher, Wallets und Transaktionen bleiben unverändert.",
+      "nameLabel": "Bücher-Set-Name",
       "submit": "Namen speichern",
-      "errorEmptyName": "Gib einen Book-Set-Namen ein.",
-      "errorGeneric": "Book-Set konnte nicht umbenannt werden."
+      "errorEmptyName": "Gib einen Bücher-Set-Namen ein.",
+      "errorGeneric": "Bücher-Set konnte nicht umbenannt werden."
     },
     "createWorkspace": {
-      "title": "Neues Book-Set",
-      "description": "Lege ein eigenes Set auf oberster Ebene in dieser lokalen Datenbank an und füge dann das erste Book hinzu. Die meisten brauchen nur eines.",
-      "nameLabel": "Book-Set-Name",
-      "namePlaceholder": "Book-Set-Name",
+      "title": "Neues Bücher-Set",
+      "description": "Lege ein eigenes Set auf oberster Ebene in dieser lokalen Datenbank an und füge dann das erste Buch hinzu. Die meisten brauchen nur eines.",
+      "nameLabel": "Bücher-Set-Name",
+      "namePlaceholder": "Bücher-Set-Name",
       "submit": "Set erstellen",
-      "errorEmptyName": "Gib einen Book-Set-Namen ein.",
-      "errorGeneric": "Book-Set konnte nicht erstellt werden."
+      "errorEmptyName": "Gib einen Bücher-Set-Namen ein.",
+      "errorGeneric": "Bücher-Set konnte nicht erstellt werden."
     },
     "switch": {
-      "title": "Books wechseln?",
+      "title": "Bücher wechseln?",
       "descriptionFromTo": "Von {{current}} zu {{next}} wechseln.",
-      "descriptionGeneric": "Zu diesen Books wechseln.",
+      "descriptionGeneric": "Zu diesen Büchern wechseln.",
       "taxPolicy": "Steuerprofil",
       "buckets": "Buckets",
       "wallets": "Wallets",
       "switchHere": "Hier wechseln",
       "switchAndOpenOverview": "Wechseln und Übersicht öffnen",
-      "errorGeneric": "Books konnten nicht gewechselt werden."
+      "errorGeneric": "Bücher konnten nicht gewechselt werden."
     }
   },
   "frame": {
@@ -105,25 +105,25 @@
     "stepFallback": "Schritt {{number}}"
   },
   "steps": {
-    "essentials": "Deine Books",
+    "essentials": "Deine Bücher",
     "sync": "Sync",
     "ai": "AI",
     "security": "Sicherheit",
     "review": "Prüfen"
   },
   "start": {
-    "title": "Öffne deine lokalen Books",
+    "title": "Öffne deine lokalen Bücher",
     "createNew": {
-      "title": "Neue Books erstellen",
+      "title": "Neue Bücher erstellen",
       "body": "Lege eine neue lokale Kassiber-Datenbank mit sinnvollen Standardwerten an."
     },
     "openExisting": {
-      "titleOpening": "Books werden geöffnet…",
-      "title": "Bestehende Books öffnen",
-      "body": "Öffne einen Kassiber-State-Root oder Datenordner und wähle lokale Books.",
+      "titleOpening": "Bücher werden geöffnet…",
+      "title": "Bestehende Bücher öffnen",
+      "body": "Öffne einen Kassiber-State-Root oder Datenordner und wähle lokale Bücher.",
       "desktopOnly": "nur Desktop-App",
-      "tooltipAvailable": "Bestehende lokale Kassiber-Books öffnen",
-      "tooltipUnavailable": "Bestehende Books öffnen ist in der Desktop-App verfügbar"
+      "tooltipAvailable": "Bestehende lokale Kassiber-Bücher öffnen",
+      "tooltipUnavailable": "Bestehende Bücher öffnen ist in der Desktop-App verfügbar"
     },
     "quickStart": "Oder mit empfohlenen Standardwerten erstellen",
     "privacyNote": "Kassiber speichert reine Watch-only-Buchhaltungsdaten lokal. Private Keys gelangen nie in die App.",
@@ -134,33 +134,33 @@
       },
       "encrypted": {
         "title": "Standardmäßig verschlüsselt",
-        "body": "SQLCipher schützt echte Books im Ruhezustand."
+        "body": "SQLCipher schützt echte Bücher im Ruhezustand."
       },
       "importLocal": {
         "title": "Import bleibt lokal",
-        "body": "Bestehende Books werden aufgelistet, sobald der gewählte Ordner geöffnet ist."
+        "body": "Bestehende Bücher werden aufgelistet, sobald der gewählte Ordner geöffnet ist."
       }
     }
   },
   "import": {
-    "title": "Bestehende Books öffnen",
-    "selectedBooks": "Ausgewählte lokale Books",
+    "title": "Bestehende Bücher öffnen",
+    "selectedBooks": "Ausgewählte lokale Bücher",
     "encrypted": "SQLCipher",
     "plaintext": "Klartext",
-    "bookCount_one": "{{count}} Book",
-    "bookCount_other": "{{count}} Books",
-    "passphraseLabel": "Books-Passphrase",
-    "unlock": "Books entsperren",
+    "bookCount_one": "{{count}} Buch",
+    "bookCount_other": "{{count}} Bücher",
+    "passphraseLabel": "Bücher-Passphrase",
+    "unlock": "Bücher entsperren",
     "backToSetup": "Zurück zum neuen Setup",
-    "rightTitle": "Lokale Kassiber-Books",
-    "rightBody": "Der Desktop-Daemon zeigt jetzt auf diesen gewählten Datenordner. Sobald ein Book geöffnet ist, betreibt dieselbe lokale Datenbank den Rest der App.",
-    "loading": "Lokale Books werden geladen…",
-    "empty": "In diesem lokalen Datenordner wurden keine Books gefunden.",
+    "rightTitle": "Lokale Kassiber-Bücher",
+    "rightBody": "Der Desktop-Daemon zeigt jetzt auf diesen gewählten Datenordner. Sobald ein Buch geöffnet ist, betreibt dieselbe lokale Datenbank den Rest der App.",
+    "loading": "Lokale Bücher werden geladen…",
+    "empty": "In diesem lokalen Datenordner wurden keine Bücher gefunden.",
     "accountsWallets": "{{accounts}} Accounts · {{wallets}} Wallets",
     "opening": "Wird geöffnet",
     "active": "Aktiv",
     "errorUnlock": "Datenbank konnte nicht entsperrt werden.",
-    "errorOpenBooks": "Books konnten nicht geöffnet werden.",
+    "errorOpenBooks": "Bücher konnten nicht geöffnet werden.",
     "passphraseRequired": "Datenbank-Passphrase ist erforderlich."
   },
   "connections": {
@@ -260,7 +260,7 @@
     },
     "ai": {
       "title": "So funktioniert der Assistent",
-      "lead": "Der Assistent hilft, Transaktionen zu kategorisieren, Notizen zu entwerfen und Fragen zu deinen Books zu beantworten. Er ist optional und kann jederzeit in den Einstellungen geändert werden.",
+      "lead": "Der Assistent hilft, Transaktionen zu kategorisieren, Notizen zu entwerfen und Fragen zu deinen Büchern zu beantworten. Er ist optional und kann jederzeit in den Einstellungen geändert werden.",
       "local": {
         "title": "Lokaler Endpunkt",
         "body": "Läuft gegen ein Modell auf diesem Rechner (standardmäßig Ollama). Prompts und Buchhaltungskontext bleiben on-device."
@@ -277,15 +277,15 @@
     }
   },
   "essentials": {
-    "title": "Richte deine Books ein",
-    "booksName": "Books-Name",
-    "booksNamePlaceholder": "My Books",
-    "booksNameDescription": "Wird im App-Header angezeigt. Getrennte private, geschäftliche oder Klient:innen-Books kannst du später hinzufügen.",
+    "title": "Richte deine Bücher ein",
+    "booksName": "Bücher-Name",
+    "booksNamePlaceholder": "Meine Bücher",
+    "booksNameDescription": "Wird im App-Header angezeigt. Getrennte private, geschäftliche oder Klient:innen-Bücher kannst du später hinzufügen.",
     "taxJurisdiction": "Steuerjurisdiktion",
     "jurisdictionAustria": "Österreich",
     "jurisdictionGeneric": "Andere / generisch",
     "jurisdictionDescriptionAt": "Österreichischer Krypto-Steuer-Workflow — EUR und Regeln zum gleitenden Durchschnittspreis gelten.",
-    "jurisdictionDescriptionGeneric": "Länderneutrale Books mit Tranchen-Auswahl FIFO, LIFO, HIFO oder LOFO.",
+    "jurisdictionDescriptionGeneric": "Länderneutrale Bücher mit Tranchen-Auswahl FIFO, LIFO, HIFO oder LOFO.",
     "fiatCurrency": "Fiat-Währung",
     "fiatSample": "Beispiel: {{sample}}",
     "accountingMethod": "Bewertungsmethode",
@@ -294,12 +294,12 @@
     "lotSelection": "Tranchen-Auswahl",
     "longTermDays": "Tage für langfristige Behaltedauer",
     "longTermDaysPlaceholder": "365",
-    "longTermDaysDescription": "Wird nur von generischen Books verwendet."
+    "longTermDaysDescription": "Wird nur von generischen Büchern verwendet."
   },
   "security": {
-    "title": "Schütze deine Books",
+    "title": "Schütze deine Bücher",
     "encrypt": {
-      "title": "Diese Books verschlüsseln",
+      "title": "Diese Bücher verschlüsseln",
       "description": "Empfohlen für echte Daten. Die lokale SQLite-Datenbank öffnet sich nur mit deiner Passphrase."
     },
     "plaintext": {
@@ -318,7 +318,7 @@
     "touchIdDescription": "Speichere die Passphrase im macOS-Keychain, damit du statt zu tippen mit Touch ID entsperren kannst. Du kannst sie jederzeit in den Einstellungen entfernen.",
     "existingCredentials": "Bestehende Backend-Zugangsdaten",
     "migrateCredentials": "Zugangsdaten aus backends.env in die verschlüsselte DB übernehmen.",
-    "migrateCredentialsDescription": "Nützlich beim Upgrade eines bestehenden CLI-Setups. Bei neuen Books kann dies bedenkenlos aktiviert bleiben.",
+    "migrateCredentialsDescription": "Nützlich beim Upgrade eines bestehenden CLI-Setups. Bei neuen Büchern kann dies bedenkenlos aktiviert bleiben.",
     "plaintextAck": "Mir ist klar, dass der Klartextmodus nicht für echte Wallet-Daten gedacht ist.",
     "plaintextAckDescription": "Guthaben, Adressen, Tags und Backend-Metadaten sind für alles mit Festplattenzugriff lesbar."
   },
@@ -333,10 +333,10 @@
     "intro": "Bestätige die Entscheidungen, die die lokale Speicherung, die Netzwerk-Sichtbarkeit und die Frage betreffen, ob Daten dieses Gerät verlassen können.",
     "change": "Ändern",
     "changeArea": "{{area}} ändern",
-    "creatingBooks": "Books werden erstellt…",
-    "createLocalBooks": "Lokale Books erstellen",
+    "creatingBooks": "Bücher werden erstellt…",
+    "createLocalBooks": "Lokale Bücher erstellen",
     "area": {
-      "books": "Books",
+      "books": "Bücher",
       "tax": "Steuer",
       "sync": "Sync",
       "ai": "AI",
@@ -345,7 +345,7 @@
     },
     "books": {
       "value": "{{workspace}} / {{profile}}",
-      "note": "Erstellt ein lokales Book-Set mit einem aktiven Book."
+      "note": "Erstellt ein lokales Bücher-Set mit einem aktiven Buch."
     },
     "tax": {
       "valueAt": "Österreich, EUR, gleitender Durchschnittspreis",
@@ -369,8 +369,8 @@
       "value": "{{kind}}: {{name}}",
       "fallbackName": "Assistent",
       "noteDisabled": "Keine Assistenten-Aufrufe im normalen App-Betrieb.",
-      "noteRemote": "Der Remote-Provider kann nach Zustimmung ausgewählten Book-Kontext erhalten.",
-      "noteLocal": "Lokaler Provider-Endpunkt; der Book-Kontext bleibt auf deinem Rechner, sofern nicht anders konfiguriert."
+      "noteRemote": "Der Remote-Provider kann nach Zustimmung ausgewählten Buch-Kontext erhalten.",
+      "noteLocal": "Lokaler Provider-Endpunkt; der Buch-Kontext bleibt auf deinem Rechner, sofern nicht anders konfiguriert."
     },
     "storage": {
       "valueEncrypted": "SQLCipher-verschlüsselte Datenbank",

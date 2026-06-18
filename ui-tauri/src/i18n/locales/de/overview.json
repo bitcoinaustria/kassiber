@@ -2,37 +2,37 @@
   "screen": {
     "unavailableTitle": "Übersicht nicht verfügbar",
     "unavailableBody": "Kassiber konnte keine echten Übersichtsdaten lesen.",
-    "noRealData": "Für das aktuelle Book sind keine echten Übersichtsdaten verfügbar."
+    "noRealData": "Für das aktuelle Buch sind keine echten Übersichtsdaten verfügbar."
   },
   "birdsEye": {
-    "title": "Book-Set-Übersicht",
-    "badge": "Book-Set",
+    "title": "Bücher-Set-Übersicht",
+    "badge": "Bücher-Set",
     "mixedFiatBadge": "Gemischte Fiat",
-    "refresh": "Book-Set aktualisieren",
-    "booksLink": "Books",
-    "readonlyNote": "Diese schreibgeschützte Zusammenführung wahrt die Book-Grenzen. Beim Öffnen eines Books oder einer Transaktion wird dieses Book vor der Navigation aktiv gesetzt.",
-    "couldNotLoad": "Book-Set-Übersicht konnte nicht geladen werden.",
-    "fallbackTitle": "Book-Set",
+    "refresh": "Bücher-Set aktualisieren",
+    "booksLink": "Bücher",
+    "readonlyNote": "Diese schreibgeschützte Zusammenführung wahrt die Buch-Grenzen. Beim Öffnen eines Buchs oder einer Transaktion wird dieses Buch vor der Navigation aktiv gesetzt.",
+    "couldNotLoad": "Bücher-Set-Übersicht konnte nicht geladen werden.",
+    "fallbackTitle": "Bücher-Set",
     "metric": {
       "btcTotal": "BTC gesamt",
-      "books_one": "{{count}} Book",
-      "books_other": "{{count}} Books",
+      "books_one": "{{count}} Buch",
+      "books_other": "{{count}} Bücher",
       "fiatRollup": "Fiat-Zusammenführung",
       "fiatTotal": "Fiat gesamt",
       "mixed": "Gemischt",
-      "perBookFiatOnly": "Nur Fiat-Zeilen pro Book",
+      "perBookFiatOnly": "Nur Fiat-Zeilen pro Buch",
       "noFiatCurrency": "Keine Fiat-Währung",
       "readiness": "Bereitschaft",
-      "booksNeedAttention_one": "{{count}} Book braucht Aufmerksamkeit",
-      "booksNeedAttention_other": "{{count}} Books brauchen Aufmerksamkeit",
-      "allBooksReady": "Alle Books bereit",
+      "booksNeedAttention_one": "{{count}} Buch braucht Aufmerksamkeit",
+      "booksNeedAttention_other": "{{count}} Bücher brauchen Aufmerksamkeit",
+      "allBooksReady": "Alle Bücher bereit",
       "quarantine": "Quarantäne",
       "journalsNeedProcessing": "Journale müssen verarbeitet werden",
       "noStaleJournals": "Keine veralteten Journale"
     },
     "booksCard": {
-      "title": "Books",
-      "empty": "Dieses Book-Set hat noch keine Books."
+      "title": "Bücher",
+      "empty": "Dieses Bücher-Set hat noch keine Bücher."
     },
     "fiatCard": {
       "title": "Fiat-Zeilen",
@@ -53,32 +53,32 @@
       "quarantines_other": "{{count}} Quarantänen"
     },
     "refreshPanel": {
-      "title": "Book-Set-Aktualisierung",
+      "title": "Bücher-Set-Aktualisierung",
       "waiting": "Warten auf Aktualisierungsfortschritt.",
-      "fallbackBook": "Book",
-      "booksRefreshed": "{{synced}}/{{total}} Books aktualisiert",
+      "fallbackBook": "Buch",
+      "booksRefreshed": "{{synced}}/{{total}} Bücher aktualisiert",
       "summaryDetail": "{{blocked}} Berichte blockiert · {{rateLimited}} gedrosselte Quellen",
-      "placeholder": "Sync-, Kurs- und Journalstatus pro Book erscheinen hier.",
+      "placeholder": "Sync-, Kurs- und Journalstatus pro Buch erscheinen hier.",
       "scanned": "{{value}} gescannt"
     },
-    "recentActivityTitle": "Letzte Aktivität nach Book",
+    "recentActivityTitle": "Letzte Aktivität nach Buch",
     "toast": {
-      "refreshStartedTitle": "Book-Set-Aktualisierung gestartet",
-      "refreshStartedBody": "Jedes Book in diesem Set wird aktualisiert.",
+      "refreshStartedTitle": "Bücher-Set-Aktualisierung gestartet",
+      "refreshStartedBody": "Jedes Buch in diesem Set wird aktualisiert.",
       "starting": "Wird gestartet…",
-      "refreshNeedsAttentionTitle": "Book-Set-Aktualisierung braucht Aufmerksamkeit",
-      "refreshFinishedTitle": "Book-Set-Aktualisierung abgeschlossen",
-      "refreshFinishedBody": "{{synced}}/{{total}} Books aktualisiert; {{blocked}} weiterhin blockiert.",
+      "refreshNeedsAttentionTitle": "Bücher-Set-Aktualisierung braucht Aufmerksamkeit",
+      "refreshFinishedTitle": "Bücher-Set-Aktualisierung abgeschlossen",
+      "refreshFinishedBody": "{{synced}}/{{total}} Bücher aktualisiert; {{blocked}} weiterhin blockiert.",
       "refreshDoneBody": "Aktualisierung abgeschlossen.",
-      "refreshFailedTitle": "Book-Set-Aktualisierung fehlgeschlagen",
-      "refreshFailedBody": "Dieses Book-Set konnte nicht aktualisiert werden.",
-      "activeBookChangedTitle": "Aktives Book geändert",
+      "refreshFailedTitle": "Bücher-Set-Aktualisierung fehlgeschlagen",
+      "refreshFailedBody": "Dieses Bücher-Set konnte nicht aktualisiert werden.",
+      "activeBookChangedTitle": "Aktives Buch geändert",
       "transactionBody": "{{book}} ist jetzt aktiv. Transaktionsdetail wird geöffnet.",
-      "fallbackBook": "Ausgewähltes Book",
-      "couldNotOpenBookTitle": "Book konnte nicht geöffnet werden",
-      "couldNotOpenBookBody": "Kassiber konnte nicht zu diesem Book wechseln.",
+      "fallbackBook": "Ausgewähltes Buch",
+      "couldNotOpenBookTitle": "Buch konnte nicht geöffnet werden",
+      "couldNotOpenBookBody": "Kassiber konnte nicht zu diesem Buch wechseln.",
       "couldNotOpenTransactionTitle": "Transaktion konnte nicht geöffnet werden",
-      "couldNotOpenTransactionBody": "Kassiber konnte nicht zum Book dieser Transaktion wechseln."
+      "couldNotOpenTransactionBody": "Kassiber konnte nicht zum Buch dieser Transaktion wechseln."
     }
   },
   "stats": {
@@ -124,7 +124,7 @@
   "readiness": {
     "connectSource": {
       "title": "Quelle verbinden",
-      "detail": "Füge eine Watch-only-Quelle hinzu oder importiere Zeilen, um dieses Book zu befüllen."
+      "detail": "Füge eine Watch-only-Quelle hinzu oder importiere Zeilen, um dieses Buch zu befüllen."
     },
     "sourceAttention": {
       "title": "Quelle braucht Aufmerksamkeit",
@@ -151,9 +151,9 @@
     "noSources": "Keine Quellen verbunden"
   },
   "health": {
-    "title": "Books-Zustand",
+    "title": "Bücher-Zustand",
     "subtitle": "Was vor den Berichten Aufmerksamkeit braucht",
-    "panelAria": "Books-Zustand",
+    "panelAria": "Bücher-Zustand",
     "journals": {
       "title": "Journalstand",
       "reprocess": "Neu verarbeiten",
@@ -168,7 +168,7 @@
       "open_other": "{{count}} offen",
       "clear": "Leer",
       "detailOpen": "Löse Zeilen in Quarantäne vor der Steuerberichterstattung auf.",
-      "detailClear": "Keine Transaktionen in Quarantäne in diesem Book."
+      "detailClear": "Keine Transaktionen in Quarantäne in diesem Buch."
     },
     "connections": {
       "title": "Verbindungen",
@@ -192,11 +192,11 @@
       },
       "openReports": {
         "title": "Berichte öffnen",
-        "detail": "Wechsle von der Übersicht ins Berichtspaket für das aktuelle Book."
+        "detail": "Wechsle von der Übersicht ins Berichtspaket für das aktuelle Buch."
       },
       "addConnection": {
         "title": "Verbindung hinzufügen",
-        "detail": "Verbinde eine Quelle oder importiere Zeilen, um das Book zu starten."
+        "detail": "Verbinde eine Quelle oder importiere Zeilen, um das Buch zu starten."
       }
     }
   },
