@@ -175,6 +175,24 @@ def _redact_sync_payload_for_ui(value: Any) -> Any:
     return value
 
 
+def _freshness_snapshot_for_ui(
+    conn: sqlite3.Connection, profile_id: str
+) -> dict[str, Any]:
+    """Render-time chokepoint for every freshness snapshot that reaches the UI.
+
+    ``core_freshness.build_snapshot`` carries raw job/source error strings
+    (e.g. ``last_error_message`` = ``str(exc)``) that can embed backend URLs and
+    inline credentials. The structured ``redact_freshness_payload`` only scrubs
+    secret *keys*, not URLs inside a free-text ``message``/``last_error_message``
+    value — so the snapshot must go through the free-text URL scrubber before it
+    is surfaced. Routing every consumer through here keeps that guarantee in one
+    place instead of relying on each call site to remember.
+    """
+    return _redact_sync_payload_for_ui(
+        core_freshness.build_snapshot(conn, profile_id)
+    )
+
+
 _SYNC_URL_RE = re.compile(
     r"\b[a-zA-Z][a-zA-Z0-9+.-]*://"
     r"(?:\[[^\]\s]+\][^\s,;)\"'\]]*|[^\s,;)\"'\]]+)"
@@ -663,7 +681,7 @@ def _freshness_status_payload(conn: sqlite3.Connection) -> dict[str, Any]:
     profile = _active_profile_row(conn)
     if profile is None:
         return {"profile": None, "policy": core_freshness.default_policy().to_payload(), "sources": [], "jobs": []}
-    snapshot = core_freshness.build_snapshot(conn, profile["id"])
+    snapshot = _freshness_snapshot_for_ui(conn, profile["id"])
     return {
         "profile": {"id": profile["id"], "label": profile["label"]},
         **snapshot,
@@ -939,7 +957,7 @@ def _freshness_background_tick(
                 "profile": {"id": profile_id, "label": profile["label"]},
                 "enqueued": enqueued,
                 "completed": completed,
-                **core_freshness.build_snapshot(conn, profile_id),
+                **_freshness_snapshot_for_ui(conn, profile_id),
             },
         )
 
@@ -1124,7 +1142,7 @@ def _freshness_run_payload(
         )
     profile = _active_profile_row(conn)
     if profile is None:
-        return {"profile": None, "enqueued": [], "completed": [], **core_freshness.build_snapshot(conn, "")}
+        return {"profile": None, "enqueued": [], "completed": [], **_freshness_snapshot_for_ui(conn, "")}
     wallet = args.get("wallet")
     if wallet is not None and (not isinstance(wallet, str) or not wallet.strip()):
         raise AppError("ui.freshness.run wallet must be a non-empty string", code="validation", retryable=False)
@@ -1198,7 +1216,7 @@ def _freshness_run_payload(
                 else None
             ),
         )
-    snapshot = core_freshness.build_snapshot(conn, profile["id"])
+    snapshot = _freshness_snapshot_for_ui(conn, profile["id"])
     return {
         "profile": {"id": profile["id"], "label": profile["label"]},
         "results": _sync_results_from_freshness_jobs(completed),
@@ -1319,7 +1337,7 @@ def _workspace_freshness_run_payload(
                 limit=limit,
                 progress_observer=_book_progress,
             )
-        snapshot = core_freshness.build_snapshot(conn, profile["id"])
+        snapshot = _freshness_snapshot_for_ui(conn, profile["id"])
         result_errors = [
             job
             for job in completed
@@ -1410,7 +1428,7 @@ def _maintenance_settings_payload(conn: sqlite3.Connection) -> dict[str, Any]:
             "freshness": {"sources": [], "jobs": []},
         }
     policy = core_freshness.get_policy(conn, profile["id"])
-    snapshot = core_freshness.build_snapshot(conn, profile["id"])
+    snapshot = _freshness_snapshot_for_ui(conn, profile["id"])
     return {
         "workspace": context.get("workspace_label") or None,
         "profile": {
@@ -1583,7 +1601,7 @@ def _auto_sync_wallets_if_enabled(
             "results": _sync_results_from_freshness_jobs(completed),
             "enqueued": enqueued,
             "completed": completed,
-            "freshness": core_freshness.build_snapshot(conn, profile["id"]),
+            "freshness": _freshness_snapshot_for_ui(conn, profile["id"]),
         }
         payload = _redact_sync_payload_for_ui(payload)
         ok = not _sync_payload_has_errors(payload)

@@ -105,9 +105,20 @@ If transactions do not already include usable fiat pricing, Kassiber first tries
 
 Pricing now carries provenance alongside the legacy numeric fields: source kind,
 provider, pair, source timestamp, fetched timestamp, granularity, method, and
-quality. Imported source prices can outrank cache-derived FMV. Daily or otherwise
-coarse provider fallback is kept on the transaction for audit context but
-quarantines with `pricing_review_required` before it can drive tax entries.
+quality. Imported source prices can outrank cache-derived FMV.
+
+Daily or otherwise coarse provider fallback is **accepted by default**: the event
+is booked at the coarse spot price (and flagged non-blockingly in the UI), so it
+flows into the capital-gains / E1kv numbers without manual intervention. The
+coarse provenance is kept on the transaction for audit context. Coarse pricing is
+only held back with `pricing_review_required` when a book opts into strict review:
+
+```bash
+# require manual review of coarse-priced events for this book (default: accept)
+python3 -m kassiber profiles set main --require-coarse-review
+# return to accepting coarse prices
+python3 -m kassiber profiles set main --no-require-coarse-review
+```
 
 Useful commands:
 

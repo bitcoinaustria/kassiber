@@ -1659,6 +1659,58 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.profiles.update") {
+      const args = (req.args ?? {}) as {
+        profile_id?: unknown;
+        gains_algorithm?: unknown;
+      };
+      const profileId =
+        typeof args.profile_id === "string" ? args.profile_id : "";
+      const workspace = mockProfilesSnapshot.workspaces.find((candidate) =>
+        candidate.profiles.some((profile) => profile.id === profileId),
+      );
+      const profile = workspace?.profiles.find(
+        (candidate) => candidate.id === profileId,
+      );
+      if (!workspace || !profile) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "book not found",
+            retryable: false,
+          },
+        };
+      }
+      const requested =
+        typeof args.gains_algorithm === "string"
+          ? (args.gains_algorithm as ProfileGainsAlgorithm)
+          : profile.gainsAlgorithm;
+      // Mirror the daemon's per-country enforcement: Austrian books are always
+      // coerced to moving-average regardless of the requested method.
+      const nextAlgorithm: ProfileGainsAlgorithm | undefined =
+        profile.taxCountry === "at" ? "MOVING_AVERAGE_AT" : requested;
+      mockProfilesSnapshot = {
+        ...mockProfilesSnapshot,
+        workspaces: mockProfilesSnapshot.workspaces.map((candidate) => ({
+          ...candidate,
+          profiles: candidate.profiles.map((existing) =>
+            existing.id === profileId
+              ? { ...existing, gainsAlgorithm: nextAlgorithm }
+              : existing,
+          ),
+        })),
+      };
+      return {
+        kind: "ui.profiles.update",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: { id: profileId } as T,
+      };
+    }
+
     if (req.kind === "ui.workspace.create") {
       const args = (req.args ?? {}) as { label?: unknown };
       const label = typeof args.label === "string" ? args.label.trim() : "";

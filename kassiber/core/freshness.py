@@ -841,8 +841,12 @@ def _mark_error(
     source_status = STATUS_RATE_LIMITED if cooldown_until else STATUS_FAILED
     source_name = job.get("source_label") or job.get("source_key") or "source"
     # Log only the source label + error code, never str(exc): the raw message
-    # can carry operational data (e.g. backend URLs) that the structured
-    # freshness redactor scrubs by key but the free-text log path would not.
+    # can carry operational data (e.g. backend URLs / inline credentials). The
+    # message is still persisted for the UI snapshot, but URLs embedded in it are
+    # scrubbed at the render boundary (daemon_freshness._freshness_snapshot_for_ui);
+    # redact_freshness_payload below only scrubs secret *keys*, not URLs inside a
+    # free-text value. The RAM log ring has no render step, so the message must
+    # never reach it.
     error_code = exc.code or "freshness_job_failed"
     if cooldown_until:
         _LOGGER.warning("Freshness %s rate-limited (%s)", source_name, error_code)

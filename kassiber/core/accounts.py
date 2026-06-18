@@ -299,7 +299,19 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
         )
     except ValueError as exc:
         raise AppError(str(exc), code="validation") from exc
-    normalized_algo = _normalized_profile_algorithm(merged_algo, policy)
+    # Only (re-)enforce the per-country method when the method or country is
+    # explicitly part of this update. The explicit method-change dialog always
+    # sends gains_algorithm, and a deliberate country switch sends tax_country,
+    # so both legitimate coercion paths still run. An incidental update (label,
+    # fiat, long-term days, coarse-review toggle) must NOT silently re-coerce a
+    # legacy AT-on-FIFO book to moving-average — that is exactly the silent
+    # tax-method mutation the explicit-surface revert (3896bdd3) removed.
+    # Preserve the stored method verbatim until the user converts it via the
+    # dialog.
+    if new_algo is not None or new_country is not None:
+        normalized_algo = _normalized_profile_algorithm(merged_algo, policy)
+    else:
+        normalized_algo = profile["gains_algorithm"]
     policy_changed = (
         policy.fiat_currency != profile["fiat_currency"]
         or policy.tax_country != profile["tax_country"]

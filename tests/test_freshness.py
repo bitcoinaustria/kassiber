@@ -203,6 +203,55 @@ class FreshnessTest(unittest.TestCase):
             captured.output,
         )
 
+    def test_failed_job_error_message_url_is_scrubbed_in_ui_snapshot(self):
+        # A backend exception message can embed the backend URL (and inline
+        # credentials) — httpx ConnectError / HTTPSConnectionPool strings do.
+        # build_snapshot's structured redactor only scrubs secret *keys*, so a
+        # URL inside the free-text last_error_message survives. The daemon render
+        # boundary (_freshness_snapshot_for_ui) must scrub it before the UI.
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            job_type=freshness.JOB_ONCHAIN_WALLET,
+            source_key="onchain_wallet:cold",
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Cold wallet",
+            priority=10,
+        )
+        conn.commit()
+
+        def boom(conn, job, progress, check_cancelled):
+            raise AppError(
+                "ConnectError: could not reach "
+                "https://user:pass@private-node.local:50002/rpc",
+                code="backend_unreachable",
+                retryable=True,
+            )
+
+        freshness.run_due_jobs(
+            conn,
+            {freshness.JOB_ONCHAIN_WALLET: boom},
+            profile_id=profile_id,
+            limit=1,
+        )
+
+        # The raw URL is stored in the source state (kept for audit, encrypted
+        # at rest) — this is the gap the render boundary must close.
+        state = freshness.get_source_state(conn, profile_id, "onchain_wallet:cold")
+        self.assertIn("private-node.local", state["last_error_message"])
+
+        # ...but the UI-facing snapshot must NOT leak host / path / credentials.
+        ui_encoded = json.dumps(
+            daemon_freshness._freshness_snapshot_for_ui(conn, profile_id),
+            sort_keys=True,
+        )
+        self.assertNotIn("private-node.local", ui_encoded)
+        self.assertNotIn("user:pass", ui_encoded)
+        self.assertNotIn("/rpc", ui_encoded)
+        self.assertIn("<backend-url>", ui_encoded)
+
     def test_cancelled_job_leaves_blocking_partial_state(self):
         conn = self._db()
         profile_id = _seed_profile(conn)
