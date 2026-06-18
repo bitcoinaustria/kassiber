@@ -67,8 +67,8 @@ For Austrian books, use `--tax-country at --fiat-currency EUR`.
 
 Coarse (daily/monthly) fallback pricing is **accepted by default** and booked at
 the coarse spot price. To require manual review of coarse-priced events instead,
-set `python3 -m kassiber profiles set main --require-coarse-review` (revert with
-`--no-require-coarse-review`).
+set `python3 -m kassiber profiles set --profile main --require-coarse-review`
+(revert with `--no-require-coarse-review`).
 
 To encrypt the local SQLite database at rest:
 

@@ -115,9 +115,9 @@ only held back with `pricing_review_required` when a book opts into strict revie
 
 ```bash
 # require manual review of coarse-priced events for this book (default: accept)
-python3 -m kassiber profiles set main --require-coarse-review
+python3 -m kassiber profiles set --profile main --require-coarse-review
 # return to accepting coarse prices
-python3 -m kassiber profiles set main --no-require-coarse-review
+python3 -m kassiber profiles set --profile main --no-require-coarse-review
 ```
 
 Useful commands:
