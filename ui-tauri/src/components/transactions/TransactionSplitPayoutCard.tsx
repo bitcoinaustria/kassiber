@@ -104,7 +104,8 @@ export function TransactionSplitPayoutCard({
           Part of this {sourceAsset} spend returned to an owned wallet and part
           went to a swap or direct payout. Record the payout portion; the
           remainder resolves as a same-transaction self-transfer instead of an
-          implausible fee.
+          implausible fee — provided the matching owned inbound is imported,
+          otherwise it books as an outbound disposal.
         </p>
       </div>
 

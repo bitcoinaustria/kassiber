@@ -201,6 +201,12 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       : ["coinbase-exchange", "coingecko", "mempool"];
   const requireCoarseReview = freshnessSettings?.require_coarse_review ?? false;
   const coarsePricedCount = freshnessSettings?.coarse_priced_count ?? 0;
+  // The coarse-review policy is independent of auto-pricing; gate it only on
+  // load/mutation state and an active profile, not the market-rate toggles.
+  const maintenanceBusy =
+    maintenanceSettingsQuery.isLoading ||
+    configureMaintenance.isPending ||
+    !maintenanceSettings?.profile;
   const marketRateProviderLabelText = marketRateProviderLabel(marketRateProvider);
   const activeRatePair = freshnessSettings?.active_rate_pair ?? "BTC-fiat";
   const rateRebuildProgress = rateRebuildTransactionProgress(rateRebuildResult);
@@ -365,7 +371,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
         wallet addresses.
       </p>
 
-      {coarsePricedCount > 0 ? (
+      {coarsePricedCount > 0 && !requireCoarseReview ? (
         <div className="rounded-md border bg-background p-3 text-sm">
           <p className="font-medium">
             {coarsePricedCount}{" "}
@@ -439,7 +445,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
           <Checkbox
             id="require-coarse-review"
             checked={requireCoarseReview}
-            disabled={autoMarketRatesDisabled}
+            disabled={maintenanceBusy}
             onCheckedChange={(checked) => {
               void setRequireCoarseReview(checked === true);
             }}

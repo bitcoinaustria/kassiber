@@ -112,6 +112,6 @@ describe("defaultPayoutAsset", () => {
   it("keeps a known source asset and falls back to BTC otherwise", () => {
     expect(defaultPayoutAsset("LBTC")).toBe("LBTC");
     expect(defaultPayoutAsset("BTC")).toBe("BTC");
-    expect(defaultPayoutAsset("DOGE")).toBe("BTC");
+    expect(defaultPayoutAsset("FOO")).toBe("BTC");
   });
 });
