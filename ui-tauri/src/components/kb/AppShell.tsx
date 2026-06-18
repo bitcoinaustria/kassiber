@@ -1872,7 +1872,7 @@ function AppDashboardHeader({
   onLock: () => void;
   daemonEnabled: boolean;
 }) {
-  const { t } = useTranslation("chrome");
+  const { t } = useTranslation(["chrome", "nav", "search", "settings"]);
   const { state: sidebarState } = useSidebar();
   const navigate = useNavigate();
   const hideSensitive = useUiStore((s) => s.hideSensitive);
@@ -1915,6 +1915,9 @@ function AppDashboardHeader({
         isResolvingTransaction:
           shouldResolveTransaction &&
           (resolvedTransaction.isFetching || resolvedTransaction.isLoading),
+        // Dynamic, prefixed keys fall outside the typed-key union; resolve via
+        // a thin string→string adapter over the namespace-branded translator.
+        t: (key: string) => t(key as never) as string,
       }),
     [
       snapshot,
@@ -1925,6 +1928,7 @@ function AppDashboardHeader({
       resolvedTransaction.isFetching,
       resolvedTransaction.isLoading,
       shouldResolveTransaction,
+      t,
     ],
   );
   const searchListId = React.useId();

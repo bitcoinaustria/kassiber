@@ -23,6 +23,7 @@ import deNav from "./locales/de/nav.json";
 import deOnboarding from "./locales/de/onboarding.json";
 import deOverview from "./locales/de/overview.json";
 import deReview from "./locales/de/review.json";
+import deSearch from "./locales/de/search.json";
 import deSettings from "./locales/de/settings.json";
 import deSourceFunds from "./locales/de/sourceFunds.json";
 import deTransactions from "./locales/de/transactions.json";
@@ -35,6 +36,7 @@ import enNav from "./locales/en/nav.json";
 import enOnboarding from "./locales/en/onboarding.json";
 import enOverview from "./locales/en/overview.json";
 import enReview from "./locales/en/review.json";
+import enSearch from "./locales/en/search.json";
 import enSettings from "./locales/en/settings.json";
 import enSourceFunds from "./locales/en/sourceFunds.json";
 import enTransactions from "./locales/en/transactions.json";
@@ -56,6 +58,7 @@ export const resources = {
     assistant: enAssistant,
     sourceFunds: enSourceFunds,
     review: enReview,
+    search: enSearch,
   },
   de: {
     common: deCommon,
@@ -70,6 +73,7 @@ export const resources = {
     assistant: deAssistant,
     sourceFunds: deSourceFunds,
     review: deReview,
+    search: deSearch,
   },
 } as const;
 
