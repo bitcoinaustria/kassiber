@@ -252,6 +252,23 @@ class FreshnessTest(unittest.TestCase):
         self.assertNotIn("/rpc", ui_encoded)
         self.assertIn("<backend-url>", ui_encoded)
 
+    def test_sync_text_scrubber_redacts_schemeless_host(self):
+        # Defense in depth: an HTTP-client connection-error repr (urllib3/httpx)
+        # embeds the host schemeless as host='…', which the scheme-form URL
+        # pattern does not catch.
+        scrubbed = daemon_freshness._redact_sync_text_for_ui(
+            "HTTPSConnectionPool(host='private-node.local', port=50002): Max retries"
+        )
+        self.assertNotIn("private-node.local", scrubbed)
+        self.assertIn("<backend-host>", scrubbed)
+        # scheme-form URLs (and inline credentials) are still scrubbed.
+        url_scrubbed = daemon_freshness._redact_sync_text_for_ui(
+            "see https://user:pass@node.local/rpc"
+        )
+        self.assertNotIn("user:pass", url_scrubbed)
+        self.assertNotIn("node.local", url_scrubbed)
+        self.assertIn("<backend-url>", url_scrubbed)
+
     def test_cancelled_job_leaves_blocking_partial_state(self):
         conn = self._db()
         profile_id = _seed_profile(conn)

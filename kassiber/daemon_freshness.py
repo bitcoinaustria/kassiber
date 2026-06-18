@@ -198,6 +198,13 @@ _SYNC_URL_RE = re.compile(
     r"(?:\[[^\]\s]+\][^\s,;)\"'\]]*|[^\s,;)\"'\]]+)"
 )
 _SYNC_URL_TRAILING_PUNCTUATION = ":.!?"
+# Defense in depth: HTTP-client connection-error reprs (urllib3/requests/httpx)
+# render the host schemeless as host='…' / host="…", which the scheme-form
+# pattern above does not catch. The stdlib client kassiber uses today always
+# embeds scheme-form URLs (kassiber/http_client.py), so this is not reachable in
+# practice — but a future client swap, or a schemeless str(exc) routed through
+# the generic freshness catch-all, would otherwise leak the host.
+_SYNC_HOST_KW_RE = re.compile(r"\bhost\s*=\s*['\"]?[^\s,;)'\"]+['\"]?", re.IGNORECASE)
 
 
 def _redact_sync_text_for_ui(value: str) -> str:
@@ -206,7 +213,8 @@ def _redact_sync_text_for_ui(value: str) -> str:
         suffix = url[len(url.rstrip(_SYNC_URL_TRAILING_PUNCTUATION)) :]
         return f"<backend-url>{suffix}"
 
-    return _SYNC_URL_RE.sub(replace, value)
+    scrubbed = _SYNC_URL_RE.sub(replace, value)
+    return _SYNC_HOST_KW_RE.sub("host=<backend-host>", scrubbed)
 
 
 def _sync_error_rows(payload: dict[str, Any] | None) -> list[dict[str, Any]]:

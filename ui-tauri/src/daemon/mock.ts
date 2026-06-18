@@ -1686,12 +1686,28 @@ export const mockDaemon: DaemonTransport = {
       }
       const requested =
         typeof args.gains_algorithm === "string"
-          ? (args.gains_algorithm as ProfileGainsAlgorithm)
-          : profile.gainsAlgorithm;
+          ? args.gains_algorithm.trim()
+          : "";
+      // Mirror the real daemon's validation (daemon.py: "Accounting method is
+      // required."); the method-change dialog always sends a non-empty method.
+      if (!requested) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "Accounting method is required.",
+            retryable: false,
+          },
+        };
+      }
       // Mirror the daemon's per-country enforcement: Austrian books are always
       // coerced to moving-average regardless of the requested method.
-      const nextAlgorithm: ProfileGainsAlgorithm | undefined =
-        profile.taxCountry === "at" ? "MOVING_AVERAGE_AT" : requested;
+      const nextAlgorithm: ProfileGainsAlgorithm =
+        profile.taxCountry === "at"
+          ? "MOVING_AVERAGE_AT"
+          : (requested as ProfileGainsAlgorithm);
       mockProfilesSnapshot = {
         ...mockProfilesSnapshot,
         workspaces: mockProfilesSnapshot.workspaces.map((candidate) => ({
