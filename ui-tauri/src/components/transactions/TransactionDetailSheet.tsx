@@ -48,6 +48,7 @@ import {
   type TransactionEditDraft,
   uniqueTags,
 } from "./model";
+import { TransactionSplitPayoutCard } from "./TransactionSplitPayoutCard";
 
 import {
   DirtyDot,
@@ -650,6 +651,14 @@ export function TransactionDetailSheet({
                     }
                     onPrimaryAction={jumpToManualPrice}
                     onExclude={setExcluded}
+                  />
+                ) : null}
+
+                {quarantineReason === "transfer_fee_implausible" ? (
+                  <TransactionSplitPayoutCard
+                    transactionId={transaction.id}
+                    sourceAsset={transaction.asset ?? "BTC"}
+                    outboundBtc={amountBtc}
                   />
                 ) : null}
 

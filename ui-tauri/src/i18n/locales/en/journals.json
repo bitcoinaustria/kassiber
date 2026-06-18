@@ -152,7 +152,9 @@
       "missingPrice": "Missing fiat price",
       "missingBasis": "Missing cost basis",
       "pairing": "Pairing decision",
-      "reviewRequired": "Review required"
+      "reviewRequired": "Review required",
+      "splitTransfer": "Split transfer / swap review",
+      "coarsePricing": "Coarse pricing — verify"
     },
     "evidence": {
       "price": "Add a fiat price or rates coverage",
@@ -160,13 +162,23 @@
       "basis": "Review acquisition history and cost basis",
       "asset": "Map the source asset before reporting",
       "detail": "Review {{keys}}",
-      "fallback": "Review evidence"
+      "fallback": "Review evidence",
+      "splitTransfer": "Review the self-transfer and residual swap or payout leg",
+      "coarsePricing": "Priced from daily rates — fetch precise prices or confirm"
     },
     "nextAction": {
       "price": "Set price, then process journals",
       "pair": "Review pair, then process journals",
       "basis": "Add missing acquisition context",
-      "fallback": "Resolve the source issue"
+      "fallback": "Resolve the source issue",
+      "splitTransfer": "Review split transfer/swap, then process journals",
+      "coarsePricing": "Fetch precise prices or confirm, then process journals"
+    },
+    "action": {
+      "openTransaction": "Open transaction",
+      "openPricing": "Open pricing",
+      "openPairing": "Open pairing",
+      "openTaxReview": "Open tax review"
     }
   },
   "review": {

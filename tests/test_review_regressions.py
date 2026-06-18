@@ -2836,7 +2836,7 @@ class ReviewRegressionTest(unittest.TestCase):
                 "EUR",
                 "at",
                 365,
-                "FIFO",
+                "moving_average_at",
                 now,
                 2,
                 now,
@@ -8436,6 +8436,13 @@ class ReviewRegressionTest(unittest.TestCase):
     def test_daily_provider_sample_is_review_quarantined(self):
         self._bootstrap_wallet(label="CoarseCache")
         payload, result = self._run_json(
+            "profiles", "set",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--require-coarse-review",
+        )
+        self._assert_ok(payload, result, "profiles.set")
+        payload, result = self._run_json(
             "rates", "set", "BTC-USD", "2024-05-01T00:00:00Z", "60000",
             "--source", "coingecko",
             "--granularity", "daily",
@@ -8490,6 +8497,57 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(detail["pricing_quality"], "coarse_fallback")
         self.assertEqual(detail["pricing_granularity"], "daily")
 
+    def test_daily_provider_sample_accepted_without_coarse_review(self):
+        # Default policy: coarse (daily) pricing is accepted and booked at the
+        # coarse spot price rather than quarantined for manual review.
+        self._bootstrap_wallet(label="CoarseAccept")
+        payload, result = self._run_json(
+            "rates", "set", "BTC-USD", "2024-05-01T00:00:00Z", "60000",
+            "--source", "coingecko",
+            "--granularity", "daily",
+            "--method", "market_chart",
+        )
+        self._assert_ok(payload, result, "rates.set")
+        self._insert_transaction(
+            wallet_label="CoarseAccept",
+            tx_id="coarse-accept-1",
+            occurred_at="2024-05-01T12:00:00Z",
+            amount_msat=1_000_000_000,
+        )
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "journals.process")
+        self.assertEqual(payload["data"]["auto_priced"], 1)
+        self.assertEqual(payload["data"]["entries_created"], 1)
+        self.assertEqual(payload["data"]["quarantined"], 0)
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        tx = conn.execute(
+            "SELECT pricing_quality, fiat_value_exact FROM transactions WHERE external_id = 'coarse-accept-1'"
+        ).fetchone()
+        quarantine_count = conn.execute(
+            """
+            SELECT COUNT(*) AS n FROM journal_quarantines
+            WHERE transaction_id = (SELECT id FROM transactions WHERE external_id = 'coarse-accept-1')
+            """
+        ).fetchone()["n"]
+        from kassiber.core import rates as _rates
+
+        profile_id = conn.execute("SELECT id FROM profiles LIMIT 1").fetchone()["id"]
+        coarse_priced_count = _rates.count_coarse_priced_transactions(conn, profile_id)
+        conn.close()
+        # The coarse price is still recorded (flagged non-blockingly in the UI),
+        # the event is booked, and nothing is quarantined.
+        self.assertEqual(tx["pricing_quality"], "coarse_fallback")
+        self.assertEqual(tx["fiat_value_exact"], "600.00")
+        self.assertEqual(quarantine_count, 0)
+        # The non-blocking "priced from daily rates" notice counts this row.
+        self.assertEqual(coarse_priced_count, 1)
+
     def test_legacy_cache_price_gets_provenance_backfill_before_review(self):
         self._bootstrap_wallet(label="LegacyCache")
         payload, result = self._run_json(
@@ -8518,6 +8576,13 @@ class ReviewRegressionTest(unittest.TestCase):
         conn.commit()
         conn.close()
 
+        payload, result = self._run_json(
+            "profiles", "set",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--require-coarse-review",
+        )
+        self._assert_ok(payload, result, "profiles.set")
         payload, result = self._run_json(
             "journals", "process",
             "--workspace", "Main",
@@ -9371,6 +9436,8 @@ class ReviewRegressionTest(unittest.TestCase):
 
     def test_transfer_pricing_review_targets_used_price_leg(self):
         profile, inputs = self._direct_transfer_engine_inputs()
+        # Coarse pricing only quarantines when the profile opts into review.
+        profile = {**dict(profile), "require_coarse_review": 1}
         out_row = {
             **inputs.rows[1],
             "pricing_source_kind": pricing.SOURCE_MANUAL_RATE_CACHE,

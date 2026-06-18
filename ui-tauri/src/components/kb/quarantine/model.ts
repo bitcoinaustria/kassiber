@@ -33,6 +33,11 @@ export function quarantineItemToRow(
     evidenceHint: evidenceHint(reason, item.detail, t),
     nextAction: nextAction(reason, t),
     metricFilterIds: quarantineReasonFilterIds(reason),
+    transactionAction: {
+      transactionId: item.transaction_id,
+      label: actionLabel(reason, t),
+      tab: actionTab(reason),
+    },
   };
 }
 
@@ -49,7 +54,7 @@ export function quarantineMetrics(
   summary: QuarantineSnapshot["summary"],
   t: TFunction<"journals">,
 ): ReviewMetric[] {
-  const missingPrices = countReasons(summary.by_reason, "price");
+  const missingPrices = countReasons(summary.by_reason, "price", "pricing_review");
   const transferReview = countReasons(summary.by_reason, "transfer", "pair", "swap");
   const basisReview = countReasons(summary.by_reason, "basis", "lot", "insufficient");
   const other = Math.max(
@@ -90,7 +95,9 @@ export function quarantineReasonFilterIds(reason: string) {
   // review category for this filter band.
   const normalized = reason.toLowerCase();
   const filters: string[] = [];
-  if (normalized.includes("price")) filters.push("missing-prices");
+  if (normalized.includes("price") || normalized.includes("pricing_review")) {
+    filters.push("missing-prices");
+  }
   if (
     normalized.includes("transfer") ||
     normalized.includes("pair") ||
@@ -147,6 +154,12 @@ function basisLabel(
   t: TFunction<"journals">,
 ) {
   const normalized = reason.toLowerCase();
+  if (normalized.includes("transfer_fee_implausible")) {
+    return t("quarantine.basis.splitTransfer");
+  }
+  if (normalized.includes("pricing_review")) {
+    return t("quarantine.basis.coarsePricing");
+  }
   if (normalized.includes("price")) return t("quarantine.basis.missingPrice");
   if (normalized.includes("basis") || normalized.includes("lot")) {
     return t("quarantine.basis.missingBasis");
@@ -164,6 +177,12 @@ function evidenceHint(
   t: TFunction<"journals">,
 ) {
   const normalized = reason.toLowerCase();
+  if (normalized.includes("transfer_fee_implausible")) {
+    return t("quarantine.evidence.splitTransfer");
+  }
+  if (normalized.includes("pricing_review")) {
+    return t("quarantine.evidence.coarsePricing");
+  }
   if (normalized.includes("price")) return t("quarantine.evidence.price");
   if (normalized.includes("transfer") || normalized.includes("pair")) {
     return t("quarantine.evidence.pair");
@@ -180,6 +199,12 @@ function evidenceHint(
 
 function nextAction(reason: string, t: TFunction<"journals">) {
   const normalized = reason.toLowerCase();
+  if (normalized.includes("transfer_fee_implausible")) {
+    return t("quarantine.nextAction.splitTransfer");
+  }
+  if (normalized.includes("pricing_review")) {
+    return t("quarantine.nextAction.coarsePricing");
+  }
   if (normalized.includes("price")) return t("quarantine.nextAction.price");
   if (normalized.includes("transfer") || normalized.includes("pair")) {
     return t("quarantine.nextAction.pair");
@@ -188,6 +213,30 @@ function nextAction(reason: string, t: TFunction<"journals">) {
     return t("quarantine.nextAction.basis");
   }
   return t("quarantine.nextAction.fallback");
+}
+
+function actionLabel(reason: string, t: TFunction<"journals">) {
+  const normalized = reason.toLowerCase();
+  if (normalized.includes("transfer_fee_implausible")) {
+    return t("quarantine.action.openTransaction");
+  }
+  if (normalized.includes("pricing_review")) return t("quarantine.action.openPricing");
+  if (normalized.includes("price")) return t("quarantine.action.openPricing");
+  if (normalized.includes("transfer") || normalized.includes("pair")) {
+    return t("quarantine.action.openPairing");
+  }
+  if (normalized.includes("basis") || normalized.includes("lot")) {
+    return t("quarantine.action.openTaxReview");
+  }
+  return t("quarantine.action.openTransaction");
+}
+
+function actionTab(reason: string): NonNullable<ReviewTableRow["transactionAction"]>["tab"] {
+  const normalized = reason.toLowerCase();
+  if (normalized.includes("pricing_review")) return "pricing";
+  if (normalized.includes("price")) return "pricing";
+  if (normalized.includes("basis") || normalized.includes("lot")) return "tax";
+  return "details";
 }
 
 function formatDirection(direction: string, t: TFunction<"journals">) {

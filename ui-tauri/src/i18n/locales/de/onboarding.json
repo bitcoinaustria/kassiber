@@ -60,12 +60,12 @@
       "errorGeneric": "Buch konnte nicht erstellt werden."
     },
     "renameProfile": {
-      "title": "Buchnamen bearbeiten",
-      "description": "Benenne dieses Buch um. Steuereinstellungen, Wallets und Transaktionen bleiben unverändert.",
+      "title": "Buch bearbeiten",
+      "description": "Benenne das Buch um oder ändere seine Buchhaltungsmethode. Eine Methodenänderung verarbeitet die Journale neu, damit die Berichte neu berechnet werden.",
       "nameLabel": "Buchname",
-      "submit": "Namen speichern",
+      "submit": "Speichern",
       "errorEmptyName": "Gib einen Buchnamen ein.",
-      "errorGeneric": "Buch konnte nicht umbenannt werden."
+      "errorGeneric": "Buch konnte nicht gespeichert werden."
     },
     "renameWorkspace": {
       "title": "Bücher-Set-Namen bearbeiten",

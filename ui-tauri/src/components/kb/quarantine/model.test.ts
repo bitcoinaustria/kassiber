@@ -47,6 +47,11 @@ describe("quarantine row model", () => {
       evidenceHint: "Add a fiat price or rates coverage",
       nextAction: "Set price, then process journals",
       metricFilterIds: ["missing-prices"],
+      transactionAction: {
+        transactionId: "transaction-with-a-long-id",
+        label: "Open pricing",
+        tab: "pricing",
+      },
     });
   });
 
@@ -68,6 +73,57 @@ describe("quarantine row model", () => {
     expect(row.owner).toBe("Active book");
     expect(row.amount).toBe("250,000 sats BTC");
     expect(row.metricFilterIds).toEqual(["basis-or-pairs"]);
+    expect(row.transactionAction).toMatchObject({
+      transactionId: "transaction-with-a-long-id",
+      label: "Open tax review",
+      tab: "tax",
+    });
+  });
+
+  it("treats coarse pricing review as a non-blocking pricing task", () => {
+    const row = quarantineItemToRow(
+      {
+        ...baseItem,
+        reason: "pricing_review_required",
+      },
+      "AT profile",
+      t,
+    );
+
+    expect(row).toMatchObject({
+      event: "Pricing Review Required",
+      basis: "Coarse pricing — verify",
+      status: "Needs review",
+      priority: "Medium",
+      evidenceHint: "Priced from daily rates — fetch precise prices or confirm",
+      nextAction: "Fetch precise prices or confirm, then process journals",
+      metricFilterIds: ["missing-prices"],
+      transactionAction: {
+        label: "Open pricing",
+        tab: "pricing",
+      },
+    });
+  });
+
+  it("describes implausible transfer fees as split-transfer review", () => {
+    const row = quarantineItemToRow(
+      {
+        ...baseItem,
+        reason: "transfer_fee_implausible",
+      },
+      "AT profile",
+      t,
+    );
+
+    expect(row).toMatchObject({
+      basis: "Split transfer / swap review",
+      evidenceHint: "Review the self-transfer and residual swap or payout leg",
+      nextAction: "Review split transfer/swap, then process journals",
+      transactionAction: {
+        label: "Open transaction",
+        tab: "details",
+      },
+    });
   });
 });
 
@@ -96,6 +152,27 @@ describe("quarantine metrics", () => {
       ["Other review", 1],
     ]);
   });
+
+  it("folds coarse pricing review into the pricing band", () => {
+    const metrics = quarantineMetrics({
+      workspace: "Personal",
+      profile: "AT profile",
+      count: 6,
+      limit: 100,
+      by_reason: [
+        { reason: "missing_spot_price", count: 2 },
+        { reason: "pricing_review_required", count: 3 },
+        { reason: "insufficient_lots", count: 1 },
+      ],
+    }, t);
+
+    expect(metrics.map((metric) => [metric.label, metric.value])).toEqual([
+      ["Quarantined", 6],
+      ["Missing prices", 5],
+      ["Basis or pairs", 1],
+      ["Other review", 0],
+    ]);
+  });
 });
 
 describe("quarantine reason filters", () => {
@@ -103,6 +180,12 @@ describe("quarantine reason filters", () => {
     expect(quarantineReasonFilterIds("swap_price_basis_review")).toEqual([
       "missing-prices",
       "basis-or-pairs",
+    ]);
+  });
+
+  it("routes coarse pricing review into the pricing band", () => {
+    expect(quarantineReasonFilterIds("pricing_review_required")).toEqual([
+      "missing-prices",
     ]);
   });
 });

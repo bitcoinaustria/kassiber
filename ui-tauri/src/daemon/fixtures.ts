@@ -1483,6 +1483,8 @@ export const fixtures: Record<string, unknown> = {
       market_rate_providers: ["coinbase-exchange", "coingecko", "mempool"],
       active_rate_pair: "BTC-EUR",
       auto_sync_before_report_reads: false,
+      require_coarse_review: false,
+      coarse_priced_count: 3,
       setting_key: "ai.auto_sync_before_report_reads.profile.mock-profile",
     },
   },

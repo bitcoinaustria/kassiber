@@ -53,7 +53,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { gainsAlgorithmsFor } from "@/components/kb/Onboarding/constants";
 import type { ProfilesSnapshot, Profile, Workspace } from "@/mocks/profiles";
+
+const ACCOUNTING_METHOD_LABELS: Record<string, string> = {
+  MOVING_AVERAGE_AT: "Moving average (Austrian)",
+  FIFO: "FIFO (first in, first out)",
+  LIFO: "LIFO (last in, first out)",
+  HIFO: "HIFO (highest in, first out)",
+  LOFO: "LOFO (lowest in, first out)",
+};
+
+const accountingMethodLabel = (method: string): string =>
+  ACCOUNTING_METHOD_LABELS[method.toUpperCase()] ?? method;
 
 export function Books() {
   const { data, isLoading } = useDaemon<ProfilesSnapshot>(
@@ -81,6 +93,9 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
     profile: { id: string; name: string };
     workspace: { id: string };
   }>("ui.profiles.rename");
+  const updateProfile = useDaemonMutation<{ id: string }>(
+    "ui.profiles.update",
+  );
   const createWorkspace = useDaemonMutation<{
     activeProfileId: string;
     activeWorkspaceId: string;
@@ -99,6 +114,7 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
   const [renameTarget, setRenameTarget] =
     useState<PendingProfileRename | null>(null);
   const [renameProfileName, setRenameProfileName] = useState("");
+  const [renameProfileMethod, setRenameProfileMethod] = useState("");
   const [renameWorkspaceTarget, setRenameWorkspaceTarget] =
     useState<Workspace | null>(null);
   const [renameWorkspaceName, setRenameWorkspaceName] = useState("");
@@ -156,6 +172,10 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
   const requestRenameProfile = (workspace: Workspace, profile: Profile) => {
     setRenameProfileError(null);
     setRenameProfileName(profile.name);
+    setRenameProfileMethod(
+      profile.gainsAlgorithm ??
+        gainsAlgorithmsFor(profile.taxCountry ?? "generic")[0],
+    );
     setRenameTarget({ workspace, profile });
   };
 
@@ -222,33 +242,41 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
     );
   };
 
-  const submitRenameProfile = () => {
-    if (!renameTarget || renameProfile.isPending) return;
+  const submitRenameProfile = async () => {
+    if (!renameTarget || renameProfile.isPending || updateProfile.isPending)
+      return;
     const label = renameProfileName.trim();
     if (!label) {
       setRenameProfileError(t("books.renameProfile.errorEmptyName"));
       return;
     }
     setRenameProfileError(null);
-    renameProfile.mutate(
-      {
-        profile_id: renameTarget.profile.id,
-        label,
-      },
-      {
-        onSuccess: () => {
-          setRenameTarget(null);
-          setRenameProfileName("");
-        },
-        onError: (error) => {
-          setRenameProfileError(
-            error instanceof Error
-              ? error.message
-              : t("books.renameProfile.errorGeneric"),
-          );
-        },
-      },
-    );
+    const profileId = renameTarget.profile.id;
+    const nameChanged = label !== renameTarget.profile.name;
+    const methodChanged =
+      renameProfileMethod !== (renameTarget.profile.gainsAlgorithm ?? "");
+    try {
+      // Method first: update_profile enforces the Austrian method + invalidates
+      // journals so reports recompute.
+      if (methodChanged) {
+        await updateProfile.mutateAsync({
+          profile_id: profileId,
+          gains_algorithm: renameProfileMethod,
+        });
+      }
+      if (nameChanged) {
+        await renameProfile.mutateAsync({ profile_id: profileId, label });
+      }
+      setRenameTarget(null);
+      setRenameProfileName("");
+      setRenameProfileMethod("");
+    } catch (error) {
+      setRenameProfileError(
+        error instanceof Error
+          ? error.message
+          : t("books.renameProfile.errorGeneric"),
+      );
+    }
   };
 
   const submitRenameWorkspace = () => {
@@ -414,8 +442,23 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
       />
       <RenameProfileDialog
         errorMessage={renameProfileError}
-        isSubmitting={renameProfile.isPending}
+        isSubmitting={renameProfile.isPending || updateProfile.isPending}
         name={renameProfileName}
+        method={renameProfileMethod}
+        methodOptions={
+          renameTarget
+            ? Array.from(
+                new Set<string>([
+                  ...(renameTarget.profile.gainsAlgorithm
+                    ? [renameTarget.profile.gainsAlgorithm]
+                    : []),
+                  ...gainsAlgorithmsFor(
+                    renameTarget.profile.taxCountry ?? "generic",
+                  ),
+                ]),
+              )
+            : []
+        }
         open={Boolean(renameTarget)}
         profile={renameTarget?.profile ?? null}
         workspace={renameTarget?.workspace ?? null}
@@ -423,11 +466,16 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
           setRenameProfileName(value);
           if (renameProfileError) setRenameProfileError(null);
         }}
+        onMethodChange={(value) => {
+          setRenameProfileMethod(value);
+          if (renameProfileError) setRenameProfileError(null);
+        }}
         onOpenChange={(open) => {
-          if (renameProfile.isPending) return;
+          if (renameProfile.isPending || updateProfile.isPending) return;
           if (!open) {
             setRenameTarget(null);
             setRenameProfileName("");
+            setRenameProfileMethod("");
             setRenameProfileError(null);
           }
         }}
@@ -865,10 +913,13 @@ interface RenameProfileDialogProps {
   errorMessage: string | null;
   isSubmitting: boolean;
   name: string;
+  method: string;
+  methodOptions: string[];
   open: boolean;
   profile: Profile | null;
   workspace: Workspace | null;
   onNameChange: (value: string) => void;
+  onMethodChange: (value: string) => void;
   onOpenChange: (open: boolean) => void;
   onSubmit: () => void;
 }
@@ -877,10 +928,13 @@ function RenameProfileDialog({
   errorMessage,
   isSubmitting,
   name,
+  method,
+  methodOptions,
   open,
   profile,
   workspace,
   onNameChange,
+  onMethodChange,
   onOpenChange,
   onSubmit,
 }: RenameProfileDialogProps) {
@@ -924,6 +978,32 @@ function RenameProfileDialog({
               value={name}
               onChange={(event) => onNameChange(event.currentTarget.value)}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="rename-profile-method">Accounting method</Label>
+            <Select
+              value={method}
+              disabled={isSubmitting || methodOptions.length <= 1}
+              onValueChange={onMethodChange}
+            >
+              <SelectTrigger id="rename-profile-method">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {methodOptions.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {accountingMethodLabel(option)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {profile?.taxCountry === "at" ? (
+              <p className="text-xs text-muted-foreground">
+                Austrian books use the moving-average method (gleitender
+                Durchschnittspreis); other methods aren&apos;t valid for Austria.
+              </p>
+            ) : null}
           </div>
 
           {errorMessage && (

@@ -60,12 +60,12 @@
       "errorGeneric": "Could not create book."
     },
     "renameProfile": {
-      "title": "Edit book name",
-      "description": "Rename this book. Tax settings, wallets, and transactions stay unchanged.",
+      "title": "Edit book",
+      "description": "Rename the book or change its accounting method. Changing the method reprocesses journals so reports recompute.",
       "nameLabel": "Book name",
-      "submit": "Save name",
+      "submit": "Save",
       "errorEmptyName": "Enter a book name.",
-      "errorGeneric": "Could not rename book."
+      "errorGeneric": "Could not save book."
     },
     "renameWorkspace": {
       "title": "Edit book set name",

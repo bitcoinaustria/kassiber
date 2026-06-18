@@ -152,7 +152,9 @@
       "missingPrice": "Fehlender Fiat-Preis",
       "missingBasis": "Fehlende Anschaffungskosten",
       "pairing": "Paarungsentscheidung",
-      "reviewRequired": "Prüfung erforderlich"
+      "reviewRequired": "Prüfung erforderlich",
+      "splitTransfer": "Split-Transfer / Swap-Prüfung",
+      "coarsePricing": "Grobe Bewertung — prüfen"
     },
     "evidence": {
       "price": "Füge einen Fiat-Preis oder Kursabdeckung hinzu",
@@ -160,13 +162,23 @@
       "basis": "Prüfe Anschaffungsverlauf und Anschaffungskosten",
       "asset": "Ordne das Quell-Asset vor der Meldung zu",
       "detail": "{{keys}} prüfen",
-      "fallback": "Nachweise prüfen"
+      "fallback": "Nachweise prüfen",
+      "splitTransfer": "Prüfe die Eigenübertragung und das verbleibende Swap- oder Auszahlungs-Leg",
+      "coarsePricing": "Aus Tageskursen bewertet — präzise Preise holen oder bestätigen"
     },
     "nextAction": {
       "price": "Preis setzen, dann Journale verarbeiten",
       "pair": "Paar prüfen, dann Journale verarbeiten",
       "basis": "Fehlenden Anschaffungskontext ergänzen",
-      "fallback": "Quellproblem beheben"
+      "fallback": "Quellproblem beheben",
+      "splitTransfer": "Split-Transfer/Swap prüfen, dann Journale verarbeiten",
+      "coarsePricing": "Präzise Preise holen oder bestätigen, dann Journale verarbeiten"
+    },
+    "action": {
+      "openTransaction": "Transaktion öffnen",
+      "openPricing": "Bewertung öffnen",
+      "openPairing": "Paarung öffnen",
+      "openTaxReview": "Steuerprüfung öffnen"
     }
   },
   "review": {

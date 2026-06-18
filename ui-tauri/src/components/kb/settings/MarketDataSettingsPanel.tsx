@@ -201,6 +201,14 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
     freshnessSettings?.market_rate_providers?.length
       ? freshnessSettings.market_rate_providers
       : ["coinbase-exchange", "coingecko", "mempool"];
+  const requireCoarseReview = freshnessSettings?.require_coarse_review ?? false;
+  const coarsePricedCount = freshnessSettings?.coarse_priced_count ?? 0;
+  // The coarse-review policy is independent of auto-pricing; gate it only on
+  // load/mutation state and an active profile, not the market-rate toggles.
+  const maintenanceBusy =
+    maintenanceSettingsQuery.isLoading ||
+    configureMaintenance.isPending ||
+    !maintenanceSettings?.profile;
   const marketRateProviderLabelText = marketRateProviderLabel(marketRateProvider);
   const activeRatePair = freshnessSettings?.active_rate_pair ?? "BTC-fiat";
   const rateRebuildProgress = rateRebuildTransactionProgress(rateRebuildResult);
@@ -341,6 +349,30 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       });
     }
   };
+  const setRequireCoarseReview = async (enabled: boolean) => {
+    if (enabled === requireCoarseReview) return;
+    try {
+      await configureMaintenance.mutateAsync({ require_coarse_review: enabled });
+      addNotification({
+        title: enabled
+          ? "Coarse pricing held for review"
+          : "Coarse pricing accepted automatically",
+        body: enabled
+          ? "Transactions priced only from daily rates are quarantined for manual review before reports."
+          : "Transactions priced from daily rates are booked at the daily price and flagged for optional review.",
+        tone: "success",
+      });
+    } catch (error) {
+      addNotification({
+        title: "Could not update coarse pricing policy",
+        body:
+          error instanceof Error
+            ? error.message
+            : "Kassiber could not save the coarse pricing setting.",
+        tone: "error",
+      });
+    }
+  };
   const importedPairs = krakenImportResult?.summary ?? [];
   const importedTotals = krakenImportResult?.totals;
   return (
@@ -348,6 +380,22 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       <p className="max-w-2xl text-sm text-muted-foreground">
         {t("marketData.intro")}
       </p>
+
+      {coarsePricedCount > 0 && !requireCoarseReview ? (
+        <div className="rounded-md border bg-background p-3 text-sm">
+          <p className="font-medium">
+            {coarsePricedCount}{" "}
+            {coarsePricedCount === 1
+              ? "transaction is priced from daily rates"
+              : "transactions are priced from daily rates"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Daily rates are accepted for tax and these rows are report-ready. For
+            finer accuracy in volatile periods, use Rebuild cache below to
+            re-price them from precise event-time rates.
+          </p>
+        </div>
+      ) : null}
 
       <div className="rounded-md border bg-background p-3">
         <div className="mb-3 flex flex-col gap-2 border-b pb-3 sm:flex-row sm:items-center sm:justify-between">
@@ -402,6 +450,28 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
         <p className="mt-2 text-xs text-muted-foreground">
           {t("marketData.autoRefreshFootnote")}
         </p>
+        <div className="mt-3 flex items-start gap-3 border-t pt-3">
+          <Checkbox
+            id="require-coarse-review"
+            checked={requireCoarseReview}
+            disabled={maintenanceBusy}
+            onCheckedChange={(checked) => {
+              void setRequireCoarseReview(checked === true);
+            }}
+          />
+          <Label
+            htmlFor="require-coarse-review"
+            className="grid gap-1 text-sm leading-relaxed"
+          >
+            <span>Hold daily-rate pricing for review</span>
+            <span className="font-normal text-muted-foreground">
+              Off (default): transactions priced only from daily/coarse rates are
+              booked at the daily price and flagged for optional review. On:
+              they are quarantined until you confirm or fetch a precise price —
+              useful for audits.
+            </span>
+          </Label>
+        </div>
       </div>
 
       <div className="space-y-2">

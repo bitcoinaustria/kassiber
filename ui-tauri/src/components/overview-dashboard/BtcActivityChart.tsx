@@ -270,6 +270,15 @@ export const BtcActivityChart = ({
       ),
     [currency, period, snapshot],
   );
+  const handlePeriodChange = React.useCallback((next: TimePeriod) => {
+    // The brush window is a zoom *within* a period's data, keyed by index.
+    // Switching periods swaps the underlying series (and its length), so any
+    // carried-over window would clamp to a partial, stale slice that never
+    // re-expands. Reset to the full range so the new period renders whole.
+    setPeriod(next);
+    setCompactBrushRange(null);
+    setExpandedBrushRange(null);
+  }, []);
   const toggleSeries = React.useCallback((key: TreasuryChartSeriesKey) => {
     setSeriesVisible((current) => ({ ...current, [key]: !current[key] }));
   }, []);
@@ -518,7 +527,7 @@ export const BtcActivityChart = ({
           open={controlsOpen}
           onOpenChange={setControlsOpen}
           period={period}
-          onPeriodChange={setPeriod}
+          onPeriodChange={handlePeriodChange}
           primaryColor={primaryColor}
           legendItems={legendItems}
           seriesVisible={seriesVisible}
@@ -966,7 +975,10 @@ export const BtcActivityChart = ({
                       }}
                     >
                       <Brush
-                        key={`treasury-brush-${expanded ? "expanded" : "compact"}-${brushRevision}`}
+                        // Remount on period change too: Recharts keeps the
+                        // travellers' internal positions, so the visual handles
+                        // would otherwise lag behind the reset window.
+                        key={`treasury-brush-${expanded ? "expanded" : "compact"}-${period}-${brushRevision}`}
                         className="text-muted-foreground"
                         dataKey="date"
                         endIndex={effectiveBrushRange.endIndex}

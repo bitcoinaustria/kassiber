@@ -48,6 +48,17 @@ _DEFAULT_ACCOUNTS = (
 
 def _normalized_profile_algorithm(raw_algorithm, policy):
     normalized = str(raw_algorithm or policy.default_accounting_method).strip().upper()
+    # Austria mandates the moving-average method (gleitender Durchschnittspreis,
+    # §2 KryptowährungsVO): Neuvermögen is taxed on a moving average and
+    # Altvermögen is exempt. FIFO/HIFO/etc. are never valid for a user-facing
+    # Austrian book — RP2 only keeps `fifo` available for engine diagnostics —
+    # so coerce any other method to the Austrian default. This closes the path
+    # where an AT book silently inherited FIFO (e.g. copied from a generic book
+    # on "add book", or kept on a generic→AT country switch) and the engine then
+    # mis-applied it. The single chokepoint covers create, update, the daemon
+    # book-create inherit branch, onboarding, and country switches.
+    if str(policy.tax_country or "").strip().lower() == "at":
+        normalized = str(policy.default_accounting_method).strip().upper()
     allowed = {method.upper() for method in policy.accounting_methods}
     if normalized not in allowed:
         raise AppError(
@@ -212,6 +223,13 @@ def list_profiles(conn, workspace_ref=None):
     ]
 
 
+def _profile_require_coarse_review(profile) -> bool:
+    try:
+        return bool(profile["require_coarse_review"])
+    except (KeyError, IndexError):
+        return False
+
+
 def get_profile_details(conn, workspace_ref=None, profile_ref=None):
     workspace = resolve_workspace(conn, workspace_ref)
     profile = resolve_profile(conn, workspace["id"], profile_ref)
@@ -226,6 +244,7 @@ def get_profile_details(conn, workspace_ref=None, profile_ref=None):
         "tax_country": profile["tax_country"],
         "tax_long_term_days": profile["tax_long_term_days"],
         "gains_algorithm": profile["gains_algorithm"],
+        "require_coarse_review": _profile_require_coarse_review(profile),
         "last_processed_at": profile["last_processed_at"],
         "last_processed_tx_count": profile["last_processed_tx_count"],
         "created_at": profile["created_at"],
@@ -242,6 +261,13 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
     new_country = updates.get("tax_country")
     new_long_term = updates.get("tax_long_term_days")
     new_algo = updates.get("gains_algorithm")
+    new_coarse = updates.get("require_coarse_review")
+
+    try:
+        current_coarse = bool(profile["require_coarse_review"])
+    except (KeyError, IndexError):
+        current_coarse = False
+    merged_coarse = bool(new_coarse) if new_coarse is not None else current_coarse
 
     merged_fiat = new_fiat if new_fiat is not None else profile["fiat_currency"]
     merged_country = new_country if new_country is not None else profile["tax_country"]
@@ -273,18 +299,32 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
         )
     except ValueError as exc:
         raise AppError(str(exc), code="validation") from exc
-    normalized_algo = _normalized_profile_algorithm(merged_algo, policy)
+    # Only (re-)enforce the per-country method when the method or country is
+    # explicitly part of this update. The explicit method-change dialog always
+    # sends gains_algorithm, and a deliberate country switch sends tax_country,
+    # so both legitimate coercion paths still run. An incidental update (label,
+    # fiat, long-term days, coarse-review toggle) must NOT silently re-coerce a
+    # legacy AT-on-FIFO book to moving-average — that is exactly the silent
+    # tax-method mutation the explicit-surface revert (3896bdd3) removed.
+    # Preserve the stored method verbatim until the user converts it via the
+    # dialog.
+    if new_algo is not None or new_country is not None:
+        normalized_algo = _normalized_profile_algorithm(merged_algo, policy)
+    else:
+        normalized_algo = profile["gains_algorithm"]
     policy_changed = (
         policy.fiat_currency != profile["fiat_currency"]
         or policy.tax_country != profile["tax_country"]
         or policy.long_term_days != profile["tax_long_term_days"]
         or normalized_algo != profile["gains_algorithm"]
+        or merged_coarse != current_coarse
     )
 
     conn.execute(
         """
         UPDATE profiles
-        SET label = ?, fiat_currency = ?, tax_country = ?, tax_long_term_days = ?, gains_algorithm = ?
+        SET label = ?, fiat_currency = ?, tax_country = ?, tax_long_term_days = ?,
+            gains_algorithm = ?, require_coarse_review = ?
         WHERE id = ?
         """,
         (
@@ -293,6 +333,7 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
             policy.tax_country,
             policy.long_term_days,
             normalized_algo,
+            1 if merged_coarse else 0,
             profile["id"],
         ),
     )
