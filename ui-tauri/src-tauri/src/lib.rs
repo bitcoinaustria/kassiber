@@ -166,6 +166,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.onboarding.complete",
     "ui.profiles.create",
     "ui.profiles.rename",
+    "ui.profiles.update",
     "ui.profiles.switch",
     "ui.profiles.reset_data",
     "ui.reports.capital_gains",

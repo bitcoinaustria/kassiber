@@ -324,6 +324,7 @@ SUPPORTED_KINDS = (
     "ui.onboarding.complete",
     "ui.profiles.create",
     "ui.profiles.rename",
+    "ui.profiles.update",
     "ui.profiles.switch",
     "ui.rates.summary",
     "ui.rates.coverage",
@@ -4936,6 +4937,50 @@ def _rename_profile_payload(
     }
 
 
+def _update_profile_payload(
+    conn: sqlite3.Connection,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    profile_id = args.get("profile_id")
+    if not isinstance(profile_id, str) or not profile_id.strip():
+        raise AppError(
+            "Book selection is missing.",
+            code="validation",
+            hint="Choose the book to update.",
+            retryable=False,
+        )
+    profile_id = profile_id.strip()
+    gains_algorithm = args.get("gains_algorithm")
+    if not isinstance(gains_algorithm, str) or not gains_algorithm.strip():
+        raise AppError(
+            "Accounting method is required.",
+            code="validation",
+            hint="Choose an accounting method for the book.",
+            retryable=False,
+        )
+    row = conn.execute(
+        "SELECT id, workspace_id FROM profiles WHERE id = ?",
+        (profile_id,),
+    ).fetchone()
+    if row is None:
+        raise AppError(
+            "Book not found.",
+            code="validation",
+            hint="Choose an existing book.",
+            details={"profile_id": profile_id},
+            retryable=False,
+        )
+    # update_profile normalizes/enforces the method (Austrian books are coerced
+    # to moving_average_at) and invalidates journals when it changes, so reports
+    # recompute with the new method.
+    return core_accounts.update_profile(
+        conn,
+        row["workspace_id"],
+        profile_id,
+        {"gains_algorithm": gains_algorithm.strip()},
+    )
+
+
 def _profile_defaults_for_workspace(
     conn: sqlite3.Connection,
     workspace_id: str,
@@ -8445,6 +8490,21 @@ def handle_request(
                 build_envelope(
                     "ui.profiles.rename",
                     _rename_profile_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.profiles.update":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.profiles.update",
+                    _update_profile_payload(
                         ctx.conn,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),

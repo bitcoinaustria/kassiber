@@ -1351,47 +1351,6 @@ def ensure_schema_compat(conn):
     _ensure_direct_swap_payout_schema(conn)
     _ensure_commercial_reconciliation_schema(conn)
     _ensure_freshness_schema(conn)
-    _correct_austrian_accounting_methods(conn)
-
-
-def _correct_austrian_accounting_methods(conn):
-    """Heal Austrian books stuck on a non-moving-average method.
-
-    Austria mandates the moving-average method (gleitender Durchschnittspreis,
-    §2 KryptowährungsVO): Neuvermögen is taxed on a moving average and
-    Altvermögen is exempt. FIFO/HIFO/etc. are never a legitimate user choice for
-    an Austrian book, but one could be silently inherited (book copy on "add
-    book", or a generic→AT country switch on older builds). Coerce any such book
-    to moving_average_at on open and invalidate its journals so reports recompute
-    with the correct method. Idempotent — once corrected the WHERE matches
-    nothing. The profile layer (`_normalized_profile_algorithm`) enforces this on
-    every create/update; this backfill heals books that predate the enforcement.
-    """
-    # SELECT-guard before any write (matches the other backfills): on a fresh
-    # `init` DB there are no profiles, and issuing DML there would try to start a
-    # transaction inside init's open one ("cannot start a transaction within a
-    # transaction"). Reads never begin a transaction, so this stays safe.
-    needs_fix = conn.execute(
-        """
-        SELECT 1 FROM profiles
-        WHERE lower(tax_country) = 'at'
-          AND upper(gains_algorithm) != 'MOVING_AVERAGE_AT'
-        LIMIT 1
-        """
-    ).fetchone()
-    if not needs_fix:
-        return
-    conn.execute(
-        """
-        UPDATE profiles
-        SET gains_algorithm = 'MOVING_AVERAGE_AT',
-            last_processed_at = NULL,
-            last_processed_tx_count = 0,
-            journal_input_version = journal_input_version + 1
-        WHERE lower(tax_country) = 'at'
-          AND upper(gains_algorithm) != 'MOVING_AVERAGE_AT'
-        """
-    )
 
 
 def _ensure_ai_provider_secret_refs_schema(conn):
