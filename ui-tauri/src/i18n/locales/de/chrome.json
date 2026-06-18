@@ -99,7 +99,7 @@
       "placeholder": "Problem, Account, Quelle suchen…"
     },
     "reconcile": {
-      "label": "Abgleich durchsuchen",
+      "label": "Adress-Abgleich durchsuchen",
       "placeholder": "Adressen oder Transaktions-IDs einfügen…"
     },
     "swaps": {

@@ -107,7 +107,7 @@
   "steps": {
     "essentials": "Deine Books",
     "sync": "Sync",
-    "ai": "KI",
+    "ai": "AI",
     "security": "Sicherheit",
     "review": "Prüfen"
   },
@@ -222,21 +222,21 @@
       "description": "Bereite einen OpenAI-kompatiblen Endpunkt oder die Claude/Codex CLI vor. Prompts und Buchhaltungskontext können dieses Gerät verlassen."
     },
     "disabled": {
-      "title": "KI vorerst deaktivieren",
-      "description": "Blende den Assistenten und den schwebenden Chat aus. Du kannst KI später in den Einstellungen wieder aktivieren."
+      "title": "AI vorerst deaktivieren",
+      "description": "Blende den Assistenten und den schwebenden Chat aus. Du kannst AI später in den Einstellungen wieder aktivieren."
     },
     "providerPrivacy": "Provider-Privatsphäre",
     "providerPrivacyDescription": "TEE bedeutet, dass der Provider einen Trusted-Execution-Pfad behauptet; Kassiber behandelt ihn dennoch als off-device.",
     "providerName": "Providername",
     "providerNamePlaceholderLocal": "ollama",
     "providerNamePlaceholderRemote": "openai oder maple",
-    "providerNameDescription": "Eine kurze Bezeichnung, die in den KI-Provider-Einstellungen angezeigt wird.",
+    "providerNameDescription": "Eine kurze Bezeichnung, die in den AI-Provider-Einstellungen angezeigt wird.",
     "baseUrl": "Basis-URL",
     "baseUrlPlaceholderRemote": "https://…/v1 oder claude-cli://default",
     "baseUrlDescription": "Verwende einen OpenAI-kompatiblen /v1-Endpunkt oder einen unterstützten CLI-Locator.",
     "remoteAck": "Mir ist klar, dass Prompts dieses Gerät verlassen können.",
     "remoteAckDescription": "Buchhaltungskontext, Labels, Notizen, Backend-Hostnamen und Berichtsdetails können sensibel sein.",
-    "disabledNote": "Dies blendet den Assistenten-Bildschirm und den schwebenden Chat nach dem Onboarding aus. Du kannst KI-Funktionen später in den Einstellungen aktivieren."
+    "disabledNote": "Dies blendet den Assistenten-Bildschirm und den schwebenden Chat nach dem Onboarding aus. Du kannst AI-Funktionen später in den Einstellungen aktivieren."
   },
   "explainer": {
     "whyThisMatters": "Warum das wichtig ist",
@@ -271,7 +271,7 @@
       },
       "disabled": {
         "title": "Deaktiviert",
-        "body": "Blendet den Assistenten und den schwebenden Chat aus. Du kannst KI später in den Einstellungen wieder aktivieren."
+        "body": "Blendet den Assistenten und den schwebenden Chat aus. Du kannst AI später in den Einstellungen wieder aktivieren."
       },
       "footer": "Während des Setups werden keine API-Keys oder Geheimnisse erfasst. Buchhaltungskontext — Labels, Notizen, Hostnamen, Berichtsdetails — kann sensibel sein; behalte das bei Remote-Providern im Hinterkopf."
     }
@@ -326,7 +326,7 @@
     "title": "Sync-Verbindungen wählen"
   },
   "aiStep": {
-    "title": "KI-Unterstützung wählen"
+    "title": "AI-Unterstützung wählen"
   },
   "review": {
     "title": "Setup prüfen",
@@ -339,7 +339,7 @@
       "books": "Books",
       "tax": "Steuer",
       "sync": "Sync",
-      "ai": "KI",
+      "ai": "AI",
       "storage": "Speicherung",
       "secrets": "Geheimnisse"
     },

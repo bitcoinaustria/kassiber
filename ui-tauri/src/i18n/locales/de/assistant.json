@@ -240,7 +240,7 @@
     "savedChats": "Gespeicherte Chats",
     "loading": "Wird geladen…",
     "empty": "Noch keine gespeicherten Chats.",
-    "disabled": "Der Chat-Verlauf ist für dieses Profil deaktiviert - siehe Einstellungen, KI-Assistent.",
+    "disabled": "Der Chat-Verlauf ist für dieses Profil deaktiviert - siehe Einstellungen, AI-Assistent.",
     "current": "(aktuell)",
     "messageCount_one": "{{count}} Nachricht",
     "messageCount_other": "{{count}} Nachrichten",
@@ -252,8 +252,8 @@
     "noProviderConfigured": "Kein Provider konfiguriert",
     "selectAModel": "Ein Modell wählen",
     "models": "Modelle",
-    "noProviders": "Keine KI-Provider konfiguriert",
+    "noProviders": "Keine AI-Provider konfiguriert",
     "noModels": "Keine Modelle gefunden",
-    "refreshModels": "Alle KI-Modelle aktualisieren"
+    "refreshModels": "Alle AI-Modelle aktualisieren"
   }
 }

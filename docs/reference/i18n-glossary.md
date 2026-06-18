@@ -60,10 +60,17 @@ confirmation→Bestätigung.
 ### Generic-tech terms — also KEEP ENGLISH
 Beyond Bitcoin jargon, these space-common tech terms stay English (owner
 decision), used consistently:
+- **AI** — keep the English abbreviation, **not** „KI": `AI-Provider`,
+  `AI-Funktionen`, `AI-Assistent`, `AI-Modelle`, standalone `AI`. (The feature
+  noun „Assistent" stays German.)
 - **Provider** — `der Provider` (AI / market-rate provider). Use everywhere
-  (`KI-Provider`, „Provider wählen", `Provider-Marktpreis`); **not** „Anbieter".
+  (`AI-Provider`, „Provider wählen", `Provider-Marktpreis`); **not** „Anbieter".
   Compound data-field labels (`Provider-Order-id`, `Provider-Payment-id`…) keep
   Provider too. `Drittanbieter` (= third-party) is a different word — leave it.
+- **Reconcile screen** — the German nav label must say *what* it reconciles, so
+  it is **„Adress-Abgleich"** (not a bare „Abgleich"): the side-nav label alone
+  should tell the user the screen matches addresses/txids to their wallets.
+  (Contextual „Abgleichlücken" elsewhere is fine.)
 - **Sync** — `der Sync` (noun/label/button), progress „Sync läuft…", status
   „Synced" / „Nicht synced", inline adjective „gesyncte …"; compounds
   `Sync-Backend`, `Lightning-Node-Sync`. **not** „Synchronisieren/-ung". The

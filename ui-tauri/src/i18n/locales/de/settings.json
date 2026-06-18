@@ -75,7 +75,7 @@
         "description": "App-Sperre, biometrisches Entsperren und das Datenbank-Passwort."
       },
       "ai": {
-        "label": "KI-Provider",
+        "label": "AI-Provider",
         "description": "Lokale und entfernte Assistent-Endpunkte und ihr Datenverhalten."
       },
       "storage": {
@@ -359,7 +359,7 @@
     "assistantDescription": "Prompt-Inhalte — die Buchdaten enthalten können — verlassen das Gerät nur, wenn du einen entfernten oder CLI-Provider aktivierst.",
     "assistantEnabled": "Aktiviert. Lokale Provider halten Prompts auf diesem Gerät; entfernte und CLI-Provider können Prompt-Inhalte sehen.",
     "assistantDisabled": "Deaktiviert. Provider-Einstellungen bleiben gespeichert, ohne Prompts zu senden.",
-    "reviewAi": "KI-Provider prüfen"
+    "reviewAi": "AI-Provider prüfen"
   },
   "data": {
     "importHeading": "Daten importieren",
@@ -383,20 +383,20 @@
     "deleteBooksButton": "Bücher löschen"
   },
   "ai": {
-    "featuresLabel": "KI-Funktionen",
+    "featuresLabel": "AI-Funktionen",
     "featuresDescription": "Zeige den Assistent-Bildschirm und den schwebenden Chat. Wenn du dies ausschaltest, bleiben die Provider-Einstellungen gespeichert.",
-    "featuresAria": "KI-Funktionen aktivieren",
+    "featuresAria": "AI-Funktionen aktivieren",
     "providerConfigHeading": "Providerkonfiguration",
     "providerConfigDescription": "Konfiguriere OpenAI-kompatible Endpunkte oder Claude-/Codex-CLI-Adapter für den integrierten Assistenten. Lokales Ollama läuft ohne Schlüssel; entfernte und CLI-Provider können Prompt-Inhalte sehen.",
     "addProvider": "Provider hinzufügen",
     "loadingProviders": "Provider werden geladen…",
-    "loadError": "KI-Provider konnten nicht geladen werden.",
+    "loadError": "AI-Provider konnten nicht geladen werden.",
     "noProviders": "Noch keine Provider konfiguriert.",
     "loadingModels": "Wird geladen…",
     "default": "Standard",
     "editProvider": "{{name}} bearbeiten",
     "deleteProvider": "{{name}} löschen",
-    "deleteConfirm": "KI-Provider '{{name}}' löschen? Kann nicht rückgängig gemacht werden.",
+    "deleteConfirm": "AI-Provider '{{name}}' löschen? Kann nicht rückgängig gemacht werden.",
     "defaultModel": "Standardmodell",
     "auth": "Authentifizierung",
     "authBearer": "Bearer-Schlüssel",
@@ -445,8 +445,8 @@
       "remote": "Cloud-, LAN- oder Hersteller-CLI-Provider. Prompts können das Gerät verlassen.",
       "tee": "Der Provider beansprucht einen Trusted-Execution-/Attestierungs-Pfad (z. B. Maple AI). Kassiber behandelt ihn dennoch als gerätefern."
     },
-    "editTitle": "KI-Provider bearbeiten",
-    "addTitle": "KI-Provider hinzufügen",
+    "editTitle": "AI-Provider bearbeiten",
+    "addTitle": "AI-Provider hinzufügen",
     "dialogDescription": "Verwende einen OpenAI-kompatiblen Endpunkt oder route über Claude-/Codex-CLI. CLI-Provider können dennoch Prompts an ihren konfigurierten Modelldienst senden.",
     "presetLabel": "Vorlage",
     "presetNoteLocal": "Lokaler Ollama-Endpunkt.",
