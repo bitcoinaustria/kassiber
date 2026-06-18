@@ -2836,7 +2836,7 @@ class ReviewRegressionTest(unittest.TestCase):
                 "EUR",
                 "at",
                 365,
-                "FIFO",
+                "moving_average_at",
                 now,
                 2,
                 now,

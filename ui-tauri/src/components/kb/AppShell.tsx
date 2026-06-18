@@ -440,6 +440,18 @@ function exhaustiveSearchAction(actionId: never): never {
 
 function notificationRouteFor(title: string): AppRoutePath | undefined {
   const normalized = title.toLowerCase();
+  // Failures / "needs attention" go to Logs, which now captures freshness job
+  // errors (freshness._mark_error logs to the RAM ring). Checked FIRST so a
+  // title like "Book refresh needs attention" isn't captured by the generic
+  // "book"/"sync" keywords below and sent to an unrelated (empty) screen.
+  if (
+    normalized.includes("needs attention") ||
+    normalized.includes("failed") ||
+    normalized.includes("error") ||
+    normalized.includes("daemon")
+  ) {
+    return "/logs";
+  }
   if (normalized.includes("journal")) return "/journals";
   if (normalized.includes("quarantine")) return "/quarantine";
   if (normalized.includes("sync") || normalized.includes("wallet")) {
@@ -448,20 +460,10 @@ function notificationRouteFor(title: string): AppRoutePath | undefined {
   if (normalized.includes("report") || normalized.includes("export")) {
     return "/reports";
   }
-  if (
-    normalized.includes("book") ||
-    normalized.includes("books")
-  ) {
+  if (normalized.includes("book") || normalized.includes("books")) {
     return "/books";
   }
   if (normalized.includes("transaction")) return "/transactions";
-  if (
-    normalized.includes("error") ||
-    normalized.includes("failed") ||
-    normalized.includes("daemon")
-  ) {
-    return "/logs";
-  }
   return undefined;
 }
 
@@ -575,18 +577,33 @@ export function AppShell() {
     Boolean(activeMaintenanceProgress?.active);
   const firstSyncEligible =
     bookRefreshActive && bookKey !== null && !firstSyncDone[bookKey];
-  const [firstSyncCardDismissed, setFirstSyncCardDismissed] =
-    React.useState(false);
+  // Dismissed state lives in the store (keyed by book) so the book-refresh
+  // notification in the header can re-open the card via reopenFirstSyncCard.
+  const firstSyncCardDismissedMap = useUiStore((s) => s.firstSyncCardDismissed);
+  const dismissFirstSyncCardStore = useUiStore((s) => s.dismissFirstSyncCard);
+  const reopenFirstSyncCardStore = useUiStore((s) => s.reopenFirstSyncCard);
+  const firstSyncCardDismissed =
+    bookKey !== null && Boolean(firstSyncCardDismissedMap[bookKey]);
   React.useEffect(() => {
-    // Reset the per-run "continue in background" choice between syncs so the
-    // card returns the next time a brand-new book runs its first sync.
-    if (!firstSyncEligible) setFirstSyncCardDismissed(false);
-  }, [firstSyncEligible]);
+    // Once a book is no longer mid-first-sync, drop any "continue in
+    // background" choice so its next first-sync run starts expanded again.
+    if (
+      !firstSyncEligible &&
+      bookKey !== null &&
+      firstSyncCardDismissedMap[bookKey]
+    ) {
+      reopenFirstSyncCardStore(bookKey);
+    }
+  }, [
+    firstSyncEligible,
+    bookKey,
+    firstSyncCardDismissedMap,
+    reopenFirstSyncCardStore,
+  ]);
   const isFirstSync = firstSyncEligible && !firstSyncCardDismissed;
-  const dismissFirstSyncCard = React.useCallback(
-    () => setFirstSyncCardDismissed(true),
-    [],
-  );
+  const dismissFirstSyncCard = React.useCallback(() => {
+    if (bookKey !== null) dismissFirstSyncCardStore(bookKey);
+  }, [bookKey, dismissFirstSyncCardStore]);
   // The card already shows the title in its header, so feed it the raw phase
   // label rather than the route-composed "Title: detail" string. Gated on
   // `active` to match `shellProgress`, so a stale maintenance record can't leak
@@ -1384,7 +1401,11 @@ export function AppShell() {
                 {!locked && !importRootBlocked ? (
                   <>
                     <RouteTopProgressLine
-                      active={shellBusy}
+                      // While the full-screen first-sync card is up it already
+                      // shows this progress (plus the blur scrim), so suppress
+                      // the hairline here — it returns once "Continue in
+                      // background" demotes the card.
+                      active={shellBusy && !isFirstSync}
                       progress={shellProgress}
                       announce={!isFirstSync}
                     />
@@ -1870,6 +1891,10 @@ function AppDashboardHeader({
   const clearNotifications = useUiStore((s) => s.clearNotifications);
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
+  const identity = useUiStore((s) => s.identity);
+  const firstSyncDone = useUiStore((s) => s.firstSyncDone);
+  const reopenFirstSyncCard = useUiStore((s) => s.reopenFirstSyncCard);
+  const headerBookKey = bookIdentityKey(identity);
   const setDeferredConnectionSetup = useUiStore(
     (s) => s.setDeferredConnectionSetup,
   );
@@ -2330,6 +2355,18 @@ function AppDashboardHeader({
                 <DropdownMenuItem
                   className="flex cursor-pointer items-start justify-between gap-3 whitespace-normal rounded-md"
                   onSelect={(event) => {
+                    // An in-progress book refresh collapsed via "Continue in
+                    // background" re-opens the first-sync card (rather than
+                    // navigating); letting the menu close on select reveals it.
+                    if (
+                      item.dedupeKey === "book-refresh" &&
+                      item.progress &&
+                      headerBookKey !== null &&
+                      !firstSyncDone[headerBookKey]
+                    ) {
+                      reopenFirstSyncCard(headerBookKey);
+                      return;
+                    }
                     if (!item.to) return;
                     event.preventDefault();
                     void navigate({ to: item.to });

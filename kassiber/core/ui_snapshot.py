@@ -11,7 +11,6 @@ from typing import Any
 from ..backends import backend_value, redact_backend_for_output
 from ..errors import AppError
 from ..msat import msat_to_btc
-from ..tax_policy import build_tax_policy
 from ..time_utils import _iso_z, _parse_iso_datetime
 from ..wallet_descriptors import (
     BITCOIN_NETWORK_ALIASES,
@@ -645,11 +644,14 @@ def _workspace_jurisdiction(tax_countries: list[str]) -> str:
 def _tax_policy_label(profile: sqlite3.Row) -> str:
     country = str(profile["tax_country"] or "generic").strip().upper()
     if country == "AT":
-        try:
-            algorithm = str(build_tax_policy(profile).default_accounting_method or "")
-        except (AppError, ValueError, ImportError):
-            algorithm = "moving_average_at"
-        return f"Austria - {_human_tax_method(algorithm)} - {profile['fiat_currency']}"
+        # Show the profile's ACTUAL stored method, never the AT policy default.
+        # An Austrian book left on FIFO must read as "Austria - FIFO", not be
+        # mislabeled "ATM" — that divergence hid a tax-affecting misconfiguration
+        # (the engine computes with the stored method, not the AT default).
+        return (
+            f"Austria - {_human_tax_method(profile['gains_algorithm'])} - "
+            f"{profile['fiat_currency']}"
+        )
     elif country == "GENERIC":
         country_label = "Generic"
     else:
@@ -670,11 +672,8 @@ def _human_tax_method(value: str) -> str:
 
 
 def _profile_policy_method(profile: sqlite3.Row) -> str:
-    if str(profile["tax_country"] or "").strip().lower() == "at":
-        try:
-            return str(build_tax_policy(profile).default_accounting_method or "").lower()
-        except (AppError, ValueError, ImportError):
-            return "moving_average_at"
+    # Always reflect the stored gains_algorithm the engine actually uses, for
+    # every country — no AT default-substitution that could mask the real method.
     return str(profile["gains_algorithm"] or "fifo").lower()
 
 

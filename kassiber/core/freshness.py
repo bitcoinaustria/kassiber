@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import sqlite3
 import uuid
 from dataclasses import dataclass
@@ -13,6 +14,11 @@ from typing import Any, Callable, Mapping
 from ..envelope import json_ready
 from ..errors import AppError
 from ..time_utils import now_iso, parse_iso_datetime_or_none
+
+# Job failures recorded here also flow to the RAM-only log ring via the stdlib
+# logging bridge (RingHandler), so they surface on the Logs screen rather than
+# living only in structured job state.
+_LOGGER = logging.getLogger(__name__)
 
 JOB_ONCHAIN_WALLET = "onchain_wallet_history"
 JOB_BTCPAY_WALLET = "btcpay_wallet_source"
@@ -833,6 +839,11 @@ def _mark_error(
     cooldown_until, cooldown_reason = _retry_after_from_error(exc, job)
     status = JOB_RATE_LIMITED if cooldown_until else JOB_ERROR
     source_status = STATUS_RATE_LIMITED if cooldown_until else STATUS_FAILED
+    source_name = job.get("source_label") or job.get("source_key") or "source"
+    if cooldown_until:
+        _LOGGER.warning("Freshness %s rate-limited: %s", source_name, str(exc))
+    else:
+        _LOGGER.error("Freshness %s failed: %s", source_name, str(exc))
     now = now_iso()
     error_payload = redact_freshness_payload(
         {

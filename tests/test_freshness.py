@@ -151,6 +151,50 @@ class FreshnessTest(unittest.TestCase):
         self.assertTrue(cold["blocking_reports"])
         self.assertEqual(snapshot["summary"]["rate_limited"], 1)
 
+    def test_failed_job_is_logged_for_the_logs_screen(self):
+        # A hard job failure (e.g. the RP2 tax-calc guard) must reach the RAM
+        # log ring via the stdlib logging bridge, so it shows on the Logs
+        # screen — not only in structured job state. We assert the ERROR log
+        # carries the message + source label; RingHandler delivers it to /logs.
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            job_type=freshness.JOB_ONCHAIN_WALLET,
+            source_key="onchain_wallet:cold",
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Journal refresh",
+            priority=10,
+        )
+        conn.commit()
+
+        def boom(conn, job, progress, check_cancelled):
+            raise AppError(
+                "RP2 multi-asset tax calculation failed", code="tax_failed"
+            )
+
+        with self.assertLogs("kassiber.core.freshness", level="ERROR") as captured:
+            results = freshness.run_due_jobs(
+                conn,
+                {freshness.JOB_ONCHAIN_WALLET: boom},
+                profile_id=profile_id,
+                limit=1,
+            )
+
+        self.assertEqual(results[0]["status"], freshness.JOB_ERROR)
+        self.assertTrue(
+            any(
+                "RP2 multi-asset tax calculation failed" in line
+                for line in captured.output
+            ),
+            captured.output,
+        )
+        self.assertTrue(
+            any("Journal refresh" in line for line in captured.output),
+            captured.output,
+        )
+
     def test_cancelled_job_leaves_blocking_partial_state(self):
         conn = self._db()
         profile_id = _seed_profile(conn)

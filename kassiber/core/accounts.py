@@ -48,6 +48,17 @@ _DEFAULT_ACCOUNTS = (
 
 def _normalized_profile_algorithm(raw_algorithm, policy):
     normalized = str(raw_algorithm or policy.default_accounting_method).strip().upper()
+    # Austria mandates the moving-average method (gleitender Durchschnittspreis,
+    # §2 KryptowährungsVO): Neuvermögen is taxed on a moving average and
+    # Altvermögen is exempt. FIFO/HIFO/etc. are never valid for a user-facing
+    # Austrian book — RP2 only keeps `fifo` available for engine diagnostics —
+    # so coerce any other method to the Austrian default. This closes the path
+    # where an AT book silently inherited FIFO (e.g. copied from a generic book
+    # on "add book", or kept on a generic→AT country switch) and the engine then
+    # mis-applied it. The single chokepoint covers create, update, the daemon
+    # book-create inherit branch, onboarding, and country switches.
+    if str(policy.tax_country or "").strip().lower() == "at":
+        normalized = str(policy.default_accounting_method).strip().upper()
     allowed = {method.upper() for method in policy.accounting_methods}
     if normalized not in allowed:
         raise AppError(
