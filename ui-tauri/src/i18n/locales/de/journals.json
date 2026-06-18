@@ -100,8 +100,8 @@
       "manual": "Manueller Preis",
       "source": "Quellenpreis",
       "cached": "Zwischengespeicherter Marktkurs",
-      "providerSample": "Anbieter-Marktstichprobe",
-      "providerPrice": "Anbieter-Marktpreis",
+      "providerSample": "Provider-Marktstichprobe",
+      "providerPrice": "Provider-Marktpreis",
       "qualified": "{{source}} ({{quality}})"
     },
     "nextAction": {

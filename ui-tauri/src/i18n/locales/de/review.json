@@ -192,7 +192,7 @@
     "title": "Adressen & Transaktionen abgleichen",
     "description": "Füge Adressen oder Transaktions-IDs ein, um herauszufinden, welche zu einer Wallet in diesem Buch gehören — Empfang oder Wechsel — und welche extern sind. Nützlich, um historische Zahlungen von Übertragungen zwischen deinen eigenen Wallets zu unterscheiden.",
     "removeCsvAria": "Importierte CSV entfernen",
-    "onDeviceNote": "Lokal auf dem Gerät gegen deine Wallets geprüft — nichts verlässt diese Maschine. Transaktionen, die nicht in deiner synchronisierten Historie sind, kannst du unten on-chain verifizieren (dieser eine Schritt kontaktiert dein Backend).",
+    "onDeviceNote": "Lokal auf dem Gerät gegen deine Wallets geprüft — nichts verlässt diese Maschine. Transaktionen, die nicht in deiner Sync-Historie sind, kannst du unten on-chain verifizieren (dieser eine Schritt kontaktiert dein Backend).",
     "importCsv": "CSV importieren",
     "checking": "Wird geprüft…",
     "checkOwnership": "Eigentümerschaft prüfen",

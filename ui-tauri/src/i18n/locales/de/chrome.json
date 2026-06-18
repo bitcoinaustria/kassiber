@@ -195,14 +195,14 @@
     "unlocking": "Wird entsperrt…",
     "unlock": "Entsperren",
     "openBooks": "Bücher öffnen",
-    "backToSetup": "Zurück zur Einrichtung",
+    "backToSetup": "Zurück zum Setup",
     "passphraseFailed": "Die Passphrase hat diese Sitzung nicht entsperrt.",
     "touchIdFailed": "Touch ID hat diese Sitzung nicht entsperrt."
   },
   "importRoot": {
     "title": "Lokale Bücher werden geöffnet",
     "body": "Das ausgewählte Kassiber-Datenverzeichnis wird wiederhergestellt.",
-    "backToSetup": "Zurück zur Einrichtung",
+    "backToSetup": "Zurück zum Setup",
     "couldNotOpen": "Der ausgewählte Ordner mit lokalen Büchern konnte nicht geöffnet werden."
   },
   "preAlpha": {
@@ -290,7 +290,7 @@
   },
   "firstSync": {
     "defaultTitle": "Dein Buch wird eingerichtet",
-    "body": "Erste Synchronisierung — deine Historie wird aus den konfigurierten Quellen aufgebaut. Das läuft einmalig und kann ein paar Minuten dauern.",
+    "body": "Erster Sync — deine Historie wird aus den konfigurierten Quellen aufgebaut. Das läuft einmalig und kann ein paar Minuten dauern.",
     "preparing": "Quellenaktualisierung wird vorbereitet",
     "working": "Wird bearbeitet…",
     "keepUsing": "Du kannst Kassiber weiter nutzen, während das fertig wird.",
@@ -303,8 +303,8 @@
     "error": "Benötigt Aufmerksamkeit"
   },
   "connectionStatus": {
-    "synced": "Synchronisiert",
-    "syncing": "Wird synchronisiert",
+    "synced": "Synced",
+    "syncing": "Sync läuft",
     "idle": "Inaktiv",
     "error": "Fehler"
   },

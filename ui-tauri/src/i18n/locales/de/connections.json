@@ -41,7 +41,7 @@
       "balance": "Guthaben",
       "transactions": "Transaktionen",
       "transactionsDetail": "In diese Wallet importiert",
-      "lastSync": "Letzte Synchronisierung",
+      "lastSync": "Letzter Sync",
       "gapLimit": "Gap Limit",
       "gapLimitDetail": "Fenster ungenutzter Adressen",
       "source": "Quelle"
@@ -58,8 +58,8 @@
       "feedsTaxReports": "Speist Steuer & Berichte",
       "onChainNotInBooks": "{{amount}} on-chain, nicht im Buch",
       "inBooksNotOnChain": "{{amount}} im Buch, nicht on-chain",
-      "inboundExcluded": "Ein Eingang ist ausgeschlossen oder die Synchronisierung ist veraltet — aktualisiere oder blende ausgeschlossene Transaktionen wieder ein.",
-      "manualOrDuplicate": "Wahrscheinlich ein manueller oder doppelter Eintrag oder eine Ausgabe, die nicht synchronisiert wurde — aktualisiere oder prüfe diese Zeilen."
+      "inboundExcluded": "Ein Eingang ist ausgeschlossen oder der Sync ist veraltet — aktualisiere oder blende ausgeschlossene Transaktionen wieder ein.",
+      "manualOrDuplicate": "Wahrscheinlich ein manueller oder doppelter Eintrag oder eine Ausgabe, die nicht per Sync erfasst wurde — aktualisiere oder prüfe diese Zeilen."
     },
     "samourai": {
       "title": "Samourai Wallet",
@@ -101,7 +101,7 @@
     },
     "btcpayProvenance": {
       "title": "BTCPay-Herkunft",
-      "description": "BTCPay-Kommentare und -Labels reichern passende Transaktionen während der Synchronisierung an. Descriptor- oder Datei-Sync bleibt die Guthaben-Quelle.",
+      "description": "BTCPay-Kommentare und -Labels reichern passende Transaktionen während des Sync an. Descriptor- oder Datei-Sync bleibt die Guthaben-Quelle.",
       "instance": "Instanz",
       "store": "Store",
       "paymentMethod": "Zahlungsmethode",
@@ -243,7 +243,7 @@
     },
     "noSnapshot": {
       "title": "Noch kein Node-Snapshot",
-      "description": "Die Lightning-Node-Synchronisierung hat für diese Verbindung noch keinen Snapshot erzeugt. Führe eine Aktualisierung aus, um Channels, Guthaben und die Routing-Zusammenfassung abzurufen."
+      "description": "Der Lightning-Node-Sync hat für diese Verbindung noch keinen Snapshot erzeugt. Führe eine Aktualisierung aus, um Channels, Guthaben und die Routing-Zusammenfassung abzurufen."
     },
     "metrics": {
       "localBalance": "Lokales Guthaben",
@@ -342,7 +342,7 @@
       "description": "Read-only-Sync-Zustand für diese Lightning-Verbindung.",
       "status": "Status",
       "lastRefresh": "Letzte Aktualisierung",
-      "lastSyncAt": "Letzte Synchronisierung am",
+      "lastSyncAt": "Letzter Sync am",
       "lastTransaction": "Letzte Transaktion",
       "importedTransactions": "Importierte Transaktionen"
     },
@@ -548,7 +548,7 @@
       "postmixHelper": "Füge den Descriptor des Postmix-Kontos oder den Konto-xpub ein; Postmix-Scans brauchen eventuell ein höheres Gap Limit.",
       "gapLimit": "Gap Limit",
       "gapLimitHelper": "Postmix hält mindestens 40 ungenutzte Adressen pro Branch. Erhöhe das für alte Wallets mit langen Folgen ungenutzter Adressen, bis 5.000.",
-      "scanAfter": "Importierte Quellen nach der Einrichtung scannen",
+      "scanAfter": "Importierte Quellen nach dem Setup scannen",
       "errorNeedMaterial": "Füge mindestens einen Samourai-Descriptor oder xpub ein.",
       "importedTitle": "Samourai-Import hinzugefügt",
       "importedBody": "{{label}} hat {{value}} Watch-only-Quellen erstellt.",
@@ -569,14 +569,14 @@
       "walletInfoHelper": "Optionale sichere Wallet-Metadaten.",
       "additionalLabel": "Weitere Wasabi-Bereiche",
       "additionalHelper": "Optionales JSON-Objekt mit den Bereichen <code>{{listkeys}}</code>, <code>{{listpayments}}</code> oder <code>{{walletJson}}</code>. Führe diese Wasabi-RPC-Methoden auf die gleiche Weise aus und füge die Antworten unter den passenden Keys ein.",
-      "importAfter": "Nach der Einrichtung importieren",
+      "importAfter": "Nach dem Setup importieren",
       "importingRpc": "{{label}} importiert eingefügte Wasabi-RPC-Ausgaben."
     },
     "fileWallet": {
       "fileFormat": "Dateiformat",
       "formatCsv": "CSV",
       "formatJson": "JSON",
-      "importAfter": "Nach der Einrichtung importieren",
+      "importAfter": "Nach dem Setup importieren",
       "stillImporting": "{{label}} importiert noch aus der ausgewählten Datei. Große Exporte können etwas dauern; Kassiber aktualisiert, sobald der Daemon fertig ist."
     },
     "descriptorWallet": {
@@ -602,7 +602,7 @@
       "kassiberWallet": "Kassiber-Wallet",
       "noWalletsYet": "Noch keine Wallets",
       "selectWallet": "Wallet auswählen",
-      "refreshAfter": "Nach der Einrichtung aktualisieren",
+      "refreshAfter": "Nach dem Setup aktualisieren",
       "stillImportingExisting": "{{label}} aktualisiert die zugeordneten Wallets, damit die Bull-Export-Metadaten abgeglichen werden können.",
       "stillImportingSources": "{{label}} importiert die ausgewählten Bull-Wallet-Netzwerke. Große Exporte können etwas dauern.",
       "mappingSavedTitle": "Bull-Wallet-Zuordnung gespeichert",
@@ -673,7 +673,7 @@
       "testing": "Wird getestet…",
       "testConnection": "Verbindung testen",
       "testResponded": "{{store}} · {{method}} hat geantwortet.",
-      "refreshAfter": "Nach der Einrichtung aktualisieren",
+      "refreshAfter": "Nach dem Setup aktualisieren",
       "stillRefreshing": "{{label}} aktualisiert noch von BTCPay. Große Stores können einen Moment dauern; Kassiber aktualisiert, sobald der Daemon fertig ist.",
       "refreshingSettlement": "{{label}} aktualisiert die zugeordneten Settlement-Wallets. Kassiber aktualisiert, sobald der Daemon fertig ist.",
       "mappingSavedTitle": "BTCPay-Zuordnung gespeichert",
@@ -708,9 +708,9 @@
     },
     "backendSettings": {
       "line1": "Diese Verbindung ist als Backend-Endpunkt in den Einstellungen konfiguriert.",
-      "line2": "Die Wallet-Einrichtung kann dieses Backend dann namentlich auswählen, ohne Endpunkt-URLs oder Zugangsdaten im Verbindungsdialog offenzulegen."
+      "line2": "Das Wallet-Setup kann dieses Backend dann namentlich auswählen, ohne Endpunkt-URLs oder Zugangsdaten im Verbindungsdialog offenzulegen."
     },
-    "notWired": "Die dedizierte Einrichtung ist noch nicht verdrahtet.",
+    "notWired": "Das dedizierte Setup ist noch nicht verdrahtet.",
     "validation": {
       "labelRequired": "Das Verbindungslabel ist erforderlich.",
       "pasteWalletMaterial": "Füge einen Wallet-Export, einen Descriptor oder einen Extended Public Key ein.",
@@ -730,8 +730,8 @@
       "body": "{{title}} ist im Katalog erfasst, aber noch nicht verdrahtet."
     },
     "setupFailed": {
-      "title": "Verbindungseinrichtung fehlgeschlagen",
-      "fallback": "Verbindungseinrichtung fehlgeschlagen."
+      "title": "Verbindungs-Setup fehlgeschlagen",
+      "fallback": "Verbindungs-Setup fehlgeschlagen."
     },
     "summary": {
       "title": "Import-Zusammenfassung",

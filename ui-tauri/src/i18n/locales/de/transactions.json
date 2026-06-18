@@ -69,7 +69,7 @@
       "description": "Vom Quellsystem gelieferten Preis verwenden"
     },
     "fmvProvider": {
-      "label": "FMV-Anbieter",
+      "label": "FMV-Provider",
       "description": "Einen gesampelten Marktkurs verwenden"
     },
     "manualOverride": {
@@ -83,7 +83,7 @@
   },
   "newPricingOption": {
     "manualEntry": "Manuelle Eingabe",
-    "fmvProviderSample": "FMV-Anbieter-Sample",
+    "fmvProviderSample": "FMV-Provider-Sample",
     "exchangeExecution": "Exchange-Ausführung",
     "btcpayInvoice": "BTCPay-Rechnung Fiat",
     "walletExport": "Wallet-Import exakter Fiat",
@@ -91,7 +91,7 @@
   },
   "pricingQuality": {
     "coarseFallback": "Grober Rückfallwert",
-    "providerSample": "Anbieter-Sample",
+    "providerSample": "Provider-Sample",
     "exact": "Exakt",
     "missing": "Fehlt"
   },
@@ -569,15 +569,15 @@
     "spotNowUnknown": "Unbekannt",
     "perBtc": "{{value}} / BTC",
     "rateCacheSource": "Quelle des Kurs-Caches",
-    "provider": "Anbieter",
+    "provider": "Provider",
     "providerUnknown": "Unbekannt",
     "pairGranularity": "Paar / Granularität",
     "pairGranularityUnknown": "Unbekannt",
     "method": "Methode: {{method}}",
     "fallbackOnly": "Nur Rückfallwert",
-    "providerSample": "Anbieter-Sample",
+    "providerSample": "Provider-Sample",
     "fallbackOnlyBody": "Tägliche Kraken-Werte sind grobe Abdeckung und bleiben prüfbar, bis du eine bessere Quelle bestätigst.",
-    "providerSampleBody": "Minütliche Marktkerzen sind gesampelte Anbieterkurse, kein Beleg einer Exchange-Ausführung.",
+    "providerSampleBody": "Minütliche Marktkerzen sind gesampelte Provider-Kurse, kein Beleg einer Exchange-Ausführung.",
     "exactManualPrice": "Exakter manueller Preis",
     "openRateSettings": "Kurs-Einstellungen öffnen",
     "exactEvidence": "Beleg für exakte Bewertung",

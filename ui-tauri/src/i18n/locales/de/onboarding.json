@@ -101,7 +101,7 @@
     "step": "Schritt {{current}}/{{total}}"
   },
   "stepper": {
-    "ariaLabel": "Einrichtungsfortschritt",
+    "ariaLabel": "Setup-Fortschritt",
     "stepFallback": "Schritt {{number}}"
   },
   "steps": {
@@ -151,7 +151,7 @@
     "bookCount_other": "{{count}} Books",
     "passphraseLabel": "Books-Passphrase",
     "unlock": "Books entsperren",
-    "backToSetup": "Zurück zur neuen Einrichtung",
+    "backToSetup": "Zurück zum neuen Setup",
     "rightTitle": "Lokale Kassiber-Books",
     "rightBody": "Der Desktop-Daemon zeigt jetzt auf diesen gewählten Datenordner. Sobald ein Book geöffnet ist, betreibt dieselbe lokale Datenbank den Rest der App.",
     "loading": "Lokale Books werden geladen…",
@@ -177,7 +177,7 @@
       "description": "Mach mit reinen manuellen Importen weiter. Die Watch-only-Aktualisierung lässt sich später in den Einstellungen konfigurieren."
     },
     "protocolLabel": "Sync-Protokoll",
-    "protocolDescription": "Zahlungsanbieter und Datei-Importe werden später unter Verbindungen konfiguriert.",
+    "protocolDescription": "Payment-Provider und Datei-Importe werden später unter Verbindungen konfiguriert.",
     "displayName": "Anzeigename",
     "displayNamePlaceholder": "home-node",
     "displayNameDescription": "Eine kurze Bezeichnung, die in den Einstellungen und bei der Verbindungsaktualisierung angezeigt wird.",
@@ -218,19 +218,19 @@
       "description": "Standardmäßig Ollama auf diesem Rechner. Du kannst dies auf einen anderen lokalen OpenAI-kompatiblen Server richten."
     },
     "remote": {
-      "title": "Remote-Anbieter nutzen",
+      "title": "Remote-Provider nutzen",
       "description": "Bereite einen OpenAI-kompatiblen Endpunkt oder die Claude/Codex CLI vor. Prompts und Buchhaltungskontext können dieses Gerät verlassen."
     },
     "disabled": {
       "title": "KI vorerst deaktivieren",
       "description": "Blende den Assistenten und den schwebenden Chat aus. Du kannst KI später in den Einstellungen wieder aktivieren."
     },
-    "providerPrivacy": "Anbieter-Privatsphäre",
-    "providerPrivacyDescription": "TEE bedeutet, dass der Anbieter einen Trusted-Execution-Pfad behauptet; Kassiber behandelt ihn dennoch als off-device.",
-    "providerName": "Anbietername",
+    "providerPrivacy": "Provider-Privatsphäre",
+    "providerPrivacyDescription": "TEE bedeutet, dass der Provider einen Trusted-Execution-Pfad behauptet; Kassiber behandelt ihn dennoch als off-device.",
+    "providerName": "Providername",
     "providerNamePlaceholderLocal": "ollama",
     "providerNamePlaceholderRemote": "openai oder maple",
-    "providerNameDescription": "Eine kurze Bezeichnung, die in den KI-Anbietereinstellungen angezeigt wird.",
+    "providerNameDescription": "Eine kurze Bezeichnung, die in den KI-Provider-Einstellungen angezeigt wird.",
     "baseUrl": "Basis-URL",
     "baseUrlPlaceholderRemote": "https://…/v1 oder claude-cli://default",
     "baseUrlDescription": "Verwende einen OpenAI-kompatiblen /v1-Endpunkt oder einen unterstützten CLI-Locator.",
@@ -266,14 +266,14 @@
         "body": "Läuft gegen ein Modell auf diesem Rechner (standardmäßig Ollama). Prompts und Buchhaltungskontext bleiben on-device."
       },
       "remote": {
-        "title": "Remote-Anbieter",
+        "title": "Remote-Provider",
         "body": "Ein OpenAI-kompatibler Endpunkt oder die Claude/Codex CLI. Prompts und Buchhaltungskontext können dieses Gerät verlassen."
       },
       "disabled": {
         "title": "Deaktiviert",
         "body": "Blendet den Assistenten und den schwebenden Chat aus. Du kannst KI später in den Einstellungen wieder aktivieren."
       },
-      "footer": "Während der Einrichtung werden keine API-Keys oder Geheimnisse erfasst. Buchhaltungskontext — Labels, Notizen, Hostnamen, Berichtsdetails — kann sensibel sein; behalte das bei Remote-Anbietern im Hinterkopf."
+      "footer": "Während des Setups werden keine API-Keys oder Geheimnisse erfasst. Buchhaltungskontext — Labels, Notizen, Hostnamen, Berichtsdetails — kann sensibel sein; behalte das bei Remote-Providern im Hinterkopf."
     }
   },
   "essentials": {
@@ -329,7 +329,7 @@
     "title": "KI-Unterstützung wählen"
   },
   "review": {
-    "title": "Einrichtung prüfen",
+    "title": "Setup prüfen",
     "intro": "Bestätige die Entscheidungen, die die lokale Speicherung, die Netzwerk-Sichtbarkeit und die Frage betreffen, ob Daten dieses Gerät verlassen können.",
     "change": "Ändern",
     "changeArea": "{{area}} ändern",
@@ -369,8 +369,8 @@
       "value": "{{kind}}: {{name}}",
       "fallbackName": "Assistent",
       "noteDisabled": "Keine Assistenten-Aufrufe im normalen App-Betrieb.",
-      "noteRemote": "Der Remote-Anbieter kann nach Zustimmung ausgewählten Book-Kontext erhalten.",
-      "noteLocal": "Lokaler Anbieter-Endpunkt; der Book-Kontext bleibt auf deinem Rechner, sofern nicht anders konfiguriert."
+      "noteRemote": "Der Remote-Provider kann nach Zustimmung ausgewählten Book-Kontext erhalten.",
+      "noteLocal": "Lokaler Provider-Endpunkt; der Book-Kontext bleibt auf deinem Rechner, sofern nicht anders konfiguriert."
     },
     "storage": {
       "valueEncrypted": "SQLCipher-verschlüsselte Datenbank",
@@ -382,7 +382,7 @@
     },
     "secrets": {
       "valueEncrypted": "Verschlüsselte Speicherung von Zugangsdaten",
-      "valueNone": "Während der Einrichtung keine Zugangsdaten erfasst",
+      "valueNone": "Während des Setups keine Zugangsdaten erfasst",
       "noteEncrypted": "Bestehende backends.env-Zugangsdaten werden migriert, falls vorhanden; neue Geheimnisse werden später hinzugefügt.",
       "noteNone": "Backend-API-Keys, Cookies und Passwörter werden später hinzugefügt."
     }

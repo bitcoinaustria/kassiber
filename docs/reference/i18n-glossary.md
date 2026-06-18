@@ -57,6 +57,24 @@ address→Adresse, balance→Guthaben (verfügbar) / Saldo (buchhalterisch),
 amount→Betrag, sent→gesendet, received→erhalten, settings→Einstellungen,
 confirmation→Bestätigung.
 
+### Generic-tech terms — also KEEP ENGLISH
+Beyond Bitcoin jargon, these space-common tech terms stay English (owner
+decision), used consistently:
+- **Provider** — `der Provider` (AI / market-rate provider). Use everywhere
+  (`KI-Provider`, „Provider wählen", `Provider-Marktpreis`); **not** „Anbieter".
+  Compound data-field labels (`Provider-Order-id`, `Provider-Payment-id`…) keep
+  Provider too. `Drittanbieter` (= third-party) is a different word — leave it.
+- **Sync** — `der Sync` (noun/label/button), progress „Sync läuft…", status
+  „Synced" / „Nicht synced", inline adjective „gesyncte …"; compounds
+  `Sync-Backend`, `Lightning-Node-Sync`. **not** „Synchronisieren/-ung". The
+  verb may still read „… per Sync …" where natural.
+- **Setup** — `das Setup` (the noun: `Verbindungs-Setup`, „das Wallet-Setup",
+  „nach dem Setup"); **not** „Einrichtung". The verb „einrichten" stays German.
+
+Other kept-English space terms already in use: **Backend, Backup, Cache,
+Label** (BIP329), **Token, Indexer, Explorer, Watch-only, Settlement, Private
+Key, Dashboard, Passphrase, on-chain/off-chain**.
+
 ### Critical one-EN→one-DE disambiguations
 - **Ledger = Hauptbuch** (the app's accounting ledger) — but the Bitcoin chain
   itself is **die Blockchain**, never „Hauptbuch".

@@ -6,7 +6,7 @@
   "wizard": {
     "step": "Schritt {{index}}",
     "steps": {
-      "setup": "Einrichtung",
+      "setup": "Setup",
       "review": "Prüfung",
       "export": "Export"
     }

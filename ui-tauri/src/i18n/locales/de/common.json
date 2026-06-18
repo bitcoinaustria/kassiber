@@ -18,7 +18,7 @@
     "filter": "Filtern",
     "sort": "Sortieren",
     "refresh": "Aktualisieren",
-    "sync": "Synchronisieren",
+    "sync": "Sync",
     "copy": "Kopieren",
     "continue": "Weiter",
     "back": "Zurück",
@@ -30,7 +30,7 @@
   "state": {
     "loading": "Wird geladen…",
     "saving": "Wird gespeichert…",
-    "syncing": "Wird synchronisiert…",
+    "syncing": "Sync läuft…",
     "hidden": "Verborgen",
     "error": "Fehler",
     "warning": "Warnung",
