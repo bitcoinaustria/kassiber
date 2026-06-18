@@ -2065,10 +2065,16 @@ function AppDashboardHeader({
   const notificationItems: NotificationItem[] = [
     ...appNotifications.map((item) => ({
       ...item,
+      // Prefer the title router first: failure/"needs attention" titles route
+      // to /logs regardless of tone, so an error-tone "Book refresh failed"
+      // isn't diverted to /settings by the developer-tools fallback below.
       to:
-        item.tone === "error"
-          ? (developerToolsEnabled ? ("/logs" as const) : ("/settings" as const))
-          : notificationRouteFor(item.title),
+        notificationRouteFor(item.title) ??
+        (item.tone === "error"
+          ? developerToolsEnabled
+            ? ("/logs" as const)
+            : ("/settings" as const)
+          : undefined),
     })),
     ...systemNotificationItems,
   ];

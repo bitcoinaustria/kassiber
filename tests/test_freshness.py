@@ -183,15 +183,23 @@ class FreshnessTest(unittest.TestCase):
             )
 
         self.assertEqual(results[0]["status"], freshness.JOB_ERROR)
+        # The source label + error code reach the ring (so /logs shows which
+        # source failed and why)...
         self.assertTrue(
+            any("Journal refresh" in line for line in captured.output),
+            captured.output,
+        )
+        self.assertTrue(
+            any("tax_failed" in line for line in captured.output),
+            captured.output,
+        )
+        # ...but NOT the raw exception text, which could carry operational data
+        # (URLs/secrets) on sync errors that the keyed redactor would miss.
+        self.assertFalse(
             any(
                 "RP2 multi-asset tax calculation failed" in line
                 for line in captured.output
             ),
-            captured.output,
-        )
-        self.assertTrue(
-            any("Journal refresh" in line for line in captured.output),
             captured.output,
         )
 

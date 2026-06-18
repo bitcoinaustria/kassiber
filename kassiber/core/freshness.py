@@ -840,10 +840,14 @@ def _mark_error(
     status = JOB_RATE_LIMITED if cooldown_until else JOB_ERROR
     source_status = STATUS_RATE_LIMITED if cooldown_until else STATUS_FAILED
     source_name = job.get("source_label") or job.get("source_key") or "source"
+    # Log only the source label + error code, never str(exc): the raw message
+    # can carry operational data (e.g. backend URLs) that the structured
+    # freshness redactor scrubs by key but the free-text log path would not.
+    error_code = exc.code or "freshness_job_failed"
     if cooldown_until:
-        _LOGGER.warning("Freshness %s rate-limited: %s", source_name, str(exc))
+        _LOGGER.warning("Freshness %s rate-limited (%s)", source_name, error_code)
     else:
-        _LOGGER.error("Freshness %s failed: %s", source_name, str(exc))
+        _LOGGER.error("Freshness %s failed (%s)", source_name, error_code)
     now = now_iso()
     error_payload = redact_freshness_payload(
         {
