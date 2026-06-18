@@ -243,7 +243,10 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
   Austrian German in the informal `du` register — use the canonical terms in
   [docs/reference/i18n-glossary.md](docs/reference/i18n-glossary.md) (Bitcoin
   jargon stays English; Austrian BMF tax wording), and the mechanics in
-  [docs/reference/i18n.md](docs/reference/i18n.md).
+  [docs/reference/i18n.md](docs/reference/i18n.md). Verify UI string changes
+  from `ui-tauri/` with `pnpm typecheck` (type-safe keys catch typos/missing
+  keys) and `pnpm test --run` (the en/de key-parity guard catches a
+  half-translated namespace); both run in CI under the `verify` check.
 - Treat code, README, AGENTS.md, and TODO.md as current truth. Treat
   `docs/plan/` as concise guardrails; if code and plans drift, inspect code and
   update the docs in the same change.
@@ -304,7 +307,9 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
   requirement, risks, and step plan before editing.
 - Prefer the repo-local `skills/kassiber/` references before generic
   agent habits when working on Kassiber-specific flows.
-- Before calling work push-ready, run `./scripts/quality-gate.sh`.
+- Before calling work push-ready, run `./scripts/quality-gate.sh`. That gate is
+  Python-only; for `ui-tauri/` changes also run `pnpm typecheck && pnpm test --run && pnpm lint`
+  there (the desktop UI's typecheck, en/de i18n key-parity, and lint).
 - When adding a new runtime dependency, update both the README dependency story and `THIRD_PARTY_LICENSES.md`.
 - Keep `THIRD_PARTY_LICENSES.md` concise: direct dependencies and notable license constraints matter more than a hand-maintained transitive dump.
 

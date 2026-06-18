@@ -99,13 +99,14 @@ Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the 
   resource bundles, type-safe keys, a store-driven language bridge (the UI store
   `lang` is the single source of truth → i18next + `<html lang>`), a working
   Settings/header language switcher, an en/de key-parity test, and a vitest i18n
-  setup. Pilot surfaces converted: Settings appearance panel + `BirdsEye`
-  navigation labels. CLI/daemon stay machine-deterministic. Conventions in
+  setup. First pilot surfaces (this groundwork milestone): Settings appearance
+  panel + `BirdsEye` navigation labels; full surface transcreation is the next
+  item. CLI/daemon stay machine-deterministic. Conventions in
   [docs/reference/i18n.md](docs/reference/i18n.md).
 - [x] **Transcreate the desktop UI into Austrian German (du register)** — main
   surfaces translated under per-surface namespaces (chrome, overview,
   transactions, connections, journals, settings, onboarding, assistant,
-  sourceFunds, review) using the researched, BMF-sourced
+  sourceFunds, review, search) using the researched, BMF-sourced
   [glossary](docs/reference/i18n-glossary.md): Bitcoin jargon kept English,
   ordinary words translated, Austrian tax terms (Anschaffungskosten,
   Veräußerung, gleitender Durchschnittspreis, Wegzugsbesteuerung, Kennzahl,

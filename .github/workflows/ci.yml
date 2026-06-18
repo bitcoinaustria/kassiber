@@ -36,5 +36,11 @@ jobs:
       - name: Install desktop dependencies
         run: pnpm --dir ui-tauri install --frozen-lockfile
 
+      # Type-safe i18n keys (and all TS): catches typo'd / missing / wrong-namespace
+      # translation keys. The en/de key-parity guard runs via Vitest inside the
+      # quality gate below.
+      - name: Desktop UI typecheck
+        run: pnpm --dir ui-tauri run typecheck
+
       - name: Quality gate
         run: ./scripts/quality-gate.sh
