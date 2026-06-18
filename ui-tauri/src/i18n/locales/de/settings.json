@@ -285,7 +285,20 @@
     "rebuildDialogWarningTitle": "Bei großen Wallets kann das eine Weile dauern.",
     "rebuildDialogWarningBody": "Der Neuaufbau löscht außerdem providergenerierte Transaktionspreise und verarbeitet die Journale neu. Manuelle Überschreibungen und importierte Ausführungspreise bleiben erhalten.",
     "rebuildDialogPending": "Wird neu aufgebaut…",
-    "rebuildDialogSubmit": "Neu aufbauen"
+    "rebuildDialogSubmit": "Neu aufbauen",
+    "coarse": {
+      "heldTitle": "Grobe Bewertung wird geprüft",
+      "acceptedTitle": "Grobe Bewertung automatisch akzeptiert",
+      "heldBody": "Transaktionen, die nur aus Tageskursen bewertet sind, werden vor Berichten zur manuellen Prüfung in Quarantäne gestellt.",
+      "acceptedBody": "Transaktionen, die aus Tageskursen bewertet sind, werden zum Tageskurs gebucht und zur optionalen Prüfung markiert.",
+      "errorTitle": "Richtlinie für grobe Bewertung konnte nicht aktualisiert werden",
+      "errorBody": "Kassiber konnte die Einstellung für die grobe Bewertung nicht speichern.",
+      "countNotice_one": "{{count}} Transaktion ist aus Tageskursen bewertet",
+      "countNotice_other": "{{count}} Transaktionen sind aus Tageskursen bewertet",
+      "countDescription": "Tageskurse werden für die Steuer akzeptiert und diese Zeilen sind berichtsfertig. Für feinere Genauigkeit in volatilen Phasen kannst du unten den Cache neu aufbauen, um sie aus präzisen Kursen zum Ereigniszeitpunkt neu zu bewerten.",
+      "reviewToggleLabel": "Bewertung aus Tageskursen zur Prüfung zurückhalten",
+      "reviewToggleDescription": "Aus (Standard): Transaktionen, die nur aus Tages-/groben Kursen bewertet sind, werden zum Tageskurs gebucht und zur optionalen Prüfung markiert. An: Sie werden in Quarantäne gestellt, bis du sie bestätigst oder einen präzisen Preis holst — nützlich für Audits."
+    }
   },
   "security": {
     "encryptionHeading": "Datenbankverschlüsselung",

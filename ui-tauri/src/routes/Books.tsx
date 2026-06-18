@@ -56,16 +56,24 @@ import { cn } from "@/lib/utils";
 import { gainsAlgorithmsFor } from "@/components/kb/Onboarding/constants";
 import type { ProfilesSnapshot, Profile, Workspace } from "@/mocks/profiles";
 
-const ACCOUNTING_METHOD_LABELS: Record<string, string> = {
-  MOVING_AVERAGE_AT: "Moving average (Austrian)",
-  FIFO: "FIFO (first in, first out)",
-  LIFO: "LIFO (last in, first out)",
-  HIFO: "HIFO (highest in, first out)",
-  LOFO: "LOFO (lowest in, first out)",
-};
+const ACCOUNTING_METHOD_LABEL_KEYS = {
+  MOVING_AVERAGE_AT: "books.method.MOVING_AVERAGE_AT",
+  FIFO: "books.method.FIFO",
+  LIFO: "books.method.LIFO",
+  HIFO: "books.method.HIFO",
+  LOFO: "books.method.LOFO",
+} as const satisfies Record<string, string>;
 
-const accountingMethodLabel = (method: string): string =>
-  ACCOUNTING_METHOD_LABELS[method.toUpperCase()] ?? method;
+const accountingMethodLabel = (
+  method: string,
+  t: TFunction<"onboarding">,
+): string => {
+  const key =
+    ACCOUNTING_METHOD_LABEL_KEYS[
+      method.toUpperCase() as keyof typeof ACCOUNTING_METHOD_LABEL_KEYS
+    ];
+  return key ? t(key) : method;
+};
 
 export function Books() {
   const { data, isLoading } = useDaemon<ProfilesSnapshot>(
@@ -981,7 +989,9 @@ function RenameProfileDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="rename-profile-method">Accounting method</Label>
+            <Label htmlFor="rename-profile-method">
+              {t("books.renameProfile.methodLabel")}
+            </Label>
             <Select
               value={method}
               disabled={isSubmitting || methodOptions.length <= 1}
@@ -993,7 +1003,7 @@ function RenameProfileDialog({
               <SelectContent>
                 {methodOptions.map((option) => (
                   <SelectItem key={option} value={option}>
-                    {accountingMethodLabel(option)}
+                    {accountingMethodLabel(option, t)}
                   </SelectItem>
                 ))}
               </SelectContent>

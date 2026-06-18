@@ -355,20 +355,20 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       await configureMaintenance.mutateAsync({ require_coarse_review: enabled });
       addNotification({
         title: enabled
-          ? "Coarse pricing held for review"
-          : "Coarse pricing accepted automatically",
+          ? t("marketData.coarse.heldTitle")
+          : t("marketData.coarse.acceptedTitle"),
         body: enabled
-          ? "Transactions priced only from daily rates are quarantined for manual review before reports."
-          : "Transactions priced from daily rates are booked at the daily price and flagged for optional review.",
+          ? t("marketData.coarse.heldBody")
+          : t("marketData.coarse.acceptedBody"),
         tone: "success",
       });
     } catch (error) {
       addNotification({
-        title: "Could not update coarse pricing policy",
+        title: t("marketData.coarse.errorTitle"),
         body:
           error instanceof Error
             ? error.message
-            : "Kassiber could not save the coarse pricing setting.",
+            : t("marketData.coarse.errorBody"),
         tone: "error",
       });
     }
@@ -384,15 +384,10 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       {coarsePricedCount > 0 && !requireCoarseReview ? (
         <div className="rounded-md border bg-background p-3 text-sm">
           <p className="font-medium">
-            {coarsePricedCount}{" "}
-            {coarsePricedCount === 1
-              ? "transaction is priced from daily rates"
-              : "transactions are priced from daily rates"}
+            {t("marketData.coarse.countNotice", { count: coarsePricedCount })}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Daily rates are accepted for tax and these rows are report-ready. For
-            finer accuracy in volatile periods, use Rebuild cache below to
-            re-price them from precise event-time rates.
+            {t("marketData.coarse.countDescription")}
           </p>
         </div>
       ) : null}
@@ -463,12 +458,9 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
             htmlFor="require-coarse-review"
             className="grid gap-1 text-sm leading-relaxed"
           >
-            <span>Hold daily-rate pricing for review</span>
+            <span>{t("marketData.coarse.reviewToggleLabel")}</span>
             <span className="font-normal text-muted-foreground">
-              Off (default): transactions priced only from daily/coarse rates are
-              booked at the daily price and flagged for optional review. On:
-              they are quarantined until you confirm or fetch a precise price —
-              useful for audits.
+              {t("marketData.coarse.reviewToggleDescription")}
             </span>
           </Label>
         </div>

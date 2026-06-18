@@ -285,7 +285,20 @@
     "rebuildDialogWarningTitle": "Large wallets can take a while.",
     "rebuildDialogWarningBody": "The rebuild also clears provider-generated transaction prices and reprocesses journals. Manual overrides and imported execution prices are preserved.",
     "rebuildDialogPending": "Rebuilding…",
-    "rebuildDialogSubmit": "Rebuild"
+    "rebuildDialogSubmit": "Rebuild",
+    "coarse": {
+      "heldTitle": "Coarse pricing held for review",
+      "acceptedTitle": "Coarse pricing accepted automatically",
+      "heldBody": "Transactions priced only from daily rates are quarantined for manual review before reports.",
+      "acceptedBody": "Transactions priced from daily rates are booked at the daily price and flagged for optional review.",
+      "errorTitle": "Could not update coarse pricing policy",
+      "errorBody": "Kassiber could not save the coarse pricing setting.",
+      "countNotice_one": "{{count}} transaction is priced from daily rates",
+      "countNotice_other": "{{count}} transactions are priced from daily rates",
+      "countDescription": "Daily rates are accepted for tax and these rows are report-ready. For finer accuracy in volatile periods, use Rebuild cache below to re-price them from precise event-time rates.",
+      "reviewToggleLabel": "Hold daily-rate pricing for review",
+      "reviewToggleDescription": "Off (default): transactions priced only from daily/coarse rates are booked at the daily price and flagged for optional review. On: they are quarantined until you confirm or fetch a precise price — useful for audits."
+    }
   },
   "security": {
     "encryptionHeading": "Database encryption",

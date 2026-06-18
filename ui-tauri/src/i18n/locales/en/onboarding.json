@@ -63,9 +63,17 @@
       "title": "Edit book",
       "description": "Rename the book or change its accounting method. Changing the method reprocesses journals so reports recompute.",
       "nameLabel": "Book name",
+      "methodLabel": "Accounting method",
       "submit": "Save",
       "errorEmptyName": "Enter a book name.",
       "errorGeneric": "Could not save book."
+    },
+    "method": {
+      "MOVING_AVERAGE_AT": "Moving average (Austrian)",
+      "FIFO": "FIFO (first in, first out)",
+      "LIFO": "LIFO (last in, first out)",
+      "HIFO": "HIFO (highest in, first out)",
+      "LOFO": "LOFO (lowest in, first out)"
     },
     "renameWorkspace": {
       "title": "Edit book set name",

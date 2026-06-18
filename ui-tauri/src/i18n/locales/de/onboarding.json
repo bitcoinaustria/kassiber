@@ -63,9 +63,17 @@
       "title": "Buch bearbeiten",
       "description": "Benenne das Buch um oder ändere seine Buchhaltungsmethode. Eine Methodenänderung verarbeitet die Journale neu, damit die Berichte neu berechnet werden.",
       "nameLabel": "Buchname",
+      "methodLabel": "Buchhaltungsmethode",
       "submit": "Speichern",
       "errorEmptyName": "Gib einen Buchnamen ein.",
       "errorGeneric": "Buch konnte nicht gespeichert werden."
+    },
+    "method": {
+      "MOVING_AVERAGE_AT": "Gleitender Durchschnittspreis (österreichisch)",
+      "FIFO": "FIFO (First In, First Out)",
+      "LIFO": "LIFO (Last In, First Out)",
+      "HIFO": "HIFO (Highest In, First Out)",
+      "LOFO": "LOFO (Lowest In, First Out)"
     },
     "renameWorkspace": {
       "title": "Bücher-Set-Namen bearbeiten",
