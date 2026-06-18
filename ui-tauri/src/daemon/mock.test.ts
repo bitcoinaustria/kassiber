@@ -325,3 +325,59 @@ describe("mock daemon chat session fidelity", () => {
     expect(missing.error?.code).toBe("not_found");
   });
 });
+
+describe("mock daemon profile method update", () => {
+  type ProfileRow = {
+    id: string;
+    name: string;
+    gainsAlgorithm?: string;
+    taxCountry?: string;
+  };
+  type Snap = { workspaces: Array<{ profiles: ProfileRow[] }> };
+
+  const profiles = async (): Promise<ProfileRow[]> => {
+    const snap = await mockDaemon.invoke<Snap>({ kind: "ui.profiles.snapshot" });
+    return (snap.data?.workspaces ?? []).flatMap((w) => w.profiles);
+  };
+
+  it("coerces an Austrian book to moving-average regardless of requested method", async () => {
+    const at = (await profiles()).find((p) => p.taxCountry === "at");
+    expect(at).toBeDefined();
+    const res = await mockDaemon.invoke<{ id: string }>({
+      kind: "ui.profiles.update",
+      args: { profile_id: at!.id, gains_algorithm: "FIFO" },
+    });
+    expect(res.error).toBeUndefined();
+    expect(res.data?.id).toBe(at!.id);
+    const after = (await profiles()).find((p) => p.id === at!.id);
+    expect(after?.gainsAlgorithm).toBe("MOVING_AVERAGE_AT");
+  });
+
+  it("applies the requested method for a generic book", async () => {
+    const generic = (await profiles()).find((p) => p.taxCountry !== "at");
+    expect(generic).toBeDefined();
+    await mockDaemon.invoke({
+      kind: "ui.profiles.update",
+      args: { profile_id: generic!.id, gains_algorithm: "LIFO" },
+    });
+    const after = (await profiles()).find((p) => p.id === generic!.id);
+    expect(after?.gainsAlgorithm).toBe("LIFO");
+  });
+
+  it("rejects a missing accounting method like the real daemon", async () => {
+    const first = (await profiles())[0];
+    const res = await mockDaemon.invoke({
+      kind: "ui.profiles.update",
+      args: { profile_id: first.id },
+    });
+    expect(res.error?.code).toBe("validation");
+  });
+
+  it("errors on an unknown book", async () => {
+    const res = await mockDaemon.invoke({
+      kind: "ui.profiles.update",
+      args: { profile_id: "does-not-exist", gains_algorithm: "FIFO" },
+    });
+    expect(res.error).toBeDefined();
+  });
+});

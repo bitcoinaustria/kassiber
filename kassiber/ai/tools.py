@@ -1081,6 +1081,13 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                     "enum": ["carrying-value", "taxable"],
                 },
                 "notes": {"type": "string"},
+                "out_amount": {
+                    "type": "string",
+                    "description": (
+                        "Optional BTC amount from the outbound used by the cross-asset "
+                        "swap; the remainder can resolve as a same-asset self-transfer."
+                    ),
+                },
             },
         },
         kind_class="mutating",
