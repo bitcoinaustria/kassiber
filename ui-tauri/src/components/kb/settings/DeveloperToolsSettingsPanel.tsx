@@ -1,5 +1,6 @@
 import * as React from "react";
 import { ExternalLink } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -20,19 +21,17 @@ export function DeveloperToolsSettingsPanel({
   setEnabled: (enabled: boolean) => void;
   onOpenLogs: () => void;
 }) {
+  const { t } = useTranslation("settings");
   const bytes = useAppLogBufferSize();
   return (
     <section className="space-y-3">
       <p className="max-w-2xl text-sm text-muted-foreground">
-        Show the typed Logs view after the local books are unlocked. Logs are
-        local-only, kept in RAM, and written to disk only when you export them.
+        {t("developer.intro")}
       </p>
       <SettingsSwitchRow
-        label="Enable Logs page"
+        label={t("developer.enableLabel")}
         description={
-          enabled
-            ? "Logs is visible in Support and route navigation."
-            : "Logs is hidden and direct navigation redirects to Overview."
+          enabled ? t("developer.enableOn") : t("developer.enableOff")
         }
         checked={enabled}
         onCheckedChange={setEnabled}
@@ -46,16 +45,17 @@ export function DeveloperToolsSettingsPanel({
           onClick={onOpenLogs}
         >
           <ExternalLink className="size-4" aria-hidden="true" />
-          Open Logs
+          {t("developer.openLogs")}
         </Button>
       ) : null}
       <div className="rounded-md border bg-background p-3 text-sm">
-        <p className="font-medium">In-memory log buffer</p>
+        <p className="font-medium">{t("developer.bufferHeading")}</p>
         <p className="text-muted-foreground">
-          {formatBytes(bytes)} retained in this GUI session. Kassiber keeps at most{" "}
-          {APP_LOG_MAX_RECORDS.toLocaleString()} records or{" "}
-          {formatBytes(APP_LOG_MAX_BYTES)}, whichever is reached first. Refreshing
-          or closing the app clears the buffer unless you export it first.
+          {t("developer.bufferDescription", {
+            retained: formatBytes(bytes),
+            records: APP_LOG_MAX_RECORDS.toLocaleString(),
+            bytes: formatBytes(APP_LOG_MAX_BYTES),
+          })}
         </p>
       </div>
     </section>

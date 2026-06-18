@@ -11,6 +11,7 @@
  * the top progress line (see `RouteTopProgressLine` in AppShell).
  */
 import { Check, Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import type { RouteProgressState } from "@/components/kb/progressIndicator";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ export function FirstSyncCard({
   title,
   onDismiss,
 }: FirstSyncCardProps) {
+  const { t } = useTranslation("chrome");
   const rawValue = progress?.value;
   const hasValue = typeof rawValue === "number" && Number.isFinite(rawValue);
   const isDeterminate = hasValue && !progress?.indeterminate;
@@ -72,11 +74,10 @@ export function FirstSyncCard({
           </span>
           <div className="min-w-0 flex-1">
             <h2 className="text-sm font-semibold text-foreground">
-              {title ?? "Setting up your book"}
+              {title ?? t("firstSync.defaultTitle")}
             </h2>
             <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-              First sync — building your history from your configured sources.
-              This runs once and can take a few minutes.
+              {t("firstSync.body")}
             </p>
           </div>
         </div>
@@ -91,10 +92,10 @@ export function FirstSyncCard({
             className="mb-1.5 flex items-center justify-between gap-3 text-[11px] font-medium leading-none"
           >
             <span className="min-w-0 truncate text-primary">
-              {progress?.label ?? "Preparing source refresh"}
+              {progress?.label ?? t("firstSync.preparing")}
             </span>
             <span className="shrink-0 tabular-nums text-muted-foreground">
-              {isDeterminate ? `${Math.round(value)}%` : "Working…"}
+              {isDeterminate ? `${Math.round(value)}%` : t("firstSync.working")}
             </span>
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-primary/15">
@@ -157,7 +158,7 @@ export function FirstSyncCard({
 
         <div className="mt-5 flex flex-col items-center gap-2.5 border-t border-border/60 pt-4">
           <p className="text-center text-[11px] leading-snug text-muted-foreground">
-            You can keep using Kassiber while this finishes.
+            {t("firstSync.keepUsing")}
           </p>
           <Button
             type="button"
@@ -166,7 +167,7 @@ export function FirstSyncCard({
             className="rounded-full text-xs"
             onClick={onDismiss}
           >
-            Continue in background
+            {t("firstSync.continueInBackground")}
           </Button>
         </div>
       </div>

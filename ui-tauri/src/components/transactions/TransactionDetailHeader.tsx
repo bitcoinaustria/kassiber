@@ -5,6 +5,7 @@ import {
   Repeat2,
   X,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -72,6 +73,7 @@ export function TransactionDetailHeader({
   onOpenExplorer: (transaction: Transaction) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation(["transactions"]);
   const StatusIcon = transactionStatusIcons[reviewStatus];
 
   return (
@@ -80,7 +82,7 @@ export function TransactionDetailHeader({
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-1.5">
             <HeaderChip className={transactionFlowStyles[flow]}>
-              {transactionFlowLabels[flow]}
+              {t(transactionFlowLabels[flow])}
             </HeaderChip>
             <HeaderChip
               icon={
@@ -94,7 +96,9 @@ export function TransactionDetailHeader({
             </HeaderChip>
             {confLabel ? (
               <HeaderChip
-                title={`${transaction.confirmations} on-chain confirmations`}
+                title={t("detailHeader.confirmationsTitle", {
+                  count: transaction.confirmations,
+                })}
               >
                 {confLabel}
               </HeaderChip>
@@ -106,7 +110,7 @@ export function TransactionDetailHeader({
                 }
                 className={transactionStatusStyles[reviewStatus]}
               >
-                {transactionStatusLabels[reviewStatus]}
+                {t(transactionStatusLabels[reviewStatus])}
               </HeaderChip>
             ) : null}
             {pair ? (
@@ -119,7 +123,9 @@ export function TransactionDetailHeader({
                 }
                 className="border-sky-500/30 text-sky-700 dark:text-sky-300"
               >
-                Paired · {pair.outWallet ?? "Out"} → {pair.inWallet ?? "In"}
+                {t("detailHeader.paired")} ·{" "}
+                {pair.outWallet ?? t("detailHeader.pairOut")} →{" "}
+                {pair.inWallet ?? t("detailHeader.pairIn")}
               </HeaderChip>
             ) : null}
           </div>
@@ -136,7 +142,7 @@ export function TransactionDetailHeader({
                 <span className={blurClass(hideSensitive)}>
                   {currencyFormatter.format(Math.abs(valueAtTimeEur))}
                 </span>{" "}
-                then
+                {t("detailHeader.valueThen")}
                 {valueNowEur !== null ? (
                   <>
                     {" "}
@@ -144,7 +150,7 @@ export function TransactionDetailHeader({
                     <span className={blurClass(hideSensitive)}>
                       {currencyFormatter.format(Math.abs(valueNowEur))}
                     </span>{" "}
-                    now
+                    {t("detailHeader.valueNow")}
                     {pricedChange !== null ? (
                       <span
                         className={cn(
@@ -173,7 +179,7 @@ export function TransactionDetailHeader({
             </span>
             <span className="text-muted-foreground">·</span>
             <span className="text-muted-foreground">
-              {transaction.wallet ?? "Unassigned wallet"}
+              {transaction.wallet ?? t("detailHeader.unassignedWallet")}
             </span>
             <span className="text-muted-foreground">·</span>
             <span className="inline-flex items-center gap-1 text-muted-foreground">
@@ -188,7 +194,7 @@ export function TransactionDetailHeader({
               type="button"
               variant="outline"
               size="icon"
-              aria-label="Open explorer"
+              aria-label={t("detailHeader.openExplorer")}
               onClick={() => onOpenExplorer(transaction)}
             >
               <ExternalLink className="size-4" aria-hidden="true" />
@@ -198,7 +204,7 @@ export function TransactionDetailHeader({
             type="button"
             size="icon"
             variant="ghost"
-            aria-label="Close transaction detail"
+            aria-label={t("detailHeader.close")}
             onClick={onClose}
           >
             <X className="size-4" aria-hidden="true" />

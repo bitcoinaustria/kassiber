@@ -1,4 +1,6 @@
+import type { ParseKeys } from "i18next";
 import { Plus, X } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,12 +21,15 @@ import {
   allTransactionStatuses,
   blurClass,
   classificationOptions,
+  classificationOptionLabelKeys,
+  tagSuggestionLabelKeys,
   transactionStatusLabels,
   type TransactionStatus,
 } from "./model";
 import type { TransactionDetailTabContext } from "./TransactionDetailTabContext";
 
 export function TransactionClassifyTab({ ctx }: { ctx: TransactionDetailTabContext }) {
+  const { t } = useTranslation(["transactions"]);
   const {
     localDraft,
     dirty,
@@ -51,7 +56,7 @@ export function TransactionClassifyTab({ ctx }: { ctx: TransactionDetailTabConte
                           htmlFor="tx-label"
                           className="flex items-center gap-1.5"
                         >
-                          Label
+                          {t("classify.label")}
                           <DirtyDot active={dirtyLabel} />
                         </Label>
                         <Select
@@ -64,7 +69,14 @@ export function TransactionClassifyTab({ ctx }: { ctx: TransactionDetailTabConte
                           <SelectContent>
                             {classificationOptions.map((label) => (
                               <SelectItem key={label} value={label}>
-                                {label}
+                                {classificationOptionLabelKeys[label]
+                                  ? // dynamic key
+                                    t(
+                                      classificationOptionLabelKeys[
+                                        label
+                                      ] as ParseKeys<["transactions"]>,
+                                    )
+                                  : label}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -75,11 +87,10 @@ export function TransactionClassifyTab({ ctx }: { ctx: TransactionDetailTabConte
                           htmlFor="tx-status"
                           className="flex items-center gap-1.5 text-muted-foreground"
                         >
-                          Review status
+                          {t("classify.reviewStatus")}
                           <DirtyDot active={dirty.reviewStatus} />
-                          <InfoHint label="Review status">
-                            Local review state for filtering and audit
-                            workflow. It does not change chain confirmations.
+                          <InfoHint label={t("classify.reviewStatus")}>
+                            {t("classify.reviewStatusHint")}
                           </InfoHint>
                         </Label>
                         <Select
@@ -97,7 +108,7 @@ export function TransactionClassifyTab({ ctx }: { ctx: TransactionDetailTabConte
                           <SelectContent>
                             {allTransactionStatuses.map((status) => (
                               <SelectItem key={status} value={status}>
-                                {transactionStatusLabels[status]}
+                                {t(transactionStatusLabels[status])}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -108,11 +119,16 @@ export function TransactionClassifyTab({ ctx }: { ctx: TransactionDetailTabConte
                           htmlFor="tx-tag-input"
                           className="flex items-center gap-1.5"
                         >
-                          Tags
+                          {t("classify.tags")}
                           <DirtyDot active={dirtyTags} />
                           <span className="text-xs font-normal text-muted-foreground">
-                            (press <kbd className="rounded border bg-muted px-1">t</kbd>{" "}
-                            anywhere to focus)
+                            <Trans
+                              i18nKey="classify.tagsFocusHint"
+                              ns="transactions"
+                              components={[
+                                <kbd className="rounded border bg-muted px-1" />,
+                              ]}
+                            />
                           </span>
                         </Label>
                         <div className="rounded-md border bg-background p-2">
@@ -127,7 +143,7 @@ export function TransactionClassifyTab({ ctx }: { ctx: TransactionDetailTabConte
                                     blurClass(hideSensitive),
                                   )}
                                   onClick={() => removeTag(tag)}
-                                  aria-label={`Remove ${tag} tag`}
+                                  aria-label={t("classify.removeTagAria", { tag })}
                                 >
                                   {tag}
                                   <X className="size-3" aria-hidden="true" />
@@ -135,7 +151,7 @@ export function TransactionClassifyTab({ ctx }: { ctx: TransactionDetailTabConte
                               ))
                             ) : (
                               <span className="px-1 py-1 text-sm text-muted-foreground">
-                                No tags yet
+                                {t("classify.noTagsYet")}
                               </span>
                             )}
                           </div>
@@ -157,13 +173,13 @@ export function TransactionClassifyTab({ ctx }: { ctx: TransactionDetailTabConte
                                   addTag(tagInput);
                                 }
                               }}
-                              placeholder="Add tag"
+                              placeholder={t("classify.addTagPlaceholder")}
                             />
                             <Button
                               type="button"
                               variant="outline"
                               size="icon"
-                              aria-label="Add tag"
+                              aria-label={t("classify.addTagAria")}
                               onClick={() => addTag(tagInput)}
                             >
                               <Plus className="size-4" aria-hidden="true" />
@@ -178,7 +194,16 @@ export function TransactionClassifyTab({ ctx }: { ctx: TransactionDetailTabConte
                               className="rounded-md border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                               onClick={() => addTag(tag)}
                             >
-                              + {tag}
+                              {t("classify.suggestionPrefix", {
+                                tag: tagSuggestionLabelKeys[tag]
+                                  ? // dynamic key
+                                    t(
+                                      tagSuggestionLabelKeys[
+                                        tag
+                                      ] as ParseKeys<["transactions"]>,
+                                    )
+                                  : tag,
+                              })}
                             </button>
                           ))}
                         </div>
@@ -188,7 +213,7 @@ export function TransactionClassifyTab({ ctx }: { ctx: TransactionDetailTabConte
                           htmlFor="tx-note"
                           className="flex items-center gap-1.5"
                         >
-                          Note
+                          {t("classify.note")}
                           <DirtyDot active={dirtyNote} />
                         </Label>
                         <Textarea
@@ -201,7 +226,7 @@ export function TransactionClassifyTab({ ctx }: { ctx: TransactionDetailTabConte
                             "min-h-28 resize-none",
                             blurClass(hideSensitive),
                           )}
-                          placeholder="Receipt, invoice, counterparty, or review context"
+                          placeholder={t("classify.notePlaceholder")}
                         />
                       </div>
                     </div>

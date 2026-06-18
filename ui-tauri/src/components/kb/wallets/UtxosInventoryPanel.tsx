@@ -5,6 +5,10 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+
+import i18n from "@/i18n";
 import {
   AlertTriangle,
   ArrowDown,
@@ -229,19 +233,27 @@ function formatOutpoint(value: string) {
   return `${txid.slice(0, 8)}…${txid.slice(-6)}:${vout ?? "?"}`;
 }
 
-function formatLocation(row: WalletUtxoRow) {
+function formatLocation(
+  row: WalletUtxoRow,
+  t: TFunction<"connections">,
+) {
   if (row.branch_label && row.address_index !== null && row.address_index !== undefined) {
-    return `${row.branch_label} #${row.address_index}`;
+    return t("utxos.locationLabel", {
+      branch: row.branch_label,
+      index: row.address_index,
+    });
   }
-  return row.address_label || row.branch_label || "watch target";
+  return row.address_label || row.branch_label || t("utxos.watchTarget");
 }
 
-function statusLabel(row: WalletUtxoRow) {
+function statusLabel(row: WalletUtxoRow, t: TFunction<"connections">) {
   if (row.confirmation_status === "confirmed") {
     const confirmations = row.confirmations;
-    return confirmations ? `${confirmations.toLocaleString()} conf` : "confirmed";
+    return confirmations
+      ? t("utxos.confLabel", { count: confirmations })
+      : t("utxos.confirmedLabel");
   }
-  return "mempool";
+  return t("utxos.mempool");
 }
 
 function isMempool(row: WalletUtxoRow) {
@@ -338,22 +350,36 @@ export function explorerTargetForUtxo(row: WalletUtxoRow, settings: ExplorerSett
   });
 }
 
-export function explorerButtonTitle(target: ExplorerTarget) {
-  return `Open UTXO transaction on ${target.label}`;
+export function explorerButtonTitle(
+  target: ExplorerTarget,
+  t?: TFunction<"connections">,
+) {
+  const translate = t ?? ((key: string, opts?: Record<string, unknown>) =>
+    // dynamic key
+    i18n.t(key as never, { ns: "connections", ...opts }) as string);
+  return translate("utxos.openExplorer", { explorer: target.label });
 }
 
-function localTransactionTitle(row: WalletUtxoRow) {
-  return `Open local transaction details for ${formatOutpoint(row.outpoint)}`;
+function localTransactionTitle(
+  row: WalletUtxoRow,
+  t: TFunction<"connections">,
+) {
+  return t("utxos.openLocalTransaction", {
+    outpoint: formatOutpoint(row.outpoint),
+  });
 }
 
 export function transactionRefForRow(row: WalletUtxoRow) {
   return row.transaction_id || row.txid;
 }
 
-function explorerOpenErrorMessage(error: unknown) {
+function explorerOpenErrorMessage(
+  error: unknown,
+  t: TFunction<"connections">,
+) {
   if (error instanceof Error && error.message) return error.message;
   if (typeof error === "string" && error) return error;
-  return "Could not open explorer in the default browser.";
+  return t("utxos.dialog.couldNotOpen");
 }
 
 function OutpointButton({
@@ -362,12 +388,14 @@ function OutpointButton({
   hideSensitive,
   onOpen,
   onOpenTransaction,
+  t,
 }: {
   row: WalletUtxoRow;
   explorer: ExplorerTarget | null;
   hideSensitive: boolean;
   onOpen: (row: WalletUtxoRow) => void;
   onOpenTransaction?: (transactionId: string) => void;
+  t: TFunction<"connections">;
 }) {
   if (onOpenTransaction) {
     return (
@@ -377,7 +405,7 @@ function OutpointButton({
           "inline-flex max-w-[22ch] items-center gap-1 truncate text-left font-mono text-xs underline-offset-4 hover:underline",
           hideSensitive && "sensitive",
         )}
-        title={localTransactionTitle(row)}
+        title={localTransactionTitle(row, t)}
         onKeyDown={(event) => event.stopPropagation()}
         onClick={(event) => {
           event.stopPropagation();
@@ -402,7 +430,7 @@ function OutpointButton({
         "inline-flex max-w-[22ch] items-center gap-1 truncate text-left font-mono text-xs underline-offset-4 hover:underline",
         hideSensitive && "sensitive",
       )}
-      title={explorerButtonTitle(explorer)}
+      title={explorerButtonTitle(explorer, t)}
       onKeyDown={(event) => event.stopPropagation()}
       onClick={(event) => {
         event.stopPropagation();
@@ -421,13 +449,15 @@ function OutpointButton({
 function LocationBlock({
   row,
   hideSensitive,
+  t,
 }: {
   row: WalletUtxoRow;
   hideSensitive: boolean;
+  t: TFunction<"connections">;
 }) {
   return (
     <div className="min-w-0">
-      <div className="truncate text-sm">{formatLocation(row)}</div>
+      <div className="truncate text-sm">{formatLocation(row, t)}</div>
       {row.address ? (
         <div className="flex min-w-0 items-center gap-1">
           <span
@@ -444,7 +474,7 @@ function LocationBlock({
           >
             <CopyButton
               value={row.address}
-              ariaLabel="Copy address"
+              ariaLabel={t("utxos.copyAddress")}
               variant="ghost"
               className="size-5 shrink-0 text-muted-foreground"
             />
@@ -497,10 +527,12 @@ function UtxoExplorerOpenDialog({
   row,
   target,
   onRowChange,
+  t,
 }: {
   row: WalletUtxoRow | null;
   target: ExplorerTarget | null;
   onRowChange: (row: WalletUtxoRow | null) => void;
+  t: TFunction<["connections", "common"]>;
 }) {
   const [openError, setOpenError] = useState<string | null>(null);
   const [opening, setOpening] = useState(false);
@@ -513,7 +545,7 @@ function UtxoExplorerOpenDialog({
       await openExternalUrl(target.url);
       onRowChange(null);
     } catch (error) {
-      setOpenError(explorerOpenErrorMessage(error));
+      setOpenError(explorerOpenErrorMessage(error, t));
     } finally {
       setOpening(false);
     }
@@ -535,11 +567,11 @@ function UtxoExplorerOpenDialog({
             <div className="mb-1 flex size-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
               <ShieldAlert className="size-5" aria-hidden="true" />
             </div>
-            <DialogTitle>Open UTXO transaction in a browser?</DialogTitle>
+            <DialogTitle>{t("utxos.dialog.title")}</DialogTitle>
             <DialogDescription className="max-w-prose">
-              This opens {target?.label ?? "the configured explorer"} outside Kassiber.
-              The explorer can see your IP address and the transaction id you
-              request.
+              {t("utxos.dialog.description", {
+                explorer: target?.label ?? t("utxos.dialog.explorerFallback"),
+              })}
             </DialogDescription>
           </DialogHeader>
           {row && target ? (
@@ -561,7 +593,7 @@ function UtxoExplorerOpenDialog({
           <DialogFooter className="gap-2 sm:flex-wrap">
             <DialogClose asChild>
               <Button type="button" variant="outline">
-                Cancel
+                {t("common:actions.cancel")}
               </Button>
             </DialogClose>
             <Button
@@ -570,7 +602,7 @@ function UtxoExplorerOpenDialog({
               onClick={() => void openExplorer()}
             >
               <ExternalLink className="size-4" aria-hidden="true" />
-              {opening ? "Opening..." : "Open explorer"}
+              {opening ? t("utxos.dialog.opening") : t("utxos.dialog.openExplorer")}
             </Button>
           </DialogFooter>
         </div>
@@ -584,11 +616,13 @@ function EmptyState({
   body,
   onRefresh,
   isRefreshing,
+  t,
 }: {
   title: string;
   body: string;
   onRefresh: () => void;
   isRefreshing: boolean;
+  t: TFunction<"connections">;
 }) {
   return (
     <div className="flex flex-col items-start gap-3 px-5 py-8 text-sm text-muted-foreground">
@@ -607,7 +641,7 @@ function EmptyState({
           className={cn("size-4", isRefreshing && "animate-spin")}
           aria-hidden="true"
         />
-        {isRefreshing ? "Refreshing" : "Refresh"}
+        {isRefreshing ? t("utxos.refreshing") : t("utxos.refresh")}
       </Button>
     </div>
   );
@@ -623,6 +657,7 @@ export function UtxosInventoryPanel({
   onRefresh,
   onOpenTransaction,
 }: UtxosInventoryPanelProps) {
+  const { t } = useTranslation(["connections", "common"]);
   const rows = inventory?.utxos ?? [];
   const walletId = inventory?.wallet?.id ?? null;
   const totalCount = inventory?.summary?.count ?? inventory?.freshness.active_count ?? rows.length;
@@ -667,7 +702,9 @@ export function UtxosInventoryPanel({
   const stale = Boolean(inventory?.freshness.stale);
   const unsupported = inventory?.support.supported === false;
   const liquidBlocked = inventory?.support.status === "liquid_unblind_blocked";
-  const title = liquidBlocked ? "Liquid UTXOs need unblinding" : "UTXO inventory unavailable";
+  const title = liquidBlocked
+    ? t("utxos.liquidNeedsUnblinding")
+    : t("utxos.unavailableTitle");
   const lastSyncedLabel = dateLabel(
     inventory?.freshness.last_synced_at ?? inventory?.freshness.last_seen_at,
   );
@@ -679,22 +716,28 @@ export function UtxosInventoryPanel({
           <div className="min-w-0">
             <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
               <Coins className="size-4" aria-hidden="true" />
-              UTXOs
+              {t("utxos.title")}
               <CountBadge>
                 {serverTruncated
-                  ? `${returnedCount.toLocaleString("en-US")} of ${totalCount.toLocaleString("en-US")}`
+                  ? t("utxos.countOf", {
+                      returned: returnedCount.toLocaleString("en-US"),
+                      total: totalCount.toLocaleString("en-US"),
+                    })
                   : totalCount.toLocaleString("en-US")}
               </CountBadge>
             </CardTitle>
             <CardDescription className="mt-1">
               {serverTruncated
-                ? `Showing the first ${returnedCount.toLocaleString("en-US")} UTXOs returned by this source.`
-                : "Currently unspent transaction outputs known from this source."}
+                ? t("utxos.descriptionTruncated", {
+                    value: returnedCount.toLocaleString("en-US"),
+                  })
+                : t("utxos.description")}
             </CardDescription>
             {serverTruncated && rowLimit ? (
               <p className="mt-1 text-xs text-muted-foreground">
-                Full totals stay current; the table response is capped at{" "}
-                {rowLimit.toLocaleString("en-US")} rows for preview performance.
+                {t("utxos.truncatedNote", {
+                  limit: rowLimit.toLocaleString("en-US"),
+                })}
               </p>
             ) : null}
           </div>
@@ -709,10 +752,11 @@ export function UtxosInventoryPanel({
           </div>
         ) : errorMessage ? (
           <EmptyState
-            title="UTXO inventory could not load"
+            title={t("utxos.couldNotLoadTitle")}
             body={errorMessage}
             onRefresh={onRefresh}
             isRefreshing={isRefreshing}
+            t={t}
           />
         ) : unsupported ? (
           <div className="flex flex-col items-start gap-3 px-5 py-8 text-sm text-muted-foreground">
@@ -725,17 +769,18 @@ export function UtxosInventoryPanel({
                 <p className="font-medium text-foreground">{title}</p>
                 <p>
                   {inventory?.support.message ||
-                    "This wallet source does not expose a watch-only UTXO inventory."}
+                    t("utxos.unsupportedFallback")}
                 </p>
               </div>
             </div>
           </div>
         ) : rows.length === 0 ? (
           <EmptyState
-            title="No UTXOs known"
-            body="Refresh this source to update Kassiber's UTXO inventory."
+            title={t("utxos.noneTitle")}
+            body={t("utxos.noneBody")}
             onRefresh={onRefresh}
             isRefreshing={isRefreshing}
+            t={t}
           />
         ) : (
           <>
@@ -743,8 +788,9 @@ export function UtxosInventoryPanel({
               <div className="flex items-start gap-2 border-b bg-amber-50 px-4 py-2.5 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
                 <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
                 <span>
-                  {lastSyncedLabel ? `Last refreshed ${lastSyncedLabel}. ` : ""}
-                  Refresh this source to update the UTXO inventory.
+                  {lastSyncedLabel
+                    ? t("utxos.staleWithDate", { date: lastSyncedLabel })
+                    : t("utxos.stale")}
                 </span>
               </div>
             ) : null}
@@ -758,30 +804,30 @@ export function UtxosInventoryPanel({
                       sort={sort}
                       onSort={handleSort}
                     >
-                      Outpoint
+                      {t("utxos.column.outpoint")}
                     </SortableTableHead>
                     <SortableTableHead
                       column="amount"
                       sort={sort}
                       onSort={handleSort}
                     >
-                      Amount
+                      {t("utxos.column.amount")}
                     </SortableTableHead>
                     <SortableTableHead
                       column="status"
                       sort={sort}
                       onSort={handleSort}
                     >
-                      Status
+                      {t("utxos.column.status")}
                     </SortableTableHead>
-                    <TableHead>Address</TableHead>
+                    <TableHead>{t("utxos.column.address")}</TableHead>
                     <SortableTableHead
                       column="confirmed"
                       sort={sort}
                       onSort={handleSort}
                       className="text-right"
                     >
-                      Confirmed
+                      {t("utxos.column.confirmed")}
                     </SortableTableHead>
                   </TableRow>
                 </TableHeader>
@@ -810,6 +856,7 @@ export function UtxosInventoryPanel({
                               hideSensitive={hideSensitive}
                               onOpen={setExplorerRow}
                               onOpenTransaction={onOpenTransaction}
+                              t={t}
                             />
                             <span
                               onClick={(event) => event.stopPropagation()}
@@ -817,7 +864,7 @@ export function UtxosInventoryPanel({
                             >
                               <CopyButton
                                 value={row.outpoint}
-                                ariaLabel="Copy outpoint"
+                                ariaLabel={t("utxos.copyOutpoint")}
                                 variant="ghost"
                                 className="size-5 shrink-0 text-muted-foreground"
                               />
@@ -834,11 +881,11 @@ export function UtxosInventoryPanel({
                         </TableCell>
                         <TableCell>
                           <Badge variant={row.confirmation_status === "confirmed" ? "secondary" : "outline"}>
-                            {statusLabel(row)}
+                            {statusLabel(row, t)}
                           </Badge>
                         </TableCell>
                         <TableCell className="max-w-[220px]">
-                          <LocationBlock row={row} hideSensitive={hideSensitive} />
+                          <LocationBlock row={row} hideSensitive={hideSensitive} t={t} />
                         </TableCell>
                         <TableCell className="text-right font-mono text-xs text-muted-foreground">
                           {primaryDateLabel(row) ?? "—"}
@@ -875,6 +922,7 @@ export function UtxosInventoryPanel({
                           hideSensitive={hideSensitive}
                           onOpen={setExplorerRow}
                           onOpenTransaction={onOpenTransaction}
+                          t={t}
                         />
                         <span
                           onClick={(event) => event.stopPropagation()}
@@ -882,7 +930,7 @@ export function UtxosInventoryPanel({
                         >
                           <CopyButton
                             value={row.outpoint}
-                            ariaLabel="Copy outpoint"
+                            ariaLabel={t("utxos.copyOutpoint")}
                             variant="ghost"
                             className="size-5 shrink-0 text-muted-foreground"
                           />
@@ -892,7 +940,7 @@ export function UtxosInventoryPanel({
                         variant={row.confirmation_status === "confirmed" ? "secondary" : "outline"}
                         className="shrink-0"
                       >
-                        {statusLabel(row)}
+                        {statusLabel(row, t)}
                       </Badge>
                     </div>
                     <div className="flex items-baseline justify-between gap-3">
@@ -906,7 +954,7 @@ export function UtxosInventoryPanel({
                         {primaryDateLabel(row) ?? "—"}
                       </span>
                     </div>
-                    <LocationBlock row={row} hideSensitive={hideSensitive} />
+                    <LocationBlock row={row} hideSensitive={hideSensitive} t={t} />
                   </div>
                 );
               })}
@@ -914,8 +962,10 @@ export function UtxosInventoryPanel({
             {hiddenCount > 0 ? (
               <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2.5 text-xs text-muted-foreground">
                 <span>
-                  Showing {visibleRows.length.toLocaleString("en-US")} of{" "}
-                  {sortedRows.length.toLocaleString("en-US")}
+                  {t("utxos.showingOf", {
+                    shown: visibleRows.length.toLocaleString("en-US"),
+                    total: sortedRows.length.toLocaleString("en-US"),
+                  })}
                 </span>
                 <Button
                   type="button"
@@ -925,19 +975,26 @@ export function UtxosInventoryPanel({
                     setVisibleCount((count) => count + UTXO_PAGE_SIZE)
                   }
                 >
-                  Show {Math.min(UTXO_PAGE_SIZE, hiddenCount).toLocaleString("en-US")} more
+                  {t("utxos.showMore", {
+                    value: Math.min(UTXO_PAGE_SIZE, hiddenCount).toLocaleString(
+                      "en-US",
+                    ),
+                  })}
                 </Button>
               </div>
             ) : serverTruncated ? (
               <div className="border-t px-4 py-2.5 text-xs text-muted-foreground">
-                Showing {returnedCount.toLocaleString("en-US")} transported rows of{" "}
-                {totalCount.toLocaleString("en-US")} total active UTXOs.
+                {t("utxos.transportedRows", {
+                  returned: returnedCount.toLocaleString("en-US"),
+                  total: totalCount.toLocaleString("en-US"),
+                })}
               </div>
             ) : null}
             <UtxoExplorerOpenDialog
               row={explorerRow}
               target={explorerTarget}
               onRowChange={setExplorerRow}
+              t={t}
             />
           </>
         )}

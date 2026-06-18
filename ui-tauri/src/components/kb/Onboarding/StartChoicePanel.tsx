@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 
@@ -26,24 +27,11 @@ interface StartChoicePanelProps {
 
 const START_HIGHLIGHTS: Array<{
   icon: LucideIcon;
-  title: string;
-  body: string;
+  titleKey: "localDatabase" | "encrypted" | "importLocal";
 }> = [
-  {
-    icon: Database,
-    title: "One local database",
-    body: "~/.kassiber by default, or an imported Kassiber folder.",
-  },
-  {
-    icon: LockKeyhole,
-    title: "Encrypted by default",
-    body: "SQLCipher protects real books at rest.",
-  },
-  {
-    icon: FolderOpen,
-    title: "Import stays local",
-    body: "Existing books are listed after the selected folder opens.",
-  },
+  { icon: Database, titleKey: "localDatabase" },
+  { icon: LockKeyhole, titleKey: "encrypted" },
+  { icon: FolderOpen, titleKey: "importLocal" },
 ];
 
 export function StartChoicePanel({
@@ -53,10 +41,11 @@ export function StartChoicePanel({
   onImport,
   onQuickStart,
 }: StartChoicePanelProps) {
+  const { t } = useTranslation("onboarding");
   return (
     <OnboardingStepFrame>
       <OnboardingStepLeftWrapper
-        title="Open your local books"
+        title={t("start.title")}
         currentStep={0}
         totalSteps={5}
         showProgress={false}
@@ -73,10 +62,10 @@ export function StartChoicePanel({
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-base font-semibold">
-                  Create new books
+                  {t("start.createNew.title")}
                 </span>
                 <span className="mt-2 block text-sm leading-6 text-paper/75">
-                  Create a new local Kassiber database with sensible defaults.
+                  {t("start.createNew.body")}
                 </span>
               </span>
               <ArrowRight
@@ -91,8 +80,8 @@ export function StartChoicePanel({
               onClick={onImport}
               title={
                 importAvailable
-                  ? "Open existing local Kassiber books"
-                  : "Opening existing books is available in the desktop app"
+                  ? t("start.openExisting.tooltipAvailable")
+                  : t("start.openExisting.tooltipUnavailable")
               }
               className={cn(
                 "group flex min-h-[132px] w-full items-start gap-4 rounded-lg border p-4 text-left transition",
@@ -106,15 +95,16 @@ export function StartChoicePanel({
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-base font-semibold text-ink">
-                  {importing ? "Opening books..." : "Open existing books"}
+                  {importing
+                    ? t("start.openExisting.titleOpening")
+                    : t("start.openExisting.title")}
                 </span>
                 <span className="mt-2 block text-sm leading-6 text-ink-2">
-                  Open a Kassiber state root or data folder and choose local
-                  books.
+                  {t("start.openExisting.body")}
                 </span>
                 {!importAvailable && (
                   <span className="mt-3 block font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-ink-3">
-                    desktop app only
+                    {t("start.openExisting.desktopOnly")}
                   </span>
                 )}
               </span>
@@ -132,7 +122,7 @@ export function StartChoicePanel({
               onClick={onQuickStart}
               className="group mt-1 inline-flex items-center gap-1.5 self-start text-sm font-medium text-ink-2 underline-offset-4 transition-colors hover:text-ink hover:underline"
             >
-              Or create with recommended defaults
+              {t("start.quickStart")}
               <ArrowRight
                 className="size-3.5 transition-transform group-hover:translate-x-0.5"
                 aria-hidden="true"
@@ -142,27 +132,28 @@ export function StartChoicePanel({
 
           <div className="flex items-start gap-3 rounded-lg border border-line bg-paper-2 p-3 text-xs leading-5 text-ink-2">
             <ShieldCheck className="mt-0.5 size-4 shrink-0 text-ink" />
-            <p className="m-0">
-              Kassiber stores watch-only accounting data locally. Private keys
-              never enter the app.
-            </p>
+            <p className="m-0">{t("start.privacyNote")}</p>
           </div>
         </div>
       </OnboardingStepLeftWrapper>
 
       <OnboardingStepRightWrapper className="p-6">
         <div className="flex h-full flex-col justify-center gap-4">
-          {START_HIGHLIGHTS.map(({ icon: Icon, title, body }) => (
+          {START_HIGHLIGHTS.map(({ icon: Icon, titleKey }) => (
             <div
-              key={title}
+              key={titleKey}
               className="flex items-start gap-3 rounded-lg border border-line bg-paper p-4"
             >
               <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-ink text-paper">
                 <Icon className="size-4" aria-hidden="true" />
               </span>
               <div>
-                <p className="m-0 text-sm font-semibold text-ink">{title}</p>
-                <p className="m-0 mt-1 text-xs leading-5 text-ink-2">{body}</p>
+                <p className="m-0 text-sm font-semibold text-ink">
+                  {t(`start.highlights.${titleKey}.title`)}
+                </p>
+                <p className="m-0 mt-1 text-xs leading-5 text-ink-2">
+                  {t(`start.highlights.${titleKey}.body`)}
+                </p>
               </div>
             </div>
           ))}

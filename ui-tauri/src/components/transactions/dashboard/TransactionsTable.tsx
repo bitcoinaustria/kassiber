@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 
@@ -74,6 +75,7 @@ import {
   allTransactionStatuses,
   austrianTaxClassificationFor,
   blurClass,
+  classificationOptionLabelKeys,
   copyText,
   currencyFormatter,
   draftForTransaction,
@@ -170,6 +172,7 @@ const TransactionsTable = ({
   deepLinkedTransactionId?: string | null;
   deepLinkedTransactionTab?: string;
 }) => {
+  const { t } = useTranslation("transactions");
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
@@ -407,8 +410,12 @@ const TransactionsTable = ({
     ],
   );
   const attachmentItems = React.useMemo(
-    () => detailAttachmentRecords.map(attachmentRecordToItem),
-    [detailAttachmentRecords],
+    () =>
+      detailAttachmentRecords.map((record) =>
+        // loose translator
+        attachmentRecordToItem(record, t as (key: string) => string),
+      ),
+    [detailAttachmentRecords, t],
   );
   React.useEffect(() => {
     setAttachmentListOverride(null);
@@ -478,10 +485,11 @@ const TransactionsTable = ({
   }, [evidenceSourceTransactions, reuseDialogOpen, reuseSourceTransactionId]);
   const reuseSourceAttachmentItems = React.useMemo(
     () =>
-      (reuseSourceAttachmentsQuery.data?.data?.attachments ?? []).map(
-        attachmentRecordToItem,
+      (reuseSourceAttachmentsQuery.data?.data?.attachments ?? []).map((record) =>
+        // loose translator
+        attachmentRecordToItem(record, t as (key: string) => string),
       ),
-    [reuseSourceAttachmentsQuery.data],
+    [reuseSourceAttachmentsQuery.data, t],
   );
   const journalEvents = journalEventsQuery.data?.data?.events ?? [];
   const commercialContext = commercialContextQuery.data?.data;
@@ -494,17 +502,17 @@ const TransactionsTable = ({
         event: target.event.id,
         ...(target.field ? { field: target.field.field } : {}),
         reason: target.field
-          ? `Reverted ${target.field.label} from edit history`
-          : "Reverted edit history event",
+          ? t("history.revertReasonField", { label: target.field.label })
+          : t("history.revertReasonEvent"),
       });
       useUiStore.getState().addNotification({
-        title: "Edit reverted",
-        body: "Kassiber wrote a new edit history entry with the reverted value.",
+        title: t("notification.editReverted.title"),
+        body: t("notification.editReverted.body"),
         tone: "success",
         dedupeKey: `history-revert-${target.event.id}-${target.field?.field ?? "event"}`,
       });
     },
-    [detailTransaction, revertHistory],
+    [detailTransaction, revertHistory, t],
   );
 
   const hasActiveFilters =
@@ -818,21 +826,22 @@ const TransactionsTable = ({
       >
       <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5">
         <div className="flex flex-1 items-center gap-2">
-          <span className="text-sm font-medium sm:text-base">Transactions</span>
+          <span className="text-sm font-medium sm:text-base">{t("table.title")}</span>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <Select value={dateFilter} onValueChange={setDateFilter}>
             <SelectTrigger
               className="h-8 w-[120px] text-xs sm:h-9 sm:w-[140px] sm:text-sm"
-              aria-label="Filter by date"
+              aria-label={t("table.filter.dateAria")}
             >
-              <SelectValue placeholder="Date" />
+              <SelectValue placeholder={t("table.filter.datePlaceholder")} />
             </SelectTrigger>
             <SelectContent>
               {dateFilterOptions.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
-                  {option.label}
+                  {/* loose translator */}
+                  {(t as (key: string) => string)(option.label)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -847,22 +856,22 @@ const TransactionsTable = ({
                   "h-8 gap-1.5 sm:h-9 sm:gap-2",
                   statusFilter !== "all" && "border-primary",
                 )}
-                aria-label="Filter by status"
+                aria-label={t("table.filter.statusAria")}
               >
                 <Filter className="size-3.5 sm:size-4" aria-hidden="true" />
-                <span className="hidden sm:inline">Status</span>
+                <span className="hidden sm:inline">{t("table.filter.statusTrigger")}</span>
                 {statusFilter !== "all" && (
                   <span className="size-1.5 rounded-full bg-primary sm:size-2" />
                 )}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-[180px]">
-              <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
+              <DropdownMenuLabel>{t("table.filter.statusLabel")}</DropdownMenuLabel>
               <DropdownMenuCheckboxItem
                 checked={statusFilter === "all"}
                 onCheckedChange={() => setStatusFilter("all")}
               >
-                All Statuses
+                {t("table.filter.allStatuses")}
               </DropdownMenuCheckboxItem>
               {allTransactionStatuses.map((status) => (
                 <DropdownMenuCheckboxItem
@@ -870,7 +879,8 @@ const TransactionsTable = ({
                   checked={statusFilter === status}
                   onCheckedChange={() => setStatusFilter(status)}
                 >
-                  {transactionStatusLabels[status]}
+                  {/* loose translator */}
+                  {(t as (key: string) => string)(transactionStatusLabels[status])}
                 </DropdownMenuCheckboxItem>
               ))}
             </DropdownMenuContent>
@@ -885,25 +895,25 @@ const TransactionsTable = ({
                   "h-8 gap-1.5 sm:h-9 sm:gap-2",
                   flowFilter !== "all" && "border-primary",
                 )}
-                aria-label="Filter by flow"
+                aria-label={t("table.filter.flowAria")}
               >
                 <ArrowLeftRight
                   className="size-3.5 sm:size-4"
                   aria-hidden="true"
                 />
-                <span className="hidden sm:inline">Flow</span>
+                <span className="hidden sm:inline">{t("table.filter.flowTrigger")}</span>
                 {flowFilter !== "all" && (
                   <span className="size-1.5 rounded-full bg-primary sm:size-2" />
                 )}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-[190px]">
-              <DropdownMenuLabel>Filter by flow</DropdownMenuLabel>
+              <DropdownMenuLabel>{t("table.filter.flowLabel")}</DropdownMenuLabel>
               <DropdownMenuCheckboxItem
                 checked={flowFilter === "all"}
                 onCheckedChange={() => setFlowFilter("all")}
               >
-                All flows
+                {t("table.filter.allFlows")}
               </DropdownMenuCheckboxItem>
               {allTransactionFlows.map((flow) => (
                 <DropdownMenuCheckboxItem
@@ -911,7 +921,8 @@ const TransactionsTable = ({
                   checked={flowFilter === flow}
                   onCheckedChange={() => setFlowFilter(flow)}
                 >
-                  {transactionFlowLabels[flow]}
+                  {/* loose translator */}
+                  {(t as (key: string) => string)(transactionFlowLabels[flow])}
                 </DropdownMenuCheckboxItem>
               ))}
             </DropdownMenuContent>
@@ -926,22 +937,22 @@ const TransactionsTable = ({
                   "h-8 gap-1.5 sm:h-9 sm:gap-2",
                   paymentMethodFilter !== "all" && "border-primary",
                 )}
-                aria-label="Filter by payment method"
+                aria-label={t("table.filter.paymentAria")}
               >
                 <Wallet className="size-3.5 sm:size-4" aria-hidden="true" />
-                <span className="hidden sm:inline">Network</span>
+                <span className="hidden sm:inline">{t("table.filter.networkTrigger")}</span>
                 {paymentMethodFilter !== "all" && (
                   <span className="size-1.5 rounded-full bg-primary sm:size-2" />
                 )}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-[200px]">
-              <DropdownMenuLabel>Filter by network</DropdownMenuLabel>
+              <DropdownMenuLabel>{t("table.filter.networkLabel")}</DropdownMenuLabel>
               <DropdownMenuCheckboxItem
                 checked={paymentMethodFilter === "all"}
                 onCheckedChange={() => setPaymentMethodFilter("all")}
               >
-                All networks
+                {t("table.filter.allNetworks")}
               </DropdownMenuCheckboxItem>
               {allPaymentMethods.map((method) => (
                 <DropdownMenuCheckboxItem
@@ -964,14 +975,14 @@ const TransactionsTable = ({
                   "h-8 gap-1.5 sm:h-9 sm:gap-2",
                   walletFilterActive && "border-primary",
                 )}
-                aria-label="Filter by wallet or source"
+                aria-label={t("table.filter.walletAria")}
                 disabled={walletOptions.length === 0}
               >
                 <WalletCards
                   className="size-3.5 sm:size-4"
                   aria-hidden="true"
                 />
-                <span className="hidden sm:inline">Wallet</span>
+                <span className="hidden sm:inline">{t("table.filter.walletTrigger")}</span>
                 {walletFilterActive && (
                   <span className="size-1.5 rounded-full bg-primary sm:size-2" />
                 )}
@@ -981,7 +992,7 @@ const TransactionsTable = ({
               align="end"
               className="max-h-[320px] w-[220px] overflow-y-auto"
             >
-              <DropdownMenuLabel>Filter by wallet / source</DropdownMenuLabel>
+              <DropdownMenuLabel>{t("table.filter.walletLabel")}</DropdownMenuLabel>
               <DropdownMenuCheckboxItem
                 checked={!walletFilterActive}
                 onCheckedChange={() => {
@@ -990,7 +1001,7 @@ const TransactionsTable = ({
                   if (walletFilterActive) clearWalletScope();
                 }}
               >
-                All wallets
+                {t("table.filter.allWallets")}
               </DropdownMenuCheckboxItem>
               {walletOptions.map((wallet) => (
                 <DropdownMenuCheckboxItem
@@ -1009,16 +1020,28 @@ const TransactionsTable = ({
       {hasActiveFilters && (
         <div className="flex flex-wrap items-center gap-2 px-3 pb-3 sm:px-6">
           <span className="text-[10px] text-muted-foreground sm:text-xs">
-            Filters:
+            {t("table.filters")}
           </span>
           {chartSelection && (
             <button
               type="button"
               className={filterChipClassName}
               onClick={() => onChartSelectionChange(null)}
-              aria-label={`Clear chart filter ${flowChartSelectionLabel(chartSelection)}`}
+              aria-label={t("table.chip.clearChart", {
+                // loose translator
+                label: flowChartSelectionLabel(
+                  chartSelection,
+                  t as (key: string, opts?: Record<string, unknown>) => string,
+                ),
+              })}
             >
-              Chart: {flowChartSelectionLabel(chartSelection)}
+              {t("table.chip.chartPrefix", {
+                // loose translator
+                label: flowChartSelectionLabel(
+                  chartSelection,
+                  t as (key: string, opts?: Record<string, unknown>) => string,
+                ),
+              })}
               <X className="size-2.5 sm:size-3" aria-hidden="true" />
             </button>
           )}
@@ -1027,9 +1050,15 @@ const TransactionsTable = ({
               type="button"
               className={filterChipClassName}
               onClick={() => onQuickFilterChange(null)}
-              aria-label={`Clear ${quickFilterLabel(quickFilter)} filter`}
+              aria-label={t("table.chip.clearQuick", {
+                // loose translator
+                label: (t as (key: string) => string)(
+                  quickFilterLabel(quickFilter),
+                ),
+              })}
             >
-              {quickFilterLabel(quickFilter)}
+              {/* loose translator */}
+              {(t as (key: string) => string)(quickFilterLabel(quickFilter))}
               <X className="size-2.5 sm:size-3" aria-hidden="true" />
             </button>
           )}
@@ -1038,9 +1067,19 @@ const TransactionsTable = ({
               type="button"
               className={filterChipClassName}
               onClick={() => onBreakdownSelectionChange(null)}
-              aria-label={`Clear ${breakdownSelectionLabel(breakdownSelection)} filter`}
+              aria-label={t("table.chip.clearBreakdown", {
+                // loose translator
+                label: breakdownSelectionLabel(
+                  breakdownSelection,
+                  t as (key: string, opts?: Record<string, unknown>) => string,
+                ),
+              })}
             >
-              {breakdownSelectionLabel(breakdownSelection)}
+              {/* loose translator */}
+              {breakdownSelectionLabel(
+                breakdownSelection,
+                t as (key: string, opts?: Record<string, unknown>) => string,
+              )}
               <X className="size-2.5 sm:size-3" aria-hidden="true" />
             </button>
           )}
@@ -1049,9 +1088,17 @@ const TransactionsTable = ({
               type="button"
               className={filterChipClassName}
               onClick={() => setStatusFilter("all")}
-              aria-label={`Clear ${transactionStatusLabels[statusFilter as TransactionStatus]} filter`}
+              aria-label={t("table.chip.clearStatus", {
+                // loose translator
+                label: (t as (key: string) => string)(
+                  transactionStatusLabels[statusFilter as TransactionStatus],
+                ),
+              })}
             >
-              {transactionStatusLabels[statusFilter as TransactionStatus]}
+              {/* loose translator */}
+              {(t as (key: string) => string)(
+                transactionStatusLabels[statusFilter as TransactionStatus],
+              )}
               <X className="size-2.5 sm:size-3" aria-hidden="true" />
             </button>
           )}
@@ -1060,9 +1107,19 @@ const TransactionsTable = ({
               type="button"
               className={filterChipClassName}
               onClick={() => setDateFilter("all")}
-              aria-label={`Clear ${dateFilterOptions.find((o) => o.value === dateFilter)?.label} filter`}
+              aria-label={t("table.chip.clearDate", {
+                // loose translator
+                label: (t as (key: string) => string)(
+                  dateFilterOptions.find((o) => o.value === dateFilter)?.label ??
+                    "",
+                ),
+              })}
             >
-              {dateFilterOptions.find((o) => o.value === dateFilter)?.label}
+              {/* loose translator */}
+              {(t as (key: string) => string)(
+                dateFilterOptions.find((o) => o.value === dateFilter)?.label ??
+                  "",
+              )}
               <X className="size-2.5 sm:size-3" aria-hidden="true" />
             </button>
           )}
@@ -1071,9 +1128,17 @@ const TransactionsTable = ({
               type="button"
               className={filterChipClassName}
               onClick={() => setFlowFilter("all")}
-              aria-label={`Clear ${transactionFlowLabels[flowFilter as TransactionFlow]} filter`}
+              aria-label={t("table.chip.clearFlow", {
+                // loose translator
+                label: (t as (key: string) => string)(
+                  transactionFlowLabels[flowFilter as TransactionFlow],
+                ),
+              })}
             >
-              {transactionFlowLabels[flowFilter as TransactionFlow]}
+              {/* loose translator */}
+              {(t as (key: string) => string)(
+                transactionFlowLabels[flowFilter as TransactionFlow],
+              )}
               <X className="size-2.5 sm:size-3" aria-hidden="true" />
             </button>
           )}
@@ -1082,7 +1147,9 @@ const TransactionsTable = ({
               type="button"
               className={filterChipClassName}
               onClick={() => setPaymentMethodFilter("all")}
-              aria-label={`Clear ${paymentMethodFilter} filter`}
+              aria-label={t("table.chip.clearPayment", {
+                label: paymentMethodFilter,
+              })}
             >
               {paymentMethodFilter}
               <X className="size-2.5 sm:size-3" aria-hidden="true" />
@@ -1093,9 +1160,9 @@ const TransactionsTable = ({
               type="button"
               className={filterChipClassName}
               onClick={() => setFeeFilter("all")}
-              aria-label="Clear with fees filter"
+              aria-label={t("table.chip.clearWithFees")}
             >
-              With fees
+              {t("table.withFees")}
               <X className="size-2.5 sm:size-3" aria-hidden="true" />
             </button>
           )}
@@ -1103,7 +1170,7 @@ const TransactionsTable = ({
             onClick={clearFilters}
             className="text-[10px] text-destructive hover:underline sm:text-xs"
           >
-            Clear all
+            {t("table.clearAll")}
           </button>
         </div>
       )}
@@ -1113,22 +1180,22 @@ const TransactionsTable = ({
           <TableHeader>
             <TableRow className="bg-muted/50 hover:bg-muted/50">
               <TableHead className="min-w-[280px] text-xs font-medium text-muted-foreground sm:text-sm">
-                Transaction
+                {t("table.column.transaction")}
               </TableHead>
               <TableHead className="min-w-[140px] text-right text-xs font-medium text-muted-foreground sm:text-sm">
-                Amount
+                {t("table.column.amount")}
               </TableHead>
               <TableHead className="hidden min-w-[190px] text-xs font-medium text-muted-foreground sm:text-sm md:table-cell">
-                Accounting
+                {t("table.column.accounting")}
               </TableHead>
               <TableHead className="hidden min-w-[150px] text-xs font-medium text-muted-foreground sm:text-sm lg:table-cell">
-                Pricing
+                {t("table.column.pricing")}
               </TableHead>
               <TableHead className="hidden min-w-[150px] text-xs font-medium text-muted-foreground sm:text-sm xl:table-cell">
-                Network
+                {t("table.column.network")}
               </TableHead>
               <TableHead className="min-w-[100px] text-xs font-medium text-muted-foreground sm:text-sm">
-                Status
+                {t("table.column.status")}
               </TableHead>
               <TableHead className="w-[40px]"></TableHead>
             </TableRow>
@@ -1172,7 +1239,7 @@ const TransactionsTable = ({
                   colSpan={7}
                   className="h-24 text-center text-sm text-muted-foreground"
                 >
-                  No transactions found matching your filters.
+                  {t("table.empty")}
                 </TableCell>
               </TableRow>
             ) : (
@@ -1189,7 +1256,8 @@ const TransactionsTable = ({
                 const rowPricingSummary =
                   draft.pricingSourceKind === "manual_override"
                     ? null
-                    : pricingCacheSummary(txn);
+                    : // loose translator
+                      pricingCacheSummary(txn, t as (key: string) => string);
                 const StatusIcon = transactionStatusIcons[draft.reviewStatus];
                 const explorer = explorerForTransaction(txn, explorerSettings);
                 const flow = displayFlow(txn);
@@ -1200,7 +1268,11 @@ const TransactionsTable = ({
                 const tagPreview = draft.tags;
                 const networkLabel =
                   flow === "swap" || flow === "layer-transition"
-                    ? pairRailLabel(txn)
+                    ? // loose translator
+                      pairRailLabel(
+                        txn,
+                        t as (key: string, opts?: Record<string, unknown>) => string,
+                      )
                     : txn.paymentMethod;
                 const amountBtc = transactionBtc(txn);
                 const signedAmountBtc =
@@ -1260,7 +1332,12 @@ const TransactionsTable = ({
                             </span>
                             {showPrimaryLabel ? (
                               <Badge variant="secondary" className="rounded-md">
-                                {draft.label}
+                                {classificationOptionLabelKeys[draft.label]
+                                  ? // loose translator
+                                    (t as (key: string) => string)(
+                                      classificationOptionLabelKeys[draft.label],
+                                    )
+                                  : draft.label}
                               </Badge>
                             ) : null}
                           </div>
@@ -1280,7 +1357,10 @@ const TransactionsTable = ({
                                   "inline-flex max-w-[20ch] items-center gap-1 truncate font-mono text-left underline-offset-4 hover:underline",
                                   blurClass(hideSensitive),
                                 )}
-                                title={`Open ${txn.txnId} on ${explorer.label}`}
+                                title={t("table.row.openExplorerTitle", {
+                                  txid: txn.txnId,
+                                  explorer: explorer.label,
+                                })}
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   setExplorerTransaction(txn);
@@ -1349,7 +1429,10 @@ const TransactionsTable = ({
                         )}
                       </div>
                       <p className="mt-1 truncate text-[10px] text-muted-foreground sm:text-xs">
-                        {rowTaxClassification.shortLabel}
+                        {/* loose translator */}
+                        {(t as (key: string) => string)(
+                          rowTaxClassification.shortLabel,
+                        )}
                       </p>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
@@ -1360,18 +1443,21 @@ const TransactionsTable = ({
                             pricingSourceStyles[rowPricingValue],
                           )}
                         >
-                          {pricingSourceLabel(
-                            draft.pricingSourceKind,
-                            draft.pricingQuality,
+                          {/* loose translator */}
+                          {(t as (key: string) => string)(
+                            pricingSourceLabel(
+                              draft.pricingSourceKind,
+                              draft.pricingQuality,
+                            ),
                           )}
                         </span>
                         {draft.pricingQuality === "coarse_fallback" ? (
                           <span
                             className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
-                            title="Coarse daily fallback price — review before relying on it"
+                            title={t("table.coarse.title")}
                           >
                             <AlertTriangle className="size-3" aria-hidden="true" />
-                            Coarse
+                            {t("table.coarse.badge")}
                           </span>
                         ) : null}
                       </div>
@@ -1382,10 +1468,12 @@ const TransactionsTable = ({
                         )}
                       >
                         {draft.pricingSourceKind === "manual_override"
-                          ? `${draft.manualCurrency} ${draft.manualValue || "value pending"}`
+                          ? `${draft.manualCurrency} ${draft.manualValue || t("table.value.valuePending")}`
                           : txn.rate
-                            ? `${currencyFormatter.format(txn.rate)} / BTC`
-                            : "Awaiting price"}
+                            ? t("table.value.perBtc", {
+                                value: currencyFormatter.format(txn.rate),
+                              })
+                            : t("table.value.awaitingPrice")}
                       </p>
                       {rowPricingSummary ? (
                         <p
@@ -1411,14 +1499,17 @@ const TransactionsTable = ({
                         )}
                       >
                         <StatusIcon className="size-3" aria-hidden="true" />
-                        {transactionStatusLabels[draft.reviewStatus]}
+                        {/* loose translator */}
+                        {(t as (key: string) => string)(
+                          transactionStatusLabels[draft.reviewStatus],
+                        )}
                       </span>
                       <p className="mt-1 hidden text-[10px] text-muted-foreground sm:block sm:text-xs">
                         {draft.excluded
-                          ? "Excluded"
+                          ? t("table.row.excluded")
                           : draft.taxable
-                            ? "Taxable"
-                            : "Not taxable"}
+                            ? t("table.row.taxable")
+                            : t("table.row.notTaxable")}
                       </p>
                     </TableCell>
                     <TableCell>
@@ -1428,7 +1519,9 @@ const TransactionsTable = ({
                             variant="ghost"
                             size="icon"
                             className="size-7 text-muted-foreground hover:text-foreground sm:size-8"
-                            aria-label={`Open actions for ${txn.txnId}`}
+                            aria-label={t("table.row.actionsAria", {
+                              txid: txn.txnId,
+                            })}
                             onClick={(event) => event.stopPropagation()}
                           >
                             <MoreHorizontal className="size-3.5 sm:size-4" />
@@ -1437,7 +1530,7 @@ const TransactionsTable = ({
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onSelect={() => openTransactionDetail(txn)}>
                             <Eye className="mr-2 size-4" aria-hidden="true" />
-                            View Details
+                            {t("table.row.viewDetails")}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onSelect={() => openTransactionDetail(txn, "classify")}
@@ -1446,13 +1539,13 @@ const TransactionsTable = ({
                               className="mr-2 size-4"
                               aria-hidden="true"
                             />
-                            Classify
+                            {t("table.row.classify")}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onSelect={() => copyText(txn.explorerId ?? txn.txnId)}
                           >
                             <Copy className="mr-2 size-4" aria-hidden="true" />
-                            Copy ID
+                            {t("table.row.copyId")}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
@@ -1460,13 +1553,11 @@ const TransactionsTable = ({
                             onSelect={(event: Event) => {
                               event.preventDefault();
                               if (typeof window === "undefined") return;
-                              window.confirm(
-                                "Void this transaction? This cannot be undone.",
-                              );
+                              window.confirm(t("table.row.voidConfirm"));
                             }}
                           >
                             <X className="mr-2 size-4" aria-hidden="true" />
-                            Exclude Transaction
+                            {t("table.row.exclude")}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -1481,7 +1572,7 @@ const TransactionsTable = ({
 
       <div className="flex flex-col items-center justify-between gap-3 border-t px-3 py-3 sm:flex-row sm:px-6">
         <div className="flex items-center gap-2 text-xs text-muted-foreground sm:text-sm">
-          <span className="hidden sm:inline">Rows per page:</span>
+          <span className="hidden sm:inline">{t("table.pagination.rowsPerPage")}</span>
           <Select
             value={pageSize.toString()}
             onValueChange={(value: string) => setPageSize(Number(value))}
@@ -1499,14 +1590,18 @@ const TransactionsTable = ({
           </Select>
           <span className="text-muted-foreground">
             {isRefreshing
-              ? "Refreshing"
+              ? t("table.pagination.refreshing")
               : filteredTransactions.length === 0
               ? "0"
               : `${(currentPage - 1) * pageSize + 1}-${Math.min(
                   currentPage * pageSize,
                   filteredTransactions.length,
                 )}`}{" "}
-            {isRefreshing ? "" : `of ${filteredTransactions.length}`}
+            {isRefreshing
+              ? ""
+              : t("table.pagination.rangeOf", {
+                  total: filteredTransactions.length,
+                })}
           </span>
         </div>
 
@@ -1518,7 +1613,9 @@ const TransactionsTable = ({
             onClick={onLoadMoreRecords}
             disabled={isLoadingMoreRecords}
           >
-            {isLoadingMoreRecords ? "Loading" : "Load more"}
+            {isLoadingMoreRecords
+              ? t("table.pagination.loading")
+              : t("table.pagination.loadMore")}
           </Button>
         ) : null}
 
@@ -1529,7 +1626,7 @@ const TransactionsTable = ({
             className="size-8"
             onClick={() => goToPage(1)}
             disabled={currentPage === 1}
-            aria-label="Go to first page"
+            aria-label={t("table.pagination.firstPage")}
           >
             <ChevronsLeft className="size-4" />
           </Button>
@@ -1539,7 +1636,7 @@ const TransactionsTable = ({
             className="size-8"
             onClick={() => goToPage(currentPage - 1)}
             disabled={currentPage === 1}
-            aria-label="Go to previous page"
+            aria-label={t("table.pagination.previousPage")}
           >
             <ChevronLeft className="size-4" />
           </Button>
@@ -1577,7 +1674,7 @@ const TransactionsTable = ({
             className="size-8"
             onClick={() => goToPage(currentPage + 1)}
             disabled={currentPage === totalPages || totalPages === 0}
-            aria-label="Go to next page"
+            aria-label={t("table.pagination.nextPage")}
           >
             <ChevronRight className="size-4" />
           </Button>
@@ -1587,7 +1684,7 @@ const TransactionsTable = ({
             className="size-8"
             onClick={() => goToPage(totalPages)}
             disabled={currentPage === totalPages || totalPages === 0}
-            aria-label="Go to last page"
+            aria-label={t("table.pagination.lastPage")}
           >
             <ChevronsRight className="size-4" />
           </Button>
@@ -1642,8 +1739,8 @@ const TransactionsTable = ({
             );
           }
           useUiStore.getState().addNotification({
-            title: "Files attached",
-            body: `${paths.length} file${paths.length === 1 ? "" : "s"} copied into Kassiber attachments.`,
+            title: t("notification.filesAttached.title"),
+            body: t("notification.filesAttached.body", { count: paths.length }),
             tone: "success",
             dedupeKey: `attachments-files-${detailTransaction.id}`,
           });
@@ -1670,8 +1767,8 @@ const TransactionsTable = ({
             );
           }
           useUiStore.getState().addNotification({
-            title: "Links attached",
-            body: `${urls.length} link${urls.length === 1 ? "" : "s"} stored as attachment references.`,
+            title: t("notification.linksAttached.title"),
+            body: t("notification.linksAttached.body", { count: urls.length }),
             tone: "success",
             dedupeKey: `attachments-links-${detailTransaction.id}`,
           });
@@ -1714,8 +1811,8 @@ const TransactionsTable = ({
             );
           }
           useUiStore.getState().addNotification({
-            title: "Link text updated",
-            body: "Attachment link label saved.",
+            title: t("notification.linkTextUpdated.title"),
+            body: t("notification.linkTextUpdated.body"),
             tone: "success",
           });
         }}
@@ -1730,8 +1827,11 @@ const TransactionsTable = ({
             (attachments) => removeAttachmentRecord(attachments, item.id),
           );
           useUiStore.getState().addNotification({
-            title: "Attachment removed",
-            body: item.kind === "file" ? "Attachment record and copied file removed." : "Attachment link removed.",
+            title: t("notification.attachmentRemoved.title"),
+            body:
+              item.kind === "file"
+                ? t("notification.attachmentRemoved.fileBody")
+                : t("notification.attachmentRemoved.linkBody"),
             tone: "success",
             dedupeKey: `attachment-remove-${item.id}`,
           });
@@ -1742,8 +1842,8 @@ const TransactionsTable = ({
             current?.pair?.id === pairId ? { ...current, pair: undefined } : current,
           );
           useUiStore.getState().addNotification({
-            title: "Pair removed",
-            body: "This movement is no longer linked to the other leg.",
+            title: t("notification.pairRemoved.title"),
+            body: t("notification.pairRemoved.body"),
             tone: "success",
             dedupeKey: `transfer-unpair-${pairId}`,
           });
@@ -1776,7 +1876,9 @@ const TransactionsTable = ({
             await saveTransactionDraft(transactionId, draft);
           } catch (error) {
             setSaveError(
-              error instanceof Error ? error.message : "Could not save metadata.",
+              error instanceof Error
+                ? error.message
+                : t("save.couldNotSaveMetadata"),
             );
             throw error;
           }
@@ -1796,7 +1898,9 @@ const TransactionsTable = ({
             }
           } catch (error) {
             setSaveError(
-              error instanceof Error ? error.message : "Could not save metadata.",
+              error instanceof Error
+                ? error.message
+                : t("save.couldNotSaveMetadata"),
             );
             throw error;
           }
@@ -1834,8 +1938,8 @@ const TransactionsTable = ({
           }
           setReuseDialogOpen(false);
           useUiStore.getState().addNotification({
-            title: "Evidence reused",
-            body: `${copied} evidence item${copied === 1 ? "" : "s"} copied to this transaction.`,
+            title: t("notification.evidenceReused.title"),
+            body: t("notification.evidenceReused.body", { count: copied }),
             tone: "success",
             dedupeKey: `attachments-copy-${detailTransaction.id}`,
           });

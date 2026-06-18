@@ -8,6 +8,7 @@ import {
   Trash2,
 } from "lucide-react";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import {
   LogsTableControls,
@@ -69,6 +70,7 @@ const SUPPORT_BUNDLE_PREVIEW_LINES = 30;
 const SEARCH_INPUT_ID = "kb-logs-search";
 
 export function Logs() {
+  const { t } = useTranslation(["review", "nav", "common"]);
   const addNotification = useUiStore((s) => s.addNotification);
   const records = useAppLogRecords();
   const [levelFilter, setLevelFilter] = React.useState<LogLevelFilter>("all");
@@ -163,7 +165,7 @@ export function Logs() {
     if (!supportBundleOpen) return "";
     return buildSupportBundleContents({
       records,
-      issueDescription: supportIssueDescription || "Preview issue description",
+      issueDescription: supportIssueDescription || t("logs.support.previewIssue"),
       mode: supportBundleMode,
       generatedAt: new Date().toISOString(),
       levelFilter,
@@ -183,6 +185,7 @@ export function Logs() {
     supportBundleMode,
     supportBundleOpen,
     supportIssueDescription,
+    t,
   ]);
 
   const clearTableFilters = () => {
@@ -193,7 +196,7 @@ export function Logs() {
   };
 
   const exportFormat = async (format: "md" | "log" | "jsonl") => {
-    if (!redacted && !window.confirm("Export raw logs? They may contain sensitive local data.")) {
+    if (!redacted && !window.confirm(t("logs.exportRawConfirm"))) {
       return;
     }
     const redaction = redacted
@@ -217,7 +220,7 @@ export function Logs() {
     try {
       if (isFilePickerAvailable) {
         const destination = await saveFile({
-          title: "Export Kassiber logs",
+          title: t("logs.exportTitle"),
           defaultPath: filename,
           filters: [{ name: format.toUpperCase(), extensions: [format] }],
         });
@@ -228,7 +231,7 @@ export function Logs() {
       triggerBrowserDownload(filename, contents, contentType(format));
     } catch (error) {
       addNotification({
-        title: "Could not export logs",
+        title: t("logs.exportFailedTitle"),
         body: error instanceof Error ? error.message : String(error),
         tone: "error",
       });
@@ -239,8 +242,8 @@ export function Logs() {
     const description = supportIssueDescription.trim();
     if (!description) {
       addNotification({
-        title: "Support bundle not exported",
-        body: "Add a short issue description first.",
+        title: t("logs.support.notExportedTitle"),
+        body: t("logs.support.notExportedBody"),
         tone: "warning",
       });
       return;
@@ -260,7 +263,7 @@ export function Logs() {
     try {
       if (isFilePickerAvailable) {
         const destination = await saveFile({
-          title: "Export Kassiber support bundle",
+          title: t("logs.exportSupportTitle"),
           defaultPath: filename,
           filters: [{ name: "JSONL", extensions: ["jsonl"] }],
         });
@@ -273,7 +276,7 @@ export function Logs() {
       setSupportBundleOpen(false);
     } catch (error) {
       addNotification({
-        title: "Could not export support bundle",
+        title: t("logs.support.exportFailedTitle"),
         body: error instanceof Error ? error.message : String(error),
         tone: "error",
       });
@@ -288,13 +291,13 @@ export function Logs() {
     try {
       await navigator.clipboard.writeText(text);
       addNotification({
-        title: "Copied log excerpt",
-        body: `${Math.min(filteredRecords.length, 200)} lines copied.`,
+        title: t("logs.copyExcerptTitle"),
+        body: t("logs.copyExcerptBody", { count: Math.min(filteredRecords.length, 200) }),
         tone: "success",
       });
     } catch (error) {
       addNotification({
-        title: "Could not copy logs",
+        title: t("logs.copyFailedTitle"),
         body: error instanceof Error ? error.message : String(error),
         tone: "error",
       });
@@ -327,10 +330,10 @@ export function Logs() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0 space-y-1">
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            Developer tools
+            {t("logs.developerTools")}
           </p>
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-2xl font-semibold tracking-tight">Logs</h2>
+            <h2 className="text-2xl font-semibold tracking-tight">{t("nav:book.logs")}</h2>
             <Badge
               variant="outline"
               className="gap-1 border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
@@ -339,41 +342,41 @@ export function Logs() {
                 className="size-2 animate-pulse rounded-full bg-emerald-500"
                 aria-hidden="true"
               />
-              Live
+              {t("logs.live")}
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground">
-            Local-only RAM buffer. Nothing is written to disk unless you export.
+            {t("logs.ramNote")}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" size="sm" variant="outline" onClick={copyLast200}>
             <Copy className="size-4" aria-hidden="true" />
-            Copy 200
+            {t("logs.copy200")}
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button type="button" size="sm">
                 <Download className="size-4" aria-hidden="true" />
-                Export
+                {t("common:actions.export")}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => setSupportBundleOpen(true)}>
                 <FileArchive className="size-4" aria-hidden="true" />
-                Support bundle
+                {t("logs.exportMenu.supportBundle")}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => void exportFormat("md")}>
                 <FileText className="size-4" aria-hidden="true" />
-                Markdown
+                {t("logs.exportMenu.markdown")}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => void exportFormat("jsonl")}>
                 <FileJson className="size-4" aria-hidden="true" />
-                JSONL
+                {t("logs.exportMenu.jsonl")}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => void exportFormat("log")}>
                 <FileText className="size-4" aria-hidden="true" />
-                Log
+                {t("logs.exportMenu.log")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -383,7 +386,7 @@ export function Logs() {
             variant="ghost"
             className="size-8"
             onClick={clearAppLogRecords}
-            title="Clear logs"
+            title={t("logs.clearLogsAria")}
           >
             <Trash2 className="size-4" aria-hidden="true" />
           </Button>
@@ -393,35 +396,35 @@ export function Logs() {
       <Dialog open={supportBundleOpen} onOpenChange={setSupportBundleOpen}>
         <DialogContent className="grid max-h-[88vh] max-w-3xl grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0">
           <DialogHeader className="border-b px-5 py-4 pr-12">
-            <DialogTitle>Export support bundle</DialogTitle>
+            <DialogTitle>{t("logs.support.title")}</DialogTitle>
             <DialogDescription>
-              Review the generated JSONL before saving.
+              {t("logs.support.description")}
             </DialogDescription>
           </DialogHeader>
           <div className="min-h-0 space-y-4 overflow-auto px-5 py-4">
             <label className="space-y-2 text-sm">
-              <span className="font-medium">Issue description</span>
+              <span className="font-medium">{t("logs.support.issueDescription")}</span>
               <Textarea
                 value={supportIssueDescription}
                 onChange={(event) => setSupportIssueDescription(event.target.value)}
-                placeholder="What went wrong?"
+                placeholder={t("logs.support.issuePlaceholder")}
                 className="min-h-24 resize-y"
               />
             </label>
 
             <div className="space-y-2">
-              <p className="text-sm font-medium">Bundle mode</p>
+              <p className="text-sm font-medium">{t("logs.support.bundleMode")}</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 <SupportBundleModeButton
                   active={supportBundleMode === "high_signal"}
-                  title="High-signal"
-                  description="Keeps amounts, addresses, txids, paths, labels, URLs, and error text readable."
+                  title={t("logs.support.highSignalTitle")}
+                  description={t("logs.support.highSignalDescription")}
                   onClick={() => setSupportBundleMode("high_signal")}
                 />
                 <SupportBundleModeButton
                   active={supportBundleMode === "public_safe"}
-                  title="Public-safe"
-                  description="Masks operational fields and exact amounts after stripping wallet and credential material."
+                  title={t("logs.support.publicSafeTitle")}
+                  description={t("logs.support.publicSafeDescription")}
                   onClick={() => setSupportBundleMode("public_safe")}
                 />
               </div>
@@ -429,9 +432,9 @@ export function Logs() {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-medium">Preview</p>
+                <p className="text-sm font-medium">{t("logs.support.preview")}</p>
                 <span className="text-xs text-muted-foreground">
-                  First {SUPPORT_BUNDLE_PREVIEW_LINES} lines
+                  {t("logs.support.firstLines", { count: SUPPORT_BUNDLE_PREVIEW_LINES })}
                 </span>
               </div>
               <pre className="max-h-80 overflow-auto rounded-md border bg-muted/40 p-3 font-mono text-xs whitespace-pre-wrap text-foreground">
@@ -442,7 +445,7 @@ export function Logs() {
           <DialogFooter className="border-t px-5 py-4">
             <DialogClose asChild>
               <Button type="button" variant="outline">
-                Cancel
+                {t("common:actions.cancel")}
               </Button>
             </DialogClose>
             <Button
@@ -450,7 +453,7 @@ export function Logs() {
               onClick={() => void exportSupportBundle()}
               disabled={!supportIssueDescription.trim()}
             >
-              Save bundle
+              {t("logs.support.saveBundle")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -479,17 +482,24 @@ export function Logs() {
 
         {!redacted ? (
           <div className="border-b border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            Raw logs are visible until {rawUntil ? new Date(rawUntil).toLocaleTimeString() : "soon"}.
-            Exports taken now are watermarked.
+            {t("logs.rawWarning", {
+              time: rawUntil
+                ? new Date(rawUntil).toLocaleTimeString()
+                : t("logs.rawWarningSoon"),
+            })}
           </div>
         ) : null}
 
         <div className="relative border-b">
           <div className="flex items-center justify-between px-3 py-1.5 font-mono text-xs text-foreground/70">
             <span>
-              {filteredRecords.length} records · RAM buffer {formatBytes(bufferBytes)} ({bufferFillPct}%)
+              {t("logs.recordsLine", {
+                count: filteredRecords.length,
+                size: formatBytes(bufferBytes),
+                percent: bufferFillPct,
+              })}
             </span>
-            <span>rendering {visibleRecords.length} newest</span>
+            <span>{t("logs.renderingNewest", { count: visibleRecords.length })}</span>
           </div>
           <div
             aria-hidden="true"
@@ -506,13 +516,13 @@ export function Logs() {
           >
             {visibleRecords.length === 0 ? (
               <div className="flex h-full min-h-64 flex-col items-center justify-center gap-1 text-sm text-muted-foreground">
-                <span>{isEmptyBecauseFilters ? "No matching log records" : "Waiting for daemon traffic…"}</span>
+                <span>{isEmptyBecauseFilters ? t("logs.noMatching") : t("logs.waiting")}</span>
                 {hasTableFilters ? (
                   <span className="text-xs">
                     {[
-                      levelFilter !== "all" ? `level ${levelFilter}` : null,
-                      moduleFilter ? `module ${moduleFilter}` : null,
-                      query ? `search "${query}"` : null,
+                      levelFilter !== "all" ? t("logs.filterLevel", { level: levelFilter }) : null,
+                      moduleFilter ? t("logs.filterModule", { module: moduleFilter }) : null,
+                      query ? t("logs.filterSearch", { query }) : null,
                     ]
                       .filter(Boolean)
                       .join(" · ")}
@@ -551,7 +561,7 @@ export function Logs() {
                 scrollToBottom();
               }}
             >
-              ↓ Jump to latest ({newWhilePaused} new)
+              {t("logs.jumpToLatest", { count: newWhilePaused })}
             </Button>
           ) : null}
         </div>

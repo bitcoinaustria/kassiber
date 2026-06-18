@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Database, Pencil, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -20,6 +21,7 @@ import {
 } from "./SettingsModel";
 
 function AiProviderModelSummary({ row }: { row: AiProviderRow }) {
+  const { t } = useTranslation("settings");
   const isCli = isCliAiProvider(row);
   const modelsQuery = useDaemon<AiModelsListData>(
     "ai.list_models",
@@ -40,7 +42,9 @@ function AiProviderModelSummary({ row }: { row: AiProviderRow }) {
   const summary = formatModelSummary(models);
   if (summary) return <>{summary}</>;
   if (modelsQuery.isFetching) {
-    return <span className="text-muted-foreground">Loading...</span>;
+    return (
+      <span className="text-muted-foreground">{t("ai.loadingModels")}</span>
+    );
   }
   return <>{row.default_model ?? "-"}</>;
 }
@@ -52,6 +56,7 @@ export function AiProvidersSettingsPanel({
   aiFeaturesEnabled: boolean;
   setAiFeaturesEnabled: (enabled: boolean) => void;
 }) {
+  const { t } = useTranslation("settings");
   const providersQuery = useDaemon<AiProvidersListData>("ai.providers.list");
   const data = React.useMemo<AiProvidersListData>(
     () =>
@@ -90,28 +95,27 @@ export function AiProvidersSettingsPanel({
     <div className="space-y-4">
       <div className="flex flex-col gap-3 rounded-md border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 space-y-1">
-          <Label htmlFor="settings-ai-features">AI features</Label>
+          <Label htmlFor="settings-ai-features">{t("ai.featuresLabel")}</Label>
           <p className="text-sm text-muted-foreground">
-            Show the Assistant screen and floating chat. Turning this off keeps
-            provider settings saved.
+            {t("ai.featuresDescription")}
           </p>
         </div>
         <Switch
           id="settings-ai-features"
           checked={aiFeaturesEnabled}
           onCheckedChange={setAiFeaturesEnabled}
-          aria-label="Enable AI features"
+          aria-label={t("ai.featuresAria")}
           className="shrink-0"
         />
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">
-          <h3 className="text-sm font-semibold">Provider configuration</h3>
+          <h3 className="text-sm font-semibold">
+            {t("ai.providerConfigHeading")}
+          </h3>
           <p className="text-sm text-muted-foreground">
-            Configure OpenAI-compatible endpoints or Claude/Codex CLI adapters
-            for the in-app assistant. Local Ollama runs without a key; remote
-            and CLI providers may see prompt content.
+            {t("ai.providerConfigDescription")}
           </p>
         </div>
         <Button
@@ -121,7 +125,7 @@ export function AiProvidersSettingsPanel({
           onClick={() => setAddOpen(true)}
         >
           <Plus className="size-4" aria-hidden="true" />
-          Add provider
+          {t("ai.addProvider")}
         </Button>
       </div>
 
@@ -133,15 +137,15 @@ export function AiProvidersSettingsPanel({
 
       {providersQuery.isLoading ? (
         <div className="rounded-md border bg-background p-4 text-sm text-muted-foreground">
-          Loading providers...
+          {t("ai.loadingProviders")}
         </div>
       ) : providersQuery.isError ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-          Could not load AI providers.
+          {t("ai.loadError")}
         </div>
       ) : data.providers.length === 0 ? (
         <div className="rounded-md border border-dashed bg-muted/20 p-6 text-center text-sm text-muted-foreground">
-          No providers configured yet.
+          {t("ai.noProviders")}
         </div>
       ) : (
         <div className="grid gap-3">
@@ -173,11 +177,13 @@ export function AiProvidersSettingsPanel({
                           AI_KIND_BADGE[row.kind],
                         )}
                       >
-                        {row.kind === "tee" ? "TEE" : row.kind}
+                        {row.kind === "tee"
+                          ? "TEE"
+                          : t(`aiProvider.posture.${row.kind}`)}
                       </span>
                       {row.is_default ? (
                         <span className="inline-flex items-center rounded-md border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
-                          Default
+                          {t("ai.default")}
                         </span>
                       ) : null}
                     </div>
@@ -190,7 +196,7 @@ export function AiProvidersSettingsPanel({
                       type="button"
                       size="icon-sm"
                       variant="ghost"
-                      aria-label={`Edit ${row.name}`}
+                      aria-label={t("ai.editProvider", { name: row.name })}
                       onClick={() => setEditingName(row.name)}
                     >
                       <Pencil className="size-3.5" aria-hidden="true" />
@@ -199,11 +205,11 @@ export function AiProvidersSettingsPanel({
                       type="button"
                       size="icon-sm"
                       variant="ghost"
-                      aria-label={`Delete ${row.name}`}
+                      aria-label={t("ai.deleteProvider", { name: row.name })}
                       disabled={row.is_default || deleteProvider.isPending}
                       onClick={() => {
                         const ok = window.confirm(
-                          `Delete AI provider '${row.name}'? Cannot be undone.`,
+                          t("ai.deleteConfirm", { name: row.name }),
                         );
                         if (!ok) return;
                         deleteProvider.mutate({ name: row.name });
@@ -216,17 +222,19 @@ export function AiProvidersSettingsPanel({
 
                 <div className="grid gap-x-4 gap-y-2 text-xs sm:grid-cols-3">
                   <div className="min-w-0 space-y-0.5">
-                    <p className="text-muted-foreground">Default model</p>
+                    <p className="text-muted-foreground">
+                      {t("ai.defaultModel")}
+                    </p>
                     <p className="break-words font-mono">
                       <AiProviderModelSummary row={row} />
                     </p>
                   </div>
                   <div className="space-y-0.5">
-                    <p className="text-muted-foreground">Auth</p>
-                    <p>{row.has_api_key ? "Bearer key" : "None"}</p>
+                    <p className="text-muted-foreground">{t("ai.auth")}</p>
+                    <p>{row.has_api_key ? t("ai.authBearer") : t("ai.authNone")}</p>
                   </div>
                   <div className="min-w-0 space-y-0.5">
-                    <p className="text-muted-foreground">Key storage</p>
+                    <p className="text-muted-foreground">{t("ai.keyStorage")}</p>
                     <p>
                       {aiSecretStoreLabel(row.secret_ref?.store_id)}{" "}
                       <span className="font-mono text-muted-foreground">
@@ -246,7 +254,7 @@ export function AiProvidersSettingsPanel({
                         disabled={setDefault.isPending}
                         onClick={() => setDefault.mutate({ name: row.name })}
                       >
-                        Set as default
+                        {t("ai.setAsDefault")}
                       </Button>
                     ) : null}
                     {nativeStoreId &&
@@ -266,7 +274,9 @@ export function AiProvidersSettingsPanel({
                         }
                       >
                         <ShieldCheck className="size-4" aria-hidden="true" />
-                        Move key to {aiSecretStoreLabel(nativeStoreId)}
+                        {t("ai.moveKeyToNative", {
+                          store: aiSecretStoreLabel(nativeStoreId),
+                        })}
                       </Button>
                     ) : null}
                     {row.secret_ref?.store_id &&
@@ -284,7 +294,7 @@ export function AiProvidersSettingsPanel({
                         }
                       >
                         <Database className="size-4" aria-hidden="true" />
-                        Move key to database
+                        {t("ai.moveKeyToDatabase")}
                       </Button>
                     ) : null}
                   </div>

@@ -123,7 +123,7 @@ describe("pricing provenance", () => {
         pricingMethod: "ohlcvt_csv",
         pricingTimestamp: "2024-05-02T00:00:00Z",
       }),
-    ).toEqual({ label: "Trading day", value: "2024-05-01" });
+    ).toEqual({ label: "transactions:pricePoint.tradingDay", value: "2024-05-01" });
   });
 
   it("does not shift non-Kraken daily rows that are already day-stamped", () => {
@@ -135,7 +135,7 @@ describe("pricing provenance", () => {
         pricingMethod: "market_chart",
         pricingTimestamp: "2024-05-01T00:00:00Z",
       }),
-    ).toEqual({ label: "Trading day", value: "2024-05-01" });
+    ).toEqual({ label: "transactions:pricePoint.tradingDay", value: "2024-05-01" });
   });
 
   it("reports the precise timestamp for minute candles", () => {
@@ -145,7 +145,7 @@ describe("pricing provenance", () => {
         pricingGranularity: "minute",
         pricingTimestamp: "2024-05-01T00:02:00Z",
       }),
-    ).toEqual({ label: "Price timestamp", value: "2024-05-01 00:02" });
+    ).toEqual({ label: "transactions:pricePoint.timestamp", value: "2024-05-01 00:02" });
   });
 });
 

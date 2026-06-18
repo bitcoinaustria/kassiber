@@ -44,6 +44,7 @@ import {
   Undo2,
   X,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
 import lightningIcon from "@/assets/integrations/lightning.svg";
@@ -106,23 +107,25 @@ import { useUiStore } from "@/store/ui";
 
 const PAIR_KIND_OPTIONS = ["manual", "peg-in", "peg-out", "submarine-swap"] as const;
 const PAIR_POLICY_OPTIONS = ["carrying-value", "taxable"] as const;
+// Stable `value` (machine code, used in filter payloads + lookups) paired with a
+// `labelKey` into the `review` namespace; labels are resolved at render.
 const CONFIDENCE_OPTIONS = [
-  { value: "all", label: "Any confidence" },
-  { value: "exact", label: "Exact (payment_hash)" },
-  { value: "strong", label: "Strong (heuristic)" },
+  { value: "all", labelKey: "swap.confidence.any" },
+  { value: "exact", labelKey: "swap.confidence.exact" },
+  { value: "strong", labelKey: "swap.confidence.strong" },
 ] as const;
 const METHOD_OPTIONS = [
-  { value: "all", label: "Any method" },
-  { value: "payment_hash", label: "Payment hash" },
-  { value: "heuristic", label: "Time + amount" },
+  { value: "all", labelKey: "swap.method.any" },
+  { value: "payment_hash", labelKey: "swap.method.paymentHash" },
+  { value: "heuristic", labelKey: "swap.method.heuristic" },
 ] as const;
 const ROUTE_PAIR_OPTIONS = [
-  { value: "all", label: "Any route" },
-  { value: "LNBTC-LBTC", label: "Lightning → Liquid" },
-  { value: "LBTC-LNBTC", label: "Liquid → Lightning" },
-  { value: "LBTC-BTC", label: "Liquid → on-chain" },
-  { value: "LNBTC-BTC", label: "Lightning → on-chain" },
-  { value: "BTC-LBTC", label: "On-chain → Liquid" },
+  { value: "all", labelKey: "swap.route.any" },
+  { value: "LNBTC-LBTC", labelKey: "swap.route.lnToLiquid" },
+  { value: "LBTC-LNBTC", labelKey: "swap.route.liquidToLn" },
+  { value: "LBTC-BTC", labelKey: "swap.route.liquidToOnchain" },
+  { value: "LNBTC-BTC", labelKey: "swap.route.lnToOnchain" },
+  { value: "BTC-LBTC", labelKey: "swap.route.onchainToLiquid" },
 ] as const;
 const ROUTE_PAIR_VALUES = new Set<string>(ROUTE_PAIR_OPTIONS.map((option) => option.value));
 
@@ -221,14 +224,16 @@ function candidatePairType(candidate: SwapCandidate) {
     : "swap";
 }
 
-function candidateLabel(candidate: SwapCandidate) {
+function candidateLabelKey(candidate: SwapCandidate) {
   return candidatePairType(candidate) === "transfer"
-    ? "Transfer candidate"
-    : "Swap candidate";
+    ? "swap.detail.candidateLabelTransfer"
+    : "swap.detail.candidateLabelSwap";
 }
 
-function candidateFeeLabel(candidate: SwapCandidate) {
-  return candidatePairType(candidate) === "transfer" ? "Transfer fee" : "Swap fee";
+function candidateFeeLabelKey(candidate: SwapCandidate) {
+  return candidatePairType(candidate) === "transfer"
+    ? "swap.detail.transferFee"
+    : "swap.detail.swapFee";
 }
 
 interface BulkPairResult {
@@ -326,6 +331,7 @@ function railForLeg(asset: string, walletKind: string): SwapRail {
 type PairingReviewTab = "swaps" | "transfers";
 
 export function SwapMatching() {
+  const { t } = useTranslation("review");
   const [activeTab, setActiveTab] = useState<PairingReviewTab>("swaps");
 
   return (
@@ -336,8 +342,8 @@ export function SwapMatching() {
         className="space-y-3"
       >
         <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
-          <TabsTrigger value="swaps">Swaps</TabsTrigger>
-          <TabsTrigger value="transfers">Transfers</TabsTrigger>
+          <TabsTrigger value="swaps">{t("swap.tabs.swaps")}</TabsTrigger>
+          <TabsTrigger value="transfers">{t("swap.tabs.transfers")}</TabsTrigger>
         </TabsList>
         <TabsContent value="swaps" className="mt-0">
           {activeTab === "swaps" ? <PairingReview mode="swaps" /> : null}
@@ -351,20 +357,20 @@ export function SwapMatching() {
 }
 
 function PairingReview({ mode }: { mode: PairingReviewMode }) {
+  const { t } = useTranslation(["review", "common"]);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const candidateType = mode === "transfers" ? "transfer" : "swap";
   const savedViewSurface =
     mode === "transfers" ? "transfer_candidates" : "swap_candidates";
   const routeFilterEnabled = mode === "swaps";
-  const pageTitle = mode === "transfers" ? "Transfer candidates" : "Swap candidates";
+  const pageTitle =
+    mode === "transfers" ? t("swap.page.transfersTitle") : t("swap.page.swapsTitle");
   const pageDescription =
     mode === "transfers"
-      ? "Review likely wallet-to-wallet moves before pairing them as transfers."
-      : "Review likely Lightning, Liquid, and on-chain legs before pairing them as swaps.";
+      ? t("swap.page.transfersDescription")
+      : t("swap.page.swapsDescription");
   const emptyText =
-    mode === "transfers"
-      ? "No unpaired transfer candidates. Once likely same-asset wallet moves show up, they will appear here."
-      : "No unpaired swap candidates. Once likely cross-asset or cross-rail legs show up, they will appear here.";
+    mode === "transfers" ? t("swap.page.transfersEmpty") : t("swap.page.swapsEmpty");
   const [confidence, setConfidence] = useState<string>("all");
   const [method, setMethod] = useState<string>("all");
   const [routePair, setRoutePair] = useState<string>("all");
@@ -604,10 +610,10 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
     await dismissMutation.mutateAsync({
       tx_out: candidate.out_id,
       tx_in: candidate.in_id,
-      reason: "user dismissed from review queue",
+      reason: t("swap.dismissReason"),
     });
     void refetch();
-  }, [dismissMutation, refetch]);
+  }, [dismissMutation, refetch, t]);
 
   const openExactPreview = useCallback(() => {
     setPreviewError(null);
@@ -636,9 +642,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
         const result = envelope.data;
         if (!result || result.summary.count === 0) {
           await refetch();
-          setPreviewError(
-            "No pairs were created. The candidates may already be paired, conflicted, or no longer match the current filters.",
-          );
+          setPreviewError(t("swap.preview.noPairsExact"));
           return;
         }
         setUndoState({
@@ -666,9 +670,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
         }
         if (applied.length === 0) {
           await refetch();
-          setPreviewError(
-            "No pairs were created. The selected candidates may already be paired or no longer match the current queue.",
-          );
+          setPreviewError(t("swap.preview.noPairsSelected"));
           return;
         }
         setUndoState({
@@ -686,9 +688,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
       await refetch();
     } catch (error) {
       setPreviewError(
-        error instanceof Error
-          ? error.message
-          : "Could not pair the selected candidates.",
+        error instanceof Error ? error.message : t("swap.preview.pairFailed"),
       );
     }
   };
@@ -724,14 +724,14 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
     return [
       {
         keys: ["?", "Shift+?"],
-        description: "Show keyboard shortcuts",
-        category: "Help",
+        description: t("swap.keymap.showShortcuts"),
+        category: t("swap.keymap.categoryHelp"),
         handler: () => setHelpOpen(true),
       },
       {
         keys: "Escape",
-        description: "Clear selection / close overlays",
-        category: "Selection",
+        description: t("swap.keymap.clearSelection"),
+        category: t("swap.keymap.categorySelection"),
         handler: () => {
           if (helpOpen) setHelpOpen(false);
           else if (detailCandidate) setDetailCandidate(null);
@@ -741,8 +741,8 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
       },
       {
         keys: ["j", "ArrowDown"],
-        description: "Move cursor down",
-        category: "Navigation",
+        description: t("swap.keymap.cursorDown"),
+        category: t("swap.keymap.categoryNavigation"),
         handler: () => {
           if (candidates.length === 0) return;
           setCursorIndex((idx) => Math.min(candidates.length - 1, idx + 1));
@@ -750,8 +750,8 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
       },
       {
         keys: ["k", "ArrowUp"],
-        description: "Move cursor up",
-        category: "Navigation",
+        description: t("swap.keymap.cursorUp"),
+        category: t("swap.keymap.categoryNavigation"),
         handler: () => {
           if (candidates.length === 0) return;
           setCursorIndex((idx) => Math.max(0, idx - 1));
@@ -759,8 +759,8 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
       },
       {
         keys: " ",
-        description: "Toggle selection on current candidate",
-        category: "Selection",
+        description: t("swap.keymap.toggleSelection"),
+        category: t("swap.keymap.categorySelection"),
         handler: () => {
           if (!cursorCandidate) return;
           if (cursorCandidate.conflict_size > 1) return;
@@ -769,46 +769,46 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
       },
       {
         keys: "a",
-        description: "Select all non-conflicted",
-        category: "Selection",
+        description: t("swap.keymap.selectAll"),
+        category: t("swap.keymap.categorySelection"),
         handler: () => handleSelectAll(),
       },
       {
         keys: "p",
-        description: "Pair current candidate",
-        category: "Actions",
+        description: t("swap.keymap.pairCurrent"),
+        category: t("swap.keymap.categoryActions"),
         handler: () => {
           if (cursorCandidate) void handlePair(cursorCandidate);
         },
       },
       {
         keys: "d",
-        description: "Dismiss current candidate",
-        category: "Actions",
+        description: t("swap.keymap.dismissCurrent"),
+        category: t("swap.keymap.categoryActions"),
         handler: () => {
           if (cursorCandidate) void handleDismiss(cursorCandidate);
         },
       },
       {
         keys: "e",
-        description: "Open 'Apply all exact' preview",
-        category: "Actions",
+        description: t("swap.keymap.applyExactPreview"),
+        category: t("swap.keymap.categoryActions"),
         handler: () => {
           if (exactSolo.length > 0) openExactPreview();
         },
       },
       {
         keys: "u",
-        description: "Undo last bulk action",
-        category: "Actions",
+        description: t("swap.keymap.undoLast"),
+        category: t("swap.keymap.categoryActions"),
         handler: () => {
           if (undoState) void performUndo();
         },
       },
       {
         keys: "r",
-        description: "Refresh candidates",
-        category: "Navigation",
+        description: t("swap.keymap.refresh"),
+        category: t("swap.keymap.categoryNavigation"),
         handler: () => void refetch(),
       },
     ];
@@ -828,6 +828,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
     selected,
     toggleSelected,
     undoState,
+    t,
   ]);
 
   useKeymap(bindings);
@@ -842,7 +843,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
           <header className="flex flex-col gap-2.5 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-4">
             <div className="min-w-0">
               <p className="text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
-                Review queue
+                {t("swap.queueLabel")}
               </p>
               <div className="mt-0.5 flex flex-wrap items-center gap-2">
                 <h1 className="text-base font-semibold">
@@ -867,7 +868,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                         {view.name}
                       </button>
                       <button
-                        aria-label={`Delete view ${view.name}`}
+                        aria-label={t("swap.savedView.deleteAria", { name: view.name })}
                         onClick={() => void deleteSavedView(view)}
                       >
                         <X className="size-3" />
@@ -887,7 +888,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                   disabled={bulkPairMutation.isPending}
                 >
                   <Sparkles className="size-4" />
-                  <span>Apply exact {exactSolo.length}</span>
+                  <span>{t("swap.header.applyExact", { count: exactSolo.length })}</span>
                 </Button>
               ) : null}
               <Button
@@ -898,12 +899,12 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                 disabled={isFetching}
               >
                 {isFetching ? <Loader2 className="size-4 animate-spin" /> : null}
-                <span className="ml-1">Refresh</span>
+                <span className="ml-1">{t("common:actions.refresh")}</span>
               </Button>
               <CollapsibleTrigger asChild>
                 <Button variant="outline" size="sm" className="h-9">
                   <SettingsIcon className="size-3.5" />
-                  <span>Rules {enabledRuleCount}/{rules.length}</span>
+                  <span>{t("swap.header.rules", { enabled: enabledRuleCount, total: rules.length })}</span>
                 </Button>
               </CollapsibleTrigger>
             </div>
@@ -911,7 +912,8 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
 
           <div className="grid grid-cols-2 divide-x-0 divide-y divide-border border-t sm:grid-cols-4 sm:divide-x sm:divide-y-0">
             <SwapQueueMetric
-              label="Candidates"
+              label={t("swap.metric.candidates")}
+              ariaLabel={t("swap.metric.showAllAria", { label: t("swap.metric.candidates") })}
               value={counts.total}
               tone={counts.total ? "neutral" : "good"}
               active={!filterIsDirty}
@@ -922,21 +924,23 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
               }}
             />
             <SwapQueueMetric
-              label="Exact"
+              label={t("swap.metric.exact")}
+              ariaLabel={t("swap.metric.filterAria", { label: t("swap.metric.exact") })}
               value={counts.exact}
               tone={counts.exact ? "good" : "neutral"}
               active={confidence === "exact"}
               onClick={() => setConfidence(confidence === "exact" ? "all" : "exact")}
             />
             <SwapQueueMetric
-              label="Strong"
+              label={t("swap.metric.strong")}
+              ariaLabel={t("swap.metric.filterAria", { label: t("swap.metric.strong") })}
               value={counts.strong}
               tone={counts.strong ? "warning" : "neutral"}
               active={confidence === "strong"}
               onClick={() => setConfidence(confidence === "strong" ? "all" : "strong")}
             />
             <SwapQueueMetric
-              label="Conflicts"
+              label={t("swap.metric.conflicts")}
               value={counts.conflicts}
               tone={counts.conflicts ? "alert" : "neutral"}
             />
@@ -950,11 +954,11 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                   onCheckedChange={handleSelectAll}
                 />
                 <span className="text-xs text-muted-foreground">
-                  Select
+                  {t("swap.filters.select")}
                 </span>
               </label>
               <span className="shrink-0 text-xs text-muted-foreground">
-                {candidates.length} visible
+                {t("swap.filters.visible", { count: candidates.length })}
               </span>
               <Select value={confidence} onValueChange={setConfidence}>
                 <SelectTrigger className="h-8 w-40 shrink-0">
@@ -963,7 +967,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                 <SelectContent>
                   {CONFIDENCE_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
-                      {option.label}
+                      {t(option.labelKey)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -975,20 +979,20 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                 <SelectContent>
                   {METHOD_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
-                      {option.label}
+                      {t(option.labelKey)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               {routeFilterEnabled ? (
                 <Select value={routePair} onValueChange={setRoutePair}>
-                  <SelectTrigger className="h-8 w-44 shrink-0" aria-label="Route filter">
+                  <SelectTrigger className="h-8 w-44 shrink-0" aria-label={t("swap.filters.routeAria")}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     {ROUTE_PAIR_OPTIONS.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
-                        {option.label}
+                        {t(option.labelKey)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1003,7 +1007,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                     onClick={() => setSaveViewOpen(true)}
                   >
                     <Star className="size-3.5" />
-                    <span>Save</span>
+                    <span>{t("swap.filters.save")}</span>
                   </Button>
                   <Button
                     variant="ghost"
@@ -1015,7 +1019,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                       if (routeFilterEnabled) setRoutePair("all");
                     }}
                   >
-                    Clear
+                    {t("swap.filters.clear")}
                   </Button>
                 </>
               ) : null}
@@ -1030,7 +1034,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                   disabled={ruleApply.isPending}
                 >
                   <Sparkles className="size-4" />
-                  <span>Apply rule {ruleSolo.length}</span>
+                  <span>{t("swap.filters.applyRule", { count: ruleSolo.length })}</span>
                 </Button>
               ) : null}
             </div>
@@ -1039,7 +1043,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
           <CollapsibleContent>
             <div className="space-y-2 border-t bg-muted/10 p-3 text-xs sm:px-6">
               <div className="flex items-center justify-between gap-2">
-                <span className="font-medium">Auto-pair rules</span>
+                <span className="font-medium">{t("swap.rules.title")}</span>
                 <Button
                   size="sm"
                   variant="outline"
@@ -1047,13 +1051,12 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                   onClick={() => setCreateRuleOpen(true)}
                 >
                   <Plus className="size-3" />
-                  <span>New rule</span>
+                  <span>{t("swap.rules.new")}</span>
                 </Button>
               </div>
               {rules.length === 0 ? (
                 <p className="text-muted-foreground">
-                  No auto-pair rules yet. Rules apply when a candidate matches
-                  the predicate and isn't part of a conflict cluster.
+                  {t("swap.rules.empty")}
                 </p>
               ) : (
                 rules.map((rule) => (
@@ -1061,12 +1064,12 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                     key={rule.id}
                     className="flex flex-wrap items-center gap-2 rounded border border-border/60 bg-background px-2 py-1"
                   >
-                    <span className="font-medium">{rule.name ?? "(unnamed)"}</span>
+                    <span className="font-medium">{rule.name ?? t("swap.rules.unnamed")}</span>
                     <code className="rounded bg-muted px-1 text-[10px]">
                       {Object.entries(rule.predicate)
                         .filter(([, v]) => v !== null && v !== "")
                         .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
-                        .join(" · ") || "any candidate"}
+                        .join(" · ") || t("swap.rules.anyCandidate")}
                     </code>
                     <Badge variant="outline" className="text-[10px]">
                       {rule.kind} · {rule.policy}
@@ -1075,14 +1078,14 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                       <Switch
                         checked={rule.enabled}
                         onCheckedChange={() => void toggleRule(rule)}
-                        aria-label="Toggle rule"
+                        aria-label={t("swap.rules.toggleAria")}
                       />
                       <Button
                         size="sm"
                         variant="ghost"
                         className="h-6 px-1"
                         onClick={() => void deleteRule(rule)}
-                        aria-label="Delete rule"
+                        aria-label={t("swap.rules.deleteAria")}
                       >
                         <Trash2 className="size-3" />
                       </Button>
@@ -1095,12 +1098,12 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
 
           {isLoading ? (
             <div className="flex items-center gap-2 border-t px-6 py-8 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" /> Loading candidates…
+              <Loader2 className="size-4 animate-spin" /> {t("swap.table.loading")}
             </div>
           ) : isError ? (
             <div className="border-t px-6 py-6">
               <div className="rounded border border-destructive/40 bg-destructive/10 p-3 text-sm">
-                Failed to load candidates: {String(error)}
+                {t("swap.table.loadFailed", { error: String(error) })}
               </div>
             </div>
           ) : candidates.length === 0 ? (
@@ -1116,20 +1119,20 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
                     <TableHead className="w-[42px]"></TableHead>
                     <TableHead className="w-[118px] text-xs font-medium text-muted-foreground">
-                      Confidence
+                      {t("swap.table.confidence")}
                     </TableHead>
                     <TableHead className="w-[132px] text-xs font-medium text-muted-foreground">
-                      Method
+                      {t("swap.table.method")}
                     </TableHead>
                     <TableHead className="w-[380px] text-xs font-medium text-muted-foreground">
-                      Outgoing
+                      {t("swap.table.outgoing")}
                     </TableHead>
                     <TableHead className="w-[44px] text-center"></TableHead>
                     <TableHead className="w-[380px] text-xs font-medium text-muted-foreground">
-                      Incoming
+                      {t("swap.table.incoming")}
                     </TableHead>
                     <TableHead className="w-[160px] text-right text-xs font-medium text-muted-foreground">
-                      Fee delta
+                      {t("swap.table.feeDelta")}
                     </TableHead>
                     <TableHead className="w-[44px]"></TableHead>
                   </TableRow>
@@ -1153,7 +1156,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                       >
                         <TableCell>
                           <Checkbox
-                            aria-label="Select candidate"
+                            aria-label={t("swap.table.selectAria")}
                             disabled={conflicted}
                             checked={!conflicted && selected.has(key)}
                             onClick={(event) => event.stopPropagation()}
@@ -1165,23 +1168,23 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                           {conflicted ? (
                             <p
                               className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-300"
-                              title={`One of these transactions appears in ${candidate.conflict_size} possible matches. Open the row to pick the right one — pairing or dismissing resolves the others.${hiddenSiblings > 0 ? ` ${hiddenSiblings} alternative match(es) are hidden by the current tab or filters.` : ""}`}
+                              title={`${t("swap.table.conflictTitle", { count: candidate.conflict_size })}${hiddenSiblings > 0 ? t("swap.table.conflictHiddenTitle", { count: hiddenSiblings }) : ""}`}
                             >
                               <AlertTriangle className="size-3" />
-                              {candidate.conflict_size} matches share a leg
-                              {hiddenSiblings > 0 ? ` (${hiddenSiblings} hidden)` : ""}
+                              {t("swap.table.conflictShareLeg", { count: candidate.conflict_size })}
+                              {hiddenSiblings > 0 ? t("swap.table.conflictHiddenSuffix", { count: hiddenSiblings }) : ""}
                             </p>
                           ) : null}
                         </TableCell>
                         <TableCell className="whitespace-normal">
                           <div className="text-xs text-muted-foreground">
                             {candidate.method === "payment_hash"
-                              ? "payment hash"
-                              : "time + amount"}
+                              ? t("swap.table.methodPaymentHash")
+                              : t("swap.table.methodHeuristic")}
                           </div>
                           {candidate.rule_match ? (
                             <Badge variant="outline" className="mt-1 text-[10px]">
-                              Rule
+                              {t("swap.table.ruleBadge")}
                             </Badge>
                           ) : null}
                         </TableCell>
@@ -1236,10 +1239,10 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
           {selectedCandidateCount > 0 ? (
             <div className="flex flex-wrap items-center gap-3 border-t bg-muted/25 px-3 py-3 text-sm sm:px-6">
               <span className="shrink-0 text-xs font-medium text-foreground">
-                {selectedCandidateCount} selected
+                {t("swap.bulk.selected", { count: selectedCandidateCount })}
               </span>
               <label className="flex min-w-[16rem] items-center gap-2 text-xs text-muted-foreground">
-                Kind
+                {t("swap.bulk.kind")}
                 <Select
                   value={bulkKind ?? "default"}
                   onValueChange={(v) => setBulkKind(v === "default" ? null : v as PairKind)}
@@ -1248,7 +1251,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="default">Candidate default</SelectItem>
+                    <SelectItem value="default">{t("swap.bulk.candidateDefault")}</SelectItem>
                     {PAIR_KIND_OPTIONS.map((option) => (
                       <SelectItem key={option} value={option}>
                         {option}
@@ -1258,7 +1261,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                 </Select>
               </label>
               <label className="flex min-w-[16rem] items-center gap-2 text-xs text-muted-foreground">
-                Policy
+                {t("swap.bulk.policy")}
                 <Select
                   value={bulkPolicy ?? "default"}
                   onValueChange={(v) => setBulkPolicy(v === "default" ? null : v as PairPolicy)}
@@ -1267,7 +1270,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="default">Candidate default</SelectItem>
+                    <SelectItem value="default">{t("swap.bulk.candidateDefault")}</SelectItem>
                     {PAIR_POLICY_OPTIONS.map((option) => (
                       <SelectItem key={option} value={option}>
                         {option}
@@ -1282,14 +1285,18 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                 onClick={openSelectedPreview}
                 disabled={pairMutation.isPending}
               >
-                Pair selected
+                {t("swap.bulk.pairSelected")}
               </Button>
             </div>
           ) : null}
 
           <div className="flex items-center border-t px-3 py-3 text-xs text-muted-foreground sm:px-6">
             <span>
-              Showing {candidates.length === 0 ? 0 : 1}-{candidates.length} of {counts.total}
+              {t("swap.showing", {
+                from: candidates.length === 0 ? 0 : 1,
+                to: candidates.length,
+                total: counts.total,
+              })}
             </span>
           </div>
         </div>
@@ -1339,14 +1346,17 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
           <DialogHeader className="border-b px-5 py-4 pr-12">
             <DialogTitle>
               {previewState?.mode === "exact"
-                ? "Apply all exact matches"
+                ? t("swap.preview.exactTitle")
                 : previewState?.mode === "rules"
-                  ? "Apply matching rules"
-                  : "Pair selected candidates"}
+                  ? t("swap.preview.rulesTitle")
+                  : t("swap.preview.selectedTitle")}
             </DialogTitle>
             <DialogDescription className={blurClass(hideSensitive)}>
               {previewState
-                ? previewSummaryText(previewState.candidates)
+                ? (() => {
+                    const summary = previewSummary(previewState.candidates);
+                    return t(summary.key, summary.params);
+                  })()
                 : null}
             </DialogDescription>
           </DialogHeader>
@@ -1367,7 +1377,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                     {candidate.in_asset} {formatBtc(candidate.in_amount)}
                   </span>
                   <span className={cn("text-xs text-muted-foreground", blurClass(hideSensitive))}>
-                    fee {formatSats(candidate.swap_fee_msat)}
+                    {t("swap.preview.feeLine", { fee: formatSats(candidate.swap_fee_msat) })}
                   </span>
                 </div>
               ))}
@@ -1381,7 +1391,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                 setPreviewState(null);
               }}
             >
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button
               onClick={() => void commitBulk()}
@@ -1391,7 +1401,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                 <Loader2 className="size-4 animate-spin" />
               ) : null}
               <span className="ml-1">
-                Pair {previewState?.candidates.length ?? 0}
+                {t("swap.preview.pairCount", { count: previewState?.candidates.length ?? 0 })}
               </span>
             </Button>
           </DialogFooter>
@@ -1431,18 +1441,14 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
         <div className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center">
           <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-zinc-900 px-4 py-2 text-sm text-zinc-50 shadow-lg dark:bg-zinc-100 dark:text-zinc-900">
             <span>
-              Paired <strong>{undoState.summary.count}</strong> candidate
-              {undoState.summary.count === 1 ? "" : "s"}
-              {undoState.summary.total_swap_fee_msat
-                ? (
-                    <>
-                      {" · fees "}
-                      <span className={blurClass(hideSensitive)}>
-                        {formatSats(undoState.summary.total_swap_fee_msat)}
-                      </span>
-                    </>
-                  )
-                : ""}
+              {t("swap.undo.paired", { count: undoState.summary.count })}
+              {undoState.summary.total_swap_fee_msat ? (
+                <span className={blurClass(hideSensitive)}>
+                  {t("swap.undo.feesSuffix", {
+                    fees: formatSats(undoState.summary.total_swap_fee_msat),
+                  })}
+                </span>
+              ) : null}
             </span>
             <Button
               size="sm"
@@ -1452,14 +1458,14 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
               disabled={unpairMutation.isPending}
             >
               <Undo2 className="size-3.5" />
-              <span className="ml-1">Undo</span>
+              <span className="ml-1">{t("swap.undo.undo")}</span>
             </Button>
             <Button
               size="sm"
               variant="ghost"
               className="h-7 px-1 text-inherit hover:bg-zinc-700 dark:hover:bg-zinc-300"
               onClick={cancelUndo}
-              aria-label="Dismiss undo toast"
+              aria-label={t("swap.undo.dismissAria")}
             >
               <X className="size-3.5" />
             </Button>
@@ -1472,12 +1478,14 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
 
 function SwapQueueMetric({
   label,
+  ariaLabel,
   value,
   tone = "neutral",
   active = false,
   onClick,
 }: {
   label: string;
+  ariaLabel?: string;
   value: number;
   tone?: "neutral" | "good" | "warning" | "alert";
   active?: boolean;
@@ -1514,7 +1522,7 @@ function SwapQueueMetric({
       className={className}
       onClick={onClick}
       aria-pressed={active}
-      aria-label={`${label === "Candidates" ? "Show all" : "Filter"} ${label}`}
+      aria-label={ariaLabel ?? label}
     >
       {content}
     </button>
@@ -1620,6 +1628,7 @@ function SwapRowMenu({
   pairDisabled,
   dismissDisabled,
 }: SwapRowMenuProps) {
+  const { t } = useTranslation("review");
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -1627,7 +1636,7 @@ function SwapRowMenu({
           variant="ghost"
           size="icon"
           className="size-8 text-muted-foreground hover:text-foreground"
-          aria-label={`Open actions for ${candidate.out_id}`}
+          aria-label={t("swap.rowMenu.openActionsAria", { id: candidate.out_id })}
           onClick={(event) => event.stopPropagation()}
         >
           <MoreHorizontal className="size-4" />
@@ -1636,12 +1645,12 @@ function SwapRowMenu({
       <DropdownMenuContent align="end">
         <DropdownMenuItem onSelect={onOpen}>
           <Eye className="mr-2 size-4" aria-hidden="true" />
-          Open details
+          {t("swap.rowMenu.openDetails")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem disabled={pairDisabled} onSelect={onPair}>
           <Check className="mr-2 size-4" aria-hidden="true" />
-          Pair
+          {t("swap.rowMenu.pair")}
         </DropdownMenuItem>
         <DropdownMenuItem
           className="text-destructive"
@@ -1649,7 +1658,7 @@ function SwapRowMenu({
           onSelect={onDismiss}
         >
           <X className="mr-2 size-4" aria-hidden="true" />
-          Dismiss
+          {t("swap.rowMenu.dismiss")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -1681,6 +1690,7 @@ function SwapCandidateDetailSheet({
   dismissDisabled,
   hideSensitive,
 }: SwapCandidateDetailSheetProps) {
+  const { t } = useTranslation("review");
   const kind = candidate ? override.kind ?? candidate.default_kind : "manual";
   const policy = candidate ? override.policy ?? candidate.default_policy : "carrying-value";
   return (
@@ -1689,23 +1699,24 @@ function SwapCandidateDetailSheet({
         {candidate ? (
           <>
             <SheetHeader className="border-b p-4 sm:p-6">
-              <SheetTitle>{candidateLabel(candidate)}</SheetTitle>
+              <SheetTitle>{t(candidateLabelKey(candidate))}</SheetTitle>
               <SheetDescription>
                 {candidate.method === "payment_hash"
-                  ? "Matched by payment hash."
-                  : "Matched by time and amount."}
+                  ? t("swap.detail.matchedByPaymentHash")
+                  : t("swap.detail.matchedByTimeAmount")}
                 {" "}
-                Delta{" "}
                 <span className={blurClass(hideSensitive)}>
-                  {formatSats(candidate.swap_fee_msat)} ({feePercent(candidate).toFixed(2)}%)
+                  {t("swap.detail.delta", {
+                    delta: formatSats(candidate.swap_fee_msat),
+                    percent: feePercent(candidate).toFixed(2),
+                  })}
                 </span>
-                .
               </SheetDescription>
             </SheetHeader>
             <div className="space-y-4 p-4 sm:p-6">
               <div className="grid gap-4 md:grid-cols-2">
                 <SwapLegDetails
-                  title="Outgoing"
+                  title={t("swap.detail.outgoing")}
                   asset={candidate.out_asset}
                   amount={candidate.out_amount}
                   amountMsat={candidate.out_amount_msat}
@@ -1716,7 +1727,7 @@ function SwapCandidateDetailSheet({
                   hideSensitive={hideSensitive}
                 />
                 <SwapLegDetails
-                  title="Incoming"
+                  title={t("swap.detail.incoming")}
                   asset={candidate.in_asset}
                   amount={candidate.in_amount}
                   amountMsat={candidate.in_amount_msat}
@@ -1730,7 +1741,7 @@ function SwapCandidateDetailSheet({
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
-                  <Label>Kind</Label>
+                  <Label>{t("swap.detail.kind")}</Label>
                   <Select
                     value={kind}
                     onValueChange={(value) => onKindChange(candidate, value as PairKind)}
@@ -1748,7 +1759,7 @@ function SwapCandidateDetailSheet({
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <Label>Policy</Label>
+                  <Label>{t("swap.detail.policy")}</Label>
                   <Select
                     value={policy}
                     onValueChange={(value) => onPolicyChange(candidate, value as PairPolicy)}
@@ -1769,47 +1780,47 @@ function SwapCandidateDetailSheet({
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-lg border bg-muted/20 p-3 text-sm">
-                  <div className="font-medium">Match rationale</div>
+                  <div className="font-medium">{t("swap.detail.matchRationale")}</div>
                   <p className="mt-1 text-muted-foreground">
                     {candidate.method === "payment_hash"
-                      ? "Both legs share the same Lightning payment hash."
-                      : "The legs are close in time and amount after accounting for the fee delta."}
+                      ? t("swap.detail.rationalePaymentHash")
+                      : t("swap.detail.rationaleHeuristic")}
                   </p>
                   {candidate.rule_match ? (
                     <p className="mt-2 text-xs text-muted-foreground">
-                      Auto-pair route: {candidate.rule_match.rule_name ?? candidate.rule_match.rule_id}
+                      {t("swap.detail.autoPairRoute", {
+                        rule: candidate.rule_match.rule_name ?? candidate.rule_match.rule_id,
+                      })}
                     </p>
                   ) : null}
                   {candidate.conflict_size > 1 ? (
                     <p className="mt-2 inline-flex items-start gap-1 text-xs text-amber-700 dark:text-amber-300">
                       <AlertTriangle className="mt-0.5 size-3 shrink-0" />
                       <span>
-                        One of these transactions also appears in{" "}
-                        {candidate.conflict_size - 1} other possible match
-                        {candidate.conflict_size - 1 === 1 ? "" : "es"} (it may
-                        be listed under the other tab or filtered out). Bulk
-                        actions skip it; pair the correct match here or dismiss
-                        the wrong ones to resolve the conflict.
+                        {t("swap.detail.conflictNote", { count: candidate.conflict_size - 1 })}
                       </span>
                     </p>
                   ) : null}
                 </div>
                 <div className="rounded-lg border bg-muted/20 p-3 text-sm">
-                  <div className="font-medium">Accounting preview</div>
+                  <div className="font-medium">{t("swap.detail.accountingPreview")}</div>
                   <dl className="mt-2 space-y-1 text-xs">
-                    <DetailRow label="Pair kind" value={kind} />
-                    <DetailRow label="Policy" value={policy} />
+                    <DetailRow label={t("swap.detail.pairKind")} value={kind} />
+                    <DetailRow label={t("swap.detail.policy")} value={policy} />
                     <DetailRow
-                      label={candidateFeeLabel(candidate)}
+                      label={t(candidateFeeLabelKey(candidate))}
                       value={
                         <span className={blurClass(hideSensitive)}>
-                          {formatSats(candidate.swap_fee_msat)} · {feePercent(candidate).toFixed(2)}%
+                          {t("swap.detail.feeLine", {
+                            fee: formatSats(candidate.swap_fee_msat),
+                            percent: feePercent(candidate).toFixed(2),
+                          })}
                         </span>
                       }
                     />
                   </dl>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Journal and tax deltas are computed on the next journal reprocess.
+                    {t("swap.detail.deltasNote")}
                   </p>
                 </div>
               </div>
@@ -1820,10 +1831,10 @@ function SwapCandidateDetailSheet({
                 onClick={() => onDismiss(candidate)}
                 disabled={dismissDisabled}
               >
-                Dismiss
+                {t("swap.rowMenu.dismiss")}
               </Button>
               <Button onClick={() => onPair(candidate)} disabled={pairDisabled}>
-                Pair
+                {t("swap.rowMenu.pair")}
               </Button>
             </SheetFooter>
           </>
@@ -1833,11 +1844,21 @@ function SwapCandidateDetailSheet({
   );
 }
 
-function previewSummaryText(candidates: SwapCandidate[]): string {
-  if (candidates.length === 0) return "No candidates to pair.";
+function previewSummary(candidates: SwapCandidate[]): {
+  key: "swap.preview.summaryEmpty" | "swap.preview.summary";
+  params?: Record<string, unknown>;
+} {
+  if (candidates.length === 0) return { key: "swap.preview.summaryEmpty" };
   const totalFeeMsat = candidates.reduce((acc, c) => acc + c.swap_fee_msat, 0);
   const totalCarry = candidates.reduce((acc, c) => acc + c.out_amount, 0);
-  return `${candidates.length} pair${candidates.length === 1 ? "" : "s"} · outgoing value ${formatBtc(totalCarry)} · total fees ${formatSats(totalFeeMsat)}.`;
+  return {
+    key: "swap.preview.summary",
+    params: {
+      count: candidates.length,
+      value: formatBtc(totalCarry),
+      fees: formatSats(totalFeeMsat),
+    },
+  };
 }
 
 interface SaveViewDialogProps {
@@ -1857,34 +1878,33 @@ function SaveViewDialog({
   onSave,
   isSaving,
 }: SaveViewDialogProps) {
+  const { t } = useTranslation(["review", "common"]);
   return (
     <Dialog open={open} onOpenChange={(value) => (!value ? onCancel() : undefined)}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Save current filter as a view</DialogTitle>
+          <DialogTitle>{t("swap.saveDialog.title")}</DialogTitle>
           <DialogDescription>
-            The active confidence, method, and asset-pair filters are saved
-            verbatim. Pick a short name; the chip appears at the top of the
-            queue for one-click recall.
+            {t("swap.saveDialog.description")}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
-          <Label htmlFor="view-name">View name</Label>
+          <Label htmlFor="view-name">{t("swap.saveDialog.nameLabel")}</Label>
           <Input
             id="view-name"
             autoFocus
-            placeholder="e.g. Boltz pegouts"
+            placeholder={t("swap.saveDialog.namePlaceholder")}
             value={name}
             onChange={(event) => onNameChange(event.target.value)}
           />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onCancel}>
-            Cancel
+            {t("common:actions.cancel")}
           </Button>
           <Button onClick={() => void onSave()} disabled={isSaving || !name.trim()}>
             {isSaving ? <Loader2 className="size-4 animate-spin" /> : null}
-            <span className="ml-1">Save</span>
+            <span className="ml-1">{t("common:actions.save")}</span>
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1908,6 +1928,7 @@ interface CreateRuleDialogProps {
 }
 
 function CreateRuleDialog({ open, onClose, onCreate, isCreating }: CreateRuleDialogProps) {
+  const { t } = useTranslation(["review", "common"]);
   const [name, setName] = useState("");
   const [outAsset, setOutAsset] = useState("any");
   const [inAsset, setInAsset] = useState("any");
@@ -1963,53 +1984,52 @@ function CreateRuleDialog({ open, onClose, onCreate, isCreating }: CreateRuleDia
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create auto-pair rule</DialogTitle>
+          <DialogTitle>{t("swap.createRule.title")}</DialogTitle>
           <DialogDescription>
-            Candidates matching every non-default field will auto-pair
-            with the chosen kind / policy. Conflict clusters never auto-pair.
+            {t("swap.createRule.description")}
           </DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2 space-y-1">
-            <Label htmlFor="rule-name">Name (optional)</Label>
+            <Label htmlFor="rule-name">{t("swap.createRule.nameLabel")}</Label>
             <Input
               id="rule-name"
-              placeholder="e.g. Phoenix → Liquid"
+              placeholder={t("swap.createRule.namePlaceholder")}
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
           </div>
           <RulePredicateAssetField
-            label="Out asset"
+            label={t("swap.createRule.outAsset")}
             value={outAsset}
             onChange={setOutAsset}
           />
           <RulePredicateAssetField
-            label="In asset"
+            label={t("swap.createRule.inAsset")}
             value={inAsset}
             onChange={setInAsset}
           />
           <RulePredicateKindField
-            label="Out wallet kind"
+            label={t("swap.createRule.outWalletKind")}
             value={outKind}
             onChange={setOutKind}
           />
           <RulePredicateKindField
-            label="In wallet kind"
+            label={t("swap.createRule.inWalletKind")}
             value={inKind}
             onChange={setInKind}
           />
           <div className="space-y-1">
-            <Label htmlFor="max-fee">Max fee % of principal</Label>
+            <Label htmlFor="max-fee">{t("swap.createRule.maxFee")}</Label>
             <Input
               id="max-fee"
-              placeholder="e.g. 0.01"
+              placeholder={t("swap.createRule.maxFeePlaceholder")}
               value={maxFeePct}
               onChange={(e) => setMaxFeePct(e.target.value)}
             />
           </div>
           <div className="space-y-1">
-            <Label>Min confidence</Label>
+            <Label>{t("swap.createRule.minConfidence")}</Label>
             <Select
               value={minConfidence}
               onValueChange={(v) => setMinConfidence(v as "strong" | "exact")}
@@ -2018,13 +2038,13 @@ function CreateRuleDialog({ open, onClose, onCreate, isCreating }: CreateRuleDia
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="strong">Strong (or exact)</SelectItem>
-                <SelectItem value="exact">Exact only</SelectItem>
+                <SelectItem value="strong">{t("swap.createRule.minStrong")}</SelectItem>
+                <SelectItem value="exact">{t("swap.createRule.minExact")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-1">
-            <Label>Kind</Label>
+            <Label>{t("swap.createRule.kind")}</Label>
             <Select value={kind} onValueChange={(v) => setKind(v as PairKind)}>
               <SelectTrigger>
                 <SelectValue />
@@ -2039,7 +2059,7 @@ function CreateRuleDialog({ open, onClose, onCreate, isCreating }: CreateRuleDia
             </Select>
           </div>
           <div className="space-y-1">
-            <Label>Policy</Label>
+            <Label>{t("swap.createRule.policy")}</Label>
             <Select value={policy} onValueChange={(v) => setPolicy(v as PairPolicy)}>
               <SelectTrigger>
                 <SelectValue />
@@ -2062,11 +2082,11 @@ function CreateRuleDialog({ open, onClose, onCreate, isCreating }: CreateRuleDia
               onClose();
             }}
           >
-            Cancel
+            {t("common:actions.cancel")}
           </Button>
           <Button onClick={() => void submit()} disabled={isCreating}>
             {isCreating ? <Loader2 className="size-4 animate-spin" /> : null}
-            <span className="ml-1">Create rule</span>
+            <span className="ml-1">{t("swap.createRule.createButton")}</span>
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -2081,6 +2101,7 @@ interface RuleFieldProps {
 }
 
 function RulePredicateAssetField({ label, value, onChange }: RuleFieldProps) {
+  const { t } = useTranslation("review");
   return (
     <div className="space-y-1">
       <Label>{label}</Label>
@@ -2089,7 +2110,7 @@ function RulePredicateAssetField({ label, value, onChange }: RuleFieldProps) {
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="any">Any</SelectItem>
+          <SelectItem value="any">{t("swap.createRule.any")}</SelectItem>
           <SelectItem value="BTC">BTC</SelectItem>
           <SelectItem value="LBTC">LBTC</SelectItem>
         </SelectContent>
@@ -2105,6 +2126,7 @@ interface KeymapHelpDialogProps {
 }
 
 function KeymapHelpDialog({ open, onClose, bindings }: KeymapHelpDialogProps) {
+  const { t } = useTranslation(["review", "common"]);
   const grouped = useMemo(() => {
     const groups: Record<string, Keybinding[]> = {};
     for (const binding of bindings) {
@@ -2118,9 +2140,9 @@ function KeymapHelpDialog({ open, onClose, bindings }: KeymapHelpDialogProps) {
     <Dialog open={open} onOpenChange={(value) => (!value ? onClose() : undefined)}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Keyboard shortcuts</DialogTitle>
+          <DialogTitle>{t("swap.keymap.title")}</DialogTitle>
           <DialogDescription>
-            Shortcuts work whenever the focus isn't in a text field.
+            {t("swap.keymap.description")}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 text-sm">
@@ -2146,7 +2168,7 @@ function KeymapHelpDialog({ open, onClose, bindings }: KeymapHelpDialogProps) {
           ))}
         </div>
         <DialogFooter>
-          <Button onClick={onClose}>Close</Button>
+          <Button onClick={onClose}>{t("common:actions.close")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -2166,6 +2188,7 @@ function formatKeybindingKeys(keys: string | string[]): string {
 }
 
 function RulePredicateKindField({ label, value, onChange }: RuleFieldProps) {
+  const { t } = useTranslation("review");
   return (
     <div className="space-y-1">
       <Label>{label}</Label>
@@ -2174,7 +2197,7 @@ function RulePredicateKindField({ label, value, onChange }: RuleFieldProps) {
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="any">Any</SelectItem>
+          <SelectItem value="any">{t("swap.createRule.any")}</SelectItem>
           <SelectItem value="phoenix">phoenix</SelectItem>
           <SelectItem value="coreln">coreln</SelectItem>
           <SelectItem value="lnd">lnd</SelectItem>
@@ -2212,6 +2235,7 @@ function SwapLegDetails({
   txId,
   hideSensitive,
 }: SwapLegDetailsProps) {
+  const { t } = useTranslation("review");
   const rail = railForLeg(asset, walletKind);
   const walletName = displayWalletName(wallet, walletKind);
   const walletLabel = wallet?.trim() ?? "";
@@ -2226,7 +2250,7 @@ function SwapLegDetails({
       </div>
       <dl className="space-y-2 text-sm">
         <DetailRow
-          label="Wallet"
+          label={t("swap.detail.wallet")}
           value={
             <span className="inline-flex min-w-0 items-center gap-2">
               <RailIcon rail={rail} size="compact" />
@@ -2238,16 +2262,16 @@ function SwapLegDetails({
           }
         />
         <DetailRow
-          label="Amount"
+          label={t("swap.detail.amount")}
           value={
             <span className={cn("font-mono tabular-nums", blurClass(hideSensitive))}>
               {formatBtc(amount)} <span className="text-xs text-muted-foreground">({formatSats(amountMsat)})</span>
             </span>
           }
         />
-        <DetailRow label="Occurred" value={formatTimestamp(timestamp)} />
+        <DetailRow label={t("swap.detail.occurred")} value={formatTimestamp(timestamp)} />
         <DetailRow
-          label="Record ID"
+          label={t("swap.detail.recordId")}
           value={<span className={cn("font-mono text-xs", blurClass(hideSensitive))}>{txId}</span>}
         />
       </dl>
@@ -2342,16 +2366,17 @@ interface ConfidenceBadgeProps {
 }
 
 function ConfidenceBadge({ candidate }: ConfidenceBadgeProps) {
+  const { t } = useTranslation("review");
   if (candidate.confidence === "exact") {
     return (
       <Badge className="bg-emerald-100 text-emerald-900 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-100">
-        Exact
+        {t("swap.metric.exact")}
       </Badge>
     );
   }
   return (
     <Badge className="bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-950/50 dark:text-amber-100">
-      Strong
+      {t("swap.metric.strong")}
     </Badge>
   );
 }

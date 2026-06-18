@@ -1,4 +1,5 @@
 import { Plus, RefreshCw } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -16,13 +17,16 @@ export function WalletsDashboardHeader({
   onAddWallet,
   onRefreshAll,
 }: WalletsDashboardHeaderProps) {
+  const { t } = useTranslation("connections");
   return (
     <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0 space-y-1">
         <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          Wallets and sources
+          {t("dashboard.eyebrow")}
         </p>
-        <h2 className="text-xl font-semibold tracking-tight">Wallets</h2>
+        <h2 className="text-xl font-semibold tracking-tight">
+          {t("dashboard.title")}
+        </h2>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Button
@@ -36,11 +40,11 @@ export function WalletsDashboardHeader({
             className={cn("size-4", isSyncing && "animate-spin")}
             aria-hidden="true"
           />
-          {isSyncing ? "Refreshing" : "Refresh book"}
+          {isSyncing ? t("dashboard.refreshing") : t("dashboard.refreshBook")}
         </Button>
         <Button size="sm" className={headerActionClassName} onClick={onAddWallet}>
           <Plus className="size-4" aria-hidden="true" />
-          Add wallet
+          {t("dashboard.addWallet")}
         </Button>
       </div>
     </div>

@@ -9,6 +9,7 @@
 
 import * as React from "react";
 import { useQueries } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { RefreshCw } from "lucide-react";
 
 import {
@@ -82,6 +83,7 @@ export function ProviderModelPicker({
   enabled = true,
   onActiveProviderKindChange,
 }: ProviderModelPickerProps) {
+  const { t } = useTranslation("assistant");
   const dataMode = useUiStore((state) => state.dataMode);
   const daemonSession = useUiStore((state) => state.daemonSession);
   const providersQuery = useDaemon<AiProvidersListData>(
@@ -231,10 +233,10 @@ export function ProviderModelPicker({
   const currentLabel = value
     ? `${value.provider} · ${value.model}`
     : !enabled
-      ? "Select model"
+      ? t("modelPicker.selectModel")
       : providers.length === 0
-      ? "No provider configured"
-      : "Select a model";
+      ? t("modelPicker.noProviderConfigured")
+      : t("modelPicker.selectAModel");
 
   const handleChange = (raw: string) => {
     const next = parseRowValue(raw);
@@ -261,8 +263,8 @@ export function ProviderModelPicker({
       className="-mr-1 size-6 text-muted-foreground hover:text-foreground"
       onClick={handleRefresh}
       disabled={isRefreshing}
-      aria-label="Refresh all AI models"
-      title="Refresh all AI models"
+      aria-label={t("modelPicker.refreshModels")}
+      title={t("modelPicker.refreshModels")}
     >
       <RefreshCw
         className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")}
@@ -282,13 +284,13 @@ export function ProviderModelPicker({
       <ModelSelectorContent>
         <ModelSelectorGroup>
           <ModelSelectorLabel trailing={refreshModelsButton}>
-            Models
+            {t("modelPicker.models")}
           </ModelSelectorLabel>
         </ModelSelectorGroup>
         {groupedRows.length === 0 ? (
           <ModelSelectorGroup>
             <ModelSelectorEmpty className="block px-2 py-1.5 text-xs">
-              No AI providers configured
+              {t("modelPicker.noProviders")}
             </ModelSelectorEmpty>
           </ModelSelectorGroup>
         ) : (
@@ -303,7 +305,9 @@ export function ProviderModelPicker({
                   value={rowValue(provider.name, "__placeholder__")}
                   disabled
                 >
-                  <ModelSelectorEmpty>No models found</ModelSelectorEmpty>
+                  <ModelSelectorEmpty>
+                    {t("modelPicker.noModels")}
+                  </ModelSelectorEmpty>
                 </ModelSelectorItem>
               ) : (
                 rows.map((model) => (

@@ -27,7 +27,8 @@ import {
   Square,
   type LucideIcon,
 } from "lucide-react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { AiProviderKind } from "@/lib/aiCapabilities";
 
 interface PromptOption {
@@ -53,34 +54,19 @@ interface Ai02Props {
   modelPickerEnabled?: boolean;
 }
 
-const DEFAULT_PROMPTS: PromptOption[] = [
-  {
-    icon: AlertTriangle,
-    text: "Review quarantine",
-    prompt:
-      "List quarantined or under-specified transactions and tell me which price, transfer, or wallet evidence is needed to resolve them.",
-  },
-  {
-    icon: RefreshCw,
-    text: "Reprocess journals",
-    prompt:
-      "Check whether journals need reprocessing after recent imports, pricing changes, metadata edits, or transfer pairing.",
-  },
-  {
-    icon: FileSpreadsheet,
-    text: "Prepare tax export",
-    prompt:
-      "Prepare the Austrian tax export checklist and call out missing journal, pricing, or report prerequisites.",
-  },
-];
+const DEFAULT_PROMPT_KEYS = [
+  { icon: AlertTriangle, key: "reviewQuarantine" },
+  { icon: RefreshCw, key: "reprocessJournals" },
+  { icon: FileSpreadsheet, key: "prepareTaxExport" },
+] as const;
 
 const TEXTAREA_MAX_HEIGHT_PX = 176;
 
 export default function Ai02({
   className,
   compact = false,
-  placeholder = "Ask anything",
-  prompts = DEFAULT_PROMPTS,
+  placeholder,
+  prompts,
   selection,
   onSelectionChange,
   onSubmit,
@@ -92,10 +78,23 @@ export default function Ai02({
   inputPanelElevated = true,
   modelPickerEnabled = true,
 }: Ai02Props) {
+  const { t } = useTranslation("assistant");
   const [inputValue, setInputValue] = useState("");
   const [activeProviderKind, setActiveProviderKind] =
     useState<AiProviderKind | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const resolvedPlaceholder = placeholder ?? t("composer.placeholder");
+  const defaultPrompts = useMemo<PromptOption[]>(
+    () =>
+      DEFAULT_PROMPT_KEYS.map(({ icon, key }) => ({
+        icon,
+        text: t(`prompts.${key}.text`),
+        prompt: t(`prompts.${key}.prompt`),
+      })),
+    [t],
+  );
+  const resolvedPrompts = prompts ?? defaultPrompts;
 
   const handlePromptClick = (prompt: string) => {
     if (inputRef.current) {
@@ -108,7 +107,8 @@ export default function Ai02({
   const canSubmit = Boolean(trimmedInput) && Boolean(selection?.model);
   const canSend = canSubmit && !isStreaming;
   const canQueue = canSubmit && isStreaming;
-  const showSuggestions = !trimmedInput && !isStreaming && prompts.length > 0;
+  const showSuggestions =
+    !trimmedInput && !isStreaming && resolvedPrompts.length > 0;
   const ModelIcon =
     activeProviderKind === "remote"
       ? Cloud
@@ -166,7 +166,7 @@ export default function Ai02({
             value={inputValue}
             onChange={(event) => setInputValue(event.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={placeholder}
+            placeholder={resolvedPlaceholder}
             className={cn(
               "max-h-44 min-h-0 w-full resize-none whitespace-pre-wrap break-words border-0 bg-transparent! text-[17px] leading-6 text-foreground shadow-none outline-none transition-[padding,color] duration-200 ease-in-out placeholder:text-muted-foreground/80 focus-visible:ring-0 focus-visible:ring-offset-0",
               compact
@@ -182,7 +182,7 @@ export default function Ai02({
                   size="icon-sm"
                   className="size-9 rounded-full bg-destructive transition-colors duration-100 ease-out cursor-pointer hover:bg-destructive/90!"
                   onClick={onAbort}
-                  aria-label="Stop generating"
+                  aria-label={t("composer.stopGenerating")}
                 >
                   <Square className="h-3.5 w-3.5 text-destructive-foreground" />
                 </Button>
@@ -196,8 +196,16 @@ export default function Ai02({
                   )}
                   disabled={!canSubmit}
                   onClick={handleSubmit}
-                  aria-label={canQueue ? "Queue message" : "Send message"}
-                  title={canQueue ? "Queue message" : "Send message"}
+                  aria-label={
+                    canQueue
+                      ? t("composer.queueMessage")
+                      : t("composer.sendMessage")
+                  }
+                  title={
+                    canQueue
+                      ? t("composer.queueMessage")
+                      : t("composer.sendMessage")
+                  }
                 >
                   <ArrowUp className="h-4 w-4" />
                 </Button>
@@ -217,7 +225,7 @@ export default function Ai02({
           <Context className="min-w-0 flex-1">
             <ContextItem
               icon={<ModelIcon className="h-4 w-4 text-muted-foreground" />}
-              label="Model context"
+              label={t("composer.modelContext")}
               className="max-w-full"
             >
               <ProviderModelPicker
@@ -231,7 +239,7 @@ export default function Ai02({
             {showThinkingEffort ? (
               <ContextItem
                 icon={<Brain className="h-3.5 w-3.5" aria-hidden="true" />}
-                label="Thinking"
+                label={t("composer.thinking")}
                 className="shrink-0"
               >
                 <Select
@@ -247,10 +255,18 @@ export default function Ai02({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent align="end">
-                    <SelectItem value="auto">Auto</SelectItem>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="auto">
+                      {t("composer.effort.auto")}
+                    </SelectItem>
+                    <SelectItem value="low">
+                      {t("composer.effort.low")}
+                    </SelectItem>
+                    <SelectItem value="medium">
+                      {t("composer.effort.medium")}
+                    </SelectItem>
+                    <SelectItem value="high">
+                      {t("composer.effort.high")}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </ContextItem>
@@ -265,7 +281,7 @@ export default function Ai02({
                 size="icon-sm"
                 className="rounded-full bg-destructive transition-colors duration-100 ease-out cursor-pointer hover:bg-destructive/90!"
                 onClick={onAbort}
-                aria-label="Stop generating"
+                aria-label={t("composer.stopGenerating")}
               >
                 <Square className="h-3.5 w-3.5 text-destructive-foreground" />
               </Button>
@@ -280,8 +296,16 @@ export default function Ai02({
                 )}
                 disabled={!canSubmit}
                 onClick={handleSubmit}
-                aria-label={canQueue ? "Queue message" : "Send message"}
-                title={canQueue ? "Queue message" : "Send message"}
+                aria-label={
+                  canQueue
+                    ? t("composer.queueMessage")
+                    : t("composer.sendMessage")
+                }
+                title={
+                  canQueue
+                    ? t("composer.queueMessage")
+                    : t("composer.sendMessage")
+                }
               >
                 <ArrowUp className="h-4 w-4" />
               </Button>
@@ -300,7 +324,7 @@ export default function Ai02({
           )}
           aria-hidden={compact}
         >
-          {prompts.map((button) => {
+          {resolvedPrompts.map((button) => {
             const IconComponent = button.icon;
             return (
               <Suggestion

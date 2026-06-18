@@ -7,6 +7,7 @@ import {
   Wallet,
 } from "lucide-react";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Bar,
@@ -89,6 +90,7 @@ const PeriodTabs = ({
   activePeriod: PeriodKey;
   onPeriodChange: (period: PeriodKey) => void;
 }) => {
+  const { t } = useTranslation("transactions");
   return (
     <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
       {periodKeys.map((key) => (
@@ -103,7 +105,8 @@ const PeriodTabs = ({
               : "text-muted-foreground hover:text-foreground",
           )}
         >
-          {periodLabels[key]}
+          {/* loose translator */}
+          {(t as (key: string) => string)(periodLabels[key])}
         </button>
       ))}
     </div>
@@ -195,6 +198,7 @@ const TransactionWorkbench = ({
   swapCandidateTotal?: number | null;
   isRefreshing?: boolean;
 }) => {
+  const { t } = useTranslation("transactions");
   const navigate = useNavigate();
   const [chartMetric, setChartMetric] =
     React.useState<FlowChartMetric>("amount");
@@ -254,6 +258,14 @@ const TransactionWorkbench = ({
   const activeChartRows = chartRows.filter((row) => flowPointTotal(row) > 0);
   const visibleChartRows = activeChartRows.length ? activeChartRows : chartRows;
   const yDomain = flowAxisDomain(visibleChartRows, chartMetric);
+  const bucketTitleSuffix = (
+    {
+      day: "Day",
+      week: "Week",
+      month: "Month",
+      quarter: "Quarter",
+    } as const
+  )[flowBucketLabel(period)];
   const flowChartCellProps = React.useCallback(
     (row: FlowChartPoint, segment: FlowChartSegment) => {
       const sameBucket =
@@ -332,7 +344,8 @@ const TransactionWorkbench = ({
         id: `${period}:all:${segment}:${chartMode}`,
         period,
         bucketKey: null,
-        bucketLabel: periodLabels[period],
+        // loose translator
+        bucketLabel: (t as (key: string) => string)(periodLabels[period]),
         segment,
         mode: chartMode,
       });
@@ -344,6 +357,7 @@ const TransactionWorkbench = ({
       onQuickFilterChange,
       onTableFiltersReset,
       period,
+      t,
     ],
   );
   const handleSummaryFlowClick = React.useCallback(
@@ -355,7 +369,8 @@ const TransactionWorkbench = ({
         id: `${period}:summary:${segment}:all`,
         period,
         bucketKey: null,
-        bucketLabel: periodLabels[period],
+        // loose translator
+        bucketLabel: (t as (key: string) => string)(periodLabels[period]),
         segment,
         mode: "all",
       });
@@ -366,6 +381,7 @@ const TransactionWorkbench = ({
       onQuickFilterChange,
       onTableFiltersReset,
       period,
+      t,
     ],
   );
   const handleNetFlowClick = React.useCallback(() => {
@@ -451,61 +467,64 @@ const TransactionWorkbench = ({
   const maxWalletValue = Math.max(...walletRows.map((row) => row.eur), 1);
   const metricCards = [
     {
-      label: "Incoming",
+      label: t("workbench.metric.incoming"),
       value: incoming,
-      meta: `${incoming.count} tx`,
+      meta: t("workbench.meta.txCount", { count: incoming.count }),
       icon: ArrowDownRight,
       tone: "text-emerald-600",
       onClick:
         incoming.count > 0
           ? () => handleSummaryFlowClick("incoming")
           : undefined,
-      ariaLabel: "Show incoming transactions",
+      ariaLabel: t("workbench.aria.showIncoming"),
     },
     {
-      label: "Outgoing",
+      label: t("workbench.metric.outgoing"),
       value: outgoing,
-      meta: `${outgoing.count} tx`,
+      meta: t("workbench.meta.txCount", { count: outgoing.count }),
       icon: ArrowUpRight,
       tone: "text-red-600",
       onClick:
         outgoing.count > 0
           ? () => handleSummaryFlowClick("outgoing")
           : undefined,
-      ariaLabel: "Show outgoing transactions",
+      ariaLabel: t("workbench.aria.showOutgoing"),
     },
     {
-      label: "Net flow",
+      label: t("workbench.metric.netFlow"),
       value: { eur: netEur, btc: netBtc },
-      meta: netEur >= 0 ? "inflow" : "outflow",
+      meta: netEur >= 0 ? t("workbench.meta.inflow") : t("workbench.meta.outflow"),
       icon: ArrowLeftRight,
       tone: netEur >= 0 ? "text-emerald-600" : "text-red-600",
       onClick:
         incoming.count + outgoing.count > 0
           ? handleNetFlowClick
           : undefined,
-      ariaLabel: "Show external flow transactions",
+      ariaLabel: t("workbench.aria.showNetFlow"),
     },
     {
-      label: "Transfers",
+      label: t("workbench.metric.transfers"),
       value: transfers,
-      meta: `${transfers.count} moves`,
+      meta: t("workbench.meta.moveCount", { count: transfers.count }),
       icon: Wallet,
       tone: "text-muted-foreground",
       onClick: () => handleSummaryFlowClick("transfers"),
-      ariaLabel: "Show transfer transactions",
+      ariaLabel: t("workbench.aria.showTransfers"),
     },
     {
-      label: "Swaps",
+      label: t("workbench.metric.swaps"),
       value: swaps,
       meta:
         knownSwapCandidateCount === null
-          ? "unpaired unknown"
+          ? t("workbench.meta.unpairedUnknown")
           : knownSwapCandidateCount > 0 && markedSwaps.count > 0
-          ? `${knownSwapCandidateCount} unpaired · ${markedSwaps.count} paired`
+          ? t("workbench.meta.unpairedAndPaired", {
+              unpaired: knownSwapCandidateCount,
+              paired: markedSwaps.count,
+            })
           : knownSwapCandidateCount > 0
-          ? `${knownSwapCandidateCount} unpaired`
-          : `${markedSwaps.count} paired`,
+          ? t("workbench.meta.unpaired", { count: knownSwapCandidateCount })
+          : t("workbench.meta.paired", { count: markedSwaps.count }),
       icon: RefreshCw,
       tone:
         knownSwapCandidateCount === null || knownSwapCandidateCount > 0
@@ -514,13 +533,16 @@ const TransactionWorkbench = ({
       onClick: handleSwapWorkflowClick,
       ariaLabel:
         knownSwapCandidateCount === null || knownSwapCandidateCount > 0
-          ? "Open pairing candidates"
-          : "Show paired swap transactions",
+          ? t("workbench.aria.openPairingCandidates")
+          : t("workbench.aria.showPairedSwaps"),
     },
     {
-      label: "Review queue",
+      label: t("workbench.metric.reviewQueue"),
       value: { eur: reviewCount + pendingCount + failedCount, btc: 0 },
-      meta: `${reviewCount} review · ${pendingCount} pending`,
+      meta: t("workbench.meta.reviewAndPending", {
+        review: reviewCount,
+        pending: pendingCount,
+      }),
       icon: ShieldAlert,
       tone:
         reviewCount || pendingCount || failedCount
@@ -528,7 +550,7 @@ const TransactionWorkbench = ({
           : "text-emerald-600",
       countOnly: true,
       onClick: handleReviewQueueClick,
-      ariaLabel: "Show review queue transactions",
+      ariaLabel: t("workbench.aria.showReviewQueue"),
     },
   ];
 
@@ -611,28 +633,28 @@ const TransactionWorkbench = ({
           <div className="mb-3 flex shrink-0 items-start justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold">
-                Flow by active {flowBucketLabel(period)}
+                {t(`workbench.chart.title${bucketTitleSuffix}`)}
               </h2>
               {isRefreshing ? (
                 <Skeleton className="mt-1 h-3 w-36" />
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  {chartRecords.length} tx across {activeChartRows.length} active{" "}
-                  {activeChartRows.length === 1
-                    ? flowBucketLabel(period)
-                    : `${flowBucketLabel(period)}s`}
+                  {t(`workbench.chart.subtitle${bucketTitleSuffix}`, {
+                    count: chartRecords.length,
+                    buckets: activeChartRows.length,
+                  })}
                 </p>
               )}
             </div>
             <div className="flex flex-col items-end gap-2">
               <div className="flex flex-wrap justify-end gap-x-2 gap-y-1 text-[10px] text-muted-foreground sm:text-xs">
                 {[
-                  ["incoming", "Incoming"],
-                  ["outgoing", "Outgoing"],
+                  ["incoming", t("chartSegment.incoming")],
+                  ["outgoing", t("chartSegment.outgoing")],
                   ...(chartMode === "all"
                     ? [
-                        ["transfer", "Transfers"],
-                        ["swap", "Swaps"],
+                        ["transfer", t("chartSegment.transfers")],
+                        ["swap", t("chartSegment.swaps")],
                       ]
                     : []),
                 ].map(([flow, label]) => (
@@ -680,7 +702,8 @@ const TransactionWorkbench = ({
                           : "border-border bg-background text-muted-foreground hover:text-foreground",
                       )}
                     >
-                      {flowChartMetricLabels[metric]}
+                      {/* loose translator */}
+                      {(t as (key: string) => string)(flowChartMetricLabels[metric])}
                     </button>
                   ),
                 )}
@@ -697,7 +720,8 @@ const TransactionWorkbench = ({
                         : "border-border bg-background text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    {flowChartModeLabels[mode]}
+                    {/* loose translator */}
+                    {(t as (key: string) => string)(flowChartModeLabels[mode])}
                   </button>
                 ))}
               </div>
@@ -887,8 +911,9 @@ const TransactionWorkbench = ({
 
         <div className="col-span-2 grid gap-0 sm:grid-cols-2 md:col-span-3 xl:col-span-2 xl:grid-cols-1 xl:border-l">
           <BreakdownPanel
-            title="Activity by network"
-            description="Priced tx value in this period, not holdings."
+            title={t("workbench.breakdown.networkTitle")}
+            description={t("workbench.breakdown.networkDescription")}
+            isWalletPanel={false}
             rows={networkRows}
             maxValue={maxNetworkValue}
             currency={currency}
@@ -902,8 +927,9 @@ const TransactionWorkbench = ({
             onSelect={(key) => handleBreakdownClick("network", key)}
           />
           <BreakdownPanel
-            title="Activity by wallet/source"
-            description="Priced tx value in this period, not balances."
+            title={t("workbench.breakdown.walletTitle")}
+            description={t("workbench.breakdown.walletDescription")}
+            isWalletPanel
             rows={walletRows.slice(0, 4)}
             maxValue={maxWalletValue}
             currency={currency}
@@ -917,7 +943,7 @@ const TransactionWorkbench = ({
             onSelect={(key) => handleBreakdownClick("wallet", key)}
           />
           <div className="border-t p-3 sm:col-span-2 lg:col-span-1 sm:p-4">
-            <h3 className="mb-2 text-sm font-semibold">Data quality</h3>
+            <h3 className="mb-2 text-sm font-semibold">{t("workbench.quality.title")}</h3>
             {isRefreshing ? (
               <div className="space-y-3 py-1">
                 {Array.from({ length: 4 }).map((_, index) => (
@@ -934,28 +960,28 @@ const TransactionWorkbench = ({
               <div className="divide-y text-xs">
                 {withoutExplorer > 0 ? (
                   <QualityRow
-                    label="Missing explorer link"
+                    label={t("workbench.quality.missingExplorerLink")}
                     value={withoutExplorer}
                     onClick={() => handleQualityFilterClick("no_explorer_id")}
                   />
                 ) : null}
                 {missingPriceCount > 0 ? (
                   <QualityRow
-                    label="Missing price"
+                    label={t("workbench.quality.missingPrice")}
                     value={missingPriceCount}
                     onClick={() => handleQualityFilterClick("missing_price")}
                   />
                 ) : null}
                 {failedCount > 0 ? (
                   <QualityRow
-                    label="Failed import"
+                    label={t("workbench.quality.failedImport")}
                     value={failedCount}
                     onClick={() => handleQualityFilterClick("failed_import")}
                   />
                 ) : null}
                 {swapCandidateTotals.count > 0 ? (
                   <QualityRow
-                    label="Swap candidates"
+                    label={t("workbench.quality.swapCandidates")}
                     value={swapCandidateTotals.count}
                     onClick={openSwapWorkflow}
                   />
@@ -966,7 +992,7 @@ const TransactionWorkbench = ({
                 swapCandidateTotals.count === 0 ? (
                   <div className="-mx-1 grid min-h-8 w-[calc(100%+0.5rem)] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md px-1 py-1.5 text-left">
                     <span className="min-w-0 truncate text-muted-foreground">
-                      No data quality issues
+                      {t("workbench.quality.none")}
                     </span>
                     <span className="shrink-0 font-semibold leading-none text-emerald-600">
                       0
@@ -991,6 +1017,7 @@ function FlowTooltip({
   currency,
   metric,
 }: ChartTooltipProps) {
+  const { t } = useTranslation("transactions");
   if (!active || !payload?.length) return null;
   const rows = payload
     .filter((row) => Number(row.value ?? 0) !== 0)
@@ -1014,7 +1041,10 @@ function FlowTooltip({
                 />
                 <span className="text-muted-foreground">
                   {segment
-                    ? flowChartSegmentLabels[segment]
+                    ? // loose translator
+                      (t as (key: string) => string)(
+                        flowChartSegmentLabels[segment],
+                      )
                     : String(row.dataKey)}
                 </span>
                 <span
@@ -1023,13 +1053,19 @@ function FlowTooltip({
                     blurClass(hideSensitive),
                   )}
                 >
-                  {formatFlowTooltipValue(Number(row.value), currency, metric)}
+                  {formatFlowTooltipValue(
+                    Number(row.value),
+                    currency,
+                    metric,
+                    // loose translator
+                    t as (key: string, opts?: Record<string, unknown>) => string,
+                  )}
                 </span>
               </div>
               {stats && (
                 <div className="space-y-1 pl-4 text-[10px] text-muted-foreground sm:text-xs">
                   <div className="flex justify-between gap-3">
-                    <span>{stats.count} tx</span>
+                    <span>{t("workbench.tooltip.txCount", { count: stats.count })}</span>
                     <span className={blurClass(hideSensitive)}>
                       {currency === "btc"
                         ? formatBtc(stats.btc, { precision: 8 })
@@ -1039,7 +1075,9 @@ function FlowTooltip({
                   {stats.largest && (
                     <div className="flex justify-between gap-3">
                       <span className="truncate">
-                        Largest: {stats.largest.label}
+                        {t("workbench.tooltip.largest", {
+                          label: stats.largest.label,
+                        })}
                       </span>
                       <span
                         className={cn(
@@ -1059,17 +1097,19 @@ function FlowTooltip({
                     <div className="flex flex-wrap gap-1 pt-0.5">
                       {stats.missingPrice > 0 && (
                         <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-amber-600">
-                          {stats.missingPrice} missing price
+                          {t("workbench.tooltip.missingPrice", {
+                            count: stats.missingPrice,
+                          })}
                         </span>
                       )}
                       {stats.review > 0 && (
                         <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-blue-600">
-                          {stats.review} review
+                          {t("workbench.tooltip.review", { count: stats.review })}
                         </span>
                       )}
                       {stats.failed > 0 && (
                         <span className="rounded bg-[var(--color-accent)]/10 px-1.5 py-0.5 text-[var(--color-accent)]">
-                          {stats.failed} failed
+                          {t("workbench.tooltip.failed", { count: stats.failed })}
                         </span>
                       )}
                     </div>
@@ -1087,6 +1127,7 @@ function FlowTooltip({
 function BreakdownPanel({
   title,
   description,
+  isWalletPanel,
   rows,
   maxValue,
   currency,
@@ -1097,6 +1138,7 @@ function BreakdownPanel({
 }: {
   title: string;
   description?: string;
+  isWalletPanel?: boolean;
   rows: Array<{ key: string; count: number; eur: number; btc: number }>;
   maxValue: number;
   currency: Currency;
@@ -1105,6 +1147,7 @@ function BreakdownPanel({
   selectedKey?: string | null;
   onSelect?: (key: string) => void;
 }) {
+  const { t } = useTranslation("transactions");
   return (
     <div className="border-t p-3 first:border-t-0 sm:p-4">
       <div className="mb-3 space-y-0.5">
@@ -1117,7 +1160,7 @@ function BreakdownPanel({
       </div>
       {isRefreshing ? (
         <div className="space-y-3">
-          {Array.from({ length: title.includes("wallet") ? 4 : 2 }).map(
+          {Array.from({ length: isWalletPanel ? 4 : 2 }).map(
             (_, index) => (
               <div key={index} className="space-y-2">
                 <div className="flex items-center justify-between gap-3">
@@ -1138,7 +1181,7 @@ function BreakdownPanel({
             <div className="flex items-center justify-between gap-2 text-xs">
               <span className="truncate font-medium">{row.key}</span>
               <span className="shrink-0 text-muted-foreground">
-                {row.count} tx ·{" "}
+                {t("workbench.meta.txCount", { count: row.count })} ·{" "}
                 <CurrencyToggleText className={blurClass(hideSensitive)}>
                   {formatDisplayMoney(row.eur, row.btc, currency)}
                 </CurrencyToggleText>

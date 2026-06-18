@@ -1,5 +1,6 @@
 import { RefreshCw, X } from "lucide-react";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,7 +16,7 @@ import { cn } from "@/lib/utils";
 import {
   activityFlowColors,
   activityFlowKeys,
-  activityFlowLabels,
+  activityFlowLabelKeys,
   ACTIVITY_MARKER_INPUT_STEP_BTC,
   ACTIVITY_MARKER_SLIDER_MARKS,
   activityMarkerSliderValue,
@@ -25,7 +26,7 @@ import {
   DEFAULT_OUTGOING_MARKER_MIN_BTC,
   formatEditableActivityMarkerMinimum,
   periodKeys,
-  periodLabels,
+  periodLabelKeys,
   serializeActivityMarkerMinimum,
   type TimePeriod,
   type TreasuryChartSeriesKey,
@@ -112,10 +113,11 @@ export type ActivityMarkerValueEditorProps = {
 };
 
 export function ActivityFlowKey() {
+  const { t } = useTranslation("overview");
   return (
     <div className="rounded-md border p-3">
       <p className="text-xs font-medium text-muted-foreground">
-        Activity flows
+        {t("controls.activityFlows")}
       </p>
       <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
         {activityFlowKeys.map((flow) => (
@@ -125,7 +127,7 @@ export function ActivityFlowKey() {
               style={{ backgroundColor: activityFlowColors[flow] }}
               aria-hidden="true"
             />
-            <span className="truncate">{activityFlowLabels[flow]}</span>
+            <span className="truncate">{t(activityFlowLabelKeys[flow])}</span>
           </div>
         ))}
       </div>
@@ -177,6 +179,7 @@ export function ChartControlsSheet({
   onResetMarkerMinimums,
   hideSensitive,
 }: ChartControlsSheetProps) {
+  const { t } = useTranslation(["overview", "common"]);
   const markerMinimumsAtDefault =
     incomingMarkerMinimumBtc === DEFAULT_INCOMING_MARKER_MIN_BTC &&
     outgoingMarkerMinimumBtc === DEFAULT_OUTGOING_MARKER_MIN_BTC;
@@ -191,15 +194,17 @@ export function ChartControlsSheet({
           <div className="flex items-start justify-between gap-4 px-4 py-4 sm:px-6">
             <div className="min-w-0">
               <SheetTitle className="truncate text-xl sm:text-2xl">
-                Chart controls
+                {t("controls.title")}
               </SheetTitle>
               <SheetDescription className="mt-1 truncate">
-                Time range, chart series, and BTC dot minimums
+                {t("controls.description")}
               </SheetDescription>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <span className="text-[10px] text-muted-foreground">
-                  {visibleMarkerCount.toLocaleString("en-US")} of{" "}
-                  {markerCount.toLocaleString("en-US")} activity dots visible
+                  {t("controls.dotsVisible", {
+                    visible: visibleMarkerCount.toLocaleString("en-US"),
+                    total: markerCount.toLocaleString("en-US"),
+                  })}
                 </span>
               </div>
             </div>
@@ -207,7 +212,7 @@ export function ChartControlsSheet({
               type="button"
               size="icon"
               variant="ghost"
-              aria-label="Close chart controls"
+              aria-label={t("controls.close")}
               onClick={() => onOpenChange(false)}
             >
               <X className="size-4" aria-hidden="true" />
@@ -219,7 +224,7 @@ export function ChartControlsSheet({
           <div className="space-y-5 p-4 sm:p-6">
             <div className="rounded-md border p-3">
               <p className="text-xs font-medium text-muted-foreground">
-                Time Range
+                {t("controls.timeRange")}
               </p>
               <div className="mt-3 grid grid-cols-2 gap-2">
                 {periodKeys.map((key) => (
@@ -243,7 +248,7 @@ export function ChartControlsSheet({
                     }
                     onClick={() => onPeriodChange(key)}
                   >
-                    {periodLabels[key]}
+                    {t(periodLabelKeys[key])}
                   </button>
                 ))}
               </div>
@@ -253,7 +258,7 @@ export function ChartControlsSheet({
 
             <div className="rounded-md border p-3">
               <p className="text-xs font-medium text-muted-foreground">
-                Series
+                {t("controls.series")}
               </p>
               <div className="mt-3 space-y-1">
                 {legendItems.map((item) => (
@@ -272,7 +277,7 @@ export function ChartControlsSheet({
                     <Checkbox
                       checked={seriesVisible[item.key]}
                       onCheckedChange={() => onToggleSeries(item.key)}
-                      aria-label={`Show ${item.label}`}
+                      aria-label={t("controls.showSeries", { label: item.label })}
                       className="data-[state=checked]:border-[var(--chart-control-accent)] data-[state=checked]:bg-[var(--chart-control-accent)] data-[state=checked]:text-background"
                       style={
                         {
@@ -304,10 +309,10 @@ export function ChartControlsSheet({
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-xs font-medium text-muted-foreground">
-                    Marker size
+                    {t("controls.markerSize")}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Minimum BTC size for activity dots
+                    {t("controls.minBtcSize")}
                   </p>
                 </div>
                 <Button
@@ -319,18 +324,19 @@ export function ChartControlsSheet({
                   disabled={markerMinimumsAtDefault}
                 >
                   <RefreshCw className="size-3.5" aria-hidden="true" />
-                  Reset
+                  {t("common:actions.reset")}
                 </Button>
               </div>
               <div className="flex items-center justify-between gap-3 text-sm">
                 <div>
                   <p className="text-xs font-medium text-muted-foreground">
-                    Incoming payments
+                    {t("controls.incomingPayments")}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Minimum size in BTC ·{" "}
-                    {visibleIncomingMarkerCount.toLocaleString("en-US")} of{" "}
-                    {incomingMarkerCount.toLocaleString("en-US")} dots shown
+                    {t("controls.minSizeWithCount", {
+                      visible: visibleIncomingMarkerCount.toLocaleString("en-US"),
+                      total: incomingMarkerCount.toLocaleString("en-US"),
+                    })}
                   </p>
                 </div>
                 <ActivityMarkerValueEditor
@@ -341,7 +347,7 @@ export function ChartControlsSheet({
               </div>
               <ActivityMarkerSlider
                 id="incoming-marker-minimum"
-                label="Minimum incoming payment dot size in BTC"
+                label={t("controls.incomingSliderAria")}
                 value={incomingMarkerMinimumBtc}
                 color={activityFlowColors.incoming}
                 onChange={onIncomingMarkerMinimumChange}
@@ -352,12 +358,13 @@ export function ChartControlsSheet({
               <div className="flex items-center justify-between gap-3 text-sm">
                 <div>
                   <p className="text-xs font-medium text-red-500 dark:text-red-400">
-                    Outgoing activity
+                    {t("controls.outgoingActivity")}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Minimum size in BTC ·{" "}
-                    {visibleOutgoingMarkerCount.toLocaleString("en-US")} of{" "}
-                    {outgoingMarkerCount.toLocaleString("en-US")} dots shown
+                    {t("controls.minSizeWithCount", {
+                      visible: visibleOutgoingMarkerCount.toLocaleString("en-US"),
+                      total: outgoingMarkerCount.toLocaleString("en-US"),
+                    })}
                   </p>
                 </div>
                 <ActivityMarkerValueEditor
@@ -369,7 +376,7 @@ export function ChartControlsSheet({
               </div>
               <ActivityMarkerSlider
                 id="outgoing-marker-minimum"
-                label="Minimum outgoing activity dot size in BTC"
+                label={t("controls.outgoingSliderAria")}
                 value={outgoingMarkerMinimumBtc}
                 color={activityFlowColors.outgoing}
                 onChange={onOutgoingMarkerMinimumChange}
@@ -388,6 +395,7 @@ export function ActivityMarkerValueEditor({
   className,
   hidden,
 }: ActivityMarkerValueEditorProps) {
+  const { t } = useTranslation("overview");
   const formattedValue = formatEditableActivityMarkerMinimum(value);
   const [draft, setDraft] = React.useState(formattedValue);
   const [editing, setEditing] = React.useState(false);
@@ -417,10 +425,10 @@ export function ActivityMarkerValueEditor({
         className,
         hidden && blurClass(true),
       )}
-      title="Click to enter a custom BTC minimum"
+      title={t("controls.customMinTitle")}
     >
       <input
-        aria-label="Custom marker minimum in BTC"
+        aria-label={t("controls.customMinAria")}
         className="h-full w-[10ch] rounded-l-md bg-transparent px-2 text-right font-medium tabular-nums outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         min={0}
         step={ACTIVITY_MARKER_INPUT_STEP_BTC}

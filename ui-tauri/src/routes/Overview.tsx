@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import { OverviewDashboard } from "@/components/overview-dashboard/OverviewDashboard";
 import { ScreenNotice, ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { useDaemon } from "@/daemon/client";
@@ -5,6 +7,7 @@ import { MOCK_OVERVIEW, type OverviewSnapshot } from "@/mocks/seed";
 import { useUiStore } from "@/store/ui";
 
 export function Overview() {
+  const { t } = useTranslation("overview");
   const dataMode = useUiStore((state) => state.dataMode);
   const { data, isLoading, isFetching, isError, error } =
     useDaemon<OverviewSnapshot>("ui.overview.snapshot");
@@ -21,14 +24,14 @@ export function Overview() {
   if (dataMode === "real" && !hasLiveOverview) {
     return (
       <ScreenNotice
-        title="Overview unavailable"
+        title={t("screen.unavailableTitle")}
         body={
           error instanceof Error
             ? error.message
             : data?.error?.message ??
               (isError
-                ? "Kassiber could not read real overview data."
-                : "No real overview data is available for the current book.")
+                ? t("screen.unavailableBody")
+                : t("screen.noRealData"))
         }
       />
     );

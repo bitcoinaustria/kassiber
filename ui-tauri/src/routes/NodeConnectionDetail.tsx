@@ -8,6 +8,8 @@
  */
 
 import { Fragment, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowDownRight,
@@ -87,20 +89,30 @@ const fmtSatSigned = (value: number) =>
 const fmtPubkey = (value: string) =>
   value.length <= 18 ? value : `${value.slice(0, 8)}…${value.slice(-6)}`;
 
-const channelStateLabels: Record<NodeChannelState, string> = {
-  active: "Active",
-  inactive: "Inactive",
-  pending_open: "Pending open",
-  pending_close: "Pending close",
-  closed: "Closed",
-  force_closed: "Force-closed",
-};
+const channelStateLabelKeys = {
+  active: "node.channelState.active",
+  inactive: "node.channelState.inactive",
+  pending_open: "node.channelState.pendingOpen",
+  pending_close: "node.channelState.pendingClose",
+  closed: "node.channelState.closed",
+  force_closed: "node.channelState.forceClosed",
+} as const satisfies Record<NodeChannelState, string>;
 
-const forwardStatusLabels: Record<NodeForwardStatus, string> = {
-  settled: "Settled",
-  failed: "Failed",
-  offered: "In flight",
-};
+const channelStateLabel = (
+  state: NodeChannelState,
+  t: TFunction<"connections">,
+) => t(channelStateLabelKeys[state]);
+
+const forwardStatusLabelKeys = {
+  settled: "node.forwardStatus.settled",
+  failed: "node.forwardStatus.failed",
+  offered: "node.forwardStatus.offered",
+} as const satisfies Record<NodeForwardStatus, string>;
+
+const forwardStatusLabel = (
+  status: NodeForwardStatus,
+  t: TFunction<"connections">,
+) => t(forwardStatusLabelKeys[status]);
 
 const forwardStatusTone: Record<NodeForwardStatus, string> = {
   settled:
@@ -159,8 +171,11 @@ export function NodeConnectionDetail({
   onSync,
   isSyncRunning,
 }: NodeConnectionDetailProps) {
+  const { t } = useTranslation("connections");
   const node = connection.node;
-  const refreshButtonLabel = isSyncRunning ? "Refreshing" : "Refresh";
+  const refreshButtonLabel = isSyncRunning
+    ? t("node.header.refreshing")
+    : t("node.header.refresh");
 
   if (!node) {
     return (
@@ -173,11 +188,11 @@ export function NodeConnectionDetail({
         />
         <Card>
           <CardHeader className="border-b px-4 pb-3">
-            <CardTitle className="text-sm sm:text-base">No node snapshot yet</CardTitle>
+            <CardTitle className="text-sm sm:text-base">
+              {t("node.noSnapshot.title")}
+            </CardTitle>
             <CardDescription>
-              Lightning node sync has not produced a snapshot for this
-              connection yet. Run a refresh to fetch channels, balances, and the
-              routing summary.
+              {t("node.noSnapshot.description")}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex items-start gap-2 px-4 pt-4">
@@ -263,12 +278,13 @@ function NodeHeader({
   refreshButtonLabel,
   onSync,
 }: NodeHeaderProps) {
+  const { t } = useTranslation("connections");
   return (
     <Card className="rounded-xl py-3">
       <CardContent className="flex flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <Button asChild variant="outline" size="icon" className="shrink-0">
-            <Link to="/connections" aria-label="Back to wallets">
+            <Link to="/connections" aria-label={t("node.header.backToWallets")}>
               <ArrowLeft className="size-4" aria-hidden="true" />
             </Link>
           </Button>
@@ -318,7 +334,10 @@ function NodeHeader({
             className="min-w-[7.5rem]"
             disabled={isSyncRunning}
             aria-busy={isSyncRunning}
-            aria-label={`${refreshButtonLabel} ${connection.label}`}
+            aria-label={t("node.header.refreshAction", {
+              action: refreshButtonLabel,
+              label: connection.label,
+            })}
             onClick={onSync}
           >
             <RefreshCw
@@ -340,6 +359,7 @@ interface NodeMetricsProps {
 }
 
 function NodeMetrics({ node, priceEur, hideSensitive }: NodeMetricsProps) {
+  const { t } = useTranslation("connections");
   const activeChannels = node.channels.filter(
     (channel) => channel.state === "active",
   );
@@ -351,35 +371,39 @@ function NodeMetrics({ node, priceEur, hideSensitive }: NodeMetricsProps) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <MetricCard
-        label="Local balance"
+        label={t("node.metrics.localBalance")}
         value={
           <span className={blurClass(hideSensitive)}>{fmtBtc(localBtc)}</span>
         }
-        detail={`${node.totalLocalBalanceSat.toLocaleString(
-          "en-US",
-        )} sat · ${fmtEur(localBtc * priceEur)}`}
+        detail={t("node.metrics.localBalanceDetail", {
+          sat: node.totalLocalBalanceSat.toLocaleString("en-US"),
+          eur: fmtEur(localBtc * priceEur),
+        })}
         icon={<Zap className="size-4" aria-hidden="true" />}
       />
       <MetricCard
-        label="Inbound liquidity"
+        label={t("node.metrics.inboundLiquidity")}
         value={
           <span className={blurClass(hideSensitive)}>
             {fmtSat(inboundLiquiditySat)}
           </span>
         }
-        detail={`Total capacity ${fmtSat(node.totalCapacitySat)}`}
+        detail={t("node.metrics.totalCapacity", {
+          capacity: fmtSat(node.totalCapacitySat),
+        })}
         icon={<Cable className="size-4" aria-hidden="true" />}
       />
       <MetricCard
-        label="Channels"
+        label={t("node.metrics.channels")}
         value={`${activeChannels.length} / ${node.channels.length}`}
-        detail={`${node.peerCount} peers · ${
-          (node.closedChannels?.length ?? 0)
-        } closed`}
+        detail={t("node.metrics.channelsDetail", {
+          peers: node.peerCount,
+          closed: node.closedChannels?.length ?? 0,
+        })}
         icon={<Server className="size-4" aria-hidden="true" />}
       />
       <MetricCard
-        label="On-chain"
+        label={t("node.metrics.onChain")}
         value={
           <span className={blurClass(hideSensitive)}>
             {fmtBtc(onchainBtc)}
@@ -387,10 +411,12 @@ function NodeMetrics({ node, priceEur, hideSensitive }: NodeMetricsProps) {
         }
         detail={
           totalLightningSat > 0
-            ? `${Math.round(
-                (node.totalLocalBalanceSat / totalLightningSat) * 100,
-              )}% local in channels`
-            : "No channel liquidity"
+            ? t("node.metrics.localInChannels", {
+                percent: Math.round(
+                  (node.totalLocalBalanceSat / totalLightningSat) * 100,
+                ),
+              })
+            : t("node.metrics.noChannelLiquidity")
         }
         icon={<Coins className="size-4" aria-hidden="true" />}
       />
@@ -409,6 +435,7 @@ function RoutingSummary({
   priceEur,
   hideSensitive,
 }: RoutingSummaryProps) {
+  const { t } = useTranslation("connections");
   const profitBtc = routing.netProfitSat / 100_000_000;
   const profitTone =
     routing.netProfitSat > 0
@@ -421,41 +448,44 @@ function RoutingSummary({
       <CardHeader className="border-b px-4 pb-3">
         <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
           <TrendingUp className="size-4" aria-hidden="true" />
-          Routing summary
+          {t("node.routing.title")}
         </CardTitle>
         <CardDescription>
-          {routing.windowLabel} · {routing.forwardCount.toLocaleString("en-US")}{" "}
-          forwards · {routing.paymentCount.toLocaleString("en-US")} payments ·{" "}
-          {routing.rebalanceCount.toLocaleString("en-US")} rebalances
+          {t("node.routing.description", {
+            window: routing.windowLabel,
+            forwards: routing.forwardCount.toLocaleString("en-US"),
+            payments: routing.paymentCount.toLocaleString("en-US"),
+            rebalances: routing.rebalanceCount.toLocaleString("en-US"),
+          })}
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3 px-4 pt-4 sm:grid-cols-2 xl:grid-cols-5">
         <RoutingStat
-          label="Revenue"
+          label={t("node.routing.revenue")}
           value={fmtSatSigned(routing.routingRevenueSat)}
           tone="text-emerald-700 dark:text-emerald-300"
           hideSensitive={hideSensitive}
         />
         <RoutingStat
-          label="Payment fees"
+          label={t("node.routing.paymentFees")}
           value={fmtSatSigned(-routing.paymentCostSat)}
           tone="text-red-700 dark:text-red-300"
           hideSensitive={hideSensitive}
         />
         <RoutingStat
-          label="Rebalance fees"
+          label={t("node.routing.rebalanceFees")}
           value={fmtSatSigned(-routing.rebalanceCostSat)}
           tone="text-red-700 dark:text-red-300"
           hideSensitive={hideSensitive}
         />
         <RoutingStat
-          label="On-chain costs"
+          label={t("node.routing.onChainCosts")}
           value={fmtSatSigned(-routing.onchainCostSat)}
           tone="text-red-700 dark:text-red-300"
           hideSensitive={hideSensitive}
         />
         <RoutingStat
-          label="Net profit"
+          label={t("node.routing.netProfit")}
           value={fmtSatSigned(routing.netProfitSat)}
           detail={fmtEur(profitBtc * priceEur)}
           tone={profitTone}
@@ -522,6 +552,7 @@ function ChannelsCard({
   hideSensitive,
   totalCapacitySat,
 }: ChannelsCardProps) {
+  const { t } = useTranslation("connections");
   // When a node only has closed channels left, default to showing them so
   // the "Show closed" toggle is not the only way to see any channel data.
   const closedOnly = channels.length === 0 && closedChannels.length > 0;
@@ -550,7 +581,7 @@ function ChannelsCard({
       <CardHeader className="border-b px-4 pb-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
-            Channels
+            {t("node.channels.title")}
             <span className="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-[10px] font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
               {channels.length}
             </span>
@@ -563,30 +594,42 @@ function ChannelsCard({
               className="text-xs"
               onClick={() => setShowClosed((prev) => !prev)}
             >
-              {showClosed ? "Hide" : "Show"} closed (
-              {sortedClosed.length.toLocaleString("en-US")})
+              {showClosed
+                ? t("node.channels.hideClosed", {
+                    value: sortedClosed.length.toLocaleString("en-US"),
+                  })
+                : t("node.channels.showClosed", {
+                    value: sortedClosed.length.toLocaleString("en-US"),
+                  })}
             </Button>
           ) : null}
         </div>
         <CardDescription>
-          Capacity, local / remote balance, and routing fee policy per channel.
-          Click a row for full channel details.
+          {t("node.channels.description")}
         </CardDescription>
       </CardHeader>
       <CardContent className="p-0">
         {visibleRows.length === 0 ? (
           <div className="px-5 py-8 text-sm text-muted-foreground">
-            No channels reported by the node.
+            {t("node.channels.empty")}
           </div>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Peer</TableHead>
-                <TableHead className="w-[40%]">Balance</TableHead>
-                <TableHead className="text-right">Capacity</TableHead>
-                <TableHead className="text-right">Fee policy</TableHead>
-                <TableHead className="text-right">State</TableHead>
+                <TableHead>{t("node.channels.peer")}</TableHead>
+                <TableHead className="w-[40%]">
+                  {t("node.channels.balance")}
+                </TableHead>
+                <TableHead className="text-right">
+                  {t("node.channels.capacity")}
+                </TableHead>
+                <TableHead className="text-right">
+                  {t("node.channels.feePolicy")}
+                </TableHead>
+                <TableHead className="text-right">
+                  {t("node.channels.state")}
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -629,6 +672,7 @@ function ChannelRow({
   totalCapacitySat,
   onOpen,
 }: ChannelRowProps) {
+  const { t } = useTranslation("connections");
   const capacity = Math.max(1, channel.capacitySat);
   const localPct = Math.min(
     100,
@@ -667,18 +711,20 @@ function ChannelRow({
             event.stopPropagation();
             onOpen();
           }}
-          aria-label={`Open channel detail for ${channel.peerAlias}`}
+          aria-label={t("node.channels.openDetail", {
+            peer: channel.peerAlias,
+          })}
         >
           <span className="flex items-center gap-1.5 truncate text-sm font-medium">
             {channel.peerAlias}
             {channel.isPrivate ? (
               <Badge variant="outline" className="rounded-md text-[10px]">
-                Private
+                {t("node.channels.private")}
               </Badge>
             ) : null}
             {channel.isInitiator ? null : (
               <Badge variant="outline" className="rounded-md text-[10px]">
-                Remote-opened
+                {t("node.channels.remoteOpened")}
               </Badge>
             )}
           </span>
@@ -690,7 +736,7 @@ function ChannelRow({
           >
             {channel.peerPubkey
               ? fmtPubkey(channel.peerPubkey)
-              : "private peer"}
+              : t("node.channels.privatePeer")}
             {channel.shortChannelId ? ` · ${channel.shortChannelId}` : ""}
           </span>
         </button>
@@ -700,9 +746,10 @@ function ChannelRow({
           <div
             className="flex h-2 w-full overflow-hidden rounded-full bg-muted"
             role="img"
-            aria-label={`${channel.localBalanceSat.toLocaleString(
-              "en-US",
-            )} sat local of ${channel.capacitySat.toLocaleString("en-US")} sat capacity`}
+            aria-label={t("node.channels.balanceAria", {
+              local: channel.localBalanceSat.toLocaleString("en-US"),
+              capacity: channel.capacitySat.toLocaleString("en-US"),
+            })}
           >
             <div
               className="h-full bg-emerald-500 dark:bg-emerald-400/80"
@@ -723,13 +770,13 @@ function ChannelRow({
               <span className="text-emerald-700 dark:text-emerald-300">
                 {fmtSat(channel.localBalanceSat)}
               </span>{" "}
-              local
+              {t("node.channels.localLabel")}
             </span>
             <span>
               <span className="text-sky-700 dark:text-sky-300">
                 {fmtSat(channel.remoteBalanceSat)}
               </span>{" "}
-              remote
+              {t("node.channels.remoteLabel")}
             </span>
           </div>
         </div>
@@ -745,7 +792,7 @@ function ChannelRow({
         </span>
         {showSharePct ? (
           <span className="text-[10px] text-muted-foreground sm:text-xs">
-            {sharePct}% of node
+            {t("node.channels.shareOfNode", { percent: sharePct })}
           </span>
         ) : null}
       </TableCell>
@@ -755,17 +802,23 @@ function ChannelRow({
         ) : (
           <Fragment>
             <span className="block font-mono text-sm tabular-nums">
-              {channel.feeRatePpm?.toLocaleString("en-US") ?? "—"} ppm
+              {t("node.channels.ppm", {
+                value: channel.feeRatePpm?.toLocaleString("en-US") ?? "—",
+              })}
             </span>
             <span className="text-[10px] text-muted-foreground sm:text-xs">
-              base {(channel.baseFeeMsat ?? 0).toLocaleString("en-US")} msat
+              {t("node.channels.baseMsat", {
+                value: (channel.baseFeeMsat ?? 0).toLocaleString("en-US"),
+              })}
             </span>
           </Fragment>
         )}
         {channel.forwardCount ? (
           <span className="mt-0.5 block text-[10px] text-muted-foreground sm:text-xs">
-            {channel.forwardCount.toLocaleString("en-US")} forwards ·{" "}
-            {fmtSat(channel.earnedRoutingSat ?? 0)}
+            {t("node.channels.forwardsEarned", {
+              value: channel.forwardCount.toLocaleString("en-US"),
+              earned: fmtSat(channel.earnedRoutingSat ?? 0),
+            })}
           </span>
         ) : null}
       </TableCell>
@@ -776,11 +829,11 @@ function ChannelRow({
             channelStateTone[channel.state],
           )}
         >
-          {channelStateLabels[channel.state]}
+          {channelStateLabel(channel.state, t)}
         </span>
         {channel.closedAt ? (
           <span className="mt-0.5 block text-[10px] text-muted-foreground sm:text-xs">
-            {channel.closeKind ?? "closed"} ·{" "}
+            {channel.closeKind ?? t("node.channels.closedFallback")} ·{" "}
             {formatShortDate(channel.closedAt)}
           </span>
         ) : null}
@@ -800,74 +853,93 @@ function NodeDetailsCard({
   node,
   hideSensitive,
 }: NodeDetailsCardProps) {
+  const { t } = useTranslation("connections");
   return (
     <div className="space-y-3">
       <Card>
         <CardHeader className="border-b px-4 pb-3">
           <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
             <Globe2 className="size-4" aria-hidden="true" />
-            Node identity
+            {t("node.identity.title")}
           </CardTitle>
           <CardDescription>
-            Read-only metadata from the Lightning node.
+            {t("node.identity.description")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 px-4 pt-4">
-          <DetailRow label="Alias" value={node.alias} />
+          <DetailRow label={t("node.identity.alias")} value={node.alias} />
           <DetailRow
-            label="Public key"
+            label={t("node.identity.publicKey")}
             value={
               <span className={blurClass(hideSensitive)}>{node.pubkey}</span>
             }
             mono
             copy
           />
-          <DetailRow label="Network" value={node.network} />
+          <DetailRow label={t("node.identity.network")} value={node.network} />
           {node.implementationVersion ? (
             <DetailRow
-              label="Implementation"
+              label={t("node.identity.implementation")}
               value={node.implementationVersion}
             />
           ) : null}
           {typeof node.blockHeight === "number" ? (
             <DetailRow
-              label="Block height"
+              label={t("node.identity.blockHeight")}
               value={node.blockHeight.toLocaleString("en-US")}
               mono
             />
           ) : null}
-          <DetailRow label="Connection kind" value={connection.kind} mono />
-          <DetailRow label="Kassiber ID" value={connection.id} mono copy />
+          <DetailRow
+            label={t("node.identity.connectionKind")}
+            value={connection.kind}
+            mono
+          />
+          <DetailRow
+            label={t("node.identity.kassiberId")}
+            value={connection.id}
+            mono
+            copy
+          />
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader className="border-b px-4 pb-3">
-          <CardTitle className="text-sm sm:text-base">Sync status</CardTitle>
+          <CardTitle className="text-sm sm:text-base">
+            {t("node.syncStatus.title")}
+          </CardTitle>
           <CardDescription>
-            Read-only sync state for this Lightning connection.
+            {t("node.syncStatus.description")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 px-4 pt-4">
-          <DetailRow label="Status" value={connection.status} mono />
-          <DetailRow label="Last refresh" value={connection.last} />
+          <DetailRow
+            label={t("node.syncStatus.status")}
+            value={connection.status}
+            mono
+          />
+          <DetailRow
+            label={t("node.syncStatus.lastRefresh")}
+            value={connection.last}
+          />
           {connection.lastSyncAt ? (
             <DetailRow
-              label="Last sync at"
+              label={t("node.syncStatus.lastSyncAt")}
               value={formatShortDate(connection.lastSyncAt)}
               mono
             />
           ) : null}
           {connection.lastTransactionAt ? (
             <DetailRow
-              label="Last transaction"
+              label={t("node.syncStatus.lastTransaction")}
               value={formatShortDate(connection.lastTransactionAt)}
               mono
             />
           ) : null}
           {typeof connection.transactionCount === "number" ? (
             <DetailRow
-              label="Imported transactions"
+              label={t("node.syncStatus.importedTransactions")}
               value={connection.transactionCount.toLocaleString("en-US")}
             />
           ) : null}
@@ -921,6 +993,7 @@ function ChannelDetailBody({
   hideSensitive,
   totalCapacitySat,
 }: ChannelDetailBodyProps) {
+  const { t } = useTranslation("connections");
   const capacity = Math.max(1, channel.capacitySat);
   const localPct = (channel.localBalanceSat / capacity) * 100;
   const remotePct = (channel.remoteBalanceSat / capacity) * 100;
@@ -952,9 +1025,11 @@ function ChannelDetailBody({
           <span className="truncate">{channel.peerAlias}</span>
         </SheetTitle>
         <SheetDescription>
-          {channelStateLabels[channel.state]} ·{" "}
-          {channel.isInitiator ? "Locally initiated" : "Remote-opened"}
-          {channel.isPrivate ? " · Private" : ""}
+          {channelStateLabel(channel.state, t)} ·{" "}
+          {channel.isInitiator
+            ? t("node.channelDetail.locallyInitiated")
+            : t("node.channelDetail.remoteOpened")}
+          {channel.isPrivate ? ` · ${t("node.channelDetail.private")}` : ""}
         </SheetDescription>
       </SheetHeader>
       <div className="space-y-4 px-4 pb-6">
@@ -962,9 +1037,10 @@ function ChannelDetailBody({
           <div
             className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted"
             role="img"
-            aria-label={`${channel.localBalanceSat.toLocaleString(
-              "en-US",
-            )} sat local of ${channel.capacitySat.toLocaleString("en-US")} sat capacity`}
+            aria-label={t("node.channels.balanceAria", {
+              local: channel.localBalanceSat.toLocaleString("en-US"),
+              capacity: channel.capacitySat.toLocaleString("en-US"),
+            })}
           >
             <div
               className="h-full bg-emerald-500 dark:bg-emerald-400/80"
@@ -982,26 +1058,41 @@ function ChannelDetailBody({
             )}
           >
             <span className="text-emerald-700 dark:text-emerald-300">
-              {fmtSat(channel.localBalanceSat)} local
+              {t("node.channelDetail.localBalance", {
+                value: fmtSat(channel.localBalanceSat),
+              })}
             </span>
             <span className="text-sky-700 dark:text-sky-300">
-              {fmtSat(channel.remoteBalanceSat)} remote
+              {t("node.channelDetail.remoteBalance", {
+                value: fmtSat(channel.remoteBalanceSat),
+              })}
             </span>
           </div>
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span>Capacity {fmtSat(channel.capacitySat)}</span>
-            {sharePct !== null ? <span>{sharePct}% of node</span> : null}
+            <span>
+              {t("node.channelDetail.capacity", {
+                capacity: fmtSat(channel.capacitySat),
+              })}
+            </span>
+            {sharePct !== null ? (
+              <span>
+                {t("node.channelDetail.shareOfNode", { percent: sharePct })}
+              </span>
+            ) : null}
           </div>
         </div>
 
         <div className="space-y-2.5">
           <h4 className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Peer
+            {t("node.channelDetail.peer")}
           </h4>
-          <DetailRow label="Alias" value={channel.peerAlias} />
+          <DetailRow
+            label={t("node.channelDetail.alias")}
+            value={channel.peerAlias}
+          />
           {channel.peerPubkey ? (
             <DetailRow
-              label="Public key"
+              label={t("node.channelDetail.publicKey")}
               value={
                 <span className={blurClass(hideSensitive)}>
                   {channel.peerPubkey}
@@ -1012,10 +1103,10 @@ function ChannelDetailBody({
             />
           ) : (
             <DetailRow
-              label="Public key"
+              label={t("node.channelDetail.publicKey")}
               value={
                 <span className="text-muted-foreground">
-                  Hidden — private channel
+                  {t("node.channelDetail.publicKeyHidden")}
                 </span>
               }
             />
@@ -1024,24 +1115,24 @@ function ChannelDetailBody({
 
         <div className="space-y-2.5">
           <h4 className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Channel
+            {t("node.channelDetail.channel")}
           </h4>
           {channel.shortChannelId ? (
             <DetailRow
-              label="Short channel id"
+              label={t("node.channelDetail.shortChannelId")}
               value={channel.shortChannelId}
               mono
               copy
             />
           ) : (
             <DetailRow
-              label="Short channel id"
-              value="Pending confirmation"
+              label={t("node.channelDetail.shortChannelId")}
+              value={t("node.channelDetail.shortChannelIdPending")}
             />
           )}
           {channel.fundingOutpoint ? (
             <DetailRow
-              label="Funding outpoint"
+              label={t("node.channelDetail.fundingOutpoint")}
               value={
                 <span
                   className={cn(
@@ -1056,7 +1147,7 @@ function ChannelDetailBody({
                       target="_blank"
                       rel="noreferrer"
                       className="shrink-0 text-muted-foreground hover:text-foreground"
-                      aria-label="Open funding transaction on mempool.space"
+                      aria-label={t("node.channelDetail.openFundingTx")}
                     >
                       <ExternalLink className="size-3" aria-hidden="true" />
                     </a>
@@ -1067,7 +1158,7 @@ function ChannelDetailBody({
           ) : null}
           {channel.openedAt ? (
             <DetailRow
-              label="Opened"
+              label={t("node.channelDetail.opened")}
               value={`${formatShortDate(channel.openedAt)}${
                 relativeFrom(channel.openedAt)
                   ? ` · ${relativeFrom(channel.openedAt)}`
@@ -1078,7 +1169,7 @@ function ChannelDetailBody({
           ) : null}
           {channel.closedAt ? (
             <DetailRow
-              label="Closed"
+              label={t("node.channelDetail.closed")}
               value={`${formatShortDate(channel.closedAt)}${
                 channel.closeKind ? ` · ${channel.closeKind}` : ""
               }`}
@@ -1087,7 +1178,7 @@ function ChannelDetailBody({
           ) : null}
           {channel.lastActivityAt ? (
             <DetailRow
-              label="Last activity"
+              label={t("node.channelDetail.lastActivity")}
               value={`${formatShortDate(channel.lastActivityAt)}${
                 lastActivityRel ? ` · ${lastActivityRel}` : ""
               }`}
@@ -1096,7 +1187,7 @@ function ChannelDetailBody({
           ) : null}
           {typeof channel.htlcCount === "number" ? (
             <DetailRow
-              label="In-flight HTLCs"
+              label={t("node.channelDetail.inFlightHtlcs")}
               value={channel.htlcCount.toLocaleString("en-US")}
             />
           ) : null}
@@ -1104,25 +1195,29 @@ function ChannelDetailBody({
 
         <div className="space-y-2.5">
           <h4 className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Routing
+            {t("node.channelDetail.routing")}
           </h4>
           <DetailRow
-            label="Fee rate"
-            value={`${(channel.feeRatePpm ?? 0).toLocaleString("en-US")} ppm`}
+            label={t("node.channelDetail.feeRate")}
+            value={t("node.channelDetail.feeRateValue", {
+              value: (channel.feeRatePpm ?? 0).toLocaleString("en-US"),
+            })}
           />
           <DetailRow
-            label="Base fee"
-            value={`${(channel.baseFeeMsat ?? 0).toLocaleString("en-US")} msat`}
+            label={t("node.channelDetail.baseFee")}
+            value={t("node.channelDetail.baseFeeValue", {
+              value: (channel.baseFeeMsat ?? 0).toLocaleString("en-US"),
+            })}
           />
           {typeof channel.forwardCount === "number" ? (
             <DetailRow
-              label="Forwards (window)"
+              label={t("node.channelDetail.forwardsWindow")}
               value={channel.forwardCount.toLocaleString("en-US")}
             />
           ) : null}
           {typeof channel.earnedRoutingSat === "number" ? (
             <DetailRow
-              label="Earned routing"
+              label={t("node.channelDetail.earnedRouting")}
               value={fmtSat(channel.earnedRoutingSat)}
               mono
             />
@@ -1139,6 +1234,7 @@ interface ForwardsCardProps {
 }
 
 function ForwardsCard({ forwards, hideSensitive }: ForwardsCardProps) {
+  const { t } = useTranslation("connections");
   const sorted = useMemo(
     () =>
       [...forwards].sort(
@@ -1151,25 +1247,30 @@ function ForwardsCard({ forwards, hideSensitive }: ForwardsCardProps) {
       <CardHeader className="border-b px-4 pb-3">
         <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
           <Repeat className="size-4" aria-hidden="true" />
-          Recent forwards
+          {t("node.forwards.title")}
           <span className="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-[10px] font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
             {sorted.length}
           </span>
         </CardTitle>
         <CardDescription>
-          HTLCs routed through this node, newest first. Failed and in-flight
-          forwards stay listed so you can see liquidity friction.
+          {t("node.forwards.description")}
         </CardDescription>
       </CardHeader>
       <CardContent className="p-0">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Time</TableHead>
-              <TableHead>Route</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-              <TableHead className="text-right">Fee</TableHead>
-              <TableHead className="text-right">Status</TableHead>
+              <TableHead>{t("node.forwards.time")}</TableHead>
+              <TableHead>{t("node.forwards.route")}</TableHead>
+              <TableHead className="text-right">
+                {t("node.forwards.amount")}
+              </TableHead>
+              <TableHead className="text-right">
+                {t("node.forwards.fee")}
+              </TableHead>
+              <TableHead className="text-right">
+                {t("node.forwards.status")}
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -1193,6 +1294,7 @@ interface ForwardRowProps {
 }
 
 function ForwardRow({ forward, hideSensitive }: ForwardRowProps) {
+  const { t } = useTranslation("connections");
   const amountSat = Math.round(forward.amountInMsat / 1_000);
   // Sub-1000 msat fees would round down to "0.5 sat" etc, which reads wrong.
   // Render those in msat so the value stays informative; otherwise show
@@ -1279,8 +1381,12 @@ function ForwardRow({ forward, hideSensitive }: ForwardRowProps) {
         >
           {forward.status === "settled" && feeMsat > 0
             ? feeRendersAsMsat
-              ? `+ ${feeMsat.toLocaleString("en-US")} msat`
-              : `+ ${feeSat.toLocaleString("en-US")} sat`
+              ? t("node.forwards.feeMsat", {
+                  value: feeMsat.toLocaleString("en-US"),
+                })
+              : t("node.forwards.feeSat", {
+                  value: feeSat.toLocaleString("en-US"),
+                })
             : "—"}
         </span>
       </TableCell>
@@ -1292,7 +1398,7 @@ function ForwardRow({ forward, hideSensitive }: ForwardRowProps) {
           )}
         >
           {statusIcon}
-          {forwardStatusLabels[forward.status]}
+          {forwardStatusLabel(forward.status, t)}
         </span>
         {forward.failureReason ? (
           <span className="mt-0.5 block text-[10px] text-muted-foreground sm:text-xs">

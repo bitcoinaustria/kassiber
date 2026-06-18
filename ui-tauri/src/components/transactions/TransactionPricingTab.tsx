@@ -1,4 +1,6 @@
+import type { ParseKeys } from "i18next";
 import { AlertTriangle, Save, SlidersHorizontal } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +27,7 @@ import {
 import type { TransactionDetailTabContext } from "./TransactionDetailTabContext";
 
 export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContext }) {
+  const { t } = useTranslation(["transactions"]);
   const {
     transaction,
     localDraft,
@@ -71,10 +74,14 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                             }}
                           >
                             <div className="text-sm font-medium">
-                              {option.label}
+                              {/* dynamic key */}
+                              {t(option.label as ParseKeys<["transactions"]>)}
                             </div>
                             <div className="mt-1 text-xs text-muted-foreground">
-                              {option.description}
+                              {option.description
+                                ? // dynamic key
+                                  t(option.description as ParseKeys<["transactions"]>)
+                                : null}
                             </div>
                           </button>
                         ))}
@@ -83,17 +90,16 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
                             <div className="flex items-center gap-1.5 text-sm font-medium">
-                              Manual price override
+                              {t("pricing.manualOverride")}
                               <DirtyDot active={dirtyPricing} />
-                              <InfoHint label="Manual price override">
-                                Saves a reviewed price source and exact manual
-                                rate/value to the transaction row. Reprocess
-                                journals after saving.
+                              <InfoHint label={t("pricing.manualOverride")}>
+                                {t("pricing.manualOverrideHint")}
                               </InfoHint>
                             </div>
                             <div className="text-xs text-muted-foreground">
-                              Calculated from the fixed amount:{" "}
-                              {formatBtcAmount(amountBtc)}.
+                              {t("pricing.calculatedFromAmount", {
+                                amount: formatBtcAmount(amountBtc),
+                              })}
                             </div>
                           </div>
                           <Badge
@@ -105,15 +111,18 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                                 : "text-muted-foreground",
                             )}
                           >
-                            {pricingSourceLabel(
-                              localDraft.pricingSourceKind,
-                              localDraft.pricingQuality,
+                            {/* dynamic key */}
+                            {t(
+                              pricingSourceLabel(
+                                localDraft.pricingSourceKind,
+                                localDraft.pricingQuality,
+                              ) as ParseKeys<["transactions"]>,
                             )}
                           </Badge>
                         </div>
                         <div className="grid gap-3 md:grid-cols-[100px_1fr_1fr]">
                           <div className="grid gap-2">
-                            <Label htmlFor="tx-manual-currency">Currency</Label>
+                            <Label htmlFor="tx-manual-currency">{t("pricing.currency")}</Label>
                             <Input
                               id="tx-manual-currency"
                               value={localDraft.manualCurrency}
@@ -127,7 +136,7 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                             />
                           </div>
                           <div className="grid gap-2">
-                            <Label htmlFor="tx-manual-price">Price / BTC</Label>
+                            <Label htmlFor="tx-manual-price">{t("pricing.pricePerBtc")}</Label>
                             <Input
                               id="tx-manual-price"
                               ref={manualPriceRef}
@@ -136,11 +145,11 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                               onChange={(event) =>
                                 updateManualPrice(event.target.value)
                               }
-                              placeholder="69453.46"
+                              placeholder={t("pricing.manualPricePlaceholder")}
                             />
                           </div>
                           <div className="grid gap-2">
-                            <Label htmlFor="tx-manual-value">Total value</Label>
+                            <Label htmlFor="tx-manual-value">{t("pricing.totalValue")}</Label>
                             <Input
                               id="tx-manual-value"
                               inputMode="decimal"
@@ -148,7 +157,7 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                               onChange={(event) =>
                                 updateManualValue(event.target.value)
                               }
-                              placeholder="17086.29"
+                              placeholder={t("pricing.manualValuePlaceholder")}
                             />
                           </div>
                         </div>
@@ -157,12 +166,9 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                             htmlFor="tx-manual-source"
                             className="flex items-center gap-1.5"
                           >
-                            Evidence / source
-                            <InfoHint label="Evidence">
-                              The proof for the price you typed — invoice
-                              number, screenshot of an OTC quote, bank receipt,
-                              or accountant note. Required for an auditable
-                              manual override.
+                            {t("pricing.evidenceSource")}
+                            <InfoHint label={t("pricing.evidenceSource")}>
+                              {t("pricing.evidenceHint")}
                             </InfoHint>
                           </Label>
                           <Input
@@ -172,35 +178,41 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                             onChange={(event) =>
                               updateDraft("manualSource", event.target.value)
                             }
-                            placeholder="BTCPay invoice, bank receipt, accountant review"
+                            placeholder={t("pricing.evidencePlaceholder")}
                           />
                           <p className="text-[11px] text-muted-foreground">
-                            Attach the actual file or URL via the{" "}
-                            <span className="font-medium">Attachments</span>{" "}
-                            panel on the right.
+                            <Trans
+                              i18nKey="pricing.attachHint"
+                              ns="transactions"
+                              components={[<span className="font-medium" />]}
+                            />
                           </p>
                         </div>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <DetailField
-                          label="Imported price"
+                          label={t("pricing.importedPrice")}
                           value={
                             transaction.rate
-                              ? `${currencyFormatter.format(transaction.rate)} / BTC`
-                              : "None"
+                              ? t("pricing.perBtc", {
+                                  value: currencyFormatter.format(transaction.rate),
+                                })
+                              : t("pricing.importedPriceNone")
                           }
                           hidden={hideSensitive}
-                          hint="The price that came in with the import. Kept here as audit reference even if you override it."
+                          hint={t("pricing.importedPriceHint")}
                         />
                         <DetailField
-                          label="Spot now"
+                          label={t("pricing.spotNow")}
                           value={
                             nowRate
-                              ? `${formatRateAtTime(nowRate)} / BTC`
-                              : "Unknown"
+                              ? t("pricing.perBtc", {
+                                  value: formatRateAtTime(nowRate),
+                                })
+                              : t("pricing.spotNowUnknown")
                           }
                           hidden={hideSensitive}
-                          hint="Current cached spot rate. Useful for sanity-checking a manual override."
+                          hint={t("pricing.spotNowHint")}
                         />
                       </div>
                       {hasCacheProvenance ? (
@@ -219,33 +231,36 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                                   aria-hidden="true"
                                 />
                               ) : null}
-                              Rate cache source
+                              {t("pricing.rateCacheSource")}
                             </div>
                             <Badge variant="outline" className="rounded-md">
-                              {pricingQualityLabel(localDraft.pricingQuality)}
+                              {t(pricingQualityLabel(localDraft.pricingQuality))}
                             </Badge>
                           </div>
                           <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
                             <div>
                               <span className="font-medium text-foreground">
-                                Provider
+                                {t("pricing.provider")}
                               </span>
                               <br />
-                              {pricingProviderLabel(transaction.pricingProvider) ??
-                                "Unknown"}
+                              {pricingProviderLabel(
+                                transaction.pricingProvider,
+                                t as (key: string) => string, // loose translator
+                              ) ?? t("pricing.providerUnknown")}
                             </div>
                             <div>
                               <span className="font-medium text-foreground">
-                                Pair / granularity
+                                {t("pricing.pairGranularity")}
                               </span>
                               <br />
                               {[transaction.pricingPair, transaction.pricingGranularity]
                                 .filter(Boolean)
-                                .join(" · ") || "Unknown"}
+                                .join(" · ") || t("pricing.pairGranularityUnknown")}
                             </div>
                             <div>
                               <span className="font-medium text-foreground">
-                                {pricePoint.label}
+                                {/* dynamic key */}
+                                {t(pricePoint.label as ParseKeys<["transactions"]>)}
                               </span>
                               <br />
                               {pricePoint.value}
@@ -253,7 +268,9 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                           </div>
                           {transaction.pricingMethod ? (
                             <p className="mt-2 text-xs text-muted-foreground">
-                              Method: {transaction.pricingMethod}
+                              {t("pricing.method", {
+                                method: transaction.pricingMethod,
+                              })}
                             </p>
                           ) : null}
                           {isCoarsePricing || isProviderSamplePricing ? (
@@ -261,13 +278,13 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                               <div className="min-w-0 text-xs text-muted-foreground">
                                 <div className="font-medium text-foreground">
                                   {isCoarsePricing
-                                    ? "Fallback only"
-                                    : "Provider sample"}
+                                    ? t("pricing.fallbackOnly")
+                                    : t("pricing.providerSample")}
                                 </div>
                                 <p className="mt-1">
                                   {isCoarsePricing
-                                    ? "Daily Kraken values are coarse coverage and stay reviewable until you confirm a better source."
-                                    : "Minute market candles are sampled provider rates, not exchange execution evidence."}
+                                    ? t("pricing.fallbackOnlyBody")
+                                    : t("pricing.providerSampleBody")}
                                 </p>
                               </div>
                               <div className="flex shrink-0 flex-wrap gap-2">
@@ -278,7 +295,7 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                                   onClick={chooseExactManualPrice}
                                 >
                                   <Save className="size-3.5" aria-hidden="true" />
-                                  Exact manual price
+                                  {t("pricing.exactManualPrice")}
                                 </Button>
                                 {onOpenMarketDataSettings ? (
                                   <Button
@@ -291,7 +308,7 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                                       className="size-3.5"
                                       aria-hidden="true"
                                     />
-                                    Open rate settings
+                                    {t("pricing.openRateSettings")}
                                   </Button>
                                 ) : null}
                               </div>
@@ -302,11 +319,10 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                       {isExactPricing && !hasCacheProvenance ? (
                         <div className="rounded-md border bg-emerald-500/10 p-3 text-xs text-muted-foreground">
                           <div className="font-medium text-foreground">
-                            Exact pricing evidence
+                            {t("pricing.exactEvidence")}
                           </div>
                           <p className="mt-1">
-                            This row is marked exact because it comes from a
-                            reviewed manual value or source-provided fiat record.
+                            {t("pricing.exactEvidenceBody")}
                           </p>
                         </div>
                       ) : null}
@@ -319,12 +335,10 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                             />
                             <div className="min-w-0 flex-1">
                               <div className="text-sm font-medium">
-                                No cached spot yet
+                                {t("pricing.noCachedSpot")}
                               </div>
                               <p className="mt-1 text-xs text-muted-foreground">
-                                Newer transactions can sit ahead of the local
-                                rate cache. Import or fetch rates, or enter an
-                                exact reviewed value.
+                                {t("pricing.noCachedSpotBody")}
                               </p>
                               <div className="mt-3 flex flex-wrap gap-2">
                                 {onOpenMarketDataSettings ? (
@@ -338,7 +352,7 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                                       className="size-3.5"
                                       aria-hidden="true"
                                     />
-                                    Open rate settings
+                                    {t("pricing.openRateSettings")}
                                   </Button>
                                 ) : null}
                                 <Button
@@ -348,7 +362,7 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                                   onClick={chooseExactManualPrice}
                                 >
                                   <Save className="size-3.5" aria-hidden="true" />
-                                  Manual exact price
+                                  {t("pricing.manualExactPrice")}
                                 </Button>
                               </div>
                             </div>

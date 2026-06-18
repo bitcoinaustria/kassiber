@@ -1,4 +1,5 @@
 import { AlertTriangle, CheckCircle2, Wallet } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { MetricCard } from "@/components/kb/MetricCard";
@@ -28,6 +29,7 @@ export function WalletsMetricGrid({
   priceEur,
   totalBtc,
 }: WalletsMetricGridProps) {
+  const { t } = useTranslation("connections");
   const totalEur = totalBtc * priceEur;
   const errorCount = connections.filter((c) => c.status === "error").length;
   const snapshotSyncingCount = connections.filter(
@@ -38,15 +40,15 @@ export function WalletsMetricGrid({
   const unsyncedCount = connections.length - syncedCount;
   const upToDateDetail =
     syncingCount > 0
-      ? `${syncingCount.toLocaleString("en-US")} refreshing now`
+      ? t("metrics.upToDateRefreshingNow", { count: syncingCount })
       : unsyncedCount === 0
-        ? "All configured sources"
-        : `${unsyncedCount.toLocaleString("en-US")} not yet up to date`;
+        ? t("metrics.upToDateAllSources")
+        : t("metrics.upToDateNotUpToDate", { count: unsyncedCount });
 
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
       <MetricCard
-        label="Total balance"
+        label={t("metrics.totalBalance")}
         icon={<Wallet className="size-4" aria-hidden="true" />}
         value={
           <span className={hiddenSensitiveClassName(hideSensitive)}>
@@ -66,16 +68,20 @@ export function WalletsMetricGrid({
         }
       />
       <MetricCard
-        label="Up to date"
+        label={t("metrics.upToDate")}
         icon={<CheckCircle2 className="size-4" aria-hidden="true" />}
         value={`${syncedCount.toLocaleString("en-US")} / ${connections.length.toLocaleString("en-US")}`}
         detail={upToDateDetail}
       />
       <MetricCard
-        label="Needs attention"
+        label={t("metrics.needsAttention")}
         icon={<AlertTriangle className="size-4" aria-hidden="true" />}
         value={errorCount.toLocaleString("en-US")}
-        detail={errorCount > 0 ? "Failed source(s)" : "No failed sources"}
+        detail={
+          errorCount > 0
+            ? t("metrics.needsAttentionFailed")
+            : t("metrics.needsAttentionNoFailed")
+        }
       />
     </div>
   );

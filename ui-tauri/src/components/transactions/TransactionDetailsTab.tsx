@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -21,6 +23,7 @@ import {
 import type { TransactionDetailTabContext } from "./TransactionDetailTabContext";
 
 export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContext }) {
+  const { t } = useTranslation("transactions");
   const {
     transaction,
     localDraft,
@@ -44,27 +47,32 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                   <TabsContent value="details" className="mt-4 space-y-4">
                     <div className="grid gap-3 sm:grid-cols-3">
                       <DetailField
-                        label="Transaction ID"
+                        label={t("details.transactionId")}
                         value={formatShortTxid(transactionDisplayId)}
                         copyValue={transactionDisplayId}
                         hidden={hideSensitive}
-                        hint="Canonical on-chain identifier or import row id, depending on the source."
+                        hint={t("details.transactionIdHint")}
                       />
                       <DetailField
-                        label="Price at time"
+                        label={t("details.priceAtTime")}
                         value={
                           localDraft.pricingSourceKind === "manual_override" &&
                           localDraft.manualPrice
-                            ? `${localDraft.manualPrice} ${localDraft.manualCurrency}/BTC`
+                            ? t("details.manualPerBtc", {
+                                price: localDraft.manualPrice,
+                                currency: localDraft.manualCurrency,
+                              })
                             : transaction.rate
-                              ? `${currencyFormatter.format(transaction.rate)} / BTC`
-                              : "Missing"
+                              ? t("details.perBtc", {
+                                  value: currencyFormatter.format(transaction.rate),
+                                })
+                              : t("details.priceMissing")
                         }
                         hidden={hideSensitive}
-                        hint="BTC/fiat rate used to value this tx at the time it occurred."
+                        hint={t("details.priceAtTimeHint")}
                       />
                       <DetailField
-                        label="Fee"
+                        label={t("details.fee")}
                         value={
                           feeBtc ? (
                             <CurrencyToggleText
@@ -73,11 +81,11 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                               {formatFee(transaction, currency)}
                             </CurrencyToggleText>
                           ) : (
-                            "None"
+                            t("details.feeNone")
                           )
                         }
                         hidden={hideSensitive}
-                        hint="Network or settlement fee paid for this transaction."
+                        hint={t("details.feeHint")}
                       />
                     </div>
                     <CommercialProvenancePanel
@@ -88,36 +96,36 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                     <div className="grid gap-3 lg:grid-cols-2">
                       <div className="overflow-hidden rounded-md border">
                         <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          Source record
+                          {t("details.sourceRecord")}
                         </div>
                         <LedgerRow
-                          label="Type"
+                          label={t("details.type")}
                           value={
                             transaction.sourceType ?? transaction.direction
                           }
                         />
                         <LedgerRow
-                          label="Network"
+                          label={t("details.network")}
                           value={networkLabel(transaction)}
                         />
                         <LedgerRow
-                          label="Counterparty"
+                          label={t("details.counterparty")}
                           value={transaction.counterparty}
                         />
                         {showSourceExternalId ? (
                           <LedgerRow
-                            label="External id"
+                            label={t("details.externalId")}
                             value={formatShortTxid(transaction.txnId)}
-                            hint="Wallet/exchange internal id. Different from the on-chain Transaction ID for off-chain sources."
+                            hint={t("details.externalIdHint")}
                           />
                         ) : null}
                       </div>
                       <div className="overflow-hidden rounded-md border">
                         <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          Book metadata
+                          {t("details.bookMetadata")}
                         </div>
                         <LedgerRow
-                          label="Label"
+                          label={t("details.label")}
                           value={
                             <span className="inline-flex items-center gap-1.5">
                               {localDraft.label}
@@ -126,7 +134,7 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                           }
                         />
                         <LedgerRow
-                          label="Tags"
+                          label={t("details.tags")}
                           value={
                             tags.length ? (
                               <div
@@ -148,17 +156,19 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                               </div>
                             ) : (
                               <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                                None
+                                {t("details.tagsNone")}
                                 <DirtyDot active={dirtyTags} />
                               </span>
                             )
                           }
                         />
                         <LedgerRow
-                          label="Included"
+                          label={t("details.included")}
                           value={
                             <span className="inline-flex items-center gap-1.5">
-                              {localDraft.excluded ? "Excluded" : "Included"}
+                              {localDraft.excluded
+                                ? t("details.includedNo")
+                                : t("details.includedYes")}
                               <DirtyDot active={dirtyExcluded} />
                             </span>
                           }
@@ -170,7 +180,7 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                         htmlFor="tx-detail-note"
                         className="flex items-center gap-1.5"
                       >
-                        Note
+                        {t("details.note")}
                         <DirtyDot active={dirtyNote} />
                       </Label>
                       <Textarea
@@ -183,7 +193,7 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                           "min-h-24 resize-none",
                           blurClass(hideSensitive),
                         )}
-                        placeholder="Receipt, invoice, counterparty, or review context"
+                        placeholder={t("details.notePlaceholder")}
                       />
                     </div>
                   </TabsContent>

@@ -7,6 +7,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import { TransactionHistoryTimeline } from "@/components/transactions/TransactionEditHistoryPanel";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +41,7 @@ function startForDateFilter(filter: DateFilter) {
 }
 
 export function Activity() {
+  const { t } = useTranslation(["review", "nav", "common"]);
   const hideSensitive = useUiStore((state) => state.hideSensitive);
   const [dateFilter, setDateFilter] = React.useState<DateFilter>("30");
   const [sourceFilter, setSourceFilter] = React.useState("all");
@@ -102,17 +104,17 @@ export function Activity() {
         event: target.event.id,
         ...(target.field ? { field: target.field.field } : {}),
         reason: target.field
-          ? `Reverted ${target.field.label} from Activity`
-          : "Reverted Activity event",
+          ? t("activity.revert.reasonField", { label: target.field.label })
+          : t("activity.revert.reasonEvent"),
       });
       addNotification({
-        title: "Edit reverted",
-        body: "Kassiber wrote a new edit history entry with the reverted value.",
+        title: t("activity.revert.title"),
+        body: t("activity.revert.body"),
         tone: "success",
         dedupeKey: `activity-history-revert-${target.event.id}-${target.field?.field ?? "event"}`,
       });
     },
-    [addNotification, revertHistory],
+    [addNotification, revertHistory, t],
   );
 
   return (
@@ -122,16 +124,16 @@ export function Activity() {
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <ActivityIcon className="size-4" aria-hidden="true" />
-              Metadata provenance
+              {t("activity.provenance")}
             </div>
             <h1 className="mt-1 text-2xl font-semibold tracking-normal text-foreground">
-              Activity
+              {t("nav:book.activity")}
             </h1>
           </div>
           {staleCount > 0 ? (
             <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
               <CalendarClock className="size-4" aria-hidden="true" />
-              <span>{staleCount} edit{staleCount === 1 ? "" : "s"} after the last journal run</span>
+              <span>{t("activity.staleEdits", { count: staleCount })}</span>
               <Button
                 type="button"
                 size="sm"
@@ -141,7 +143,7 @@ export function Activity() {
                 onClick={runJournalProcessing}
               >
                 <RefreshCw className={cn("size-3", isProcessingJournals && "animate-spin")} aria-hidden="true" />
-                Process
+                {t("activity.process")}
               </Button>
             </div>
           ) : null}
@@ -150,82 +152,82 @@ export function Activity() {
         <section className="grid gap-3 rounded-md border bg-card p-3">
           <div className="flex items-center gap-2 text-sm font-medium">
             <Filter className="size-4 text-muted-foreground" aria-hidden="true" />
-            Filters
+            {t("activity.filters")}
           </div>
           <div className="grid gap-3 md:grid-cols-4">
             <div className="grid gap-1.5">
-              <Label htmlFor="activity-date">Date</Label>
+              <Label htmlFor="activity-date">{t("activity.date")}</Label>
               <Select value={dateFilter} onValueChange={(value) => setDateFilter(value as DateFilter)}>
                 <SelectTrigger id="activity-date">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="7">Last 7 days</SelectItem>
-                  <SelectItem value="30">Last 30 days</SelectItem>
-                  <SelectItem value="365">Last year</SelectItem>
-                  <SelectItem value="all">All history</SelectItem>
+                  <SelectItem value="7">{t("activity.dateLast7")}</SelectItem>
+                  <SelectItem value="30">{t("activity.dateLast30")}</SelectItem>
+                  <SelectItem value="365">{t("activity.dateLastYear")}</SelectItem>
+                  <SelectItem value="all">{t("activity.dateAll")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="activity-source">Source</Label>
+              <Label htmlFor="activity-source">{t("activity.source")}</Label>
               <Select value={sourceFilter} onValueChange={setSourceFilter}>
                 <SelectTrigger id="activity-source">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All sources</SelectItem>
-                  <SelectItem value="gui">Desktop</SelectItem>
-                  <SelectItem value="cli">CLI</SelectItem>
-                  <SelectItem value="ai_tool">Assistant</SelectItem>
+                  <SelectItem value="all">{t("activity.sourceAll")}</SelectItem>
+                  <SelectItem value="gui">{t("activity.sourceDesktop")}</SelectItem>
+                  <SelectItem value="cli">{t("activity.sourceCli")}</SelectItem>
+                  <SelectItem value="ai_tool">{t("activity.sourceAssistant")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="activity-family">Field family</Label>
+              <Label htmlFor="activity-family">{t("activity.fieldFamily")}</Label>
               <Select value={familyFilter} onValueChange={setFamilyFilter}>
                 <SelectTrigger id="activity-family">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All fields</SelectItem>
-                  <SelectItem value="metadata">Metadata</SelectItem>
-                  <SelectItem value="pricing">Pricing</SelectItem>
-                  <SelectItem value="tax">Tax</SelectItem>
+                  <SelectItem value="all">{t("activity.fieldAll")}</SelectItem>
+                  <SelectItem value="metadata">{t("activity.fieldMetadata")}</SelectItem>
+                  <SelectItem value="pricing">{t("activity.fieldPricing")}</SelectItem>
+                  <SelectItem value="tax">{t("activity.fieldTax")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="activity-wallet">Wallet</Label>
+              <Label htmlFor="activity-wallet">{t("activity.wallet")}</Label>
               <Input
                 id="activity-wallet"
                 value={walletFilter}
                 onChange={(event) => setWalletFilter(event.target.value)}
-                placeholder="Wallet label or id"
+                placeholder={t("activity.walletPlaceholder")}
               />
             </div>
             <div className="grid gap-1.5 md:col-span-2">
-              <Label htmlFor="activity-transaction">Transaction</Label>
+              <Label htmlFor="activity-transaction">{t("activity.transaction")}</Label>
               <Input
                 id="activity-transaction"
                 value={transactionFilter}
                 onChange={(event) => setTransactionFilter(event.target.value)}
-                placeholder="Transaction id or external id"
+                placeholder={t("activity.transactionPlaceholder")}
               />
             </div>
             <div className="flex flex-wrap items-center gap-4 md:col-span-2">
               <label className="flex items-center gap-2 text-sm">
                 <Switch checked={pricingOnly} onCheckedChange={setPricingOnly} />
-                Pricing changes
+                {t("activity.pricingChanges")}
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <Switch checked={aiOnly} onCheckedChange={setAiOnly} />
                 <Bot className="size-3.5 text-muted-foreground" aria-hidden="true" />
-                Assistant changes
+                {t("activity.assistantChanges")}
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <Switch checked={staleOnly} onCheckedChange={setStaleOnly} />
-                Stale reports
+                {t("activity.staleReports")}
               </label>
               <Button
                 type="button"
@@ -243,7 +245,7 @@ export function Activity() {
                 }}
               >
                 <RotateCcw className="size-3.5" aria-hidden="true" />
-                Reset
+                {t("common:actions.reset")}
               </Button>
             </div>
           </div>
@@ -255,16 +257,16 @@ export function Activity() {
               <Badge variant="secondary" className="rounded-md">
                 {events.length}
               </Badge>
-              loaded edit{events.length === 1 ? "" : "s"}
+              {t("activity.loadedEdits", { count: events.length })}
             </div>
             {historyQuery.isFetching ? (
-              <span className="text-xs text-muted-foreground">Refreshing...</span>
+              <span className="text-xs text-muted-foreground">{t("activity.refreshing")}</span>
             ) : null}
           </div>
           <TransactionHistoryTimeline
             events={events}
             hideSensitive={hideSensitive}
-            emptyLabel="No metadata activity matches these filters"
+            emptyLabel={t("activity.emptyLabel")}
             showTransaction
             onRevert={onRevert}
             isReverting={revertHistory.isPending}
@@ -278,7 +280,7 @@ export function Activity() {
                 disabled={historyQuery.isFetchingNextPage}
                 onClick={() => void historyQuery.fetchNextPage()}
               >
-                {historyQuery.isFetchingNextPage ? "Loading..." : "Load more"}
+                {historyQuery.isFetchingNextPage ? t("activity.loadingMore") : t("activity.loadMore")}
               </Button>
             </div>
           ) : null}

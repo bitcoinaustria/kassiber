@@ -1,5 +1,6 @@
 import * as React from "react";
 import { MessagesSquare, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { AssistantSessionContext } from "@/components/ai/assistantSession";
 import { Button } from "@/components/ui/button";
@@ -23,13 +24,20 @@ interface ChatSessionsListShape {
   sessions?: { id: string }[];
 }
 
-const MODE_DESCRIPTIONS: Record<string, string> = {
-  auto: "Store chats only while the database is encrypted.",
-  on: "Always store chats, even on an unencrypted database.",
-  off: "Never store chats.",
+const MODE_DESCRIPTION_KEYS: Record<string, string> = {
+  auto: "chatHistory.mode.auto",
+  on: "chatHistory.mode.on",
+  off: "chatHistory.mode.off",
+};
+
+const MODE_LABEL_KEYS: Record<string, string> = {
+  auto: "chatHistory.modeLabel.auto",
+  on: "chatHistory.modeLabel.on",
+  off: "chatHistory.modeLabel.off",
 };
 
 export function ChatHistorySettingsCard() {
+  const { t } = useTranslation(["settings", "common"]);
   // Without a `history` arg the configure kind is a pure read of the
   // effective policy state.
   const configQuery = useDaemon<ChatHistoryConfigShape>(
@@ -54,13 +62,13 @@ export function ChatHistorySettingsCard() {
 
   const effectiveLine = config.history_enabled
     ? config.database_encrypted
-      ? "Chats are currently stored inside the encrypted database."
-      : "Chats are currently stored inside the unencrypted database because history is set to on."
+      ? t("chatHistory.effectiveEncrypted")
+      : t("chatHistory.effectiveOnUnencrypted")
     : config.database_encrypted
-      ? "Chats are not stored."
+      ? t("chatHistory.effectiveNotStoredEncrypted")
       : mode === "auto"
-        ? "Chats are not stored: the database is not encrypted yet. Encrypting it (secrets init) turns history on."
-        : "Chats are not stored.";
+        ? t("chatHistory.effectiveNotStoredAuto")
+        : t("chatHistory.effectiveNotStored");
 
   return (
     <div className="space-y-3 rounded-md border bg-background p-4">
@@ -70,19 +78,16 @@ export function ChatHistorySettingsCard() {
           aria-hidden="true"
         />
         <div className="min-w-0 flex-1 space-y-1">
-          <h3 className="text-sm font-semibold">Chat history</h3>
+          <h3 className="text-sm font-semibold">{t("chatHistory.heading")}</h3>
           <p className="text-sm text-muted-foreground">
-            Stored chats live inside the database, never as plaintext files.
-            Diagnostics and audit exports do not include them. Resuming a chat
-            replays that conversation as model context; otherwise past chats
-            are not exposed as an assistant tool.
+            {t("chatHistory.description")}
           </p>
         </div>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Label htmlFor="settings-chat-history-mode" className="text-sm">
-          Store conversations
+          {t("chatHistory.storeLabel")}
         </Label>
         <Select
           value={mode}
@@ -97,10 +102,14 @@ export function ChatHistorySettingsCard() {
           <SelectContent>
             {(["auto", "on", "off"] as const).map((value) => (
               <SelectItem key={value} value={value}>
-                <span className="font-medium capitalize">{value}</span>
+                <span className="font-medium">
+                  {/* dynamic key */}
+                  {t(MODE_LABEL_KEYS[value] as never)}
+                </span>
                 <span className="text-muted-foreground">
                   {" — "}
-                  {MODE_DESCRIPTIONS[value]}
+                  {/* dynamic key */}
+                  {t(MODE_DESCRIPTION_KEYS[value] as never)}
                 </span>
               </SelectItem>
             ))}
@@ -112,7 +121,7 @@ export function ChatHistorySettingsCard() {
 
       <div className="flex items-center justify-between gap-3 border-t pt-3">
         <span className="text-sm text-muted-foreground">
-          {sessionCount} stored chat{sessionCount === 1 ? "" : "s"}
+          {t("chatHistory.storedCount", { count: sessionCount })}
         </span>
         {confirmingClear ? (
           <div className="flex items-center gap-2">
@@ -126,7 +135,7 @@ export function ChatHistorySettingsCard() {
                 setConfirmingClear(false);
               }}
             >
-              Delete all stored chats
+              {t("chatHistory.deleteAll")}
             </Button>
             <Button
               type="button"
@@ -134,7 +143,7 @@ export function ChatHistorySettingsCard() {
               size="sm"
               onClick={() => setConfirmingClear(false)}
             >
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
           </div>
         ) : (
@@ -147,7 +156,7 @@ export function ChatHistorySettingsCard() {
             onClick={() => setConfirmingClear(true)}
           >
             <Trash2 className="size-4" aria-hidden="true" />
-            Clear stored chats
+            {t("chatHistory.clearStored")}
           </Button>
         )}
       </div>

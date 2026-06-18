@@ -1,12 +1,15 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import type { LanguageCode } from "@/i18n/config";
 import {
   DEFAULT_EXPLORER_SETTINGS,
   type ExplorerSettings,
 } from "@/lib/explorer";
 
-type Lang = "en" | "de";
+// The supported language set lives in `@/i18n/config` so adding a language is
+// a one-place change; the store type follows it.
+type Lang = LanguageCode;
 type Currency = "btc" | "eur";
 export type DataMode = "mock" | "real";
 export type ThemePreference = "system" | "light" | "dark";

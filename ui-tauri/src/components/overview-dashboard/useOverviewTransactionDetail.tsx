@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 
 import {
   ExplorerOpenDialog,
@@ -60,6 +61,7 @@ export function useOverviewTransactionDetail({
   currency,
   explorerSettings,
 }: OverviewTransactionDetailOptions) {
+  const { t } = useTranslation("transactions");
   const [detailTransaction, setDetailTransaction] =
     React.useState<Transaction | null>(null);
   const [detailInitialTab, setDetailInitialTab] = React.useState("details");
@@ -231,8 +233,11 @@ export function useOverviewTransactionDetail({
     ],
   );
   const attachmentItems = React.useMemo(
-    () => detailAttachmentRecords.map(attachmentRecordToItem),
-    [detailAttachmentRecords],
+    () =>
+      detailAttachmentRecords.map((record) =>
+        attachmentRecordToItem(record, t as (key: string) => string),
+      ),
+    [detailAttachmentRecords, t],
   );
   React.useEffect(() => {
     setAttachmentListOverride(null);
@@ -302,10 +307,10 @@ export function useOverviewTransactionDetail({
   }, [evidenceSourceTransactions, reuseDialogOpen, reuseSourceTransactionId]);
   const reuseSourceAttachmentItems = React.useMemo(
     () =>
-      (reuseSourceAttachmentsQuery.data?.data?.attachments ?? []).map(
-        attachmentRecordToItem,
+      (reuseSourceAttachmentsQuery.data?.data?.attachments ?? []).map((record) =>
+        attachmentRecordToItem(record, t as (key: string) => string),
       ),
-    [reuseSourceAttachmentsQuery.data],
+    [reuseSourceAttachmentsQuery.data, t],
   );
   const journalEvents = journalEventsQuery.data?.data?.events ?? [];
   const commercialContext = commercialContextQuery.data?.data;

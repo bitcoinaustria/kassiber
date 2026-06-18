@@ -1,4 +1,5 @@
 import { Sparkles } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import {
   DEFAULT_AI_BASE_URL,
@@ -24,6 +25,7 @@ interface AiFieldsProps {
  * Essentials step's "AI assistant" disclosure.
  */
 export const AiFields = ({ form, update }: AiFieldsProps) => {
+  const { t } = useTranslation("onboarding");
   const localSelected = form.aiSetupMode === "local";
   const remoteSelected = form.aiSetupMode === "remote";
   const disabledSelected = form.aiSetupMode === "disabled";
@@ -34,8 +36,8 @@ export const AiFields = ({ form, update }: AiFieldsProps) => {
       <div className="space-y-3">
         <ChoiceCard
           active={localSelected}
-          title="Use a local endpoint"
-          description="Default to Ollama on this machine. You can point this at another local OpenAI-compatible server."
+          title={t("ai.local.title")}
+          description={t("ai.local.description")}
           onClick={() => {
             update("aiSetupMode", "local");
             update("aiProviderKind", "local");
@@ -45,8 +47,8 @@ export const AiFields = ({ form, update }: AiFieldsProps) => {
         />
         <ChoiceCard
           active={remoteSelected}
-          title="Use a remote provider"
-          description="Prepare an OpenAI-compatible endpoint or Claude/Codex CLI. Prompts and accounting context may leave this device."
+          title={t("ai.remote.title")}
+          description={t("ai.remote.description")}
           tone="warning"
           onClick={() => {
             update("aiSetupMode", "remote");
@@ -61,8 +63,8 @@ export const AiFields = ({ form, update }: AiFieldsProps) => {
         />
         <ChoiceCard
           active={disabledSelected}
-          title="Disable AI for now"
-          description="Hide the Assistant and floating chat. You can turn AI back on later in Settings."
+          title={t("ai.disabled.title")}
+          description={t("ai.disabled.description")}
           onClick={() => update("aiSetupMode", "disabled")}
         />
       </div>
@@ -71,32 +73,36 @@ export const AiFields = ({ form, update }: AiFieldsProps) => {
         <div className="space-y-4 rounded-lg border border-line bg-paper-2 p-4">
           {remoteSelected && (
             <SelectField
-              label="Provider privacy"
+              label={t("ai.providerPrivacy")}
               value={form.aiProviderKind}
               options={AI_PROVIDER_KINDS}
-              description="TEE means the provider claims a trusted-execution path; Kassiber still treats it as off-device."
+              description={t("ai.providerPrivacyDescription")}
               onChange={(value) => update("aiProviderKind", value)}
             />
           )}
           <TextField
-            label="Provider name"
+            label={t("ai.providerName")}
             name="aiProviderName"
             value={form.aiProviderName}
-            placeholder={localSelected ? "ollama" : "openai or maple"}
-            description="A short label shown in AI provider settings."
+            placeholder={
+              localSelected
+                ? t("ai.providerNamePlaceholderLocal")
+                : t("ai.providerNamePlaceholderRemote")
+            }
+            description={t("ai.providerNameDescription")}
             onChange={(value) => update("aiProviderName", value)}
           />
           <TextField
-            label="Base URL"
+            label={t("ai.baseUrl")}
             name="aiBaseUrl"
             value={form.aiBaseUrl}
             placeholder={
               localSelected
                 ? DEFAULT_AI_BASE_URL
-                : "https://.../v1 or claude-cli://default"
+                : t("ai.baseUrlPlaceholderRemote")
             }
             hint={endpointHint}
-            description="Use an OpenAI-compatible /v1 endpoint or a supported CLI locator."
+            description={t("ai.baseUrlDescription")}
             onChange={(value) => update("aiBaseUrl", value)}
           />
           {remoteSelected && (
@@ -106,8 +112,8 @@ export const AiFields = ({ form, update }: AiFieldsProps) => {
               onCheckedChange={(checked) =>
                 update("aiRemoteAcknowledged", checked)
               }
-              label="I understand prompts may leave this device."
-              description="Accounting context, labels, notes, backend hostnames, and report details can be sensitive."
+              label={t("ai.remoteAck")}
+              description={t("ai.remoteAckDescription")}
             />
           )}
         </div>
@@ -116,10 +122,7 @@ export const AiFields = ({ form, update }: AiFieldsProps) => {
       {disabledSelected && (
         <div className="flex items-start gap-3 rounded-lg border border-accent bg-[rgba(227,0,15,0.04)] p-4 text-xs leading-5 text-ink-2">
           <Sparkles className="mt-0.5 size-4 shrink-0 text-accent" />
-          <p className="m-0">
-            This hides the Assistant screen and floating chat after onboarding.
-            You can enable AI features later in Settings.
-          </p>
+          <p className="m-0">{t("ai.disabledNote")}</p>
         </div>
       )}
     </div>

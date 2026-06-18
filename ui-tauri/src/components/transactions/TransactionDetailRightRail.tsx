@@ -4,6 +4,7 @@ import {
   Hash,
   Tags,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import type {
@@ -82,6 +83,7 @@ export function TransactionDetailRightRail({
   isProcessingJournals?: boolean;
   onOpenExplorer: (transaction: Transaction) => void;
 }) {
+  const { t } = useTranslation("transactions");
   return (
     <aside className="space-y-3">
       <ReviewChecklist
@@ -94,12 +96,12 @@ export function TransactionDetailRightRail({
             className="size-4 text-muted-foreground"
             aria-hidden="true"
           />
-          Source record
+          {t("sourceRecord.title")}
         </div>
         <div className="space-y-2">
           <SourceRecordRow
             icon={<Hash className="size-3.5" aria-hidden="true" />}
-            label="Kassiber row"
+            label={t("sourceRecord.kassiberRow")}
             value={transaction.id}
             copyValue={transaction.id}
             hidden={hideSensitive}
@@ -111,7 +113,7 @@ export function TransactionDetailRightRail({
                 aria-hidden="true"
               />
             }
-            label="Source"
+            label={t("sourceRecord.source")}
             value={`${sourceName} · ${sourceType}`}
             hidden={hideSensitive}
           />
@@ -123,11 +125,14 @@ export function TransactionDetailRightRail({
               />
             }
             label="Explorer"
-            value={explorer ? explorer.label : "No public explorer"}
+            value={explorer ? explorer.label : t("sourceRecord.noExplorer")}
             action={
               explorer
                 ? {
-                    label: `Open ${transaction.txnId} on ${explorer.label}`,
+                    label: t("sourceRecord.openOn", {
+                      txid: transaction.txnId,
+                      explorer: explorer.label,
+                    }),
                     onClick: () => onOpenExplorer(transaction),
                   }
                 : undefined

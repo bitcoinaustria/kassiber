@@ -4,7 +4,7 @@
 
 - Kassiber is a local-first Bitcoin accounting suite with a desktop GUI and a CLI, both backed by the same Python daemon.
 - The CLI entrypoint lives in [kassiber/cli/main.py](kassiber/cli/main.py). The remaining command implementation surface lives in [kassiber/cli/handlers.py](kassiber/cli/handlers.py).
-- Desktop UI: Tauri 2 + React + TypeScript with a Python sidecar daemon. Stack decision lives in [docs/plan/01-stack-decision.md](docs/plan/01-stack-decision.md); implementation plan lives in [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md). [docs/plan/00-overview.md](docs/plan/00-overview.md) remains the orientation map. The Vite + React 19 + TS + Tailwind v4 + TanStack + Zustand frontend lives at [ui-tauri/](ui-tauri/); Claude Design source mockups are staged under `ui-tauri/claude-design/`. The Tauri supervisor (`ui-tauri/src-tauri/`) keeps one Python daemon process and demuxes JSONL responses by `request_id`; typed UI snapshot kinds and the AI provider/chat surface flow through that daemon boundary.
+- Desktop UI: Tauri 2 + React + TypeScript with a Python sidecar daemon. Stack decision lives in [docs/plan/01-stack-decision.md](docs/plan/01-stack-decision.md); implementation plan lives in [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md). [docs/plan/00-overview.md](docs/plan/00-overview.md) remains the orientation map. The Vite + React 19 + TS + Tailwind v4 + TanStack + Zustand frontend lives at [ui-tauri/](ui-tauri/); Claude Design source mockups are staged under `ui-tauri/claude-design/`. The Tauri supervisor (`ui-tauri/src-tauri/`) keeps one Python daemon process and demuxes JSONL responses by `request_id`; typed UI snapshot kinds and the AI provider/chat surface flow through that daemon boundary. The desktop UI is localized (English/German, expandable) with i18next under [ui-tauri/src/i18n/](ui-tauri/src/i18n/); the UI store's `lang` is the single source of truth and the CLI/daemon stay machine-deterministic (the UI translates their stable codes). Conventions live in [docs/reference/i18n.md](docs/reference/i18n.md).
 - External-document reconciliation scope and architecture are captured in [docs/plan/08-external-document-reconciliation.md](docs/plan/08-external-document-reconciliation.md).
 - Supporting modules (bottom-up — no back-edges into the CLI layer):
   - [kassiber/errors.py](kassiber/errors.py) — `AppError` typed exception carrying `code`, `hint`, `details`, `retryable`.
@@ -236,6 +236,17 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 ## Working rules
 
 - Keep the project local-first.
+- For user-facing desktop UI strings, add keys to the i18n resource bundles
+  (English + German in lockstep) and render via `t(...)` instead of hardcoding
+  literals; keep the CLI/daemon English and machine-deterministic. Migrate a
+  whole surface at a time so a screen is never half-translated. German is
+  Austrian German in the informal `du` register — use the canonical terms in
+  [docs/reference/i18n-glossary.md](docs/reference/i18n-glossary.md) (Bitcoin
+  jargon stays English; Austrian BMF tax wording), and the mechanics in
+  [docs/reference/i18n.md](docs/reference/i18n.md). Verify UI string changes
+  from `ui-tauri/` with `pnpm typecheck` (type-safe keys catch typos/missing
+  keys) and `pnpm test --run` (the en/de key-parity guard catches a
+  half-translated namespace); both run in CI under the `verify` check.
 - Treat code, README, AGENTS.md, and TODO.md as current truth. Treat
   `docs/plan/` as concise guardrails; if code and plans drift, inspect code and
   update the docs in the same change.
@@ -296,7 +307,9 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
   requirement, risks, and step plan before editing.
 - Prefer the repo-local `skills/kassiber/` references before generic
   agent habits when working on Kassiber-specific flows.
-- Before calling work push-ready, run `./scripts/quality-gate.sh`.
+- Before calling work push-ready, run `./scripts/quality-gate.sh`. That gate is
+  Python-only; for `ui-tauri/` changes also run `pnpm typecheck && pnpm test --run && pnpm lint`
+  there (the desktop UI's typecheck, en/de i18n key-parity, and lint).
 - When adding a new runtime dependency, update both the README dependency story and `THIRD_PARTY_LICENSES.md`.
 - Keep `THIRD_PARTY_LICENSES.md` concise: direct dependencies and notable license constraints matter more than a hand-maintained transitive dump.
 

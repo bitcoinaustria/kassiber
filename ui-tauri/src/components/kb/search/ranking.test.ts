@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import i18n from "@/i18n";
 import {
   buildAppSearchResults,
   isLikelyTransactionLookupQuery,
@@ -10,6 +11,12 @@ import {
   type SearchResult,
 } from ".";
 import type { OverviewSnapshot } from "@/mocks/seed";
+
+// vitest.setup initializes i18n to English, so EN titles resolve and the
+// existing English assertions below still hold. Dynamic, prefixed keys fall
+// outside the typed-key union, so adapt the fixed-T to a string→string fn.
+const fixedT = i18n.getFixedT("en", null);
+const t = (key: string) => fixedT(key as never) as string;
 
 const results: SearchResult[] = [
   {
@@ -218,6 +225,7 @@ describe("app search results", () => {
           date: "2026-04-18 14:22",
         },
       },
+      t,
     });
 
     expect(ranked[0]).toMatchObject({
@@ -234,6 +242,7 @@ describe("app search results", () => {
       aiFeaturesEnabled: true,
       developerToolsEnabled: true,
       resolvedTransaction: { query: txid.slice(0, 12), transaction: null },
+      t,
     });
 
     expect(ranked[0]).toMatchObject({
@@ -254,6 +263,7 @@ describe("app search results", () => {
       aiFeaturesEnabled: true,
       developerToolsEnabled: true,
       resolvedTransaction: { query: "abcdefabcdefabcdef", transaction: null },
+      t,
     });
 
     expect(ranked[0]).toMatchObject({
@@ -269,6 +279,7 @@ describe("app search results", () => {
       query: "change passphrase",
       aiFeaturesEnabled: true,
       developerToolsEnabled: true,
+      t,
     });
 
     expect(ranked[0]).toMatchObject({
@@ -283,6 +294,7 @@ describe("app search results", () => {
       snapshot,
       query: "open logs",
       aiFeaturesEnabled: true,
+      t,
     };
 
     expect(

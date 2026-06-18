@@ -1,0 +1,28 @@
+{
+  "book": {
+    "overview": "Overview",
+    "transactions": "Transactions",
+    "ledger": "Ledger",
+    "quarantine": "Quarantine",
+    "wallets": "Wallets",
+    "reports": "Reports",
+    "assistant": "Assistant",
+    "reconcile": "Reconcile",
+    "sourceFunds": "Source Funds",
+    "swaps": "Swaps & Transfers",
+    "activity": "Activity",
+    "logs": "Logs",
+    "exitTax": "Exit Tax",
+    "settings": "Settings"
+  },
+  "section": {
+    "main": "Main",
+    "review": "Review"
+  },
+  "openBook": {
+    "title": "Active book changed",
+    "body": "{{book}} is now active. Opening {{page}}.",
+    "fallbackBook": "Selected book",
+    "fallbackPage": "page"
+  }
+}

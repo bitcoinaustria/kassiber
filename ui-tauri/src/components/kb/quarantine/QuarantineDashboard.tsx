@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import { ReviewDataTable } from "@/components/kb/ReviewDataTable";
 
 import { quarantineMetrics, quarantineRows } from "./model";
@@ -15,27 +17,34 @@ export function QuarantineDashboard({
   isProcessingJournals,
   onProcessJournals,
 }: QuarantineDashboardProps) {
-  const rows = quarantineRows(snapshot);
-  const metrics = quarantineMetrics(snapshot.summary);
+  const { t } = useTranslation("journals");
+  const rows = quarantineRows(snapshot, t);
+  const metrics = quarantineMetrics(snapshot.summary, t);
+  const reasonGroupCount = snapshot.summary.by_reason.length;
 
   return (
     <ReviewDataTable
       kind="quarantine"
-      eyebrow="Review queue"
-      title="Quarantine"
-      description="Blocked transactions held out of journals and reports until missing prices, basis, assets, or pair evidence are fixed."
+      eyebrow={t("quarantine.eyebrow")}
+      title={t("quarantine.title")}
+      description={t("quarantine.description")}
       rows={rows}
       metrics={metrics}
       showSummaryBadge={false}
       badgeLabel={
         snapshot.summary.count
-          ? `${snapshot.summary.count.toLocaleString("en-US")} quarantined`
-          : "clear"
+          ? t("quarantine.badge.quarantined", {
+              count: snapshot.summary.count,
+            })
+          : t("quarantine.badge.clear")
       }
-      tableTitle="Quarantined transactions"
-      tableDescription={`${rows.length.toLocaleString("en-US")} shown · ${snapshot.summary.by_reason.length.toLocaleString("en-US")} reason group${snapshot.summary.by_reason.length === 1 ? "" : "s"}`}
-      searchPlaceholder="Search wallet, txid, reason, amount..."
-      emptyMessage="No quarantined transactions in the active book."
+      tableTitle={t("quarantine.tableTitle")}
+      tableDescription={t("quarantine.tableDescription", {
+        count: reasonGroupCount,
+        rows: rows.length,
+      })}
+      searchPlaceholder={t("quarantine.searchPlaceholder")}
+      emptyMessage={t("quarantine.empty")}
       actions={
         <QuarantineActions
           isProcessingJournals={isProcessingJournals}

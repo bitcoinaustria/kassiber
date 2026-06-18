@@ -1,3 +1,6 @@
+import type { ParseKeys } from "i18next";
+import { useTranslation } from "react-i18next";
+
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import {
@@ -22,6 +25,7 @@ import {
 import type { TransactionDetailTabContext } from "./TransactionDetailTabContext";
 
 export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext }) {
+  const { t } = useTranslation(["transactions"]);
   const {
     transaction,
     localDraft,
@@ -39,10 +43,9 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                   <TabsContent value="tax" className="mt-4 space-y-3">
                     <div className="rounded-md border bg-muted/50 p-3 text-sm leading-relaxed">
                       <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase text-muted-foreground">
-                        Plain English
-                        <InfoHint label="Plain English summary">
-                          Generated from the tx and your current draft. Use
-                          this to sanity-check the legal labels below.
+                        {t("tax.plainEnglish")}
+                        <InfoHint label={t("tax.plainEnglish")}>
+                          {t("tax.plainEnglishHint")}
                         </InfoHint>
                       </div>
                       <p className={blurClass(hideSensitive)}>{taxNarrative}</p>
@@ -50,7 +53,7 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                     <div className="rounded-md border bg-background p-3">
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <h3 className="flex items-center gap-1.5 text-sm font-semibold">
-                          Tax handling
+                          {t("tax.handling")}
                           <DirtyDot active={dirtyExcluded || dirtyReviewTax} />
                         </h3>
                         <Badge
@@ -61,10 +64,10 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                           }
                         >
                           {localDraft.excluded
-                            ? "Excluded"
+                            ? t("taxable.excluded")
                             : localDraft.taxable
-                              ? "Taxable"
-                              : "Not taxable"}
+                              ? t("taxable.taxable")
+                              : t("taxable.notTaxable")}
                         </Badge>
                       </div>
                       <div className="grid gap-3 xl:grid-cols-[minmax(220px,0.9fr)_minmax(0,1fr)_minmax(0,1fr)]">
@@ -73,14 +76,10 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                             htmlFor="tx-tax-treatment"
                             className="flex items-center gap-1.5"
                           >
-                            Austrian category
+                            {t("tax.austrianCategory")}
                             <DirtyDot active={dirty.atRegime || dirty.atCategory} />
-                            <InfoHint label="Austrian category">
-                              Maps to § 27b EStG buckets. "Neu" covers
-                              holdings acquired on or after 1 Mar 2021; "Alt"
-                              is pre-1 Mar 2021 Altvermögen, taxable only
-                              within the 1-year speculation period; "Own-wallet
-                              transfer" stays outside the realization rules.
+                            <InfoHint label={t("tax.austrianCategory")}>
+                              {t("tax.austrianCategoryHint")}
                             </InfoHint>
                           </Label>
                           <Select
@@ -106,7 +105,8 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                                     key={option.value}
                                     value={option.value}
                                   >
-                                    {option.label}
+                                    {/* dynamic key */}
+                                    {t(option.label as ParseKeys<["transactions"]>)}
                                   </SelectItem>
                                 ),
                               )}
@@ -119,11 +119,11 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                               htmlFor="tx-taxable"
                               className="flex items-center gap-1.5"
                             >
-                              Taxable
+                              {t("tax.taxable")}
                               <DirtyDot active={dirty.taxable} />
                             </Label>
                             <p className="text-xs text-muted-foreground">
-                              Included in journal processing.
+                              {t("tax.taxableHint")}
                             </p>
                           </div>
                           <Switch
@@ -140,14 +140,14 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                               htmlFor="tx-excluded"
                               className="flex items-center gap-1.5"
                             >
-                              Excluded
+                              {t("tax.excluded")}
                               <DirtyDot active={dirtyExcluded} />
                               <span className="text-xs font-normal text-muted-foreground">
                                 (<kbd className="rounded border bg-muted px-1">e</kbd>)
                               </span>
                             </Label>
                             <p className="text-xs text-muted-foreground">
-                              Kept out of journal processing.
+                              {t("tax.excludedHint")}
                             </p>
                           </div>
                           <Switch
@@ -162,20 +162,20 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                     </div>
                     <div className="overflow-hidden rounded-md border">
                       <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        Projected effect
+                        {t("tax.projectedEffect")}
                       </div>
                       <LedgerRow
-                        label="Cost basis"
+                        label={t("tax.costBasis")}
                         value={
                           transaction.amount === null
                             ? MISSING_FIAT_LABEL
                             : currencyFormatter.format(transaction.amount)
                         }
                         align="right"
-                        hint="Acquisition value used by the tax engine."
+                        hint={t("tax.costBasisHint")}
                       />
                       <LedgerRow
-                        label="Proceeds"
+                        label={t("tax.proceeds")}
                         value={
                           flow !== "outgoing"
                             ? currencyFormatter.format(0)
@@ -184,21 +184,21 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                               : currencyFormatter.format(transaction.amount)
                         }
                         align="right"
-                        hint="Disposal value applied on outgoing tx."
+                        hint={t("tax.proceedsHint")}
                       />
                       <LedgerRow
-                        label="Gain / loss"
-                        value="Pending journal run"
+                        label={t("tax.gainLoss")}
+                        value={t("tax.gainLossPending")}
                         align="right"
                         muted
-                        hint="Calculated by RP2 once journals are processed."
+                        hint={t("tax.gainLossHint")}
                       />
                       {localDraft.pricingSourceKind === "manual_override" ? (
                         <LedgerRow
-                          label="Price evidence"
+                          label={t("tax.priceEvidence")}
                           value={
                             <span className={blurClass(hideSensitive)}>
-                              {localDraft.manualSource || "Source missing"}
+                              {localDraft.manualSource || t("tax.sourceMissing")}
                             </span>
                           }
                           align="right"

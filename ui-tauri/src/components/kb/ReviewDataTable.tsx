@@ -18,6 +18,8 @@ import {
   type ReactNode,
   type SVGProps,
 } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -128,6 +130,20 @@ const statusOptions: Array<ReviewTableRow["status"] | "All"> = [
   "Ready",
 ];
 
+const statusLabelKey = {
+  All: "review.status.all",
+  Ready: "review.status.ready",
+  "Needs review": "review.status.needsReview",
+  Blocked: "review.status.blocked",
+  Resolved: "review.status.resolved",
+} as const satisfies Record<ReviewTableRow["status"] | "All", string>;
+
+const priorityLabelKey = {
+  Low: "review.priority.low",
+  Medium: "review.priority.medium",
+  High: "review.priority.high",
+} as const satisfies Record<ReviewTableRow["priority"], string>;
+
 export type ReviewTone = "good" | "warning" | "alert" | "neutral";
 type SortDirection = "desc" | "asc";
 
@@ -153,6 +169,7 @@ export function ReviewDataTable({
   showPriorityBadge = true,
   shellClassName = screenShellClassName,
 }: ReviewDataTableProps) {
+  const { t } = useTranslation(["journals", "common"]);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const [globalFilter, setGlobalFilter] = useState("");
   const [statusFilter, setStatusFilter] =
@@ -215,11 +232,19 @@ export function ReviewDataTable({
   const metricsToShow =
     metrics ??
     [
-      { label: "Open", value: activeRows.length, tone: queueTone },
-      { label: "Needs review", value: reviewCount, tone: "warning" },
-      { label: "Blocked", value: blockedCount, tone: "alert" },
+      { label: t("review.metricFallback.open"), value: activeRows.length, tone: queueTone },
       {
-        label: "High priority",
+        label: t("review.metricFallback.needsReview"),
+        value: reviewCount,
+        tone: "warning",
+      },
+      {
+        label: t("review.metricFallback.blocked"),
+        value: blockedCount,
+        tone: "alert",
+      },
+      {
+        label: t("review.metricFallback.highPriority"),
         value: highCount,
         tone: highCount ? "alert" : "neutral",
       },
@@ -229,9 +254,15 @@ export function ReviewDataTable({
     ? metricsToShow.find((metric) => metric.filterId === metricFilterId)
     : null;
   const renderedTableDescription = tableDescriptionDetail
-    ? `${filteredRows.length.toLocaleString("en-US")} shown · ${tableDescriptionDetail}`
+    ? t("review.tableDescription.detail", {
+        rows: filteredRows.length,
+        detail: tableDescriptionDetail,
+      })
     : tableDescription ??
-      `${filteredRows.length} shown · ${resolvedCount} resolved`;
+      t("review.tableDescription.resolved", {
+        rows: filteredRows.length,
+        resolved: resolvedCount,
+      });
 
   const updateStatusFilter = (status: ReviewTableRow["status"] | "All") => {
     setStatusFilter(status);
@@ -280,7 +311,7 @@ export function ReviewDataTable({
               variant="outline"
               className={cn("self-start rounded-md", toneBadgeStyles[queueTone])}
             >
-              {badgeLabel ?? `${activeRows.length} open`}
+              {badgeLabel ?? t("review.badgeOpen", { count: activeRows.length })}
             </Badge>
           ) : null}
         </div>
@@ -322,8 +353,8 @@ export function ReviewDataTable({
               <h2 className="text-sm font-medium sm:text-base">
                 {tableTitle ??
                   (kind === "journal-events"
-                    ? "Review records"
-                    : "Blocked records")}
+                    ? t("review.tableTitle.review")
+                    : t("review.tableTitle.blocked"))}
               </h2>
               <p className="text-[10px] text-muted-foreground sm:text-xs">
                 {renderedTableDescription}
@@ -339,7 +370,7 @@ export function ReviewDataTable({
               <Input
                 value={globalFilter}
                 onChange={(event) => updateGlobalFilter(event.target.value)}
-                placeholder={searchPlaceholder ?? "Search account, issue, source..."}
+                placeholder={searchPlaceholder ?? t("review.searchPlaceholder")}
                 className="h-8 pl-9"
               />
             </div>
@@ -359,7 +390,7 @@ export function ReviewDataTable({
                     className="h-8"
                     onClick={() => updateStatusFilter(status)}
                   >
-                    {status}
+                    {t(statusLabelKey[status])}
                   </Button>
                 )) : null}
             </div>
@@ -369,7 +400,7 @@ export function ReviewDataTable({
         {hasActiveFilters ? (
           <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 sm:px-4">
             <span className="text-[10px] text-muted-foreground sm:text-xs">
-              Filters active
+              {t("review.filters.active")}
             </span>
             <Button
               type="button"
@@ -382,14 +413,16 @@ export function ReviewDataTable({
                 updateGlobalFilter("");
               }}
             >
-              Clear all
+              {t("review.filters.clearAll")}
             </Button>
             {activeMetric ? (
               <button
                 type="button"
                 className="inline-flex h-7 items-center gap-1.5 rounded-md border bg-background px-2 text-xs text-foreground transition-colors hover:bg-muted"
                 onClick={() => updateMetricFilter("all")}
-                aria-label={`Clear ${activeMetric.filterLabel ?? activeMetric.label} filter`}
+                aria-label={t("review.filters.clearMetricAria", {
+                  label: activeMetric.filterLabel ?? activeMetric.label,
+                })}
               >
                 {activeMetric.filterLabel ?? activeMetric.label}
                 <X className="size-3" aria-hidden="true" />
@@ -403,21 +436,27 @@ export function ReviewDataTable({
             <TableHeader>
               <TableRow className="bg-muted/50 hover:bg-muted/50">
                 <TableHead className="min-w-[330px]">
-                  {kind === "journal-events" ? "Event" : "Issue"}
+                  {kind === "journal-events"
+                    ? t("review.column.event")
+                    : t("review.column.issue")}
                 </TableHead>
-                <TableHead className="min-w-[180px]">Evidence</TableHead>
+                <TableHead className="min-w-[180px]">
+                  {t("review.column.evidence")}
+                </TableHead>
                 <TableHead className="min-w-[160px] text-right">
-                  Amount / basis
+                  {t("review.column.amountBasis")}
                 </TableHead>
                 <TableHead className="min-w-[140px] text-right">
-                  Impact
+                  {t("review.column.impact")}
                 </TableHead>
                 {showStateColumn ? (
-                  <TableHead className="min-w-[170px]">State</TableHead>
+                  <TableHead className="min-w-[170px]">
+                    {t("common:field.status")}
+                  </TableHead>
                 ) : null}
                 <TableHead className="w-[112px] text-right">
                   <SortButton
-                    label="Date"
+                    label={t("common:field.date")}
                     direction={sortDirection}
                     onClick={() =>
                       setSortDirection((value) =>
@@ -445,7 +484,7 @@ export function ReviewDataTable({
                     colSpan={showStateColumn ? 6 : 5}
                     className="h-24 text-center text-muted-foreground"
                   >
-                    {emptyMessage ?? "No matching records."}
+                    {emptyMessage ?? t("review.empty")}
                   </TableCell>
                 </TableRow>
               )}
@@ -456,11 +495,15 @@ export function ReviewDataTable({
         <div className="flex flex-col gap-3 border-t px-3 py-2.5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-4">
           <span>
             {filteredRows.length === 0
-              ? "0 rows"
-              : `${currentPage * pageSize + 1}-${Math.min(
-                  currentPage * pageSize + pageSize,
-                  filteredRows.length,
-                )} of ${filteredRows.length}`}
+              ? t("review.pagination.noRows")
+              : t("review.pagination.range", {
+                  from: currentPage * pageSize + 1,
+                  to: Math.min(
+                    currentPage * pageSize + pageSize,
+                    filteredRows.length,
+                  ),
+                  total: filteredRows.length,
+                })}
           </span>
           <div className="flex items-center gap-2">
             <Button
@@ -469,12 +512,15 @@ export function ReviewDataTable({
               className="size-7"
               onClick={() => setPageIndex((value) => Math.max(value - 1, 0))}
               disabled={currentPage === 0}
-              aria-label="Previous page"
+              aria-label={t("review.pagination.previous")}
             >
               <ChevronLeft className="size-4" aria-hidden="true" />
             </Button>
             <span>
-              Page {currentPage + 1} of {pageCount}
+              {t("review.pagination.page", {
+                current: currentPage + 1,
+                count: pageCount,
+              })}
             </span>
             <Button
               variant="outline"
@@ -484,7 +530,7 @@ export function ReviewDataTable({
                 setPageIndex((value) => Math.min(value + 1, pageCount - 1))
               }
               disabled={currentPage >= pageCount - 1}
-              aria-label="Next page"
+              aria-label={t("review.pagination.next")}
             >
               <ChevronRight className="size-4" aria-hidden="true" />
             </Button>
@@ -510,6 +556,7 @@ function QueueMetric({
   active?: boolean;
   onFilter?: (filterId: string) => void;
 }) {
+  const { t } = useTranslation("journals");
   const formattedValue =
     typeof value === "number" ? value.toLocaleString("en-US") : value;
   const className = cn(
@@ -537,7 +584,11 @@ function QueueMetric({
       className={className}
       onClick={() => onFilter(filterId)}
       aria-pressed={active}
-      aria-label={`${filterId === "all" ? "Show all" : "Filter"} ${label}`}
+      aria-label={
+        filterId === "all"
+          ? t("review.metricAria.showAll", { label })
+          : t("review.metricAria.filter", { label })
+      }
     >
       {content}
     </button>
@@ -555,6 +606,7 @@ function ReviewWorklistRow({
   showStateColumn: boolean;
   showPriorityBadge: boolean;
 }) {
+  const { t } = useTranslation("journals");
   const StatusIcon = statusIcon[row.status];
 
   return (
@@ -578,7 +630,7 @@ function ReviewWorklistRow({
                   variant="secondary"
                   className={cn("rounded-md", priorityClass[row.priority])}
                 >
-                  {row.priority}
+                  {t(priorityLabelKey[row.priority])}
                 </Badge>
               ) : null}
             </div>
@@ -595,7 +647,7 @@ function ReviewWorklistRow({
       <TableCell>
         <span className="text-sm text-muted-foreground">{row.source}</span>
         <p className="mt-1 text-[10px] text-muted-foreground sm:text-xs">
-          {evidenceHint(row)}
+          {evidenceHint(row, t)}
         </p>
       </TableCell>
       <TableCell className="text-right">
@@ -628,10 +680,10 @@ function ReviewWorklistRow({
             variant="outline"
             className={cn("rounded-md", statusClass[row.status])}
           >
-            {row.status}
+            {t(statusLabelKey[row.status])}
           </Badge>
           <p className="mt-1 text-[10px] text-muted-foreground sm:text-xs">
-            {nextActionLabel(row)}
+            {nextActionLabel(row, t)}
           </p>
           {row.transactionAction ? (
             <Button
@@ -694,29 +746,29 @@ function SortButton({
   );
 }
 
-function evidenceHint(row: ReviewTableRow) {
+function evidenceHint(row: ReviewTableRow, t: TFunction<"journals">) {
   if (row.evidenceHint) return row.evidenceHint;
   const normalized = `${row.event} ${row.source} ${row.basis}`.toLowerCase();
-  if (normalized.includes("price")) return "Needs fiat price evidence";
+  if (normalized.includes("price")) return t("review.evidenceHint.price");
   if (normalized.includes("transfer") || normalized.includes("pair")) {
-    return "Needs matching movement decision";
+    return t("review.evidenceHint.pair");
   }
   if (normalized.includes("receipt") || normalized.includes("document")) {
-    return "Needs document attachment";
+    return t("review.evidenceHint.document");
   }
   if (normalized.includes("descriptor") || normalized.includes("asset")) {
-    return "Needs source/asset mapping";
+    return t("review.evidenceHint.asset");
   }
-  if (normalized.includes("fee")) return "Needs tax classification";
-  return "Needs review evidence";
+  if (normalized.includes("fee")) return t("review.evidenceHint.fee");
+  return t("review.evidenceHint.fallback");
 }
 
-function nextActionLabel(row: ReviewTableRow) {
+function nextActionLabel(row: ReviewTableRow, t: TFunction<"journals">) {
   if (row.nextAction) return row.nextAction;
-  if (row.status === "Resolved") return "No action needed";
-  if (row.status === "Blocked") return "Blocks trusted reports";
-  if (row.status === "Needs review") return "Review before reports";
-  return "Ready for reports";
+  if (row.status === "Resolved") return t("review.nextAction.noAction");
+  if (row.status === "Blocked") return t("review.nextAction.blocked");
+  if (row.status === "Needs review") return t("review.nextAction.needsReview");
+  return t("review.nextAction.ready");
 }
 
 function impactToneClass(impact: string) {

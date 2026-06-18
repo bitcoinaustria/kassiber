@@ -6,6 +6,8 @@
  */
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import {
@@ -238,38 +240,53 @@ interface SamouraiWalletMetadata {
   sections?: string[];
 }
 
-const syncModeLabels: Record<string, string> = {
-  backend_descriptor: "Watch-only descriptor",
-  backend_addresses: "Watch-only addresses",
-  file_import: "File import",
-  btcpay: "BTCPay enrichment",
-  not_configured: "Manual / not configured",
+const syncModeLabelKeys: Record<string, string> = {
+  backend_descriptor: "detail.syncMode.backendDescriptor",
+  backend_addresses: "detail.syncMode.backendAddresses",
+  file_import: "detail.syncMode.fileImport",
+  btcpay: "detail.syncMode.btcpay",
+  not_configured: "detail.syncMode.notConfigured",
 };
 
-function formatBackendDetail(backend?: WalletListItem["backend"]) {
-  if (!backend?.name) return "Not configured";
+function syncModeLabel(value: string, t: TFunction<"connections">) {
+  const key = syncModeLabelKeys[value];
+  // dynamic key
+  return key ? t(key as never) : undefined;
+}
+
+function formatBackendDetail(
+  backend: WalletListItem["backend"] | undefined,
+  t: TFunction<"connections">,
+) {
+  if (!backend?.name) return t("detail.backendDetail.notConfigured");
   const kind = backend.kind ? ` · ${backend.kind}` : "";
   const source =
     backend.source && backend.source !== "none" ? ` (${backend.source})` : "";
   return `${backend.name}${kind}${source}`;
 }
 
-function samouraiSectionLabel(value?: string) {
-  const labels: Record<string, string> = {
-    deposit: "Deposit",
-    badbank: "Badbank / Toxic Change",
-    premix: "Premix",
-    postmix: "Postmix",
-    ricochet: "Ricochet",
+function samouraiSectionLabel(
+  value: string | undefined,
+  t: TFunction<"connections">,
+) {
+  const keys: Record<string, string> = {
+    deposit: "detail.samourai.sectionLabel.deposit",
+    badbank: "detail.samourai.sectionLabel.badbank",
+    premix: "detail.samourai.sectionLabel.premix",
+    postmix: "detail.samourai.sectionLabel.postmix",
+    ricochet: "detail.samourai.sectionLabel.ricochet",
   };
-  return labels[value ?? ""] ?? value ?? "Samourai group";
+  const key = keys[value ?? ""];
+  // dynamic key
+  return key ? t(key as never) : value ?? t("detail.samourai.groupFallback");
 }
 
-function samouraiSourceLabel(value?: string) {
-  const labels: Record<string, string> = {
-    source_set: "Descriptor/xpub set",
-  };
-  return labels[value ?? ""] ?? value ?? "Imported";
+function samouraiSourceLabel(
+  value: string | undefined,
+  t: TFunction<"connections">,
+) {
+  if (value === "source_set") return t("detail.samourai.sourceLabel.sourceSet");
+  return value ?? t("detail.samourai.sourceLabel.imported");
 }
 
 function backendOptionLabel(backend: { name: string; display_name?: string }) {
@@ -302,6 +319,7 @@ function isWalletLiveBackendSource(
 }
 
 export function ConnectionDetail() {
+  const { t } = useTranslation("connections");
   const { connectionId } = useParams({ from: "/_app/connections/$connectionId" });
   const { data, isLoading } = useDaemon<OverviewSnapshot>(
     "ui.overview.snapshot",
@@ -318,11 +336,13 @@ export function ConnectionDetail() {
   if (!connection) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4 p-12 text-muted-foreground">
-        <p className="text-sm">No connection found for {connectionId}.</p>
+        <p className="text-sm">
+          {t("detail.notFound", { id: connectionId })}
+        </p>
         <Button asChild variant="outline" size="sm">
           <Link to="/connections">
             <ArrowLeft className="size-4" aria-hidden="true" />
-            Back to wallets
+            {t("detail.backToWallets")}
           </Link>
         </Button>
       </div>
@@ -369,6 +389,7 @@ function NodeConnectionContainer({
   priceEur,
   hideSensitive,
 }: NodeConnectionContainerProps) {
+  const { t } = useTranslation("connections");
   const queryClient = useQueryClient();
   const dataMode = useUiStore((state) => state.dataMode);
   const addNotification = useUiStore((state) => state.addNotification);
@@ -418,8 +439,8 @@ function NodeConnectionContainer({
       queryClient.isMutating({ mutationKey: walletSyncMutationKey }) > 0
     ) {
       addNotification({
-        title: "Node refresh already running",
-        body: `${connection.label} is already scanning. Kassiber will update this page when the daemon finishes.`,
+        title: t("node.sync.alreadyRunningTitle"),
+        body: t("node.sync.alreadyRunningBody", { label: connection.label }),
         tone: "info",
         dedupeKey: nodeSyncDedupeKey,
       });
@@ -427,14 +448,14 @@ function NodeConnectionContainer({
     }
     progressValueRef.current = startingSyncProgress().value ?? 5;
     syncNoticeIdRef.current = addNotification({
-      title: "Node refresh started",
-      body: `${connection.label} is fetching channel and routing data in read-only mode.`,
+      title: t("node.sync.startedTitle"),
+      body: t("node.sync.startedBody", { label: connection.label }),
       tone: "warning",
       dedupeKey: nodeSyncDedupeKey,
       progress: startingSyncProgress(),
     });
     startSyncNotice(
-      `${connection.label} is still scanning. Large channel histories can take a moment; Kassiber will update when the daemon returns.`,
+      t("node.sync.stillScanning", { label: connection.label }),
     );
     syncWallet.mutate(
       { wallet: connection.label },
@@ -448,8 +469,8 @@ function NodeConnectionContainer({
           const notification = {
             title:
               status === "error"
-                ? "Node refresh failed"
-                : "Node refresh finished",
+                ? t("node.sync.failedTitle")
+                : t("node.sync.finishedTitle"),
             body: message,
             tone: status === "error" ? "error" : "success",
             dedupeKey: nodeSyncDedupeKey,
@@ -463,9 +484,9 @@ function NodeConnectionContainer({
         },
         onError: (error) => {
           const message =
-            error instanceof Error ? error.message : "Node refresh failed.";
+            error instanceof Error ? error.message : t("node.sync.failedFallback");
           const notification = {
-            title: "Node refresh failed",
+            title: t("node.sync.failedTitle"),
             body: message,
             tone: "error",
             dedupeKey: nodeSyncDedupeKey,
@@ -511,6 +532,7 @@ function ConnectionDetailView({
   txs,
   hideSensitive,
 }: ConnectionDetailViewProps) {
+  const { t } = useTranslation(["connections", "common"]);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const dataMode = useUiStore((state) => state.dataMode);
@@ -626,10 +648,10 @@ function ConnectionDetailView({
     connectionKindLabels[connection.kind];
   const sourceDetail =
     connection.syncMode === "live"
-      ? "Live sync source"
+      ? t("detail.source.live")
       : connection.syncMode === "file"
-        ? "File import source"
-        : "Wallet source";
+        ? t("detail.source.file")
+        : t("detail.source.wallet");
   const hasGapMetric = connection.gap != null;
   const connectionTxs = txs.filter((tx) =>
     transactionBelongsToConnection(tx, connection),
@@ -645,11 +667,11 @@ function ConnectionDetailView({
     }
     if (utxoTransactionQuery.error) {
       addNotification({
-        title: "Transaction not opened",
+        title: t("detail.utxoTransaction.notOpenedTitle"),
         body:
           utxoTransactionQuery.error instanceof Error
             ? utxoTransactionQuery.error.message
-            : "Kassiber could not resolve this UTXO transaction.",
+            : t("detail.utxoTransaction.couldNotResolve"),
         tone: "warning",
         dedupeKey: `utxo-transaction-open-${pendingUtxoTransactionId}`,
       });
@@ -658,8 +680,8 @@ function ConnectionDetailView({
     }
     if (utxoTransactionQuery.data) {
       addNotification({
-        title: "Transaction not found",
-        body: "This UTXO has no matching imported Kassiber transaction yet.",
+        title: t("detail.utxoTransaction.notFoundTitle"),
+        body: t("detail.utxoTransaction.notFoundBody"),
         tone: "warning",
         dedupeKey: `utxo-transaction-missing-${pendingUtxoTransactionId}`,
       });
@@ -673,10 +695,13 @@ function ConnectionDetailView({
     utxoTransactionQuery.data,
     utxoTransactionQuery.error,
     utxoTransactionQuery.isLoading,
+    t,
   ]);
   const txCount = connection.transactionCount ?? connectionTxs.length;
   const isWalletSyncRunning = syncWallet.isPending || connectionRefreshing;
-  const refreshButtonLabel = isWalletSyncRunning ? "Refreshing" : "Refresh";
+  const refreshButtonLabel = isWalletSyncRunning
+    ? t("detail.refreshing")
+    : t("detail.refresh");
 
   const onSync = (options?: { forceFull?: boolean }) => {
     if (
@@ -684,8 +709,8 @@ function ConnectionDetailView({
       queryClient.isMutating({ mutationKey: walletSyncMutationKey }) > 0
     ) {
       addNotification({
-        title: "Connection refresh already running",
-        body: `${connection.label} is already scanning. Kassiber will update this page when the daemon finishes.`,
+        title: t("detail.sync.alreadyRunningTitle"),
+        body: t("detail.sync.alreadyRunningBody", { label: connection.label }),
         tone: "info",
         dedupeKey: "wallet-sync",
       });
@@ -695,17 +720,17 @@ function ConnectionDetailView({
     progressValueRef.current = startingSyncProgress().value ?? 5;
     syncNoticeIdRef.current = addNotification({
       title: options?.forceFull
-        ? "Connection rescan started"
-        : "Connection refresh started",
+        ? t("detail.sync.rescanStartedTitle")
+        : t("detail.sync.refreshStartedTitle"),
       body: options?.forceFull
-        ? `${connection.label} is rescanning in watch-only mode.`
-        : `${connection.label} is scanning in watch-only mode.`,
+        ? t("detail.sync.rescanStartedBody", { label: connection.label })
+        : t("detail.sync.refreshStartedBody", { label: connection.label }),
       tone: "warning",
       dedupeKey: "wallet-sync",
       progress: startingSyncProgress(),
     });
     startSyncNotice(
-      `${connection.label} is still scanning. Large descriptors or slow backends can take a bit; Kassiber will update when the daemon returns.`,
+      t("detail.sync.stillScanning", { label: connection.label }),
     );
     syncWallet.mutate(
       { wallet: connection.label, force_full: Boolean(options?.forceFull) },
@@ -720,7 +745,10 @@ function ConnectionDetailView({
             setSyncErrorMessage(message);
           }
           const notification = {
-            title: status === "error" ? "Connection refresh failed" : "Connection refresh finished",
+            title:
+              status === "error"
+                ? t("detail.sync.failedTitle")
+                : t("detail.sync.finishedTitle"),
             body: message,
             tone: status === "error" ? "error" : "success",
             dedupeKey: "wallet-sync",
@@ -734,10 +762,10 @@ function ConnectionDetailView({
         },
         onError: (error) => {
           const message =
-            error instanceof Error ? error.message : "Connection refresh failed.";
+            error instanceof Error ? error.message : t("detail.sync.failedFallback");
           setSyncErrorMessage(message);
           const notification = {
-            title: "Connection refresh failed",
+            title: t("detail.sync.failedTitle"),
             body: message,
             tone: "error",
             dedupeKey: "wallet-sync",
@@ -805,7 +833,7 @@ function ConnectionDetailView({
   ) => {
     if (!encryptedWorkspace) return true;
     if (!passphrase) {
-      setError("Enter the database passphrase.");
+      setError(t("detail.auth.enterPassphrase"));
       return false;
     }
     return true;
@@ -816,12 +844,14 @@ function ConnectionDetailView({
     setEditError(null);
     const nextLabel = editLabel.trim();
     if (!nextLabel) {
-      setEditError("Enter a connection label.");
+      setEditError(t("detail.edit.errorEnterLabel"));
       return;
     }
     if (!(await verifyLocalPassphrase(editPassphrase, setEditError))) return;
     if (!encryptedWorkspace && editPlaintextAck.trim() !== PLAINTEXT_CHANGE_ACK) {
-      setEditError(`Type ${PLAINTEXT_CHANGE_ACK} to confirm the change.`);
+      setEditError(
+        t("detail.edit.errorPlaintextAck", { ack: PLAINTEXT_CHANGE_ACK }),
+      );
       return;
     }
     const labelChanged = nextLabel !== connection.label;
@@ -844,12 +874,14 @@ function ConnectionDetailView({
     if (editConfigKind === "descriptor" && gapLimitText) {
       const gapLimit = Number.parseInt(gapLimitText, 10);
       if (!Number.isFinite(gapLimit) || gapLimit <= 0) {
-        setEditError("Gap limit must be a positive integer.");
+        setEditError(t("detail.edit.errorGapPositive"));
         return;
       }
       if (gapLimit > MAX_DESCRIPTOR_GAP_LIMIT) {
         setEditError(
-          `Gap limit must be ${MAX_DESCRIPTOR_GAP_LIMIT.toLocaleString()} or lower.`,
+          t("detail.edit.errorGapMax", {
+            max: MAX_DESCRIPTOR_GAP_LIMIT.toLocaleString(),
+          }),
         );
         return;
       }
@@ -884,7 +916,7 @@ function ConnectionDetailView({
       Object.keys(configChanges).length === 0 &&
       clearFields.length === 0
     ) {
-      setEditError("Change the label or update at least one field.");
+      setEditError(t("detail.edit.errorChangeNothing"));
       return;
     }
 
@@ -899,17 +931,17 @@ function ConnectionDetailView({
           : { plaintext_change_ack: PLAINTEXT_CHANGE_ACK },
       });
       const summary = labelChanged
-        ? `${connection.label} was renamed to ${nextLabel}.`
-        : `${connection.label} was updated.`;
+        ? t("detail.edit.renamed", { from: connection.label, to: nextLabel })
+        : t("detail.edit.updated", { label: connection.label });
       addNotification({
-        title: "Connection changed",
+        title: t("detail.edit.changedTitle"),
         body: summary,
         tone: "success",
       });
       setEditOpen(false);
     } catch (error) {
       setEditError(
-        error instanceof Error ? error.message : "Could not change connection.",
+        error instanceof Error ? error.message : t("detail.edit.couldNotChange"),
       );
     }
   };
@@ -918,7 +950,9 @@ function ConnectionDetailView({
     event.preventDefault();
     setDeleteError(null);
     if (deleteConfirm.trim() !== connection.label) {
-      setDeleteError(`Type ${connection.label} to confirm removal.`);
+      setDeleteError(
+        t("detail.delete.errorConfirmLabel", { label: connection.label }),
+      );
       return;
     }
     if (!(await verifyLocalPassphrase(deletePassphrase, setDeleteError))) return;
@@ -926,7 +960,9 @@ function ConnectionDetailView({
       !encryptedWorkspace &&
       deletePlaintextAck.trim() !== PLAINTEXT_DELETE_ACK
     ) {
-      setDeleteError(`Type ${PLAINTEXT_DELETE_ACK} to confirm local deletion.`);
+      setDeleteError(
+        t("detail.delete.errorPlaintextAck", { ack: PLAINTEXT_DELETE_ACK }),
+      );
       return;
     }
 
@@ -941,15 +977,15 @@ function ConnectionDetailView({
           : { plaintext_delete_ack: PLAINTEXT_DELETE_ACK },
       });
       addNotification({
-        title: "Connection removed",
-        body: `${connection.label} and its local transactions were removed.`,
+        title: t("detail.delete.removedTitle"),
+        body: t("detail.delete.removedBody", { label: connection.label }),
         tone: "success",
       });
       setDeleteOpen(false);
       void navigate({ to: "/connections", replace: true });
     } catch (error) {
       setDeleteError(
-        error instanceof Error ? error.message : "Could not remove connection.",
+        error instanceof Error ? error.message : t("detail.delete.couldNotRemove"),
       );
     }
   };
@@ -960,7 +996,7 @@ function ConnectionDetailView({
         <CardContent className="flex flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
             <Button asChild variant="outline" size="icon" className="shrink-0">
-              <Link to="/connections" aria-label="Back to wallets">
+              <Link to="/connections" aria-label={t("detail.backToWallets")}>
                 <ArrowLeft className="size-4" aria-hidden="true" />
               </Link>
             </Button>
@@ -998,7 +1034,10 @@ function ConnectionDetailView({
               className="min-w-[7.5rem]"
               disabled={isWalletSyncRunning}
               aria-busy={isWalletSyncRunning}
-              aria-label={`${refreshButtonLabel} ${connection.label}`}
+              aria-label={t("detail.refreshAction", {
+                action: refreshButtonLabel,
+                label: connection.label,
+              })}
               onClick={() => onSync()}
             >
               <RefreshCw
@@ -1013,7 +1052,7 @@ function ConnectionDetailView({
                   type="button"
                   variant="outline"
                   size="icon"
-                  aria-label="More actions"
+                  aria-label={t("detail.moreActions")}
                 >
                   <MoreHorizontal className="size-4" aria-hidden="true" />
                 </Button>
@@ -1021,14 +1060,14 @@ function ConnectionDetailView({
               <DropdownMenuContent align="end" className="w-44">
                 <DropdownMenuItem onClick={openEditDialog}>
                   <Pencil className="size-4" aria-hidden="true" />
-                  Edit
+                  {t("common:actions.edit")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   disabled={isWalletSyncRunning}
                   onClick={() => onSync({ forceFull: true })}
                 >
                   <RotateCcw className="size-4" aria-hidden="true" />
-                  Full rescan
+                  {t("detail.fullRescan")}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -1036,7 +1075,7 @@ function ConnectionDetailView({
                   onClick={openDeleteDialog}
                 >
                   <Trash2 className="size-4" aria-hidden="true" />
-                  Remove
+                  {t("common:actions.remove")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -1056,7 +1095,7 @@ function ConnectionDetailView({
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          label="Balance"
+          label={t("detail.metric.balance")}
           value={
             <span className={blurClass(hideSensitive)}>
               {fmtBtc(connection.balance)}
@@ -1066,23 +1105,23 @@ function ConnectionDetailView({
           icon={<Wallet className="size-4" aria-hidden="true" />}
         />
         <MetricCard
-          label="Transactions"
+          label={t("detail.metric.transactions")}
           value={txCount.toLocaleString("en-US")}
-          detail="Imported into this wallet"
+          detail={t("detail.metric.transactionsDetail")}
           icon={<ArrowLeftRight className="size-4" aria-hidden="true" />}
         />
         <MetricCard
-          label="Last sync"
+          label={t("detail.metric.lastSync")}
           value={connection.last}
           detail={connection.status}
           icon={<RefreshCw className="size-4" aria-hidden="true" />}
         />
         <MetricCard
-          label={hasGapMetric ? "Gap limit" : "Source"}
+          label={hasGapMetric ? t("detail.metric.gapLimit") : t("detail.metric.source")}
           value={
             hasGapMetric ? connection.gap?.toLocaleString("en-US") ?? "—" : sourceValue
           }
-          detail={hasGapMetric ? "Unused address window" : sourceDetail}
+          detail={hasGapMetric ? t("detail.metric.gapLimitDetail") : sourceDetail}
           icon={<Database className="size-4" aria-hidden="true" />}
         />
       </div>
@@ -1105,7 +1144,7 @@ function ConnectionDetailView({
               <div className="flex items-center gap-4">
                 <div>
                   <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                    On-chain inventory
+                    {t("detail.reconcile.onChainInventory")}
                   </div>
                   <div
                     className={cn(
@@ -1116,7 +1155,7 @@ function ConnectionDetailView({
                     {fmtBtc(reconciliation.utxoSat / 1e8)}
                   </div>
                   <div className="text-[10px] text-muted-foreground">
-                    Watch-only source of truth
+                    {t("detail.reconcile.watchOnlyTruth")}
                   </div>
                 </div>
                 <span
@@ -1127,7 +1166,7 @@ function ConnectionDetailView({
                 </span>
                 <div>
                   <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                    Recorded in books
+                    {t("detail.reconcile.recordedInBooks")}
                   </div>
                   <div
                     className={cn(
@@ -1138,7 +1177,7 @@ function ConnectionDetailView({
                     {fmtBtc(reconciliation.importedSat / 1e8)}
                   </div>
                   <div className="text-[10px] text-muted-foreground">
-                    Feeds tax &amp; reports
+                    {t("detail.reconcile.feedsTaxReports")}
                   </div>
                 </div>
               </div>
@@ -1147,13 +1186,17 @@ function ConnectionDetailView({
               <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:text-amber-300">
                 <AlertTriangle className="size-3.5" aria-hidden="true" />
                 {reconciliation.deltaSat < 0
-                  ? `${fmtBtc(Math.abs(reconciliation.deltaSat) / 1e8)} on-chain, not in books`
-                  : `${fmtBtc(Math.abs(reconciliation.deltaSat) / 1e8)} in books, not on-chain`}
+                  ? t("detail.reconcile.onChainNotInBooks", {
+                      amount: fmtBtc(Math.abs(reconciliation.deltaSat) / 1e8),
+                    })
+                  : t("detail.reconcile.inBooksNotOnChain", {
+                      amount: fmtBtc(Math.abs(reconciliation.deltaSat) / 1e8),
+                    })}
               </span>
               <div className="mt-1 text-xs text-muted-foreground">
                 {reconciliation.deltaSat < 0
-                  ? "An inbound is excluded or the sync is stale — refresh, or unhide excluded transactions."
-                  : "Likely a manual or duplicate entry, or a spend that didn't sync — refresh or review those rows."}
+                  ? t("detail.reconcile.inboundExcluded")
+                  : t("detail.reconcile.manualOrDuplicate")}
               </div>
             </div>
           </CardContent>
@@ -1179,49 +1222,51 @@ function ConnectionDetailView({
         <Card>
           <CardHeader className="border-b px-4 pb-3">
             <CardTitle className="flex flex-wrap items-center gap-2 text-sm sm:text-base">
-              Samourai Wallet
+              {t("detail.samourai.title")}
               <Badge variant="secondary">
                 {samouraiMetadata.role === "parent"
-                  ? "Group"
-                  : samouraiSectionLabel(samouraiMetadata.section)}
+                  ? t("detail.samourai.group")
+                  : samouraiSectionLabel(samouraiMetadata.section, t)}
               </Badge>
               {samouraiMetadata.privacy_boundary ? (
-                <Badge variant="outline">Privacy boundary</Badge>
+                <Badge variant="outline">
+                  {t("detail.samourai.privacyBoundary")}
+                </Badge>
               ) : null}
               {samouraiMetadata.paynym ? (
                 <Badge variant="outline">BIP47</Badge>
               ) : null}
             </CardTitle>
             <CardDescription>
-              Watch-only Samourai/Whirlpool import state.
+              {t("detail.samourai.description")}
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 px-4 pt-4 md:grid-cols-2">
             <DetailRow
-              label="Source"
-              value={samouraiSourceLabel(samouraiMetadata.source)}
+              label={t("detail.samourai.source")}
+              value={samouraiSourceLabel(samouraiMetadata.source, t)}
             />
             <DetailRow
-              label="Group"
+              label={t("detail.samourai.group")}
               value={samouraiMetadata.group_label || connection.label}
             />
             {samouraiMetadata.role !== "parent" ? (
               <>
                 <DetailRow
-                  label="Section"
-                  value={samouraiSectionLabel(samouraiMetadata.section)}
+                  label={t("detail.samourai.section")}
+                  value={samouraiSectionLabel(samouraiMetadata.section, t)}
                 />
                 <DetailRow
-                  label="Script"
+                  label={t("detail.samourai.script")}
                   value={samouraiMetadata.script_type || "—"}
                 />
                 <DetailRow
-                  label="Root"
+                  label={t("detail.samourai.root")}
                   value={samouraiMetadata.root_path || "—"}
                   mono
                 />
                 <DetailRow
-                  label="Gap"
+                  label={t("detail.samourai.gap")}
                   value={
                     samouraiMetadata.gap_limit?.toLocaleString("en-US") ??
                     connection.gap?.toLocaleString("en-US") ??
@@ -1231,39 +1276,55 @@ function ConnectionDetailView({
               </>
             ) : (
               <DetailRow
-                label="Sections"
+                label={t("detail.samourai.sections")}
                 value={(samouraiMetadata.sections ?? [])
-                  .map(samouraiSectionLabel)
+                  .map((section) => samouraiSectionLabel(section, t))
                   .join(", ")}
               />
             )}
             {samouraiMetadata.minimum_mix_count ? (
               <DetailRow
-                label="Mix count"
-                value={`at least ${samouraiMetadata.minimum_mix_count.toLocaleString("en-US")} · ${samouraiMetadata.mix_count_confidence ?? "minimum"}`}
+                label={t("detail.samourai.minimumMixCount")}
+                value={t("detail.samourai.minimumMixCountValue", {
+                  value:
+                    samouraiMetadata.minimum_mix_count.toLocaleString("en-US"),
+                  confidence:
+                    samouraiMetadata.mix_count_confidence ??
+                    t("detail.samourai.minimumConfidence"),
+                })}
               />
             ) : null}
             {samouraiMetadata.mix_count ? (
               <DetailRow
-                label="Observed mixes"
-                value={`${samouraiMetadata.mix_count.toLocaleString("en-US")} · ${samouraiMetadata.mix_count_confidence ?? "imported"}`}
+                label={t("detail.samourai.observedMixes")}
+                value={t("detail.samourai.observedMixesValue", {
+                  value: samouraiMetadata.mix_count.toLocaleString("en-US"),
+                  confidence:
+                    samouraiMetadata.mix_count_confidence ??
+                    t("detail.samourai.importedConfidence"),
+                })}
               />
             ) : null}
             {samouraiMetadata.target_mix_count ? (
               <DetailRow
-                label="Target mixes"
+                label={t("detail.samourai.targetMixes")}
                 value={samouraiMetadata.target_mix_count.toLocaleString("en-US")}
               />
             ) : null}
             {samouraiMetadata.pool_denomination_sat ? (
               <DetailRow
-                label="Pool"
-                value={`${samouraiMetadata.pool_denomination_sat.toLocaleString("en-US")} sats`}
+                label={t("detail.samourai.pool")}
+                value={t("detail.samourai.poolValue", {
+                  value:
+                    samouraiMetadata.pool_denomination_sat.toLocaleString(
+                      "en-US",
+                    ),
+                })}
               />
             ) : null}
             {samouraiMetadata.role !== "parent" ? (
               <DetailRow
-                label="Coins"
+                label={t("detail.samourai.coins")}
                 value={
                   samouraiInventory?.freshness.active_count?.toLocaleString(
                     "en-US",
@@ -1277,21 +1338,17 @@ function ConnectionDetailView({
           <div className="space-y-2 border-t px-4 py-3 text-sm">
             {samouraiMetadata.toxic_change ? (
               <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
-                Toxic-change spends remain reportable and need normal pricing
-                evidence.
+                {t("detail.samourai.toxicChange")}
               </div>
             ) : null}
             {samouraiMetadata.section === "postmix" ? (
               <div className="rounded-md border bg-background px-3 py-2 text-muted-foreground">
-                Postmix rows without exact Whirlpool metadata are shown as
-                having at least one mix; Kassiber does not claim exact sat
-                lineage through other participants.
+                {t("detail.samourai.postmixNote")}
               </div>
             ) : null}
             {samouraiInventory?.freshness.stale ? (
               <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
-                Samourai inventory is stale. Refresh before relying on wallet
-                detail, reports, or source-of-funds readiness.
+                {t("detail.samourai.stale")}
               </div>
             ) : null}
             <Button
@@ -1305,7 +1362,9 @@ function ConnectionDetailView({
                 className={cn("size-4", isWalletSyncRunning && "animate-spin")}
                 aria-hidden="true"
               />
-              {isWalletSyncRunning ? "Refreshing" : "Refresh Samourai source"}
+              {isWalletSyncRunning
+                ? t("detail.refreshing")
+                : t("detail.samourai.refreshSource")}
             </Button>
           </div>
         </Card>
@@ -1314,19 +1373,22 @@ function ConnectionDetailView({
       {walletProvenanceRoutes.length > 0 ? (
         <Card>
           <CardHeader className="border-b px-4 pb-3">
-            <CardTitle className="text-sm sm:text-base">BTCPay provenance</CardTitle>
+            <CardTitle className="text-sm sm:text-base">
+              {t("detail.btcpayProvenance.title")}
+            </CardTitle>
             <CardDescription>
-              BTCPay comments and labels enrich matching transactions during sync.
-              Descriptor or file sync remains the balance source.
+              {t("detail.btcpayProvenance.description")}
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Instance</TableHead>
-                  <TableHead>Store</TableHead>
-                  <TableHead>Payment method</TableHead>
+                  <TableHead>{t("detail.btcpayProvenance.instance")}</TableHead>
+                  <TableHead>{t("detail.btcpayProvenance.store")}</TableHead>
+                  <TableHead>
+                    {t("detail.btcpayProvenance.paymentMethod")}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1343,10 +1405,15 @@ function ConnectionDetailView({
             </Table>
           </CardContent>
           <div className="border-t px-4 py-2.5 text-xs text-muted-foreground">
-            Add more routes from <strong>Add wallet</strong> &rarr;{" "}
-            <em>BTCPay Server</em> &rarr; <em>Map existing wallets</em>, or via{" "}
-            <code>kassiber wallets attach-btcpay</code>. Use Edit to clear all
-            routes from this wallet.
+            <Trans
+              t={t}
+              i18nKey="detail.btcpayProvenance.footer"
+              components={{
+                strong: <strong />,
+                em: <em />,
+                code: <code />,
+              }}
+            />
           </div>
         </Card>
       ) : null}
@@ -1357,13 +1424,15 @@ function ConnectionDetailView({
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
-                  Recent transactions
+                  {t("detail.recentTransactions.title")}
                   <CountBadge>{txCount.toLocaleString("en-US")}</CountBadge>
                 </CardTitle>
                 <CardDescription>
                   {connectionTxs.length > txsForConnection.length
-                    ? `Showing the ${txsForConnection.length} most recent for this wallet source.`
-                    : "Recent transactions for this wallet source."}
+                    ? t("detail.recentTransactions.showingRecent", {
+                        count: txsForConnection.length,
+                      })
+                    : t("detail.recentTransactions.recent")}
                 </CardDescription>
               </div>
               {connectionTxs.length > 0 ? (
@@ -1379,7 +1448,7 @@ function ConnectionDetailView({
                     search={{ wallet: connection.label }}
                     hash="transactions-table"
                   >
-                    Show all
+                    {t("detail.recentTransactions.showAll")}
                     <ArrowRight className="size-4" aria-hidden="true" />
                   </Link>
                 </Button>
@@ -1399,7 +1468,7 @@ function ConnectionDetailView({
               </div>
             ) : (
               <div className="flex flex-col items-start gap-3 px-5 py-8 text-sm text-muted-foreground">
-                <p>No transactions imported for this wallet yet.</p>
+                <p>{t("detail.recentTransactions.empty")}</p>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
@@ -1415,12 +1484,14 @@ function ConnectionDetailView({
                       )}
                       aria-hidden="true"
                     />
-                    {isWalletSyncRunning ? "Refreshing" : "Refresh now"}
+                    {isWalletSyncRunning
+                      ? t("detail.refreshing")
+                      : t("detail.recentTransactions.refreshNow")}
                   </Button>
                   <Button asChild type="button" variant="outline" size="sm">
                     <Link to="/imports">
                       <Plus className="size-4" aria-hidden="true" />
-                      Import file
+                      {t("detail.recentTransactions.importFile")}
                     </Link>
                   </Button>
                 </div>
@@ -1436,30 +1507,33 @@ function ConnectionDetailView({
           />
           <Card>
             <CardHeader className="border-b px-4 pb-3">
-              <CardTitle className="text-sm sm:text-base">Connection details</CardTitle>
+              <CardTitle className="text-sm sm:text-base">
+                {t("detail.connectionDetails.title")}
+              </CardTitle>
               <CardDescription>
-                Local sync configuration.
+                {t("detail.connectionDetails.description")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 px-4 pt-4">
               <DetailRow
-                label="Sync mode"
+                label={t("detail.connectionDetails.syncMode")}
                 value={
-                  syncModeLabels[
-                    walletDetail?.sync_mode || connection.syncMode || ""
-                  ] ??
+                  syncModeLabel(
+                    walletDetail?.sync_mode || connection.syncMode || "",
+                    t,
+                  ) ??
                   walletDetail?.sync_mode ??
                   connection.syncMode ??
                   "—"
                 }
               />
               <DetailRow
-                label="Backend"
-                value={formatBackendDetail(walletDetail?.backend)}
+                label={t("detail.connectionDetails.backend")}
+                value={formatBackendDetail(walletDetail?.backend, t)}
               />
               {walletDetail?.account?.label || walletDetail?.account?.code ? (
                 <DetailRow
-                  label="Account"
+                  label={t("detail.connectionDetails.account")}
                   value={[
                     walletDetail.account.code,
                     walletDetail.account.label,
@@ -1470,26 +1544,33 @@ function ConnectionDetailView({
               ) : null}
               {walletDetail?.chain || walletDetail?.network ? (
                 <DetailRow
-                  label="Network"
+                  label={t("detail.connectionDetails.network")}
                   value={[walletDetail.chain, walletDetail.network]
                     .filter(Boolean)
                     .join(" · ")}
                 />
               ) : null}
               <DetailRow
-                label="Created"
+                label={t("detail.connectionDetails.created")}
                 value={formatShortDate(walletDetail?.created_at)}
                 mono
               />
-              <DetailRow label="Kassiber ID" value={connection.id} mono copy />
+              <DetailRow
+                label={t("detail.connectionDetails.kassiberId")}
+                value={connection.id}
+                mono
+                copy
+              />
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="border-b px-4 pb-3">
-              <CardTitle className="text-sm sm:text-base">Related views</CardTitle>
+              <CardTitle className="text-sm sm:text-base">
+                {t("detail.relatedViews.title")}
+              </CardTitle>
               <CardDescription>
-                Jump to this wallet&apos;s records across Kassiber.
+                {t("detail.relatedViews.description")}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
@@ -1505,10 +1586,12 @@ function ConnectionDetailView({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-medium">
-                      All transactions
+                      {t("detail.relatedViews.allTransactions")}
                     </span>
                     <span className="block text-xs text-muted-foreground">
-                      {txCount.toLocaleString("en-US")} in this wallet
+                      {t("detail.relatedViews.allTransactionsDetail", {
+                        value: txCount.toLocaleString("en-US"),
+                      })}
                     </span>
                   </span>
                   <ArrowRight className={relatedViewArrowClass} aria-hidden="true" />
@@ -1524,10 +1607,10 @@ function ConnectionDetailView({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-medium">
-                      Needs review
+                      {t("detail.relatedViews.needsReview")}
                     </span>
                     <span className="block text-xs text-muted-foreground">
-                      Rows not yet marked reviewed
+                      {t("detail.relatedViews.needsReviewDetail")}
                     </span>
                   </span>
                   <ArrowRight className={relatedViewArrowClass} aria-hidden="true" />
@@ -1543,10 +1626,10 @@ function ConnectionDetailView({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-medium">
-                      Missing price
+                      {t("detail.relatedViews.missingPrice")}
                     </span>
                     <span className="block text-xs text-muted-foreground">
-                      Unpriced rows block tax reports
+                      {t("detail.relatedViews.missingPriceDetail")}
                     </span>
                   </span>
                   <ArrowRight className={relatedViewArrowClass} aria-hidden="true" />
@@ -1557,10 +1640,10 @@ function ConnectionDetailView({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-medium">
-                      Source of funds
+                      {t("detail.relatedViews.sourceOfFunds")}
                     </span>
                     <span className="block text-xs text-muted-foreground">
-                      Evidence &amp; provenance readiness
+                      {t("detail.relatedViews.sourceOfFundsDetail")}
                     </span>
                   </span>
                   <ArrowRight className={relatedViewArrowClass} aria-hidden="true" />
@@ -1574,16 +1657,16 @@ function ConnectionDetailView({
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit connection</DialogTitle>
+            <DialogTitle>{t("detail.edit.title")}</DialogTitle>
             <DialogDescription>
               {encryptedWorkspace
-                ? "Confirm this change with the local database passphrase."
-                : "These plaintext books have no database passphrase; type the explicit local-change challenge to continue."}
+                ? t("detail.edit.descriptionEncrypted")
+                : t("detail.edit.descriptionPlaintext")}
             </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={onEditSubmit}>
             <div className="space-y-2">
-              <Label htmlFor="connection-label">Label</Label>
+              <Label htmlFor="connection-label">{t("detail.edit.label")}</Label>
               <Input
                 id="connection-label"
                 value={editLabel}
@@ -1592,7 +1675,9 @@ function ConnectionDetailView({
             </div>
             {canEditLiveBackend && editConfigKind !== "btcpay" ? (
               <div className="space-y-2">
-                <Label htmlFor="connection-edit-backend">Sync backend</Label>
+                <Label htmlFor="connection-edit-backend">
+                  {t("detail.edit.syncBackend")}
+                </Label>
                 <select
                   id="connection-edit-backend"
                   className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
@@ -1600,35 +1685,38 @@ function ConnectionDetailView({
                   onChange={(event) => setEditBackend(event.target.value)}
                 >
                   <option value="">
-                    Keep current backend
                     {walletDetail?.backend?.name
-                      ? ` (${walletDetail.backend.name})`
-                      : ""}
+                      ? t("detail.edit.keepCurrentBackendNamed", {
+                          name: walletDetail.backend.name,
+                        })
+                      : t("detail.edit.keepCurrentBackend")}
                   </option>
                   {canClearLiveBackend ? (
                     <option value={CLEAR_BACKEND_SELECTION}>
-                      Use default Bitcoin backend
+                      {t("detail.edit.useDefaultBitcoinBackend")}
                     </option>
                   ) : null}
                   {liveBackendOptions.map((backend) => (
                     <option key={backend.name} value={backend.name}>
                       {backendOptionLabel(backend)}
                       {backend.network ? ` · ${backend.network}` : ""}
-                      {backend.is_default ? " (default)" : ""}
+                      {backend.is_default
+                        ? t("detail.edit.backendOptionDefault")
+                        : ""}
                     </option>
                   ))}
                 </select>
                 <p className="text-xs text-muted-foreground">
                   {walletChain === "liquid"
-                    ? "Liquid wallet sources require an explicit Liquid backend."
-                    : "Choose a backend for only this wallet source."}
+                    ? t("detail.edit.liquidBackendHelper")
+                    : t("detail.edit.backendHelper")}
                 </p>
               </div>
             ) : null}
             {editConfigKind === "descriptor" ? (
               <div className="space-y-2">
                 <Label htmlFor="connection-edit-material">
-                  Descriptor or xpub
+                  {t("detail.edit.descriptorOrXpub")}
                 </Label>
                 <Textarea
                   id="connection-edit-material"
@@ -1637,7 +1725,7 @@ function ConnectionDetailView({
                   onChange={(event) =>
                     setEditWalletMaterial(event.target.value)
                   }
-                  placeholder="Paste a fresh descriptor or extended public key to overwrite"
+                  placeholder={t("detail.edit.materialPlaceholder")}
                 />
                 {editWalletMaterial.trim()
                   ? (() => {
@@ -1649,21 +1737,29 @@ function ConnectionDetailView({
                           : "text-emerald-700 dark:text-emerald-300";
                       return (
                         <p className={cn("text-xs", tone)}>
-                          Detected: {detection.label}
-                          {detection.hint ? ` — ${detection.hint}` : ""}
+                          {detection.hint
+                            ? t("detail.edit.detectedWithHint", {
+                                label: detection.label,
+                                hint: detection.hint,
+                              })
+                            : t("detail.edit.detected", {
+                                label: detection.label,
+                              })}
                         </p>
                       );
                     })()
                   : (
                       <p className="text-xs text-muted-foreground">
-                        Leave empty unless you need to change the saved wallet material.
+                        {t("detail.edit.materialHelper")}
                       </p>
                     )}
               </div>
             ) : null}
             {editConfigKind === "descriptor" ? (
               <div className="space-y-2">
-                <Label htmlFor="connection-edit-gap-limit">Gap limit</Label>
+                <Label htmlFor="connection-edit-gap-limit">
+                  {t("detail.edit.gapLimit")}
+                </Label>
                 <Input
                   id="connection-edit-gap-limit"
                   type="number"
@@ -1674,43 +1770,47 @@ function ConnectionDetailView({
                   placeholder="40"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Raise this for wallets with long unused address runs. Large
-                  values up to 5,000 can take longer, but refreshes keep
-                  running until the daemon returns.
+                  {t("detail.edit.gapLimitHelper")}
                 </p>
               </div>
             ) : null}
             {editConfigKind === "btcpay" ? (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="connection-edit-backend">BTCPay instance</Label>
+                  <Label htmlFor="connection-edit-backend">
+                    {t("detail.edit.btcpayInstance")}
+                  </Label>
                   <select
                     id="connection-edit-backend"
                     className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                     value={editBackend}
                     onChange={(event) => setEditBackend(event.target.value)}
                   >
-                    <option value="">Keep current instance</option>
+                    <option value="">{t("detail.edit.keepCurrentInstance")}</option>
                     {btcpayBackendOptions.map((backend) => (
                       <option key={backend.name} value={backend.name}>
                         {backendOptionLabel(backend)}
-                        {backend.is_default ? " (default)" : ""}
+                        {backend.is_default
+                          ? t("detail.edit.backendOptionDefault")
+                          : ""}
                       </option>
                     ))}
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="connection-edit-store">BTCPay store ID</Label>
+                  <Label htmlFor="connection-edit-store">
+                    {t("detail.edit.btcpayStoreId")}
+                  </Label>
                   <Input
                     id="connection-edit-store"
                     value={editStoreId}
                     onChange={(event) => setEditStoreId(event.target.value)}
-                    placeholder="Leave empty to keep the current store ID"
+                    placeholder={t("detail.edit.storeIdPlaceholder")}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="connection-edit-payment-method">
-                    BTCPay wallet
+                    {t("detail.edit.btcpayWallet")}
                   </Label>
                   <Input
                     id="connection-edit-payment-method"
@@ -1718,20 +1818,22 @@ function ConnectionDetailView({
                     onChange={(event) =>
                       setEditPaymentMethodId(event.target.value)
                     }
-                    placeholder="Leave empty to keep BTC-CHAIN"
+                    placeholder={t("detail.edit.paymentMethodPlaceholder")}
                   />
                 </div>
               </>
             ) : null}
             {editConfigKind === "file-wallet" ? (
               <div className="space-y-2">
-                <Label htmlFor="connection-edit-source">Source file</Label>
+                <Label htmlFor="connection-edit-source">
+                  {t("detail.edit.sourceFile")}
+                </Label>
                 <div className="flex gap-2">
                   <Input
                     id="connection-edit-source"
                     value={editSourceFile}
                     onChange={(event) => setEditSourceFile(event.target.value)}
-                    placeholder="Leave empty to keep the current file"
+                    placeholder={t("detail.edit.sourceFilePlaceholder")}
                   />
                   {isFilePickerAvailable ? (
                     <Button
@@ -1739,12 +1841,14 @@ function ConnectionDetailView({
                       variant="outline"
                       onClick={async () => {
                         const picked = await pickFile({
-                          title: `Select ${connection.label} export file`,
+                          title: t("detail.edit.selectExportFileTitle", {
+                            label: connection.label,
+                          }),
                         });
                         if (picked) setEditSourceFile(picked);
                       }}
                     >
-                      Browse…
+                      {t("detail.edit.browse")}
                     </Button>
                   ) : null}
                 </div>
@@ -1762,11 +1866,11 @@ function ConnectionDetailView({
                     }
                   />
                   <span className="grid gap-0.5">
-                    <span>Clear BTCPay provenance routes</span>
+                    <span>{t("detail.edit.clearProvenance")}</span>
                     <span className="text-xs text-muted-foreground">
-                      Removes all {walletProvenanceRoutes.length} stored
-                      route(s). Descriptor/file sync remains the balance
-                      source. Re-add routes from Add wallet.
+                      {t("detail.edit.clearProvenanceHelper", {
+                        count: walletProvenanceRoutes.length,
+                      })}
                     </span>
                   </span>
                 </label>
@@ -1774,7 +1878,9 @@ function ConnectionDetailView({
             ) : null}
             {encryptedWorkspace ? (
               <div className="space-y-2">
-                <Label htmlFor="connection-edit-passphrase">Passphrase</Label>
+                <Label htmlFor="connection-edit-passphrase">
+                  {t("detail.edit.passphrase")}
+                </Label>
                 <Input
                   id="connection-edit-passphrase"
                   type="password"
@@ -1786,7 +1892,7 @@ function ConnectionDetailView({
             ) : (
               <div className="space-y-2">
                 <Label htmlFor="connection-edit-ack">
-                  Plaintext change challenge
+                  {t("detail.edit.plaintextChallenge")}
                 </Label>
                 <Input
                   id="connection-edit-ack"
@@ -1805,10 +1911,12 @@ function ConnectionDetailView({
                 variant="outline"
                 onClick={() => setEditOpen(false)}
               >
-                Cancel
+                {t("common:actions.cancel")}
               </Button>
               <Button type="submit" disabled={updateWallet.isPending}>
-                {updateWallet.isPending ? "Saving..." : "Save"}
+                {updateWallet.isPending
+                  ? t("detail.edit.saving")
+                  : t("common:actions.save")}
               </Button>
             </DialogFooter>
           </form>
@@ -1818,20 +1926,22 @@ function ConnectionDetailView({
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Remove connection</DialogTitle>
+            <DialogTitle>{t("detail.delete.title")}</DialogTitle>
             <DialogDescription>
-              This removes {connection.label} and its local imported transactions. Confirm
-              with{" "}
-              {encryptedWorkspace
-                ? "the database passphrase"
-                : "the plaintext local-delete challenge"}{" "}
-              and the exact connection label.
+              {t("detail.delete.description", {
+                label: connection.label,
+                challenge: encryptedWorkspace
+                  ? t("detail.delete.challengePassphrase")
+                  : t("detail.delete.challengePlaintext"),
+              })}
             </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={onDeleteSubmit}>
             {encryptedWorkspace ? (
               <div className="space-y-2">
-                <Label htmlFor="connection-delete-passphrase">Passphrase</Label>
+                <Label htmlFor="connection-delete-passphrase">
+                  {t("detail.delete.passphrase")}
+                </Label>
                 <Input
                   id="connection-delete-passphrase"
                   type="password"
@@ -1843,7 +1953,7 @@ function ConnectionDetailView({
             ) : (
               <div className="space-y-2">
                 <Label htmlFor="connection-delete-ack">
-                  Plaintext delete challenge
+                  {t("detail.delete.plaintextChallenge")}
                 </Label>
                 <Input
                   id="connection-delete-ack"
@@ -1854,7 +1964,9 @@ function ConnectionDetailView({
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="connection-delete-label">Connection label</Label>
+              <Label htmlFor="connection-delete-label">
+                {t("detail.delete.connectionLabel")}
+              </Label>
               <Input
                 id="connection-delete-label"
                 value={deleteConfirm}
@@ -1871,14 +1983,16 @@ function ConnectionDetailView({
                 variant="outline"
                 onClick={() => setDeleteOpen(false)}
               >
-                Cancel
+                {t("common:actions.cancel")}
               </Button>
               <Button
                 type="submit"
                 variant="destructive"
                 disabled={deleteWallet.isPending}
               >
-                {deleteWallet.isPending ? "Removing..." : "Remove"}
+                {deleteWallet.isPending
+                  ? t("detail.delete.removing")
+                  : t("common:actions.remove")}
               </Button>
             </DialogFooter>
           </form>
@@ -1896,6 +2010,7 @@ function ConnectionTransactionRow({
   tx: OverviewSnapshot["txs"][number];
   hideSensitive: boolean;
 }) {
+  const { t } = useTranslation("connections");
   const flow =
     tx.type === "Swap" || tx.type === "Transfer" || tx.type === "Rebalance"
       ? "transfer"
@@ -1943,7 +2058,7 @@ function ConnectionTransactionRow({
               variant="outline"
               className="rounded-md whitespace-nowrap text-amber-700 ring-amber-600/20 dark:text-amber-300"
             >
-              Pending
+              {t("detail.recentTransactions.pending")}
             </Badge>
           )}
         </span>

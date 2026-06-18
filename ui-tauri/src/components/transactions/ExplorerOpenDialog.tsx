@@ -1,5 +1,6 @@
 import { ExternalLink, ShieldAlert } from "lucide-react";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -16,10 +17,10 @@ import type { ExplorerTarget } from "@/lib/explorer";
 
 import type { Transaction } from "./model";
 
-function explorerOpenErrorMessage(error: unknown) {
+function explorerOpenErrorMessage(error: unknown): string | null {
   if (error instanceof Error && error.message) return error.message;
   if (typeof error === "string" && error) return error;
-  return "Could not open explorer in the default browser.";
+  return null;
 }
 
 export function ExplorerOpenDialog({
@@ -31,6 +32,7 @@ export function ExplorerOpenDialog({
   target: ExplorerTarget | null;
   onTransactionChange: (transaction: Transaction | null) => void;
 }) {
+  const { t } = useTranslation(["transactions", "common"]);
   const [openError, setOpenError] = React.useState<string | null>(null);
   const [opening, setOpening] = React.useState(false);
 
@@ -48,7 +50,9 @@ export function ExplorerOpenDialog({
       await openExternalUrl(target.url);
       onTransactionChange(null);
     } catch (error) {
-      setOpenError(explorerOpenErrorMessage(error));
+      setOpenError(
+        explorerOpenErrorMessage(error) ?? t("explorerDialog.openError"),
+      );
     } finally {
       setOpening(false);
     }
@@ -69,11 +73,11 @@ export function ExplorerOpenDialog({
           <div className="mb-1 flex size-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
             <ShieldAlert className="size-5" aria-hidden="true" />
           </div>
-          <DialogTitle>Open transaction in a browser?</DialogTitle>
+          <DialogTitle>{t("explorerDialog.title")}</DialogTitle>
           <DialogDescription className="max-w-prose">
-            This opens {target?.label ?? "the configured explorer"} outside Kassiber.
-            The explorer can see your IP address and the transaction id you
-            request.
+            {t("explorerDialog.body", {
+              explorer: target?.label ?? t("explorerDialog.fallbackExplorer"),
+            })}
           </DialogDescription>
         </DialogHeader>
         {transaction && target ? (
@@ -95,7 +99,7 @@ export function ExplorerOpenDialog({
         <DialogFooter className="gap-2 sm:flex-wrap">
           <DialogClose asChild>
             <Button type="button" variant="outline">
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
           </DialogClose>
           <Button
@@ -104,7 +108,9 @@ export function ExplorerOpenDialog({
             onClick={() => void openExplorer()}
           >
             <ExternalLink className="size-4" aria-hidden="true" />
-            {opening ? "Opening..." : "Open explorer"}
+            {opening
+              ? t("explorerDialog.opening")
+              : t("explorerDialog.open")}
           </Button>
         </DialogFooter>
         </div>

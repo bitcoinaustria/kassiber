@@ -1,9 +1,11 @@
+import type { ParseKeys } from "i18next";
 import {
   ArrowRight,
   RotateCcw,
   Save,
 } from "lucide-react";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +29,7 @@ import type {
 
 import {
   austrianTaxClassificationFor,
+  classificationOptionLabelKeys,
   currencyFormatter,
   explorerForTransaction,
   formatBtcAmount,
@@ -156,6 +159,7 @@ export function TransactionDetailSheet({
   ) => void | Promise<void>;
   hasNext?: boolean;
 }) {
+  const { t } = useTranslation(["transactions", "common"]);
   const [activeTab, setActiveTab] = React.useState(initialTab);
   const [localDraft, setLocalDraft] =
     React.useState<TransactionEditDraft | null>(draft);
@@ -284,7 +288,7 @@ export function TransactionDetailSheet({
   const isProviderSamplePricing = localDraft.pricingQuality === "provider_sample";
   const sourceName = transaction.wallet || transaction.paymentMethod;
   const sourceType = transaction.sourceType ?? transaction.paymentMethod;
-  const settlementLabel = transactionStatusLabels[transaction.status];
+  const settlementLabel = t(transactionStatusLabels[transaction.status]);
   const valueAtTimeEur = transaction.amount;
   const valueNowEur =
     nowRate && amountBtc ? nowRate * amountBtc * (impactDirection || 1) : null;
@@ -300,7 +304,10 @@ export function TransactionDetailSheet({
   const hasPricingBlocker = isPricingMissing && !localDraft.excluded;
   const showReviewBanner =
     hasJournalQuarantine || (activeTab !== "pricing" && hasPricingBlocker);
-  const confLabel = confirmationsLabel(transaction.confirmations);
+  const confLabel = confirmationsLabel(
+    transaction.confirmations,
+    t as (key: string, opts?: Record<string, unknown>) => string, // loose translator
+  );
   const dirtyTags = dirty.tags;
   const dirtyLabel = dirty.label;
   const dirtyNote = dirty.note;
@@ -320,9 +327,9 @@ export function TransactionDetailSheet({
   const timelineSteps: TimelineStep[] = [
     {
       key: "imported",
-      label: "Imported",
+      label: t("sheet.timeline.imported"),
       done: true,
-      hint: "Transaction read from a wallet, exchange, or import file.",
+      hint: t("sheet.timeline.importedHint"),
     },
     {
       key: "settled",
@@ -331,29 +338,31 @@ export function TransactionDetailSheet({
       current: transaction.status === "pending",
       hint:
         transaction.status === "completed"
-          ? "On-chain settled."
+          ? t("sheet.timeline.settledOnChain")
           : transaction.status === "pending"
-            ? "Waiting for confirmation."
-            : "Settlement issue — check details.",
+            ? t("sheet.timeline.waitingConfirmation")
+            : t("sheet.timeline.settlementIssue"),
     },
     {
       key: "reviewed",
-      label: localDraft.reviewStatus === "review" ? "Needs review" : "Reviewed",
+      label:
+        localDraft.reviewStatus === "review"
+          ? t("sheet.timeline.needsReview")
+          : t("sheet.timeline.reviewed"),
       done: localDraft.reviewStatus !== "review",
-      hint: "Marked off the review queue.",
+      hint: t("sheet.timeline.reviewedHint"),
     },
     {
       key: "journaled",
       label: localDraft.excluded
-        ? "Excluded"
+        ? t("sheet.timeline.excluded")
         : hasJournalQuarantine
-          ? "Quarantined"
+          ? t("sheet.timeline.quarantined")
           : isPricingMissing
-          ? "Pending journal"
-          : "Journaled",
+          ? t("sheet.timeline.pendingJournal")
+          : t("sheet.timeline.journaled"),
       done: !localDraft.excluded && !hasJournalQuarantine && !isPricingMissing,
-      hint:
-        "Included in the RP2 journal once pricing is set and the tx isn't excluded.",
+      hint: t("sheet.timeline.journaledHint"),
     },
   ];
 
@@ -361,36 +370,57 @@ export function TransactionDetailSheet({
     {
       key: "pricing",
       label: isPricingMissing
-        ? "Set a pricing source"
-        : `Priced via ${pricingSourceLabel(
-            localDraft.pricingSourceKind,
-            localDraft.pricingQuality,
-          )}`,
+        ? t("sheet.checklist.setPricingSource")
+        : t("sheet.checklist.pricedVia", {
+            // dynamic key
+            label: t(
+              pricingSourceLabel(
+                localDraft.pricingSourceKind,
+                localDraft.pricingQuality,
+              ) as ParseKeys<["transactions", "common"]>,
+            ),
+          }),
       done: !isPricingMissing,
       warn: isPricingMissing,
       tab: "pricing",
     },
     {
       key: "classified",
-      label: isLabeled ? `Labeled ${localDraft.label}` : "Pick a label",
+      label: isLabeled
+        ? t("sheet.checklist.labeled", {
+            label: classificationOptionLabelKeys[localDraft.label]
+              ? // dynamic key
+                t(
+                  classificationOptionLabelKeys[
+                    localDraft.label
+                  ] as ParseKeys<["transactions", "common"]>,
+                )
+              : localDraft.label,
+          })
+        : t("sheet.checklist.pickLabel"),
       done: isLabeled,
       tab: "classify",
     },
     {
       key: "tax",
       label: localDraft.excluded
-        ? "Excluded from tax reports"
-        : `Tax: ${taxClassification.shortLabel}`,
+        ? t("sheet.checklist.excludedFromReports")
+        : t("sheet.checklist.taxLabel", {
+            // dynamic key
+            label: t(
+              taxClassification.shortLabel as ParseKeys<["transactions", "common"]>,
+            ),
+          }),
       done: true,
       tab: "tax",
     },
     {
       key: "quarantine",
       label: hasJournalQuarantine
-        ? "Resolve quarantine to include in reports"
+        ? t("sheet.checklist.resolveQuarantine")
         : hasPricingBlocker
-          ? "Pricing incomplete"
-          : "No quarantine",
+          ? t("sheet.checklist.pricingIncomplete")
+          : t("sheet.checklist.noQuarantine"),
       done: !hasJournalQuarantine && !hasPricingBlocker,
       warn: hasJournalQuarantine || hasPricingBlocker,
       tab: "pricing",
@@ -467,19 +497,35 @@ export function TransactionDetailSheet({
   const taxNarrative = (() => {
     const action =
       flow === "incoming"
-        ? "received"
+        ? t("tax.narrative.received")
         : flow === "outgoing"
-          ? "sent"
-          : "moved";
-    const counterparty = transaction.counterparty || "the counterparty";
+          ? t("tax.narrative.sent")
+          : t("tax.narrative.moved");
+    const counterparty =
+      transaction.counterparty || t("tax.narrative.theCounterparty");
     const at = transaction.date;
     const fiat = valueAtTimeEur
-      ? `worth ${currencyFormatter.format(valueAtTimeEur)} at the time`
-      : "with no fiat price recorded yet";
+      ? t("tax.narrative.worthAtTime", {
+          value: currencyFormatter.format(valueAtTimeEur),
+        })
+      : t("tax.narrative.noFiatYet");
     const treatment = localDraft.excluded
-      ? "It is excluded from journal processing"
-      : `It is currently treated as ${taxClassification.label}`;
-    return `You ${action} ${formatBtcAmount(amountBtc)} ${flow === "outgoing" ? "to" : "from"} ${counterparty} on ${at}, ${fiat}. ${treatment}.`;
+      ? t("tax.narrative.excludedTreatment")
+      : t("tax.narrative.currentTreatment", {
+          // dynamic key
+          treatment: t(
+            taxClassification.label as ParseKeys<["transactions", "common"]>,
+          ),
+        });
+    return t("tax.narrative.sentence", {
+      action,
+      amount: formatBtcAmount(amountBtc),
+      direction: flow === "outgoing" ? t("tax.narrative.to") : t("tax.narrative.from"),
+      counterparty,
+      date: at,
+      fiat,
+      treatment,
+    });
   })();
 
   const tabContext: TransactionDetailTabContext = {
@@ -573,29 +619,35 @@ export function TransactionDetailSheet({
                   <QuarantineBanner
                     title={
                       hasJournalQuarantine
-                        ? "Journal quarantine"
+                        ? t("sheet.banner.journalQuarantine")
                         : transaction.amount === null
-                        ? "Missing fiat price"
+                        ? t("sheet.banner.missingFiatPrice")
                         : localDraft.pricingSourceKind === null
-                          ? "No pricing source"
-                          : "Pricing flagged for review"
+                          ? t("sheet.banner.noPricingSource")
+                          : t("sheet.banner.pricingFlagged")
                     }
                     reason={
                       hasJournalQuarantine
-                        ? `Current journal blocker: ${normalizedQuarantineReason}.`
+                        ? t("sheet.banner.journalBlocker", {
+                            reason: normalizedQuarantineReason,
+                          })
                         : transaction.amount === null
-                          ? `No fiat price recorded for ${transaction.date}. Add a manual price or value to include this row in journal processing.`
+                          ? t("sheet.banner.noFiatRecorded", {
+                              date: transaction.date,
+                            })
                           : localDraft.pricingSourceKind === null
-                            ? "No persisted pricing source is available yet. Add a manual price or choose a backed pricing source."
-                            : "Pricing source is marked as missing or under review. Save a reviewed source before running journals."
+                            ? t("sheet.banner.noPersistedSource")
+                            : t("sheet.banner.missingOrUnderReview")
                     }
                     hint={
                       hasJournalQuarantine
                         ? undefined
-                        : "This is a pricing readiness warning from the transaction row. It is not an active journal quarantine unless the daemon returns a quarantine reason."
+                        : t("sheet.banner.readinessHint")
                     }
                     primaryActionLabel={
-                      hasJournalQuarantine ? "View Pricing" : "Open Pricing"
+                      hasJournalQuarantine
+                        ? t("sheet.banner.viewPricing")
+                        : t("sheet.banner.openPricing")
                     }
                     onPrimaryAction={jumpToManualPrice}
                     onExclude={setExcluded}
@@ -612,23 +664,23 @@ export function TransactionDetailSheet({
 
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
                   <TabsList className="grid w-full grid-cols-6">
-                    <TabsTrigger value="details">Details</TabsTrigger>
+                    <TabsTrigger value="details">{t("sheet.tab.details")}</TabsTrigger>
                     <TabsTrigger value="classify">
-                      Classify
+                      {t("sheet.tab.classify")}
                       {dirtyLabel || dirtyTags || dirtyNote || dirty.reviewStatus ? (
                         <DirtyDot active />
                       ) : null}
                     </TabsTrigger>
                     <TabsTrigger value="pricing">
-                      Pricing
+                      {t("sheet.tab.pricing")}
                       {dirtyPricing ? <DirtyDot active /> : null}
                     </TabsTrigger>
                     <TabsTrigger value="tax">
-                      Tax
+                      {t("sheet.tab.tax")}
                       {dirtyExcluded || dirtyReviewTax ? <DirtyDot active /> : null}
                     </TabsTrigger>
-                    <TabsTrigger value="linked">Linked</TabsTrigger>
-                    <TabsTrigger value="ledger">Ledger</TabsTrigger>
+                    <TabsTrigger value="linked">{t("sheet.tab.linked")}</TabsTrigger>
+                    <TabsTrigger value="ledger">{t("sheet.tab.ledger")}</TabsTrigger>
                   </TabsList>
 
                   <TransactionDetailsTab ctx={tabContext} />
@@ -679,13 +731,13 @@ export function TransactionDetailSheet({
               {dirtyCount > 0 ? (
                 <span className="inline-flex items-center gap-1.5 font-medium text-amber-600 dark:text-amber-400">
                   <span className="inline-block size-1.5 rounded-full bg-amber-500" />
-                  {dirtyCount} unsaved {dirtyCount === 1 ? "change" : "changes"}
+                  {t("sheet.footer.unsavedChanges", { count: dirtyCount })}
                 </span>
               ) : null}
               <span className="hidden items-center gap-1.5 sm:inline-flex">
-                <kbd className="rounded border bg-muted px-1">⌘S</kbd> save ·{" "}
-                <kbd className="rounded border bg-muted px-1">1–6</kbd> tabs ·{" "}
-                <kbd className="rounded border bg-muted px-1">e</kbd> exclude
+                <kbd className="rounded border bg-muted px-1">⌘S</kbd> {t("sheet.footer.shortcutSave")} ·{" "}
+                <kbd className="rounded border bg-muted px-1">1–6</kbd> {t("sheet.footer.shortcutTabs")} ·{" "}
+                <kbd className="rounded border bg-muted px-1">e</kbd> {t("sheet.footer.shortcutExclude")}
               </span>
               {saveError ? (
                 <span className="basis-full text-destructive sm:basis-auto">
@@ -700,7 +752,7 @@ export function TransactionDetailSheet({
                 disabled={isSaving}
                 onClick={() => onOpenChange(false)}
               >
-                Cancel
+                {t("common:actions.cancel")}
               </Button>
               {dirtyCount > 0 ? (
                 <Button
@@ -714,7 +766,7 @@ export function TransactionDetailSheet({
                   }}
                 >
                   <RotateCcw className="size-4" aria-hidden="true" />
-                  Discard
+                  {t("sheet.footer.discard")}
                 </Button>
               ) : null}
               <Button
@@ -736,10 +788,10 @@ export function TransactionDetailSheet({
               >
                 <Save className="size-4" aria-hidden="true" />
                 {isSaving
-                  ? "Saving"
+                  ? t("sheet.footer.saving")
                   : onSaveAndNext && hasNext
-                    ? "Save & next"
-                    : "Save"}
+                    ? t("sheet.footer.saveAndNext")
+                    : t("sheet.footer.save")}
                 {onSaveAndNext && hasNext && !isSaving ? (
                   <ArrowRight className="size-4" aria-hidden="true" />
                 ) : null}

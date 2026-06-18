@@ -1,4 +1,5 @@
 import { KeyRound } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { canUseTouchIdPassphraseUnlock } from "@/daemon/transport";
@@ -20,6 +21,7 @@ export const SecurityStep = ({
   goBack,
   canContinue = true,
 }: StepComponentProps) => {
+  const { t } = useTranslation(["onboarding", "common"]);
   const encrypted = form.databaseMode === "sqlcipher";
   const touchIdAvailable = encrypted && canUseTouchIdPassphraseUnlock();
   const passphraseHint = encrypted
@@ -33,7 +35,7 @@ export const SecurityStep = ({
     : form.plaintextAcknowledged;
   return (
     <OnboardingSingleColumnFrame
-      title="Protect your books"
+      title={t("security.title")}
       currentStep={currentStep}
       totalSteps={totalSteps}
       goBack={goBack}
@@ -48,14 +50,14 @@ export const SecurityStep = ({
         <div className="space-y-3">
           <ChoiceCard
             active={encrypted}
-            title="Encrypt these books"
-            description="Recommended for real data. The local SQLite database opens only with your passphrase."
+            title={t("security.encrypt.title")}
+            description={t("security.encrypt.description")}
             onClick={() => update("databaseMode", "sqlcipher")}
           />
           <ChoiceCard
             active={form.databaseMode === "plaintext"}
-            title="Leave it unencrypted"
-            description="Useful for throwaway evaluation only. Anyone with disk access can read the database."
+            title={t("security.plaintext.title")}
+            description={t("security.plaintext.description")}
             tone="warning"
             onClick={() => update("databaseMode", "plaintext")}
           />
@@ -66,33 +68,32 @@ export const SecurityStep = ({
             <div className="space-y-4 rounded-lg border border-line bg-paper-2 p-4">
               <div className="flex items-center gap-2 text-sm font-semibold text-ink">
                 <KeyRound className="size-4" />
-                Database passphrase
+                {t("security.databasePassphrase")}
               </div>
               <TextField
-                label="Passphrase"
+                label={t("security.passphrase")}
                 name="database-passphrase"
                 type="password"
                 autoComplete="new-password"
                 autoFocus
                 value={form.databasePassphrase}
-                placeholder="At least 12 characters"
+                placeholder={t("security.passphrasePlaceholder")}
                 onChange={(value) => update("databasePassphrase", value)}
               />
               <TextField
-                label="Confirm passphrase"
+                label={t("security.confirmPassphrase")}
                 name="database-passphrase-confirm"
                 type="password"
                 autoComplete="new-password"
                 value={form.databasePassphraseConfirm}
-                placeholder="Repeat passphrase"
+                placeholder={t("security.confirmPassphrasePlaceholder")}
                 hint={passphraseHint}
                 onChange={(value) =>
                   update("databasePassphraseConfirm", value)
                 }
               />
               <p className="m-0 text-xs leading-5 text-ink-2">
-                Sent only to the local daemon to unlock the database — never
-                stored in the UI.
+                {t("security.passphraseNote")}
               </p>
             </div>
             <CheckRow
@@ -101,21 +102,21 @@ export const SecurityStep = ({
               onCheckedChange={(checked) =>
                 update("recoveryAcknowledged", checked)
               }
-              label="I understand there is no passphrase recovery path."
-              description="If the passphrase is lost, the SQLCipher database cannot be opened."
+              label={t("security.recoveryAck")}
+              description={t("security.recoveryAckDescription")}
             />
             {touchIdAvailable && (
               <CheckRow
                 id="enable-touch-id"
                 checked={form.enableTouchId}
                 onCheckedChange={(checked) => update("enableTouchId", checked)}
-                label="Unlock with Touch ID"
-                description="Store the passphrase in the macOS Keychain so you can unlock with Touch ID instead of typing it. Remove it anytime in Settings."
+                label={t("security.touchId")}
+                description={t("security.touchIdDescription")}
               />
             )}
             <details className="rounded-lg border border-line bg-paper-2 p-3">
               <summary className="cursor-pointer text-sm font-medium text-ink marker:text-ink-3">
-                Existing backend credentials
+                {t("security.existingCredentials")}
               </summary>
               <div className="pt-3">
                 <CheckRow
@@ -124,8 +125,8 @@ export const SecurityStep = ({
                   onCheckedChange={(checked) =>
                     update("migrateCredentials", checked)
                   }
-                  label="Move credentials from backends.env into the encrypted DB."
-                  description="Useful when upgrading an existing CLI setup. New books can leave this checked safely."
+                  label={t("security.migrateCredentials")}
+                  description={t("security.migrateCredentialsDescription")}
                 />
               </div>
             </details>
@@ -137,8 +138,8 @@ export const SecurityStep = ({
             onCheckedChange={(checked) =>
               update("plaintextAcknowledged", checked)
             }
-            label="I understand plaintext mode is not for real wallet data."
-            description="Balances, addresses, tags, and backend metadata are readable by anything with disk access."
+            label={t("security.plaintextAck")}
+            description={t("security.plaintextAckDescription")}
           />
         )}
 
@@ -148,7 +149,7 @@ export const SecurityStep = ({
             className="w-full"
             disabled={!canCreateBooks || !canContinue}
           >
-            Continue
+            {t("common:actions.continue")}
           </Button>
         </OnboardingStepActions>
       </form>

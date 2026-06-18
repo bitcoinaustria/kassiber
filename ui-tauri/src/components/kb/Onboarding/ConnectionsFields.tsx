@@ -6,6 +6,7 @@ import {
   KeyRound,
   XCircle,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { useDaemonMutation } from "@/daemon/client";
@@ -39,6 +40,7 @@ interface ConnectionsFieldsProps {
  * Essentials step's "Sync connections" disclosure without duplicating logic.
  */
 export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
+  const { t } = useTranslation("onboarding");
   const [testState, setTestState] = useState<
     "idle" | "testing" | "ok" | "fail"
   >("idle");
@@ -85,7 +87,11 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
   const runElectrumTest = () => {
     if (endpointHint || !electrumUrl) {
       setTestState("fail");
-      setTestLog(`Validation failed\n${endpointHint ?? "Endpoint is required."}`);
+      setTestLog(
+        `${t("connections.validationFailed")}\n${
+          endpointHint ?? t("connections.endpointRequired")
+        }`,
+      );
       return;
     }
     setTestState("testing");
@@ -115,7 +121,7 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
       .catch((error) => {
         setTestState("fail");
         setTestLog(
-          error instanceof Error ? error.message : "Electrum test failed.",
+          error instanceof Error ? error.message : t("connections.testFailed"),
         );
       });
   };
@@ -125,8 +131,8 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
       <div className="space-y-3">
         <ChoiceCard
           active={form.backendSetupMode === "default"}
-          title="Use built-in public backends"
-          description="Start quickly with the bundled Explorer API, Electrum / Fulcrum, and Liquid endpoints. You can replace them later."
+          title={t("connections.default.title")}
+          description={t("connections.default.description")}
           onClick={() => {
             update("backendSetupMode", "default");
             update("backendKind", "electrum");
@@ -137,8 +143,8 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
         />
         <ChoiceCard
           active={customSelected}
-          title="Use a custom sync backend"
-          description="Point Kassiber at an Explorer API (Esplora/mempool), Electrum / Fulcrum, Bitcoin Core RPC, or Liquid endpoint."
+          title={t("connections.custom.title")}
+          description={t("connections.custom.description")}
           onClick={() => {
             update("backendSetupMode", "custom");
             if (
@@ -153,8 +159,8 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
         />
         <ChoiceCard
           active={skipSelected}
-          title="Skip connections for now"
-          description="Continue with manual imports only. Watch-only refresh can be configured from Settings later."
+          title={t("connections.skip.title")}
+          description={t("connections.skip.description")}
           tone="warning"
           onClick={() => {
             update("backendSetupMode", "skip");
@@ -166,32 +172,32 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
       {customSelected && (
         <div className="space-y-4 rounded-lg border border-line bg-paper-2 p-4">
           <SelectField
-            label="Sync protocol"
+            label={t("connections.protocolLabel")}
             value={form.backendKind}
             options={BACKEND_KINDS}
             optionLabels={BACKEND_KIND_LABELS}
-            description="Payment providers and file imports are configured later from Connections."
+            description={t("connections.protocolDescription")}
             onChange={(value) => {
               update("backendKind", value);
               resetTest();
             }}
           />
           <TextField
-            label="Display name"
+            label={t("connections.displayName")}
             name="backendName"
             value={form.backendName}
-            placeholder="home-node"
-            description="A short label shown in Settings and connection refresh screens."
+            placeholder={t("connections.displayNamePlaceholder")}
+            description={t("connections.displayNameDescription")}
             onChange={(value) => update("backendName", value)}
           />
           {electrumSelected ? (
             <>
               <div className="grid gap-3 sm:grid-cols-[1fr_130px]">
                 <TextField
-                  label="Host"
+                  label={t("connections.host")}
                   name="backendHost"
                   value={form.backendHost}
-                  placeholder="index.bitcoin-austria.at"
+                  placeholder={t("connections.hostPlaceholder")}
                   hint={endpointHint}
                   onChange={(value) => {
                     update("backendHost", value);
@@ -199,7 +205,7 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
                   }}
                 />
                 <TextField
-                  label="Port"
+                  label={t("connections.port")}
                   name="backendPort"
                   value={form.backendPort}
                   placeholder={
@@ -218,8 +224,8 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
                 id="backend-use-ssl"
                 checked={form.backendUseSsl}
                 onCheckedChange={updateElectrumSsl}
-                label="Use SSL"
-                description="Use TLS on the Electrum connection; common servers listen on 50002."
+                label={t("connections.useSsl")}
+                description={t("connections.useSslDescription")}
               />
               {form.backendUseSsl && (
                 <CheckRow
@@ -229,19 +235,19 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
                     update("backendTrustSsl", checked);
                     resetTest();
                   }}
-                  label="Trust self-signed certificate"
-                  description="Use only for a server you operate or have verified out of band."
+                  label={t("connections.trustSsl")}
+                  description={t("connections.trustSslDescription")}
                 />
               )}
               <TextField
-                label="Certificate"
+                label={t("connections.certificate")}
                 name="backendCertificate"
                 value={form.backendCertificate}
-                placeholder="Optional server certificate (.crt)"
+                placeholder={t("connections.certificatePlaceholder")}
                 description={
                   form.backendTrustSsl
-                    ? "Ignored while 'Trust self-signed certificate' is on."
-                    : "Leave empty to use the system certificate store."
+                    ? t("connections.certificateIgnored")
+                    : t("connections.certificateSystemStore")
                 }
                 disabled={form.backendTrustSsl}
                 onChange={(value) => {
@@ -256,26 +262,26 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
                   update("backendUseProxy", checked);
                   resetTest();
                 }}
-                label="Use proxy"
-                description="Optional Tor or SOCKS proxy for the Electrum connection."
+                label={t("connections.useProxy")}
+                description={t("connections.useProxyDescription")}
               />
               {form.backendUseProxy && (
                 <div className="grid gap-3 sm:grid-cols-[1fr_130px]">
                   <TextField
-                    label="Proxy host"
+                    label={t("connections.proxyHost")}
                     name="backendProxyHost"
                     value={form.backendProxyHost}
-                    placeholder="127.0.0.1"
+                    placeholder={t("connections.proxyHostPlaceholder")}
                     onChange={(value) => {
                       update("backendProxyHost", value);
                       resetTest();
                     }}
                   />
                   <TextField
-                    label="Port"
+                    label={t("connections.port")}
                     name="backendProxyPort"
                     value={form.backendProxyPort}
-                    placeholder="9050"
+                    placeholder={t("connections.proxyPortPlaceholder")}
                     onChange={(value) => {
                       update("backendProxyPort", value);
                       resetTest();
@@ -298,17 +304,19 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
                     ) : (
                       <CircleHelp className="size-4" />
                     )}
-                    {testState === "testing" ? "Testing" : "Test connection"}
+                    {testState === "testing"
+                      ? t("connections.testing")
+                      : t("connections.testConnection")}
                   </Button>
                   <span className="text-xs text-ink-2">
-                    Optional — check the endpoint is reachable.
+                    {t("connections.testHint")}
                   </span>
                 </div>
                 {(testState !== "idle" || testLog) && (
                   <textarea
                     readOnly
                     value={testLog}
-                    aria-label="Electrum test connection log"
+                    aria-label={t("connections.testLogLabel")}
                     className="min-h-28 w-full resize-none rounded-md border border-line bg-paper p-3 font-mono text-xs leading-5 text-ink"
                   />
                 )}
@@ -316,10 +324,10 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
             </>
           ) : (
             <TextField
-              label="Endpoint URL"
+              label={t("connections.endpointUrl")}
               name="backendUrl"
               value={form.backendUrl}
-              placeholder="https://... or ssl://..."
+              placeholder={t("connections.endpointUrlPlaceholder")}
               hint={endpointHint}
               description={backendEndpointDescription(form.backendKind)}
               onChange={(value) => {
@@ -330,11 +338,7 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
           )}
           <div className="flex items-start gap-3 rounded-lg border border-line bg-paper p-3 text-xs leading-5 text-ink-2">
             <KeyRound className="mt-0.5 size-4 shrink-0 text-ink" />
-            <p className="m-0">
-              Do not paste API tokens, RPC passwords, cookies, or bearer headers
-              here. Credentials should be added only after the encrypted
-              database is open.
-            </p>
+            <p className="m-0">{t("connections.credentialsWarning")}</p>
           </div>
         </div>
       )}
@@ -345,12 +349,10 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
             <AlertTriangle className="mt-0.5 size-5 shrink-0 text-accent" />
             <div>
               <p className="m-0 font-semibold text-ink">
-                Watch-only refresh will not be ready.
+                {t("connections.skipWarningTitle")}
               </p>
               <p className="m-0 mt-1 text-xs leading-5 text-ink-2">
-                You can still import files, but address discovery, wallet
-                refresh, and node-backed history remain disabled until a backend
-                is configured.
+                {t("connections.skipWarningBody")}
               </p>
             </div>
           </div>
@@ -360,8 +362,8 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
             onCheckedChange={(checked) =>
               update("skipBackendsAcknowledged", checked)
             }
-            label="I understand sync needs a backend later."
-            description="Settings can add Bitcoin or Liquid sync backends after onboarding."
+            label={t("connections.skipAck")}
+            description={t("connections.skipAckDescription")}
           />
         </div>
       )}

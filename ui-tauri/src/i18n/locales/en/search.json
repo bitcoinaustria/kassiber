@@ -1,0 +1,77 @@
+{
+  "page": {
+    "overview": {
+      "subtitle": "Portfolio, balance, activity"
+    },
+    "transactions": {
+      "subtitle": "Transaction rows and filters"
+    },
+    "connections": {
+      "subtitle": "Wallets, imports, backends, and sync"
+    },
+    "books": {
+      "title": "Books",
+      "subtitle": "Books, book-set overview, and tax settings"
+    },
+    "source-of-funds": {
+      "subtitle": "Wallet sources and local provenance summaries"
+    },
+    "journals": {
+      "subtitle": "Processed tax ledger"
+    },
+    "reports": {
+      "subtitle": "Capital gains and exports"
+    },
+    "exit-tax": {
+      "subtitle": "Wegzugsbesteuerung deemed-disposal estimate"
+    },
+    "quarantine": {
+      "subtitle": "Review ambiguous rows"
+    },
+    "swaps-transfers": {
+      "subtitle": "Review candidate swap and transfer pairings"
+    },
+    "settings": {
+      "subtitle": "Preferences, integrations, local data"
+    },
+    "logs": {
+      "subtitle": "Typed local log stream and redacted troubleshooting export"
+    },
+    "assistant": {
+      "subtitle": "Ask Kassiber"
+    }
+  },
+  "action": {
+    "process-journals": {
+      "title": "Process journals",
+      "subtitle": "Refresh local report-ready journal state"
+    },
+    "sync-wallets": {
+      "title": "Sync wallets",
+      "subtitle": "Open Connections to refresh watch-only sources"
+    },
+    "add-wallet": {
+      "title": "Add wallet",
+      "subtitle": "Open the wallet connection dialog"
+    },
+    "import-btcpay": {
+      "title": "Import BTCPay",
+      "subtitle": "Open BTCPay wallet-source setup"
+    },
+    "export-report": {
+      "title": "Export report",
+      "subtitle": "Open report export tools"
+    },
+    "open-logs": {
+      "title": "Open logs",
+      "subtitle": "Open redacted local troubleshooting logs"
+    },
+    "change-passphrase": {
+      "title": "Change passphrase",
+      "subtitle": "Open lock and encryption settings"
+    }
+  },
+  "settings": {
+    "groupPrefix": "Settings"
+  }
+}
