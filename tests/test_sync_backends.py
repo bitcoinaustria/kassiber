@@ -839,6 +839,63 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual([target["address_index"] for target in targets], [0, 1, 2, 3, 4])
         self.assertEqual(checked, [3, 4])
 
+    def test_first_sync_scans_full_gap_depth_following_used_addresses(self):
+        # A first sync (no stored checkpoint, highest_used=None) must walk the
+        # FULL active range, not a fixed shallow window: every used address
+        # resets the trailing-gap counter so discovery extends as deep as
+        # activity goes, stopping only after gap_limit consecutive unused. This
+        # pins the "first Refresh reaches the entire gap limit" trust property
+        # (the original Issue #1 complaint) so it cannot silently regress.
+        class FakeDescriptor:
+            is_wildcard = True
+
+        plan = DescriptorPlan(
+            chain="bitcoin",
+            network="bitcoin",
+            gap_limit=3,
+            descriptor_fingerprint="fp",
+            branches=(DescriptorBranch(0, "receive", FakeDescriptor()),),
+        )
+        used_indices = {0, 3, 6}
+
+        def fake_derive(plan, branch_index=None, start=0, end=0):
+            del plan
+            return [
+                DerivedTarget(
+                    chain="bitcoin",
+                    network="bitcoin",
+                    branch_index=branch_index,
+                    branch_label="receive",
+                    address_index=index,
+                    address=f"bc1q{index}",
+                    unconfidential_address=None,
+                    script_pubkey=f"{index:064x}",
+                    derivation_path=f"m/0/{index}",
+                    derivation_paths=(f"m/0/{index}",),
+                    key_origins=(),
+                )
+                for index in range(start, end)
+            ]
+
+        def target_used_batch(targets):
+            return [target["address_index"] in used_indices for target in targets]
+
+        with patch(
+            "kassiber.core.sync_backends.derive_descriptor_targets",
+            side_effect=fake_derive,
+        ):
+            targets = scan_descriptor_targets(
+                plan,
+                target_used_batch=target_used_batch,
+                scan_batch_size=1,
+                highest_used=None,  # first sync: derive from index 0
+            )
+
+        scanned = [target["address_index"] for target in targets]
+        # Used at 0/3/6 keep the walk alive past a naive shallow scan; it stops
+        # only after gap_limit(3) trailing unused (7, 8, 9), reaching index 9.
+        self.assertEqual(scanned, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+
     def test_electrum_call_raises_app_error_for_non_json_response(self):
         client = ElectrumClient({"name": "electrum", "url": "tcp://electrum.example:50001"})
         client.socket = _DummySocket()

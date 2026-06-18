@@ -218,6 +218,19 @@ def _pricing_needs_review(row: Mapping[str, Any]) -> bool:
     return _row_get(row, "pricing_quality") == pricing.QUALITY_COARSE_FALLBACK
 
 
+def _profile_requires_coarse_review(profile: Mapping[str, Any]) -> bool:
+    """Coarse (daily/monthly/yearly) pricing is accepted by default; events are
+    booked at the coarse spot price and flagged non-blockingly in the UI. Only a
+    profile that opts into ``require_coarse_review`` quarantines them for manual
+    pricing review (the previous always-on behavior)."""
+    if not hasattr(profile, "keys") or "require_coarse_review" not in profile.keys():
+        return False
+    value = profile["require_coarse_review"]
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
 def _pricing_review_detail(row: Mapping[str, Any], wallet_label: str, asset: str, direction: str) -> dict[str, Any]:
     return {
         "wallet": wallet_label,
@@ -400,7 +413,11 @@ def _collect_samourai_internal_transfers(
                         "label"
                     ]
                     break
-            if spot_price is not None and _pricing_needs_review(spot_price_row):
+            if (
+                spot_price is not None
+                and _pricing_needs_review(spot_price_row)
+                and _profile_requires_coarse_review(profile)
+            ):
                 quarantines.append(
                     build_tax_quarantine(
                         profile,
@@ -738,7 +755,12 @@ def normalize_tax_asset_inputs(
             # holdings / double-spendable). The transfer is deferred until the
             # fee is priced; the per-account gate quarantines any dependent
             # destination disposal gracefully in the meantime (no crash).
-            if fee > 0 and spot_price is not None and _pricing_needs_review(spot_price_row):
+            if (
+                fee > 0
+                and spot_price is not None
+                and _pricing_needs_review(spot_price_row)
+                and _profile_requires_coarse_review(profile)
+            ):
                 quarantines.append(
                     build_tax_quarantine(
                         profile,
@@ -818,7 +840,7 @@ def normalize_tax_asset_inputs(
             )
             continue
         if direction == "inbound":
-            if _pricing_needs_review(row):
+            if _pricing_needs_review(row) and _profile_requires_coarse_review(profile):
                 quarantines.append(
                     build_tax_quarantine(
                         profile,
@@ -846,7 +868,7 @@ def normalize_tax_asset_inputs(
                 continue
             fiat_value = _positive_fiat_value(row, amount * spot_price)
         elif direction == "outbound":
-            if _pricing_needs_review(row):
+            if _pricing_needs_review(row) and _profile_requires_coarse_review(profile):
                 quarantines.append(
                     build_tax_quarantine(
                         profile,

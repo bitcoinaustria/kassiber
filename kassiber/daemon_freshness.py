@@ -266,6 +266,15 @@ def _row_int(row: sqlite3.Row, key: str, default: int = 0) -> int:
     return int(value or default)
 
 
+def _profile_require_coarse_review(row: sqlite3.Row) -> bool:
+    try:
+        if "require_coarse_review" not in row.keys():
+            return False
+        return bool(row["require_coarse_review"])
+    except (IndexError, KeyError):
+        return False
+
+
 def _wallet_lookup_sql(wallet_ref: str | None = None) -> tuple[str, tuple[Any, ...]]:
     if wallet_ref:
         return (
@@ -1412,6 +1421,10 @@ def _maintenance_settings_payload(conn: sqlite3.Connection) -> dict[str, Any]:
             **policy.to_payload(),
             **_market_rate_provider_settings(conn, profile),
             "auto_sync_before_report_reads": policy.report_read_sync,
+            "require_coarse_review": _profile_require_coarse_review(profile),
+            "coarse_priced_count": core_rates.count_coarse_priced_transactions(
+                conn, profile["id"]
+            ),
             "setting_key": core_freshness.policy_setting_key(profile["id"]),
         },
         "freshness": snapshot,
@@ -1429,6 +1442,7 @@ def _maintenance_configure_payload(
             "background_enabled",
             "market_rate_provider",
             "report_read_sync",
+            "require_coarse_review",
             "source_classes",
         }
     )
@@ -1446,7 +1460,26 @@ def _maintenance_configure_payload(
             code="validation",
             retryable=False,
         )
-    payload = _freshness_configure_payload(conn, raw_args)
+    require_coarse_review = raw_args.get("require_coarse_review")
+    if require_coarse_review is not None:
+        if not isinstance(require_coarse_review, bool):
+            raise AppError(
+                "ui.maintenance.configure require_coarse_review must be a boolean",
+                code="validation",
+                details={"type": type(require_coarse_review).__name__},
+                retryable=False,
+            )
+        # Reuse update_profile so the change is journal-invalidated consistently.
+        from .core import accounts as core_accounts
+
+        core_accounts.update_profile(
+            conn,
+            profile["workspace_id"],
+            profile["id"],
+            {"require_coarse_review": require_coarse_review},
+        )
+    freshness_args = {k: v for k, v in raw_args.items() if k != "require_coarse_review"}
+    payload = _freshness_configure_payload(conn, freshness_args)
     return {**_maintenance_settings_payload(conn), "configured": payload["settings"]}
 
 

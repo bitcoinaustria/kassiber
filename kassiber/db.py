@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS profiles (
     tax_country TEXT NOT NULL DEFAULT 'generic',
     tax_long_term_days INTEGER NOT NULL DEFAULT 365,
     gains_algorithm TEXT NOT NULL DEFAULT 'FIFO',
+    require_coarse_review INTEGER NOT NULL DEFAULT 0,
     journal_input_version INTEGER NOT NULL DEFAULT 0,
     last_processed_input_version INTEGER NOT NULL DEFAULT 0,
     last_processed_at TEXT,
@@ -1272,6 +1273,7 @@ def ensure_schema_compat(conn):
     """
     ensure_column(conn, "profiles", "tax_country", f"TEXT NOT NULL DEFAULT '{DEFAULT_TAX_COUNTRY}'")
     ensure_column(conn, "profiles", "tax_long_term_days", f"INTEGER NOT NULL DEFAULT {DEFAULT_LONG_TERM_DAYS}")
+    ensure_column(conn, "profiles", "require_coarse_review", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "profiles", "journal_input_version", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "profiles", "last_processed_input_version", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "backends", "batch_size", "INTEGER")

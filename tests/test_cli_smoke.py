@@ -2140,6 +2140,10 @@ class CliSmokeTest(unittest.TestCase):
         # (later) lot.
         self._cli("profiles", "create", "--workspace", "Main",
                   "--fiat-currency", "USD", "--tax-country", "generic", "Basis")
+        # This scenario depends on the coarse acquisition being held for review
+        # (dropping it from the FIFO), so opt into coarse review for this book.
+        self._cli("profiles", "set", "--workspace", "Main", "--profile", "Basis",
+                  "--require-coarse-review")
         self._cli("wallets", "create", "--workspace", "Main",
                   "--profile", "Basis", "--label", "W", "--kind", "custom")
         self._cli("wallets", "import-csv", "--workspace", "Main", "--profile", "Basis",

@@ -212,6 +212,13 @@ def list_profiles(conn, workspace_ref=None):
     ]
 
 
+def _profile_require_coarse_review(profile) -> bool:
+    try:
+        return bool(profile["require_coarse_review"])
+    except (KeyError, IndexError):
+        return False
+
+
 def get_profile_details(conn, workspace_ref=None, profile_ref=None):
     workspace = resolve_workspace(conn, workspace_ref)
     profile = resolve_profile(conn, workspace["id"], profile_ref)
@@ -226,6 +233,7 @@ def get_profile_details(conn, workspace_ref=None, profile_ref=None):
         "tax_country": profile["tax_country"],
         "tax_long_term_days": profile["tax_long_term_days"],
         "gains_algorithm": profile["gains_algorithm"],
+        "require_coarse_review": _profile_require_coarse_review(profile),
         "last_processed_at": profile["last_processed_at"],
         "last_processed_tx_count": profile["last_processed_tx_count"],
         "created_at": profile["created_at"],
@@ -242,6 +250,13 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
     new_country = updates.get("tax_country")
     new_long_term = updates.get("tax_long_term_days")
     new_algo = updates.get("gains_algorithm")
+    new_coarse = updates.get("require_coarse_review")
+
+    try:
+        current_coarse = bool(profile["require_coarse_review"])
+    except (KeyError, IndexError):
+        current_coarse = False
+    merged_coarse = bool(new_coarse) if new_coarse is not None else current_coarse
 
     merged_fiat = new_fiat if new_fiat is not None else profile["fiat_currency"]
     merged_country = new_country if new_country is not None else profile["tax_country"]
@@ -279,12 +294,14 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
         or policy.tax_country != profile["tax_country"]
         or policy.long_term_days != profile["tax_long_term_days"]
         or normalized_algo != profile["gains_algorithm"]
+        or merged_coarse != current_coarse
     )
 
     conn.execute(
         """
         UPDATE profiles
-        SET label = ?, fiat_currency = ?, tax_country = ?, tax_long_term_days = ?, gains_algorithm = ?
+        SET label = ?, fiat_currency = ?, tax_country = ?, tax_long_term_days = ?,
+            gains_algorithm = ?, require_coarse_review = ?
         WHERE id = ?
         """,
         (
@@ -293,6 +310,7 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
             policy.tax_country,
             policy.long_term_days,
             normalized_algo,
+            1 if merged_coarse else 0,
             profile["id"],
         ),
     )

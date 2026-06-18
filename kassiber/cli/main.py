@@ -813,6 +813,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     profiles_set.add_argument("--tax-long-term-days", type=int)
     profiles_set.add_argument("--gains-algorithm", choices=list(RP2_ACCOUNTING_METHODS))
+    profiles_set.add_argument(
+        "--require-coarse-review",
+        dest="require_coarse_review",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Quarantine coarse (daily/monthly) priced events for manual review "
+        "instead of accepting them at the coarse spot price (default: accept).",
+    )
 
     accounts = sub.add_parser(
         "accounts",
@@ -2208,12 +2216,13 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 "tax_country": args.tax_country,
                 "tax_long_term_days": args.tax_long_term_days,
                 "gains_algorithm": args.gains_algorithm,
+                "require_coarse_review": args.require_coarse_review,
             }
             if all(v is None for v in updates.values()):
                 raise AppError(
                     "profiles set requires at least one field to update",
                     code="validation",
-                    hint="Pass one or more of --label, --fiat-currency, --tax-country, --tax-long-term-days, --gains-algorithm",
+                    hint="Pass one or more of --label, --fiat-currency, --tax-country, --tax-long-term-days, --gains-algorithm, --require-coarse-review",
                 )
             return emit(
                 args,
