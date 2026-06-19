@@ -285,30 +285,37 @@ def derive_ownership_transfers(
 def _inputs_are_single_source(
     inputs: Sequence[Mapping[str, Any]], index: Any, source_wallet_id: str
 ) -> bool:
-    """True only when every input resolves to ``source_wallet_id``.
+    """True only when the source wallet owns every input.
 
     A foreign/unresolvable input (payjoin/coinjoin, or coins we do not watch)
     or an input from a *different* owned wallet (a multi-wallet consolidation)
-    both make the recorded amount/fee unreliable for splitting. Require a clean
-    single owner.
+    makes the recorded amount/fee unreliable for splitting. An input is
+    acceptable only when ``source_wallet_id`` is among its owners; resolution is
+    set-based (not first-match) so a shared descriptor / reused address does not
+    make the verdict depend on index insertion order.
     """
     if not inputs:
         return False
     for entry in inputs:
-        owner = _owner_of_input(index, entry)
-        if owner is None or str(owner.wallet_id) != source_wallet_id:
+        owners = _input_owner_ids(index, entry)
+        if not owners or source_wallet_id not in owners:
             return False
     return True
 
 
-def _owner_of_input(index: Any, entry: Mapping[str, Any]):
+def _input_owner_ids(index: Any, entry: Mapping[str, Any]) -> set[str]:
+    """All owned-wallet ids for an input (outpoint inventory wins; else script).
+
+    The outpoint inventory is unambiguous (one wallet per UTXO); only the
+    script fallback can map to several wallets, and we return the full set so
+    callers can reason about ambiguity instead of an arbitrary first match.
+    """
     outpoint = entry.get("outpoint")
     if outpoint:
         match = index.by_outpoint.get(outpoint)
         if match is not None:
-            return match
-    matches = index.lookup_script(entry.get("script"))
-    return matches[0] if matches else None
+            return {str(match.wallet_id)}
+    return {str(match.wallet_id) for match in index.lookup_script(entry.get("script"))}
 
 
 def _parse_onchain_tx(raw_json: Any) -> Optional[dict[str, Any]]:
