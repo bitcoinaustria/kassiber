@@ -61,12 +61,8 @@ LIGHTNING_WALLET_KINDS = frozenset({"phoenix", "coreln", "lnd", "nwc"})
 # On-chain self-custody BTC wallet kinds — eligible ends of a base-layer <-> Liquid
 # peg. wasabi/samourai are on-chain BTC wallets too, so a peg from them must still
 # be recognized (else the cross-asset route guard hides legitimate candidates).
-# `custom` is the generic CSV/JSON kind most real wallets use; the asset pair
-# (BTC<->LBTC) is the real peg gate in default_kind_for, so admitting custom lets
-# a peg between two generic-CSV wallets surface for review instead of being
-# silently dropped as `manual`.
 CHAIN_WALLET_KINDS = frozenset(
-    {"descriptor", "xpub", "address", "wasabi", "samourai", "custom"}
+    {"descriptor", "xpub", "address", "wasabi", "samourai"}
 )
 
 DEFAULT_TIME_WINDOW_SECONDS = 24 * 60 * 60  # 24h

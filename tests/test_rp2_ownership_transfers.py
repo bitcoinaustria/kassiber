@@ -21,7 +21,6 @@ from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
 from kassiber.core.ownership import OwnedIndex, OwnedMatch
 from kassiber.core.sync_backends import address_to_scriptpubkey
 from kassiber.db import open_db
-from kassiber.msat import msat_to_btc
 
 
 NOW = "2026-01-01T00:00:00Z"
@@ -218,6 +217,54 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
         # Source fully spent (0.5 moved + 0.2 sold + 0.0001 fee == 0.7001 acquired).
         self.assertAlmostEqual(holdings.get("Cold", 0.0), 0.0, places=6)
 
+    def test_direct_payout_remainder_can_still_be_derived(self):
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        out = self._rows()[1]
+        direct_payouts = [
+            {
+                "id": "direct-payout-1",
+                "out_transaction_id": out["id"],
+                "kind": "direct-swap-payout",
+                "policy": "taxable",
+                "payout_asset": "BTC",
+                "payout_amount": 20_000_000_000,
+                "payout_occurred_at": "2026-01-01T00:01:00Z",
+                "payout_fiat_value": 8000,
+                "payout_external_id": "provider-payout",
+                "counterparty": "external-recipient",
+                "notes": "direct payout",
+                "swap_fee_msat": 0,
+                "swap_fee_kind": "combined",
+                "created_at": "2026-01-01T00:01:00Z",
+                "out_amount": 20_000_000_000,
+            }
+        ]
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=self._rows(),
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                direct_payout_records=direct_payouts,
+                owned_index=index,
+            )
+        )
+
+        self.assertEqual(state.quarantines, [])
+        entry_types = [entry["entry_type"] for entry in state.entries]
+        self.assertIn("transfer_in", entry_types)
+        self.assertIn("transfer_out", entry_types)
+        disposals = [entry for entry in state.entries if entry["entry_type"] == "disposal"]
+        self.assertEqual(len(disposals), 1)
+        self.assertAlmostEqual(float(disposals[0]["quantity"]), -0.2, places=6)
+        holdings = {
+            label: float(totals["quantity"])
+            for (_, label, _, _), totals in state.wallet_holdings.items()
+        }
+        self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.5, places=6)
+        self.assertAlmostEqual(holdings.get("Cold", 0.0), 0.0, places=6)
+
 
 class OwnershipDeriverAmbiguityTest(unittest.TestCase):
     """Ambiguous destination must not inflate holdings.
@@ -254,12 +301,86 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
                 owned_index=index,
             )
         )
+        self.assertEqual(
+            [q["reason"] for q in state.quarantines],
+            ["ownership_transfer_destination_ambiguous"],
+        )
+        entry_types = [entry["entry_type"] for entry in state.entries]
+        self.assertNotIn("disposal", entry_types)
+        self.assertNotIn("transfer_in", entry_types)
         holdings = {
             label: round(float(totals["quantity"]), 5)
             for (_, label, _, _), totals in state.wallet_holdings.items()
         }
         # B keeps exactly its two recorded 0.5 receipts = 1.0, never 1.5.
         self.assertAlmostEqual(holdings.get("Hot", 0.0), 1.0, places=6)
+
+    def test_duplicate_same_txid_destination_quarantines_source(self):
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        txid = "a" * 64
+        spend = json.dumps(
+            {
+                "txid": txid,
+                "vin": [{"txid": "pv", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}}],
+                "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 50_000_000}],
+            }
+        )
+        rows = [
+            _row("A", "inbound", BTC, external_id="acq"),
+            _row("A", "outbound", 50_000_000_000, external_id=txid, raw_json=spend),
+            _row("B", "inbound", 50_000_000_000, external_id=txid),
+            _row("B", "inbound", 50_000_000_000, external_id=txid),
+        ]
+        rows[-2]["id"] = "b-in-1"
+        rows[-1]["id"] = "b-in-2"
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                owned_index=index,
+            )
+        )
+        self.assertEqual(
+            [q["reason"] for q in state.quarantines],
+            ["ownership_transfer_destination_ambiguous"],
+        )
+        self.assertNotIn("transfer_in", [entry["entry_type"] for entry in state.entries])
+
+    def test_multi_source_sync_gap_quarantines_source(self):
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        index.add_script(SCRIPT_C, _match("C", "Savings"))
+        spend = json.dumps(
+            {
+                "txid": "multi-source",
+                "vin": [
+                    {"txid": "prev-a", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}},
+                    {"txid": "prev-b", "vout": 1, "prevout": {"scriptpubkey": SCRIPT_B}},
+                ],
+                "vout": [{"n": 0, "scriptpubkey": SCRIPT_C, "value": 80_000_000}],
+            }
+        )
+        rows = [
+            _row("A", "inbound", BTC, external_id="acq"),
+            _row("A", "outbound", 80_000_000_000, external_id="multi-source", raw_json=spend),
+        ]
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                owned_index=index,
+            )
+        )
+        self.assertEqual(
+            [q["reason"] for q in state.quarantines],
+            ["ownership_transfer_source_ambiguous"],
+        )
+        self.assertNotIn("disposal", [entry["entry_type"] for entry in state.entries])
 
 
 class OwnershipDeriverHandlerTest(unittest.TestCase):

@@ -1640,6 +1640,26 @@ def _direct_payout_synthetic_rows(
     return rows_for_engine, cross_asset_pairs, direct_payouts, quarantines, blocked_row_ids
 
 
+def _ownership_block_quarantines(
+    profile: Mapping[str, Any],
+    blocked_sources: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    quarantines: list[dict[str, Any]] = []
+    for blocked in blocked_sources:
+        row = blocked.get("row")
+        if row is None:
+            continue
+        quarantines.append(
+            build_tax_quarantine(
+                profile,
+                row,
+                str(blocked.get("reason") or "ownership_transfer_unresolved"),
+                dict(blocked.get("detail") or {}),
+            )
+        )
+    return quarantines
+
+
 def _pair_record_out_amount(record: Mapping[str, Any]) -> Any:
     if hasattr(record, "keys"):
         return record["out_amount"] if "out_amount" in record.keys() else None
@@ -1814,12 +1834,20 @@ class GenericRP2TaxEngine:
             for record in split_pair_records:
                 already_paired_ids.add(str(record["out_transaction_id"]))
                 already_paired_ids.add(str(record["in_transaction_id"]))
-            # Direct-payout sources are already decomposed by
-            # _direct_payout_synthetic_rows (the out row is reduced in place and
-            # carries the real txid in raw_json); keep the deriver from
-            # re-splitting them.
+            input_rows_by_id = {str(row["id"]): row for row in inputs.rows}
+            # Whole-row direct-payout sources are already decomposed by
+            # _direct_payout_synthetic_rows. Partial payouts leave a reduced
+            # real source row in rows_for_engine for the remainder, and that
+            # row must still be eligible for ownership-derived self-transfers.
             for record in inputs.direct_payout_records:
-                already_paired_ids.add(str(record["out_transaction_id"]))
+                out_id = str(record["out_transaction_id"])
+                out_row = input_rows_by_id.get(out_id)
+                if out_row is None:
+                    continue
+                reviewed_out_amount = _direct_payout_record_out_amount(record, out_row)
+                full_out_amount = int(_row_get(out_row, "amount") or 0)
+                if reviewed_out_amount >= full_out_amount:
+                    already_paired_ids.add(out_id)
             already_paired_ids |= {str(rid) for rid in blocked_payout_row_ids}
             ownership_result = derive_ownership_transfers(
                 rows_for_engine,
@@ -1827,6 +1855,21 @@ class GenericRP2TaxEngine:
                 wallet_refs_by_id=inputs.wallet_refs_by_id,
                 already_paired_ids=already_paired_ids,
             )
+            blocked_ownership_row_ids = {
+                str(_row_get(blocked.get("row"), "id"))
+                for blocked in ownership_result.blocked_sources
+            }
+            if blocked_ownership_row_ids:
+                quarantines.extend(
+                    _ownership_block_quarantines(
+                        self.profile, ownership_result.blocked_sources
+                    )
+                )
+                rows_for_engine = [
+                    row
+                    for row in rows_for_engine
+                    if str(row["id"]) not in blocked_ownership_row_ids
+                ]
             if ownership_result.dropped_out_ids or ownership_result.out_row_overrides:
                 rows_for_engine = [
                     ownership_result.out_row_overrides.get(str(row["id"]), row)

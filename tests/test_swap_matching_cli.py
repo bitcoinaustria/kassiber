@@ -373,17 +373,17 @@ class SwapMatchingCliTest(unittest.TestCase):
             "--tax-country", "at",
             "Swap",
         )
-        for wallet, csv_path in (
-            ("cold-onchain", out_csv),
-            ("hot-onchain", in_btc_csv),
-            ("liquid-vault", in_lbtc_csv),
+        for wallet, kind, csv_path in (
+            ("cold-onchain", "wasabi", out_csv),
+            ("hot-onchain", "custom", in_btc_csv),
+            ("liquid-vault", "wasabi", in_lbtc_csv),
         ):
             _run(
                 data_root, "wallets", "create",
                 "--workspace", "Main",
                 "--profile", "Swap",
                 "--label", wallet,
-                "--kind", "custom",
+                "--kind", kind,
             )
             _run(
                 data_root, "wallets", "import-csv",

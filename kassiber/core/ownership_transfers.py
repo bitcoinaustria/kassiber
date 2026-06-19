@@ -91,6 +91,7 @@ class OwnershipDeriveResult:
     synthetic_rows: list[dict[str, Any]] = field(default_factory=list)
     out_row_overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
     dropped_out_ids: set[str] = field(default_factory=set)
+    blocked_sources: list[dict[str, Any]] = field(default_factory=list)
 
 
 def derive_ownership_transfers(
@@ -147,8 +148,6 @@ def derive_ownership_transfers(
         if parsed is None:
             continue
         source_wallet_id = str(_get(row, "wallet_id"))
-        if not _inputs_are_single_source(parsed["inputs"], index, source_wallet_id):
-            continue
 
         # Aggregate owned outputs per destination wallet — sync records one
         # inbound row per wallet per tx, so a wallet receiving two outputs in
@@ -179,9 +178,33 @@ def derive_ownership_transfers(
             slot["value_sats"] += int(output["value_sats"])
             slot["min_n"] = min(slot["min_n"], output["n"])
         if ambiguous_output:
-            continue  # leave the whole tx on its existing disposal/quarantine path
+            _block_source(
+                result,
+                row,
+                "ownership_transfer_ambiguous_output",
+                {
+                    "required_for": "ownership_transfer_review",
+                    "wallet": _get(row, "wallet_label") or source_wallet_id,
+                    "asset": _get(row, "asset"),
+                    "external_id": _get(row, "external_id"),
+                },
+            )
+            continue
         if not by_dest:
             continue  # ordinary outbound payment — leave on the disposal path
+        if not _inputs_are_single_source(parsed["inputs"], index, source_wallet_id):
+            _block_source(
+                result,
+                row,
+                "ownership_transfer_source_ambiguous",
+                {
+                    "required_for": "ownership_transfer_review",
+                    "wallet": _get(row, "wallet_label") or source_wallet_id,
+                    "asset": _get(row, "asset"),
+                    "external_id": _get(row, "external_id"),
+                },
+            )
+            continue
 
         source_amount_msat = int(_get(row, "amount") or 0)
         legs_value_msat = sum(slot["value_sats"] * SATS_TO_MSAT for slot in by_dest.values())
@@ -189,14 +212,29 @@ def derive_ownership_transfers(
         # mismatch means the parsed graph and the recorded amount disagree
         # (re-org/RBF stale json, odd sync) — decline rather than guess.
         if legs_value_msat > source_amount_msat:
+            _block_source(
+                result,
+                row,
+                "ownership_transfer_amount_mismatch",
+                {
+                    "required_for": "ownership_transfer_review",
+                    "wallet": _get(row, "wallet_label") or source_wallet_id,
+                    "asset": _get(row, "asset"),
+                    "external_id": _get(row, "external_id"),
+                    "row_amount_msat": source_amount_msat,
+                    "owned_outputs_msat": legs_value_msat,
+                },
+            )
             continue
 
-        txid = str(_get(row, "external_id") or source_id)
+        txid = str(parsed.get("txid") or _get(row, "external_id") or source_id)
         source_fee_msat = int(_get(row, "fee") or 0)
         legs = sorted(by_dest.items(), key=lambda item: (item[1]["min_n"], item[0]))
         leg_pairs: list[dict[str, Any]] = []
         leg_synthetic_rows: list[dict[str, Any]] = []
         ok = True
+        decline_reason: Optional[str] = None
+        decline_detail: dict[str, Any] = {}
         for position, (dest_wallet_id, slot) in enumerate(legs):
             leg_msat = slot["value_sats"] * SATS_TO_MSAT
             if leg_msat <= 0:
@@ -229,6 +267,15 @@ def derive_ownership_transfers(
                 # risk cannibalizing an unrelated receipt. Leave the whole tx on
                 # its existing disposal/quarantine path instead of guessing.
                 ok = False
+                decline_reason = "ownership_transfer_destination_ambiguous"
+                decline_detail = {
+                    "required_for": "ownership_transfer_review",
+                    "wallet": _get(row, "wallet_label") or source_wallet_id,
+                    "destination_wallet_id": dest_wallet_id,
+                    "asset": _get(row, "asset"),
+                    "external_id": _get(row, "external_id"),
+                    "leg_amount_msat": leg_msat,
+                }
                 break
             if decision == "reuse":
                 consumed_in_ids.add(str(_get(in_row, "id")))
@@ -238,6 +285,14 @@ def derive_ownership_transfers(
                     # No ref for the destination wallet — cannot book the MOVE
                     # target safely; leave the whole tx to existing handling.
                     ok = False
+                    decline_reason = "ownership_transfer_destination_missing_ref"
+                    decline_detail = {
+                        "required_for": "ownership_transfer_review",
+                        "wallet": _get(row, "wallet_label") or source_wallet_id,
+                        "destination_wallet_id": dest_wallet_id,
+                        "asset": _get(row, "asset"),
+                        "external_id": _get(row, "external_id"),
+                    }
                     break
                 in_row = _clone_row(
                     row,
@@ -258,6 +313,8 @@ def derive_ownership_transfers(
             # Roll back any inbound rows we tentatively consumed for this tx.
             for pair in leg_pairs:
                 consumed_in_ids.discard(str(_get(pair["in"], "id")))
+            if decline_reason is not None:
+                _block_source(result, row, decline_reason, decline_detail)
             continue
 
         result.derived_pairs.extend(leg_pairs)
@@ -363,10 +420,14 @@ def _parse_onchain_tx(raw_json: Any) -> Optional[dict[str, Any]]:
             value_sats = int(value)
         except (TypeError, ValueError):
             return None
+        try:
+            output_index = int(entry.get("n", position))
+        except (TypeError, ValueError):
+            output_index = position
         outputs.append(
-            {"n": int(entry.get("n", position)), "script": script, "value_sats": value_sats}
+            {"n": output_index, "script": script, "value_sats": value_sats}
         )
-    return {"inputs": inputs, "outputs": outputs}
+    return {"txid": raw.get("txid"), "inputs": inputs, "outputs": outputs}
 
 
 def _resolve_destination_inbound(
@@ -428,17 +489,17 @@ def _resolve_destination_inbound(
 
     exact = [row for row in available if int(_get(row, "amount") or 0) == leg_msat]
     same_txid = [row for row in exact if str(_get(row, "external_id") or "") == txid]
-    if same_txid:
+    if len(same_txid) == 1:
         return ("reuse", same_txid[0])
+    if len(same_txid) >= 2:
+        return ("decline", None)
 
     reusable = [
         row
         for row in exact
         if not _different_onchain_tx(row) and _within_window(row)
     ]
-    if len(reusable) == 1:
-        return ("reuse", reusable[0])
-    if len(reusable) >= 2:
+    if reusable:
         return ("decline", None)  # ambiguous equal-value matches — never fabricate
 
     # No exact reuse. Synthesizing is safe only when nothing else in the
@@ -464,6 +525,17 @@ def _looks_like_txid(value: Any) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _block_source(
+    result: OwnershipDeriveResult,
+    row: Mapping[str, Any],
+    reason: str,
+    detail: Mapping[str, Any],
+) -> None:
+    result.blocked_sources.append(
+        {"row": row, "reason": reason, "detail": dict(detail)}
+    )
 
 
 def _clone_row(

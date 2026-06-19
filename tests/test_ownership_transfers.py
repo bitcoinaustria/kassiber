@@ -116,10 +116,11 @@ class OwnershipDeriverTests(unittest.TestCase):
             already_paired_ids=already or set(),
         )
 
-    def test_one_to_one_mismatched_txid_pairs_existing_row(self):
+    def test_one_to_one_non_txid_candidate_blocks_for_review(self):
         # A -> B, both rows recorded but with different external_ids (CSV import).
-        # detect_intra_transfers misses this; the deriver proves it by ownership
-        # and pairs the existing inbound row (matched on exact value).
+        # Without shared txid evidence, an exact provider id could be either the
+        # real leg or an unrelated same-amount receipt. Block the source for
+        # review instead of cannibalizing or duplicating the inbound.
         out = _outbound(
             row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=1000,
             txid="real-txid", input_scripts=[SCRIPT["A"]],
@@ -128,12 +129,11 @@ class OwnershipDeriverTests(unittest.TestCase):
         b_in = _inbound(row_id="b-in", wallet_id="B", amount_sats=50_000_000,
                         txid="provider-xyz")
         result = self._run([out, b_in], {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")}, _refs("B"))
-        self.assertEqual(len(result.derived_pairs), 1)
-        pair = result.derived_pairs[0]
-        self.assertEqual(pair["in"]["id"], "b-in")  # real row reused, not synthesized
-        self.assertEqual(pair["out"]["amount"], pair["in"]["amount"])
-        self.assertEqual(result.dropped_out_ids, {"a-out"})
-        self.assertEqual(result.out_row_overrides, {})
+        self.assertEqual(result.derived_pairs, [])
+        self.assertEqual(
+            [item["reason"] for item in result.blocked_sources],
+            ["ownership_transfer_destination_ambiguous"],
+        )
 
     def test_one_to_one_sync_gap_synthesizes_inbound(self):
         # Destination B recorded NO row (never synced). The deriver synthesizes
@@ -164,6 +164,10 @@ class OwnershipDeriverTests(unittest.TestCase):
         result = self._run([out], {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")}, _refs("A"))
         self.assertEqual(result.derived_pairs, [])
         self.assertEqual(result.dropped_out_ids, set())
+        self.assertEqual(
+            [item["reason"] for item in result.blocked_sources],
+            ["ownership_transfer_destination_missing_ref"],
+        )
 
     def test_fanout_one_to_two_emits_balanced_pairs(self):
         # One spend to two owned wallets (1->N). detect_intra skips it and the
@@ -219,6 +223,10 @@ class OwnershipDeriverTests(unittest.TestCase):
             _refs("A", "B", "C"),
         )
         self.assertEqual(result.derived_pairs, [])
+        self.assertEqual(
+            [item["reason"] for item in result.blocked_sources],
+            ["ownership_transfer_source_ambiguous"],
+        )
 
     def test_change_and_external_only_not_derived(self):
         # Change back to self + a payment to an external recipient, no owned
@@ -260,10 +268,9 @@ class OwnershipDeriverTests(unittest.TestCase):
         self.assertEqual(total_out, (70_000_000 + 1000) * SATS)
 
     def test_unrelated_equal_value_deposit_not_cannibalized(self):
-        # B has the genuine self-transfer leg (CSV provider id) AND an unrelated
-        # deposit of the same value carrying a DIFFERENT real on-chain txid. The
-        # deriver must reuse the genuine row, never cannibalize the unrelated one
-        # (which would destroy that acquisition's basis).
+        # B has a possible self-transfer leg (CSV provider id) AND an unrelated
+        # same-value deposit carrying a DIFFERENT real on-chain txid. The deriver
+        # must not consume the provider-id row without explicit txid evidence.
         out = _outbound(
             row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=1000,
             txid="real-txid", input_scripts=[SCRIPT["A"]],
@@ -275,8 +282,11 @@ class OwnershipDeriverTests(unittest.TestCase):
                              txid="a" * 64)  # a different real on-chain txid
         result = self._run([out, legit, unrelated],
                            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")}, _refs("B"))
-        self.assertEqual(len(result.derived_pairs), 1)
-        self.assertEqual(result.derived_pairs[0]["in"]["id"], "b-legit")
+        self.assertEqual(result.derived_pairs, [])
+        self.assertEqual(
+            [item["reason"] for item in result.blocked_sources],
+            ["ownership_transfer_destination_ambiguous"],
+        )
 
     def test_ambiguous_equal_value_candidates_declined(self):
         # Two same-value B inbounds, both non-txid ids in window -> ambiguous.
@@ -297,6 +307,29 @@ class OwnershipDeriverTests(unittest.TestCase):
         self.assertEqual(result.synthetic_rows, [])
         self.assertEqual(result.dropped_out_ids, set())
         self.assertEqual(result.out_row_overrides, {})
+        self.assertEqual(
+            [item["reason"] for item in result.blocked_sources],
+            ["ownership_transfer_destination_ambiguous"],
+        )
+
+    def test_duplicate_same_txid_candidates_declined(self):
+        # Even shared txid evidence is ambiguous if the destination has duplicate
+        # exact rows for the same spend.
+        txid = "a" * 64
+        out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=1000,
+            txid=txid, input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000)],
+        )
+        c1 = _inbound(row_id="b-1", wallet_id="B", amount_sats=50_000_000, txid=txid)
+        c2 = _inbound(row_id="b-2", wallet_id="B", amount_sats=50_000_000, txid=txid)
+        result = self._run([out, c1, c2],
+                           {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")}, _refs("B"))
+        self.assertEqual(result.derived_pairs, [])
+        self.assertEqual(
+            [item["reason"] for item in result.blocked_sources],
+            ["ownership_transfer_destination_ambiguous"],
+        )
 
     def test_near_value_candidate_blocks_synthesize(self):
         # B recorded the genuine leg via CSV but the amount is off by a sat
@@ -311,6 +344,10 @@ class OwnershipDeriverTests(unittest.TestCase):
         result = self._run([out, off],
                            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")}, _refs("B"))
         self.assertEqual(result.derived_pairs, [])
+        self.assertEqual(
+            [item["reason"] for item in result.blocked_sources],
+            ["ownership_transfer_destination_ambiguous"],
+        )
 
     def test_different_txid_deposit_does_not_block_synthesize(self):
         # B has a same-value deposit from a DIFFERENT real on-chain tx; the leg
@@ -353,6 +390,21 @@ class OwnershipDeriverTests(unittest.TestCase):
         result = self._run([out], {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")}, _refs("B"))
         self.assertEqual(result.derived_pairs, [])
 
+    def test_invalid_output_index_falls_back_to_position(self):
+        # Imported raw JSON with a malformed vout.n should not crash journal
+        # processing; output order is enough to mint stable synthetic ids.
+        out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=1000,
+            txid="real-txid", input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000)],
+        )
+        payload = json.loads(out["raw_json"])
+        payload["vout"][0]["n"] = "bad"
+        out["raw_json"] = json.dumps(payload)
+        result = self._run([out], {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")}, _refs("B"))
+        self.assertEqual(len(result.derived_pairs), 1)
+        self.assertIn("owned-derive:real-txid:out:0", result.derived_pairs[0]["out"]["id"])
+
     def test_cross_asset_peg_to_unowned_federation_not_derived(self):
         # BTC peg-in: the output pays a Liquid federation address we do not own,
         # so it is never an owned leg. Pegs stay on the heuristic + review path.
@@ -393,6 +445,10 @@ class OwnershipDeriverTests(unittest.TestCase):
         )
         result = self._run([out], {SCRIPT["B"]: ("B", "B")}, _refs("B"))
         self.assertEqual(result.derived_pairs, [])
+        self.assertEqual(
+            [item["reason"] for item in result.blocked_sources],
+            ["ownership_transfer_source_ambiguous"],
+        )
 
     def test_output_owned_by_source_and_other_is_change_not_leg(self):
         # A script owned by BOTH the source wallet and another wallet is change
@@ -429,6 +485,10 @@ class OwnershipDeriverTests(unittest.TestCase):
             [out], index=index, wallet_refs_by_id=_refs("B", "C"), already_paired_ids=set()
         )
         self.assertEqual(result.derived_pairs, [])
+        self.assertEqual(
+            [item["reason"] for item in result.blocked_sources],
+            ["ownership_transfer_ambiguous_output"],
+        )
 
     def test_synthetic_prefix_inbound_not_reused(self):
         # A synthetic inbound minted by another stage (direct-payout target leg)
