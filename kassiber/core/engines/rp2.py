@@ -17,6 +17,7 @@ from ...msat import btc_to_msat, dec, msat_to_btc
 from ...tax_policy import build_tax_policy
 from ...transfers import apply_manual_pairs, detect_intra_transfers
 from .. import pricing
+from ..ownership_transfers import derive_ownership_transfers
 from ..austrian import (
     AT_SWAP_QUARANTINE_REASON,
     REGIME_NEU,
@@ -1765,6 +1766,14 @@ class GenericRP2TaxEngine:
             inputs.direct_payout_records,
         )
         wallet_labels = {row["wallet_label"] for row in rows_for_engine}
+        # The ownership deriver can route a MOVE into a wallet that recorded no
+        # rows (sync gap); declare every profile wallet as an RP2 exchange so the
+        # synthesized destination leg lands on a known account.
+        wallet_labels |= {
+            ref["label"]
+            for ref in inputs.wallet_refs_by_id.values()
+            if ref.get("label")
+        }
         assets = {row["asset"] for row in rows_for_engine}
         entries: list[dict[str, Any]] = []
         quarantines: list[dict[str, Any]] = list(payout_quarantines)
@@ -1786,12 +1795,47 @@ class GenericRP2TaxEngine:
                 rows_for_engine,
                 inputs.manual_pair_records,
             )
-            auto_pairs, _ = detect_intra_transfers(rows_for_engine)
+            auto_pairs, auto_matched_ids = detect_intra_transfers(rows_for_engine)
+            # Address-ownership deriver: prove self-transfers from the on-chain
+            # graph (output paid an address owned by another of my wallets), for
+            # the cases same-txid row matching misses — sync-gap destinations,
+            # mismatched txids, and 1->N fan-outs. Supplements (does not replace)
+            # detect_intra_transfers, which still covers same-txid rows the
+            # deriver can't read (CSV imports with no transaction JSON).
+            already_paired_ids = set(auto_matched_ids)
+            for record in split_pair_records:
+                already_paired_ids.add(str(record["out_transaction_id"]))
+                already_paired_ids.add(str(record["in_transaction_id"]))
+            # Direct-payout sources are already decomposed by
+            # _direct_payout_synthetic_rows (the out row is reduced in place and
+            # carries the real txid in raw_json); keep the deriver from
+            # re-splitting them.
+            for record in inputs.direct_payout_records:
+                already_paired_ids.add(str(record["out_transaction_id"]))
+            already_paired_ids |= {str(rid) for rid in blocked_payout_row_ids}
+            ownership_result = derive_ownership_transfers(
+                rows_for_engine,
+                index=inputs.owned_index,
+                wallet_refs_by_id=inputs.wallet_refs_by_id,
+                already_paired_ids=already_paired_ids,
+            )
+            if ownership_result.dropped_out_ids or ownership_result.out_row_overrides:
+                rows_for_engine = [
+                    ownership_result.out_row_overrides.get(str(row["id"]), row)
+                    for row in rows_for_engine
+                    if str(row["id"]) not in ownership_result.dropped_out_ids
+                ]
+            if ownership_result.synthetic_rows:
+                rows_for_engine = sorted(
+                    list(rows_for_engine) + ownership_result.synthetic_rows,
+                    key=_transaction_row_sort_key,
+                )
             all_pairs, manual_cross_asset_pairs = apply_manual_pairs(
                 rows_for_engine,
                 auto_pairs,
                 split_pair_records,
             )
+            all_pairs = all_pairs + ownership_result.derived_pairs
             # The engine carries the synthetic split leg (so it can mark the
             # cross-asset swap-out without touching the self-transfer remainder),
             # but the result/audit should reference the real out tx — map it back.

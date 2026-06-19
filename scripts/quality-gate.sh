@@ -54,6 +54,13 @@ run py -m unittest tests.test_rates_kraken_csv -v
 run py -m unittest tests.test_review_regressions -v
 run py -m unittest tests.test_exit_tax -v
 run py -m unittest tests.test_ownership -v
+run py -m unittest tests.test_ownership_transfers -v
+run py -m unittest tests.test_rp2_ownership_transfers -v
+run py -m unittest tests.test_transfer_matching -v
+run py -m unittest tests.test_swap_matching_cli -v
+run py -m unittest tests.test_swap_rules -v
+run py -m unittest tests.test_schema_swap_matching -v
+run py -m unittest tests.test_daemon_swap_matching -v
 run py -m unittest tests.test_sync_backends -v
 run py -m unittest tests.test_sync_backends_legs -v
 run py -m unittest tests.test_sync_htlc_enrichment -v

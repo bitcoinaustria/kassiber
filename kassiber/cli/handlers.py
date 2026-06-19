@@ -3142,22 +3142,53 @@ def build_ledger_state(conn, profile):
     ).fetchall()
     tax_engine = build_tax_engine(profile)
     rates = latest_rates_for_profile(conn, profile["id"])
+    # Build refs for EVERY profile wallet, not just wallets that have rows: the
+    # ownership deriver can route a self-transfer into a wallet that recorded no
+    # inbound row (sync gap), and the intra path resolves the destination ref by
+    # wallet_id — a rowless destination would otherwise KeyError.
     wallet_refs_by_id = {}
-    for row in rows:
-        wallet_config = json.loads(row["config_json"] or "{}")
-        wallet_refs_by_id[row["wallet_id"]] = {
-            "id": row["wallet_id"],
-            "label": row["wallet_label"],
-            "wallet_account_id": row["wallet_account_id"],
-            "account_code": row["account_code"],
-            "account_label": row["account_label"],
+    for wallet in conn.execute(
+        """
+        SELECT
+            w.id AS id,
+            w.label AS label,
+            w.account_id AS wallet_account_id,
+            COALESCE(a.code, 'treasury') AS account_code,
+            COALESCE(a.label, 'Treasury') AS account_label
+        FROM wallets w
+        LEFT JOIN accounts a ON a.id = w.account_id
+        WHERE w.profile_id = ?
+        """,
+        (profile["id"],),
+    ).fetchall():
+        wallet_refs_by_id[wallet["id"]] = {
+            "id": wallet["id"],
+            "label": wallet["label"],
+            "wallet_account_id": wallet["wallet_account_id"],
+            "account_code": wallet["account_code"],
+            "account_label": wallet["account_label"],
         }
+    # The address-ownership index is only useful (and only worth its descriptor
+    # derivation cost) when some on-chain outbound carries full transaction JSON
+    # to read outputs from. Skip the build entirely for pure CSV / Lightning
+    # profiles.
+    owned_index = None
+    has_onchain_outbound = any(
+        row["direction"] == "outbound" and (row["raw_json"] or "").find('"vout"') != -1
+        for row in rows
+    )
+    if has_onchain_outbound:
+        index_wallets = core_ownership.load_profile_wallets(conn, profile["id"])
+        owned_index, _ownership_warnings = core_ownership.build_owned_index(
+            conn, profile["id"], index_wallets
+        )
     engine_state = tax_engine.build_ledger_state(
         TaxEngineLedgerInputs(
             rows=rows,
             wallet_refs_by_id=wallet_refs_by_id,
             manual_pair_records=manual_pair_records,
             direct_payout_records=direct_payout_records,
+            owned_index=owned_index,
         )
     )
     return {
