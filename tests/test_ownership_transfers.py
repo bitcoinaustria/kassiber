@@ -278,9 +278,12 @@ class OwnershipDeriverTests(unittest.TestCase):
         self.assertEqual(len(result.derived_pairs), 1)
         self.assertEqual(result.derived_pairs[0]["in"]["id"], "b-legit")
 
-    def test_ambiguous_equal_value_candidates_synthesize(self):
-        # Two same-value B inbounds, both non-txid ids in window -> ambiguous, so
-        # the deriver synthesizes rather than guessing which one to consume.
+    def test_ambiguous_equal_value_candidates_declined(self):
+        # Two same-value B inbounds, both non-txid ids in window -> ambiguous.
+        # The deriver must DECLINE the whole tx: synthesizing would fabricate a
+        # duplicate transfer_in on top of the genuine recorded leg (holdings
+        # inflation); reusing would cannibalize an unrelated deposit. Leave the
+        # source on its existing path.
         out = _outbound(
             row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=1000,
             txid="real-txid", input_scripts=[SCRIPT["A"]],
@@ -289,6 +292,37 @@ class OwnershipDeriverTests(unittest.TestCase):
         c1 = _inbound(row_id="b-1", wallet_id="B", amount_sats=50_000_000, txid="prov-1")
         c2 = _inbound(row_id="b-2", wallet_id="B", amount_sats=50_000_000, txid="prov-2")
         result = self._run([out, c1, c2],
+                           {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")}, _refs("B"))
+        self.assertEqual(result.derived_pairs, [])
+        self.assertEqual(result.synthetic_rows, [])
+        self.assertEqual(result.dropped_out_ids, set())
+        self.assertEqual(result.out_row_overrides, {})
+
+    def test_near_value_candidate_blocks_synthesize(self):
+        # B recorded the genuine leg via CSV but the amount is off by a sat
+        # (rounding / fee-on-receive), so there is no exact match. Synthesizing
+        # would duplicate that near row -> decline instead.
+        out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=1000,
+            txid="real-txid", input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000)],
+        )
+        off = _inbound(row_id="b-off", wallet_id="B", amount_sats=49_999_999, txid="prov-genuine")
+        result = self._run([out, off],
+                           {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")}, _refs("B"))
+        self.assertEqual(result.derived_pairs, [])
+
+    def test_different_txid_deposit_does_not_block_synthesize(self):
+        # B has a same-value deposit from a DIFFERENT real on-chain tx; the leg
+        # from THIS tx was never recorded (sync gap). That separate receipt is
+        # provably not this leg, so synthesize the leg and keep the deposit.
+        out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=1000,
+            txid="real-txid", input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000)],
+        )
+        other = _inbound(row_id="b-other", wallet_id="B", amount_sats=50_000_000, txid="b" * 64)
+        result = self._run([out, other],
                            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")}, _refs("B"))
         self.assertEqual(len(result.derived_pairs), 1)
         self.assertTrue(str(result.derived_pairs[0]["in"]["id"]).startswith("owned-derive:"))

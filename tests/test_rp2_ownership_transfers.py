@@ -219,6 +219,49 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
         self.assertAlmostEqual(holdings.get("Cold", 0.0), 0.0, places=6)
 
 
+class OwnershipDeriverAmbiguityTest(unittest.TestCase):
+    """Ambiguous destination must not inflate holdings.
+
+    When the destination has two equal-value inbounds (the genuine self-transfer
+    leg recorded by a CSV import + an unrelated deposit of the same amount), the
+    deriver must decline rather than fabricate a duplicate transfer_in. On the
+    buggy code this booked the leg twice (Hot = 1.5 instead of 1.0) — silent
+    holdings inflation and understated future gains.
+    """
+
+    def test_ambiguous_destination_does_not_inflate_holdings(self):
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        spend = json.dumps(
+            {
+                "txid": "real-T",
+                "vin": [{"txid": "pv", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}}],
+                "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 50_000_000}],
+            }
+        )
+        rows = [
+            _row("A", "inbound", 70_000_000_000, external_id="acq"),
+            _row("A", "outbound", 50_000_000_000, external_id="real-T", raw_json=spend),
+            _row("B", "inbound", 50_000_000_000, external_id="prov-genuine"),
+            _row("B", "inbound", 50_000_000_000, external_id="prov-other"),
+        ]
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                owned_index=index,
+            )
+        )
+        holdings = {
+            label: round(float(totals["quantity"]), 5)
+            for (_, label, _, _), totals in state.wallet_holdings.items()
+        }
+        # B keeps exactly its two recorded 0.5 receipts = 1.0, never 1.5.
+        self.assertAlmostEqual(holdings.get("Hot", 0.0), 1.0, places=6)
+
+
 class OwnershipDeriverHandlerTest(unittest.TestCase):
     def _seed(self, conn):
         conn.execute(

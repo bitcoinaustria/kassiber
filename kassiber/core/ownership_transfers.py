@@ -195,7 +195,7 @@ def derive_ownership_transfers(
                 kind="self_transfer_out",
                 journal_transaction_id=source_id,
             )
-            in_row = _find_real_inbound(
+            decision, in_row = _resolve_destination_inbound(
                 inbound_by_wallet.get(dest_wallet_id, ()),
                 leg_msat,
                 txid,
@@ -204,7 +204,18 @@ def derive_ownership_transfers(
                 already_paired_ids,
                 asset=_get(row, "asset"),
             )
-            if in_row is None:
+            if decision == "decline":
+                # The destination has an ambiguous match (>=2 equal-value
+                # candidates, or a near non-matching inbound that might be this
+                # very leg recorded by a CSV import). Synthesizing would risk a
+                # duplicate inbound (silent holdings inflation); reusing would
+                # risk cannibalizing an unrelated receipt. Leave the whole tx on
+                # its existing disposal/quarantine path instead of guessing.
+                ok = False
+                break
+            if decision == "reuse":
+                consumed_in_ids.add(str(_get(in_row, "id")))
+            else:  # "synthesize" — the destination recorded no related inbound
                 dest_ref = wallet_refs_by_id.get(dest_wallet_id)
                 if dest_ref is None:
                     # No ref for the destination wallet — cannot book the MOVE
@@ -224,8 +235,6 @@ def derive_ownership_transfers(
                     wallet_ref=dest_ref,
                 )
                 leg_synthetic_rows.append(in_row)
-            else:
-                consumed_in_ids.add(str(_get(in_row, "id")))
             leg_pairs.append({"out": out_leg, "in": in_row, "source": "ownership_derived"})
             leg_synthetic_rows.append(out_leg)
         if not ok or not leg_pairs:
@@ -336,7 +345,7 @@ def _parse_onchain_tx(raw_json: Any) -> Optional[dict[str, Any]]:
     return {"inputs": inputs, "outputs": outputs}
 
 
-def _find_real_inbound(
+def _resolve_destination_inbound(
     candidates: Sequence[Mapping[str, Any]],
     leg_msat: int,
     txid: str,
@@ -345,52 +354,81 @@ def _find_real_inbound(
     already_paired_ids: set[str],
     *,
     asset: Any,
-) -> Optional[Mapping[str, Any]]:
-    """Return the destination wallet's real inbound row for this leg, if any.
+) -> tuple[str, Optional[Mapping[str, Any]]]:
+    """Decide how to represent one destination leg.
 
-    Candidates are the destination wallet's inbound rows of the same asset and
-    exact value (integer msat — exact for synced rows) that are not already
-    paired or consumed by an earlier leg.
+    Returns ``("reuse", row)``, ``("synthesize", None)``, or
+    ``("decline", None)``. The caller reuses the row, synthesizes a fresh
+    inbound, or abandons the whole derivation respectively.
 
-    Reuse rules, ordered:
+    The distinction that matters for correctness is *synthesize vs decline*:
+    fabricating an inbound is only safe when the destination recorded **no**
+    related inbound near the spend. If it did, synthesizing would double-count
+    (the synthetic ``transfer_in`` plus the still-present real row); reusing an
+    ambiguous match would instead cannibalize what may be an unrelated receipt.
+    Either way, when we cannot be confident, we decline and leave the source on
+    its existing disposal/quarantine path (status quo, surfaces for review).
 
-    1. A row sharing this spend's on-chain txid is unambiguously this leg.
-    2. Otherwise reuse a row only when it does *not* provably belong to a
-       different on-chain transaction (a real 64-hex txid that isn't this
-       spend), sits within the reuse time window, and is the *only* such
-       candidate. A second same-value candidate makes the match ambiguous, so
-       we synthesize the inbound leg instead of cannibalizing what may be an
-       unrelated equal-value deposit (which would destroy its acquisition
-       basis).
+    Decision order (candidates are the destination's same-asset, unpaired,
+    unconsumed inbound rows):
+
+    1. A row sharing this spend's on-chain txid is unambiguously this leg → reuse.
+    2. Exactly one exact-value candidate that is not provably a *different*
+       on-chain transaction and is within the time window → reuse it.
+    3. Two or more such exact-value candidates → ambiguous → decline.
+    4. No exact reuse, but the destination has some other in-window inbound that
+       is not provably a different on-chain transaction (a near/off-value row
+       that might be this very leg) → decline rather than fabricate a duplicate.
+    5. Otherwise the destination is genuinely empty for this leg → synthesize.
     """
     asset_key = str(asset or "").upper()
-    matches = [
+    source_seconds = _iso_seconds(source_occurred_at)
+
+    def _within_window(row: Mapping[str, Any]) -> bool:
+        if source_seconds is None:
+            return True
+        row_seconds = _iso_seconds(_get(row, "occurred_at"))
+        return row_seconds is not None and abs(row_seconds - source_seconds) <= REUSE_WINDOW_SECONDS
+
+    def _different_onchain_tx(row: Mapping[str, Any]) -> bool:
+        external_id = str(_get(row, "external_id") or "")
+        return _looks_like_txid(external_id) and external_id.lower() != txid.lower()
+
+    available = [
         row
         for row in candidates
         if str(_get(row, "id")) not in consumed_in_ids
         and str(_get(row, "id")) not in already_paired_ids
-        and int(_get(row, "amount") or 0) == leg_msat
         and str(_get(row, "asset") or "").upper() == asset_key
     ]
-    if not matches:
-        return None
-    same_txid = [row for row in matches if str(_get(row, "external_id") or "") == txid]
+
+    exact = [row for row in available if int(_get(row, "amount") or 0) == leg_msat]
+    same_txid = [row for row in exact if str(_get(row, "external_id") or "") == txid]
     if same_txid:
-        return same_txid[0]
-    source_seconds = _iso_seconds(source_occurred_at)
-    reusable: list[Mapping[str, Any]] = []
-    for row in matches:
-        external_id = str(_get(row, "external_id") or "")
-        if _looks_like_txid(external_id) and external_id.lower() != txid.lower():
-            continue  # provably a different on-chain transaction
-        if source_seconds is not None:
-            row_seconds = _iso_seconds(_get(row, "occurred_at"))
-            if row_seconds is None or abs(row_seconds - source_seconds) > REUSE_WINDOW_SECONDS:
-                continue
-        reusable.append(row)
+        return ("reuse", same_txid[0])
+
+    reusable = [
+        row
+        for row in exact
+        if not _different_onchain_tx(row) and _within_window(row)
+    ]
     if len(reusable) == 1:
-        return reusable[0]
-    return None
+        return ("reuse", reusable[0])
+    if len(reusable) >= 2:
+        return ("decline", None)  # ambiguous equal-value matches — never fabricate
+
+    # No exact reuse. Synthesizing is safe only when nothing else in the
+    # destination could plausibly be this leg. A row that provably belongs to a
+    # different on-chain transaction does not block (it is a separate receipt);
+    # any other in-window same-asset inbound does.
+    nearby = [
+        row
+        for row in available
+        if _within_window(row) and not _different_onchain_tx(row)
+    ]
+    if nearby:
+        return ("decline", None)
+    return ("synthesize", None)
 
 
 def _looks_like_txid(value: Any) -> bool:
