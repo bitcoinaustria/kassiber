@@ -375,6 +375,57 @@ class OwnershipDeriverTests(unittest.TestCase):
         result = self._run([out], {SCRIPT["B"]: ("B", "B")}, _refs("B"))
         self.assertEqual(result.derived_pairs, [])
 
+    def test_output_owned_by_source_and_other_is_change_not_leg(self):
+        # A script owned by BOTH the source wallet and another wallet is change
+        # back to self (matches the sync amount model), never a transfer leg.
+        shared = "0014" + "55" * 20
+        out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=1000,
+            txid="real-txid", input_scripts=[SCRIPT["A"]],
+            outputs=[(shared, 50_000_000)],
+        )
+        index = OwnedIndex()
+        index.add_script(SCRIPT["A"], _match("A", "A"))
+        index.add_script(shared, _match("A", "A"))
+        index.add_script(shared, _match("B", "B"))
+        result = derive_ownership_transfers(
+            [out], index=index, wallet_refs_by_id=_refs("A", "B"), already_paired_ids=set()
+        )
+        self.assertEqual(result.derived_pairs, [])
+
+    def test_output_owned_by_two_non_source_wallets_declines(self):
+        # A script owned by two different non-source wallets can't be routed; the
+        # whole tx is declined rather than guessing a destination.
+        shared = "0014" + "66" * 20
+        out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=1000,
+            txid="real-txid", input_scripts=[SCRIPT["A"]],
+            outputs=[(shared, 50_000_000)],
+        )
+        index = OwnedIndex()
+        index.add_script(SCRIPT["A"], _match("A", "A"))
+        index.add_script(shared, _match("B", "B"))
+        index.add_script(shared, _match("C", "C"))
+        result = derive_ownership_transfers(
+            [out], index=index, wallet_refs_by_id=_refs("B", "C"), already_paired_ids=set()
+        )
+        self.assertEqual(result.derived_pairs, [])
+
+    def test_synthetic_prefix_inbound_not_reused(self):
+        # A synthetic inbound minted by another stage (direct-payout target leg)
+        # must not be consumed as a MOVE destination — synthesize a fresh leg.
+        out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=1000,
+            txid="real-txid", input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000)],
+        )
+        synth_in = _inbound(row_id="direct-payout:P:in", wallet_id="B",
+                            amount_sats=50_000_000, txid="real-txid")
+        result = self._run([out, synth_in],
+                           {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")}, _refs("B"))
+        self.assertEqual(len(result.derived_pairs), 1)
+        self.assertTrue(str(result.derived_pairs[0]["in"]["id"]).startswith("owned-derive:"))
+
     def test_already_paired_source_skipped(self):
         # A same-txid auto pair or a manual pair already covers this out row.
         out = _outbound(

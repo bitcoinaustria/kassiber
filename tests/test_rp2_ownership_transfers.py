@@ -378,6 +378,54 @@ class OwnershipDeriverHandlerTest(unittest.TestCase):
                 conn.execute("SELECT COUNT(*) FROM transaction_pairs").fetchone()[0], 0
             )
 
+    def test_process_journals_persists_derived_move(self):
+        # process_journals (the real `journals process` command) INSERTs journal
+        # entries; journal_entries.transaction_id has an FK into transactions, so
+        # the synthetic owned-derive: leg ids must be mapped to the real source
+        # tx. Without that mapping this raises a FOREIGN KEY IntegrityError.
+        addr_a = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
+        addr_b = "bc1q0xcqpzrky6eff2g52qdye53xkk9jxkvrh6yhyw"
+        script_a = address_to_scriptpubkey(addr_a).hex()
+        script_b = address_to_scriptpubkey(addr_b).hex()
+        with tempfile.TemporaryDirectory(prefix="kassiber-owned-derive-persist-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            self._seed(conn)
+            self._utxo(conn, "wallet-a", addr_a, "prevtx", 0)
+            self._utxo(conn, "wallet-b", addr_b, "scan-only", 0)
+            self._tx(
+                conn, tx_id="acq", wallet_id="wallet-a", direction="inbound",
+                amount=BTC, external_id="acq", raw_json="{}",
+            )
+            self._tx(
+                conn, tx_id="cold-out", wallet_id="wallet-a", direction="outbound",
+                amount=50 * BTC // 100, external_id="spend-tx", fee=1_000_000,
+                raw_json=json.dumps(
+                    {
+                        "txid": "spend-tx",
+                        "vin": [{"txid": "prevtx", "vout": 0,
+                                 "prevout": {"scriptpubkey": script_a}}],
+                        "vout": [{"n": 0, "scriptpubkey": script_b, "value": 50_000_000}],
+                    }
+                ),
+            )
+            conn.commit()
+
+            # Must not raise (FK violation on the synthetic leg ids).
+            handlers.process_journals(conn, "Main", "Default")
+
+            rows = conn.execute(
+                "SELECT entry_type, transaction_id FROM journal_entries"
+            ).fetchall()
+            types = sorted(r["entry_type"] for r in rows)
+            self.assertIn("transfer_out", types)
+            self.assertIn("transfer_in", types)
+            # Every persisted entry references a real transaction row (FK holds).
+            real_ids = {
+                r["id"] for r in conn.execute("SELECT id FROM transactions").fetchall()
+            }
+            for r in rows:
+                self.assertIn(r["transaction_id"], real_ids)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -125,6 +125,11 @@ def derive_ownership_transfers(
     for row in rows:
         if _get(row, "direction") != "inbound":
             continue
+        # Never reuse a synthetic inbound minted by another engine stage
+        # (direct-payout / cross-split target legs); consuming one would strip a
+        # leg the other path needs and double-handle the row.
+        if str(_get(row, "id")).startswith(_SYNTHETIC_ID_PREFIXES):
+            continue
         inbound_by_wallet.setdefault(str(_get(row, "wallet_id")), []).append(row)
     consumed_in_ids: set[str] = set()
 
@@ -149,20 +154,32 @@ def derive_ownership_transfers(
         # inbound row per wallet per tx, so a wallet receiving two outputs in
         # the same tx must pair as a single leg of their combined value.
         by_dest: dict[str, dict[str, Any]] = {}
+        ambiguous_output = False
         for output in parsed["outputs"]:
             matches = index.lookup_script(output["script"])
             if not matches:
                 continue  # external recipient or OP_RETURN — folded into residual
+            owner_ids = {str(match.wallet_id) for match in matches}
+            if source_wallet_id in owner_ids:
+                # The source wallet also owns this script -> change back to self.
+                # (Matches the sync amount model, which excludes change.)
+                continue
+            if len(owner_ids) > 1:
+                # Owned by two different non-source wallets (shared descriptor /
+                # address reuse): we cannot route the leg unambiguously. Decline
+                # the whole tx rather than guess a destination.
+                ambiguous_output = True
+                break
             owner = matches[0]
             dest_wallet_id = str(owner.wallet_id)
-            if dest_wallet_id == source_wallet_id:
-                continue  # change back to self — not a transfer leg
             slot = by_dest.setdefault(
                 dest_wallet_id,
                 {"value_sats": 0, "label": owner.wallet_label, "min_n": output["n"]},
             )
             slot["value_sats"] += int(output["value_sats"])
             slot["min_n"] = min(slot["min_n"], output["n"])
+        if ambiguous_output:
+            continue  # leave the whole tx on its existing disposal/quarantine path
         if not by_dest:
             continue  # ordinary outbound payment — leave on the disposal path
 

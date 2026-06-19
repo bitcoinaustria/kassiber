@@ -1068,7 +1068,13 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
                 "id": str(uuid.uuid4()),
                 "workspace_id": profile["workspace_id"],
                 "profile_id": profile["id"],
-                "transaction_id": audit["out_id"],
+                # Synthetic legs (ownership-derived / split / payout) carry the
+                # real source tx in journal_transaction_id; the journal entry's
+                # transaction_id has an FK into transactions, so map through it
+                # (real legs fall back to their own id).
+                "transaction_id": _journal_transaction_id(
+                    row_by_id.get(audit["out_id"]), audit["out_id"]
+                ),
                 "wallet_id": from_wallet["id"],
                 "account_id": from_wallet["wallet_account_id"],
                 "occurred_at": audit["occurred_at"],
@@ -1088,7 +1094,9 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
                 "id": str(uuid.uuid4()),
                 "workspace_id": profile["workspace_id"],
                 "profile_id": profile["id"],
-                "transaction_id": audit["in_id"],
+                "transaction_id": _journal_transaction_id(
+                    row_by_id.get(audit["in_id"]), audit["in_id"]
+                ),
                 "wallet_id": to_wallet["id"],
                 "account_id": to_wallet["wallet_account_id"],
                 "occurred_at": audit["occurred_at"],
