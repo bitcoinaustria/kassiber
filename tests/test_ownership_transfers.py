@@ -532,6 +532,84 @@ class OwnershipDeriverTests(unittest.TestCase):
         )
         self.assertEqual(result.derived_pairs, [])
 
+    def test_output_match_on_other_network_is_not_owned_leg(self):
+        # The destination scriptpubkey hex is owned only by a wallet on a
+        # DIFFERENT network (mainnet/testnet siblings share the same 0014... hex).
+        # A real mainnet BTC payment must not be re-routed into the testnet wallet
+        # as a phantom MOVE — it stays on the disposal path.
+        out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=1000,
+            txid="real-txid", input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000)],
+        )
+        index = OwnedIndex()
+        index.add_script(SCRIPT["A"], _match("A", "A"))  # source: bitcoin/mainnet
+        index.add_script(
+            SCRIPT["B"],
+            OwnedMatch("T", "Testnet", "", "bitcoin", "testnet", "", None, None, "derived"),
+        )
+        result = derive_ownership_transfers(
+            [out], index=index, wallet_refs_by_id=_refs("T"), already_paired_ids=set()
+        )
+        self.assertEqual(result.derived_pairs, [])
+        self.assertEqual(result.blocked_sources, [])
+
+    def test_output_match_picks_source_network_when_script_collides(self):
+        # The destination script is owned by BOTH a mainnet wallet B and a testnet
+        # collision wallet T. The leg must route to B (the source's network), not
+        # be declined as multi-owner-ambiguous.
+        out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=1000,
+            txid="real-txid", input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000)],
+        )
+        index = OwnedIndex()
+        index.add_script(SCRIPT["A"], _match("A", "A"))
+        index.add_script(SCRIPT["B"], _match("B", "B"))  # bitcoin/mainnet
+        index.add_script(
+            SCRIPT["B"],
+            OwnedMatch("T", "Testnet", "", "bitcoin", "testnet", "", None, None, "derived"),
+        )
+        result = derive_ownership_transfers(
+            [out], index=index, wallet_refs_by_id=_refs("B"), already_paired_ids=set()
+        )
+        self.assertEqual(len(result.derived_pairs), 1)
+        self.assertEqual(result.derived_pairs[0]["in"]["wallet_id"], "B")
+
+    def test_equivalent_network_spellings_still_derive(self):
+        # The index seeds (chain, network) from paths with inconsistent spelling
+        # (descriptor normalizes; address-list / inventory store raw config / DB
+        # values). A legit mainnet A->B move where the two wallets were seeded
+        # with different-but-equivalent spellings (bitcoin/main vs btc/mainnet,
+        # and an empty network defaulting to main) must still derive — the filter
+        # normalizes before comparing.
+        out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=1000,
+            txid="real-txid", input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000)],
+        )
+        for src, dst in (
+            (("bitcoin", "main"), ("btc", "mainnet")),
+            (("btc", "mainnet"), ("bitcoin", "main")),
+            (("bitcoin", ""), ("bitcoin", "main")),
+        ):
+            with self.subTest(src=src, dst=dst):
+                index = OwnedIndex()
+                index.add_script(
+                    SCRIPT["A"],
+                    OwnedMatch("A", "A", "", src[0], src[1], "", None, None, "derived"),
+                )
+                index.add_script(
+                    SCRIPT["B"],
+                    OwnedMatch("B", "B", "", dst[0], dst[1], "", None, None, "derived"),
+                )
+                result = derive_ownership_transfers(
+                    [out], index=index, wallet_refs_by_id=_refs("B"),
+                    already_paired_ids=set(),
+                )
+                self.assertEqual(len(result.derived_pairs), 1)
+                self.assertEqual(result.derived_pairs[0]["in"]["wallet_id"], "B")
+
 
 if __name__ == "__main__":
     unittest.main()

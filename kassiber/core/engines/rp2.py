@@ -282,6 +282,11 @@ def _compose_transfer_notes(transfer: Any) -> str:
     pool = getattr(transfer, "at_pool", None)
     if pool:
         tokens.append(f"at_pool={pool}")
+    if getattr(transfer, "pairing_source", None) == "ownership_derived":
+        # Make the basis for the non-taxable treatment auditable: this leg was
+        # proven from the on-chain transaction graph (an output paid an address
+        # owned by another of the user's wallets), not a same-txid row match.
+        tokens.append("self-transfer proven by address ownership")
     description = getattr(transfer, "description", "") or ""
     if description:
         tokens.append(description)
@@ -631,6 +636,10 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                 "crypto_received": float(transfer.received),
                 "crypto_fee": float(transfer.fee),
                 "spot_price": float(transfer.spot_price) if transfer.spot_price is not None else 0.0,
+                # Provenance for the audit trail: "ownership_derived" when this
+                # MOVE was proven from the on-chain graph rather than row-matched
+                # (None for same-txid / manual pairs).
+                "pairing_source": getattr(transfer, "pairing_source", None),
             }
             if transfer_id != transfer.out_transaction_id:
                 audit_row["rp2_unique_id"] = transfer_id
@@ -1063,6 +1072,11 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
         sent = dec(audit["crypto_sent"])
         received = dec(audit["crypto_received"])
         description = f"Transfer {from_wallet['label']} -> {to_wallet['label']}"
+        if audit.get("pairing_source") == "ownership_derived":
+            # Record the basis for the non-taxable treatment on the entry itself,
+            # so the audit/report shows this MOVE was proven from the on-chain
+            # address graph rather than matched on a shared txid.
+            description += " (proven by address ownership)"
         entries.append(
             {
                 "id": str(uuid.uuid4()),
@@ -1855,21 +1869,50 @@ class GenericRP2TaxEngine:
                 wallet_refs_by_id=inputs.wallet_refs_by_id,
                 already_paired_ids=already_paired_ids,
             )
-            blocked_ownership_row_ids = {
-                str(_row_get(blocked.get("row"), "id"))
-                for blocked in ownership_result.blocked_sources
-            }
-            if blocked_ownership_row_ids:
-                quarantines.extend(
-                    _ownership_block_quarantines(
-                        self.profile, ownership_result.blocked_sources
+            # A blocked source is a proven self-transfer the deriver could not
+            # safely split. Surface it for review, but NEVER drop it from booking:
+            # a blocked source posts a normal disposal — the same conservative
+            # booking the deriver-off baseline makes — so holdings stay correct.
+            # Dropping it would lose that disposal and silently inflate the source
+            # wallet whenever the destination receipt was recorded under a
+            # different external_id (CSV / separate sync) or not at all. The one
+            # case we skip the quarantine is when a recorded destination shares
+            # the spend's (external_id, asset) group from another wallet: the
+            # existing owned-fanout guard already holds back and quarantines that
+            # whole balanced group, so a second quarantine would be redundant.
+            if ownership_result.blocked_sources:
+                inbound_group_wallets: dict[tuple[Any, Any], set[str]] = {}
+                for candidate in rows_for_engine:
+                    if _row_get(candidate, "direction") == "inbound" and _row_get(
+                        candidate, "external_id"
+                    ):
+                        inbound_group_wallets.setdefault(
+                            (
+                                str(_row_get(candidate, "external_id")),
+                                _row_get(candidate, "asset"),
+                            ),
+                            set(),
+                        ).add(str(_row_get(candidate, "wallet_id")))
+                surfaced_blocks: list[Mapping[str, Any]] = []
+                for blocked in ownership_result.blocked_sources:
+                    row = blocked.get("row")
+                    if row is None:
+                        continue
+                    source_wallet_id = str(_row_get(row, "wallet_id"))
+                    group_key = (
+                        str(_row_get(row, "external_id")),
+                        _row_get(row, "asset"),
                     )
-                )
-                rows_for_engine = [
-                    row
-                    for row in rows_for_engine
-                    if str(row["id"]) not in blocked_ownership_row_ids
-                ]
+                    fanout_holds = any(
+                        wallet_id != source_wallet_id
+                        for wallet_id in inbound_group_wallets.get(group_key, ())
+                    )
+                    if not fanout_holds:
+                        surfaced_blocks.append(blocked)
+                if surfaced_blocks:
+                    quarantines.extend(
+                        _ownership_block_quarantines(self.profile, surfaced_blocks)
+                    )
             if ownership_result.dropped_out_ids or ownership_result.out_row_overrides:
                 rows_for_engine = [
                     ownership_result.out_row_overrides.get(str(row["id"]), row)

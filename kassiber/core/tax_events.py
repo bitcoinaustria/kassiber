@@ -81,6 +81,10 @@ class NormalizedTaxTransfer:
     # Optional stable id for one logical movement split out of a multi-output
     # wallet transaction. Journal rows still point at the real out/in rows.
     transfer_id: Optional[str] = None
+    # How this self-transfer was paired, for audit provenance:
+    # "ownership_derived" when proven from the on-chain address graph; None for a
+    # same-txid auto match or a user's manual pair.
+    pairing_source: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -817,6 +821,9 @@ def normalize_tax_asset_inputs(
                     out_row=out_row,
                     in_row=in_row,
                     at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
+                    pairing_source=(
+                        pair.get("source") if hasattr(pair, "get") else None
+                    ),
                 )
             )
             ordered_items.append(("transfer", out_row["id"]))

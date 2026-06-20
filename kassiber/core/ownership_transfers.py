@@ -59,6 +59,7 @@ from decimal import Decimal
 from typing import Any, Mapping, Optional, Sequence
 
 from ..msat import msat_to_btc
+from ..wallet_descriptors import normalize_chain, normalize_network
 
 
 SATS_TO_MSAT = 1000
@@ -148,6 +149,13 @@ def derive_ownership_transfers(
         if parsed is None:
             continue
         source_wallet_id = str(_get(row, "wallet_id"))
+        # Constrain ownership to the source's own chain/network. The same
+        # scriptpubkey hex is shared by mainnet and testnet siblings of one key
+        # (and by a reused-key Liquid wallet), so an unfiltered script match can
+        # route a real BTC payment into a wrong-chain wallet as a phantom MOVE.
+        source_chain_network = _source_chain_network(
+            parsed["inputs"], index, source_wallet_id
+        )
 
         # Aggregate owned outputs per destination wallet — sync records one
         # inbound row per wallet per tx, so a wallet receiving two outputs in
@@ -156,8 +164,18 @@ def derive_ownership_transfers(
         ambiguous_output = False
         for output in parsed["outputs"]:
             matches = index.lookup_script(output["script"])
+            if source_chain_network is not None:
+                matches = [
+                    match
+                    for match in matches
+                    if _norm_chain_network(match.chain, match.network)
+                    == source_chain_network
+                ]
             if not matches:
-                continue  # external recipient or OP_RETURN — folded into residual
+                # External recipient, OP_RETURN, or a same-script-hex collision
+                # on another chain/network — never an owned leg; folded into the
+                # residual disposal.
+                continue
             owner_ids = {str(match.wallet_id) for match in matches}
             if source_wallet_id in owner_ids:
                 # The source wallet also owns this script -> change back to self.
@@ -373,6 +391,47 @@ def _input_owner_ids(index: Any, entry: Mapping[str, Any]) -> set[str]:
         if match is not None:
             return {str(match.wallet_id)}
     return {str(match.wallet_id) for match in index.lookup_script(entry.get("script"))}
+
+
+def _norm_chain_network(chain: Any, network: Any) -> tuple[str, str]:
+    """Canonical ``(chain, network)`` for comparison.
+
+    The index seeds chain/network from three paths with inconsistent spelling —
+    the descriptor path normalizes, but the address-list and inventory paths
+    store raw config / DB values (``btc``, ``mainnet``, ``""`` …). Comparing the
+    raw strings would drop a legitimate same-network self-transfer as if it were
+    cross-chain, so both sides are normalized here. Unsupported values fall back
+    to a lowercased raw tuple (still consistent for identical spellings) instead
+    of raising.
+    """
+    try:
+        canonical_chain = normalize_chain(chain)
+        return (canonical_chain, normalize_network(canonical_chain, network))
+    except ValueError:
+        return (str(chain or "").strip().lower(), str(network or "").strip().lower())
+
+
+def _source_chain_network(
+    inputs: Sequence[Mapping[str, Any]], index: Any, source_wallet_id: str
+) -> Optional[tuple[str, str]]:
+    """Canonical ``(chain, network)`` of the source wallet, from its owned inputs.
+
+    Used to reject output matches on a different chain/network (the same
+    scriptpubkey hex is produced by mainnet/testnet siblings of one key, or a
+    reused-key Liquid wallet). Returns ``None`` when no input resolves to the
+    source wallet — the spend is then left to the single-source guard, which
+    blocks it, so no chain filtering is needed.
+    """
+    for entry in inputs:
+        outpoint = entry.get("outpoint")
+        if outpoint:
+            match = index.by_outpoint.get(outpoint)
+            if match is not None and str(match.wallet_id) == source_wallet_id:
+                return _norm_chain_network(match.chain, match.network)
+        for match in index.lookup_script(entry.get("script")):
+            if str(match.wallet_id) == source_wallet_id:
+                return _norm_chain_network(match.chain, match.network)
+    return None
 
 
 def _parse_onchain_tx(raw_json: Any) -> Optional[dict[str, Any]]:

@@ -156,6 +156,57 @@ class OwnershipDeriverEngineTest(unittest.TestCase):
         self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.5, places=6)
         self.assertAlmostEqual(holdings.get("Savings", 0.0), 0.3, places=6)
 
+    def test_derived_move_provenance_is_surfaced(self):
+        # The non-taxable treatment must be auditable: every leg the deriver
+        # proved from the on-chain graph is tagged "ownership_derived" in the
+        # intra-transfer audit, and records the basis in its entry description so
+        # the report / transaction view shows WHY it is a MOVE.
+        state = self._run(owned_index=_fanout_index())
+        derived = [
+            audit
+            for audit in state.intra_audit
+            if audit.get("pairing_source") == "ownership_derived"
+        ]
+        self.assertEqual(len(derived), 2)  # both fan-out legs
+        descriptions = [
+            entry.get("description", "")
+            for entry in state.entries
+            if entry["entry_type"] in ("transfer_in", "transfer_out")
+        ]
+        self.assertEqual(len(descriptions), 4)  # 2 fan-out legs x (out + in)
+        self.assertTrue(
+            all("proven by address ownership" in d for d in descriptions),
+            descriptions,
+        )
+
+    def test_row_matched_move_has_no_ownership_provenance(self):
+        # A plain same-txid transfer (paired by detect_intra_transfers, not
+        # graph-derived) must NOT carry the ownership-provenance note — the
+        # marker is specific to derived MOVEs.
+        rows = [
+            _row("A", "inbound", BTC, external_id="acq"),
+            _row("A", "outbound", BTC, external_id="move-tx"),
+            _row("B", "inbound", BTC, external_id="move-tx"),
+        ]
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                owned_index=None,
+            )
+        )
+        transfers = [
+            entry
+            for entry in state.entries
+            if entry["entry_type"] in ("transfer_in", "transfer_out")
+        ]
+        self.assertEqual(len(transfers), 2)
+        self.assertFalse(
+            any("proven by address ownership" in e.get("description", "") for e in transfers),
+            [e.get("description") for e in transfers],
+        )
+
 
 SCRIPT_EXT = "0014" + "ee" * 20  # external recipient, never owned
 
@@ -306,7 +357,11 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
             ["ownership_transfer_destination_ambiguous"],
         )
         entry_types = [entry["entry_type"] for entry in state.entries]
-        self.assertNotIn("disposal", entry_types)
+        # The ambiguous source is NOT dropped (that would lose the disposal that
+        # offsets B's recorded receipts and inflate the total). It stays on its
+        # conservative disposal path — correct holdings — plus the review flag,
+        # and no fabricated transfer_in.
+        self.assertIn("disposal", entry_types)
         self.assertNotIn("transfer_in", entry_types)
         holdings = {
             label: round(float(totals["quantity"]), 5)
@@ -314,6 +369,9 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
         }
         # B keeps exactly its two recorded 0.5 receipts = 1.0, never 1.5.
         self.assertAlmostEqual(holdings.get("Hot", 0.0), 1.0, places=6)
+        # Source A (0.7 acquired) is debited by the 0.5 disposal -> 0.2, never
+        # left at 0.7 (the silent source-side inflation of block-and-remove).
+        self.assertAlmostEqual(holdings.get("Cold", 0.0), 0.2, places=6)
 
     def test_duplicate_same_txid_destination_quarantines_source(self):
         index = OwnedIndex()
@@ -343,11 +401,22 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
                 owned_index=index,
             )
         )
+        # The destination's two recorded inbounds share the spend's txid with the
+        # source, so the whole 1-out/2-in group is a recorded fan-out: the
+        # existing owned-fanout guard holds it back and quarantines every leg.
+        # The deriver leaves the source in place (no second quarantine — it would
+        # only be collapsed by dedupe_quarantines) and never books a transfer_in.
         self.assertEqual(
-            [q["reason"] for q in state.quarantines],
-            ["ownership_transfer_destination_ambiguous"],
+            sorted(q["reason"] for q in state.quarantines),
+            ["owned_fanout_unresolved"] * 3,
         )
         self.assertNotIn("transfer_in", [entry["entry_type"] for entry in state.entries])
+        holdings = {
+            label: round(float(totals["quantity"]), 5)
+            for (_, label, _, _), totals in state.wallet_holdings.items()
+        }
+        # The held-back group books nothing into B — no inflation.
+        self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.0, places=6)
 
     def test_multi_source_sync_gap_quarantines_source(self):
         index = OwnedIndex()
@@ -380,7 +449,169 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
             [q["reason"] for q in state.quarantines],
             ["ownership_transfer_source_ambiguous"],
         )
-        self.assertNotIn("disposal", [entry["entry_type"] for entry in state.entries])
+        # The unsplittable source is flagged for review but NOT dropped from
+        # booking: it posts its normal disposal (matching the deriver-off
+        # baseline), so the source wallet is debited and holdings are not
+        # inflated. Dropping it instead would leave the spent coins in the source.
+        entry_types = [entry["entry_type"] for entry in state.entries]
+        self.assertIn("disposal", entry_types)
+        holdings = {
+            label: round(float(totals["quantity"]), 5)
+            for (_, label, _, _), totals in state.wallet_holdings.items()
+        }
+        self.assertAlmostEqual(holdings.get("Cold", 0.0), 0.2, places=6)
+
+    def test_consolidation_with_recorded_destination_does_not_inflate(self):
+        # A+B -> C, all owned, C's inbound recorded under the spend's txid. The
+        # per-wallet amounts are unreliable (the fee is double-counted across the
+        # contributing wallets) so the deriver declines (source_ambiguous). The
+        # whole same-txid group is a recorded consolidation, so the existing
+        # owned-fanout guard holds back EVERY leg. The old block-and-remove path
+        # dropped only the source outbounds, leaving C's acquisition booked and
+        # doubling the profile total to 1.6 — it must stay 0.8.
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        index.add_script(SCRIPT_C, _match("C", "Savings"))
+        consol = json.dumps(
+            {
+                "txid": "consol",
+                "vin": [
+                    {"txid": "pa", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}},
+                    {"txid": "pb", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_B}},
+                ],
+                "vout": [{"n": 0, "scriptpubkey": SCRIPT_C, "value": 80_000_000}],
+            }
+        )
+        rows = [
+            _row("A", "inbound", 50_000_000_000, external_id="acqA"),
+            _row("B", "inbound", 30_000_000_000, external_id="acqB"),
+            _row("A", "outbound", 50_000_000_000, external_id="consol", raw_json=consol),
+            _row("B", "outbound", 30_000_000_000, external_id="consol", raw_json=consol),
+            _row("C", "inbound", 80_000_000_000, external_id="consol"),
+        ]
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                owned_index=index,
+            )
+        )
+        holdings = {
+            label: round(float(totals["quantity"]), 5)
+            for (_, label, _, _), totals in state.wallet_holdings.items()
+        }
+        self.assertAlmostEqual(sum(holdings.values()), 0.8, places=6)
+        self.assertAlmostEqual(holdings.get("Savings", 0.0), 0.0, places=6)
+        entry_types = [entry["entry_type"] for entry in state.entries]
+        self.assertNotIn("disposal", entry_types)
+        self.assertNotIn("transfer_in", entry_types)
+        self.assertEqual(
+            sorted(q["reason"] for q in state.quarantines),
+            ["owned_fanout_unresolved"] * 3,
+        )
+
+    def test_fanout_amount_mismatch_with_recorded_inbounds_does_not_inflate(self):
+        # 1->N spend whose parsed owned outputs (0.5 + 0.3) exceed the recorded
+        # outbound amount (0.4) -> the deriver declines (amount_mismatch). Both
+        # destination inbounds are recorded under the spend's txid, so the
+        # owned-fanout guard holds the whole group. Block-and-remove dropped the
+        # source and let the two inbound legs book as fresh acquisitions,
+        # inflating the total to 1.8; it must stay 1.0.
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        index.add_script(SCRIPT_C, _match("C", "Savings"))
+        fan = json.dumps(
+            {
+                "txid": "fan",
+                "vin": [{"txid": "pa", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}}],
+                "vout": [
+                    {"n": 0, "scriptpubkey": SCRIPT_B, "value": 50_000_000},
+                    {"n": 1, "scriptpubkey": SCRIPT_C, "value": 30_000_000},
+                ],
+            }
+        )
+        rows = [
+            _row("A", "inbound", BTC, external_id="acqA"),
+            _row("A", "outbound", 40_000_000_000, external_id="fan", raw_json=fan),
+            _row("B", "inbound", 50_000_000_000, external_id="fan"),
+            _row("C", "inbound", 30_000_000_000, external_id="fan"),
+        ]
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                owned_index=index,
+            )
+        )
+        holdings = {
+            label: round(float(totals["quantity"]), 5)
+            for (_, label, _, _), totals in state.wallet_holdings.items()
+        }
+        self.assertAlmostEqual(sum(holdings.values()), 1.0, places=6)
+        entry_types = [entry["entry_type"] for entry in state.entries]
+        self.assertNotIn("transfer_in", entry_types)
+        self.assertNotIn("disposal", entry_types)
+        self.assertEqual(
+            sorted(q["reason"] for q in state.quarantines),
+            ["owned_fanout_unresolved"] * 3,
+        )
+
+    def test_blocked_source_with_different_txid_destination_matches_baseline(self):
+        # The destinations of a blocked spend were recorded under their OWN
+        # external_id (CSV import / separate sync), so they do NOT share the
+        # source's (external_id, asset) group and the owned-fanout guard does not
+        # fire. The blocked source must still post its disposal (matching the
+        # deriver-off baseline) — dropping it would leave the spent coins in the
+        # source while the destinations stay booked, inflating the profile total.
+        consol = json.dumps(
+            {
+                "txid": "consol",
+                "vin": [
+                    {"txid": "pa", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}},
+                    {"txid": "pb", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_B}},
+                ],
+                "vout": [{"n": 0, "scriptpubkey": SCRIPT_C, "value": 80_000_000}],
+            }
+        )
+        rows = [
+            _row("A", "inbound", 50_000_000_000, external_id="acqA"),
+            _row("B", "inbound", 30_000_000_000, external_id="acqB"),
+            _row("A", "outbound", 50_000_000_000, external_id="consol", raw_json=consol),
+            _row("B", "outbound", 30_000_000_000, external_id="consol", raw_json=consol),
+            # C's receipt recorded under its OWN provider id, not the spend txid.
+            _row("C", "inbound", 80_000_000_000, external_id="exchange-deposit-77"),
+        ]
+
+        def _total(owned_index):
+            state = build_tax_engine(PROFILE).build_ledger_state(
+                TaxEngineLedgerInputs(
+                    rows=rows,
+                    wallet_refs_by_id=WALLET_REFS,
+                    manual_pair_records=[],
+                    owned_index=owned_index,
+                )
+            )
+            return sum(
+                float(totals["quantity"])
+                for _, totals in state.wallet_holdings.items()
+            ), [q["reason"] for q in state.quarantines]
+
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        index.add_script(SCRIPT_C, _match("C", "Savings"))
+        on_total, on_reasons = _total(index)
+        off_total, _ = _total(None)
+        # No inflation: deriver ON never books more coins than the baseline.
+        self.assertAlmostEqual(on_total, off_total, places=6)
+        # Both source spends are flagged for review.
+        self.assertEqual(
+            sorted(on_reasons), ["ownership_transfer_source_ambiguous"] * 2
+        )
 
 
 class OwnershipDeriverHandlerTest(unittest.TestCase):

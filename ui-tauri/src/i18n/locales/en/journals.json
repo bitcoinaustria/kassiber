@@ -154,7 +154,8 @@
       "pairing": "Pairing decision",
       "reviewRequired": "Review required",
       "splitTransfer": "Split transfer / swap review",
-      "coarsePricing": "Coarse pricing — verify"
+      "coarsePricing": "Coarse pricing — verify",
+      "ownershipTransfer": "Self-transfer between your wallets"
     },
     "evidence": {
       "price": "Add a fiat price or rates coverage",
@@ -164,7 +165,8 @@
       "detail": "Review {{keys}}",
       "fallback": "Review evidence",
       "splitTransfer": "Review the self-transfer and residual swap or payout leg",
-      "coarsePricing": "Priced from daily rates — fetch precise prices or confirm"
+      "coarsePricing": "Priced from daily rates — fetch precise prices or confirm",
+      "ownershipTransfer": "Proven from the on-chain transaction — an output paid another of your wallets, but the matching receipt couldn't be resolved automatically"
     },
     "nextAction": {
       "price": "Set price, then process journals",
@@ -172,7 +174,10 @@
       "basis": "Add missing acquisition context",
       "fallback": "Resolve the source issue",
       "splitTransfer": "Review split transfer/swap, then process journals",
-      "coarsePricing": "Fetch precise prices or confirm, then process journals"
+      "coarsePricing": "Fetch precise prices or confirm, then process journals",
+      "ownershipTransfer": "Pair it manually, or sync the destination wallet so its receipt is recorded, then process journals",
+      "ownershipConsolidation": "Several of your wallets funded this spend — review the consolidation and pair it, then process journals",
+      "ownershipAmountMismatch": "The recorded amount disagrees with the on-chain transaction — re-sync the wallet, then process journals"
     },
     "action": {
       "openTransaction": "Open transaction",
