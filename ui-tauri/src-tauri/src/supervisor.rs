@@ -63,8 +63,10 @@ pub struct DaemonSupervisor {
     next_lifecycle_id: AtomicU64,
     event_sink: SharedEventSink,
     /// Per-request budget for non-streaming kinds. Exceeding it never kills the
-    /// daemon — it just fails the one slow request retryably (`daemon_busy`).
-    /// A field (not the bare const) so tests can shrink it.
+    /// daemon — it just fails the one slow request as `daemon_busy`. Read-style
+    /// calls are retryable; mutating calls are not, since they have already been
+    /// accepted on stdin and may still apply side effects later. A field (not the
+    /// bare const) so tests can shrink it.
     invoke_timeout: Duration,
 }
 
@@ -599,7 +601,7 @@ impl DaemonSupervisor {
                     // true in-process hang can't last indefinitely because every
                     // sync network/socket call is timeout-bounded. If the process
                     // has already exited, surface that; otherwise fail THIS
-                    // request retryably and leave the daemon running.
+                    // request and leave the daemon running.
                     //
                     // Returning early WITHOUT unregistering is deliberate: the
                     // eventual late response finds the (receiver-dropped) sender
@@ -616,11 +618,7 @@ impl DaemonSupervisor {
                         .with_stderr_tail(stderr_tail)
                         .retryable());
                     }
-                    return Err(SupervisorError::new(
-                        "daemon_busy",
-                        "The daemon is busy with a long-running operation. Please retry shortly.",
-                    )
-                    .retryable());
+                    return Err(daemon_busy_timeout(kind));
                 }
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
                     process.mark_broken();
@@ -757,6 +755,47 @@ impl DaemonSupervisor {
             SupervisorError::new("daemon_unavailable", "Python daemon is unavailable")
         })
     }
+}
+
+fn daemon_busy_timeout(kind: &str) -> SupervisorError {
+    let error = SupervisorError::new(
+        "daemon_busy",
+        if timeout_is_safe_to_retry(kind) {
+            "The daemon is busy with a long-running operation. Please retry shortly."
+        } else {
+            "The daemon accepted this request but is busy with a long-running operation. Wait for it to finish before submitting it again."
+        },
+    );
+    if timeout_is_safe_to_retry(kind) {
+        error.retryable()
+    } else {
+        error
+    }
+}
+
+fn timeout_is_safe_to_retry(kind: &str) -> bool {
+    matches!(
+        kind,
+        "status"
+            | "ui.audit.evidence.summary"
+            | "ui.backends.options"
+            | "ui.backends.public_defaults"
+            | "ui.documents.list"
+            | "ui.freshness.status"
+            | "ui.logs.snapshot"
+            | "ui.next_actions"
+            | "ui.overview.snapshot"
+            | "ui.profiles.snapshot"
+            | "ui.workspace.health"
+            | "ui.workspace.overview.snapshot"
+            | "ui.wallets.preview_descriptor"
+            | "ui.wallets.utxos"
+    ) || kind.ends_with(".list")
+        || kind.ends_with(".snapshot")
+        || kind.ends_with(".summary")
+        || kind.ends_with(".coverage")
+        || kind.ends_with(".quarantine")
+        || kind.ends_with(".suggest")
 }
 
 impl DaemonProcess {
@@ -1880,7 +1919,7 @@ def emit(payload):
 sys.stderr.write("stub-daemon startup api_key=sk-stub-stderr-secret\n")
 sys.stderr.flush()
 
-emit({"kind":"daemon.ready","schema_version":1,"data":{"version":"test","supported_kinds":["slow","fast","locked","secret-get","emit-event","daemon.shutdown"]}})
+emit({"kind":"daemon.ready","schema_version":1,"data":{"version":"test","supported_kinds":["slow","fast","locked","secret-get","emit-event","daemon.shutdown","ui.overview.snapshot","ui.wallets.create"]}})
 
 def slow(request_id):
     emit({"kind":"slow.delta","schema_version":1,"request_id":request_id,"data":{"delta":{"content":"a"}}})
@@ -1897,7 +1936,7 @@ for line in sys.stdin:
         threading.Thread(target=slow, args=(request_id,), daemon=True).start()
     elif kind == "fast":
         emit({"kind":"fast","schema_version":1,"request_id":request_id,"data":{"ok":True,"pid":os.getpid()}})
-    elif kind == "busy":
+    elif kind in ("busy", "ui.overview.snapshot", "ui.wallets.create"):
         # Read but never answer: models the single-threaded daemon being busy
         # on another request. The reader loop stays free for later requests.
         pass
@@ -2005,7 +2044,13 @@ for line in sys.stdin:
         // A non-streaming request the busy daemon never answers must fail
         // retryably as daemon_busy WITHOUT killing the process.
         let busy = supervisor
-            .invoke_inner("busy", None, false, Some(json!("busy-1")), |_| {})
+            .invoke_inner(
+                "ui.overview.snapshot",
+                None,
+                false,
+                Some(json!("busy-1")),
+                |_| {},
+            )
             .expect_err("busy request should time out");
         assert_eq!(busy.code, "daemon_busy");
         assert!(busy.retryable);
@@ -2022,6 +2067,51 @@ for line in sys.stdin:
             None,
             false,
             Some(json!("shutdown-busy-1")),
+            |_| {},
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn queued_mutating_timeout_is_not_reported_retryable() {
+        let (dir, script) = write_stub_daemon();
+        let process = DaemonProcess::spawn_command(DaemonCommand {
+            program: script,
+            args: Vec::new(),
+            cwd: dir.clone(),
+            source: "env_python",
+        })
+        .expect("spawn stub daemon");
+        let supervisor = DaemonSupervisor::new_with_process(process)
+            .with_invoke_timeout(Duration::from_millis(200));
+
+        let busy = supervisor
+            .invoke_inner(
+                "ui.wallets.create",
+                Some(json!({"name":"Queued wallet"})),
+                false,
+                Some(json!("create-1")),
+                |_| {},
+            )
+            .expect_err("queued mutation should time out");
+        assert_eq!(busy.code, "daemon_busy");
+        assert!(!busy.retryable);
+        assert!(
+            busy.message.contains("accepted this request"),
+            "message should warn the request may still complete"
+        );
+
+        let after = supervisor
+            .invoke_inner("fast", None, false, Some(json!("after-create")), |_| {})
+            .expect("daemon still answers after queued mutation timeout");
+        assert_eq!(after.get("kind").and_then(Value::as_str), Some("fast"));
+
+        let _ = supervisor.invoke_inner(
+            "daemon.shutdown",
+            None,
+            false,
+            Some(json!("shutdown-mutation-timeout")),
             |_| {},
         );
         let _ = fs::remove_dir_all(dir);
