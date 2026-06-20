@@ -17,7 +17,10 @@ from ...msat import btc_to_msat, dec, msat_to_btc
 from ...tax_policy import build_tax_policy
 from ...transfers import apply_manual_pairs, detect_intra_transfers
 from .. import pricing
-from ..ownership_transfers import derive_ownership_transfers
+from ..ownership_transfers import (
+    derive_ownership_transfers,
+    derive_recorded_fanout_transfers,
+)
 from ..austrian import (
     AT_SWAP_QUARANTINE_REASON,
     REGIME_NEU,
@@ -1924,12 +1927,47 @@ class GenericRP2TaxEngine:
                     list(rows_for_engine) + ownership_result.synthetic_rows,
                     key=_transaction_row_sort_key,
                 )
+            # Recorded fan-out decomposer: rescue a 1->N self-transfer whose legs
+            # were all synced but that has no readable on-chain graph (Liquid
+            # confidential outputs, or a graphless CSV import), so both
+            # detect_intra_transfers and the address-ownership deriver skip it.
+            # It must not re-process a Bitcoin fan-out the ownership deriver
+            # already handled, so feed it every id that deriver touched.
+            fanout_already_paired = set(already_paired_ids)
+            fanout_already_paired |= ownership_result.dropped_out_ids
+            fanout_already_paired |= {
+                str(out_id) for out_id in ownership_result.out_row_overrides
+            }
+            for pair in ownership_result.derived_pairs:
+                fanout_already_paired.add(str(pair["in"]["id"]))
+            for blocked in ownership_result.blocked_sources:
+                blocked_row = blocked.get("row")
+                if blocked_row is not None:
+                    fanout_already_paired.add(str(_row_get(blocked_row, "id")))
+            fanout_result = derive_recorded_fanout_transfers(
+                rows_for_engine, already_paired_ids=fanout_already_paired
+            )
+            if fanout_result.dropped_out_ids:
+                rows_for_engine = [
+                    row
+                    for row in rows_for_engine
+                    if str(row["id"]) not in fanout_result.dropped_out_ids
+                ]
+            if fanout_result.synthetic_rows:
+                rows_for_engine = sorted(
+                    list(rows_for_engine) + fanout_result.synthetic_rows,
+                    key=_transaction_row_sort_key,
+                )
             all_pairs, manual_cross_asset_pairs = apply_manual_pairs(
                 rows_for_engine,
                 auto_pairs,
                 split_pair_records,
             )
-            all_pairs = all_pairs + ownership_result.derived_pairs
+            all_pairs = (
+                all_pairs
+                + ownership_result.derived_pairs
+                + fanout_result.derived_pairs
+            )
             # The engine carries the synthetic split leg (so it can mark the
             # cross-asset swap-out without touching the self-transfer remainder),
             # but the result/audit should reference the real out tx — map it back.
