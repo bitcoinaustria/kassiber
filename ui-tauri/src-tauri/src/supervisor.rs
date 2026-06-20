@@ -786,6 +786,12 @@ fn timeout_is_safe_to_retry(kind: &str) -> bool {
             | "ui.next_actions"
             | "ui.overview.snapshot"
             | "ui.profiles.snapshot"
+            // Idempotent reads behind retry:false panels (Connection detail,
+            // Lightning, balance history) that should still ride out a busy
+            // daemon during a sync rather than flash an error.
+            | "ui.reports.balance_history"
+            | "ui.reports.lightning_profitability"
+            | "ui.transactions.resolve"
             | "ui.workspace.health"
             | "ui.workspace.overview.snapshot"
             | "ui.wallets.preview_descriptor"
