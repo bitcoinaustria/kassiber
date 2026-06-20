@@ -792,6 +792,12 @@ fn timeout_is_safe_to_retry(kind: &str) -> bool {
             | "ui.reports.balance_history"
             | "ui.reports.lightning_profitability"
             | "ui.transactions.resolve"
+            // Read-only candidate matcher. Enumerated explicitly rather than via
+            // a `.suggest` suffix because the suggestion *seeders*
+            // ui.source_funds.suggest / ui.btcpay.provenance.suggest share that
+            // suffix but INSERT/upsert + commit, so retrying them after a busy
+            // timeout could double-seed.
+            | "ui.transfers.suggest"
             | "ui.workspace.health"
             | "ui.workspace.overview.snapshot"
             | "ui.wallets.preview_descriptor"
@@ -801,7 +807,6 @@ fn timeout_is_safe_to_retry(kind: &str) -> bool {
         || kind.ends_with(".summary")
         || kind.ends_with(".coverage")
         || kind.ends_with(".quarantine")
-        || kind.ends_with(".suggest")
 }
 
 impl DaemonProcess {
@@ -2176,6 +2181,23 @@ for line in sys.stdin:
             |_| {},
         );
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn timeout_retryability_excludes_mutating_suggest_seeders() {
+        // Idempotent reads ride out a busy daemon; mutating kinds must not be
+        // reported retryable, or a resubmit could double-apply. The suggestion
+        // *seeders* share the `.suggest` suffix with the read-only matcher but
+        // INSERT/upsert + commit, so they must be classified as mutating.
+        assert!(timeout_is_safe_to_retry("ui.transfers.suggest"));
+        assert!(timeout_is_safe_to_retry("ui.overview.snapshot"));
+        assert!(timeout_is_safe_to_retry("ui.transactions.list"));
+        assert!(timeout_is_safe_to_retry("ui.transactions.resolve"));
+        assert!(timeout_is_safe_to_retry("ui.journals.quarantine"));
+        assert!(!timeout_is_safe_to_retry("ui.source_funds.suggest"));
+        assert!(!timeout_is_safe_to_retry("ui.btcpay.provenance.suggest"));
+        assert!(!timeout_is_safe_to_retry("ui.wallets.create"));
+        assert!(!timeout_is_safe_to_retry("ui.transactions.metadata.update"));
     }
 
     #[test]
