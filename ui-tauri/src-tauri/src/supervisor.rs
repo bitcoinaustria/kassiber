@@ -26,6 +26,18 @@ const DAEMON_INVOKE_TIMEOUT: Duration = Duration::from_secs(15);
 /// every time a delta arrives, so a long-running stream stays alive as long
 /// as the daemon keeps producing output within the window.
 const DAEMON_STREAM_INACTIVITY_TIMEOUT: Duration = Duration::from_secs(90);
+/// How long the daemon must produce *no output at all* before a non-streaming
+/// request timeout is treated as a genuinely wedged/dead process worth killing.
+///
+/// The Python daemon dispatches requests on a single serial loop, so a slow
+/// reply to one non-streaming request (e.g. a routine `ui.logs.snapshot` /
+/// `ui.overview.snapshot` poll) usually means the daemon is *busy* serving
+/// another, often streaming, request — not that it is dead. Killing the whole
+/// process in that case was the root of the daemon-supervisor kill loop: the
+/// kill marks the shared process broken, the next request respawns it (locked),
+/// and any heavy work re-runs. We now only kill when the daemon has been
+/// silent across this window — real evidence of a hang rather than a busy loop.
+const DAEMON_SILENCE_KILL_TIMEOUT: Duration = Duration::from_secs(90);
 const STDERR_TAIL_LIMIT: usize = 16 * 1024;
 const LIFECYCLE_RING_CAPACITY: usize = 64;
 
@@ -62,6 +74,14 @@ pub struct DaemonSupervisor {
     lifecycle: Mutex<VecDeque<LifecycleRecord>>,
     next_lifecycle_id: AtomicU64,
     event_sink: SharedEventSink,
+    /// Per-request budget for non-streaming kinds. Exceeding it no longer kills
+    /// the daemon outright (see [`DAEMON_SILENCE_KILL_TIMEOUT`]); it fails the
+    /// one slow request retryably. A field (not the bare const) so tests can
+    /// shrink it without waiting the full budget.
+    invoke_timeout: Duration,
+    /// Silence window after which a non-streaming timeout escalates to killing
+    /// a genuinely wedged daemon. A field so tests can drive both branches.
+    silence_kill_timeout: Duration,
 }
 
 /// Daemon lifecycle event kept for the diagnostics screen. `detail` and
@@ -84,6 +104,11 @@ struct DaemonProcess {
     pending: PendingMap,
     stderr_tail: StderrTail,
     broken: Arc<AtomicBool>,
+    /// Wall-clock instant of the most recent line read from the daemon's
+    /// stdout (any record: response, stream delta, or event). Used to tell a
+    /// busy-but-alive daemon apart from a wedged one when a non-streaming
+    /// request times out. Updated by the stdout reader; read on timeout.
+    last_activity: Arc<Mutex<Instant>>,
 }
 
 #[derive(Clone)]
@@ -340,6 +365,8 @@ impl DaemonSupervisor {
             lifecycle: Mutex::new(VecDeque::new()),
             next_lifecycle_id: AtomicU64::new(1),
             event_sink: Arc::new(Mutex::new(None)),
+            invoke_timeout: DAEMON_INVOKE_TIMEOUT,
+            silence_kill_timeout: DAEMON_SILENCE_KILL_TIMEOUT,
         }
     }
 
@@ -354,7 +381,18 @@ impl DaemonSupervisor {
             lifecycle: Mutex::new(VecDeque::new()),
             next_lifecycle_id: AtomicU64::new(1),
             event_sink: Arc::new(Mutex::new(None)),
+            invoke_timeout: DAEMON_INVOKE_TIMEOUT,
+            silence_kill_timeout: DAEMON_SILENCE_KILL_TIMEOUT,
         }
+    }
+
+    /// Override the timeouts so tests can exercise both the non-fatal (busy)
+    /// and the silence-kill branches without waiting the production budgets.
+    #[cfg(test)]
+    fn with_timeouts(mut self, invoke_timeout: Duration, silence_kill_timeout: Duration) -> Self {
+        self.invoke_timeout = invoke_timeout;
+        self.silence_kill_timeout = silence_kill_timeout;
+        self
     }
 
     #[cfg(test)]
@@ -371,6 +409,8 @@ impl DaemonSupervisor {
             lifecycle: Mutex::new(VecDeque::new()),
             next_lifecycle_id: AtomicU64::new(1),
             event_sink: Arc::new(Mutex::new(None)),
+            invoke_timeout: DAEMON_INVOKE_TIMEOUT,
+            silence_kill_timeout: DAEMON_SILENCE_KILL_TIMEOUT,
         }
     }
 
@@ -554,12 +594,12 @@ impl DaemonSupervisor {
         }
 
         // For streaming kinds we use a per-record inactivity timeout so a slow
-        // model that keeps emitting tokens stays alive past the 15s
-        // total-budget. Non-streaming kinds keep the original total deadline.
+        // model that keeps emitting tokens stays alive past the total-budget.
+        // Non-streaming kinds keep the original total deadline.
         let deadline = if streaming {
             None
         } else {
-            Some(Instant::now() + DAEMON_INVOKE_TIMEOUT)
+            Some(Instant::now() + self.invoke_timeout)
         };
 
         let result = loop {
@@ -572,18 +612,55 @@ impl DaemonSupervisor {
                 Ok(Ok(response)) => response,
                 Ok(Err(error)) => break Err(error.with_stderr_tail(process.stderr_tail())),
                 Err(mpsc::RecvTimeoutError::Timeout) => {
-                    process.mark_broken();
-                    process.kill();
-                    let stderr_tail = process.stderr_tail();
-                    self.record_lifecycle("killed", "daemon_timeout", &stderr_tail, "");
-                    break Err(SupervisorError::new(
-                        "daemon_timeout",
-                        format!(
-                            "Python daemon did not answer within {} seconds",
-                            remaining.as_secs()
-                        ),
+                    // A non-streaming request blew its budget. Historically we
+                    // killed the whole daemon here — but the Python daemon
+                    // dispatches requests on one serial loop, so an overdue
+                    // reply almost always means it is *busy* serving another
+                    // (often streaming) request, not that it is dead. Killing it
+                    // for a routine poll (ui.logs.snapshot / ui.overview.snapshot
+                    // / ui.wallets.list) that lands during a long sync is the
+                    // root of the supervisor kill loop: the kill marks the
+                    // shared process broken, the next request respawns it
+                    // locked, and heavy work re-runs. Only kill on real evidence
+                    // of death; otherwise fail THIS request retryably and leave
+                    // the daemon (and its in-flight work) running.
+                    if let Ok(Some(status)) = process.try_wait() {
+                        process.mark_broken();
+                        let stderr_tail = process.stderr_tail();
+                        self.record_lifecycle("exited", &status.to_string(), &stderr_tail, "");
+                        break Err(SupervisorError::new(
+                            "daemon_exited",
+                            format!("Python daemon exited before answering: {status}"),
+                        )
+                        .with_stderr_tail(stderr_tail)
+                        .retryable());
+                    }
+                    let silence = process.silence_elapsed();
+                    if silence >= self.silence_kill_timeout {
+                        process.mark_broken();
+                        process.kill();
+                        let stderr_tail = process.stderr_tail();
+                        self.record_lifecycle("killed", "daemon_timeout", &stderr_tail, "");
+                        break Err(SupervisorError::new(
+                            "daemon_timeout",
+                            format!(
+                                "Python daemon produced no output for {} seconds",
+                                silence.as_secs()
+                            ),
+                        )
+                        .with_stderr_tail(stderr_tail)
+                        .retryable());
+                    }
+                    // Alive and recently productive — just slow for this one
+                    // request. Return early WITHOUT unregistering: the eventual
+                    // late response will find the (receiver-dropped) sender and
+                    // be discarded by the stdout reader's send-failure path,
+                    // rather than hitting the unknown-request_id branch that
+                    // would kill the daemon.
+                    return Err(SupervisorError::new(
+                        "daemon_busy",
+                        "The daemon is busy with a long-running operation. Please retry shortly.",
                     )
-                    .with_stderr_tail(stderr_tail)
                     .retryable());
                 }
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
@@ -793,11 +870,13 @@ impl DaemonProcess {
 
         let broken = Arc::new(AtomicBool::new(false));
         let pending = Arc::new(Mutex::new(HashMap::new()));
+        let last_activity = Arc::new(Mutex::new(Instant::now()));
         let (ready_tx, ready_rx) = mpsc::channel();
         spawn_stdout_reader(
             stdout,
             Arc::clone(&pending),
             Arc::clone(&broken),
+            Arc::clone(&last_activity),
             ready_tx,
             Arc::clone(&stdin),
             secret_store,
@@ -809,6 +888,7 @@ impl DaemonProcess {
             pending,
             stderr_tail,
             broken,
+            last_activity,
         };
         let ready = match ready_rx.recv_timeout(DAEMON_READY_TIMEOUT) {
             Ok(Ok(ready)) => ready,
@@ -934,6 +1014,15 @@ impl DaemonProcess {
         self.broken.load(Ordering::SeqCst)
     }
 
+    /// How long since the daemon last wrote anything to stdout. A short value
+    /// while a request is overdue means the daemon is busy (alive), not wedged.
+    fn silence_elapsed(&self) -> Duration {
+        self.last_activity
+            .lock()
+            .map(|last| last.elapsed())
+            .unwrap_or(Duration::ZERO)
+    }
+
     fn mark_broken(&self) {
         self.broken.store(true, Ordering::SeqCst);
     }
@@ -1027,10 +1116,15 @@ impl StderrTail {
     }
 }
 
+// Pure wiring: each argument is a distinct shared handle the reader thread
+// needs for the lifetime of the process; bundling them into a struct would not
+// improve clarity.
+#[allow(clippy::too_many_arguments)]
 fn spawn_stdout_reader(
     stdout: ChildStdout,
     pending: PendingMap,
     broken: Arc<AtomicBool>,
+    last_activity: Arc<Mutex<Instant>>,
     ready_tx: PendingSender,
     stdin: SharedStdin,
     secret_store: SharedSecretStore,
@@ -1041,7 +1135,17 @@ fn spawn_stdout_reader(
         let mut startup = Some(ready_tx);
         loop {
             let mut line = String::new();
-            match reader.read_line(&mut line) {
+            let read = reader.read_line(&mut line);
+            // Any non-empty line — response, stream delta, event, or even a
+            // malformed record — proves the daemon is alive and producing
+            // output, so refresh the liveness clock the non-streaming timeout
+            // path consults before deciding a slow request means a dead daemon.
+            if matches!(&read, Ok(count) if *count > 0) {
+                if let Ok(mut last) = last_activity.lock() {
+                    *last = Instant::now();
+                }
+            }
+            match read {
                 Ok(0) => {
                     fail_stdout_reader(
                         &broken,
@@ -1861,6 +1965,10 @@ for line in sys.stdin:
         threading.Thread(target=slow, args=(request_id,), daemon=True).start()
     elif kind == "fast":
         emit({"kind":"fast","schema_version":1,"request_id":request_id,"data":{"ok":True,"pid":os.getpid()}})
+    elif kind == "busy":
+        # Read but never answer: models the single-threaded daemon being busy
+        # on another request. The reader loop stays free for later requests.
+        pass
     elif kind == "locked":
         emit({"kind":"auth_required","schema_version":1,"request_id":request_id,"data":{"scope":"unlock_database"}})
     elif kind == "emit-event":
@@ -1939,6 +2047,80 @@ for line in sys.stdin:
             Some(json!("shutdown-1")),
             |_| {},
         );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn busy_non_streaming_request_does_not_kill_a_live_daemon() {
+        let (dir, script) = write_stub_daemon();
+        let process = DaemonProcess::spawn_command(DaemonCommand {
+            program: script,
+            args: Vec::new(),
+            cwd: dir.clone(),
+            source: "env_python",
+        })
+        .expect("spawn stub daemon");
+        // Short invoke budget so the busy request times out fast; a generous
+        // silence window so the daemon (which just answered the warm-up) is
+        // treated as alive, not wedged.
+        let supervisor = DaemonSupervisor::new_with_process(process)
+            .with_timeouts(Duration::from_millis(200), Duration::from_secs(30));
+
+        // A real response stamps the liveness clock to ~now.
+        let warm = supervisor
+            .invoke_inner("fast", None, false, Some(json!("warm-1")), |_| {})
+            .expect("warm-up response");
+        let pid_before = response_pid(&warm);
+
+        // A non-streaming request the busy daemon never answers must fail
+        // retryably as daemon_busy WITHOUT killing the process.
+        let busy = supervisor
+            .invoke_inner("busy", None, false, Some(json!("busy-1")), |_| {})
+            .expect_err("busy request should time out");
+        assert_eq!(busy.code, "daemon_busy");
+        assert!(busy.retryable);
+
+        // The daemon must still answer, on the SAME process (no respawn) — the
+        // late/never response to busy-1 must not have taken the daemon down.
+        let after = supervisor
+            .invoke_inner("fast", None, false, Some(json!("after-1")), |_| {})
+            .expect("daemon still answers after a busy timeout");
+        assert_eq!(response_pid(&after), pid_before);
+
+        let _ = supervisor.invoke_inner(
+            "daemon.shutdown",
+            None,
+            false,
+            Some(json!("shutdown-busy-1")),
+            |_| {},
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn silent_daemon_is_killed_after_the_silence_window() {
+        let (dir, script) = write_stub_daemon();
+        let process = DaemonProcess::spawn_command(DaemonCommand {
+            program: script,
+            args: Vec::new(),
+            cwd: dir.clone(),
+            source: "env_python",
+        })
+        .expect("spawn stub daemon");
+        // Zero silence window: a non-streaming timeout while the daemon has
+        // produced no output escalates to a kill — genuine-hang recovery is
+        // preserved, distinct from the busy (alive) case above.
+        let supervisor = DaemonSupervisor::new_with_process(process)
+            .with_timeouts(Duration::from_millis(100), Duration::from_secs(0));
+
+        let killed = supervisor
+            .invoke_inner("busy", None, false, Some(json!("busy-1")), |_| {})
+            .expect_err("silent daemon should be killed");
+        assert_eq!(killed.code, "daemon_timeout");
+        assert!(killed.retryable);
+
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -2351,6 +2533,8 @@ for line in sys.stdin:
             lifecycle: Mutex::new(VecDeque::new()),
             next_lifecycle_id: AtomicU64::new(1),
             event_sink: Arc::new(Mutex::new(None)),
+            invoke_timeout: DAEMON_INVOKE_TIMEOUT,
+            silence_kill_timeout: DAEMON_SILENCE_KILL_TIMEOUT,
         };
 
         let error = supervisor
