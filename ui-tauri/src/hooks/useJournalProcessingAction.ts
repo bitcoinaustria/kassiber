@@ -6,6 +6,13 @@ import { useUiStore } from "@/store/ui";
 
 const JOURNAL_PROCESSING_PROGRESS_ID = "journal-processing";
 
+export type JournalProcessWarning = {
+  code?: string;
+  label?: string;
+  wallet_ids?: string[];
+  message?: string;
+};
+
 export type JournalProcessResult = {
   profile?: string;
   entries_created?: number;
@@ -15,7 +22,32 @@ export type JournalProcessResult = {
   auto_priced?: number;
   processed_transactions?: number;
   processed_at?: string;
+  warnings?: JournalProcessWarning[];
 };
+
+export function warningSummary(warnings: JournalProcessWarning[]) {
+  const first = warnings[0]?.message ?? "Review required";
+  return warnings.length > 1
+    ? `${warnings.length} warnings — ${first}`
+    : first;
+}
+
+/** Notification body + tone for a finished journal-processing run. */
+export function journalProcessOutcome(
+  payload: JournalProcessResult | undefined,
+  entryLabel: "entries" | "events" = "entries",
+): { body: string; tone: "success" | "warning" } {
+  const warnings = payload?.warnings ?? [];
+  const summary = journalProcessBody(payload, entryLabel);
+  return {
+    body: warnings.length
+      ? `${summary} — ${warningSummary(warnings)}`
+      : summary,
+    // A non-blocking warning (e.g. duplicate wallet labels merging per-wallet
+    // attribution) must not read as a clean success.
+    tone: warnings.length || payload?.quarantined ? "warning" : "success",
+  };
+}
 
 type JournalProcessingActionOptions = {
   entryLabel?: "entries" | "events";
@@ -104,11 +136,11 @@ export function useJournalProcessingAction(
     });
     processJournals.mutate(undefined, {
       onSuccess: (envelope) => {
-        const payload = envelope.data;
+        const { body, tone } = journalProcessOutcome(envelope.data, entryLabel);
         addNotification({
           title: "Journals processed",
-          body: journalProcessBody(payload, entryLabel),
-          tone: payload?.quarantined ? "warning" : "success",
+          body,
+          tone,
           dedupeKey: "journal-processing",
         });
         clearActiveMaintenanceProgress(JOURNAL_PROCESSING_PROGRESS_ID);

@@ -354,6 +354,121 @@ def derive_ownership_transfers(
     return result
 
 
+def derive_recorded_fanout_transfers(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    already_paired_ids: set[str],
+) -> OwnershipDeriveResult:
+    """Decompose a recorded 1->N self-transfer fan-out from the rows alone.
+
+    The address-ownership deriver needs a readable on-chain graph (esplora
+    ``vin``/``vout``). Liquid output amounts are confidential, so a Liquid spend
+    carries no per-output graph — and a CSV import may carry none either. But
+    when every leg of the fan-out *was* synced, the rows themselves are enough:
+    a group of rows sharing one ``(external_id, asset)`` across two or more of
+    the profile's wallets is, by construction, all owned, and the sync amount
+    model conserves value (an outbound's ``amount`` excludes change and the fee,
+    so ``out.amount == sum(in.amount)`` for a pure fan-out on both Bitcoin and
+    Liquid). ``detect_intra_transfers`` only pairs the clean 1-out/1-in shape, so
+    a 1->N fan-out is otherwise quarantined ``owned_fanout_unresolved``.
+
+    Scope (conservative — anything outside is left to that quarantine):
+
+    * **Exactly one outbound.** Multi-source consolidations (>1 outbound) assign
+      the whole fee to each contributing wallet's row, so amounts are unreliable.
+    * **Two or more distinct destination wallets**, one inbound each (a wallet
+      receiving twice in one tx records a single combined inbound).
+    * **Exact conservation.** ``out.amount == sum(in.amount)``; a shortfall means
+      a destination was not synced, so the split would be wrong.
+
+    Pairs reuse the recorded inbound rows; the outbound is split into one MOVE
+    leg per destination (whole fee on the first leg) and dropped from the row
+    set. Runs *after* the address-ownership deriver and must be given that
+    deriver's touched ids in ``already_paired_ids`` so a graph-readable Bitcoin
+    fan-out is not decomposed twice.
+    """
+    result = OwnershipDeriveResult()
+    groups: dict[tuple[str, Any], list[Mapping[str, Any]]] = {}
+    for row in rows:
+        external_id = _get(row, "external_id")
+        if not external_id:
+            continue
+        if str(_get(row, "id")).startswith(_SYNTHETIC_ID_PREFIXES):
+            continue
+        groups.setdefault((str(external_id), _get(row, "asset")), []).append(row)
+
+    for (external_id, asset), group in groups.items():
+        # Count the group's TRUE source rows first — every positive outbound,
+        # paired or not. The consolidation guard must reflect how many wallets
+        # actually funded the spend; filtering already_paired_ids first would let
+        # a multi-source consolidation masquerade as single-source once one of
+        # its sources was handled elsewhere, and the surviving source (whose
+        # per-wallet amount is unreliable) would be wrongly split.
+        outs = [
+            row
+            for row in group
+            if _get(row, "direction") == "outbound"
+            and int(_get(row, "amount") or 0) > 0
+        ]
+        if len(outs) != 1:
+            continue  # consolidation / nothing to split — leave to quarantine
+        out_row = outs[0]
+        if str(_get(out_row, "id")) in already_paired_ids:
+            continue  # the single source is already handled elsewhere
+        source_wallet_id = str(_get(out_row, "wallet_id"))
+        dest_ins = [
+            row
+            for row in group
+            if _get(row, "direction") == "inbound"
+            and str(_get(row, "id")) not in already_paired_ids
+            and str(_get(row, "wallet_id")) != source_wallet_id
+        ]
+        if len(dest_ins) < 2:
+            # 0 destinations -> not a transfer; exactly 1 -> the clean shape
+            # detect_intra_transfers already pairs (and would be in
+            # already_paired_ids). Either way, nothing to decompose here.
+            continue
+        dest_wallets = {str(_get(row, "wallet_id")) for row in dest_ins}
+        if len(dest_wallets) != len(dest_ins):
+            continue  # a wallet appears twice — odd shape, decline
+        out_amount = int(_get(out_row, "amount") or 0)
+        legs_total = sum(int(_get(row, "amount") or 0) for row in dest_ins)
+        if legs_total != out_amount:
+            continue  # a destination was not synced — amounts don't conserve
+
+        out_fee = int(_get(out_row, "fee") or 0)
+        legs = sorted(
+            dest_ins,
+            key=lambda row: (int(_get(row, "amount") or 0), str(_get(row, "id"))),
+        )
+        leg_pairs: list[dict[str, Any]] = []
+        leg_rows: list[dict[str, Any]] = []
+        ok = True
+        for position, in_row in enumerate(legs):
+            leg_msat = int(_get(in_row, "amount") or 0)
+            if leg_msat <= 0:
+                ok = False
+                break
+            out_leg = _clone_row(
+                out_row,
+                amount=leg_msat,
+                fee=out_fee if position == 0 else 0,
+                row_id=f"recorded-fanout:{external_id}:out:{_get(in_row, 'id')}",
+                external_id=f"recorded-fanout:{external_id}:out:{_get(in_row, 'id')}",
+                kind="self_transfer_out",
+                journal_transaction_id=str(_get(out_row, "id")),
+            )
+            leg_pairs.append({"out": out_leg, "in": in_row, "source": "recorded_fanout"})
+            leg_rows.append(out_leg)
+        if not ok or not leg_pairs:
+            continue
+        result.derived_pairs.extend(leg_pairs)
+        result.synthetic_rows.extend(leg_rows)
+        result.dropped_out_ids.add(str(_get(out_row, "id")))
+
+    return result
+
+
 # -- internals --------------------------------------------------------------
 
 

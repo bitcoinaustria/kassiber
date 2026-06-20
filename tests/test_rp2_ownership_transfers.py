@@ -65,7 +65,7 @@ def _fanout_index():
     return index
 
 
-def _row(wallet_id, direction, amount, *, external_id, raw_json="{}", fee=0):
+def _row(wallet_id, direction, amount, *, external_id, raw_json="{}", fee=0, asset="BTC"):
     ref = WALLET_REFS[wallet_id]
     return {
         "id": f"{wallet_id}-{direction}-{external_id}",
@@ -80,7 +80,7 @@ def _row(wallet_id, direction, amount, *, external_id, raw_json="{}", fee=0):
         "occurred_at": NOW,
         "created_at": NOW,
         "direction": direction,
-        "asset": "BTC",
+        "asset": asset,
         "amount": amount,
         "fee": fee,
         "fiat_currency": "USD",
@@ -132,10 +132,17 @@ class OwnershipDeriverEngineTest(unittest.TestCase):
             )
         )
 
-    def test_fanout_quarantined_without_deriver(self):
+    def test_recorded_fanout_decomposed_without_ownership_index(self):
+        # All legs of this fan-out were synced (recorded under one txid across
+        # wallets), so the row-based recorded-fanout decomposer proves the
+        # self-transfer and books MOVEs even with NO ownership index — the index
+        # (graph read) is only needed for sync-gap / mismatched-txid cases.
         state = self._run(owned_index=None)
         reasons = {q["reason"] for q in state.quarantines}
-        self.assertIn("owned_fanout_unresolved", reasons)
+        self.assertNotIn("owned_fanout_unresolved", reasons)
+        entry_types = sorted(entry["entry_type"] for entry in state.entries)
+        self.assertEqual(entry_types.count("transfer_out"), 2)
+        self.assertEqual(entry_types.count("transfer_in"), 2)
 
     def test_fanout_becomes_moves_with_deriver(self):
         state = self._run(owned_index=_fanout_index())
@@ -777,6 +784,85 @@ class OwnershipDeriverHandlerTest(unittest.TestCase):
             }
             for r in rows:
                 self.assertIn(r["transaction_id"], real_ids)
+
+
+class DuplicateWalletLabelGuardTest(unittest.TestCase):
+    def test_warns_on_shared_label(self):
+        refs = {
+            "w1": {"id": "w1", "label": "Hot"},
+            "w2": {"id": "w2", "label": "Hot"},
+            "w3": {"id": "w3", "label": "Cold"},
+        }
+        warnings = handlers._duplicate_label_warnings(refs)
+        self.assertEqual(len(warnings), 1)
+        warning = warnings[0]
+        self.assertEqual(warning["code"], "duplicate_wallet_label")
+        self.assertEqual(warning["label"], "Hot")
+        self.assertEqual(warning["wallet_ids"], ["w1", "w2"])
+
+    def test_unique_labels_produce_no_warning(self):
+        refs = {
+            "w1": {"id": "w1", "label": "Hot"},
+            "w2": {"id": "w2", "label": "Cold"},
+        }
+        self.assertEqual(handlers._duplicate_label_warnings(refs), [])
+
+
+class RecordedFanoutEngineTest(unittest.TestCase):
+    """Liquid (no on-chain graph) 1->N self-transfer through the real engine."""
+
+    def _liquid_fanout_rows(self, fee=0):
+        # A (Cold) fans 0.8 LBTC to B (Hot) 0.5 and C (Savings) 0.3, all recorded
+        # under one txid. No vin/vout (Liquid amounts are confidential), so the
+        # address-ownership deriver can't read it — the recorded-fanout
+        # decomposer pairs it from the rows.
+        return [
+            _row("A", "inbound", 80 * BTC // 100 + fee, external_id="acqA", asset="LBTC"),
+            _row("A", "outbound", 80 * BTC // 100, external_id="lq", fee=fee, asset="LBTC"),
+            _row("B", "inbound", 50 * BTC // 100, external_id="lq", asset="LBTC"),
+            _row("C", "inbound", 30 * BTC // 100, external_id="lq", asset="LBTC"),
+        ]
+
+    def test_liquid_fanout_books_moves_without_index(self):
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=self._liquid_fanout_rows(fee=2_000_000),
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                owned_index=None,  # no graph, no index — rows alone
+            )
+        )
+        self.assertNotIn(
+            "owned_fanout_unresolved", {q["reason"] for q in state.quarantines}
+        )
+        entry_types = sorted(e["entry_type"] for e in state.entries)
+        self.assertEqual(entry_types.count("transfer_out"), 2)
+        self.assertEqual(entry_types.count("transfer_in"), 2)
+        holdings = {
+            label: round(float(totals["quantity"]), 5)
+            for (_, label, _, _), totals in state.wallet_holdings.items()
+        }
+        # Basis carried: 0.5 -> Hot, 0.3 -> Savings, source drained. No disposal.
+        self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.5, places=6)
+        self.assertAlmostEqual(holdings.get("Savings", 0.0), 0.3, places=6)
+        self.assertNotIn("disposal", entry_types)
+
+    def test_liquid_fanout_with_unsynced_destination_quarantines(self):
+        # C never synced -> the recorded inbounds don't conserve, so the
+        # decomposer declines and the spend stays on its review path (not booked
+        # as a partial/incorrect split).
+        rows = self._liquid_fanout_rows(fee=0)[:-1]  # drop C's inbound
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                owned_index=None,
+            )
+        )
+        entry_types = [e["entry_type"] for e in state.entries]
+        self.assertNotIn("transfer_in", entry_types)
+        self.assertTrue(state.quarantines)  # flagged for review, nothing mis-booked
 
 
 if __name__ == "__main__":

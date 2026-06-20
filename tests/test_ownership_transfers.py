@@ -14,7 +14,10 @@ import json
 import unittest
 
 from kassiber.core.ownership import OwnedIndex, OwnedMatch
-from kassiber.core.ownership_transfers import derive_ownership_transfers
+from kassiber.core.ownership_transfers import (
+    derive_ownership_transfers,
+    derive_recorded_fanout_transfers,
+)
 
 
 # Arbitrary distinct scriptPubKey hex per wallet — values are opaque to the
@@ -609,6 +612,136 @@ class OwnershipDeriverTests(unittest.TestCase):
                 )
                 self.assertEqual(len(result.derived_pairs), 1)
                 self.assertEqual(result.derived_pairs[0]["in"]["wallet_id"], "B")
+
+
+def _plain_row(*, row_id, wallet_id, direction, amount_sats, txid, asset="LBTC", fee_sats=0):
+    """A recorded row with NO on-chain graph (Liquid / graphless CSV shape)."""
+    return {
+        "id": row_id,
+        "wallet_id": wallet_id,
+        "wallet_label": f"Wallet {wallet_id}",
+        "direction": direction,
+        "asset": asset,
+        "amount": amount_sats * SATS,
+        "fee": fee_sats * SATS,
+        "external_id": txid,
+        "occurred_at": "2026-03-14T17:30:00Z",
+        "created_at": "2026-03-14T17:30:00Z",
+        "fiat_rate": 40000.0,
+        "fiat_rate_exact": "40000",
+        "fiat_value": None,
+        "raw_json": "{}",
+    }
+
+
+class RecordedFanoutDeriverTests(unittest.TestCase):
+    """The graphless 1->N decomposer (Liquid / CSV) working from rows alone."""
+
+    def test_recorded_fanout_decomposes_into_legs(self):
+        # A spends 0.8 LBTC fanning to B (0.5) and C (0.3), all recorded under
+        # one txid. detect_intra skips the 1-out/2-in shape; the decomposer pairs
+        # each recorded inbound, whole fee on the first leg, drops the source.
+        rows = [
+            _plain_row(row_id="a-out", wallet_id="A", direction="outbound",
+                       amount_sats=80_000_000, fee_sats=2000, txid="lq"),
+            _plain_row(row_id="b-in", wallet_id="B", direction="inbound",
+                       amount_sats=50_000_000, txid="lq"),
+            _plain_row(row_id="c-in", wallet_id="C", direction="inbound",
+                       amount_sats=30_000_000, txid="lq"),
+        ]
+        result = derive_recorded_fanout_transfers(rows, already_paired_ids=set())
+        self.assertEqual(len(result.derived_pairs), 2)
+        self.assertEqual(result.dropped_out_ids, {"a-out"})
+        self.assertEqual({p["in"]["id"] for p in result.derived_pairs}, {"b-in", "c-in"})
+        for pair in result.derived_pairs:
+            self.assertEqual(pair["source"], "recorded_fanout")
+            self.assertEqual(pair["out"]["amount"], pair["in"]["amount"])
+        fees = sorted(p["out"]["fee"] for p in result.derived_pairs)
+        self.assertEqual(fees, [0, 2000 * SATS])  # whole fee on exactly one leg
+
+    def test_shortfall_not_decomposed(self):
+        # A destination wasn't synced -> recorded inbounds don't sum to the
+        # outbound -> the split would be wrong, so decline (leave to quarantine).
+        rows = [
+            _plain_row(row_id="a-out", wallet_id="A", direction="outbound",
+                       amount_sats=80_000_000, txid="lq"),
+            _plain_row(row_id="b-in", wallet_id="B", direction="inbound",
+                       amount_sats=50_000_000, txid="lq"),
+        ]
+        result = derive_recorded_fanout_transfers(rows, already_paired_ids=set())
+        self.assertEqual(result.derived_pairs, [])
+
+    def test_consolidation_not_decomposed(self):
+        # Two outbounds under one txid (N->1 consolidation): per-wallet fee is
+        # double-counted, amounts unreliable -> decline.
+        rows = [
+            _plain_row(row_id="a-out", wallet_id="A", direction="outbound",
+                       amount_sats=50_000_000, txid="cons"),
+            _plain_row(row_id="b-out", wallet_id="B", direction="outbound",
+                       amount_sats=30_000_000, txid="cons"),
+            _plain_row(row_id="c-in", wallet_id="C", direction="inbound",
+                       amount_sats=80_000_000, txid="cons"),
+        ]
+        result = derive_recorded_fanout_transfers(rows, already_paired_ids=set())
+        self.assertEqual(result.derived_pairs, [])
+
+    def test_one_to_one_left_to_detect_intra(self):
+        # A clean 1-out/1-in is detect_intra_transfers' job; the decomposer only
+        # handles >=2 destinations, so it declines here.
+        rows = [
+            _plain_row(row_id="a-out", wallet_id="A", direction="outbound",
+                       amount_sats=50_000_000, txid="lq"),
+            _plain_row(row_id="b-in", wallet_id="B", direction="inbound",
+                       amount_sats=50_000_000, txid="lq"),
+        ]
+        result = derive_recorded_fanout_transfers(rows, already_paired_ids=set())
+        self.assertEqual(result.derived_pairs, [])
+
+    def test_already_paired_source_skipped(self):
+        rows = [
+            _plain_row(row_id="a-out", wallet_id="A", direction="outbound",
+                       amount_sats=80_000_000, txid="lq"),
+            _plain_row(row_id="b-in", wallet_id="B", direction="inbound",
+                       amount_sats=50_000_000, txid="lq"),
+            _plain_row(row_id="c-in", wallet_id="C", direction="inbound",
+                       amount_sats=30_000_000, txid="lq"),
+        ]
+        result = derive_recorded_fanout_transfers(rows, already_paired_ids={"a-out"})
+        self.assertEqual(result.derived_pairs, [])
+
+    def test_multi_source_not_decomposed_when_one_source_already_paired(self):
+        # Two wallets fund the spend (A + B both outbound under one txid). Even
+        # when one source is already paired elsewhere, the group is still a
+        # multi-source consolidation whose per-wallet amounts are unreliable, so
+        # the surviving source must NOT be split. The consolidation guard counts
+        # ALL positive outbounds, not just the unpaired ones.
+        rows = [
+            _plain_row(row_id="a-out", wallet_id="A", direction="outbound",
+                       amount_sats=50_000_000, txid="T"),
+            _plain_row(row_id="b-out", wallet_id="B", direction="outbound",
+                       amount_sats=80_000_000, txid="T"),
+            _plain_row(row_id="c-in", wallet_id="C", direction="inbound",
+                       amount_sats=50_000_000, txid="T"),
+            _plain_row(row_id="d-in", wallet_id="D", direction="inbound",
+                       amount_sats=30_000_000, txid="T"),
+        ]
+        result = derive_recorded_fanout_transfers(rows, already_paired_ids={"a-out"})
+        self.assertEqual(result.derived_pairs, [])
+        self.assertEqual(result.dropped_out_ids, set())
+
+    def test_same_wallet_double_inbound_declined(self):
+        # Two inbounds from the SAME destination wallet under one txid is an odd
+        # shape (sync records one combined inbound per wallet) -> decline.
+        rows = [
+            _plain_row(row_id="a-out", wallet_id="A", direction="outbound",
+                       amount_sats=80_000_000, txid="lq"),
+            _plain_row(row_id="b-in-1", wallet_id="B", direction="inbound",
+                       amount_sats=50_000_000, txid="lq"),
+            _plain_row(row_id="b-in-2", wallet_id="B", direction="inbound",
+                       amount_sats=30_000_000, txid="lq"),
+        ]
+        result = derive_recorded_fanout_transfers(rows, already_paired_ids=set())
+        self.assertEqual(result.derived_pairs, [])
 
 
 if __name__ == "__main__":

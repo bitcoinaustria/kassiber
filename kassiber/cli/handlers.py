@@ -3107,6 +3107,40 @@ def auto_price_transactions_from_rates_cache(conn, profile):
     return auto_priced
 
 
+def _duplicate_label_warnings(wallet_refs_by_id):
+    """Warn when two wallets in a profile share a label.
+
+    RP2 keys per-account holdings (and exchange identity) by the wallet *label*,
+    so two wallets sharing one label merge their balances, and a derived
+    self-transfer routed by label can land on the wrong account. The books'
+    totals stay correct; the per-wallet attribution does not. Surfaced as a
+    non-blocking warning so the user renames them.
+    """
+    ids_by_label: dict[str, list[str]] = {}
+    for ref in wallet_refs_by_id.values():
+        label = ref.get("label")
+        if not label:
+            continue
+        ids_by_label.setdefault(str(label), []).append(str(ref.get("id")))
+    warnings = []
+    for label, ids in sorted(ids_by_label.items()):
+        if len(ids) > 1:
+            warnings.append(
+                {
+                    "code": "duplicate_wallet_label",
+                    "label": label,
+                    "wallet_ids": sorted(ids),
+                    "message": (
+                        f"{len(ids)} wallets share the label '{label}'. Reports key "
+                        "holdings by wallet label, so their balances merge and a "
+                        "derived self-transfer can be attributed to the wrong "
+                        "wallet. Rename them to be unique."
+                    ),
+                }
+            )
+    return warnings
+
+
 def build_ledger_state(conn, profile):
     require_tax_processing_supported(profile)
     rows = conn.execute(
@@ -3172,6 +3206,7 @@ def build_ledger_state(conn, profile):
     # derivation cost) when some on-chain outbound carries full transaction JSON
     # to read outputs from. Skip the build entirely for pure CSV / Lightning
     # profiles.
+    warnings = _duplicate_label_warnings(wallet_refs_by_id)
     owned_index = None
     has_onchain_outbound = any(
         row["direction"] == "outbound" and (row["raw_json"] or "").find('"vout"') != -1
@@ -3179,8 +3214,12 @@ def build_ledger_state(conn, profile):
     )
     if has_onchain_outbound:
         index_wallets = core_ownership.load_profile_wallets(conn, profile["id"])
-        owned_index, _ownership_warnings = core_ownership.build_owned_index(
+        owned_index, ownership_warnings = core_ownership.build_owned_index(
             conn, profile["id"], index_wallets
+        )
+        warnings.extend(
+            {"code": "ownership_index", "message": str(message)}
+            for message in ownership_warnings or ()
         )
     engine_state = tax_engine.build_ledger_state(
         TaxEngineLedgerInputs(
@@ -3201,6 +3240,7 @@ def build_ledger_state(conn, profile):
         "account_holdings": engine_state.account_holdings,
         "wallet_holdings": engine_state.wallet_holdings,
         "latest_rates": rates,
+        "warnings": warnings,
     }
 
 
@@ -3409,6 +3449,8 @@ def process_journals(conn, workspace_ref, profile_ref):
     }
     if state.get("direct_swap_payouts"):
         result["direct_swap_payouts"] = len(state["direct_swap_payouts"])
+    if state.get("warnings"):
+        result["warnings"] = state["warnings"]
     return result
 
 
