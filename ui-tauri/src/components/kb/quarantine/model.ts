@@ -157,6 +157,9 @@ function basisLabel(
   if (normalized.includes("transfer_fee_implausible")) {
     return t("quarantine.basis.splitTransfer");
   }
+  if (normalized.includes("ownership_transfer")) {
+    return t("quarantine.basis.ownershipTransfer");
+  }
   if (normalized.includes("pricing_review")) {
     return t("quarantine.basis.coarsePricing");
   }
@@ -180,6 +183,9 @@ function evidenceHint(
   if (normalized.includes("transfer_fee_implausible")) {
     return t("quarantine.evidence.splitTransfer");
   }
+  if (normalized.includes("ownership_transfer")) {
+    return t("quarantine.evidence.ownershipTransfer");
+  }
   if (normalized.includes("pricing_review")) {
     return t("quarantine.evidence.coarsePricing");
   }
@@ -202,6 +208,15 @@ function nextAction(reason: string, t: TFunction<"journals">) {
   if (normalized.includes("transfer_fee_implausible")) {
     return t("quarantine.nextAction.splitTransfer");
   }
+  if (normalized.includes("ownership_transfer_source_ambiguous")) {
+    return t("quarantine.nextAction.ownershipConsolidation");
+  }
+  if (normalized.includes("ownership_transfer_amount_mismatch")) {
+    return t("quarantine.nextAction.ownershipAmountMismatch");
+  }
+  if (normalized.includes("ownership_transfer")) {
+    return t("quarantine.nextAction.ownershipTransfer");
+  }
   if (normalized.includes("pricing_review")) {
     return t("quarantine.nextAction.coarsePricing");
   }
@@ -219,6 +234,9 @@ function actionLabel(reason: string, t: TFunction<"journals">) {
   const normalized = reason.toLowerCase();
   if (normalized.includes("transfer_fee_implausible")) {
     return t("quarantine.action.openTransaction");
+  }
+  if (normalized.includes("ownership_transfer")) {
+    return t("quarantine.action.openPairing");
   }
   if (normalized.includes("pricing_review")) return t("quarantine.action.openPricing");
   if (normalized.includes("price")) return t("quarantine.action.openPricing");

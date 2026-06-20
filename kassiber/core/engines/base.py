@@ -12,6 +12,10 @@ class TaxEngineLedgerInputs:
     wallet_refs_by_id: Mapping[str, Mapping[str, Any]]
     manual_pair_records: Sequence[Mapping[str, Any]]
     direct_payout_records: Sequence[Mapping[str, Any]] = ()
+    # Prebuilt profile-wide address-ownership index (kassiber.core.ownership.
+    # OwnedIndex) used to derive self-transfers from the transaction graph;
+    # ``None`` when no on-chain transaction JSON is available to read.
+    owned_index: Any = None
 
 
 @dataclass(frozen=True)

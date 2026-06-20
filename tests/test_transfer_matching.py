@@ -240,14 +240,25 @@ class HeuristicMatchTests(unittest.TestCase):
         self.assertEqual(ids, set())
 
     def test_cross_asset_heuristic_without_recognized_route_skipped(self):
-        # LBTC->BTC across two custom (non-chain, non-Lightning) wallets is not a
-        # recognized peg/submarine route, so the time+amount heuristic must NOT
-        # surface it as a strong candidate (would otherwise be weldable into a
-        # basis-corrupting carrying-value pair).
-        out = _row(id="o", external_id="", wallet_id="w1", wallet_kind="custom",
+        # LBTC->BTC across two custodial-exchange wallets (neither a chain nor a
+        # Lightning kind) is not a recognized peg/submarine route, so the
+        # time+amount heuristic must NOT surface it as a strong candidate (would
+        # otherwise be weldable into a basis-corrupting carrying-value pair).
+        out = _row(id="o", external_id="", wallet_id="w1", wallet_kind="strike",
                    direction="outbound", asset="LBTC", amount=100_000_000)
-        inbound = _row(id="i", external_id="", wallet_id="w2", wallet_kind="custom",
+        inbound = _row(id="i", external_id="", wallet_id="w2", wallet_kind="river",
                        direction="inbound", asset="BTC", amount=99_900_000,
+                       occurred_at="2026-03-14T17:31:00Z")
+        self.assertEqual(suggest_swap_candidates([out, inbound], tax_country="at"), [])
+
+    def test_custom_wallet_cross_asset_peg_is_not_inferred(self):
+        # `custom` is too broad: it can mean custodians, exchanges, CSV-only
+        # sources, or self-custody wallets. Do not infer a carrying-value peg
+        # from asset shape alone.
+        out = _row(id="o", external_id="", wallet_id="w1", wallet_kind="custom",
+                   direction="outbound", asset="BTC", amount=100_000_000)
+        inbound = _row(id="i", external_id="", wallet_id="w2", wallet_kind="custom",
+                       direction="inbound", asset="LBTC", amount=99_900_000,
                        occurred_at="2026-03-14T17:31:00Z")
         self.assertEqual(suggest_swap_candidates([out, inbound], tax_country="at"), [])
 

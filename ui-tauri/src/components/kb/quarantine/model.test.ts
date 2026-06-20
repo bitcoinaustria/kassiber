@@ -125,6 +125,56 @@ describe("quarantine row model", () => {
       },
     });
   });
+
+  it("guides ownership-derived self-transfers that could not be auto-resolved", () => {
+    const row = quarantineItemToRow(
+      {
+        ...baseItem,
+        reason: "ownership_transfer_destination_ambiguous",
+      },
+      "AT profile",
+      t,
+    );
+
+    expect(row).toMatchObject({
+      event: "Ownership Transfer Destination Ambiguous",
+      basis: "Self-transfer between your wallets",
+      status: "Needs review",
+      priority: "Medium",
+      evidenceHint:
+        "Proven from the on-chain transaction — an output paid another of your wallets, but the matching receipt couldn't be resolved automatically",
+      nextAction:
+        "Pair it manually, or sync the destination wallet so its receipt is recorded, then process journals",
+      metricFilterIds: ["basis-or-pairs"],
+      transactionAction: {
+        label: "Open pairing",
+        tab: "details",
+      },
+    });
+  });
+
+  it("gives multi-source consolidations their own next action", () => {
+    const row = quarantineItemToRow(
+      { ...baseItem, reason: "ownership_transfer_source_ambiguous" },
+      "AT profile",
+      t,
+    );
+    expect(row.basis).toBe("Self-transfer between your wallets");
+    expect(row.nextAction).toBe(
+      "Several of your wallets funded this spend — review the consolidation and pair it, then process journals",
+    );
+  });
+
+  it("tells the user to re-sync on an ownership amount mismatch", () => {
+    const row = quarantineItemToRow(
+      { ...baseItem, reason: "ownership_transfer_amount_mismatch" },
+      "AT profile",
+      t,
+    );
+    expect(row.nextAction).toBe(
+      "The recorded amount disagrees with the on-chain transaction — re-sync the wallet, then process journals",
+    );
+  });
 });
 
 describe("quarantine metrics", () => {

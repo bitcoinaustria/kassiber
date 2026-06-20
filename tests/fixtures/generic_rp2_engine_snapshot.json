@@ -92,6 +92,7 @@
       "in_id": "onchain-self-transfer-1-in",
       "occurred_at": "2026-02-01T12:00:00Z",
       "out_id": "onchain-self-transfer-1-out",
+      "pairing_source": null,
       "spot_price": 65000.0,
       "to_wallet_id": "wallet-hot",
       "to_wallet_label": "Hot"

@@ -154,7 +154,8 @@
       "pairing": "Paarungsentscheidung",
       "reviewRequired": "Prüfung erforderlich",
       "splitTransfer": "Split-Transfer / Swap-Prüfung",
-      "coarsePricing": "Grobe Bewertung — prüfen"
+      "coarsePricing": "Grobe Bewertung — prüfen",
+      "ownershipTransfer": "Eigenübertragung zwischen deinen Wallets"
     },
     "evidence": {
       "price": "Füge einen Fiat-Preis oder Kursabdeckung hinzu",
@@ -164,7 +165,8 @@
       "detail": "{{keys}} prüfen",
       "fallback": "Nachweise prüfen",
       "splitTransfer": "Prüfe die Eigenübertragung und das verbleibende Swap- oder Auszahlungs-Leg",
-      "coarsePricing": "Aus Tageskursen bewertet — präzise Preise holen oder bestätigen"
+      "coarsePricing": "Aus Tageskursen bewertet — präzise Preise holen oder bestätigen",
+      "ownershipTransfer": "Aus der On-Chain-Transaktion belegt — eine Ausgabe ging an eine andere deiner Wallets, der passende Eingang ließ sich aber nicht automatisch zuordnen"
     },
     "nextAction": {
       "price": "Preis setzen, dann Journale verarbeiten",
@@ -172,7 +174,10 @@
       "basis": "Fehlenden Anschaffungskontext ergänzen",
       "fallback": "Quellproblem beheben",
       "splitTransfer": "Split-Transfer/Swap prüfen, dann Journale verarbeiten",
-      "coarsePricing": "Präzise Preise holen oder bestätigen, dann Journale verarbeiten"
+      "coarsePricing": "Präzise Preise holen oder bestätigen, dann Journale verarbeiten",
+      "ownershipTransfer": "Manuell paaren oder die Ziel-Wallet synchronisieren, damit ihr Eingang erfasst wird, dann Journale verarbeiten",
+      "ownershipConsolidation": "Mehrere deiner Wallets haben diese Ausgabe finanziert — die Zusammenlegung prüfen und paaren, dann Journale verarbeiten",
+      "ownershipAmountMismatch": "Der erfasste Betrag weicht von der On-Chain-Transaktion ab — Wallet neu synchronisieren, dann Journale verarbeiten"
     },
     "action": {
       "openTransaction": "Transaktion öffnen",
