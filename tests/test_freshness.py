@@ -203,6 +203,52 @@ class FreshnessTest(unittest.TestCase):
             captured.output,
         )
 
+    def test_swallowed_non_apperror_logs_exception_type(self):
+        # A non-AppError that escapes a handler's own guards (e.g. an RP2/Liquid
+        # balance error during the journal refresh) is wrapped as the opaque
+        # "freshness_job_failed". The TYPE must be captured — logged and stored —
+        # so the failure is diagnosable, while the raw message (which can carry
+        # operational data) must still never reach the ring.
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            job_type=freshness.JOB_ONCHAIN_WALLET,
+            source_key="onchain_wallet:cold",
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Journal refresh",
+            priority=10,
+        )
+        conn.commit()
+
+        def boom(conn, job, progress, check_cancelled):
+            raise ValueError("balance went negative https://user:pw@node/secret")
+
+        with self.assertLogs("kassiber.core.freshness", level="ERROR") as captured:
+            results = freshness.run_due_jobs(
+                conn,
+                {freshness.JOB_ONCHAIN_WALLET: boom},
+                profile_id=profile_id,
+                limit=1,
+            )
+
+        self.assertEqual(results[0]["status"], freshness.JOB_ERROR)
+        # The fully-qualified exception type reaches the ring...
+        self.assertTrue(
+            any("builtins.ValueError" in line for line in captured.output),
+            captured.output,
+        )
+        # ...the raw message (with its embedded URL/secret) does not.
+        self.assertFalse(
+            any("balance went negative" in line for line in captured.output),
+            captured.output,
+        )
+        # ...and it is persisted in the job error for diagnostics/UI.
+        self.assertEqual(
+            results[0]["error"]["details"]["error_class"], "builtins.ValueError"
+        )
+
     def test_failed_job_error_message_url_is_scrubbed_in_ui_snapshot(self):
         # A backend exception message can embed the backend URL (and inline
         # credentials) — httpx ConnectError / HTTPSConnectionPool strings do.
