@@ -1221,17 +1221,23 @@ fn spawn_stdout_reader(
                             continue;
                         }
 
-                        fail_stdout_reader(
-                            &broken,
-                            &pending,
-                            &mut startup,
-                            SupervisorError::new(
-                                "daemon_request_id_mismatch",
-                                "Python daemon emitted a response for an unknown request_id",
-                            )
-                            .details(json!({ "request_id": request_id })),
+                        // No pending entry for this request_id. With non-fatal
+                        // request timeouts (daemon_busy), a caller can abandon a
+                        // request the daemon still answers later — including a
+                        // streaming request that emits SEVERAL late records (e.g.
+                        // ai.chat delta then terminal) after its receiver was
+                        // dropped. The first straggler is absorbed by the
+                        // send-failure path above (which then unregisters it), so
+                        // any further records land here; they are expected
+                        // stragglers, not a protocol desync. Drop and log them
+                        // rather than killing the daemon (matching how an event
+                        // record with no sink is handled). A genuinely unknown
+                        // record before daemon.ready is still caught above by the
+                        // `startup.is_some()` guard.
+                        eprintln!(
+                            "kassiber: dropping late daemon record for unknown request_id {request_id:?}"
                         );
-                        return;
+                        continue;
                     }
                     Err(error) => {
                         fail_stdout_reader(
@@ -1946,6 +1952,13 @@ for line in sys.stdin:
         # Read but never answer: models the single-threaded daemon being busy
         # on another request. The reader loop stays free for later requests.
         pass
+    elif kind == "stray":
+        # Emit a record for a request_id the supervisor never sent (a late
+        # straggler from an abandoned/timed-out request) BEFORE this request's
+        # own terminal. The supervisor must drop the stray record and still
+        # resolve this one, rather than killing the daemon.
+        emit({"kind":"ghost.delta","schema_version":1,"request_id":"ghost-1","data":{"delta":"late"}})
+        emit({"kind":"stray","schema_version":1,"request_id":request_id,"data":{"ok":True,"pid":os.getpid()}})
     elif kind == "locked":
         emit({"kind":"auth_required","schema_version":1,"request_id":request_id,"data":{"scope":"unlock_database"}})
     elif kind == "emit-event":
@@ -2118,6 +2131,48 @@ for line in sys.stdin:
             None,
             false,
             Some(json!("shutdown-mutation-timeout")),
+            |_| {},
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn late_record_for_unknown_request_id_does_not_kill_daemon() {
+        // A streaming request that times out (daemon_busy) is left registered;
+        // its first late straggler is absorbed by the send-failure path, but a
+        // SECOND late record (e.g. ai.chat delta then terminal) lands as an
+        // unknown request_id. The daemon must drop it, not die. The stub's
+        // "stray" kind reproduces an unknown-request_id record arriving before a
+        // valid terminal in a single request.
+        let (dir, script) = write_stub_daemon();
+        let process = DaemonProcess::spawn_command(DaemonCommand {
+            program: script,
+            args: Vec::new(),
+            cwd: dir.clone(),
+            source: "env_python",
+        })
+        .expect("spawn stub daemon");
+        let supervisor = DaemonSupervisor::new_with_process(process);
+
+        let stray = supervisor
+            .invoke_inner("stray", None, false, Some(json!("stray-1")), |_| {})
+            .expect("stray request resolves despite the unknown-request_id record");
+        assert_eq!(stray.get("kind").and_then(Value::as_str), Some("stray"));
+        let pid = response_pid(&stray);
+
+        // Daemon must still be alive on the SAME process (the stray record must
+        // not have marked it broken / killed it).
+        let after = supervisor
+            .invoke_inner("fast", None, false, Some(json!("after-stray")), |_| {})
+            .expect("daemon survives an unknown-request_id record");
+        assert_eq!(response_pid(&after), pid);
+
+        let _ = supervisor.invoke_inner(
+            "daemon.shutdown",
+            None,
+            false,
+            Some(json!("shutdown-stray")),
             |_| {},
         );
         let _ = fs::remove_dir_all(dir);
