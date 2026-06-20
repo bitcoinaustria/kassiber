@@ -83,6 +83,7 @@ import {
   useDaemon,
   useDaemonMutation,
   useDaemonStreamMutation,
+  retryRetryableDaemonError,
 } from "@/daemon/client";
 import {
   connectionKindLabels,
@@ -399,7 +400,7 @@ function NodeConnectionContainer({
   const nodeSnapshotQuery = useDaemon<NodeSnapshot>(
     "ui.connections.node.snapshot",
     { connection: connection.id },
-    { retry: false },
+    { retry: retryRetryableDaemonError },
   );
   const liveSnapshot = nodeSnapshotQuery.data?.data;
   const resolvedConnection = liveSnapshot
@@ -584,14 +585,14 @@ function ConnectionDetailView({
   const coinsInventoryQuery = useDaemon<WalletUtxosData>(
     "ui.wallets.utxos",
     { wallet: connection.id },
-    { retry: false },
+    { retry: retryRetryableDaemonError },
   );
   const utxoTransactionQuery = useDaemon<{
     transaction?: OverviewSnapshot["txs"][number] | null;
   }>(
     "ui.transactions.resolve",
     { query: pendingUtxoTransactionId ?? "" },
-    { enabled: Boolean(pendingUtxoTransactionId), retry: false },
+    { enabled: Boolean(pendingUtxoTransactionId), retry: retryRetryableDaemonError },
   );
   const resolvedUtxoTransaction =
     utxoTransactionQuery.data?.data?.transaction ?? null;

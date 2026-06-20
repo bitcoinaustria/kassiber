@@ -25,7 +25,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useDaemon } from "@/daemon/client";
+import { useDaemon, retryRetryableDaemonError } from "@/daemon/client";
 import { localeForLanguage } from "@/i18n/config";
 import { cn } from "@/lib/utils";
 import {
@@ -79,7 +79,7 @@ export function WalletBalanceHistoryCard({
   const query = useDaemon<BalanceHistoryData>(
     "ui.reports.balance_history",
     { wallet: walletId, interval: "month", limit: 24 },
-    { retry: false },
+    { retry: retryRetryableDaemonError },
   );
 
   const points = useMemo(() => {
