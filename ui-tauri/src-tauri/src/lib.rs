@@ -306,12 +306,23 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
 /// "<request_kind>.tool_call", etc.) before the terminal envelope. The supervisor
 /// forwards intermediate records to the webview as Tauri events
 /// `daemon://stream` and switches to a per-record inactivity
-/// timeout. Other kinds keep the existing total-budget behavior.
+/// timeout. Other kinds keep the existing total-budget (15s) behavior.
+///
+/// This list also covers long-running, result-bearing kinds that run heavy
+/// sync/RP2 work synchronously on the daemon's single serial loop. They may not
+/// emit intermediate records yet, but they legitimately exceed the 15s
+/// non-streaming budget, so they must use the inactivity timeout — otherwise the
+/// caller is abandoned (and the late terminal envelope discarded) on every long
+/// run. (Follow-up: wire real progress emission so they also feed liveness
+/// during sub-terminal silence.)
 const STREAMING_DAEMON_KINDS: &[&str] = &[
     "ai.chat",
     "ui.wallets.sync",
     "ui.freshness.run",
     "ui.workspace.freshness.run",
+    "ui.maintenance.run",
+    "ui.journals.process",
+    "ui.rates.rebuild",
 ];
 
 // Daemon kinds that exercise the AI runtime (model calls, chat sessions, tool
