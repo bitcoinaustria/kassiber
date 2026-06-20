@@ -709,6 +709,26 @@ class RecordedFanoutDeriverTests(unittest.TestCase):
         result = derive_recorded_fanout_transfers(rows, already_paired_ids={"a-out"})
         self.assertEqual(result.derived_pairs, [])
 
+    def test_multi_source_not_decomposed_when_one_source_already_paired(self):
+        # Two wallets fund the spend (A + B both outbound under one txid). Even
+        # when one source is already paired elsewhere, the group is still a
+        # multi-source consolidation whose per-wallet amounts are unreliable, so
+        # the surviving source must NOT be split. The consolidation guard counts
+        # ALL positive outbounds, not just the unpaired ones.
+        rows = [
+            _plain_row(row_id="a-out", wallet_id="A", direction="outbound",
+                       amount_sats=50_000_000, txid="T"),
+            _plain_row(row_id="b-out", wallet_id="B", direction="outbound",
+                       amount_sats=80_000_000, txid="T"),
+            _plain_row(row_id="c-in", wallet_id="C", direction="inbound",
+                       amount_sats=50_000_000, txid="T"),
+            _plain_row(row_id="d-in", wallet_id="D", direction="inbound",
+                       amount_sats=30_000_000, txid="T"),
+        ]
+        result = derive_recorded_fanout_transfers(rows, already_paired_ids={"a-out"})
+        self.assertEqual(result.derived_pairs, [])
+        self.assertEqual(result.dropped_out_ids, set())
+
     def test_same_wallet_double_inbound_declined(self):
         # Two inbounds from the SAME destination wallet under one txid is an odd
         # shape (sync records one combined inbound per wallet) -> decline.

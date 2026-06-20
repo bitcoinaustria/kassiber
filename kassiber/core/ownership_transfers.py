@@ -398,16 +398,23 @@ def derive_recorded_fanout_transfers(
         groups.setdefault((str(external_id), _get(row, "asset")), []).append(row)
 
     for (external_id, asset), group in groups.items():
+        # Count the group's TRUE source rows first — every positive outbound,
+        # paired or not. The consolidation guard must reflect how many wallets
+        # actually funded the spend; filtering already_paired_ids first would let
+        # a multi-source consolidation masquerade as single-source once one of
+        # its sources was handled elsewhere, and the surviving source (whose
+        # per-wallet amount is unreliable) would be wrongly split.
         outs = [
             row
             for row in group
             if _get(row, "direction") == "outbound"
             and int(_get(row, "amount") or 0) > 0
-            and str(_get(row, "id")) not in already_paired_ids
         ]
         if len(outs) != 1:
             continue  # consolidation / nothing to split — leave to quarantine
         out_row = outs[0]
+        if str(_get(out_row, "id")) in already_paired_ids:
+            continue  # the single source is already handled elsewhere
         source_wallet_id = str(_get(out_row, "wallet_id"))
         dest_ins = [
             row
