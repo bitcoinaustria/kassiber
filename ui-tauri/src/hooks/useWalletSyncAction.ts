@@ -145,6 +145,15 @@ export function useWalletSyncAction() {
               : quarantineCount > 0
                 ? t("bookRefresh.quarantineTitle", { count: quarantineCount })
                 : t("bookRefresh.finishedTitle");
+            // Route the notification by a language-independent target instead of
+            // letting the header guess from the (localized) title: failures /
+            // blocking sources go to the logs (settings when dev tools are off),
+            // quarantine goes to the quarantine review.
+            const target = needsAttention
+              ? "/logs"
+              : quarantineCount > 0
+                ? "/quarantine"
+                : undefined;
             if (noticeIdRef.current) {
               updateNotification(noticeIdRef.current, {
                 title,
@@ -152,6 +161,7 @@ export function useWalletSyncAction() {
                 tone: needsReview ? "warning" : "success",
                 dedupeKey: "book-refresh",
                 progress: undefined,
+                target,
               });
               noticeIdRef.current = null;
             } else {
@@ -160,6 +170,7 @@ export function useWalletSyncAction() {
                 body,
                 tone: needsReview ? "warning" : "success",
                 dedupeKey: "book-refresh",
+                target,
               });
             }
             if (!needsReview) {

@@ -1,4 +1,10 @@
-import { type AppRoutePath } from "./menuIntent";
+import { APP_ROUTE_PATHS, type AppRoutePath } from "./menuIntent";
+
+function asRoutePath(value: string | undefined): AppRoutePath | undefined {
+  return value && (APP_ROUTE_PATHS as readonly string[]).includes(value)
+    ? (value as AppRoutePath)
+    : undefined;
+}
 
 // Map a notification title to the screen that explains it.
 export function notificationRouteFor(title: string): AppRoutePath | undefined {
@@ -46,11 +52,15 @@ export function notificationTarget(
   title: string,
   tone: string | undefined,
   developerToolsEnabled: boolean,
+  explicitTarget?: string,
 ): AppRoutePath | undefined {
   const logsOrSettings: AppRoutePath = developerToolsEnabled
     ? "/logs"
     : "/settings";
-  const target = notificationRouteFor(title);
+  // An explicit, language-independent target set by the notification's producer
+  // takes precedence over title keyword-matching (which only works in English).
+  // It still flows through the /logs → /settings developer-tools guard below.
+  const target = asRoutePath(explicitTarget) ?? notificationRouteFor(title);
   if (target === "/logs") return logsOrSettings;
   if (target) return target;
   return tone === "error" ? logsOrSettings : undefined;
