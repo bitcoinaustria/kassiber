@@ -126,6 +126,10 @@ export function useWalletSyncAction() {
         tone: "warning",
         dedupeKey: "book-refresh",
         progress: startingSyncProgress(),
+        // Clear any target left on the deduped notification by a prior run's
+        // completion (updateNotification only shallow-merges, so `target` is
+        // sticky); an in-progress refresh has nothing to review yet.
+        target: undefined,
       });
       refreshBook.mutate(
         {
@@ -198,6 +202,10 @@ export function useWalletSyncAction() {
                 tone: "error",
                 dedupeKey: "book-refresh",
                 progress: undefined,
+                // Failures route to the logs (settings when dev tools are off);
+                // set it explicitly so a stale /quarantine target from a prior
+                // run's completion can't bypass that error fallback.
+                target: "/logs",
               });
               noticeIdRef.current = null;
               clearActiveMaintenanceProgress(BOOK_REFRESH_PROGRESS_ID);
@@ -209,6 +217,7 @@ export function useWalletSyncAction() {
               body,
               tone: "error",
               dedupeKey: "book-refresh",
+              target: "/logs",
             });
             clearActiveMaintenanceProgress(BOOK_REFRESH_PROGRESS_ID);
             startedAtRef.current = null;
