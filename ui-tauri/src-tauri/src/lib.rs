@@ -315,12 +315,12 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
 /// run heavy sync/RP2 work synchronously on the daemon's single serial loop.
 /// They may not emit intermediate records yet, but they legitimately exceed the
 /// 15s non-streaming budget, so the inactivity timeout lets a sub-window run
-/// finish and return its result instead of the caller being abandoned at 15s.
-/// (A fully-silent run beyond the inactivity window is still subject to the
-/// supervisor's silence guard — see DAEMON_SILENCE_KILL_TIMEOUT — until these
-/// handlers emit real progress; that is the remaining follow-up. `ui.maintenance.run`
-/// is intentionally absent: it is only ever an AI tool call run inside `ai.chat`,
-/// never a top-level supervisor request, so its classification here would be inert.)
+/// finish and return its result instead of the caller being abandoned at 15s. A
+/// fully-silent run beyond the inactivity window returns `daemon_busy` to the
+/// caller without killing the shared daemon; the UX follow-up is to emit real
+/// progress from those handlers. `ui.maintenance.run` is intentionally absent:
+/// it is only ever an AI tool call run inside `ai.chat`, never a top-level
+/// supervisor request, so its classification here would be inert.
 const STREAMING_DAEMON_KINDS: &[&str] = &[
     "ai.chat",
     "ui.wallets.sync",
