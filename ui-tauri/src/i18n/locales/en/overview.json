@@ -90,9 +90,12 @@
     "rescanStartedBody": "Kassiber is rescanning configured sources and journals.",
     "configuredSourcesQueued": "Configured sources queued",
     "journalsIncluded": "Journals included",
+    "autoPairIncluded": "Safe auto-pairing included",
     "needsAttentionTitle": "Book refresh needs attention",
     "quarantineTitle_one": "Review {{count}} quarantined transaction",
     "quarantineTitle_other": "Review {{count}} quarantined transactions",
+    "transferReviewTitle_one": "Review {{count}} swap/transfer candidate",
+    "transferReviewTitle_other": "Review {{count}} swap/transfer candidates",
     "finishedTitle": "Book refresh finished",
     "failedTitle": "Book refresh failed",
     "failedBody": "Book refresh failed"

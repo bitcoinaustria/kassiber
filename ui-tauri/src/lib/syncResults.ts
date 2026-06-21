@@ -46,12 +46,35 @@ export interface FreshnessJobSummary {
   job_type?: string;
   source_label?: string;
   status?: string;
-  result?: Record<string, unknown> | null;
+  result?:
+    | (Record<string, unknown> & {
+        auto_pair?: FreshnessAutoPairSummary | null;
+      })
+    | null;
   error?: {
     code?: string;
     message?: string;
     hint?: string;
   } | null;
+}
+
+export interface FreshnessAutoPairSummary {
+  enabled?: boolean;
+  applied?: number;
+  rules_applied?: number;
+  bulk_exact_applied?: number;
+  skipped_conflicts?: number;
+  total_swap_fee_msat?: number;
+  before?: FreshnessTransferCandidateCounts | null;
+  remaining?: FreshnessTransferCandidateCounts | null;
+}
+
+export interface FreshnessTransferCandidateCounts {
+  total?: number;
+  exact?: number;
+  strong?: number;
+  conflicts?: number;
+  rule_matches?: number;
 }
 
 export interface FreshnessRunData {
@@ -200,6 +223,31 @@ export function freshnessRunQuarantineCount(
   }, 0);
 }
 
+function autoPairSummary(job: FreshnessJobSummary): FreshnessAutoPairSummary | null {
+  const result = job.result;
+  const summary = result?.auto_pair;
+  if (!summary || typeof summary !== "object") return null;
+  return summary;
+}
+
+export function freshnessRunAutoPairCount(
+  data: FreshnessRunData | null | undefined,
+): number {
+  return (data?.completed ?? []).reduce((total, job) => {
+    if (job.job_type !== "journal_refresh") return total;
+    return total + positiveInteger(autoPairSummary(job)?.applied);
+  }, 0);
+}
+
+export function freshnessRunTransferReviewCount(
+  data: FreshnessRunData | null | undefined,
+): number {
+  return (data?.completed ?? []).reduce((total, job) => {
+    if (job.job_type !== "journal_refresh") return total;
+    return total + positiveInteger(autoPairSummary(job)?.remaining?.total);
+  }, 0);
+}
+
 export function summarizeFreshnessRun(data: FreshnessRunData | null | undefined): string {
   const completed = data?.completed ?? [];
   if (!completed.length) {
@@ -212,10 +260,16 @@ export function summarizeFreshnessRun(data: FreshnessRunData | null | undefined)
   const rateLimited = completed.filter((job) => job.status === "rate_limited").length;
   const failed = completed.filter((job) => ["error", "cancelled"].includes(job.status ?? "")).length;
   const quarantineCount = freshnessRunQuarantineCount(data);
+  const autoPaired = freshnessRunAutoPairCount(data);
+  const transferReviewCount = freshnessRunTransferReviewCount(data);
   const parts = [
     done ? `${done} completed` : null,
     rateLimited ? `${rateLimited} cooling down` : null,
     failed ? `${failed} needs attention` : null,
+    autoPaired ? `${autoPaired} pair${autoPaired === 1 ? "" : "s"} applied` : null,
+    transferReviewCount
+      ? `${transferReviewCount} swap/transfer candidate${transferReviewCount === 1 ? "" : "s"} to review`
+      : null,
     quarantineCount
       ? `${quarantineCount} quarantined transaction${quarantineCount === 1 ? "" : "s"}`
       : null,

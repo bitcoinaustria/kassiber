@@ -23,6 +23,9 @@ export function notificationRouteFor(title: string): AppRoutePath | undefined {
   ) {
     return "/quarantine";
   }
+  if (normalized.includes("swap") || normalized.includes("transfer")) {
+    return "/swaps";
+  }
   if (normalized.includes("sync") || normalized.includes("wallet")) {
     return "/connections";
   }

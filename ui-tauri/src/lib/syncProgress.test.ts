@@ -79,6 +79,18 @@ describe("sync progress notifications", () => {
       indeterminate: false,
       label: "Market-rate coverage: Checking market-rate coverage",
     });
+
+    expect(
+      syncProgressNotification({
+        source_label: "Journal refresh",
+        source_type: "journals",
+        phase: "auto_pair",
+      }).progress,
+    ).toEqual({
+      value: 91,
+      indeterminate: false,
+      label: "Journal refresh: Pairing swaps and transfers",
+    });
   });
 
   it("weights daemon-owned phases across freshness sources", () => {
@@ -203,6 +215,9 @@ describe("first-sync milestones", () => {
     );
     expect(firstSyncActiveMilestoneIndex(0.5, true)).toBe(
       indexOfPhase("decode_enrich"),
+    );
+    expect(firstSyncActiveMilestoneIndex(0.92, true)).toBe(
+      indexOfPhase("journal_refresh"),
     );
   });
 

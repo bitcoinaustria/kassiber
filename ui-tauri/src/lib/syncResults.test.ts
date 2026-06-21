@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   describeFreshnessSourceState,
+  freshnessRunAutoPairCount,
   freshnessRunQuarantineCount,
+  freshnessRunTransferReviewCount,
   describeWalletSyncResult,
   freshnessRunNeedsAttention,
   summarizeFreshnessRun,
@@ -155,6 +157,31 @@ describe("syncResults", () => {
     expect(freshnessRunQuarantineCount(payload)).toBe(2);
     expect(summarizeFreshnessRun(payload)).toBe(
       "2 completed, 2 quarantined transactions",
+    );
+    expect(freshnessRunNeedsAttention(payload)).toBe(false);
+  });
+
+  it("summarizes auto-paired and still-reviewable transfer candidates", () => {
+    const payload = {
+      completed: [
+        {
+          job_type: "journal_refresh",
+          source_label: "Journal refresh",
+          status: "done",
+          result: {
+            auto_pair: {
+              applied: 3,
+              remaining: { total: 2, exact: 0, strong: 2, conflicts: 1 },
+            },
+          },
+        },
+      ],
+    };
+
+    expect(freshnessRunAutoPairCount(payload)).toBe(3);
+    expect(freshnessRunTransferReviewCount(payload)).toBe(2);
+    expect(summarizeFreshnessRun(payload)).toBe(
+      "1 completed, 3 pairs applied, 2 swap/transfer candidates to review",
     );
     expect(freshnessRunNeedsAttention(payload)).toBe(false);
   });

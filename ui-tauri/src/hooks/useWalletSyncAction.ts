@@ -6,6 +6,7 @@ import { daemonMutationKey, useDaemonStreamMutation } from "@/daemon/client";
 import {
   freshnessRunNeedsAttention,
   freshnessRunQuarantineCount,
+  freshnessRunTransferReviewCount,
   summarizeFreshnessRun,
   type FreshnessRunData,
 } from "@/lib/syncResults";
@@ -110,6 +111,7 @@ export function useWalletSyncAction() {
         progress: startingSyncProgress(),
         details: [
           t("bookRefresh.configuredSourcesQueued"),
+          t("bookRefresh.autoPairIncluded"),
           t("bookRefresh.journalsIncluded"),
         ],
         active: true,
@@ -131,6 +133,7 @@ export function useWalletSyncAction() {
         {
           all: true,
           journals: true,
+          auto_pair: true,
           run: true,
           force_full: Boolean(options?.forceFull),
         },
@@ -139,12 +142,19 @@ export function useWalletSyncAction() {
             const body = summarizeFreshnessRun(envelope.data);
             const needsAttention = freshnessRunNeedsAttention(envelope.data);
             const quarantineCount = freshnessRunQuarantineCount(envelope.data);
-            const needsReview = needsAttention || quarantineCount > 0;
-            const title = needsAttention
-              ? t("bookRefresh.needsAttentionTitle")
-              : quarantineCount > 0
-                ? t("bookRefresh.quarantineTitle", { count: quarantineCount })
-                : t("bookRefresh.finishedTitle");
+            const transferReviewCount = freshnessRunTransferReviewCount(envelope.data);
+            const needsReview =
+              needsAttention || quarantineCount > 0 || transferReviewCount > 0;
+            let title = t("bookRefresh.finishedTitle");
+            if (needsAttention) {
+              title = t("bookRefresh.needsAttentionTitle");
+            } else if (quarantineCount > 0) {
+              title = t("bookRefresh.quarantineTitle", { count: quarantineCount });
+            } else if (transferReviewCount > 0) {
+              title = t("bookRefresh.transferReviewTitle", {
+                count: transferReviewCount,
+              });
+            }
             if (noticeIdRef.current) {
               updateNotification(noticeIdRef.current, {
                 title,
@@ -167,9 +177,9 @@ export function useWalletSyncAction() {
               // The book has completed a clean full run, so subsequent
               // refreshes are ordinary background syncs rather than a
               // first-time setup. A run that still needs attention (job
-              // errors, blocking reports, or journal quarantine) stays in
-              // first-sync mode so a retry keeps the setup card instead of
-              // demoting to the thin line.
+              // errors, blocking reports, journal quarantine, or unresolved
+              // transfer candidates) stays in first-sync mode so a retry keeps
+              // the setup card instead of demoting to the thin line.
               if (bookKey) markFirstSyncDone(bookKey);
             }
             clearActiveMaintenanceProgress(BOOK_REFRESH_PROGRESS_ID);

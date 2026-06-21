@@ -14,6 +14,12 @@ describe("notificationRouteFor", () => {
     expect(
       notificationRouteFor("2 Transaktionen in Quarantäne prüfen"),
     ).toBe("/quarantine");
+    expect(notificationRouteFor("Review 2 swap/transfer candidates")).toBe(
+      "/swaps",
+    );
+    expect(
+      notificationRouteFor("2 Swap-/Transfer-Kandidaten prüfen"),
+    ).toBe("/swaps");
     expect(notificationRouteFor("Journal processing complete")).toBe("/journals");
   });
 });
@@ -43,6 +49,9 @@ describe("notificationTarget", () => {
     expect(
       notificationTarget("2 Transaktionen in Quarantäne prüfen", "warning", false),
     ).toBe("/quarantine");
+    expect(
+      notificationTarget("Review 2 swap/transfer candidates", "warning", false),
+    ).toBe("/swaps");
     expect(notificationTarget("Transactions quarantined", "warning", true)).toBe(
       "/quarantine",
     );
