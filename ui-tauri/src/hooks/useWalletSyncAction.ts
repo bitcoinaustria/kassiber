@@ -1,9 +1,11 @@
 import * as React from "react";
 import { useIsMutating, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 
 import { daemonMutationKey, useDaemonStreamMutation } from "@/daemon/client";
 import {
   freshnessRunNeedsAttention,
+  freshnessRunQuarantineCount,
   summarizeFreshnessRun,
   type FreshnessRunData,
 } from "@/lib/syncResults";
@@ -23,6 +25,7 @@ type WalletSyncOptions = {
 };
 
 export function useWalletSyncAction() {
+  const { t } = useTranslation("overview");
   const queryClient = useQueryClient();
   const dataMode = useUiStore((state) => state.dataMode);
   const freshnessRunMutationKey = React.useMemo(
@@ -97,22 +100,29 @@ export function useWalletSyncAction() {
       startedAtRef.current = startedAt;
       setActiveMaintenanceProgress({
         id: BOOK_REFRESH_PROGRESS_ID,
-        title: options?.forceFull ? "Rescanning book" : "Refreshing book",
+        title: options?.forceFull
+          ? t("bookRefresh.rescanInProgressTitle")
+          : t("bookRefresh.refreshInProgressTitle"),
         body: options?.forceFull
-          ? "Kassiber is rescanning configured sources and journals."
-          : "Kassiber is refreshing configured sources and journals.",
+          ? t("bookRefresh.rescanStartedBody")
+          : t("bookRefresh.refreshStartedBody"),
         tone: "warning",
         progress: startingSyncProgress(),
-        details: ["Configured sources queued", "Journals included"],
+        details: [
+          t("bookRefresh.configuredSourcesQueued"),
+          t("bookRefresh.journalsIncluded"),
+        ],
         active: true,
         startedAt,
         updatedAt: startedAt,
       });
       noticeIdRef.current = addNotification({
-        title: options?.forceFull ? "Book rescan started" : "Book refresh started",
+        title: options?.forceFull
+          ? t("bookRefresh.rescanStartedTitle")
+          : t("bookRefresh.refreshStartedTitle"),
         body: options?.forceFull
-          ? "Kassiber is rescanning configured sources and journals."
-          : "Kassiber is refreshing configured sources and journals.",
+          ? t("bookRefresh.rescanStartedBody")
+          : t("bookRefresh.refreshStartedBody"),
         tone: "warning",
         dedupeKey: "book-refresh",
         progress: startingSyncProgress(),
@@ -128,34 +138,38 @@ export function useWalletSyncAction() {
           onSuccess: (envelope) => {
             const body = summarizeFreshnessRun(envelope.data);
             const needsAttention = freshnessRunNeedsAttention(envelope.data);
+            const quarantineCount = freshnessRunQuarantineCount(envelope.data);
+            const needsReview = needsAttention || quarantineCount > 0;
+            const title = needsAttention
+              ? t("bookRefresh.needsAttentionTitle")
+              : quarantineCount > 0
+                ? t("bookRefresh.quarantineTitle", { count: quarantineCount })
+                : t("bookRefresh.finishedTitle");
             if (noticeIdRef.current) {
               updateNotification(noticeIdRef.current, {
-                title: needsAttention
-                  ? "Book refresh needs attention"
-                  : "Book refresh finished",
+                title,
                 body,
-                tone: needsAttention ? "warning" : "success",
+                tone: needsReview ? "warning" : "success",
                 dedupeKey: "book-refresh",
                 progress: undefined,
               });
               noticeIdRef.current = null;
             } else {
               addNotification({
-                title: needsAttention
-                  ? "Book refresh needs attention"
-                  : "Book refresh finished",
+                title,
                 body,
-                tone: needsAttention ? "warning" : "success",
+                tone: needsReview ? "warning" : "success",
                 dedupeKey: "book-refresh",
               });
             }
-            if (!needsAttention) {
+            if (!needsReview) {
               options?.onTrustedSuccess?.();
               // The book has completed a clean full run, so subsequent
               // refreshes are ordinary background syncs rather than a
               // first-time setup. A run that still needs attention (job
-              // errors, blocking reports) stays in first-sync mode so a retry
-              // keeps the setup card instead of demoting to the thin line.
+              // errors, blocking reports, or journal quarantine) stays in
+              // first-sync mode so a retry keeps the setup card instead of
+              // demoting to the thin line.
               if (bookKey) markFirstSyncDone(bookKey);
             }
             clearActiveMaintenanceProgress(BOOK_REFRESH_PROGRESS_ID);
@@ -165,10 +179,10 @@ export function useWalletSyncAction() {
             const body =
               error instanceof Error
                 ? error.message
-                : "Book refresh failed";
+                : t("bookRefresh.failedBody");
             if (noticeIdRef.current) {
               updateNotification(noticeIdRef.current, {
-                title: "Book refresh failed",
+                title: t("bookRefresh.failedTitle"),
                 body,
                 tone: "error",
                 dedupeKey: "book-refresh",
@@ -180,7 +194,7 @@ export function useWalletSyncAction() {
               return;
             }
             addNotification({
-              title: "Book refresh failed",
+              title: t("bookRefresh.failedTitle"),
               body,
               tone: "error",
               dedupeKey: "book-refresh",
@@ -200,6 +214,7 @@ export function useWalletSyncAction() {
       queryClient,
       refreshBook,
       setActiveMaintenanceProgress,
+      t,
       updateNotification,
       walletSyncMutationKey,
     ],

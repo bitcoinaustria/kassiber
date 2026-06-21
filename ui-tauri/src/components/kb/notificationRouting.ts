@@ -16,7 +16,13 @@ export function notificationRouteFor(title: string): AppRoutePath | undefined {
     return "/logs";
   }
   if (normalized.includes("journal")) return "/journals";
-  if (normalized.includes("quarantine")) return "/quarantine";
+  if (
+    normalized.includes("quarantine") ||
+    normalized.includes("quarantäne") ||
+    normalized.includes("quarantaene")
+  ) {
+    return "/quarantine";
+  }
   if (normalized.includes("sync") || normalized.includes("wallet")) {
     return "/connections";
   }

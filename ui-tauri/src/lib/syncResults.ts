@@ -46,6 +46,7 @@ export interface FreshnessJobSummary {
   job_type?: string;
   source_label?: string;
   status?: string;
+  result?: Record<string, unknown> | null;
   error?: {
     code?: string;
     message?: string;
@@ -177,6 +178,28 @@ export function freshnessRunNeedsAttention(data: FreshnessRunData | null | undef
   );
 }
 
+function positiveInteger(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return 0;
+  return Math.floor(value);
+}
+
+export function freshnessRunQuarantineCount(
+  data: FreshnessRunData | null | undefined,
+): number {
+  return (data?.completed ?? []).reduce((total, job) => {
+    if (job.job_type !== "journal_refresh") return total;
+    const result = job.result;
+    if (!result || typeof result !== "object") return total;
+    return (
+      total +
+      Math.max(
+        positiveInteger(result.quarantined),
+        positiveInteger(result.quarantine_count),
+      )
+    );
+  }, 0);
+}
+
 export function summarizeFreshnessRun(data: FreshnessRunData | null | undefined): string {
   const completed = data?.completed ?? [];
   if (!completed.length) {
@@ -188,10 +211,14 @@ export function summarizeFreshnessRun(data: FreshnessRunData | null | undefined)
   const done = completed.filter((job) => job.status === "done").length;
   const rateLimited = completed.filter((job) => job.status === "rate_limited").length;
   const failed = completed.filter((job) => ["error", "cancelled"].includes(job.status ?? "")).length;
+  const quarantineCount = freshnessRunQuarantineCount(data);
   const parts = [
     done ? `${done} completed` : null,
     rateLimited ? `${rateLimited} cooling down` : null,
     failed ? `${failed} needs attention` : null,
+    quarantineCount
+      ? `${quarantineCount} quarantined transaction${quarantineCount === 1 ? "" : "s"}`
+      : null,
   ].filter(Boolean);
   const summary = parts.join(", ") || "No source changes returned.";
   const firstProblem = completed.find((job) => job.status && job.status !== "done");

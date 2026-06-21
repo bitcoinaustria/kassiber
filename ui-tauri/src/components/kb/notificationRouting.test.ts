@@ -11,6 +11,9 @@ describe("notificationRouteFor", () => {
 
   it("routes domain titles to their own screens", () => {
     expect(notificationRouteFor("Transactions quarantined")).toBe("/quarantine");
+    expect(
+      notificationRouteFor("2 Transaktionen in Quarantäne prüfen"),
+    ).toBe("/quarantine");
     expect(notificationRouteFor("Journal processing complete")).toBe("/journals");
   });
 });
@@ -37,6 +40,9 @@ describe("notificationTarget", () => {
     expect(notificationTarget("Transactions quarantined", "warning", false)).toBe(
       "/quarantine",
     );
+    expect(
+      notificationTarget("2 Transaktionen in Quarantäne prüfen", "warning", false),
+    ).toBe("/quarantine");
     expect(notificationTarget("Transactions quarantined", "warning", true)).toBe(
       "/quarantine",
     );

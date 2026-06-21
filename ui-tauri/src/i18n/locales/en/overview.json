@@ -81,6 +81,22 @@
       "couldNotOpenTransactionBody": "Kassiber could not switch to that transaction's book."
     }
   },
+  "bookRefresh": {
+    "refreshInProgressTitle": "Refreshing book",
+    "rescanInProgressTitle": "Rescanning book",
+    "refreshStartedTitle": "Book refresh started",
+    "rescanStartedTitle": "Book rescan started",
+    "refreshStartedBody": "Kassiber is refreshing configured sources and journals.",
+    "rescanStartedBody": "Kassiber is rescanning configured sources and journals.",
+    "configuredSourcesQueued": "Configured sources queued",
+    "journalsIncluded": "Journals included",
+    "needsAttentionTitle": "Book refresh needs attention",
+    "quarantineTitle_one": "Review {{count}} quarantined transaction",
+    "quarantineTitle_other": "Review {{count}} quarantined transactions",
+    "finishedTitle": "Book refresh finished",
+    "failedTitle": "Book refresh failed",
+    "failedBody": "Book refresh failed"
+  },
   "stats": {
     "btcPrice": "BTC price",
     "refreshing": "Refreshing",

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   describeFreshnessSourceState,
+  freshnessRunQuarantineCount,
   describeWalletSyncResult,
   freshnessRunNeedsAttention,
   summarizeFreshnessRun,
@@ -134,6 +135,26 @@ describe("syncResults", () => {
 
     expect(summarizeFreshnessRun(payload)).toBe(
       "3 completed, 1 cooling down: BTCPay provenance: Retry after 90 seconds.",
+    );
+    expect(freshnessRunNeedsAttention(payload)).toBe(false);
+  });
+
+  it("surfaces journal quarantines in combined book refresh summaries", () => {
+    const payload = {
+      completed: [
+        { job_type: "onchain_wallet_history", source_label: "Cold", status: "done" },
+        {
+          job_type: "journal_refresh",
+          source_label: "Journal refresh",
+          status: "done",
+          result: { quarantined: 2 },
+        },
+      ],
+    };
+
+    expect(freshnessRunQuarantineCount(payload)).toBe(2);
+    expect(summarizeFreshnessRun(payload)).toBe(
+      "2 completed, 2 quarantined transactions",
     );
     expect(freshnessRunNeedsAttention(payload)).toBe(false);
   });
