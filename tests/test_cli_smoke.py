@@ -264,6 +264,12 @@ _MANUAL_TO_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
 2026-03-15T10:05:00Z,manual-in-leg,inbound,BTC,0.10000000,0,72000,Manual swap in
 """
 
+_FAILED_SWAP_REFUND_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-03-01T09:00:00Z,refund-fund,inbound,BTC,0.20000000,0,70000,Funding
+2026-03-02T09:00:00Z,failed-swap-send,outbound,BTC,0.10000000,0.00010000,72000,Failed swap send
+2026-03-02T11:00:00Z,failed-swap-refund,inbound,BTC,0.09980000,0,72000,Refund from failed swap
+"""
+
 # Cross-asset (BTC → LBTC) scenario for the carrying-value rejection +
 # taxable acceptance tests.
 _CROSS_BTC_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
@@ -408,6 +414,8 @@ class CliSmokeTest(unittest.TestCase):
         cls.manual_from_csv.write_text(_MANUAL_FROM_CSV, encoding="utf-8")
         cls.manual_to_csv = Path(cls._tmp.name) / "manual-to.csv"
         cls.manual_to_csv.write_text(_MANUAL_TO_CSV, encoding="utf-8")
+        cls.failed_swap_refund_csv = Path(cls._tmp.name) / "failed-swap-refund.csv"
+        cls.failed_swap_refund_csv.write_text(_FAILED_SWAP_REFUND_CSV, encoding="utf-8")
         cls.cross_btc_csv = Path(cls._tmp.name) / "cross-btc.csv"
         cls.cross_btc_csv.write_text(_CROSS_BTC_CSV, encoding="utf-8")
         cls.cross_btc_at_csv = Path(cls._tmp.name) / "cross-btc-at.csv"
@@ -2389,6 +2397,94 @@ class CliSmokeTest(unittest.TestCase):
             "--transaction", "manual-out-leg",
         )
         self.assertEqual(payload["data"]["excluded"], True)
+
+    def test_14b_same_wallet_failed_swap_refund_pairing(self):
+        workspace = "RefundWorkspace"
+        self._cli("init")
+        self._cli("workspaces", "create", workspace)
+        payload = self._cli(
+            "profiles", "create",
+            "--workspace", workspace,
+            "--fiat-currency", "USD",
+            "--tax-country", "generic",
+            "RefundPair",
+        )
+        self._assert_kind(payload, "profiles.create")
+        self._cli(
+            "wallets", "create",
+            "--workspace", workspace,
+            "--profile", "RefundPair",
+            "--label", "RefundWallet",
+            "--kind", "custom",
+        )
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", workspace,
+            "--profile", "RefundPair",
+            "--wallet", "RefundWallet",
+            "--file", str(self.failed_swap_refund_csv),
+        )
+
+        payload = self._cli(
+            "transfers", "pair",
+            "--workspace", workspace,
+            "--profile", "RefundPair",
+            "--tx-out", "failed-swap-send",
+            "--tx-in", "failed-swap-refund",
+            "--kind", "manual",
+            "--policy", "carrying-value",
+        )
+        self._assert_kind(payload, "transfers.pair")
+        pair_id = payload["data"]["id"]
+
+        payload = self._cli(
+            "transfers", "list",
+            "--workspace", workspace,
+            "--profile", "RefundPair",
+        )
+        self._assert_kind(payload, "transfers.list")
+        self.assertEqual(len(payload["data"]), 1)
+        self.assertEqual(payload["data"][0]["id"], pair_id)
+        self.assertEqual(payload["data"][0]["out"]["wallet"], "RefundWallet")
+        self.assertEqual(payload["data"][0]["in"]["wallet"], "RefundWallet")
+
+        payload = self._cli(
+            "journals", "process",
+            "--workspace", workspace,
+            "--profile", "RefundPair",
+        )
+        data = payload["data"]
+        self.assertEqual(data["transfers_detected"], 1)
+        self.assertEqual(data["cross_asset_pairs"], 0)
+        self.assertEqual(data["quarantined"], 0)
+        self.assertEqual(data["entries_created"], 4)
+
+        payload = self._cli(
+            "reports", "journal-entries",
+            "--workspace", workspace,
+            "--profile", "RefundPair",
+        )
+        entries = payload["data"]
+        self.assertEqual(
+            sorted(entry["entry_type"] for entry in entries),
+            ["acquisition", "transfer_fee", "transfer_in", "transfer_out"],
+        )
+        out_entry = next(entry for entry in entries if entry["entry_type"] == "transfer_out")
+        in_entry = next(entry for entry in entries if entry["entry_type"] == "transfer_in")
+        self.assertEqual(out_entry["wallet"], "RefundWallet")
+        self.assertEqual(in_entry["wallet"], "RefundWallet")
+        self.assertAlmostEqual(float(out_entry["quantity"]), -0.1001, places=8)
+        self.assertAlmostEqual(float(in_entry["quantity"]), 0.0998, places=8)
+
+        payload = self._cli(
+            "reports", "capital-gains",
+            "--workspace", workspace,
+            "--profile", "RefundPair",
+        )
+        gains = payload["data"]
+        self.assertEqual(len(gains), 1)
+        self.assertEqual(gains[0]["entry_type"], "transfer_fee")
+        self.assertAlmostEqual(float(gains[0]["quantity"]), 0.0003, places=8)
 
     def test_15_cross_asset_pair_policies(self):
         payload = self._cli(

@@ -124,6 +124,15 @@ python3 -m kassiber transfers pair --tx-out <out-id> --tx-in <in-id> \
   --kind submarine-swap --policy carrying-value
 ```
 
+For a failed swap that refunds the same asset back to the same wallet, pair the
+send and refund legs with `--policy carrying-value` (use `--kind swap-refund` to
+label it). Kassiber books the round trip as a same-wallet transfer and realizes
+only the shortfall / network fee as the transfer fee, rather than treating the
+send as a sale and the refund as a fresh acquisition. When the refund is swept
+on-chain through a Boltz HTLC, chain sync links it to its funding send
+automatically and `transfers suggest` surfaces it as an exact `swap-refund`
+candidate — even within a single wallet.
+
 For a direct swap payout where the provider pays an external recipient and
 no owned inbound leg exists:
 

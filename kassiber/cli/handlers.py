@@ -430,11 +430,6 @@ def create_transaction_pair(
     in_row = resolve_transaction(conn, profile["id"], in_ref, direction="inbound")
     if out_row["id"] == in_row["id"]:
         raise AppError("--tx-out and --tx-in must reference different transactions", code="validation")
-    if out_row["wallet_id"] == in_row["wallet_id"] and out_row["asset"] == in_row["asset"]:
-        raise AppError(
-            "Same-wallet pairs must be cross-asset swaps; same-asset legs should stay unpaired or use different wallets.",
-            code="validation",
-        )
     if out_row["asset"] == in_row["asset"] and policy == "taxable":
         raise AppError(
             f"Same-asset taxable pairs are not supported yet "
