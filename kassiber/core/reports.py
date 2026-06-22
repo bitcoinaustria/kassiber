@@ -4368,7 +4368,9 @@ def _generic_report_csv_rows(context, sections):
 def _generic_report_xlsx_formats(workbook):
     return {
         "title": workbook.add_format({"bold": True, "font_size": 14, "valign": "vcenter"}),
-        "header": workbook.add_format({"bold": True, "font_size": 11, "valign": "top", "text_wrap": True}),
+        "header": workbook.add_format(
+            {"bold": True, "font_size": 11, "valign": "top", "text_wrap": True, "bg_color": "#EFEFEF", "bottom": 1}
+        ),
         "text": workbook.add_format({"font_size": 11, "valign": "top", "text_wrap": True}),
         "int": workbook.add_format({"font_size": 11, "valign": "top", "num_format": "0"}),
         "quantity": workbook.add_format({"font_size": 11, "valign": "top", "num_format": "0.00000000"}),
@@ -4441,6 +4443,21 @@ def _generic_report_column_width(header, rows):
     return max(10, min(sample_width + 2, 38))
 
 
+def _estimate_wrapped_lines(text, width_chars):
+    """Estimate how many wrapped lines a string occupies in a cell that wide."""
+    if text in (None, ""):
+        return 1
+    width = max(1, int(width_chars) - 1)
+    total = 0
+    for segment in str(text).split("\n"):
+        total += max(1, -(-len(segment.rstrip()) // width))
+    return max(1, total)
+
+
+def _row_height_for_lines(lines):
+    return max(16, lines * 15 + 4)
+
+
 def _generic_report_xlsx_write_sheet(workbook, spec, formats):
     worksheet = workbook.add_worksheet(spec["sheet_name"])
     worksheet.set_landscape()
@@ -4449,24 +4466,34 @@ def _generic_report_xlsx_write_sheet(workbook, spec, formats):
     headers = list(spec["headers"])
     rows = spec["rows"]
     last_column = max(len(headers) - 1, 0)
+    widths = [_generic_report_column_width(header, rows) for header in headers]
     worksheet.set_row(0, 28)
     worksheet.merge_range(0, 0, 0, last_column, spec["title"], formats["title"])
-    worksheet.set_row(1, 24)
+    header_lines = max(
+        (_estimate_wrapped_lines(_report_column_label(header), widths[index]) for index, header in enumerate(headers)),
+        default=1,
+    )
+    worksheet.set_row(1, max(24, header_lines * 15 + 4))
     for column_index, header in enumerate(headers):
-        worksheet.set_column(column_index, column_index, _generic_report_column_width(header, rows))
+        worksheet.set_column(column_index, column_index, widths[column_index])
         worksheet.write_string(1, column_index, _report_column_label(header), formats["header"])
     worksheet.freeze_panes(2, 0)
 
     row_index = 2
     if rows:
         for row in rows:
+            lines = 1
             for column_index, header in enumerate(headers):
                 if header == "attachments" and "attachments_list" in row:
                     _write_attachments_cell(worksheet, row_index, column_index, row, formats)
+                    lines = max(lines, len(row.get("attachments_list") or []) or 1)
                     continue
                 value = row.get(header, "")
                 format_name = _generic_report_xlsx_format_name(header, value)
+                if format_name == "text":
+                    lines = max(lines, _estimate_wrapped_lines(value, widths[column_index]))
                 _xlsx_write_value(worksheet, row_index, column_index, value, formats[format_name])
+            worksheet.set_row(row_index, _row_height_for_lines(lines))
             row_index += 1
     else:
         worksheet.write_string(row_index, 0, "No rows in scope.", formats["text"])

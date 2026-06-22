@@ -159,6 +159,17 @@ def _write_value(worksheet, row_index: int, column_index: int, value, cell_forma
 # --------------------------------------------------------------------------- #
 # Generic data-sheet writer
 # --------------------------------------------------------------------------- #
+def _wrapped_line_count(text, width_chars) -> int:
+    """Estimate how many wrapped lines a string occupies in a cell that wide."""
+    if text in (None, ""):
+        return 1
+    width = max(1, int(width_chars) - 1)
+    total = 0
+    for segment in str(text).split("\n"):
+        total += max(1, -(-len(segment.rstrip()) // width))
+    return max(1, total)
+
+
 def _column_width(label: str, key: str, rows: list[dict], fmt: str) -> float:
     width = len(label) + 2
     for row in rows[:50]:
@@ -196,12 +207,17 @@ def _write_data_sheet(
 
     col_index = {column["key"]: index for index, column in enumerate(columns)}
     last_column = max(len(columns) - 1, 0)
+    widths = [_column_width(column["label"], column["key"], rows, column["fmt"]) for column in columns]
 
     worksheet.set_row(0, 28)
     worksheet.merge_range(0, 0, 0, last_column, title, formats["title"])
-    worksheet.set_row(1, 30)
+    header_lines = max(
+        (_wrapped_line_count(column["label"], widths[index]) for index, column in enumerate(columns)),
+        default=1,
+    )
+    worksheet.set_row(1, max(30, header_lines * 15 + 6))
     for index, column in enumerate(columns):
-        worksheet.set_column(index, index, _column_width(column["label"], column["key"], rows, column["fmt"]))
+        worksheet.set_column(index, index, widths[index])
         worksheet.write_string(1, index, column["label"], formats["header"])
     worksheet.freeze_panes(2, 0)
 
@@ -210,6 +226,7 @@ def _write_data_sheet(
     if rows:
         for row in rows:
             excel_row = row_index + 1
+            lines = 1
             for index, column in enumerate(columns):
                 fmt = formats[column["fmt"]]
                 formula = column.get("formula")
@@ -222,12 +239,17 @@ def _write_data_sheet(
                         worksheet.write_formula(row_index, index, expr, fmt, cached)
                 elif column.get("link_key"):
                     name = str(row.get(column["key"], ""))
+                    lines = max(lines, _wrapped_line_count(name, widths[index]))
                     if link_url:
                         worksheet.write_url(row_index, index, link_url, formats["link"], name)
                     else:
                         _write_value(worksheet, row_index, index, name, formats["text"])
                 else:
-                    _write_value(worksheet, row_index, index, row.get(column["key"], ""), fmt)
+                    value = row.get(column["key"], "")
+                    if column["fmt"] in ("text", "subheader"):
+                        lines = max(lines, _wrapped_line_count(value, widths[index]))
+                    _write_value(worksheet, row_index, index, value, fmt)
+            worksheet.set_row(row_index, max(18, lines * 15 + 4))
             row_index += 1
         last_data_row = row_index  # 1-based row of the last data row
     else:
@@ -657,8 +679,8 @@ def _write_verify_readme(
     workbook, formats, *, gains_algorithm, tax_country, fiat_currency, wallet_scope_label, run_metadata
 ):
     worksheet = workbook.add_worksheet("Verify")
-    worksheet.set_column(0, 0, 30)
-    worksheet.set_column(1, 1, 74)
+    worksheet.set_column(0, 0, 26)
+    worksheet.set_column(1, 1, 78)
     worksheet.set_margins(left=0.4, right=0.4, top=0.5, bottom=0.5)
 
     meta = run_metadata or {}
@@ -671,7 +693,7 @@ def _write_verify_readme(
     worksheet.set_row(0, 26)
     worksheet.write_string(0, 0, "How to verify this report", formats["title"])
     worksheet.write_string(STATUS_CELL[0], 0, "Verification status", formats["subheader"])
-    worksheet.write_string(TOLERANCE_CELL_RC[0], 0, "Check tolerance (edit to retighten all checks)", formats["subheader"])
+    worksheet.write_string(TOLERANCE_CELL_RC[0], 0, "Check tolerance", formats["subheader"])
     worksheet.write_number(TOLERANCE_CELL_RC[0], TOLERANCE_CELL_RC[1], DEFAULT_FIAT_TOLERANCE, formats["tolerance"])
 
     meta_rows = [
@@ -686,21 +708,27 @@ def _write_verify_readme(
     ]
     row_index = TOLERANCE_CELL_RC[0] + 1
     for label, value in meta_rows:
+        worksheet.set_row(row_index, max(18, _wrapped_line_count(value, 74) * 15 + 4))
         worksheet.write_string(row_index, 0, label, formats["subheader"])
         _write_value(worksheet, row_index, 1, value, formats["text"])
         row_index += 1
 
     row_index += 1  # blank spacer
+    # Explanatory rows are merged across A:B (~104 chars wide); size each row to
+    # its wrapped line count so long paragraphs are never clipped.
+    merged_width = 104
     for text, kind in _verify_readme_rows(
         gains_algorithm=gains_algorithm,
         tax_country=tax_country,
         fiat_currency=fiat_currency,
         wallet_scope_label=wallet_scope_label,
     ):
-        worksheet.set_row(row_index, 24 if kind == "subheader" else 30)
         if text:
+            height = 24 if kind == "subheader" else _wrapped_line_count(text, merged_width) * 15 + 6
+            worksheet.set_row(row_index, height)
             worksheet.merge_range(row_index, 0, row_index, 1, text, formats.get(kind, formats["text"]))
         else:
+            worksheet.set_row(row_index, 10)
             worksheet.write_blank(row_index, 0, None, formats["text"])
         row_index += 1
     return worksheet
