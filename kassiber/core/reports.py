@@ -4592,7 +4592,8 @@ def _build_verification_data(conn, profile, hooks: ReportHooks):
         SELECT
             je.occurred_at,
             w.label AS wallet,
-            je.transaction_id,
+            je.transaction_id AS internal_tx_id,
+            COALESCE(NULLIF(t.external_id, ''), je.transaction_id) AS transaction_id,
             je.entry_type,
             je.asset,
             je.quantity,
@@ -4632,7 +4633,7 @@ def _build_verification_data(conn, profile, hooks: ReportHooks):
             "quantity_msat": magnitude,
             "quantity": float(msat_to_btc(magnitude)),
             "description": row["description"],
-            "tags": ledger_tags.get(row["transaction_id"], ""),
+            "tags": ledger_tags.get(row["internal_tx_id"], ""),
             "pricing_source": row["pricing_source"],
             "pricing_quality": row["pricing_quality"],
             "taxable": int(row["taxable"]),
@@ -4653,7 +4654,7 @@ def _build_verification_data(conn, profile, hooks: ReportHooks):
         SELECT
             jq.reason,
             jq.detail_json,
-            jq.transaction_id,
+            COALESCE(NULLIF(t.external_id, ''), jq.transaction_id) AS transaction_id,
             t.occurred_at,
             t.asset,
             t.amount,
@@ -4732,6 +4733,8 @@ def _build_verification_data(conn, profile, hooks: ReportHooks):
                 if exc.code != "not_found":
                     raise
             except sqlite3.OperationalError:
+                # Rates cache table may not exist yet (older DBs); fall back to
+                # the "no market quote" provenance defaults set above.
                 pass
         rate_provenance[asset] = (source, timestamp)
 

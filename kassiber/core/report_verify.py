@@ -410,21 +410,30 @@ def _conditional_quality_format(worksheet, formats, ref: dict, key: str) -> None
 # --------------------------------------------------------------------------- #
 # Control reconciliation sheet
 # --------------------------------------------------------------------------- #
-def _sumifs_minus(add_ref, sub_ref, value_key, asset_cell) -> str:
-    # Earn/income coins are emitted by the engine TWICE: as an `acquisition`
-    # lot (which enters holdings) and as an `income` line (the taxable
-    # recognition). The lot already carries the quantity and basis, so the
-    # holdings add-side counts only acquisition + transfer_in (explicit equality
-    # criteria — Apple Numbers drops the "<>income" not-equal condition string).
-    add_vals = _abs_range(add_ref["sheet_name"], add_ref["col_index"][value_key], add_ref["first_data_row"], add_ref["last_data_row"])
+def _holdings_quantity_formula(add_ref, sub_ref, asset_cell) -> str:
+    """Net holdings quantity = Σ inflows − Σ outflows, per asset.
+
+    Add-side counts only acquisition + transfer_in: earn/income coins are
+    emitted by the engine TWICE (an `acquisition` lot that enters holdings plus
+    an `income` line for the taxable recognition), so summing the `income` rows
+    would double-count them. Sub-side counts every Disposals quantity EXCEPT
+    `transfer_fee`: a self-transfer's `transfer_out` is the full sent amount
+    (already including the network fee), and the separate `transfer_fee` row is
+    a tax-only disposal of that same fee — subtracting it again would
+    double-count it. Plain equality criteria keep Apple Numbers happy on import.
+    """
+    quantity = "quantity"
+    add_vals = _abs_range(add_ref["sheet_name"], add_ref["col_index"][quantity], add_ref["first_data_row"], add_ref["last_data_row"])
     add_assets = _abs_range(add_ref["sheet_name"], add_ref["col_index"]["asset"], add_ref["first_data_row"], add_ref["last_data_row"])
     add_types = _abs_range(add_ref["sheet_name"], add_ref["col_index"]["entry_type"], add_ref["first_data_row"], add_ref["last_data_row"])
-    sub_vals = _abs_range(sub_ref["sheet_name"], sub_ref["col_index"][value_key], sub_ref["first_data_row"], sub_ref["last_data_row"])
+    sub_vals = _abs_range(sub_ref["sheet_name"], sub_ref["col_index"][quantity], sub_ref["first_data_row"], sub_ref["last_data_row"])
     sub_assets = _abs_range(sub_ref["sheet_name"], sub_ref["col_index"]["asset"], sub_ref["first_data_row"], sub_ref["last_data_row"])
+    sub_types = _abs_range(sub_ref["sheet_name"], sub_ref["col_index"]["entry_type"], sub_ref["first_data_row"], sub_ref["last_data_row"])
     return (
         f'SUMIFS({add_vals},{add_assets},{asset_cell},{add_types},"acquisition")'
         f'+SUMIFS({add_vals},{add_assets},{asset_cell},{add_types},"transfer_in")'
         f"-SUMIFS({sub_vals},{sub_assets},{asset_cell})"
+        f'+SUMIFS({sub_vals},{sub_assets},{asset_cell},{sub_types},"transfer_fee")'
     )
 
 
@@ -449,7 +458,7 @@ def _control_columns(add_ref, sub_ref) -> list[dict]:
         return _cell(colmap["asset"], excel_row, abs_col=True)
 
     def qty_recompute(colmap, excel_row, row):
-        expr = "=" + _sumifs_minus(add_ref, sub_ref, "quantity", asset_cell(colmap, excel_row))
+        expr = "=" + _holdings_quantity_formula(add_ref, sub_ref, asset_cell(colmap, excel_row))
         return expr, float(row.get("quantity", 0.0))
 
     def basis_recompute(colmap, excel_row, row):
@@ -492,9 +501,12 @@ def _control_columns(add_ref, sub_ref) -> list[dict]:
     def _avg_value(row):
         return float(row["cost_basis"]) / float(row["quantity"]) if row.get("quantity") else 0.0
 
-    def check(recompute_key, kassiber_key, recompute_fn, tol):
+    def check(recompute_key, kassiber_key, recompute_fn, tol, tol_ref=TOLERANCE_CELL):
         # The cached OK/DIFF is computed from the row so it reflects reality
         # before any recalc: a desynced recompute vs Kassiber value shows DIFF.
+        # ``tol_ref`` is the live-formula tolerance: the editable fiat cell for
+        # money checks, but a BTC literal for the quantity check (the fiat cent
+        # cell would mask quantity drifts up to 0.01 BTC).
         def builder(colmap, excel_row, row):
             a = _cell(colmap[recompute_key], excel_row)
             b = _cell(colmap[kassiber_key], excel_row)
@@ -502,7 +514,7 @@ def _control_columns(add_ref, sub_ref) -> list[dict]:
             kassiber = float(row.get(kassiber_key, 0.0) or 0.0)
             cached = "OK" if abs(recomputed - kassiber) <= tol else f"DIFF {recomputed - kassiber:.8f}"
             return (
-                f'=IF(ABS({a}-{b})<={TOLERANCE_CELL},"OK","DIFF "&TEXT({a}-{b},"0.00000000"))',
+                f'=IF(ABS({a}-{b})<={tol_ref},"OK","DIFF "&TEXT({a}-{b},"0.00000000"))',
                 cached,
             )
 
@@ -515,7 +527,7 @@ def _control_columns(add_ref, sub_ref) -> list[dict]:
         {"key": "rate_as_of", "label": "Rate As Of", "fmt": "text"},
         {"key": "holdings_qty", "label": "Holdings BTC (recompute)", "fmt": "formula_quantity", "formula": qty_recompute},
         {"key": "holdings_qty_kassiber", "label": "Holdings BTC (Kassiber)", "fmt": "kassiber_qty"},
-        {"key": "qty_check", "label": "Balance Check", "fmt": "check", "formula": check("holdings_qty", "holdings_qty_kassiber", lambda r: r.get("quantity", 0.0), QTY_TOLERANCE)},
+        {"key": "qty_check", "label": "Balance Check", "fmt": "check", "formula": check("holdings_qty", "holdings_qty_kassiber", lambda r: r.get("quantity", 0.0), QTY_TOLERANCE, tol_ref="0.00000001")},
         {"key": "cost_basis", "label": "Cost Basis (recompute)", "fmt": "formula_money", "formula": basis_recompute},
         {"key": "cost_basis_kassiber", "label": "Cost Basis (Kassiber)", "fmt": "kassiber"},
         {"key": "basis_check", "label": "Basis Check", "fmt": "check", "formula": check("cost_basis", "cost_basis_kassiber", lambda r: r.get("cost_basis", 0.0), DEFAULT_FIAT_TOLERANCE)},

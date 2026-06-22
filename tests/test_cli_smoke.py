@@ -1446,6 +1446,87 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIn("Kassiber Transactions - Default", csv_text)
         self.assertIn("Transaction ID", csv_text)
 
+    def test_07af_verify_transfer_fee_and_traceable_ids(self):
+        # A self-transfer with a network fee: the engine records transfer_out for
+        # the full sent amount (fee included) plus a separate transfer_fee row.
+        # The holdings recompute must not subtract the fee twice, and the ledger
+        # Transaction IDs must be the external txids (so they match the
+        # Transactions sheet for evidence cross-reference).
+        with tempfile.TemporaryDirectory(prefix="kassiber-verify-xfer-") as tmp:
+            root = Path(tmp) / "data"
+            a_csv = Path(tmp) / "a.csv"
+            b_csv = Path(tmp) / "b.csv"
+            a_csv.write_text(
+                "date,txid,direction,asset,amount,fee,fiat_rate,description,kind\n"
+                "2024-01-01T00:00:00Z,buy-001,inbound,BTC,1.00000000,0,40000,Buy,buy\n"
+                "2024-06-01T00:00:00Z,xfer-001,outbound,BTC,0.50100000,0,50000,Move to cold,transfer\n",
+                encoding="utf-8",
+            )
+            b_csv.write_text(
+                "date,txid,direction,asset,amount,fee,fiat_rate,description,kind\n"
+                "2024-06-01T00:05:00Z,xfer-001,inbound,BTC,0.50000000,0,50000,Move to cold,transfer\n",
+                encoding="utf-8",
+            )
+            xlsx_path = Path(tmp) / "report.xlsx"
+
+            def run(*args):
+                payload, code = _run(root, *args)
+                self.assertEqual(code, 0, f"{args} -> {json.dumps(payload)[:300]}")
+                return payload
+
+            run("init")
+            run("workspaces", "create", "Main")
+            run("profiles", "create", "--workspace", "Main", "--fiat-currency", "USD", "--tax-country", "generic", "Default")
+            run("wallets", "create", "--workspace", "Main", "--profile", "Default", "--label", "Hot", "--kind", "custom")
+            run("wallets", "create", "--workspace", "Main", "--profile", "Default", "--label", "Cold", "--kind", "custom")
+            run("wallets", "import-csv", "--workspace", "Main", "--profile", "Default", "--wallet", "Hot", "--file", str(a_csv))
+            run("wallets", "import-csv", "--workspace", "Main", "--profile", "Default", "--wallet", "Cold", "--file", str(b_csv))
+            run("rates", "set", "BTC-USD", "2025-06-01T00:00:00Z", "90000")
+            run("journals", "process", "--workspace", "Main", "--profile", "Default")
+            run("reports", "export-xlsx", "--workspace", "Main", "--profile", "Default", "--file", str(xlsx_path))
+
+            portfolio = run("reports", "portfolio-summary", "--workspace", "Main", "--profile", "Default")["data"]
+            kassiber_qty = sum(float(row["quantity"]) for row in portfolio if row["asset"] == "BTC")
+            self.assertAlmostEqual(kassiber_qty, 0.999, places=8)  # 1.0 funded − 0.001 fee burned
+
+            sheets = _load_xlsx_sheets(xlsx_path)
+            acq = sheets["Acquisitions"]
+            disp = sheets["Disposals"]
+            acq_h = {l: c for c, l in acq.get(2, {}).items()}
+            disp_h = {l: c for c, l in disp.get(2, {}).items()}
+
+            def _by_asset(rows, headers, value_label, *, types=None):
+                total = 0.0
+                for rownum, cells in rows.items():
+                    if rownum < 3 or headers["Asset"] not in cells:
+                        continue
+                    if types is not None and cells.get(headers["Type"]) not in types:
+                        continue
+                    total += cells.get(headers[value_label], 0.0)
+                return total
+
+            qty = "Quantity msat (input)"
+            add = _by_asset(acq, acq_h, qty, types={"acquisition", "transfer_in"})
+            sub_all = _by_asset(disp, disp_h, qty)
+            sub_fee = _by_asset(disp, disp_h, qty, types={"transfer_fee"})
+            # Mirror the Control holdings formula: Σadd − (Σdisp − Σtransfer_fee).
+            recompute = (add - (sub_all - sub_fee)) / 1e11
+            self.assertAlmostEqual(recompute, kassiber_qty, places=8)
+
+            # The live formula must re-add transfer_fee and use a BTC tolerance.
+            with zipfile.ZipFile(xlsx_path) as workbook:
+                names = re.findall(r'<sheet name="([^"]+)"', workbook.read("xl/workbook.xml").decode("utf-8"))
+                control_xml = _unescape_xml(
+                    workbook.read(f"xl/worksheets/sheet{names.index('Control') + 1}.xml").decode("utf-8")
+                )
+            self.assertIn('"transfer_fee"', control_xml)
+            self.assertIn("0.00000001", control_xml)  # balance check uses a BTC tolerance, not the fiat cell
+
+            # Ledger Transaction IDs are the external txids, matching Transactions.
+            acq_ids = {acq[r].get(acq_h["Transaction ID"]) for r in acq if r >= 3 and acq_h["Transaction ID"] in acq[r]}
+            self.assertIn("buy-001", acq_ids)
+            self.assertIn("xfer-001", acq_ids)
+
     def test_07aa_pdf_writer_reports_actual_page_count(self):
         from kassiber.pdf_report import write_text_pdf
 
