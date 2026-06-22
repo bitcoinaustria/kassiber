@@ -17,7 +17,9 @@ from kassiber.core.transfer_matching import (
     KIND_PEG_IN,
     KIND_PEG_OUT,
     KIND_SUBMARINE_SWAP,
+    KIND_SWAP_REFUND,
     METHOD_HEURISTIC,
+    METHOD_HTLC_REFUND,
     METHOD_PAYMENT_HASH,
     POLICY_CARRYING_VALUE,
     POLICY_TAXABLE,
@@ -578,6 +580,98 @@ class ExcludedRowsTests(unittest.TestCase):
         out = _row(id="o", wallet_id="A", payment_hash=_PAY_HASH, direction="outbound", excluded=1)
         inbound = _row(id="i", wallet_id="B", payment_hash=_PAY_HASH, direction="inbound", asset="LBTC")
         self.assertEqual(suggest_swap_candidates([out, inbound], tax_country="at"), [])
+
+
+class RefundLinkMatchingTests(unittest.TestCase):
+    def test_same_wallet_refund_paired_by_funding_link(self):
+        lockup = _row(
+            id="lockup",
+            wallet_id="wallet-a",
+            external_id="lockup-txid",
+            direction="outbound",
+            amount=10_000_000,
+            occurred_at="2026-03-01T09:00:00Z",
+        )
+        refund = _row(
+            id="refund",
+            wallet_id="wallet-a",  # refund returns to the funding wallet
+            external_id="refund-txid",
+            swap_refund_funding_txid="lockup-txid",
+            direction="inbound",
+            amount=9_950_000,
+            occurred_at="2026-03-05T09:00:00Z",  # well past the 24h window
+        )
+        candidates = suggest_swap_candidates([lockup, refund])
+        self.assertEqual(len(candidates), 1)
+        candidate = candidates[0]
+        self.assertEqual(candidate.out_id, "lockup")
+        self.assertEqual(candidate.in_id, "refund")
+        self.assertEqual(candidate.confidence, CONFIDENCE_EXACT)
+        self.assertEqual(candidate.method, METHOD_HTLC_REFUND)
+        self.assertEqual(candidate.default_kind, KIND_SWAP_REFUND)
+        self.assertEqual(candidate.default_policy, POLICY_CARRYING_VALUE)
+        self.assertEqual(candidate.swap_fee_msat, 50_000)
+
+    def test_refund_link_with_no_matching_funding_leg_is_unmatched(self):
+        # Same-wallet refund whose funding leg isn't present (and same-wallet, so
+        # the heuristic can't rescue it either) stays unmatched.
+        refund = _row(
+            id="refund",
+            wallet_id="wallet-a",
+            external_id="refund-txid",
+            swap_refund_funding_txid="missing-lockup",
+            direction="inbound",
+            amount=9_950_000,
+        )
+        self.assertEqual(suggest_swap_candidates([refund]), [])
+
+    def test_refund_link_beats_heuristic_for_cross_wallet_refund(self):
+        # A different-wallet refund inside the window would also match the
+        # heuristic; the deterministic link must win and emit exactly one
+        # exact candidate, not a duplicate strong one.
+        lockup = _row(
+            id="lockup",
+            wallet_id="wallet-a",
+            external_id="lockup-txid",
+            direction="outbound",
+            amount=10_000_000,
+            occurred_at="2026-03-01T09:00:00Z",
+        )
+        refund = _row(
+            id="refund",
+            wallet_id="wallet-b",
+            external_id="refund-txid",
+            swap_refund_funding_txid="lockup-txid",
+            direction="inbound",
+            amount=9_950_000,
+            occurred_at="2026-03-01T15:00:00Z",
+        )
+        candidates = suggest_swap_candidates([lockup, refund])
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].method, METHOD_HTLC_REFUND)
+        self.assertEqual(candidates[0].confidence, CONFIDENCE_EXACT)
+
+    def test_cross_asset_funding_link_not_paired(self):
+        # The same-asset guard: a refund returns the asset that was locked, so a
+        # link that points at a different-asset outbound is not a swap refund.
+        lockup = _row(
+            id="lockup",
+            wallet_id="wallet-a",
+            external_id="lockup-txid",
+            direction="outbound",
+            asset="LBTC",
+            amount=10_000_000,
+        )
+        refund = _row(
+            id="refund",
+            wallet_id="wallet-a",
+            external_id="refund-txid",
+            swap_refund_funding_txid="lockup-txid",
+            direction="inbound",
+            asset="BTC",
+            amount=9_950_000,
+        )
+        self.assertEqual(suggest_swap_candidates([lockup, refund]), [])
 
 
 if __name__ == "__main__":

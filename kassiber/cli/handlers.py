@@ -325,7 +325,7 @@ def _journals_current_for_profile(conn, profile):
     )
 
 
-TRANSFER_PAIR_KINDS = ("manual", "peg-in", "peg-out", "submarine-swap")
+TRANSFER_PAIR_KINDS = ("manual", "peg-in", "peg-out", "submarine-swap", "swap-refund")
 TRANSFER_PAIR_POLICIES = ("carrying-value", "taxable")
 DIRECT_SWAP_PAYOUT_KINDS = ("direct-swap-payout",)
 
@@ -866,6 +866,7 @@ def _load_matcher_rows(conn, profile_id):
         """
         SELECT
             t.id, t.profile_id, t.wallet_id, t.external_id, t.payment_hash,
+            t.swap_refund_funding_txid,
             t.occurred_at, t.direction, t.asset, t.amount, t.excluded,
             w.label AS wallet_label, w.kind AS wallet_kind
         FROM transactions t
