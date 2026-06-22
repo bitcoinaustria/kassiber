@@ -118,7 +118,34 @@ const METHOD_OPTIONS = [
   { value: "all", labelKey: "swap.method.any" },
   { value: "payment_hash", labelKey: "swap.method.paymentHash" },
   { value: "heuristic", labelKey: "swap.method.heuristic" },
+  { value: "htlc_refund", labelKey: "swap.method.htlcRefund" },
 ] as const;
+
+type CandidateMethod = "payment_hash" | "heuristic" | "htlc_refund";
+// Per-method i18n keys for the three render sites. The Record forces every
+// method (including any future one) to define all three labels, so the type
+// checker flags a missing translation instead of silently labelling it as a
+// heuristic match.
+const METHOD_LABEL_KEYS = {
+  payment_hash: {
+    table: "swap.table.methodPaymentHash",
+    matched: "swap.detail.matchedByPaymentHash",
+    rationale: "swap.detail.rationalePaymentHash",
+  },
+  heuristic: {
+    table: "swap.table.methodHeuristic",
+    matched: "swap.detail.matchedByTimeAmount",
+    rationale: "swap.detail.rationaleHeuristic",
+  },
+  htlc_refund: {
+    table: "swap.table.methodHtlcRefund",
+    matched: "swap.detail.matchedByRefundLink",
+    rationale: "swap.detail.rationaleHtlcRefund",
+  },
+} as const satisfies Record<
+  CandidateMethod,
+  { table: string; matched: string; rationale: string }
+>;
 const ROUTE_PAIR_OPTIONS = [
   { value: "all", labelKey: "swap.route.any" },
   { value: "LNBTC-LBTC", labelKey: "swap.route.lnToLiquid" },
@@ -151,7 +178,7 @@ interface SwapCandidate {
   out_occurred_at: string;
   in_occurred_at: string;
   confidence: "exact" | "strong";
-  method: "payment_hash" | "heuristic";
+  method: CandidateMethod;
   swap_fee_msat: number;
   swap_fee: number;
   swap_fee_kind: string;
@@ -1178,9 +1205,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                         </TableCell>
                         <TableCell className="whitespace-normal">
                           <div className="text-xs text-muted-foreground">
-                            {candidate.method === "payment_hash"
-                              ? t("swap.table.methodPaymentHash")
-                              : t("swap.table.methodHeuristic")}
+                            {t(METHOD_LABEL_KEYS[candidate.method].table)}
                           </div>
                           {candidate.rule_match ? (
                             <Badge variant="outline" className="mt-1 text-[10px]">
@@ -1701,9 +1726,7 @@ function SwapCandidateDetailSheet({
             <SheetHeader className="border-b p-4 sm:p-6">
               <SheetTitle>{t(candidateLabelKey(candidate))}</SheetTitle>
               <SheetDescription>
-                {candidate.method === "payment_hash"
-                  ? t("swap.detail.matchedByPaymentHash")
-                  : t("swap.detail.matchedByTimeAmount")}
+                {t(METHOD_LABEL_KEYS[candidate.method].matched)}
                 {" "}
                 <span className={blurClass(hideSensitive)}>
                   {t("swap.detail.delta", {
@@ -1782,9 +1805,7 @@ function SwapCandidateDetailSheet({
                 <div className="rounded-lg border bg-muted/20 p-3 text-sm">
                   <div className="font-medium">{t("swap.detail.matchRationale")}</div>
                   <p className="mt-1 text-muted-foreground">
-                    {candidate.method === "payment_hash"
-                      ? t("swap.detail.rationalePaymentHash")
-                      : t("swap.detail.rationaleHeuristic")}
+                    {t(METHOD_LABEL_KEYS[candidate.method].rationale)}
                   </p>
                   {candidate.rule_match ? (
                     <p className="mt-2 text-xs text-muted-foreground">

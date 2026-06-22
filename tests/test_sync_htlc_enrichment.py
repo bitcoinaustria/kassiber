@@ -28,6 +28,7 @@ from kassiber.core.sync_backends import (
     _payment_hash_fields,
     _swap_refund_fields,
     decode_raw_transaction,
+    liquid_input_txid,
     record_from_bitcoin_esplora_tx,
     record_from_electrum_tx,
 )
@@ -240,6 +241,21 @@ class RefundLinkEnrichmentTests(unittest.TestCase):
         self.assertEqual(
             _extract_refund_funding_txid(vins, _esplora_witness_items),
             "funding-lockup",
+        )
+
+    def test_extract_refund_funding_txid_liquid_embit_vin(self):
+        # Liquid vins are embit objects: witness via script_witness.items and
+        # prevout txid via liquid_input_txid, not the dict-shaped defaults.
+        items = [bytes.fromhex("3045" + "00" * 70), b"", _redeem_script()]
+        vin = SimpleNamespace(
+            txid="aa" * 32,
+            witness=SimpleNamespace(script_witness=SimpleNamespace(items=items)),
+        )
+        self.assertEqual(
+            _extract_refund_funding_txid(
+                [vin], _liquid_witness_items, prev_txid_fn=liquid_input_txid
+            ),
+            "aa" * 32,
         )
 
     def test_extract_refund_funding_txid_ignores_claim_vin(self):

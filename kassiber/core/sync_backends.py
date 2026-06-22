@@ -1370,16 +1370,18 @@ def _vin_prev_txid(vin):
     return None
 
 
-def _extract_refund_funding_txid(vins, witness_items_fn):
+def _extract_refund_funding_txid(vins, witness_items_fn, prev_txid_fn=_vin_prev_txid):
     """Funding txid of the first vin whose witness is an HTLC refund spend.
 
     A failed swap is swept via the HTLC's CLTV timeout branch, so the vin
     carrying that refund witness spends the swap's funding (lockup) output.
     That vin's prevout txid is therefore the on-chain funding transaction the
     inbound refund should be linked back to. ``witness_items_fn`` decodes one
-    vin's witness items (``_esplora_witness_items`` for BTC, ``_liquid_witness_items``
-    for Liquid). Returns ``None`` when no input reveals an HTLC refund or the
-    prevout txid is unavailable.
+    vin's witness items (``_esplora_witness_items`` for dict-shaped BTC/Electrum
+    vins, ``_liquid_witness_items`` for embit Liquid vins) and ``prev_txid_fn``
+    resolves that vin's prevout txid (``_vin_prev_txid`` for dict vins,
+    ``liquid_input_txid`` for embit Liquid vins). Returns ``None`` when no input
+    reveals an HTLC refund or the prevout txid is unavailable.
     """
     for vin in vins:
         items = witness_items_fn(vin)
@@ -1388,7 +1390,7 @@ def _extract_refund_funding_txid(vins, witness_items_fn):
         extraction = htlc_parser.extract_from_refund_witness(items)
         if extraction is None:
             continue
-        prev_txid = _vin_prev_txid(vin)
+        prev_txid = prev_txid_fn(vin)
         if prev_txid:
             return prev_txid
     return None
@@ -1572,6 +1574,13 @@ def record_components_from_liquid_tx(
         _liquid_witness_items(vin) for vin in tx.vin
     )
     payment_hash_fields = _payment_hash_fields(payment_hash)
+    # Liquid vins are embit objects, so the refund link needs the embit-aware
+    # witness + prevout-txid helpers rather than the dict-shaped defaults.
+    swap_refund_fields = _swap_refund_fields(
+        _extract_refund_funding_txid(
+            tx.vin, _liquid_witness_items, prev_txid_fn=liquid_input_txid
+        )
+    )
     records = []
     all_assets = sorted(set(net_sats) | set(fee_sats))
     for asset_id in all_assets:
@@ -1628,6 +1637,7 @@ def record_components_from_liquid_tx(
                     sort_keys=True,
                 ),
                 **payment_hash_fields,
+                **swap_refund_fields,
             }
         )
     return records
