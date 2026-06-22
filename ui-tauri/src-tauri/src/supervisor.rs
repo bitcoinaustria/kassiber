@@ -786,11 +786,17 @@ fn timeout_is_safe_to_retry(kind: &str) -> bool {
             | "ui.next_actions"
             | "ui.overview.snapshot"
             | "ui.profiles.snapshot"
-            // Idempotent reads behind retry:false panels (Connection detail,
-            // Lightning, balance history) that should still ride out a busy
-            // daemon during a sync rather than flash an error.
+            // Idempotent reads the UI polls (incl. detail-sheet history and the
+            // retry:false panels — Connection detail, Lightning, balance
+            // history) that should ride out a busy daemon during a sync rather
+            // than flash an error. None mutate (none are auto-journal kinds).
+            | "ui.activity.history"
+            | "ui.activity.stale"
             | "ui.reports.balance_history"
             | "ui.reports.lightning_profitability"
+            | "ui.source_funds.preview"
+            | "ui.transactions.commercial_context"
+            | "ui.transactions.history"
             | "ui.transactions.resolve"
             // Read-only candidate matcher. Enumerated explicitly rather than via
             // a `.suggest` suffix because the suggestion *seeders*
@@ -2193,11 +2199,15 @@ for line in sys.stdin:
         assert!(timeout_is_safe_to_retry("ui.overview.snapshot"));
         assert!(timeout_is_safe_to_retry("ui.transactions.list"));
         assert!(timeout_is_safe_to_retry("ui.transactions.resolve"));
+        assert!(timeout_is_safe_to_retry("ui.transactions.history"));
+        assert!(timeout_is_safe_to_retry("ui.activity.history"));
         assert!(timeout_is_safe_to_retry("ui.journals.quarantine"));
         assert!(!timeout_is_safe_to_retry("ui.source_funds.suggest"));
         assert!(!timeout_is_safe_to_retry("ui.btcpay.provenance.suggest"));
         assert!(!timeout_is_safe_to_retry("ui.wallets.create"));
         assert!(!timeout_is_safe_to_retry("ui.transactions.metadata.update"));
+        // Mutating kinds the UI calls must never be retryable.
+        assert!(!timeout_is_safe_to_retry("ui.transactions.history.revert"));
     }
 
     #[test]
