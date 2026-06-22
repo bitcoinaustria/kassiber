@@ -2054,7 +2054,12 @@ function AppDashboardHeader({
   const notificationItems: NotificationItem[] = [
     ...appNotifications.map((item) => ({
       ...item,
-      to: notificationTarget(item.title, item.tone, developerToolsEnabled),
+      to: notificationTarget(
+        item.title,
+        item.tone,
+        developerToolsEnabled,
+        item.target,
+      ),
     })),
     ...systemNotificationItems,
   ];

@@ -128,6 +128,10 @@ export function useWalletSyncAction() {
         tone: "warning",
         dedupeKey: "book-refresh",
         progress: startingSyncProgress(),
+        // Clear any target left on the deduped notification by a prior run's
+        // completion (updateNotification only shallow-merges, so `target` is
+        // sticky); an in-progress refresh has nothing to review yet.
+        target: undefined,
       });
       refreshBook.mutate(
         {
@@ -143,18 +147,27 @@ export function useWalletSyncAction() {
             const needsAttention = freshnessRunNeedsAttention(envelope.data);
             const quarantineCount = freshnessRunQuarantineCount(envelope.data);
             const transferReviewCount = freshnessRunTransferReviewCount(envelope.data);
-            const needsReview =
-              needsAttention || quarantineCount > 0 || transferReviewCount > 0;
+            const blocksFirstSync = needsAttention || quarantineCount > 0;
+            const needsReview = blocksFirstSync || transferReviewCount > 0;
             let title = t("bookRefresh.finishedTitle");
+            let target: "/logs" | "/quarantine" | "/swaps" | undefined;
             if (needsAttention) {
               title = t("bookRefresh.needsAttentionTitle");
+              target = "/logs";
             } else if (quarantineCount > 0) {
               title = t("bookRefresh.quarantineTitle", { count: quarantineCount });
+              target = "/quarantine";
             } else if (transferReviewCount > 0) {
               title = t("bookRefresh.transferReviewTitle", {
                 count: transferReviewCount,
               });
+              target = "/swaps";
             }
+            // Route the notification by a language-independent target instead of
+            // letting the header guess from the (localized) title: failures /
+            // blocking sources go to the logs (settings when dev tools are off),
+            // quarantine goes to the quarantine review, and remaining safe
+            // transfer candidates go to Swaps.
             if (noticeIdRef.current) {
               updateNotification(noticeIdRef.current, {
                 title,
@@ -162,6 +175,7 @@ export function useWalletSyncAction() {
                 tone: needsReview ? "warning" : "success",
                 dedupeKey: "book-refresh",
                 progress: undefined,
+                target,
               });
               noticeIdRef.current = null;
             } else {
@@ -170,16 +184,16 @@ export function useWalletSyncAction() {
                 body,
                 tone: needsReview ? "warning" : "success",
                 dedupeKey: "book-refresh",
+                target,
               });
             }
-            if (!needsReview) {
+            if (!blocksFirstSync) {
               options?.onTrustedSuccess?.();
               // The book has completed a clean full run, so subsequent
               // refreshes are ordinary background syncs rather than a
-              // first-time setup. A run that still needs attention (job
-              // errors, blocking reports, journal quarantine, or unresolved
-              // transfer candidates) stays in first-sync mode so a retry keeps
-              // the setup card instead of demoting to the thin line.
+              // first-time setup. Reviewable swap/transfer candidates still
+              // notify the user, but they should not keep setup mode alive
+              // forever once the core sync and journals are clean.
               if (bookKey) markFirstSyncDone(bookKey);
             }
             clearActiveMaintenanceProgress(BOOK_REFRESH_PROGRESS_ID);
@@ -197,6 +211,10 @@ export function useWalletSyncAction() {
                 tone: "error",
                 dedupeKey: "book-refresh",
                 progress: undefined,
+                // Failures route to the logs (settings when dev tools are off);
+                // set it explicitly so a stale /quarantine target from a prior
+                // run's completion can't bypass that error fallback.
+                target: "/logs",
               });
               noticeIdRef.current = null;
               clearActiveMaintenanceProgress(BOOK_REFRESH_PROGRESS_ID);
@@ -208,6 +226,7 @@ export function useWalletSyncAction() {
               body,
               tone: "error",
               dedupeKey: "book-refresh",
+              target: "/logs",
             });
             clearActiveMaintenanceProgress(BOOK_REFRESH_PROGRESS_ID);
             startedAtRef.current = null;

@@ -809,6 +809,39 @@ class FreshnessTest(unittest.TestCase):
         self.assertEqual(result["auto_pair"]["applied"], 2)
         self.assertEqual(result["entries_created"], 4)
 
+    def test_journal_freshness_handler_continues_when_auto_pair_fails(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        progress = []
+        handler = daemon_freshness._freshness_handlers({})[
+            freshness.JOB_JOURNAL_REFRESH
+        ]
+
+        with patch(
+            "kassiber.daemon_freshness._auto_pair_before_journals",
+            side_effect=AppError("profile missing", code="not_found"),
+        ) as auto_pair, patch(
+            "kassiber.daemon_freshness._journals_process_payload",
+            return_value={"quarantined": 0, "entries_created": 4},
+        ) as process:
+            result = handler(
+                conn,
+                {"profile_id": profile_id, "payload": {"auto_pair": True}},
+                progress.append,
+                lambda: None,
+            )
+
+        self.assertEqual(
+            [item["phase"] for item in progress],
+            ["auto_pair", "journal_refresh"],
+        )
+        auto_pair.assert_called_once()
+        process.assert_called_once()
+        self.assertEqual(result["entries_created"], 4)
+        self.assertEqual(result["auto_pair"]["applied"], 0)
+        self.assertTrue(result["auto_pair"]["skipped"])
+        self.assertEqual(result["auto_pair"]["error"]["code"], "not_found")
+
     def test_auto_pair_before_journals_returns_applied_and_remaining_counts(self):
         conn = self._db()
         profile_id = _seed_profile(conn)
@@ -821,7 +854,7 @@ class FreshnessTest(unittest.TestCase):
         ), patch(
             "kassiber.daemon_freshness.apply_transfer_rules",
             return_value={"summary": {"count": 1, "total_swap_fee_msat": 1200}},
-        ), patch(
+        ) as rules, patch(
             "kassiber.daemon_freshness.bulk_pair_transfers",
             return_value={
                 "summary": {
@@ -830,12 +863,20 @@ class FreshnessTest(unittest.TestCase):
                     "total_swap_fee_msat": 800,
                 }
             },
-        ):
+        ) as bulk:
             summary = daemon_freshness._auto_pair_before_journals(
                 conn,
                 {"profile_id": profile_id},
             )
 
+        rules.assert_called_once_with(conn, "ws", profile_id, commit=False)
+        bulk.assert_called_once_with(
+            conn,
+            "ws",
+            profile_id,
+            confidence="exact",
+            commit=False,
+        )
         self.assertEqual(summary["applied"], 3)
         self.assertEqual(summary["rules_applied"], 1)
         self.assertEqual(summary["bulk_exact_applied"], 2)

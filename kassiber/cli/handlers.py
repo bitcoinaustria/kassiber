@@ -1048,6 +1048,7 @@ def bulk_pair_transfers(
     route_pair=None,
     method=None,
     candidate_type=None,
+    commit=True,
 ):
     """Run the matcher and auto-pair every solo (non-conflicted) candidate
     whose confidence meets the threshold.
@@ -1111,7 +1112,7 @@ def bulk_pair_transfers(
     except Exception:
         conn.rollback()
         raise
-    if applied:
+    if applied and commit:
         conn.commit()
     total_fee_msat = sum(int(pair.get("swap_fee_msat") or 0) for pair in applied)
     return {
@@ -1137,6 +1138,7 @@ def apply_transfer_rules(
     route_pair=None,
     method=None,
     candidate_type=None,
+    commit=True,
 ):
     """Auto-pair every non-conflicted candidate matched by enabled rules."""
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
@@ -1186,7 +1188,7 @@ def apply_transfer_rules(
     except Exception:
         conn.rollback()
         raise
-    if applied:
+    if applied and commit:
         conn.commit()
     return {
         "applied": applied,

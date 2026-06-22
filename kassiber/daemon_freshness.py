@@ -300,6 +300,23 @@ def _transfer_candidate_counts(payload: Mapping[str, Any]) -> dict[str, int]:
     }
 
 
+def _skipped_auto_pair_summary(exc: BaseException) -> dict[str, Any]:
+    code = exc.code if isinstance(exc, AppError) else "auto_pair_failed"
+    retryable = bool(exc.retryable) if isinstance(exc, AppError) else True
+    return {
+        "enabled": True,
+        "applied": 0,
+        "rules_applied": 0,
+        "bulk_exact_applied": 0,
+        "skipped": True,
+        "error": {
+            "code": code,
+            "message": "Automatic pairing was skipped; journals were still processed.",
+            "retryable": retryable,
+        },
+    }
+
+
 def _auto_pair_before_journals(
     conn: sqlite3.Connection,
     job: Mapping[str, Any],
@@ -308,12 +325,13 @@ def _auto_pair_before_journals(
     before = _transfer_candidate_counts(
         suggest_transfer_candidates(conn, workspace_ref, profile_ref)
     )
-    rules = apply_transfer_rules(conn, workspace_ref, profile_ref)
+    rules = apply_transfer_rules(conn, workspace_ref, profile_ref, commit=False)
     bulk_exact = bulk_pair_transfers(
         conn,
         workspace_ref,
         profile_ref,
         confidence="exact",
+        commit=False,
     )
     remaining = _transfer_candidate_counts(
         suggest_transfer_candidates(conn, workspace_ref, profile_ref)
@@ -744,7 +762,19 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
         if job_payload.get("auto_pair"):
             progress({"phase": "auto_pair"})
             check_cancelled()
-            auto_pair = _auto_pair_before_journals(conn, job)
+            try:
+                auto_pair = _auto_pair_before_journals(conn, job)
+            except AppError as exc:
+                conn.rollback()
+                _LOGGER.warning(
+                    "Automatic pairing before journal refresh was skipped: %s",
+                    exc.code,
+                )
+                auto_pair = _skipped_auto_pair_summary(exc)
+            except Exception as exc:
+                conn.rollback()
+                _LOGGER.exception("Automatic pairing before journal refresh was skipped")
+                auto_pair = _skipped_auto_pair_summary(exc)
         progress({"phase": core_freshness.PHASE_JOURNAL_REFRESH})
         check_cancelled()
         payload = _journals_process_payload(conn)
