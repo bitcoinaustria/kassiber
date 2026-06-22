@@ -776,8 +776,19 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
                 _LOGGER.exception("Automatic pairing before journal refresh was skipped")
                 auto_pair = _skipped_auto_pair_summary(exc)
         progress({"phase": core_freshness.PHASE_JOURNAL_REFRESH})
-        check_cancelled()
-        payload = _journals_process_payload(conn)
+        try:
+            check_cancelled()
+            payload = _journals_process_payload(conn)
+        except Exception:
+            # The auto-pair inserts above are pending (commit=False). If journal
+            # processing fails or is cancelled, run_job's error/cancel handler
+            # would otherwise commit the connection — persisting those pairs (and
+            # the journal invalidation) for a refresh the user was told failed,
+            # so the next retry would see already-paired legs without ever
+            # getting the auto-pair summary. Roll back so the auto-pair + journal
+            # step is atomic: either both land or neither does.
+            conn.rollback()
+            raise
         if auto_pair is not None:
             payload["auto_pair"] = auto_pair
         return {"status": "synced", **payload}

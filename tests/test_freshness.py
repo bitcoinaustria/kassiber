@@ -842,6 +842,46 @@ class FreshnessTest(unittest.TestCase):
         self.assertTrue(result["auto_pair"]["skipped"])
         self.assertEqual(result["auto_pair"]["error"]["code"], "not_found")
 
+    def test_journal_freshness_handler_rolls_back_auto_pairs_when_processing_fails(self):
+        # Auto-pair inserts are commit=False (pending). If journal processing
+        # then fails, run_job commits the connection on its way to marking the
+        # job failed — which must NOT persist the pending pairs. The handler
+        # rolls back so the pair + journal step is atomic.
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        handler = daemon_freshness._freshness_handlers({})[
+            freshness.JOB_JOURNAL_REFRESH
+        ]
+
+        def seed_pending_pair(conn_arg, _job):
+            # Stand in for a commit=False auto-pair insert left pending.
+            conn_arg.execute(
+                "INSERT INTO settings(key, value) VALUES('pending-auto-pair', '1')"
+            )
+            return {"enabled": True, "applied": 1, "remaining": {"total": 0}}
+
+        with patch(
+            "kassiber.daemon_freshness._auto_pair_before_journals",
+            side_effect=seed_pending_pair,
+        ), patch(
+            "kassiber.daemon_freshness._journals_process_payload",
+            side_effect=AppError("journal boom", code="tax_failed"),
+        ):
+            with self.assertRaises(AppError):
+                handler(
+                    conn,
+                    {"profile_id": profile_id, "payload": {"auto_pair": True}},
+                    lambda _payload: None,
+                    lambda: None,
+                )
+
+        # The pending auto-pair write must have been rolled back, not left for
+        # run_job's error handler to commit.
+        row = conn.execute(
+            "SELECT value FROM settings WHERE key = 'pending-auto-pair'"
+        ).fetchone()
+        self.assertIsNone(row)
+
     def test_auto_pair_before_journals_returns_applied_and_remaining_counts(self):
         conn = self._db()
         profile_id = _seed_profile(conn)
