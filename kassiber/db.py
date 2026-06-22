@@ -162,6 +162,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     raw_json TEXT NOT NULL DEFAULT '{}',
     payment_hash TEXT,
     payment_hash_source TEXT,
+    swap_refund_funding_txid TEXT,
     created_at TEXT NOT NULL
 );
 
@@ -1867,6 +1868,9 @@ def _ensure_swap_matching_schema(conn):
     _migrate_legacy_transaction_pairs_uniques(conn)
     ensure_column(conn, "transactions", "payment_hash", "TEXT")
     ensure_column(conn, "transactions", "payment_hash_source", "TEXT")
+    # Links an inbound HTLC refund back to its on-chain funding (lockup) txid so
+    # the matcher can pair a failed swap's send + refund even within one wallet.
+    ensure_column(conn, "transactions", "swap_refund_funding_txid", "TEXT")
     ensure_column(conn, "transaction_pairs", "swap_fee_msat", "INTEGER")
     ensure_column(conn, "transaction_pairs", "swap_fee_kind", "TEXT")
     ensure_column(conn, "transaction_pairs", "confidence_at_pair", "TEXT")
