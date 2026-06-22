@@ -217,7 +217,17 @@
   "dashboard": {
     "refreshBook": "Refresh book",
     "refreshing": "Refreshing",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "export": {
+      "label": "Export",
+      "xlsx": "Excel workbook (.xlsx)",
+      "csv": "CSV file (.csv)",
+      "saveTitle": "Save transactions export",
+      "done": "Transactions exported",
+      "savedTo": "Saved to {{name}}",
+      "rows": "{{count}} transactions exported",
+      "failed": "Transactions export failed"
+    }
   },
   "workbench": {
     "metric": {

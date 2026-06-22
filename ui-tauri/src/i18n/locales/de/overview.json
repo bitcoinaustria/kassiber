@@ -333,6 +333,10 @@
     "seriesToggle": "{{label}} {{action}}",
     "btcPriceAxis": "BTC-Kurs ({{currency}})",
     "dragHint": "Ziehe das Zeitfenster oder die Griffe, um den Zeitraum anzupassen; Doppelklick zum Zurücksetzen",
+    "empty": {
+      "title": "Noch nichts zum Darstellen",
+      "body": "Verbinde eine Wallet oder importiere Transaktionen und aktualisiere dann, um hier dein Bitcoin-Guthaben und deine Aktivität zu sehen."
+    },
     "stat": {
       "changeInBalance": "Änderung des Bitcoin-Guthabens",
       "highestPosition": "Höchste BTC-Position",

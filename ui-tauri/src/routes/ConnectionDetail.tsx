@@ -1032,7 +1032,6 @@ function ConnectionDetailView({
               type="button"
               variant="outline"
               size="sm"
-              className="min-w-[7.5rem]"
               disabled={isWalletSyncRunning}
               aria-busy={isWalletSyncRunning}
               aria-label={t("detail.refreshAction", {
@@ -1045,7 +1044,35 @@ function ConnectionDetailView({
                 className={cn("size-4", isWalletSyncRunning && "animate-spin")}
                 aria-hidden="true"
               />
-              <span>{refreshButtonLabel}</span>
+              {/*
+                Reserve the width of the widest label so the button never
+                resizes when it flips to the in-progress text. A mid-refresh
+                width change strands a stale composited tile of the spinning
+                icon in WKWebView (the macOS webview), leaving a frozen "ghost"
+                copy of the button overlaid on the live, spinning one. The
+                shift — and the ghost — only showed in locales where the two
+                labels differ in width (e.g. de "Aktualisieren" →
+                "Wird aktualisiert"); English clamped to the same width and
+                stayed clean. Stacking both labels pins the width to the
+                wider one in every locale.
+              */}
+              <span className="grid justify-items-center">
+                <span
+                  aria-hidden="true"
+                  className="invisible col-start-1 row-start-1"
+                >
+                  {t("detail.refresh")}
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="invisible col-start-1 row-start-1"
+                >
+                  {t("detail.refreshing")}
+                </span>
+                <span className="col-start-1 row-start-1">
+                  {refreshButtonLabel}
+                </span>
+              </span>
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

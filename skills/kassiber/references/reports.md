@@ -253,3 +253,62 @@ kassiber reports export-pdf --wallet satoshi-liquid --file satoshi-liquid-report
 
 Use these instead of inventing extra report renderers unless the user asks for
 a custom output beyond Kassiber's built-in exports.
+
+### Transactions-only export
+
+For just the transaction ledger (not the full report), use:
+
+```bash
+kassiber transactions export --export-format xlsx --file transactions.xlsx
+kassiber transactions export --export-format csv --file transactions.csv
+kassiber transactions export --wallet satoshi-cold --export-format xlsx --file cold.xlsx
+```
+
+It writes a single styled Transactions sheet (or CSV) with the same columns as
+the report's Transactions sheet — description, note, counterparty, tags, and the
+linked-file/URL Attachments column (single URLs render as clickable links). In
+the desktop GUI this is the **Export** button on the Transactions screen toolbar
+(Excel / CSV), backed by the daemon kinds `ui.transactions.export_csv` /
+`ui.transactions.export_xlsx`. It exports the profile's transactions (wallet
+scope when given), not the screen's transient view filters.
+
+### Self-verifying XLSX (default)
+
+`reports export-xlsx` appends a verification layer so the reader can reproduce
+every figure in Excel/LibreOffice rather than trusting the static numbers:
+
+- **Acquisitions** / **Disposals** — the raw journal ledger. Only the
+  highlighted inputs (msat quantities, fiat values, proceeds, cost basis) are
+  hard numbers; quantities-in-BTC, per-row gain = proceeds − cost basis, and an
+  OK/DIFF check are live formulas. Each row also shows its **Pricing Source**
+  and **Pricing Quality** (coarse/estimated prices are highlighted).
+- **Control** — a per-asset reconciliation matrix. Holdings balance, cost
+  basis, average price, market value, unrealized and realized gain are each
+  recomputed with a live formula over the ledger sheets and shown next to
+  Kassiber's own number with an OK/DIFF check (the check references the editable
+  tolerance in `Verify!B3`). It also shows the **market rate, its source and
+  timestamp** so the valuation is traceable.
+- **Verify** — a plain-language "how to verify" sheet: a workbook-level
+  `ALL CHECKS OK` / mismatch banner, run metadata (lot method, fiat, last
+  processed, Kassiber version), the formula legend, the recalc gotcha, the
+  active lot method, and scope notes.
+- **Quarantined** (only when present) — the transactions Kassiber could not
+  classify, with reason and detail, so the reader can see what is deliberately
+  excluded from every figure.
+
+The main report's **Transactions** sheet is the full per-transaction record:
+description, note, counterparty, tags, and an **Attachments** column. A single
+linked URL renders as a clickable link shown behind its name; multiple
+attachments are listed one per line (Excel allows only one hyperlink per cell).
+The Acquisitions/Disposals ledgers also carry each row's description and tags;
+match a ledger row to its evidence by the Transaction ID. When any attachments
+exist, an **Evidence** sheet lists every link as its own row with a clickable
+styled link — so even a transaction with several links has each one clickable.
+
+Reconciliation is per asset across the whole profile (Bitcoin accounting is
+pooled per asset across wallets; per-wallet cost basis is an allocation).
+Per-disposal cost basis under FIFO/LIFO/HIFO/LOFO is engine-selected and cannot
+be re-derived by a plain formula — the Control sheet verifies the
+method-independent identities instead. Pass `--no-verify` for the lean
+value-only workbook. The daemon kind `ui.reports.export_xlsx` accepts
+`{"verify": false}` for the same effect.

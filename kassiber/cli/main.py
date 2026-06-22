@@ -1115,6 +1115,13 @@ def build_parser() -> argparse.ArgumentParser:
     tx_list.add_argument("--order", choices=("asc", "desc"), default="desc")
     tx_list.add_argument("--limit", type=int, default=100)
 
+    tx_export = tx_sub.add_parser("export")
+    tx_export.add_argument("--workspace")
+    tx_export.add_argument("--profile")
+    tx_export.add_argument("--wallet")
+    tx_export.add_argument("--export-format", choices=("csv", "xlsx"), default="xlsx")
+    tx_export.add_argument("--file", required=True)
+
     attachments = sub.add_parser("attachments")
     attachments_sub = attachments.add_subparsers(dest="attachments_command", required=True)
     attachments_add = attachments_sub.add_parser("add")
@@ -1865,6 +1872,13 @@ def build_parser() -> argparse.ArgumentParser:
     export_xlsx.add_argument("--wallet")
     export_xlsx.add_argument("--file", required=True)
     export_xlsx.add_argument("--history-limit", type=int, default=0)
+    export_xlsx.add_argument(
+        "--no-verify",
+        dest="verify",
+        action="store_false",
+        help="Skip the self-verification sheets (Verify/Acquisitions/Disposals/Control).",
+    )
+    export_xlsx.set_defaults(verify=True)
 
     lightning_profitability = reports_sub.add_parser("lightning-profitability")
     lightning_profitability.add_argument("--workspace")
@@ -2570,6 +2584,23 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 args,
                 transactions_payload,
                 envelope_meta=transactions_meta,
+            )
+        if args.transactions_command == "export":
+            exporter = (
+                core_reports.export_transactions_xlsx_report
+                if args.export_format == "xlsx"
+                else core_reports.export_transactions_csv_report
+            )
+            return emit(
+                args,
+                exporter(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.file,
+                    _report_hooks(),
+                    wallet_ref=args.wallet,
+                ),
             )
     if args.command == "attachments":
         attachment_hooks = _attachment_hooks()
@@ -3660,6 +3691,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     report_hooks,
                     wallet_ref=args.wallet,
                     history_limit=args.history_limit,
+                    verify=args.verify,
                 ),
             )
         if args.reports_command == "lightning-profitability":

@@ -79,7 +79,10 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
   trusted handoff.
 - **Tax & reports** — RP2 lot accounting (FIFO/LIFO/HIFO/LOFO and moving
   average); Austrian § 27b EStG with E 1kv PDF / XLSX / CSV; summary,
-  balance sheet, capital gains, portfolio, balance history; local
+  balance sheet, capital gains, portfolio, balance history; self-verifying
+  XLSX export with live recompute formulas so you can check every balance,
+  average price, acquisition, disposal and gain in Excel/LibreOffice yourself
+  (`--no-verify` for the lean workbook); local
   BTC-USD / BTC-EUR rates cache (configurable live provider, Coinbase by
   default, CoinGecko supported, plus Kraken OHLCVT local archive and
   auto-seeded bundled BTC-only Kraken offline history for daily values) and

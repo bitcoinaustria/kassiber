@@ -5798,6 +5798,42 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(report_xlsx_file.read_bytes()[:2], b"PK")
             self.assertIn("Overview", report_xlsx["data"]["sheets"])
             self.assertIn("Transactions", report_xlsx["data"]["sheets"])
+            # Self-verification sheets ship by default.
+            self.assertTrue(report_xlsx["data"]["verified"])
+            self.assertIn("Control", report_xlsx["data"]["sheets"])
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "export-report-xlsx-plain",
+                    "kind": "ui.reports.export_xlsx",
+                    "args": {"verify": False},
+                },
+            )
+            report_xlsx_plain = _read_payload_timeout(proc)
+            self.assertEqual(report_xlsx_plain["kind"], "ui.reports.export_xlsx")
+            self.assertFalse(report_xlsx_plain["data"]["verified"])
+            self.assertNotIn("Control", report_xlsx_plain["data"]["sheets"])
+
+            _write_payload(
+                proc,
+                {"request_id": "export-transactions-xlsx", "kind": "ui.transactions.export_xlsx"},
+            )
+            tx_xlsx = _read_payload_timeout(proc)
+            self.assertEqual(tx_xlsx["kind"], "ui.transactions.export_xlsx")
+            self.assertEqual(tx_xlsx["data"]["scope"], "transactions")
+            self.assertEqual(tx_xlsx["data"]["sheets"], ["Transactions"])
+            self.assertTrue(Path(tx_xlsx["data"]["file"]).is_file())
+            self.assertEqual(Path(tx_xlsx["data"]["file"]).read_bytes()[:2], b"PK")
+
+            _write_payload(
+                proc,
+                {"request_id": "export-transactions-csv", "kind": "ui.transactions.export_csv"},
+            )
+            tx_csv = _read_payload_timeout(proc)
+            self.assertEqual(tx_csv["kind"], "ui.transactions.export_csv")
+            self.assertEqual(tx_csv["data"]["format"], "csv")
+            self.assertTrue(Path(tx_csv["data"]["file"]).is_file())
 
             _write_payload(
                 proc,

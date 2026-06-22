@@ -217,7 +217,17 @@
   "dashboard": {
     "refreshBook": "Buch aktualisieren",
     "refreshing": "Wird aktualisiert…",
-    "refresh": "Aktualisieren"
+    "refresh": "Aktualisieren",
+    "export": {
+      "label": "Exportieren",
+      "xlsx": "Excel-Arbeitsmappe (.xlsx)",
+      "csv": "CSV-Datei (.csv)",
+      "saveTitle": "Transaktionen-Export speichern",
+      "done": "Transaktionen exportiert",
+      "savedTo": "Gespeichert unter {{name}}",
+      "rows": "{{count}} Transaktionen exportiert",
+      "failed": "Transaktionen-Export fehlgeschlagen"
+    }
   },
   "workbench": {
     "metric": {
