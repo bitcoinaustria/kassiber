@@ -262,14 +262,21 @@ every figure in Excel/LibreOffice rather than trusting the static numbers:
 - **Acquisitions** / **Disposals** — the raw journal ledger. Only the
   highlighted inputs (msat quantities, fiat values, proceeds, cost basis) are
   hard numbers; quantities-in-BTC, per-row gain = proceeds − cost basis, and an
-  OK/DIFF check are live formulas.
+  OK/DIFF check are live formulas. Each row also shows its **Pricing Source**
+  and **Pricing Quality** (coarse/estimated prices are highlighted).
 - **Control** — a per-asset reconciliation matrix. Holdings balance, cost
   basis, average price, market value, unrealized and realized gain are each
   recomputed with a live formula over the ledger sheets and shown next to
   Kassiber's own number with an OK/DIFF check (the check references the editable
-  tolerance in `Verify!B2`).
-- **Verify** — a plain-language "how to verify" sheet (formula legend, the
-  recalc gotcha, the active lot method, and scope notes).
+  tolerance in `Verify!B3`). It also shows the **market rate, its source and
+  timestamp** so the valuation is traceable.
+- **Verify** — a plain-language "how to verify" sheet: a workbook-level
+  `ALL CHECKS OK` / mismatch banner, run metadata (lot method, fiat, last
+  processed, Kassiber version), the formula legend, the recalc gotcha, the
+  active lot method, and scope notes.
+- **Quarantined** (only when present) — the transactions Kassiber could not
+  classify, with reason and detail, so the reader can see what is deliberately
+  excluded from every figure.
 
 Reconciliation is per asset across the whole profile (Bitcoin accounting is
 pooled per asset across wallets; per-wallet cost basis is an allocation).

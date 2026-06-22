@@ -4407,6 +4407,23 @@ _VERIFY_ADD_ENTRY_TYPES = ("acquisition", "income", "transfer_in")
 _VERIFY_SUB_ENTRY_TYPES = ("disposal", "fee", "transfer_fee", "transfer_out")
 
 
+def _verification_quarantine_detail(detail_json):
+    """Render a quarantine's detail_json as a compact one-line string."""
+    if not detail_json:
+        return ""
+    import json
+
+    try:
+        data = json.loads(detail_json)
+    except (ValueError, TypeError):
+        return str(detail_json)[:200]
+    if isinstance(data, dict):
+        if not data:
+            return ""
+        return "; ".join(f"{key}={value}" for key, value in data.items())[:200]
+    return str(data)[:200]
+
+
 def _build_verification_data(conn, profile, hooks: ReportHooks):
     """Gather the profile-scope ledger and per-asset Kassiber aggregates that
     drive the self-verifying ``Control`` / ``Acquisitions`` / ``Disposals``
@@ -4429,6 +4446,8 @@ def _build_verification_data(conn, profile, hooks: ReportHooks):
             COALESCE(je.cost_basis, 0) AS cost_basis,
             COALESCE(je.proceeds, 0) AS proceeds,
             COALESCE(je.gain_loss, 0) AS gain_loss,
+            COALESCE(je.pricing_source_kind, '') AS pricing_source,
+            COALESCE(je.pricing_quality, '') AS pricing_quality,
             CASE
                 WHEN COALESCE(t.taxability_override, 1) != 0
                      AND COALESCE(je.at_category, '') != 'neu_swap'
@@ -4455,6 +4474,8 @@ def _build_verification_data(conn, profile, hooks: ReportHooks):
             "entry_type": row["entry_type"],
             "quantity_msat": magnitude,
             "quantity": float(msat_to_btc(magnitude)),
+            "pricing_source": row["pricing_source"],
+            "pricing_quality": row["pricing_quality"],
             "taxable": int(row["taxable"]),
         }
         if row["entry_type"] in _VERIFY_ADD_ENTRY_TYPES:
@@ -4468,8 +4489,57 @@ def _build_verification_data(conn, profile, hooks: ReportHooks):
             common["gain_loss_kassiber"] = float(row["gain_loss"] or 0.0)
             disposals.append(common)
 
+    quarantines = conn.execute(
+        """
+        SELECT
+            jq.reason,
+            jq.detail_json,
+            jq.transaction_id,
+            t.occurred_at,
+            t.asset,
+            t.amount,
+            COALESCE(t.description, '') AS description
+        FROM journal_quarantines jq
+        LEFT JOIN transactions t ON t.id = jq.transaction_id
+        WHERE jq.profile_id = ?
+        ORDER BY t.occurred_at ASC, jq.transaction_id ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    quarantine_rows = []
+    for row in quarantines:
+        amount_msat = row["amount"]
+        quarantine_rows.append(
+            {
+                "occurred_at": row["occurred_at"] or "",
+                "transaction_id": row["transaction_id"],
+                "asset": row["asset"] or "",
+                "amount": float(msat_to_btc(amount_msat)) if amount_msat is not None else "",
+                "reason": row["reason"],
+                "detail": _verification_quarantine_detail(row["detail_json"]),
+                "description": row["description"],
+            }
+        )
+
     portfolio_rows = report_portfolio_summary(conn, workspace_id, profile_id, hooks)
     capital_rows = report_capital_gains(conn, workspace_id, profile_id, hooks)
+
+    fiat_currency = profile["fiat_currency"]
+    rate_provenance = {}
+    for asset in {row["asset"] for row in portfolio_rows}:
+        pair = core_rates.transaction_rate_pair(asset, fiat_currency)
+        source, timestamp = "transaction price (no market quote)", ""
+        if pair is not None:
+            try:
+                cached_rate = core_rates.get_latest_rate(conn, pair)
+                source = cached_rate.get("source") or source
+                timestamp = cached_rate.get("timestamp") or ""
+            except AppError as exc:
+                if exc.code != "not_found":
+                    raise
+            except sqlite3.OperationalError:
+                pass
+        rate_provenance[asset] = (source, timestamp)
 
     holdings_by_asset = {}
     for row in portfolio_rows:
@@ -4497,10 +4567,13 @@ def _build_verification_data(conn, profile, hooks: ReportHooks):
         rate = market_value / quantity if quantity else 0.0
         avg_cost = cost_basis / quantity if quantity else 0.0
         realized = realized_by_asset.get(asset, 0.0)
+        rate_source, rate_timestamp = rate_provenance.get(asset, ("", ""))
         asset_rows.append(
             {
                 "asset": asset,
                 "rate": rate,
+                "rate_source": rate_source,
+                "rate_as_of": rate_timestamp,
                 "quantity": quantity,
                 "holdings_qty_kassiber": quantity,
                 "cost_basis": cost_basis,
@@ -4515,7 +4588,12 @@ def _build_verification_data(conn, profile, hooks: ReportHooks):
             }
         )
 
-    return {"acquisitions": acquisitions, "disposals": disposals, "asset_rows": asset_rows}
+    return {
+        "acquisitions": acquisitions,
+        "disposals": disposals,
+        "asset_rows": asset_rows,
+        "quarantines": quarantine_rows,
+    }
 
 
 def export_xlsx_report(
@@ -4555,16 +4633,31 @@ def export_xlsx_report(
 
     verify_sheets = []
     if verify:
-        verification = _build_verification_data(conn, context["profile"], hooks)
+        import kassiber
+
+        profile = context["profile"]
+        verification = _build_verification_data(conn, profile, hooks)
+        run_metadata = {
+            "generated_at": context["generated_at"],
+            "kassiber_version": getattr(kassiber, "__version__", ""),
+            "lot_method": profile["gains_algorithm"],
+            "fiat_currency": profile["fiat_currency"],
+            "tax_country": profile["tax_country"],
+            "last_processed_at": profile["last_processed_at"] or "",
+            "processed_tx_count": int(profile["last_processed_tx_count"] or 0),
+            "wallet_scope": context["wallet"]["label"] if context["wallet"] else "All wallets",
+        }
         verify_sheets = report_verify.augment_workbook(
             workbook,
-            gains_algorithm=context["profile"]["gains_algorithm"],
-            tax_country=context["profile"]["tax_country"],
-            fiat_currency=context["profile"]["fiat_currency"],
+            gains_algorithm=profile["gains_algorithm"],
+            tax_country=profile["tax_country"],
+            fiat_currency=profile["fiat_currency"],
             wallet_scope_label=context["wallet"]["label"] if context["wallet"] else None,
+            run_metadata=run_metadata,
             acquisitions=verification["acquisitions"],
             disposals=verification["disposals"],
             asset_rows=verification["asset_rows"],
+            quarantines=verification["quarantines"],
         )
     workbook.close()
     return {

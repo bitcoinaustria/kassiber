@@ -379,8 +379,12 @@ def _load_xlsx_sheets(path):
         for index, name in enumerate(names, start=1):
             xml = workbook.read(f"xl/worksheets/sheet{index}.xml").decode("utf-8")
             rows = {}
-            for cell in re.finditer(r'<c r="([A-Z]+)(\d+)"([^>]*)>(.*?)</c>', xml, re.DOTALL):
+            # Handle both self-closing (<c .../>) and content (<c ...>...</c>) cells;
+            # merged/blank cells are self-closing and carry no value.
+            for cell in re.finditer(r'<c r="([A-Z]+)(\d+)"([^>]*?)(?:/>|>(.*?)</c>)', xml, re.DOTALL):
                 col, rownum, attrs, body = cell.group(1), int(cell.group(2)), cell.group(3), cell.group(4)
+                if body is None:
+                    continue
                 vmatch = re.search(r"<v>(.*?)</v>", body, re.DOTALL)
                 if vmatch is None:
                     continue
@@ -1175,13 +1179,18 @@ class CliSmokeTest(unittest.TestCase):
         control = sheets["Control"]
         self.assertIn("<f>", control)
         self.assertIn("SUMIFS(", control)
-        self.assertIn("Verify!$B$2", control)
+        self.assertIn("Verify!$B$3", control)  # checks reference the tolerance cell
         # Quantities are msat; BTC = msat / 1e11.
         self.assertIn("/100000000000", sheets["Acquisitions"])
-        # README guidance + the active lot method are surfaced.
+        # README guidance, run metadata, and the active lot method are surfaced.
         self.assertIn("How to verify this report", shared)
         self.assertIn("Holdings BTC (recompute)", shared)
         self.assertIn("Active lot-selection method", shared)
+        self.assertIn("Verification status", shared)
+        self.assertIn("Kassiber version", shared)
+        self.assertIn("Pricing Source", shared)  # provenance column on the ledgers
+        self.assertIn("Rate Source", shared)  # rate provenance on Control
+        self.assertIn("ALL CHECKS OK", sheets["Verify"])  # workbook-level status banner
 
         # Cached results must equal Kassiber's numbers: each Disposals gain cell
         # (column J = proceeds - basis) must match the stored engine gain
@@ -1277,22 +1286,47 @@ class CliSmokeTest(unittest.TestCase):
                 ).decode("utf-8")
             self.assertIn("<>income", _unescape_xml(control_xml))
 
-            def _accumulate(rows, key_fn):
+            # Resolve columns by header label (row 2) so the test survives
+            # column additions/reordering.
+            def _headers(rows):
+                return {label: col for col, label in rows.get(2, {}).items()}
+
+            acq_h = _headers(acq)
+            disp_h = _headers(disp)
+
+            def _accumulate(rows, headers, key_fn):
+                asset_col = headers["Asset"]
                 totals = {}
                 for rownum, cells in rows.items():
-                    if rownum < 3 or "D" not in cells:  # skip header / placeholder
+                    if rownum < 3 or asset_col not in cells:  # skip header / placeholder
                         continue
-                    asset = cells["D"]
+                    asset = cells[asset_col]
                     totals[asset] = totals.get(asset, 0.0) + key_fn(cells)
                 return totals
 
+            def _val(cells, headers, label, default=0.0):
+                return cells.get(headers[label], default)
+
             # Holdings exclude `income` rows on the add side (the paired lot carries them).
-            qty_add = _accumulate(acq, lambda c: c.get("F", 0.0) if c.get("E") != "income" else 0.0)
-            qty_sub = _accumulate(disp, lambda c: c.get("F", 0.0))
-            basis_add = _accumulate(acq, lambda c: c.get("H", 0.0) if c.get("E") != "income" else 0.0)
-            basis_sub = _accumulate(disp, lambda c: c.get("I", 0.0))
-            realized_disp = _accumulate(disp, lambda c: (c.get("H", 0.0) - c.get("I", 0.0)) if c.get("M") == 1 else 0.0)
-            realized_acq = _accumulate(acq, lambda c: c.get("J", 0.0) if c.get("K") == 1 else 0.0)
+            qty_add = _accumulate(
+                acq, acq_h,
+                lambda c: _val(c, acq_h, "Quantity msat (input)") if _val(c, acq_h, "Type", "") != "income" else 0.0,
+            )
+            qty_sub = _accumulate(disp, disp_h, lambda c: _val(c, disp_h, "Quantity msat (input)"))
+            basis_add = _accumulate(
+                acq, acq_h,
+                lambda c: _val(c, acq_h, "Fiat Value (input)") if _val(c, acq_h, "Type", "") != "income" else 0.0,
+            )
+            basis_sub = _accumulate(disp, disp_h, lambda c: _val(c, disp_h, "Cost Basis (input)"))
+            realized_disp = _accumulate(
+                disp, disp_h,
+                lambda c: (_val(c, disp_h, "Proceeds (input)") - _val(c, disp_h, "Cost Basis (input)"))
+                if _val(c, disp_h, "Taxable") == 1 else 0.0,
+            )
+            realized_acq = _accumulate(
+                acq, acq_h,
+                lambda c: _val(c, acq_h, "Income Gain (input)") if _val(c, acq_h, "Taxable") == 1 else 0.0,
+            )
 
             for asset, expected in kassiber_qty.items():
                 recompute = (qty_add.get(asset, 0.0) - qty_sub.get(asset, 0.0)) / 1e11
@@ -1304,19 +1338,32 @@ class CliSmokeTest(unittest.TestCase):
                 recompute = realized_disp.get(asset, 0.0) + realized_acq.get(asset, 0.0)
                 self.assertAlmostEqual(recompute, expected, places=2, msg=f"realized gain {asset}")
 
-            # The Control sheet's cached recompute values reconcile to Kassiber's
-            # (recompute | kassiber column pairs).
+            # The Control sheet's cached recompute values reconcile to Kassiber's.
             control = sheets["Control"]
-            pairs = [("C", "D"), ("F", "G"), ("I", "J"), ("L", "M"), ("O", "P"), ("R", "S")]
+            ctrl_h = _headers(control)
+            label_pairs = [
+                ("Holdings BTC (recompute)", "Holdings BTC (Kassiber)"),
+                ("Cost Basis (recompute)", "Cost Basis (Kassiber)"),
+                ("Avg Price (recompute)", "Avg Price (Kassiber)"),
+                ("Market Value (recompute)", "Market Value (Kassiber)"),
+                ("Unrealized (recompute)", "Unrealized (Kassiber)"),
+                ("Realized Gain (recompute)", "Realized Gain (Kassiber)"),
+            ]
+            asset_col = ctrl_h["Asset"]
             compared = 0
             for rownum, cells in control.items():
-                if rownum < 3 or "A" not in cells:
+                if rownum < 3 or asset_col not in cells:
                     continue
-                for recompute_col, kassiber_col in pairs:
-                    if recompute_col in cells and kassiber_col in cells:
-                        self.assertAlmostEqual(cells[recompute_col], cells[kassiber_col], places=2)
+                for recompute_label, kassiber_label in label_pairs:
+                    rc, kc = ctrl_h[recompute_label], ctrl_h[kassiber_label]
+                    if rc in cells and kc in cells:
+                        self.assertAlmostEqual(cells[rc], cells[kc], places=2)
                         compared += 1
             self.assertGreater(compared, 0, "expected Control rows to reconcile")
+
+            # Rate provenance is surfaced on the Control sheet.
+            self.assertIn("Rate Source", ctrl_h)
+            self.assertIn("Rate As Of", ctrl_h)
 
     def test_07aa_pdf_writer_reports_actual_page_count(self):
         from kassiber.pdf_report import write_text_pdf

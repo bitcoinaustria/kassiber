@@ -40,7 +40,8 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-# Sheets appended to the workbook, in write order.
+# Sheets appended to the workbook, in write order. "Quarantined" is added only
+# when the profile has quarantined transactions (signal, not reassurance).
 VERIFY_SHEET_NAMES = ("Verify", "Acquisitions", "Disposals", "Control")
 
 # Journal entry types that increase holdings (the Acquisitions ledger) and those
@@ -49,9 +50,12 @@ VERIFY_SHEET_NAMES = ("Verify", "Acquisitions", "Disposals", "Control")
 ADD_ENTRY_TYPES = ("acquisition", "income", "transfer_in")
 SUB_ENTRY_TYPES = ("disposal", "fee", "transfer_fee", "transfer_out")
 
-DEFAULT_FIAT_TOLERANCE = 0.01  # one cent; written to Verify!$B$2
+DEFAULT_FIAT_TOLERANCE = 0.01  # one cent; written to the tolerance cell
 QTY_TOLERANCE = 5e-9  # ~half a sat; msat→BTC is exact integer division
-TOLERANCE_CELL = "Verify!$B$2"
+# Verify-sheet layout: B2 = status banner, B3 = editable tolerance.
+STATUS_CELL = (1, 1)
+TOLERANCE_CELL_RC = (2, 1)
+TOLERANCE_CELL = "Verify!$B$3"
 
 _MSAT_PER_BTC = 100_000_000_000  # quantity is stored in msat
 
@@ -131,6 +135,10 @@ def _build_formats(workbook) -> dict[str, Any]:
         ),
         "ok": workbook.add_format({"bg_color": "#C6EFCE", "font_color": "#006100"}),
         "diff": workbook.add_format({"bg_color": "#FFC7CE", "font_color": "#9C0006", "bold": True}),
+        "status_ok": workbook.add_format(
+            {"bg_color": "#C6EFCE", "font_color": "#006100", "bold": True, "font_size": 11}
+        ),
+        "coarse": workbook.add_format({"bg_color": "#FFEB9C", "font_color": "#9C6500"}),
     }
 
 
@@ -285,6 +293,8 @@ def _acquisitions_columns() -> list[dict]:
         {"key": "unit_price", "label": "Unit Price (=fiat/qty)", "fmt": "formula_money", "formula": _unit_price_formula("quantity", "fiat_value")},
         {"key": "gain_loss", "label": "Income Gain (input)", "fmt": "money_input"},
         {"key": "taxable", "label": "Taxable", "fmt": "int"},
+        {"key": "pricing_source", "label": "Pricing Source", "fmt": "text"},
+        {"key": "pricing_quality", "label": "Pricing Quality", "fmt": "text"},
     ]
 
 
@@ -303,6 +313,20 @@ def _disposals_columns() -> list[dict]:
         {"key": "gain_loss_kassiber", "label": "Gain/Loss (Kassiber)", "fmt": "kassiber"},
         {"key": "gain_check", "label": "Check", "fmt": "check", "formula": _gain_check_formula("gain_loss", "gain_loss_kassiber")},
         {"key": "taxable", "label": "Taxable", "fmt": "int"},
+        {"key": "pricing_source", "label": "Pricing Source", "fmt": "text"},
+        {"key": "pricing_quality", "label": "Pricing Quality", "fmt": "text"},
+    ]
+
+
+def _quarantined_columns() -> list[dict]:
+    return [
+        {"key": "occurred_at", "label": "Occurred At", "fmt": "text"},
+        {"key": "transaction_id", "label": "Transaction ID", "fmt": "text"},
+        {"key": "asset", "label": "Asset", "fmt": "text"},
+        {"key": "amount", "label": "Amount BTC", "fmt": "quantity"},
+        {"key": "reason", "label": "Quarantine Reason", "fmt": "text"},
+        {"key": "detail", "label": "Detail", "fmt": "text"},
+        {"key": "description", "label": "Description", "fmt": "text"},
     ]
 
 
@@ -320,6 +344,19 @@ def _conditional_check_format(worksheet, formats, ref: dict, check_key: str) -> 
     worksheet.conditional_format(
         cell_range, {"type": "text", "criteria": "containing", "value": "OK", "format": formats["ok"]}
     )
+
+
+def _conditional_quality_format(worksheet, formats, ref: dict, key: str) -> None:
+    """Highlight estimated (coarse_fallback / missing) pricing-quality cells."""
+    if key not in ref["col_index"]:
+        return
+    col = ref["col_index"][key]
+    cell_range = f"{_cell(col, ref['first_data_row'])}:{_cell(col, ref['last_data_row'])}"
+    for token in ("coarse", "missing"):
+        worksheet.conditional_format(
+            cell_range,
+            {"type": "text", "criteria": "containing", "value": token, "format": formats["coarse"]},
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -423,6 +460,8 @@ def _control_columns(add_ref, sub_ref) -> list[dict]:
     return [
         {"key": "asset", "label": "Asset", "fmt": "subheader"},
         {"key": "rate", "label": "Market Rate (input)", "fmt": "money_input"},
+        {"key": "rate_source", "label": "Rate Source", "fmt": "text"},
+        {"key": "rate_as_of", "label": "Rate As Of", "fmt": "text"},
         {"key": "holdings_qty", "label": "Holdings BTC (recompute)", "fmt": "formula_quantity", "formula": qty_recompute},
         {"key": "holdings_qty_kassiber", "label": "Holdings BTC (Kassiber)", "fmt": "kassiber_qty"},
         {"key": "qty_check", "label": "Balance Check", "fmt": "check", "formula": check("holdings_qty", "holdings_qty_kassiber", lambda r: r.get("quantity", 0.0), QTY_TOLERANCE)},
@@ -471,11 +510,6 @@ def _verify_readme_rows(
         "row still checks gain = proceeds − cost basis directly."
     )
     rows: list[tuple[str, str]] = [
-        ("How to verify this report", "title"),
-        ("", "text"),
-        ("Tolerance (edit to retighten/loosen all checks):", "subheader"),
-        # The actual tolerance number is written separately into B2.
-        ("", "text"),
         ("What this proves", "subheader"),
         (
             "The Acquisitions and Disposals sheets hold the raw journal ledger. Only "
@@ -552,43 +586,107 @@ def _verify_readme_rows(
                 "text",
             ),
             (
-                "Tip: set the tolerance in B2 to 0, recalculate, and confirm every "
+                "Tip: set the tolerance in B3 to 0, recalculate, and confirm every "
                 "check still reads OK.",
+                "text",
+            ),
+            ("Pricing provenance", "subheader"),
+            (
+                "The Acquisitions and Disposals sheets carry a Pricing Source and "
+                "Pricing Quality column for every priced row; rows marked "
+                "'coarse_fallback' or 'missing' used an estimated price, not an exact "
+                "quote. The Control sheet shows, per asset, which market rate valued "
+                "your holdings, its source, and when it was captured.",
                 "text",
             ),
             ("Missing rows", "subheader"),
             (
-                "Excluded, quarantined and Austrian neu_swap rows are intentionally "
-                "absent (they are not taxable disposals). The 'Taxable' column marks "
-                "which ledger rows feed the realized-gain check. Quarantine counts are "
-                "on the main report's Data Quality sheet.",
+                "Excluded and Austrian neu_swap rows are intentionally absent (they are "
+                "not taxable disposals). The 'Taxable' column marks which ledger rows "
+                "feed the realized-gain check. Transactions Kassiber could not classify "
+                "are listed on the Quarantined sheet (when present) and are not in any "
+                "figure above.",
                 "text",
             ),
-            (f"Fiat currency: {fiat_currency}", "text"),
         ]
     )
     return rows
 
 
-def _write_verify_readme(workbook, formats, *, gains_algorithm, tax_country, fiat_currency, wallet_scope_label) -> None:
+def _write_verify_readme(
+    workbook, formats, *, gains_algorithm, tax_country, fiat_currency, wallet_scope_label, run_metadata
+):
     worksheet = workbook.add_worksheet("Verify")
-    worksheet.set_column(0, 0, 104)
-    worksheet.set_column(1, 1, 14)
+    worksheet.set_column(0, 0, 30)
+    worksheet.set_column(1, 1, 74)
     worksheet.set_margins(left=0.4, right=0.4, top=0.5, bottom=0.5)
-    rows = _verify_readme_rows(
+
+    meta = run_metadata or {}
+    method = str(gains_algorithm or "").upper() or "(unset)"
+    if str(tax_country or "").lower() == "at":
+        method += " (Austrian moving-average cost base)"
+
+    # Header block (A = label, B = value). B2 is the status banner (written by
+    # the caller after the check sheets exist); B3 is the editable tolerance.
+    worksheet.set_row(0, 26)
+    worksheet.write_string(0, 0, "How to verify this report", formats["title"])
+    worksheet.write_string(STATUS_CELL[0], 0, "Verification status", formats["subheader"])
+    worksheet.write_string(TOLERANCE_CELL_RC[0], 0, "Check tolerance (edit to retighten all checks)", formats["subheader"])
+    worksheet.write_number(TOLERANCE_CELL_RC[0], TOLERANCE_CELL_RC[1], DEFAULT_FIAT_TOLERANCE, formats["tolerance"])
+
+    meta_rows = [
+        ("Generated at", meta.get("generated_at", "")),
+        ("Kassiber version", meta.get("kassiber_version", "")),
+        ("Lot-selection method", method),
+        ("Fiat currency", fiat_currency),
+        ("Tax country", str(tax_country or "")),
+        ("Journals last processed", meta.get("last_processed_at", "")),
+        ("Processed tx count", meta.get("processed_tx_count", "")),
+        ("Wallet scope", meta.get("wallet_scope", "All wallets")),
+    ]
+    row_index = TOLERANCE_CELL_RC[0] + 1
+    for label, value in meta_rows:
+        worksheet.write_string(row_index, 0, label, formats["subheader"])
+        _write_value(worksheet, row_index, 1, value, formats["text"])
+        row_index += 1
+
+    row_index += 1  # blank spacer
+    for text, kind in _verify_readme_rows(
         gains_algorithm=gains_algorithm,
         tax_country=tax_country,
         fiat_currency=fiat_currency,
         wallet_scope_label=wallet_scope_label,
-    )
-    for row_index, (text, kind) in enumerate(rows):
-        worksheet.set_row(row_index, 24 if kind in ("title", "subheader") else 30)
+    ):
+        worksheet.set_row(row_index, 24 if kind == "subheader" else 30)
         if text:
-            worksheet.write_string(row_index, 0, text, formats.get(kind, formats["text"]))
+            worksheet.merge_range(row_index, 0, row_index, 1, text, formats.get(kind, formats["text"]))
         else:
             worksheet.write_blank(row_index, 0, None, formats["text"])
-    # Tolerance lives in B2 (Excel 1-based) so every check can reference it.
-    worksheet.write_number(1, 1, DEFAULT_FIAT_TOLERANCE, formats["tolerance"])
+        row_index += 1
+    return worksheet
+
+
+def _write_status_banner(verify_ws, formats, control_ref, sub_ref):
+    """Write the workbook-level OK/DIFF banner into the Verify sheet's B2.
+
+    Counts DIFF results across every Control check column plus the Disposals
+    gain check, so a reviewer gets a single one-glance verdict.
+    """
+    counts = []
+    for check_key in ("qty_check", "basis_check", "avg_check", "mv_check", "unrealized_check", "realized_check"):
+        col = control_ref["col_index"][check_key]
+        rng = _abs_range(control_ref["sheet_name"], col, control_ref["first_data_row"], control_ref["last_data_row"])
+        counts.append(f'COUNTIF({rng},"DIFF*")')
+    gain_col = sub_ref["col_index"]["gain_check"]
+    gain_rng = _abs_range(sub_ref["sheet_name"], gain_col, sub_ref["first_data_row"], sub_ref["last_data_row"])
+    counts.append(f'COUNTIF({gain_rng},"DIFF*")')
+    total = "+".join(counts)
+    expr = f'=IF(({total})=0,"ALL CHECKS OK","MISMATCH — see the highlighted check columns")'
+    verify_ws.write_formula(STATUS_CELL[0], STATUS_CELL[1], expr, formats["status_ok"], "ALL CHECKS OK")
+    verify_ws.conditional_format(
+        f"{_cell(STATUS_CELL[1], STATUS_CELL[0] + 1)}",
+        {"type": "text", "criteria": "containing", "value": "MISMATCH", "format": formats["diff"]},
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -601,24 +699,28 @@ def augment_workbook(
     tax_country: str | None,
     fiat_currency: str,
     wallet_scope_label: str | None,
+    run_metadata: dict | None = None,
     acquisitions: list[dict],
     disposals: list[dict],
     asset_rows: list[dict],
+    quarantines: list[dict] | None = None,
 ) -> list[str]:
     """Append the verification sheets to an open xlsxwriter workbook.
 
     ``acquisitions`` / ``disposals`` are journal ledger rows (already partitioned
     by add/sub entry type). ``asset_rows`` are the per-asset Kassiber aggregates
-    used as the reconciliation targets. Returns the list of sheet names added.
+    used as the reconciliation targets. ``quarantines`` (if any) get their own
+    sheet. Returns the list of sheet names added.
     """
     formats = _build_formats(workbook)
-    _write_verify_readme(
+    verify_ws = _write_verify_readme(
         workbook,
         formats,
         gains_algorithm=gains_algorithm,
         tax_country=tax_country,
         fiat_currency=fiat_currency,
         wallet_scope_label=wallet_scope_label,
+        run_metadata=run_metadata,
     )
 
     add_ref = _write_data_sheet(
@@ -629,6 +731,7 @@ def augment_workbook(
         rows=acquisitions,
         columns=_acquisitions_columns(),
     )
+    _conditional_quality_format(add_ref["worksheet"], formats, add_ref, "pricing_quality")
     sub_ref = _write_data_sheet(
         workbook,
         formats,
@@ -638,6 +741,7 @@ def augment_workbook(
         columns=_disposals_columns(),
     )
     _conditional_check_format(sub_ref["worksheet"], formats, sub_ref, "gain_check")
+    _conditional_quality_format(sub_ref["worksheet"], formats, sub_ref, "pricing_quality")
 
     control_ref = _write_data_sheet(
         workbook,
@@ -650,4 +754,17 @@ def augment_workbook(
     for check_key in ("qty_check", "basis_check", "avg_check", "mv_check", "unrealized_check", "realized_check"):
         _conditional_check_format(control_ref["worksheet"], formats, control_ref, check_key)
 
-    return list(VERIFY_SHEET_NAMES)
+    _write_status_banner(verify_ws, formats, control_ref, sub_ref)
+
+    sheets = list(VERIFY_SHEET_NAMES)
+    if quarantines:
+        _write_data_sheet(
+            workbook,
+            formats,
+            sheet_name="Quarantined",
+            title="Quarantined transactions (excluded from every figure above)",
+            rows=quarantines,
+            columns=_quarantined_columns(),
+        )
+        sheets.append("Quarantined")
+    return sheets
