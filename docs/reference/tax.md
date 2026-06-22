@@ -112,7 +112,9 @@ python3 -m kassiber transfers unpair --pair-id <PAIR_ID>
 
 Current rules:
 
-- same-asset manual pairs support `--policy carrying-value`
+- same-asset manual pairs support `--policy carrying-value`, including
+  same-wallet failed-swap refunds where the send and refund have different
+  transaction ids
 - same-asset `--policy taxable` is rejected; leave those legs unpaired if you want normal SELL + BUY treatment
 - cross-asset pairs are always stored for audit
 - cross-asset `--policy carrying-value` is supported for Austrian books (`tax_country=at`): Kassiber emits reviewed swap markers, then rp2's native Austrian multi-asset hook carries basis

@@ -946,7 +946,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 },
                 "method": {
                     "type": "string",
-                    "enum": ["payment_hash", "heuristic"],
+                    "enum": ["payment_hash", "heuristic", "htlc_refund"],
                     "description": "Optional filter pinning to one match method.",
                 },
                 "asset_pair": {
@@ -990,7 +990,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 },
                 "method": {
                     "type": "string",
-                    "enum": ["payment_hash", "heuristic"],
+                    "enum": ["payment_hash", "heuristic", "htlc_refund"],
                     "description": "Optional filter pinning to one match method.",
                 },
                 "asset_pair": {
@@ -1074,7 +1074,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 "tx_in": {"type": "string", "description": "Inbound transaction id."},
                 "kind": {
                     "type": "string",
-                    "enum": ["manual", "peg-in", "peg-out", "submarine-swap"],
+                    "enum": ["manual", "peg-in", "peg-out", "submarine-swap", "swap-refund"],
                 },
                 "policy": {
                     "type": "string",
@@ -1187,7 +1187,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 "predicate": {"type": "object"},
                 "kind": {
                     "type": "string",
-                    "enum": ["manual", "peg-in", "peg-out", "submarine-swap"],
+                    "enum": ["manual", "peg-in", "peg-out", "submarine-swap", "swap-refund"],
                 },
                 "policy": {
                     "type": "string",

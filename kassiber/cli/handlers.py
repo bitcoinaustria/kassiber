@@ -325,7 +325,7 @@ def _journals_current_for_profile(conn, profile):
     )
 
 
-TRANSFER_PAIR_KINDS = ("manual", "peg-in", "peg-out", "submarine-swap")
+TRANSFER_PAIR_KINDS = ("manual", "peg-in", "peg-out", "submarine-swap", "swap-refund")
 TRANSFER_PAIR_POLICIES = ("carrying-value", "taxable")
 DIRECT_SWAP_PAYOUT_KINDS = ("direct-swap-payout",)
 
@@ -430,11 +430,6 @@ def create_transaction_pair(
     in_row = resolve_transaction(conn, profile["id"], in_ref, direction="inbound")
     if out_row["id"] == in_row["id"]:
         raise AppError("--tx-out and --tx-in must reference different transactions", code="validation")
-    if out_row["wallet_id"] == in_row["wallet_id"] and out_row["asset"] == in_row["asset"]:
-        raise AppError(
-            "Same-wallet pairs must be cross-asset swaps; same-asset legs should stay unpaired or use different wallets.",
-            code="validation",
-        )
     if out_row["asset"] == in_row["asset"] and policy == "taxable":
         raise AppError(
             f"Same-asset taxable pairs are not supported yet "
@@ -871,6 +866,7 @@ def _load_matcher_rows(conn, profile_id):
         """
         SELECT
             t.id, t.profile_id, t.wallet_id, t.external_id, t.payment_hash,
+            t.swap_refund_funding_txid,
             t.occurred_at, t.direction, t.asset, t.amount, t.excluded,
             w.label AS wallet_label, w.kind AS wallet_kind
         FROM transactions t

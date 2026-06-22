@@ -1455,7 +1455,7 @@ def build_parser() -> argparse.ArgumentParser:
     transfers_suggest.add_argument("--workspace")
     transfers_suggest.add_argument("--profile")
     transfers_suggest.add_argument("--confidence", choices=("exact", "strong"))
-    transfers_suggest.add_argument("--method", choices=("payment_hash", "heuristic"))
+    transfers_suggest.add_argument("--method", choices=("payment_hash", "heuristic", "htlc_refund"))
     transfers_suggest.add_argument(
         "--asset-pair",
         dest="asset_pair",
@@ -1486,7 +1486,7 @@ def build_parser() -> argparse.ArgumentParser:
     transfers_bulk_pair.add_argument(
         "--confidence", choices=("exact", "strong"), default="exact"
     )
-    transfers_bulk_pair.add_argument("--method", choices=("payment_hash", "heuristic"))
+    transfers_bulk_pair.add_argument("--method", choices=("payment_hash", "heuristic", "htlc_refund"))
     transfers_bulk_pair.add_argument(
         "--asset-pair",
         dest="asset_pair",
@@ -1564,7 +1564,7 @@ def build_parser() -> argparse.ArgumentParser:
     tr_rules_apply.add_argument("--workspace")
     tr_rules_apply.add_argument("--profile")
     tr_rules_apply.add_argument("--confidence", choices=("exact", "strong"))
-    tr_rules_apply.add_argument("--method", choices=("payment_hash", "heuristic"))
+    tr_rules_apply.add_argument("--method", choices=("payment_hash", "heuristic", "htlc_refund"))
     tr_rules_apply.add_argument(
         "--asset-pair",
         dest="asset_pair",

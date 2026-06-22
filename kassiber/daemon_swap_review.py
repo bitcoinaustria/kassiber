@@ -278,6 +278,16 @@ def _swap_review_confidence_reason(candidate: Mapping[str, Any]) -> dict[str, An
             "reason": "both legs share a Lightning payment_hash",
             "needs_human_confirmation": False,
         }
+    if method == "htlc_refund":
+        return {
+            "confidence": confidence,
+            "method": method,
+            "reason": (
+                "the inbound refund spends the outbound's on-chain HTLC "
+                "funding output (deterministic link, same-wallet safe)"
+            ),
+            "needs_human_confirmation": False,
+        }
     return {
         "confidence": confidence,
         "method": method,
@@ -354,12 +364,18 @@ def _swap_review_suggested_action(
             ),
         }
     if candidate.get("confidence") == "exact":
+        reason = (
+            "the inbound refund deterministically spends the outbound's HTLC "
+            "funding output, and is non-conflicted"
+            if candidate.get("method") == "htlc_refund"
+            else "payment_hash identity is exact and non-conflicted"
+        )
         return {
             "action": "bulk_pair_exact_or_pair",
             "daemon_kind": "ui.transfers.bulk_pair",
             "arguments": {"confidence": "exact"},
             "requires_consent": True,
-            "reason": "payment_hash identity is exact and non-conflicted",
+            "reason": reason,
         }
     return {
         "action": "ask_user_to_confirm_then_pair",

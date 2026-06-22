@@ -44,7 +44,8 @@
     "method": {
       "any": "Any method",
       "paymentHash": "Payment hash",
-      "heuristic": "Time + amount"
+      "heuristic": "Time + amount",
+      "htlcRefund": "Refund link"
     },
     "route": {
       "any": "Any route",
@@ -73,6 +74,7 @@
       "feeDelta": "Fee delta",
       "methodPaymentHash": "payment hash",
       "methodHeuristic": "time + amount",
+      "methodHtlcRefund": "refund link",
       "ruleBadge": "Rule",
       "selectAria": "Select candidate",
       "conflictTitle": "One of these transactions appears in {{count}} possible matches. Open the row to pick the right one — pairing or dismissing resolves the others.",
@@ -119,6 +121,7 @@
       "candidateLabelSwap": "Swap candidate",
       "matchedByPaymentHash": "Matched by payment hash.",
       "matchedByTimeAmount": "Matched by time and amount.",
+      "matchedByRefundLink": "Matched by HTLC refund link.",
       "delta": "Delta {{delta}} ({{percent}}%).",
       "outgoing": "Outgoing",
       "incoming": "Incoming",
@@ -127,6 +130,7 @@
       "matchRationale": "Match rationale",
       "rationalePaymentHash": "Both legs share the same Lightning payment hash.",
       "rationaleHeuristic": "The legs are close in time and amount after accounting for the fee delta.",
+      "rationaleHtlcRefund": "The inbound refund spends the outbound's on-chain HTLC funding output, a deterministic link even within one wallet.",
       "autoPairRoute": "Auto-pair route: {{rule}}",
       "conflictNote_one": "One of these transactions also appears in {{count}} other possible match (it may be listed under the other tab or filtered out). Bulk actions skip it; pair the correct match here or dismiss the wrong ones to resolve the conflict.",
       "conflictNote_other": "One of these transactions also appears in {{count}} other possible matches (it may be listed under the other tab or filtered out). Bulk actions skip it; pair the correct match here or dismiss the wrong ones to resolve the conflict.",

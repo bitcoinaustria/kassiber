@@ -1362,6 +1362,55 @@ def _payment_hash_fields(payment_hash):
     }
 
 
+def _vin_prev_txid(vin):
+    """Prevout txid of a decoded vin (esplora / electrum dict shape)."""
+    if isinstance(vin, dict):
+        txid = vin.get("txid")
+        return str(txid) if txid else None
+    return None
+
+
+def _extract_refund_funding_txid(vins, witness_items_fn, prev_txid_fn=_vin_prev_txid):
+    """Funding txid of the first vin whose witness is an HTLC refund spend.
+
+    A failed swap is swept via the HTLC's CLTV timeout branch, so the vin
+    carrying that refund witness spends the swap's funding (lockup) output.
+    That vin's prevout txid is therefore the on-chain funding transaction the
+    inbound refund should be linked back to. ``witness_items_fn`` decodes one
+    vin's witness items (``_esplora_witness_items`` for dict-shaped BTC/Electrum
+    vins, ``_liquid_witness_items`` for embit Liquid vins) and ``prev_txid_fn``
+    resolves that vin's prevout txid (``_vin_prev_txid`` for dict vins,
+    ``liquid_input_txid`` for embit Liquid vins). Returns ``None`` when no input
+    reveals an HTLC refund or the prevout txid is unavailable.
+
+    Links only the first refund input — a Boltz refund spends a single HTLC, so
+    a tx batch-sweeping multiple failed swaps (rare) links one lockup and the
+    rest fall back to the heuristic / manual pairing.
+    """
+    for vin in vins:
+        items = witness_items_fn(vin)
+        if not items:
+            continue
+        extraction = htlc_parser.extract_from_refund_witness(items)
+        if extraction is None:
+            continue
+        prev_txid = prev_txid_fn(vin)
+        if prev_txid:
+            return prev_txid
+    return None
+
+
+def _swap_refund_fields(funding_txid):
+    """Swap-refund link entries for a sync record, splattable with ``**``.
+
+    Empty dict when there is no link so records that are not HTLC refunds stay
+    unpolluted.
+    """
+    if not funding_txid:
+        return {}
+    return {"swap_refund_funding_txid": funding_txid}
+
+
 def _esplora_witness_items(vin_entry):
     """Decode an esplora vin's ``witness`` array of hex strings into bytes."""
     witness = vin_entry.get("witness") if isinstance(vin_entry, dict) else None
@@ -1428,6 +1477,9 @@ def record_from_bitcoin_esplora_tx(tx, tracked_scripts, backend_name):
     payment_hash = _extract_payment_hash_from_witnesses(
         _esplora_witness_items(vin) for vin in tx.get("vin", [])
     )
+    swap_refund_funding_txid = _extract_refund_funding_txid(
+        tx.get("vin", []), _esplora_witness_items
+    )
     return {
         "txid": tx.get("txid"),
         "occurred_at": occurred_at,
@@ -1443,6 +1495,7 @@ def record_from_bitcoin_esplora_tx(tx, tracked_scripts, backend_name):
         "counterparty": None,
         "raw_json": json.dumps(tx, sort_keys=True),
         **_payment_hash_fields(payment_hash),
+        **_swap_refund_fields(swap_refund_funding_txid),
     }
 
 
@@ -1525,6 +1578,13 @@ def record_components_from_liquid_tx(
         _liquid_witness_items(vin) for vin in tx.vin
     )
     payment_hash_fields = _payment_hash_fields(payment_hash)
+    # Liquid vins are embit objects, so the refund link needs the embit-aware
+    # witness + prevout-txid helpers rather than the dict-shaped defaults.
+    swap_refund_fields = _swap_refund_fields(
+        _extract_refund_funding_txid(
+            tx.vin, _liquid_witness_items, prev_txid_fn=liquid_input_txid
+        )
+    )
     records = []
     all_assets = sorted(set(net_sats) | set(fee_sats))
     for asset_id in all_assets:
@@ -1581,6 +1641,7 @@ def record_components_from_liquid_tx(
                     sort_keys=True,
                 ),
                 **payment_hash_fields,
+                **swap_refund_fields,
             }
         )
     return records
@@ -2467,6 +2528,9 @@ def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_
     payment_hash = _extract_payment_hash_from_witnesses(
         _esplora_witness_items(vin) for vin in tx.get("vin", [])
     )
+    swap_refund_funding_txid = _extract_refund_funding_txid(
+        tx.get("vin", []), _esplora_witness_items
+    )
     return {
         "txid": txid,
         "occurred_at": occurred_at,
@@ -2482,6 +2546,7 @@ def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_
         "counterparty": None,
         "raw_json": json.dumps(json_ready(tx), sort_keys=True),
         **_payment_hash_fields(payment_hash),
+        **_swap_refund_fields(swap_refund_funding_txid),
     }
 
 

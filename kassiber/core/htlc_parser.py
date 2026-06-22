@@ -80,8 +80,9 @@ class HtlcExtraction:
         template: Identifier of the script template that matched, e.g.
             ``"boltz_v1_submarine"`` or ``"boltz_v1_reverse"``.
         role: ``"fund"`` when only the HTLC-output redeem script was
-            seen (no preimage available) or ``"claim"`` when a spending
-            witness revealed the preimage.
+            seen (no preimage available), ``"claim"`` when a spending
+            witness revealed the preimage, or ``"refund"`` when a spending
+            witness took the CLTV timeout branch (no preimage revealed).
         hashlock160: 40-char lowercase hex of the ``HASH160(preimage)``
             embedded in the redeem script.
         payment_hash: 64-char lowercase hex of ``SHA256(preimage)``,
@@ -222,6 +223,47 @@ def extract_from_claim_witness(witness_items: Sequence[bytes]) -> Optional[HtlcE
             preimage=item_bytes.hex(),
         )
     return None
+
+
+def extract_from_refund_witness(witness_items: Sequence[bytes]) -> Optional[HtlcExtraction]:
+    """Decode a P2WSH HTLC refund (CLTV timeout) witness.
+
+    The refund branch of a Boltz v1 HTLC is spent after the timelock
+    expires with a witness shaped ``<sig> <empty-selector> <redeem_script>``:
+    the spender pushes an empty (falsy) item where a successful claim
+    would push the 32-byte preimage, so the script's ``OP_IF`` falls
+    through to the ``OP_ELSE`` timeout branch. No preimage is revealed,
+    so there is no recoverable ``payment_hash`` — but recognizing the
+    spend as a refund lets the matcher link an inbound refund back to the
+    on-chain funding leg that paid into the HTLC.
+
+    Returns an :class:`HtlcExtraction` with ``role="refund"`` and the
+    embedded ``hashlock160`` when ``witness_items`` spends a recognized
+    HTLC via its timeout branch. Returns ``None`` when the witness is not
+    a recognized HTLC spend, or when it actually reveals the preimage (a
+    claim — that is :func:`extract_from_claim_witness`'s job).
+    """
+    if len(witness_items) < 2:
+        return None
+
+    redeem_script = bytes(witness_items[-1])
+    fund = parse_htlc_redeem_script(redeem_script)
+    if fund is None:
+        return None
+
+    expected_hash160 = bytes.fromhex(fund.hashlock160)
+    for item in witness_items[:-1]:
+        item_bytes = bytes(item)
+        if len(item_bytes) != _PREIMAGE_LEN:
+            continue
+        if _embit_hashes.hash160(item_bytes) == expected_hash160:
+            # The preimage is present: this is a claim, not a refund.
+            return None
+    return HtlcExtraction(
+        template=fund.template,
+        role="refund",
+        hashlock160=fund.hashlock160,
+    )
 
 
 def script_matches_payment_hash(script_bytes: bytes, payment_hash_hex: str) -> bool:
