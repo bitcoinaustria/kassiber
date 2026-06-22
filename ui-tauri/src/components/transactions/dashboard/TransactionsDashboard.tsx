@@ -1,9 +1,17 @@
-import { RefreshCw } from "lucide-react";
+import { Download, RefreshCw } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useDaemonMutation } from "@/daemon/client";
 import { cn } from "@/lib/utils";
+import { exportBasename, saveDaemonExport } from "@/lib/exportFile";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { useCurrency } from "@/lib/currency";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
@@ -36,6 +44,13 @@ const workbenchBackedQuickFilters = new Set<TableQuickFilter>([
   "missing_price",
   "failed_import",
 ]);
+
+interface TransactionsExportResult {
+  file?: string;
+  rows?: number;
+  format?: string;
+  filename?: string;
+}
 
 const TransactionsDashboard = ({
   className,
@@ -96,6 +111,66 @@ const TransactionsDashboard = ({
   const currency = useCurrency();
   const { syncAll, isSyncing } = useWalletSyncAction();
   const showRefreshSkeleton = isSyncing || isDataRefreshing;
+  const addNotification = useUiStore((s) => s.addNotification);
+  const exportTransactionsXlsx = useDaemonMutation<TransactionsExportResult>(
+    "ui.transactions.export_xlsx",
+  );
+  const exportTransactionsCsv = useDaemonMutation<TransactionsExportResult>(
+    "ui.transactions.export_csv",
+  );
+  const isExporting =
+    exportTransactionsXlsx.isPending || exportTransactionsCsv.isPending;
+
+  const handleExportTransactions = (format: "xlsx" | "csv") => {
+    const mutation =
+      format === "xlsx" ? exportTransactionsXlsx : exportTransactionsCsv;
+    mutation.mutate(
+      {},
+      {
+        onSuccess: async (envelope) => {
+          const payload = envelope?.data;
+          const exportPath = payload?.file ?? "";
+          try {
+            const { savedPath, copied } = await saveDaemonExport({
+              exportPath,
+              title: t("dashboard.export.saveTitle"),
+              defaultName:
+                format === "xlsx"
+                  ? "kassiber-transactions.xlsx"
+                  : "kassiber-transactions.csv",
+              filters: [
+                format === "xlsx"
+                  ? { name: "Excel workbook", extensions: ["xlsx"] }
+                  : { name: "CSV", extensions: ["csv"] },
+              ],
+            });
+            addNotification({
+              title: t("dashboard.export.done"),
+              body: copied
+                ? t("dashboard.export.savedTo", {
+                    name: exportBasename(savedPath),
+                  })
+                : t("dashboard.export.rows", { count: payload?.rows ?? 0 }),
+              tone: "success",
+            });
+          } catch (error) {
+            addNotification({
+              title: t("dashboard.export.failed"),
+              body: error instanceof Error ? error.message : String(error),
+              tone: "error",
+            });
+          }
+        },
+        onError: (error) => {
+          addNotification({
+            title: t("dashboard.export.failed"),
+            body: error instanceof Error ? error.message : String(error),
+            tone: "error",
+          });
+        },
+      },
+    );
+  };
   const records = React.useMemo(
     () => {
       const txs = transactions.txs.length ? [...transactions.txs] : [];
@@ -264,6 +339,32 @@ const TransactionsDashboard = ({
               {isSyncing ? t("dashboard.refreshing") : t("dashboard.refresh")}
             </span>
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-2 sm:h-9"
+                aria-label={t("dashboard.export.label")}
+                disabled={isExporting}
+              >
+                <Download className="size-4" aria-hidden="true" />
+                <span className="hidden sm:inline">
+                  {t("dashboard.export.label")}
+                </span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onSelect={() => handleExportTransactions("xlsx")}
+              >
+                {t("dashboard.export.xlsx")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => handleExportTransactions("csv")}>
+                {t("dashboard.export.csv")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <NewTransactionDialog
             open={newTxnOpen}
             draft={newTransactionDraft}
