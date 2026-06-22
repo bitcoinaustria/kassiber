@@ -1470,6 +1470,8 @@ export const mockDaemon: DaemonTransport = {
         workspace_id?: unknown;
         label?: unknown;
         source_profile_id?: unknown;
+        tax_country?: unknown;
+        gains_algorithm?: unknown;
       };
       const workspaceId =
         typeof args.workspace_id === "string" ? args.workspace_id : "";
@@ -1521,29 +1523,61 @@ export const mockDaemon: DaemonTransport = {
         };
       }
       const firstProfile = workspace.profiles[0];
+      // The "New book" dialog can pick a region + method explicitly; copying from
+      // a source inherits its settings verbatim instead. Mirror the real daemon.
+      const requestedCountry: ProfileTaxCountry | null =
+        args.tax_country === "at"
+          ? "at"
+          : args.tax_country === "generic"
+            ? "generic"
+            : null;
+      const requestedAlgorithm =
+        typeof args.gains_algorithm === "string" && args.gains_algorithm.trim()
+          ? (args.gains_algorithm.trim() as ProfileGainsAlgorithm)
+          : null;
+      const baseCountry: ProfileTaxCountry =
+        sourceProfile?.taxCountry ??
+        firstProfile?.taxCountry ??
+        (workspace.jurisdiction === "Austria" ? "at" : "generic");
+      const nextCountry: ProfileTaxCountry = sourceProfile
+        ? baseCountry
+        : (requestedCountry ?? baseCountry);
+      const baseAlgorithm: ProfileGainsAlgorithm =
+        sourceProfile?.gainsAlgorithm ??
+        firstProfile?.gainsAlgorithm ??
+        (baseCountry === "at" ? "MOVING_AVERAGE_AT" : "FIFO");
+      // Mirror the daemon's per-country enforcement (Austrian -> moving-average).
+      const nextAlgorithm: ProfileGainsAlgorithm =
+        nextCountry === "at"
+          ? "MOVING_AVERAGE_AT"
+          : sourceProfile
+            ? baseAlgorithm
+            : (requestedAlgorithm ?? baseAlgorithm);
+      const nextFiat =
+        nextCountry === "at"
+          ? "EUR"
+          : (sourceProfile?.fiatCurrency ??
+            firstProfile?.fiatCurrency ??
+            workspace.currency);
+      const nextLongTermDays =
+        nextCountry === "at"
+          ? 0
+          : !sourceProfile && nextCountry !== baseCountry
+            ? 365
+            : (sourceProfile?.taxLongTermDays ??
+              firstProfile?.taxLongTermDays ??
+              365);
       const profile = {
         id: `mock-profile-${Date.now()}`,
         name: label,
         taxPolicy:
-          sourceProfile?.taxPolicy ??
-          firstProfile?.taxPolicy ??
-          `${workspace.jurisdiction} defaults`,
-        fiatCurrency:
-          sourceProfile?.fiatCurrency ??
-          firstProfile?.fiatCurrency ??
-          workspace.currency,
-        taxCountry:
-          sourceProfile?.taxCountry ??
-          firstProfile?.taxCountry ??
-          (workspace.jurisdiction === "Austria" ? "at" : "generic"),
-        taxLongTermDays:
-          sourceProfile?.taxLongTermDays ??
-          firstProfile?.taxLongTermDays ??
-          (workspace.jurisdiction === "Austria" ? 0 : 365),
-        gainsAlgorithm:
-          sourceProfile?.gainsAlgorithm ??
-          firstProfile?.gainsAlgorithm ??
-          (workspace.jurisdiction === "Austria" ? "MOVING_AVERAGE_AT" : "FIFO"),
+          nextCountry === "at"
+            ? `Austria - ATM - ${nextFiat}`
+            : `Generic - ${nextAlgorithm} - ${nextFiat}`,
+        fiatCurrency: nextFiat,
+        taxCountry: nextCountry,
+        taxLongTermDays: nextLongTermDays,
+        gainsAlgorithm: nextAlgorithm,
         accounts: 1,
         wallets: 0,
         lastOpened: "Just now",
@@ -1663,6 +1697,7 @@ export const mockDaemon: DaemonTransport = {
       const args = (req.args ?? {}) as {
         profile_id?: unknown;
         gains_algorithm?: unknown;
+        tax_country?: unknown;
       };
       const profileId =
         typeof args.profile_id === "string" ? args.profile_id : "";
@@ -1702,19 +1737,36 @@ export const mockDaemon: DaemonTransport = {
           },
         };
       }
+      // Region is optional: the book-settings dialog only sends it on an
+      // explicit switch, always paired with a region-valid method.
+      const nextCountry: ProfileTaxCountry =
+        args.tax_country === "at"
+          ? "at"
+          : args.tax_country === "generic"
+            ? "generic"
+            : (profile.taxCountry ?? "generic");
       // Mirror the daemon's per-country enforcement: Austrian books are always
       // coerced to moving-average regardless of the requested method.
       const nextAlgorithm: ProfileGainsAlgorithm =
-        profile.taxCountry === "at"
+        nextCountry === "at"
           ? "MOVING_AVERAGE_AT"
           : (requested as ProfileGainsAlgorithm);
+      const nextTaxPolicy =
+        nextCountry === "at"
+          ? "Austria - ATM - EUR"
+          : `Generic - ${nextAlgorithm} - EUR`;
       mockProfilesSnapshot = {
         ...mockProfilesSnapshot,
         workspaces: mockProfilesSnapshot.workspaces.map((candidate) => ({
           ...candidate,
           profiles: candidate.profiles.map((existing) =>
             existing.id === profileId
-              ? { ...existing, gainsAlgorithm: nextAlgorithm }
+              ? {
+                  ...existing,
+                  gainsAlgorithm: nextAlgorithm,
+                  taxCountry: nextCountry,
+                  taxPolicy: nextTaxPolicy,
+                }
               : existing,
           ),
         })),

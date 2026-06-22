@@ -34,7 +34,7 @@
       "newBook": "Neues Buch"
     },
     "profileCard": {
-      "editName": "Namen von {{name}} bearbeiten",
+      "settings": "Bucheinstellungen für {{name}}",
       "current": "Aktuelle Bücher: {{name}}",
       "switchTo": "Zu den Büchern {{name}} wechseln",
       "opened": "Geöffnet {{date}}",
@@ -48,25 +48,41 @@
     "create": {
       "title": "Neues Buch",
       "descriptionFromSource": "Lege ein eigenes Buch in {{workspace}} aus den Steuereinstellungen von {{source}} an.",
-      "descriptionInWorkspace": "Lege ein eigenes Buch in {{workspace}} an.",
+      "descriptionInWorkspace": "Lege ein eigenes Buch in {{workspace}} an und wähle seine Region und Buchhaltungsmethode.",
       "descriptionDefault": "Lege ein eigenes Buch mit Standardeinstellungen an.",
       "startFrom": "Ausgehen von",
       "defaultSettings": "Standardeinstellungen",
       "copyHint": "Beim Kopieren der Einstellungen werden nur Steuerprofil, Währung, Behaltedauer und Tranchen-Auswahl übernommen. Wallets, Accounts und Transaktionen bleiben in den ursprünglichen Büchern.",
       "nameLabel": "Buchname",
       "namePlaceholder": "Buchname",
+      "regionLabel": "Region",
+      "methodLabel": "Buchhaltungsmethode",
+      "austrianMethodNote": "Österreichische Bücher nutzen den gleitenden Durchschnittspreis; andere Methoden sind für Österreich nicht gültig.",
       "submit": "Buch erstellen",
       "errorEmptyName": "Gib einen Buchnamen ein.",
       "errorGeneric": "Buch konnte nicht erstellt werden."
     },
     "renameProfile": {
-      "title": "Buch bearbeiten",
-      "description": "Benenne das Buch um oder ändere seine Buchhaltungsmethode. Eine Methodenänderung verarbeitet die Journale neu, damit die Berichte neu berechnet werden.",
+      "title": "Bucheinstellungen",
+      "description": "Benenne das Buch um oder ändere seine Region und Buchhaltungsmethode. Eine Änderung von Region oder Methode verarbeitet die Journale neu, damit die Berichte neu berechnet werden.",
       "nameLabel": "Buchname",
+      "regionLabel": "Region",
       "methodLabel": "Buchhaltungsmethode",
+      "austrianMethodNote": "Österreichische Bücher nutzen den gleitenden Durchschnittspreis; andere Methoden sind für Österreich nicht gültig.",
+      "switchRegion": {
+        "title": "Region wechseln?",
+        "body": "Ändere dieses Buch von {{from}} auf {{to}} und setze die Buchhaltungsmethode auf {{method}} zurück.",
+        "warning": "Alle Journale werden neu verarbeitet, damit die Berichte neu berechnet werden.",
+        "confirm": "Region wechseln und neu verarbeiten",
+        "back": "Zurück"
+      },
       "submit": "Speichern",
       "errorEmptyName": "Gib einen Buchnamen ein.",
       "errorGeneric": "Buch konnte nicht gespeichert werden."
+    },
+    "region": {
+      "generic": "Generisch",
+      "at": "Österreich"
     },
     "method": {
       "MOVING_AVERAGE_AT": "Gleitender Durchschnittspreis (österreichisch)",

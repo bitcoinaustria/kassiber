@@ -54,6 +54,8 @@ export const DEFAULT_FORM: OnboardingForm = {
 
 export const FIAT_CURRENCIES: FiatCurrency[] = ["EUR", "USD", "CHF", "GBP"];
 
+export const TAX_COUNTRIES: TaxCountry[] = ["generic", "at"];
+
 export const GENERIC_GAINS_ALGORITHMS: GenericGainsAlgorithm[] = [
   "FIFO",
   "LIFO",
