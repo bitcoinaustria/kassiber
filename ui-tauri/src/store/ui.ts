@@ -34,9 +34,9 @@ export interface AppNotification {
   dedupeKey?: string;
   progress?: NotificationProgress;
   createdAt: string;
-  /// Optional language-independent click target (an app route path). When set,
-  /// the header notification routes here instead of guessing from the (often
-  /// localized) title — so a translated title still routes correctly.
+  // Optional language-independent click target (an app route path). When set,
+  // the header notification routes here instead of guessing from the (often
+  // localized) title, so a translated title still routes correctly.
   target?: string;
 }
 

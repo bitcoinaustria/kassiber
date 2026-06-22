@@ -752,6 +752,139 @@ class FreshnessTest(unittest.TestCase):
             {job["source_type"] for job in payload["enqueued"]},
         )
 
+    def test_freshness_run_can_request_auto_pair_before_journals(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        set_setting(conn, "context_workspace", "ws")
+        set_setting(conn, "context_profile", profile_id)
+
+        payload = daemon_freshness._freshness_run_payload(
+            conn,
+            {},
+            {
+                "all": True,
+                "rates": False,
+                "journals": True,
+                "auto_pair": True,
+                "run": False,
+            },
+        )
+
+        journal_jobs = [
+            job
+            for job in payload["enqueued"]
+            if job["job_type"] == freshness.JOB_JOURNAL_REFRESH
+        ]
+        self.assertEqual(len(journal_jobs), 1)
+        self.assertEqual(journal_jobs[0]["payload"], {"auto_pair": True})
+
+    def test_journal_freshness_handler_auto_pairs_before_processing(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        progress = []
+        handler = daemon_freshness._freshness_handlers({})[
+            freshness.JOB_JOURNAL_REFRESH
+        ]
+
+        with patch(
+            "kassiber.daemon_freshness._auto_pair_before_journals",
+            return_value={"enabled": True, "applied": 2, "remaining": {"total": 1}},
+        ) as auto_pair, patch(
+            "kassiber.daemon_freshness._journals_process_payload",
+            return_value={"quarantined": 0, "entries_created": 4},
+        ) as process:
+            result = handler(
+                conn,
+                {"profile_id": profile_id, "payload": {"auto_pair": True}},
+                progress.append,
+                lambda: None,
+            )
+
+        self.assertEqual(
+            [item["phase"] for item in progress],
+            ["auto_pair", "journal_refresh"],
+        )
+        auto_pair.assert_called_once()
+        process.assert_called_once()
+        self.assertEqual(result["auto_pair"]["applied"], 2)
+        self.assertEqual(result["entries_created"], 4)
+
+    def test_journal_freshness_handler_continues_when_auto_pair_fails(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        progress = []
+        handler = daemon_freshness._freshness_handlers({})[
+            freshness.JOB_JOURNAL_REFRESH
+        ]
+
+        with patch(
+            "kassiber.daemon_freshness._auto_pair_before_journals",
+            side_effect=AppError("profile missing", code="not_found"),
+        ) as auto_pair, patch(
+            "kassiber.daemon_freshness._journals_process_payload",
+            return_value={"quarantined": 0, "entries_created": 4},
+        ) as process:
+            result = handler(
+                conn,
+                {"profile_id": profile_id, "payload": {"auto_pair": True}},
+                progress.append,
+                lambda: None,
+            )
+
+        self.assertEqual(
+            [item["phase"] for item in progress],
+            ["auto_pair", "journal_refresh"],
+        )
+        auto_pair.assert_called_once()
+        process.assert_called_once()
+        self.assertEqual(result["entries_created"], 4)
+        self.assertEqual(result["auto_pair"]["applied"], 0)
+        self.assertTrue(result["auto_pair"]["skipped"])
+        self.assertEqual(result["auto_pair"]["error"]["code"], "not_found")
+
+    def test_auto_pair_before_journals_returns_applied_and_remaining_counts(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        before = {"counts": {"total": 4, "exact": 2, "strong": 2, "conflicts": 1}}
+        remaining = {"counts": {"total": 1, "exact": 0, "strong": 1, "conflicts": 1}}
+
+        with patch(
+            "kassiber.daemon_freshness.suggest_transfer_candidates",
+            side_effect=[before, remaining],
+        ), patch(
+            "kassiber.daemon_freshness.apply_transfer_rules",
+            return_value={"summary": {"count": 1, "total_swap_fee_msat": 1200}},
+        ) as rules, patch(
+            "kassiber.daemon_freshness.bulk_pair_transfers",
+            return_value={
+                "summary": {
+                    "count": 2,
+                    "skipped_conflicts": 1,
+                    "total_swap_fee_msat": 800,
+                }
+            },
+        ) as bulk:
+            summary = daemon_freshness._auto_pair_before_journals(
+                conn,
+                {"profile_id": profile_id},
+            )
+
+        rules.assert_called_once_with(conn, "ws", profile_id, commit=False)
+        bulk.assert_called_once_with(
+            conn,
+            "ws",
+            profile_id,
+            confidence="exact",
+            commit=False,
+        )
+        self.assertEqual(summary["applied"], 3)
+        self.assertEqual(summary["rules_applied"], 1)
+        self.assertEqual(summary["bulk_exact_applied"], 2)
+        self.assertEqual(summary["skipped_conflicts"], 1)
+        self.assertEqual(summary["total_swap_fee_msat"], 2000)
+        self.assertEqual(summary["before"]["total"], 4)
+        self.assertEqual(summary["remaining"]["total"], 1)
+
     def test_workspace_freshness_run_honors_each_book_market_rate_policy(self):
         conn = self._db()
         first_profile = _seed_profile(conn)

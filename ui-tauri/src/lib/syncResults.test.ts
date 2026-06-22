@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   describeFreshnessSourceState,
+  freshnessRunAutoPairCount,
   freshnessRunQuarantineCount,
+  freshnessRunTransferReviewCount,
   describeWalletSyncResult,
   freshnessRunNeedsAttention,
   summarizeFreshnessRun,
@@ -157,6 +159,60 @@ describe("syncResults", () => {
       "2 completed, 2 quarantined transactions",
     );
     expect(freshnessRunNeedsAttention(payload)).toBe(false);
+  });
+
+  it("summarizes auto-paired and still-reviewable transfer candidates", () => {
+    const payload = {
+      completed: [
+        {
+          job_type: "journal_refresh",
+          source_label: "Journal refresh",
+          status: "done",
+          result: {
+            auto_pair: {
+              applied: 3,
+              remaining: { total: 2, exact: 0, strong: 2, conflicts: 1 },
+            },
+          },
+        },
+      ],
+    };
+
+    expect(freshnessRunAutoPairCount(payload)).toBe(3);
+    expect(freshnessRunTransferReviewCount(payload)).toBe(2);
+    expect(summarizeFreshnessRun(payload)).toBe(
+      "1 completed, 3 pairs applied, 2 swap/transfer candidates to review",
+    );
+    expect(freshnessRunNeedsAttention(payload)).toBe(false);
+  });
+
+  it("surfaces skipped auto-pairing as attention while keeping journal completion", () => {
+    const payload = {
+      completed: [
+        {
+          job_type: "journal_refresh",
+          source_label: "Journal refresh",
+          status: "done",
+          result: {
+            entries_created: 4,
+            auto_pair: {
+              enabled: true,
+              applied: 0,
+              skipped: true,
+              error: {
+                code: "auto_pair_failed",
+                message: "Automatic pairing was skipped; journals were still processed.",
+              },
+            },
+          },
+        },
+      ],
+    };
+
+    expect(summarizeFreshnessRun(payload)).toBe(
+      "1 completed, automatic pairing skipped: Automatic pairing was skipped; journals were still processed.",
+    );
+    expect(freshnessRunNeedsAttention(payload)).toBe(true);
   });
 
   it("marks combined refresh attention only for blocking or failed sources", () => {

@@ -60,6 +60,7 @@ const PHASE_LABELS: Record<string, string> = {
   import: "Importing transactions",
   importing: "Importing transactions",
   rate_coverage: "Checking market-rate coverage",
+  auto_pair: "Pairing swaps and transfers",
   journal_refresh: "Refreshing journals",
   rate_limited: "Waiting out rate limit",
   done: "Refresh complete",
@@ -73,6 +74,7 @@ const PHASE_PROGRESS_FRACTIONS: Record<string, number> = {
   import: 0.78,
   importing: 0.78,
   rate_coverage: 0.86,
+  auto_pair: 0.91,
   journal_refresh: 0.94,
   done: 1,
   error: 1,
@@ -96,6 +98,7 @@ export const FIRST_SYNC_MILESTONES: readonly SyncMilestone[] = [
   "decode_enrich",
   "import",
   "rate_coverage",
+  "auto_pair",
   "journal_refresh",
 ].map((phase) => ({
   phase,
@@ -294,6 +297,9 @@ export function syncProgressNotification(
 function activeSyncTitle(progress: WalletSyncProgress) {
   if (progress.phase === "rate_limited") {
     return "Waiting out rate limit";
+  }
+  if (progress.phase === "auto_pair") {
+    return "Pairing swaps and transfers";
   }
   if (
     progress.source_type === "journals" ||

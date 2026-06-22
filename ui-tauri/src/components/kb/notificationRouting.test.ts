@@ -76,6 +76,14 @@ describe("notificationTarget", () => {
     expect(
       notificationTarget(germanAttention, "warning", false, "/quarantine"),
     ).toBe("/quarantine");
+
+    const germanTransferReview = "2 Swap-/Transfer-Kandidaten prüfen";
+    expect(
+      notificationTarget(germanTransferReview, "warning", false),
+    ).toBeUndefined();
+    expect(
+      notificationTarget(germanTransferReview, "warning", false, "/swaps"),
+    ).toBe("/swaps");
   });
 
   it("ignores an explicit target that is not a known route", () => {

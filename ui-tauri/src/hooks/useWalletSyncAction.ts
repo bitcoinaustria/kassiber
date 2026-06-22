@@ -6,6 +6,7 @@ import { daemonMutationKey, useDaemonStreamMutation } from "@/daemon/client";
 import {
   freshnessRunNeedsAttention,
   freshnessRunQuarantineCount,
+  freshnessRunTransferReviewCount,
   summarizeFreshnessRun,
   type FreshnessRunData,
 } from "@/lib/syncResults";
@@ -110,6 +111,7 @@ export function useWalletSyncAction() {
         progress: startingSyncProgress(),
         details: [
           t("bookRefresh.configuredSourcesQueued"),
+          t("bookRefresh.autoPairIncluded"),
           t("bookRefresh.journalsIncluded"),
         ],
         active: true,
@@ -135,6 +137,7 @@ export function useWalletSyncAction() {
         {
           all: true,
           journals: true,
+          auto_pair: true,
           run: true,
           force_full: Boolean(options?.forceFull),
         },
@@ -143,21 +146,28 @@ export function useWalletSyncAction() {
             const body = summarizeFreshnessRun(envelope.data);
             const needsAttention = freshnessRunNeedsAttention(envelope.data);
             const quarantineCount = freshnessRunQuarantineCount(envelope.data);
-            const needsReview = needsAttention || quarantineCount > 0;
-            const title = needsAttention
-              ? t("bookRefresh.needsAttentionTitle")
-              : quarantineCount > 0
-                ? t("bookRefresh.quarantineTitle", { count: quarantineCount })
-                : t("bookRefresh.finishedTitle");
+            const transferReviewCount = freshnessRunTransferReviewCount(envelope.data);
+            const blocksFirstSync = needsAttention || quarantineCount > 0;
+            const needsReview = blocksFirstSync || transferReviewCount > 0;
+            let title = t("bookRefresh.finishedTitle");
+            let target: "/logs" | "/quarantine" | "/swaps" | undefined;
+            if (needsAttention) {
+              title = t("bookRefresh.needsAttentionTitle");
+              target = "/logs";
+            } else if (quarantineCount > 0) {
+              title = t("bookRefresh.quarantineTitle", { count: quarantineCount });
+              target = "/quarantine";
+            } else if (transferReviewCount > 0) {
+              title = t("bookRefresh.transferReviewTitle", {
+                count: transferReviewCount,
+              });
+              target = "/swaps";
+            }
             // Route the notification by a language-independent target instead of
             // letting the header guess from the (localized) title: failures /
             // blocking sources go to the logs (settings when dev tools are off),
-            // quarantine goes to the quarantine review.
-            const target = needsAttention
-              ? "/logs"
-              : quarantineCount > 0
-                ? "/quarantine"
-                : undefined;
+            // quarantine goes to the quarantine review, and remaining safe
+            // transfer candidates go to Swaps.
             if (noticeIdRef.current) {
               updateNotification(noticeIdRef.current, {
                 title,
@@ -177,14 +187,13 @@ export function useWalletSyncAction() {
                 target,
               });
             }
-            if (!needsReview) {
+            if (!blocksFirstSync) {
               options?.onTrustedSuccess?.();
               // The book has completed a clean full run, so subsequent
               // refreshes are ordinary background syncs rather than a
-              // first-time setup. A run that still needs attention (job
-              // errors, blocking reports, or journal quarantine) stays in
-              // first-sync mode so a retry keeps the setup card instead of
-              // demoting to the thin line.
+              // first-time setup. Reviewable swap/transfer candidates still
+              // notify the user, but they should not keep setup mode alive
+              // forever once the core sync and journals are clean.
               if (bookKey) markFirstSyncDone(bookKey);
             }
             clearActiveMaintenanceProgress(BOOK_REFRESH_PROGRESS_ID);
