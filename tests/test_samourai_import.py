@@ -16,6 +16,7 @@ from kassiber.core.sync import WalletSyncState
 from kassiber.core.tax_events import normalize_tax_asset_inputs
 from kassiber.db import open_db
 from kassiber.errors import AppError
+from kassiber.wallet_descriptors import load_descriptor_plan
 
 
 NOW = "2026-06-05T00:00:00Z"
@@ -286,6 +287,11 @@ class SamouraiImportTest(unittest.TestCase):
             self.assertEqual(raised.exception.code, "validation")
             self.assertIn("origin", str(raised.exception).lower())
 
+            # A Samourai source pasted with only its receive descriptor is now
+            # accepted rather than rejected: Kassiber synthesizes the standard
+            # sibling change chain (Samourai accounts use BIP-standard 0/1
+            # chains) so postmix change — including toxic change — still lands in
+            # balances and the UTXO list.
             single_branch_path = Path(tmp) / "single-branch-samourai-sources.json"
             single_branch_path.write_text(
                 json.dumps(
@@ -303,17 +309,33 @@ class SamouraiImportTest(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            with self.assertRaises(AppError) as raised:
-                core_samourai.import_samourai_wallet_group(
-                    conn,
-                    "Main",
-                    "Default",
-                    label="Single Branch Samourai",
-                    source_set_file=str(single_branch_path),
-                    network="main",
-                )
-            self.assertEqual(raised.exception.code, "validation")
-            self.assertEqual(raised.exception.details["missing_branches"], [1])
+            single_branch_result = core_samourai.import_samourai_wallet_group(
+                conn,
+                "Main",
+                "Default",
+                label="Single Branch Samourai",
+                source_set_file=str(single_branch_path),
+                network="main",
+            )
+            single_branch_id = next(
+                child["id"]
+                for child in single_branch_result["children"]
+                if child["config"]["samourai"]["section"] == "postmix"
+            )
+            stored_config = json.loads(
+                conn.execute(
+                    "SELECT config_json FROM wallets WHERE id = ?",
+                    (single_branch_id,),
+                ).fetchone()["config_json"]
+            )
+            # The user supplied no change descriptor, yet the persisted wallet
+            # still derives both branches when its plan is built for sync.
+            self.assertNotIn("change_descriptor", stored_config)
+            synthesized_plan = load_descriptor_plan(stored_config)
+            self.assertEqual(
+                [branch.branch_label for branch in synthesized_plan.branches],
+                ["receive", "change"],
+            )
 
             duplicate_path = Path(tmp) / "duplicate-samourai-sources.json"
             duplicate_path.write_text(

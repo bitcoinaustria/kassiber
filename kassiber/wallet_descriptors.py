@@ -194,6 +194,39 @@ def normalize_descriptor_text(chain, descriptor_text):
     return re.sub(r"slip77\(([0-9a-fA-F]{64})\)", _normalize_slip77_key, normalized)
 
 
+# Standard BIP44/49/84/86 wallets pair a receive chain (`.../0/*`) with a
+# sibling change chain (`.../1/*`). Most hand-pasted descriptors and many wallet
+# exports only carry the receive line, so without synthesizing the change branch
+# Kassiber never derives or scans internal addresses and change UTXOs silently
+# vanish from balances and the UTXO list. embit already understands the `<0;1>`
+# multipath form, so promoting a single-branch receive descriptor to it lets the
+# existing two-branch plan logic cover the change chain too.
+_RECEIVE_CHAIN_WILDCARD_RE = re.compile(r"/0/\*")
+
+
+def _promote_receive_only_to_multipath(descriptor_class, normalized_text, primary):
+    """Return a `<0;1>` multipath descriptor when `primary` is receive-only.
+
+    Falls back to the original ``primary`` whenever promotion is not applicable
+    or the promoted text does not parse into exactly two branches, so a
+    descriptor that loads today never starts failing because of this helper.
+    """
+    if getattr(primary, "num_branches", 1) >= 2:
+        return primary
+    if not getattr(primary, "is_wildcard", False):
+        return primary
+    promoted_text, substitutions = _RECEIVE_CHAIN_WILDCARD_RE.subn("/<0;1>/*", normalized_text)
+    if substitutions == 0:
+        return primary
+    try:
+        promoted = descriptor_class.from_string(promoted_text)
+    except Exception:
+        return primary
+    if getattr(promoted, "num_branches", 1) != 2:
+        return primary
+    return promoted
+
+
 def load_descriptor_plan(config):
     descriptor_text = str(config.get("descriptor") or "").strip()
     if not descriptor_text:
@@ -209,11 +242,18 @@ def load_descriptor_plan(config):
         )
     modules = get_embit_modules()
     descriptor_class = modules["Descriptor"] if chain == "bitcoin" else modules["LDescriptor"]
-    primary = descriptor_class.from_string(normalize_descriptor_text(chain, descriptor_text))
+    normalized_primary_text = normalize_descriptor_text(chain, descriptor_text)
+    primary = descriptor_class.from_string(normalized_primary_text)
     change_text = str(config.get("change_descriptor") or "").strip()
     change_descriptor = (
         descriptor_class.from_string(normalize_descriptor_text(chain, change_text)) if change_text else None
     )
+    if change_descriptor is None:
+        # No explicit change descriptor: derive the sibling change chain from a
+        # receive-only descriptor so internal/change UTXOs are not missed.
+        primary = _promote_receive_only_to_multipath(
+            descriptor_class, normalized_primary_text, primary
+        )
     branches = []
     if change_descriptor is not None:
         branches.append(DescriptorBranch(0, "receive", primary, None))

@@ -248,9 +248,10 @@ Backup files, recovery words, passphrases, and other secret-bearing material are
 not accepted. The response returns a redacted logical group plus child wallet
 summaries and safe warnings; it does not return descriptors, xpubs, PayNym
 secrets, backend URLs, tokens, or raw file payloads.
-Explicit Samourai descriptor source sets must include both receive and change
-coverage for scanned sections, either via `descriptor` plus `change_descriptor`
-or a descriptor expression that expands to branches `0` and `1`.
+Samourai descriptor source sets need a receive descriptor per scanned section.
+When neither an explicit `change_descriptor` nor a multipath (`<0;1>`)
+expression is supplied, Kassiber synthesizes the standard `/1/*` change chain
+from the receive descriptor, so internal/change coverage is never missed.
 
 `ui.wallets.preview_descriptor` is a read-only helper for the connection
 setup form. It accepts `wallet_material` (or explicit `descriptor` /

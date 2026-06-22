@@ -54,6 +54,38 @@ class PreviewDescriptorTests(unittest.TestCase):
         self.assertEqual(len(result["addresses"]), 3)  # 2 receive + 1 change
         self.assertTrue(result["has_change_branch"])
 
+    def test_receive_only_descriptor_synthesizes_change_branch(self):
+        # A lone receive-chain descriptor (no explicit change descriptor) must
+        # still derive the sibling change chain. Otherwise change/internal UTXOs
+        # are never scanned and silently vanish from balances and the UTXO list.
+        xpub = _xpub_from_seed()
+
+        result = _preview_descriptor_payload(
+            {"descriptor": f"wpkh({xpub}/0/*)", "count": 3}
+        )
+
+        self.assertTrue(result["has_change_branch"])
+        receive = [addr for addr in result["addresses"] if addr["branch"] == "receive"]
+        change = [addr for addr in result["addresses"] if addr["branch"] == "change"]
+        self.assertEqual(len(receive), 3)
+        self.assertEqual(len(change), 1)
+        # The change address derives from chain index 1 and is distinct from
+        # every receive address.
+        self.assertEqual(change[0]["derivation_path"], "m/1/0")
+        self.assertNotIn(change[0]["address"], {addr["address"] for addr in receive})
+
+    def test_fixed_single_address_descriptor_has_no_change_branch(self):
+        # A non-ranged descriptor is a single fixed address, not a wallet chain;
+        # it must not gain a synthetic change branch.
+        xpub = _xpub_from_seed()
+
+        result = _preview_descriptor_payload(
+            {"descriptor": f"wpkh({xpub}/0/5)", "count": 3}
+        )
+
+        self.assertFalse(result["has_change_branch"])
+        self.assertTrue(all(addr["branch"] == "receive" for addr in result["addresses"]))
+
     def test_count_is_clamped_to_twenty(self):
         result = _preview_descriptor_payload(
             {"wallet_material": PUBLIC_MAINNET_ZPUB_FIXTURE, "count": 999}

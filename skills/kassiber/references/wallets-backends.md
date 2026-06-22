@@ -83,6 +83,13 @@ separate receive and change descriptors. The daemon normalizes common formats
 such as Bitcoin Core descriptor JSON, two-line descriptor text, key/value
 descriptor exports, and ypub/zpub/upub/vpub single-sig keys.
 
+A receive-only descriptor (just the `/0/*` chain) is sufficient: Kassiber
+automatically derives the sibling `/1/*` change chain, so change UTXOs appear
+in balances and the UTXO list without a separate change descriptor. This covers
+single-sig, multisig, and Liquid. Supply `--change-descriptor` /
+`--change-descriptor-file` (or a `<0;1>` multipath descriptor) only for a
+non-standard change chain.
+
 ## Descriptor wallets
 
 Bitcoin example:
