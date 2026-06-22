@@ -47,8 +47,14 @@ APP_VERSION="$(
 )"
 APP_COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || printf unknown)"
 APP_DISPLAY_VERSION="dev"
-TAURI_VERSION_CONFIG="$(mktemp "${TMPDIR:-/tmp}/kassiber-tauri-version.XXXXXX.json")"
-trap 'rm -f "$TAURI_VERSION_CONFIG"' EXIT
+# macOS (BSD) mktemp only substitutes a trailing run of X's, so a
+# ".XXXXXX.json" template is NOT randomized — it yields a fixed filename that
+# fails with "File exists" if a previous run was killed before its cleanup trap
+# could fire. Create a uniquely-named temp dir (trailing X's) and keep the
+# config file inside it instead.
+TAURI_VERSION_DIR="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-tauri-version.XXXXXX")"
+trap 'rm -rf "$TAURI_VERSION_DIR"' EXIT
+TAURI_VERSION_CONFIG="$TAURI_VERSION_DIR/version.json"
 printf '{ "version": "%s" }\n' "$APP_VERSION" > "$TAURI_VERSION_CONFIG"
 
 echo "Building Kassiber desktop for macOS arm64 only."
@@ -107,7 +113,16 @@ run chmod 755 "$BINARIES_DIR/$SIDECAR_NAME"
 
 run rustup target add "$TARGET_TRIPLE"
 run pnpm --dir ui-tauri install --frozen-lockfile
-run env KASSIBER_BUILD_VERSION="$APP_DISPLAY_VERSION" KASSIBER_BUILD_COMMIT="$APP_COMMIT" \
+# Force CI=true for the bundle step. Tauri only passes create-dmg's
+# `--skip-jenkins` (skip the Finder/AppleScript window-styling step) when the
+# CI env var is set; the `--ci` flag alone does NOT trigger it. Locally that
+# AppleScript step is flaky, and when it fails it leaves an orphaned
+# `/Volumes/dmg.*` scratch mount plus an `rw.*.dmg` behind, which then makes
+# every subsequent build fail too. CI=true makes the DMG bundle
+# deterministically, matching the GitHub Actions prerelease build (which always
+# runs with CI=true, so its shipped DMG is unstyled as well — the layout is
+# cosmetic for an unsigned bundle).
+run env CI=true KASSIBER_BUILD_VERSION="$APP_DISPLAY_VERSION" KASSIBER_BUILD_COMMIT="$APP_COMMIT" \
   pnpm --dir ui-tauri tauri build --target "$TARGET_TRIPLE" --bundles "$BUNDLES" --ci --config "$TAURI_VERSION_CONFIG"
 
 cat <<EOF
