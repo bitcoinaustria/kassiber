@@ -860,6 +860,13 @@ class FreshnessTest(unittest.TestCase):
             )
             return {"enabled": True, "applied": 1, "remaining": {"total": 0}}
 
+        # run_job's real progress callback COMMITS the connection on every
+        # phase emission. Mimic that here, so the test catches a phase commit
+        # landing *after* the pending auto-pair inserts (which would make the
+        # rollback unable to undo them).
+        def committing_progress(_payload):
+            conn.commit()
+
         with patch(
             "kassiber.daemon_freshness._auto_pair_before_journals",
             side_effect=seed_pending_pair,
@@ -871,7 +878,7 @@ class FreshnessTest(unittest.TestCase):
                 handler(
                     conn,
                     {"profile_id": profile_id, "payload": {"auto_pair": True}},
-                    lambda _payload: None,
+                    committing_progress,
                     lambda: None,
                 )
 

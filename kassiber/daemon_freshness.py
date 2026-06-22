@@ -758,26 +758,32 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
         check_cancelled: Callable[[], None],
     ) -> Mapping[str, Any]:
         job_payload = job.get("payload") if isinstance(job.get("payload"), dict) else {}
-        auto_pair = None
-        if job_payload.get("auto_pair"):
+        auto_pair_requested = bool(job_payload.get("auto_pair"))
+        if auto_pair_requested:
             progress({"phase": "auto_pair"})
-            check_cancelled()
-            try:
-                auto_pair = _auto_pair_before_journals(conn, job)
-            except AppError as exc:
-                conn.rollback()
-                _LOGGER.warning(
-                    "Automatic pairing before journal refresh was skipped: %s",
-                    exc.code,
-                )
-                auto_pair = _skipped_auto_pair_summary(exc)
-            except Exception as exc:
-                conn.rollback()
-                _LOGGER.exception("Automatic pairing before journal refresh was skipped")
-                auto_pair = _skipped_auto_pair_summary(exc)
+        # Emit the journal-refresh phase BEFORE any auto-pair inserts. run_job's
+        # progress callback COMMITS the connection, so emitting it after the
+        # commit=False pair inserts would commit them prematurely and defeat the
+        # rollback below. After this point no committing progress is issued until
+        # process_journals, so the auto-pair + journal step stays atomic.
         progress({"phase": core_freshness.PHASE_JOURNAL_REFRESH})
+        auto_pair = None
         try:
             check_cancelled()
+            if auto_pair_requested:
+                try:
+                    auto_pair = _auto_pair_before_journals(conn, job)
+                except AppError as exc:
+                    conn.rollback()
+                    _LOGGER.warning(
+                        "Automatic pairing before journal refresh was skipped: %s",
+                        exc.code,
+                    )
+                    auto_pair = _skipped_auto_pair_summary(exc)
+                except Exception as exc:
+                    conn.rollback()
+                    _LOGGER.exception("Automatic pairing before journal refresh was skipped")
+                    auto_pair = _skipped_auto_pair_summary(exc)
             payload = _journals_process_payload(conn)
         except Exception:
             # The auto-pair inserts above are pending (commit=False). If journal
