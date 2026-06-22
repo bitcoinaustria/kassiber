@@ -1411,6 +1411,41 @@ class CliSmokeTest(unittest.TestCase):
             self.assertIn("Sale receipt", att_values)
             self.assertNotIn(sale_doc, att_values)  # URL is the link target, not the shown text
 
+    def test_07ae_transactions_export(self):
+        xlsx_path = Path(self._tmp.name) / "kassiber-transactions.xlsx"
+        csv_path = Path(self._tmp.name) / "kassiber-transactions.csv"
+        for path in (xlsx_path, csv_path):
+            if path.exists():
+                path.unlink()
+
+        payload = self._cli(
+            "transactions", "export",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--export-format", "xlsx",
+            "--file", str(xlsx_path),
+        )
+        self._assert_kind(payload, "transactions.export")
+        self.assertEqual(payload["data"]["sheets"], ["Transactions"])
+        self.assertGreater(payload["data"]["rows"], 0)
+        self.assertEqual(xlsx_path.read_bytes()[:2], b"PK")
+        sheets = _load_xlsx_sheets(xlsx_path)
+        headers = {label for label in sheets["Transactions"].get(2, {}).values()}
+        for column in ("Wallet", "Direction", "Asset", "Description", "Tags", "Attachments"):
+            self.assertIn(column, headers)
+
+        payload = self._cli(
+            "transactions", "export",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--export-format", "csv",
+            "--file", str(csv_path),
+        )
+        self._assert_kind(payload, "transactions.export")
+        csv_text = csv_path.read_text(encoding="utf-8")
+        self.assertIn("Kassiber Transactions - Default", csv_text)
+        self.assertIn("Transaction ID", csv_text)
+
     def test_07aa_pdf_writer_reports_actual_page_count(self):
         from kassiber.pdf_report import write_text_pdf
 

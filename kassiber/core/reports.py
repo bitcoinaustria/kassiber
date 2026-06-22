@@ -4867,6 +4867,88 @@ def export_xlsx_report(
     }
 
 
+TRANSACTIONS_EXPORT_HEADERS = (
+    "occurred_at",
+    "wallet",
+    "transaction_id",
+    "direction",
+    "asset",
+    "amount",
+    "amount_msat",
+    "fee",
+    "fee_msat",
+    "description",
+    "note",
+    "counterparty",
+    "tags",
+    "attachments",
+)
+
+
+def _transactions_export_context(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None):
+    """Build the single-sheet Transactions export spec (wallet-scope aware).
+
+    Reuses the same row builder + columns as the full report's Transactions
+    sheet — including note, counterparty, tags, and the linked-file/URL
+    attachments — so the standalone export matches the report."""
+    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
+    query_rows = _report_query_rows(conn, profile, wallet=wallet)
+    rows = _generic_report_transaction_rows({"query_rows": query_rows})
+    title_scope = wallet["label"] if wallet else profile["label"]
+    spec = {
+        "sheet_name": "Transactions",
+        "title": "Transactions",
+        "headers": TRANSACTIONS_EXPORT_HEADERS,
+        "rows": rows,
+    }
+    return {"title": f"Kassiber Transactions - {title_scope}", "spec": spec, "wallet": wallet}
+
+
+def export_transactions_csv_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, wallet_ref=None):
+    context = _transactions_export_context(conn, workspace_ref, profile_ref, hooks, wallet_ref=wallet_ref)
+    spec = context["spec"]
+    path = Path(file_path).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _write_csv_rows(path, _generic_report_csv_rows({"title": context["title"]}, [spec]))
+    return {
+        "file": str(path.resolve()),
+        "bytes": path.stat().st_size,
+        "title": context["title"],
+        "wallet": wallet_ref or "",
+        "rows": len(spec["rows"]),
+    }
+
+
+def export_transactions_xlsx_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, wallet_ref=None):
+    import xlsxwriter
+
+    context = _transactions_export_context(conn, workspace_ref, profile_ref, hooks, wallet_ref=wallet_ref)
+    spec = context["spec"]
+    path = Path(file_path).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    workbook = xlsxwriter.Workbook(str(path))
+    workbook.set_properties(
+        {
+            "title": context["title"],
+            "subject": "Kassiber transactions export",
+            "author": "Kassiber",
+            "comments": "Transaction ledger with notes, tags, and linked evidence.",
+        }
+    )
+    formats = _generic_report_xlsx_formats(workbook)
+    _generic_report_xlsx_write_sheet(workbook, spec, formats)
+    workbook.close()
+    return {
+        "file": str(path.resolve()),
+        "bytes": path.stat().st_size,
+        "title": context["title"],
+        "wallet": wallet_ref or "",
+        "sheets": [spec["sheet_name"]],
+        "rows": len(spec["rows"]),
+    }
+
+
 def build_pdf_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None, history_limit=None):
     context = _build_full_report_context(
         conn,
@@ -5427,6 +5509,8 @@ __all__ = [
     "export_csv_report",
     "export_pdf_report",
     "export_summary_pdf_report",
+    "export_transactions_csv_report",
+    "export_transactions_xlsx_report",
     "export_xlsx_report",
     "latest_market_rates_for_profile",
     "latest_transaction_rates_for_profile",

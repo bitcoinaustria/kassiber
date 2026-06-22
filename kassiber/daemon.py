@@ -226,6 +226,8 @@ SUPPORTED_KINDS = (
     "ui.transactions.extremes",
     "ui.transactions.resolve",
     "ui.transactions.search",
+    "ui.transactions.export_csv",
+    "ui.transactions.export_xlsx",
     "ui.transactions.metadata.update",
     "ui.transactions.history",
     "ui.transactions.history.revert",
@@ -2067,6 +2069,25 @@ def _ui_report_export_payload(
 ) -> dict[str, Any]:
     conn = _require_conn(ctx)
     hooks = _report_hooks()
+    transactions_exports = {
+        "ui.transactions.export_csv": ("csv", ".csv", core_reports.export_transactions_csv_report),
+        "ui.transactions.export_xlsx": ("xlsx", ".xlsx", core_reports.export_transactions_xlsx_report),
+    }
+    if kind in transactions_exports:
+        export_format, suffix, exporter = transactions_exports[kind]
+        wallet = args.get("wallet")
+        if wallet is not None and not isinstance(wallet, str):
+            raise AppError(f"{kind} wallet must be a string", code="validation")
+        path = _managed_report_export_path(ctx.data_root, "kassiber-transactions", suffix)
+        payload = dict(exporter(conn, None, None, path, hooks, wallet_ref=wallet))
+        payload.update(
+            {
+                "format": export_format,
+                "scope": "transactions",
+                "filename": Path(payload["file"]).name,
+            }
+        )
+        return payload
     generic_report_exports = {
         "ui.reports.export_pdf": ("pdf", ".pdf", core_reports.export_pdf_report),
         "ui.reports.export_csv": ("csv", ".csv", core_reports.export_csv_report),
@@ -8301,6 +8322,8 @@ def handle_request(
         )
 
     if kind in {
+        "ui.transactions.export_csv",
+        "ui.transactions.export_xlsx",
         "ui.reports.export_pdf",
         "ui.reports.export_summary_pdf",
         "ui.reports.export_csv",

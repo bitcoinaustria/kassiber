@@ -196,7 +196,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `accounts {list,create}`
 - `wallets {kinds,list,create,get,update,delete,reveal-descriptor,sync,sync-btcpay,attach-btcpay,attach-bullbitcoin-wallet,derive,identify,import-json,import-csv,import-btcpay,import-phoenix,import-river,import-bull,import-coinfinity,import-21bitcoin,import-strike,import-samourai}`
 - `backends {kinds,list,get,create,update,delete,reveal-token,set-default,clear-default}`
-- `transactions {list}`
+- `transactions {list,export}` (`export --export-format {csv,xlsx} --file [--wallet]` writes the styled transaction ledger — notes, tags, counterparty, linked-file/URL attachments — reusing the report's Transactions sheet; daemon kinds `ui.transactions.export_csv` / `ui.transactions.export_xlsx`)
 - `attachments {add,list,remove,verify,gc}`
 - `metadata records {list,get,note {set,clear},tag {add,remove},excluded {set,clear},history {list,activity,stale,revert}}`
 - `metadata bip329 {import,list,export}`

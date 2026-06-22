@@ -5817,6 +5817,26 @@ class DaemonSmokeTest(unittest.TestCase):
 
             _write_payload(
                 proc,
+                {"request_id": "export-transactions-xlsx", "kind": "ui.transactions.export_xlsx"},
+            )
+            tx_xlsx = _read_payload_timeout(proc)
+            self.assertEqual(tx_xlsx["kind"], "ui.transactions.export_xlsx")
+            self.assertEqual(tx_xlsx["data"]["scope"], "transactions")
+            self.assertEqual(tx_xlsx["data"]["sheets"], ["Transactions"])
+            self.assertTrue(Path(tx_xlsx["data"]["file"]).is_file())
+            self.assertEqual(Path(tx_xlsx["data"]["file"]).read_bytes()[:2], b"PK")
+
+            _write_payload(
+                proc,
+                {"request_id": "export-transactions-csv", "kind": "ui.transactions.export_csv"},
+            )
+            tx_csv = _read_payload_timeout(proc)
+            self.assertEqual(tx_csv["kind"], "ui.transactions.export_csv")
+            self.assertEqual(tx_csv["data"]["format"], "csv")
+            self.assertTrue(Path(tx_csv["data"]["file"]).is_file())
+
+            _write_payload(
+                proc,
                 {
                     "request_id": "export-pdf-year",
                     "kind": "ui.reports.export_pdf",

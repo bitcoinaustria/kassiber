@@ -254,6 +254,24 @@ kassiber reports export-pdf --wallet satoshi-liquid --file satoshi-liquid-report
 Use these instead of inventing extra report renderers unless the user asks for
 a custom output beyond Kassiber's built-in exports.
 
+### Transactions-only export
+
+For just the transaction ledger (not the full report), use:
+
+```bash
+kassiber transactions export --export-format xlsx --file transactions.xlsx
+kassiber transactions export --export-format csv --file transactions.csv
+kassiber transactions export --wallet satoshi-cold --export-format xlsx --file cold.xlsx
+```
+
+It writes a single styled Transactions sheet (or CSV) with the same columns as
+the report's Transactions sheet — description, note, counterparty, tags, and the
+linked-file/URL Attachments column (single URLs render as clickable links). In
+the desktop GUI this is the **Export** button on the Transactions screen toolbar
+(Excel / CSV), backed by the daemon kinds `ui.transactions.export_csv` /
+`ui.transactions.export_xlsx`. It exports the profile's transactions (wallet
+scope when given), not the screen's transient view filters.
+
 ### Self-verifying XLSX (default)
 
 `reports export-xlsx` appends a verification layer so the reader can reproduce
