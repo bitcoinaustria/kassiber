@@ -1296,15 +1296,18 @@ class CliSmokeTest(unittest.TestCase):
             acq = sheets["Acquisitions"]
             disp = sheets["Disposals"]
 
-            # Pin the load-bearing formula detail: the holdings recompute must
-            # exclude `income` rows on the add side, or recalc silently
-            # double-counts earned coins.
+            # Pin the load-bearing formula detail: the holdings recompute adds
+            # only acquisition + transfer_in (excluding the income lines), or
+            # recalc silently double-counts earned coins. Plain equality
+            # criteria (no "<>income") keep Apple Numbers happy on import.
             with zipfile.ZipFile(xlsx_path) as workbook:
                 names = re.findall(r'<sheet name="([^"]+)"', workbook.read("xl/workbook.xml").decode("utf-8"))
-                control_xml = workbook.read(
-                    f"xl/worksheets/sheet{names.index('Control') + 1}.xml"
-                ).decode("utf-8")
-            self.assertIn("<>income", _unescape_xml(control_xml))
+                control_xml = _unescape_xml(
+                    workbook.read(f"xl/worksheets/sheet{names.index('Control') + 1}.xml").decode("utf-8")
+                )
+            self.assertIn('"acquisition"', control_xml)
+            self.assertIn('"transfer_in"', control_xml)
+            self.assertNotIn("<>income", control_xml)
 
             # Resolve columns by header label (row 2) so the test survives
             # column additions/reordering.

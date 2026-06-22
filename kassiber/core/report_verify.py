@@ -392,14 +392,16 @@ def _sumifs_minus(add_ref, sub_ref, value_key, asset_cell) -> str:
     # Earn/income coins are emitted by the engine TWICE: as an `acquisition`
     # lot (which enters holdings) and as an `income` line (the taxable
     # recognition). The lot already carries the quantity and basis, so the
-    # holdings add-side must exclude the `income` rows to avoid double-counting.
+    # holdings add-side counts only acquisition + transfer_in (explicit equality
+    # criteria — Apple Numbers drops the "<>income" not-equal condition string).
     add_vals = _abs_range(add_ref["sheet_name"], add_ref["col_index"][value_key], add_ref["first_data_row"], add_ref["last_data_row"])
     add_assets = _abs_range(add_ref["sheet_name"], add_ref["col_index"]["asset"], add_ref["first_data_row"], add_ref["last_data_row"])
     add_types = _abs_range(add_ref["sheet_name"], add_ref["col_index"]["entry_type"], add_ref["first_data_row"], add_ref["last_data_row"])
     sub_vals = _abs_range(sub_ref["sheet_name"], sub_ref["col_index"][value_key], sub_ref["first_data_row"], sub_ref["last_data_row"])
     sub_assets = _abs_range(sub_ref["sheet_name"], sub_ref["col_index"]["asset"], sub_ref["first_data_row"], sub_ref["last_data_row"])
     return (
-        f'SUMIFS({add_vals},{add_assets},{asset_cell},{add_types},"<>income")'
+        f'SUMIFS({add_vals},{add_assets},{asset_cell},{add_types},"acquisition")'
+        f'+SUMIFS({add_vals},{add_assets},{asset_cell},{add_types},"transfer_in")'
         f"-SUMIFS({sub_vals},{sub_assets},{asset_cell})"
     )
 
@@ -439,7 +441,8 @@ def _control_columns(add_ref, sub_ref) -> list[dict]:
         sub_assets = _abs_range(sub_ref["sheet_name"], sub_ref["col_index"]["asset"], sub_ref["first_data_row"], sub_ref["last_data_row"])
         cell = asset_cell(colmap, excel_row)
         expr = (
-            f'=SUMIFS({add_vals},{add_assets},{cell},{add_types},"<>income")'
+            f'=SUMIFS({add_vals},{add_assets},{cell},{add_types},"acquisition")'
+            f'+SUMIFS({add_vals},{add_assets},{cell},{add_types},"transfer_in")'
             f"-SUMIFS({sub_vals},{sub_assets},{cell})"
         )
         return expr, float(row.get("cost_basis", 0.0))
@@ -706,17 +709,20 @@ def _write_verify_readme(
 def _write_status_banner(verify_ws, formats, control_ref, sub_ref):
     """Write the workbook-level OK/DIFF banner into the Verify sheet's B2.
 
-    Counts DIFF results across every Control check column plus the Disposals
-    gain check, so a reviewer gets a single one-glance verdict.
+    Counts non-OK results across every Control check column plus the Disposals
+    gain check, so a reviewer gets a single one-glance verdict. Uses
+    ``COUNTA - COUNTIF(..,"OK")`` rather than a ``"DIFF*"`` wildcard, which
+    Apple Numbers drops on import.
     """
     counts = []
-    for check_key in ("qty_check", "basis_check", "avg_check", "mv_check", "unrealized_check", "realized_check"):
+    check_keys = ("qty_check", "basis_check", "avg_check", "mv_check", "unrealized_check", "realized_check")
+    for check_key in check_keys:
         col = control_ref["col_index"][check_key]
         rng = _abs_range(control_ref["sheet_name"], col, control_ref["first_data_row"], control_ref["last_data_row"])
-        counts.append(f'COUNTIF({rng},"DIFF*")')
+        counts.append(f'(COUNTA({rng})-COUNTIF({rng},"OK"))')
     gain_col = sub_ref["col_index"]["gain_check"]
     gain_rng = _abs_range(sub_ref["sheet_name"], gain_col, sub_ref["first_data_row"], sub_ref["last_data_row"])
-    counts.append(f'COUNTIF({gain_rng},"DIFF*")')
+    counts.append(f'(COUNTA({gain_rng})-COUNTIF({gain_rng},"OK"))')
     total = "+".join(counts)
     expr = f'=IF(({total})=0,"ALL CHECKS OK","MISMATCH — see the highlighted check columns")'
     verify_ws.write_formula(STATUS_CELL[0], STATUS_CELL[1], expr, formats["status_ok"], "ALL CHECKS OK")
