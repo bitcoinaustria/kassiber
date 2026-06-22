@@ -483,18 +483,21 @@ def _match_by_refund_link(
     window (a CLTV refund routinely lands well past the 24h heuristic window).
     Same-asset only: a refund returns the asset that was locked up.
     """
+    # txids are hex, so match case-insensitively: sync lowercases
+    # ``swap_refund_funding_txid`` but the lockup's ``external_id`` is stored
+    # verbatim, so normalizing both sides here keeps the join self-contained.
     out_by_external_id: dict[str, list[Mapping]] = {}
     for row in out_rows:
         external_id = _record_get(row, "external_id")
         if external_id:
-            out_by_external_id.setdefault(str(external_id), []).append(row)
+            out_by_external_id.setdefault(str(external_id).lower(), []).append(row)
     pairs: list[tuple[Mapping, Mapping]] = []
     for in_row in in_rows:
         funding_txid = _record_get(in_row, "swap_refund_funding_txid")
         if not funding_txid:
             continue
         in_asset = str(_record_get(in_row, "asset") or "").upper()
-        for out_row in out_by_external_id.get(str(funding_txid), []):
+        for out_row in out_by_external_id.get(str(funding_txid).lower(), []):
             if str(_record_get(out_row, "asset") or "").upper() != in_asset:
                 continue
             pairs.append((out_row, in_row))

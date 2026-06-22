@@ -651,6 +651,29 @@ class RefundLinkMatchingTests(unittest.TestCase):
         self.assertEqual(candidates[0].method, METHOD_HTLC_REFUND)
         self.assertEqual(candidates[0].confidence, CONFIDENCE_EXACT)
 
+    def test_refund_link_matches_case_insensitively(self):
+        # txids are hex; sync lowercases the funding link but external_id is
+        # stored verbatim, so the join must not be case-sensitive.
+        mixed_txid = "AABB" + "cc" * 30  # 64 chars, mixed case
+        lockup = _row(
+            id="lockup",
+            wallet_id="wallet-a",
+            external_id=mixed_txid,
+            direction="outbound",
+            amount=10_000_000,
+        )
+        refund = _row(
+            id="refund",
+            wallet_id="wallet-a",
+            external_id="refund-txid",
+            swap_refund_funding_txid=mixed_txid.lower(),
+            direction="inbound",
+            amount=9_950_000,
+        )
+        candidates = suggest_swap_candidates([lockup, refund])
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].method, METHOD_HTLC_REFUND)
+
     def test_cross_asset_funding_link_not_paired(self):
         # The same-asset guard: a refund returns the asset that was locked, so a
         # link that points at a different-asset outbound is not a swap refund.

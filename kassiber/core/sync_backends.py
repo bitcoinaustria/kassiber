@@ -1382,6 +1382,10 @@ def _extract_refund_funding_txid(vins, witness_items_fn, prev_txid_fn=_vin_prev_
     resolves that vin's prevout txid (``_vin_prev_txid`` for dict vins,
     ``liquid_input_txid`` for embit Liquid vins). Returns ``None`` when no input
     reveals an HTLC refund or the prevout txid is unavailable.
+
+    Links only the first refund input — a Boltz refund spends a single HTLC, so
+    a tx batch-sweeping multiple failed swaps (rare) links one lockup and the
+    rest fall back to the heuristic / manual pairing.
     """
     for vin in vins:
         items = witness_items_fn(vin)
