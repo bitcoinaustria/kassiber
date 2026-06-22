@@ -8,13 +8,17 @@ import re
 import sqlite3
 import threading
 import time
+from collections.abc import Mapping as AbcMapping
 from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, Protocol
 
 from .backends import merge_db_backends
 from .cli.handlers import (
+    apply_transfer_rules,
+    bulk_pair_transfers,
     enrich_wallet_from_btcpay_provenance,
     process_journals,
+    suggest_transfer_candidates,
     sync_configured_btcpay_wallet,
     sync_wallet,
     sync_wallet_from_backend,
@@ -274,6 +278,87 @@ def _journals_process_payload(conn: sqlite3.Connection) -> dict[str, Any]:
     return process_journals(conn, None, None)
 
 
+def _job_scope_refs(conn: sqlite3.Connection, job: Mapping[str, Any]) -> tuple[str, str]:
+    profile_id = str(job.get("profile_id") or "")
+    profile = conn.execute(
+        "SELECT id, workspace_id FROM profiles WHERE id = ?",
+        (profile_id,),
+    ).fetchone()
+    if profile is None:
+        raise AppError("Freshness job profile was not found", code="not_found")
+    return str(profile["workspace_id"]), str(profile["id"])
+
+
+def _transfer_candidate_counts(payload: Mapping[str, Any]) -> dict[str, int]:
+    counts = payload.get("counts") if isinstance(payload.get("counts"), AbcMapping) else {}
+    return {
+        "total": int(counts.get("total") or 0),
+        "exact": int(counts.get("exact") or 0),
+        "strong": int(counts.get("strong") or 0),
+        "conflicts": int(counts.get("conflicts") or 0),
+        "rule_matches": int(counts.get("rule_matches") or 0),
+    }
+
+
+def _skipped_auto_pair_summary(exc: BaseException) -> dict[str, Any]:
+    code = exc.code if isinstance(exc, AppError) else "auto_pair_failed"
+    retryable = bool(exc.retryable) if isinstance(exc, AppError) else True
+    return {
+        "enabled": True,
+        "applied": 0,
+        "rules_applied": 0,
+        "bulk_exact_applied": 0,
+        "skipped": True,
+        "error": {
+            "code": code,
+            "message": "Automatic pairing was skipped; journals were still processed.",
+            "retryable": retryable,
+        },
+    }
+
+
+def _auto_pair_before_journals(
+    conn: sqlite3.Connection,
+    job: Mapping[str, Any],
+) -> dict[str, Any]:
+    workspace_ref, profile_ref = _job_scope_refs(conn, job)
+    before = _transfer_candidate_counts(
+        suggest_transfer_candidates(conn, workspace_ref, profile_ref)
+    )
+    rules = apply_transfer_rules(conn, workspace_ref, profile_ref, commit=False)
+    bulk_exact = bulk_pair_transfers(
+        conn,
+        workspace_ref,
+        profile_ref,
+        confidence="exact",
+        commit=False,
+    )
+    remaining = _transfer_candidate_counts(
+        suggest_transfer_candidates(conn, workspace_ref, profile_ref)
+    )
+    rules_summary = (
+        rules.get("summary") if isinstance(rules.get("summary"), AbcMapping) else {}
+    )
+    bulk_summary = (
+        bulk_exact.get("summary")
+        if isinstance(bulk_exact.get("summary"), AbcMapping)
+        else {}
+    )
+    rules_applied = int(rules_summary.get("count") or 0)
+    bulk_applied = int(bulk_summary.get("count") or 0)
+    return {
+        "enabled": True,
+        "applied": rules_applied + bulk_applied,
+        "rules_applied": rules_applied,
+        "bulk_exact_applied": bulk_applied,
+        "skipped_conflicts": int(bulk_summary.get("skipped_conflicts") or 0),
+        "total_swap_fee_msat": int(rules_summary.get("total_swap_fee_msat") or 0)
+        + int(bulk_summary.get("total_swap_fee_msat") or 0),
+        "before": before,
+        "remaining": remaining,
+    }
+
+
 def _active_profile_row(conn: sqlite3.Connection) -> sqlite3.Row | None:
     context = current_context_snapshot(conn)
     profile_id = context.get("profile_id")
@@ -358,6 +443,7 @@ def _freshness_wallet_source_specs(
     wallet_ref: str | None = None,
     include_rates: bool = True,
     include_journals: bool = True,
+    auto_pair_before_journals: bool = False,
     force_full: bool = False,
 ) -> list[dict[str, Any]]:
     specs: list[dict[str, Any]] = []
@@ -427,13 +513,14 @@ def _freshness_wallet_source_specs(
             }
         )
     if include_journals:
+        journal_payload = {"auto_pair": True} if auto_pair_before_journals else {}
         specs.append(
             {
                 "job_type": core_freshness.JOB_JOURNAL_REFRESH,
                 "source_type": core_freshness.SOURCE_JOURNALS,
                 "source_key": core_freshness.journal_source_key(profile_id),
                 "source_label": "Journal refresh",
-                "payload": {},
+                "payload": journal_payload,
                 "priority": 80,
             }
         )
@@ -670,10 +757,46 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
         progress: Callable[[Mapping[str, Any]], None],
         check_cancelled: Callable[[], None],
     ) -> Mapping[str, Any]:
-        del job
+        job_payload = job.get("payload") if isinstance(job.get("payload"), dict) else {}
+        auto_pair_requested = bool(job_payload.get("auto_pair"))
+        if auto_pair_requested:
+            progress({"phase": "auto_pair"})
+        # Emit the journal-refresh phase BEFORE any auto-pair inserts. run_job's
+        # progress callback COMMITS the connection, so emitting it after the
+        # commit=False pair inserts would commit them prematurely and defeat the
+        # rollback below. After this point no committing progress is issued until
+        # process_journals, so the auto-pair + journal step stays atomic.
         progress({"phase": core_freshness.PHASE_JOURNAL_REFRESH})
-        check_cancelled()
-        payload = _journals_process_payload(conn)
+        auto_pair = None
+        try:
+            check_cancelled()
+            if auto_pair_requested:
+                try:
+                    auto_pair = _auto_pair_before_journals(conn, job)
+                except AppError as exc:
+                    conn.rollback()
+                    _LOGGER.warning(
+                        "Automatic pairing before journal refresh was skipped: %s",
+                        exc.code,
+                    )
+                    auto_pair = _skipped_auto_pair_summary(exc)
+                except Exception as exc:
+                    conn.rollback()
+                    _LOGGER.exception("Automatic pairing before journal refresh was skipped")
+                    auto_pair = _skipped_auto_pair_summary(exc)
+            payload = _journals_process_payload(conn)
+        except Exception:
+            # The auto-pair inserts above are pending (commit=False). If journal
+            # processing fails or is cancelled, run_job's error/cancel handler
+            # would otherwise commit the connection — persisting those pairs (and
+            # the journal invalidation) for a refresh the user was told failed,
+            # so the next retry would see already-paired legs without ever
+            # getting the auto-pair summary. Roll back so the auto-pair + journal
+            # step is atomic: either both land or neither does.
+            conn.rollback()
+            raise
+        if auto_pair is not None:
+            payload["auto_pair"] = auto_pair
         return {"status": "synced", **payload}
 
     return {
@@ -1140,7 +1263,19 @@ def _freshness_run_payload(
     progress_observer: Callable[[Mapping[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     args = raw_args or {}
-    unknown = sorted(set(args) - {"wallet", "all", "rates", "journals", "run", "limit", "force_full"})
+    unknown = sorted(
+        set(args)
+        - {
+            "wallet",
+            "all",
+            "rates",
+            "journals",
+            "auto_pair",
+            "run",
+            "limit",
+            "force_full",
+        }
+    )
     if unknown:
         raise AppError(
             "ui.freshness.run received unsupported arguments",
@@ -1168,6 +1303,14 @@ def _freshness_run_payload(
         policy,
         core_freshness.SOURCE_JOURNALS,
     )
+    auto_pair = args.get("auto_pair")
+    if auto_pair is not None and not isinstance(auto_pair, bool):
+        raise AppError(
+            "ui.freshness.run auto_pair must be a boolean",
+            code="validation",
+            retryable=False,
+        )
+    auto_pair = bool(auto_pair)
     force_full = args.get("force_full")
     if force_full is not None and not isinstance(force_full, bool):
         raise AppError("ui.freshness.run force_full must be a boolean", code="validation", retryable=False)
@@ -1181,6 +1324,7 @@ def _freshness_run_payload(
         wallet_ref=None if sync_all else wallet.strip(),
         include_rates=include_rates,
         include_journals=include_journals,
+        auto_pair_before_journals=auto_pair,
         force_full=force_full,
     )
     enqueued = _enqueue_freshness_jobs(conn, profile["id"], specs)

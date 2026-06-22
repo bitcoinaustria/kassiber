@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DaemonAuthRequiredError,
+  DaemonRequestError,
   daemonMutationKey,
   invalidatedDaemonQueryKindsForMutation,
+  isRetryableDaemonError,
   mutationAdvancesDaemonSession,
   parseDaemonAuthRequiredEventDetail,
+  retryDaemonQuery,
+  retryRetryableDaemonError,
   shouldHandleDaemonAuthRequiredEvent,
 } from "./client";
 import type { DaemonEnvelope } from "./transport";
@@ -53,6 +58,45 @@ describe("daemon auth-required event detail", () => {
         7,
       ),
     ).toBe(false);
+  });
+});
+
+describe("daemon query retry policy", () => {
+  const busyError = new DaemonRequestError("ui.overview.snapshot", {
+    kind: "error",
+    schema_version: 1,
+    error: { code: "daemon_busy", message: "busy", retryable: true },
+  });
+  const hardError = new DaemonRequestError("ui.overview.snapshot", {
+    kind: "error",
+    schema_version: 1,
+    error: { code: "validation", message: "bad input", retryable: false },
+  });
+  const authError = new DaemonAuthRequiredError(authEnvelope);
+
+  it("classifies only daemon-flagged retryable errors as retryable", () => {
+    expect(isRetryableDaemonError(busyError)).toBe(true);
+    expect(isRetryableDaemonError(hardError)).toBe(false);
+    expect(isRetryableDaemonError(authError)).toBe(false);
+    expect(isRetryableDaemonError(new Error("plain"))).toBe(false);
+  });
+
+  it("never retries an auth-required prompt", () => {
+    expect(retryDaemonQuery(0, authError)).toBe(false);
+    expect(retryRetryableDaemonError(0, authError)).toBe(false);
+  });
+
+  it("rides out a transient busy daemon a few extra times", () => {
+    expect(retryDaemonQuery(4, busyError)).toBe(true);
+    expect(retryDaemonQuery(5, busyError)).toBe(false);
+    expect(retryRetryableDaemonError(4, busyError)).toBe(true);
+    expect(retryRetryableDaemonError(5, busyError)).toBe(false);
+  });
+
+  it("keeps the prior 3x policy for hard errors, and opt-out panels never retry them", () => {
+    expect(retryDaemonQuery(2, hardError)).toBe(true);
+    expect(retryDaemonQuery(3, hardError)).toBe(false);
+    expect(retryRetryableDaemonError(0, hardError)).toBe(false);
   });
 });
 

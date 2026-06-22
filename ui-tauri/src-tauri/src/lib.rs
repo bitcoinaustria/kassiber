@@ -146,6 +146,9 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.workspace.overview.snapshot",
     "ui.transactions.list",
     "ui.transactions.metadata.update",
+    "ui.transactions.resolve",
+    "ui.transactions.history",
+    "ui.transactions.history.revert",
     "ui.attachments.list",
     "ui.attachments.add",
     "ui.attachments.copy",
@@ -306,12 +309,25 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
 /// "<request_kind>.tool_call", etc.) before the terminal envelope. The supervisor
 /// forwards intermediate records to the webview as Tauri events
 /// `daemon://stream` and switches to a per-record inactivity
-/// timeout. Other kinds keep the existing total-budget behavior.
+/// timeout. Other kinds keep the existing total-budget (15s) behavior.
+///
+/// This list also covers long-running, result-bearing kinds the UI invokes that
+/// run heavy sync/RP2 work synchronously on the daemon's single serial loop.
+/// They may not emit intermediate records yet, but they legitimately exceed the
+/// 15s non-streaming budget, so the inactivity timeout lets a sub-window run
+/// finish and return its result instead of the caller being abandoned at 15s. A
+/// fully-silent run beyond the inactivity window returns `daemon_busy` to the
+/// caller without killing the shared daemon; the UX follow-up is to emit real
+/// progress from those handlers. `ui.maintenance.run` is intentionally absent:
+/// it is only ever an AI tool call run inside `ai.chat`, never a top-level
+/// supervisor request, so its classification here would be inert.
 const STREAMING_DAEMON_KINDS: &[&str] = &[
     "ai.chat",
     "ui.wallets.sync",
     "ui.freshness.run",
     "ui.workspace.freshness.run",
+    "ui.journals.process",
+    "ui.rates.rebuild",
 ];
 
 // Daemon kinds that exercise the AI runtime (model calls, chat sessions, tool
@@ -2706,6 +2722,24 @@ mod tests {
             "ui.saved_views.list",
             "ui.saved_views.create",
             "ui.saved_views.delete",
+        ];
+        for kind in required {
+            assert!(
+                ALLOWED_DAEMON_KINDS.contains(kind),
+                "daemon kind missing from Tauri allowlist: {kind}"
+            );
+        }
+    }
+
+    #[test]
+    fn transaction_detail_daemon_kinds_are_in_allowlist() {
+        // AppShell tx resolution, the transactions table, and the overview tx
+        // detail drive these through the supervisor; packaged desktop mode
+        // rejects any unlisted kind (these were missing, causing kind_not_allowed).
+        let required: &[&str] = &[
+            "ui.transactions.resolve",
+            "ui.transactions.history",
+            "ui.transactions.history.revert",
         ];
         for kind in required {
             assert!(

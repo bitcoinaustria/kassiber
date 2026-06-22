@@ -848,8 +848,14 @@ def _mark_error(
     # free-text value. The RAM log ring has no render step, so the message must
     # never reach it.
     error_code = exc.code or "freshness_job_failed"
+    # The exception TYPE (set by run_job for swallowed non-AppErrors) is a code
+    # identifier, never runtime data, so it is safe for the RAM log ring and
+    # makes an otherwise-opaque "freshness_job_failed" diagnosable.
+    error_class = exc.details.get("error_class") if isinstance(exc.details, dict) else None
     if cooldown_until:
         _LOGGER.warning("Freshness %s rate-limited (%s)", source_name, error_code)
+    elif error_class:
+        _LOGGER.error("Freshness %s failed (%s; %s)", source_name, error_code, error_class)
     else:
         _LOGGER.error("Freshness %s failed (%s)", source_name, error_code)
     now = now_iso()
@@ -957,6 +963,10 @@ def run_job(
         conn.commit()
         return updated
     except Exception as exc:
+        # Carry the exception's fully-qualified TYPE (never str(exc), which can
+        # hold backend URLs/credentials) so a swallowed non-AppError failure —
+        # e.g. an RP2/Liquid balance error during the journal refresh — is
+        # diagnosable from the log instead of a bare "freshness_job_failed".
         updated = _mark_error(
             conn,
             job,
@@ -964,6 +974,9 @@ def run_job(
                 str(exc) or exc.__class__.__name__,
                 code="freshness_job_failed",
                 retryable=True,
+                details={
+                    "error_class": f"{exc.__class__.__module__}.{exc.__class__.__qualname__}"
+                },
             ),
         )
         conn.commit()

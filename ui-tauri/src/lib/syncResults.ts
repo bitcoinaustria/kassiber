@@ -46,11 +46,41 @@ export interface FreshnessJobSummary {
   job_type?: string;
   source_label?: string;
   status?: string;
+  result?:
+    | (Record<string, unknown> & {
+        auto_pair?: FreshnessAutoPairSummary | null;
+      })
+    | null;
   error?: {
     code?: string;
     message?: string;
     hint?: string;
   } | null;
+}
+
+export interface FreshnessAutoPairSummary {
+  enabled?: boolean;
+  applied?: number;
+  rules_applied?: number;
+  bulk_exact_applied?: number;
+  skipped_conflicts?: number;
+  total_swap_fee_msat?: number;
+  skipped?: boolean;
+  error?: {
+    code?: string;
+    message?: string;
+    retryable?: boolean;
+  } | null;
+  before?: FreshnessTransferCandidateCounts | null;
+  remaining?: FreshnessTransferCandidateCounts | null;
+}
+
+export interface FreshnessTransferCandidateCounts {
+  total?: number;
+  exact?: number;
+  strong?: number;
+  conflicts?: number;
+  rule_matches?: number;
 }
 
 export interface FreshnessRunData {
@@ -172,9 +202,64 @@ export function freshnessRunNeedsAttention(data: FreshnessRunData | null | undef
   const summary = data?.summary;
   return (
     completed.some((job) => ["error", "cancelled"].includes(job.status ?? "")) ||
+    completed.some(
+      (job) => job.job_type === "journal_refresh" && autoPairNeedsAttention(job),
+    ) ||
     sources.some((source) => Boolean(source.blocking_reports) || source.status === "failed") ||
     Boolean((summary?.failed ?? 0) > 0 || (summary?.blocking_reports ?? 0) > 0)
   );
+}
+
+function positiveInteger(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return 0;
+  return Math.floor(value);
+}
+
+export function freshnessRunQuarantineCount(
+  data: FreshnessRunData | null | undefined,
+): number {
+  return (data?.completed ?? []).reduce((total, job) => {
+    if (job.job_type !== "journal_refresh") return total;
+    const result = job.result;
+    if (!result || typeof result !== "object") return total;
+    return (
+      total +
+      Math.max(
+        positiveInteger(result.quarantined),
+        positiveInteger(result.quarantine_count),
+      )
+    );
+  }, 0);
+}
+
+function autoPairSummary(job: FreshnessJobSummary): FreshnessAutoPairSummary | null {
+  const result = job.result;
+  const summary = result?.auto_pair;
+  if (!summary || typeof summary !== "object") return null;
+  return summary;
+}
+
+function autoPairNeedsAttention(job: FreshnessJobSummary): boolean {
+  const summary = autoPairSummary(job);
+  return Boolean(summary?.skipped || summary?.error);
+}
+
+export function freshnessRunAutoPairCount(
+  data: FreshnessRunData | null | undefined,
+): number {
+  return (data?.completed ?? []).reduce((total, job) => {
+    if (job.job_type !== "journal_refresh") return total;
+    return total + positiveInteger(autoPairSummary(job)?.applied);
+  }, 0);
+}
+
+export function freshnessRunTransferReviewCount(
+  data: FreshnessRunData | null | undefined,
+): number {
+  return (data?.completed ?? []).reduce((total, job) => {
+    if (job.job_type !== "journal_refresh") return total;
+    return total + positiveInteger(autoPairSummary(job)?.remaining?.total);
+  }, 0);
 }
 
 export function summarizeFreshnessRun(data: FreshnessRunData | null | undefined): string {
@@ -188,16 +273,35 @@ export function summarizeFreshnessRun(data: FreshnessRunData | null | undefined)
   const done = completed.filter((job) => job.status === "done").length;
   const rateLimited = completed.filter((job) => job.status === "rate_limited").length;
   const failed = completed.filter((job) => ["error", "cancelled"].includes(job.status ?? "")).length;
+  const quarantineCount = freshnessRunQuarantineCount(data);
+  const autoPaired = freshnessRunAutoPairCount(data);
+  const transferReviewCount = freshnessRunTransferReviewCount(data);
+  const autoPairProblem = completed.find(
+    (job) => job.job_type === "journal_refresh" && autoPairNeedsAttention(job),
+  );
   const parts = [
     done ? `${done} completed` : null,
     rateLimited ? `${rateLimited} cooling down` : null,
     failed ? `${failed} needs attention` : null,
+    autoPairProblem ? "automatic pairing skipped" : null,
+    autoPaired ? `${autoPaired} pair${autoPaired === 1 ? "" : "s"} applied` : null,
+    transferReviewCount
+      ? `${transferReviewCount} swap/transfer candidate${transferReviewCount === 1 ? "" : "s"} to review`
+      : null,
+    quarantineCount
+      ? `${quarantineCount} quarantined transaction${quarantineCount === 1 ? "" : "s"}`
+      : null,
   ].filter(Boolean);
   const summary = parts.join(", ") || "No source changes returned.";
   const firstProblem = completed.find((job) => job.status && job.status !== "done");
+  const autoPairDetail = autoPairProblem
+    ? autoPairSummary(autoPairProblem)?.error?.message
+    : null;
   const detail = firstProblem?.error?.message || firstProblem?.error?.hint;
   return firstProblem && detail
     ? `${summary}: ${firstProblem.source_label ?? "Source"}: ${detail}`
+    : autoPairDetail
+      ? `${summary}: ${autoPairDetail}`
     : summary;
 }
 

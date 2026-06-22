@@ -9,7 +9,7 @@
 import { useMemo, useState } from "react";
 import { TrendingUp, Zap } from "lucide-react";
 
-import { useDaemon } from "@/daemon/client";
+import { useDaemon, retryRetryableDaemonError } from "@/daemon/client";
 import {
   Card,
   CardContent,
@@ -132,7 +132,7 @@ function LightningProfitabilityBody({
   const profitability = useDaemon<LightningProfitabilityReport>(
     "ui.reports.lightning_profitability",
     { connection: connectionId },
-    { retry: false },
+    { retry: retryRetryableDaemonError },
   );
   if (profitability.isLoading) {
     return (

@@ -81,6 +81,25 @@
       "couldNotOpenTransactionBody": "Kassiber konnte nicht zum Buch dieser Transaktion wechseln."
     }
   },
+  "bookRefresh": {
+    "refreshInProgressTitle": "Buch-Aktualisierung läuft",
+    "rescanInProgressTitle": "Buch-Rescan läuft",
+    "refreshStartedTitle": "Buch-Aktualisierung gestartet",
+    "rescanStartedTitle": "Buch-Rescan gestartet",
+    "refreshStartedBody": "Kassiber aktualisiert konfigurierte Quellen und Journale.",
+    "rescanStartedBody": "Kassiber scannt konfigurierte Quellen und Journale neu.",
+    "configuredSourcesQueued": "Konfigurierte Quellen eingereiht",
+    "journalsIncluded": "Journale eingeschlossen",
+    "autoPairIncluded": "Sicheres Auto-Pairing eingeschlossen",
+    "needsAttentionTitle": "Buch-Aktualisierung braucht Aufmerksamkeit",
+    "quarantineTitle_one": "{{count}} Transaktion in Quarantäne prüfen",
+    "quarantineTitle_other": "{{count}} Transaktionen in Quarantäne prüfen",
+    "transferReviewTitle_one": "{{count}} Swap-/Transfer-Kandidat prüfen",
+    "transferReviewTitle_other": "{{count}} Swap-/Transfer-Kandidaten prüfen",
+    "finishedTitle": "Buch-Aktualisierung abgeschlossen",
+    "failedTitle": "Buch-Aktualisierung fehlgeschlagen",
+    "failedBody": "Buch-Aktualisierung fehlgeschlagen"
+  },
   "stats": {
     "btcPrice": "BTC-Kurs",
     "refreshing": "Wird aktualisiert…",

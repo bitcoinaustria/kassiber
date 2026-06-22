@@ -203,6 +203,52 @@ class FreshnessTest(unittest.TestCase):
             captured.output,
         )
 
+    def test_swallowed_non_apperror_logs_exception_type(self):
+        # A non-AppError that escapes a handler's own guards (e.g. an RP2/Liquid
+        # balance error during the journal refresh) is wrapped as the opaque
+        # "freshness_job_failed". The TYPE must be captured — logged and stored —
+        # so the failure is diagnosable, while the raw message (which can carry
+        # operational data) must still never reach the ring.
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            job_type=freshness.JOB_ONCHAIN_WALLET,
+            source_key="onchain_wallet:cold",
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Journal refresh",
+            priority=10,
+        )
+        conn.commit()
+
+        def boom(conn, job, progress, check_cancelled):
+            raise ValueError("balance went negative https://user:pw@node/secret")
+
+        with self.assertLogs("kassiber.core.freshness", level="ERROR") as captured:
+            results = freshness.run_due_jobs(
+                conn,
+                {freshness.JOB_ONCHAIN_WALLET: boom},
+                profile_id=profile_id,
+                limit=1,
+            )
+
+        self.assertEqual(results[0]["status"], freshness.JOB_ERROR)
+        # The fully-qualified exception type reaches the ring...
+        self.assertTrue(
+            any("builtins.ValueError" in line for line in captured.output),
+            captured.output,
+        )
+        # ...the raw message (with its embedded URL/secret) does not.
+        self.assertFalse(
+            any("balance went negative" in line for line in captured.output),
+            captured.output,
+        )
+        # ...and it is persisted in the job error for diagnostics/UI.
+        self.assertEqual(
+            results[0]["error"]["details"]["error_class"], "builtins.ValueError"
+        )
+
     def test_failed_job_error_message_url_is_scrubbed_in_ui_snapshot(self):
         # A backend exception message can embed the backend URL (and inline
         # credentials) — httpx ConnectError / HTTPSConnectionPool strings do.
@@ -705,6 +751,186 @@ class FreshnessTest(unittest.TestCase):
             freshness.SOURCE_RATES,
             {job["source_type"] for job in payload["enqueued"]},
         )
+
+    def test_freshness_run_can_request_auto_pair_before_journals(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        set_setting(conn, "context_workspace", "ws")
+        set_setting(conn, "context_profile", profile_id)
+
+        payload = daemon_freshness._freshness_run_payload(
+            conn,
+            {},
+            {
+                "all": True,
+                "rates": False,
+                "journals": True,
+                "auto_pair": True,
+                "run": False,
+            },
+        )
+
+        journal_jobs = [
+            job
+            for job in payload["enqueued"]
+            if job["job_type"] == freshness.JOB_JOURNAL_REFRESH
+        ]
+        self.assertEqual(len(journal_jobs), 1)
+        self.assertEqual(journal_jobs[0]["payload"], {"auto_pair": True})
+
+    def test_journal_freshness_handler_auto_pairs_before_processing(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        progress = []
+        handler = daemon_freshness._freshness_handlers({})[
+            freshness.JOB_JOURNAL_REFRESH
+        ]
+
+        with patch(
+            "kassiber.daemon_freshness._auto_pair_before_journals",
+            return_value={"enabled": True, "applied": 2, "remaining": {"total": 1}},
+        ) as auto_pair, patch(
+            "kassiber.daemon_freshness._journals_process_payload",
+            return_value={"quarantined": 0, "entries_created": 4},
+        ) as process:
+            result = handler(
+                conn,
+                {"profile_id": profile_id, "payload": {"auto_pair": True}},
+                progress.append,
+                lambda: None,
+            )
+
+        self.assertEqual(
+            [item["phase"] for item in progress],
+            ["auto_pair", "journal_refresh"],
+        )
+        auto_pair.assert_called_once()
+        process.assert_called_once()
+        self.assertEqual(result["auto_pair"]["applied"], 2)
+        self.assertEqual(result["entries_created"], 4)
+
+    def test_journal_freshness_handler_continues_when_auto_pair_fails(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        progress = []
+        handler = daemon_freshness._freshness_handlers({})[
+            freshness.JOB_JOURNAL_REFRESH
+        ]
+
+        with patch(
+            "kassiber.daemon_freshness._auto_pair_before_journals",
+            side_effect=AppError("profile missing", code="not_found"),
+        ) as auto_pair, patch(
+            "kassiber.daemon_freshness._journals_process_payload",
+            return_value={"quarantined": 0, "entries_created": 4},
+        ) as process:
+            result = handler(
+                conn,
+                {"profile_id": profile_id, "payload": {"auto_pair": True}},
+                progress.append,
+                lambda: None,
+            )
+
+        self.assertEqual(
+            [item["phase"] for item in progress],
+            ["auto_pair", "journal_refresh"],
+        )
+        auto_pair.assert_called_once()
+        process.assert_called_once()
+        self.assertEqual(result["entries_created"], 4)
+        self.assertEqual(result["auto_pair"]["applied"], 0)
+        self.assertTrue(result["auto_pair"]["skipped"])
+        self.assertEqual(result["auto_pair"]["error"]["code"], "not_found")
+
+    def test_journal_freshness_handler_rolls_back_auto_pairs_when_processing_fails(self):
+        # Auto-pair inserts are commit=False (pending). If journal processing
+        # then fails, run_job commits the connection on its way to marking the
+        # job failed — which must NOT persist the pending pairs. The handler
+        # rolls back so the pair + journal step is atomic.
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        handler = daemon_freshness._freshness_handlers({})[
+            freshness.JOB_JOURNAL_REFRESH
+        ]
+
+        def seed_pending_pair(conn_arg, _job):
+            # Stand in for a commit=False auto-pair insert left pending.
+            conn_arg.execute(
+                "INSERT INTO settings(key, value) VALUES('pending-auto-pair', '1')"
+            )
+            return {"enabled": True, "applied": 1, "remaining": {"total": 0}}
+
+        # run_job's real progress callback COMMITS the connection on every
+        # phase emission. Mimic that here, so the test catches a phase commit
+        # landing *after* the pending auto-pair inserts (which would make the
+        # rollback unable to undo them).
+        def committing_progress(_payload):
+            conn.commit()
+
+        with patch(
+            "kassiber.daemon_freshness._auto_pair_before_journals",
+            side_effect=seed_pending_pair,
+        ), patch(
+            "kassiber.daemon_freshness._journals_process_payload",
+            side_effect=AppError("journal boom", code="tax_failed"),
+        ):
+            with self.assertRaises(AppError):
+                handler(
+                    conn,
+                    {"profile_id": profile_id, "payload": {"auto_pair": True}},
+                    committing_progress,
+                    lambda: None,
+                )
+
+        # The pending auto-pair write must have been rolled back, not left for
+        # run_job's error handler to commit.
+        row = conn.execute(
+            "SELECT value FROM settings WHERE key = 'pending-auto-pair'"
+        ).fetchone()
+        self.assertIsNone(row)
+
+    def test_auto_pair_before_journals_returns_applied_and_remaining_counts(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        before = {"counts": {"total": 4, "exact": 2, "strong": 2, "conflicts": 1}}
+        remaining = {"counts": {"total": 1, "exact": 0, "strong": 1, "conflicts": 1}}
+
+        with patch(
+            "kassiber.daemon_freshness.suggest_transfer_candidates",
+            side_effect=[before, remaining],
+        ), patch(
+            "kassiber.daemon_freshness.apply_transfer_rules",
+            return_value={"summary": {"count": 1, "total_swap_fee_msat": 1200}},
+        ) as rules, patch(
+            "kassiber.daemon_freshness.bulk_pair_transfers",
+            return_value={
+                "summary": {
+                    "count": 2,
+                    "skipped_conflicts": 1,
+                    "total_swap_fee_msat": 800,
+                }
+            },
+        ) as bulk:
+            summary = daemon_freshness._auto_pair_before_journals(
+                conn,
+                {"profile_id": profile_id},
+            )
+
+        rules.assert_called_once_with(conn, "ws", profile_id, commit=False)
+        bulk.assert_called_once_with(
+            conn,
+            "ws",
+            profile_id,
+            confidence="exact",
+            commit=False,
+        )
+        self.assertEqual(summary["applied"], 3)
+        self.assertEqual(summary["rules_applied"], 1)
+        self.assertEqual(summary["bulk_exact_applied"], 2)
+        self.assertEqual(summary["skipped_conflicts"], 1)
+        self.assertEqual(summary["total_swap_fee_msat"], 2000)
+        self.assertEqual(summary["before"]["total"], 4)
+        self.assertEqual(summary["remaining"]["total"], 1)
 
     def test_workspace_freshness_run_honors_each_book_market_rate_policy(self):
         conn = self._db()
