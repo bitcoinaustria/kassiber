@@ -1390,9 +1390,27 @@ function ConnectionDetailView({
                 className={cn("size-4", isWalletSyncRunning && "animate-spin")}
                 aria-hidden="true"
               />
-              {isWalletSyncRunning
-                ? t("detail.refreshing")
-                : t("detail.samourai.refreshSource")}
+              {/* Reserve the widest label's width so the spinning icon can't
+                  ghost on a mid-refresh resize — see the header Refresh button. */}
+              <span className="grid justify-items-center">
+                <span
+                  aria-hidden="true"
+                  className="invisible col-start-1 row-start-1"
+                >
+                  {t("detail.samourai.refreshSource")}
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="invisible col-start-1 row-start-1"
+                >
+                  {t("detail.refreshing")}
+                </span>
+                <span className="col-start-1 row-start-1">
+                  {isWalletSyncRunning
+                    ? t("detail.refreshing")
+                    : t("detail.samourai.refreshSource")}
+                </span>
+              </span>
             </Button>
           </div>
         </Card>
@@ -1512,9 +1530,28 @@ function ConnectionDetailView({
                       )}
                       aria-hidden="true"
                     />
-                    {isWalletSyncRunning
-                      ? t("detail.refreshing")
-                      : t("detail.recentTransactions.refreshNow")}
+                    {/* Reserve the widest label's width so the spinning icon
+                        can't ghost on a mid-refresh resize — see the header
+                        Refresh button. */}
+                    <span className="grid justify-items-center">
+                      <span
+                        aria-hidden="true"
+                        className="invisible col-start-1 row-start-1"
+                      >
+                        {t("detail.recentTransactions.refreshNow")}
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className="invisible col-start-1 row-start-1"
+                      >
+                        {t("detail.refreshing")}
+                      </span>
+                      <span className="col-start-1 row-start-1">
+                        {isWalletSyncRunning
+                          ? t("detail.refreshing")
+                          : t("detail.recentTransactions.refreshNow")}
+                      </span>
+                    </span>
                   </Button>
                   <Button asChild type="button" variant="outline" size="sm">
                     <Link to="/imports">
