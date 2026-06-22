@@ -325,6 +325,8 @@ export function BirdsEyeView({
       tone: "warning",
       dedupeKey: `workspace-refresh-${workspaceId}`,
       progress: { indeterminate: true, label: to("birdsEye.toast.starting") },
+      // Clear any target left on the deduped notification by a prior run.
+      target: undefined,
     });
     refreshWorkspace.mutate(
       { workspace_id: workspaceId, journals: true, run: true },
@@ -349,6 +351,11 @@ export function BirdsEyeView({
             tone: needsAttention ? "warning" : "success",
             dedupeKey: `workspace-refresh-${workspaceId}`,
             progress: undefined,
+            // Route by an explicit, language-independent target: a warning-tone
+            // "needs attention" title isn't recognized by the English keyword
+            // router (and warning tone has no error fallback), so a localized
+            // title would otherwise be non-clickable.
+            target: needsAttention ? "/logs" : undefined,
           } as const;
           if (noticeRef.current) {
             updateNotification(noticeRef.current, notification);
@@ -367,6 +374,9 @@ export function BirdsEyeView({
             tone: "error",
             dedupeKey: `workspace-refresh-${workspaceId}`,
             progress: undefined,
+            // Failures go to the logs (settings when dev tools are off); set it
+            // explicitly so a stale target from a prior run can't bypass that.
+            target: "/logs",
           } as const;
           if (noticeRef.current) {
             updateNotification(noticeRef.current, notification);
