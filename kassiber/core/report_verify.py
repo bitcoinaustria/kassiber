@@ -295,6 +295,8 @@ def _acquisitions_columns() -> list[dict]:
         {"key": "taxable", "label": "Taxable", "fmt": "int"},
         {"key": "pricing_source", "label": "Pricing Source", "fmt": "text"},
         {"key": "pricing_quality", "label": "Pricing Quality", "fmt": "text"},
+        {"key": "description", "label": "Description", "fmt": "text"},
+        {"key": "tags", "label": "Tags", "fmt": "text"},
     ]
 
 
@@ -315,6 +317,8 @@ def _disposals_columns() -> list[dict]:
         {"key": "taxable", "label": "Taxable", "fmt": "int"},
         {"key": "pricing_source", "label": "Pricing Source", "fmt": "text"},
         {"key": "pricing_quality", "label": "Pricing Quality", "fmt": "text"},
+        {"key": "description", "label": "Description", "fmt": "text"},
+        {"key": "tags", "label": "Tags", "fmt": "text"},
     ]
 
 
@@ -597,6 +601,15 @@ def _verify_readme_rows(
                 "'coarse_fallback' or 'missing' used an estimated price, not an exact "
                 "quote. The Control sheet shows, per asset, which market rate valued "
                 "your holdings, its source, and when it was captured.",
+                "text",
+            ),
+            ("Notes, tags & evidence", "subheader"),
+            (
+                "Each Acquisitions/Disposals row shows its description and tags. The "
+                "main report's Transactions sheet is the full per-transaction record: "
+                "description, note, counterparty, tags, and an Attachments column "
+                "listing every linked file name and URL. Match a ledger row to its "
+                "evidence by the Transaction ID.",
                 "text",
             ),
             ("Missing rows", "subheader"),

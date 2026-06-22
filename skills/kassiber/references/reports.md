@@ -278,6 +278,12 @@ every figure in Excel/LibreOffice rather than trusting the static numbers:
   classify, with reason and detail, so the reader can see what is deliberately
   excluded from every figure.
 
+The main report's **Transactions** sheet is the full per-transaction record:
+description, note, counterparty, tags, and an **Attachments** column listing
+every linked file name and URL. The Acquisitions/Disposals ledgers also carry
+each row's description and tags; match a ledger row to its evidence by the
+Transaction ID.
+
 Reconciliation is per asset across the whole profile (Bitcoin accounting is
 pooled per asset across wallets; per-wallet cost basis is an allocation).
 Per-disposal cost basis under FIFO/LIFO/HIFO/LOFO is engine-selected and cannot

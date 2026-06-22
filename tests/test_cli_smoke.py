@@ -1191,6 +1191,12 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIn("Pricing Source", shared)  # provenance column on the ledgers
         self.assertIn("Rate Source", shared)  # rate provenance on Control
         self.assertIn("ALL CHECKS OK", sheets["Verify"])  # workbook-level status banner
+        # Per-transaction context on the value-layer Transactions sheet.
+        self.assertIn("Attachments", shared)
+        self.assertIn("Tags", shared)
+        self.assertIn("Counterparty", shared)
+        # The URL attachment added in the attachments lifecycle is surfaced.
+        self.assertIn("docs.google.com", shared)
 
         # Cached results must equal Kassiber's numbers: each Disposals gain cell
         # (column J = proceeds - basis) must match the stored engine gain
@@ -1364,6 +1370,10 @@ class CliSmokeTest(unittest.TestCase):
             # Rate provenance is surfaced on the Control sheet.
             self.assertIn("Rate Source", ctrl_h)
             self.assertIn("Rate As Of", ctrl_h)
+            # Description + tags accompany each ledger row.
+            for headers in (acq_h, disp_h):
+                self.assertIn("Description", headers)
+                self.assertIn("Tags", headers)
 
     def test_07aa_pdf_writer_reports_actual_page_count(self):
         from kassiber.pdf_report import write_text_pdf

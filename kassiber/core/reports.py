@@ -869,6 +869,55 @@ def _wallet_scope_sql(column: str, wallets: Sequence[Mapping[str, Any]]) -> tupl
     return f"{column} IN ({placeholders})", ids
 
 
+def _format_attachment_reference(row):
+    label = (row["label"] or "").strip()
+    if str(row["kind"]).lower() == "url":
+        ref = (row["url"] or "").strip() or "(url)"
+        return f"{label}: {ref}" if label else ref
+    name = (row["filename"] or "").strip() or label or "(file)"
+    return f"{name} ({label})" if label and label != name else name
+
+
+def _tags_by_transaction(conn, tx_where, tx_params):
+    rows = conn.execute(
+        f"""
+        SELECT tt.transaction_id AS tx_id, tg.code AS code
+        FROM transaction_tags tt
+        JOIN tags tg ON tg.id = tt.tag_id
+        JOIN transactions t ON t.id = tt.transaction_id
+        WHERE {tx_where} AND t.excluded = 0
+        ORDER BY tg.code ASC
+        """,
+        tx_params,
+    ).fetchall()
+    grouped = {}
+    for row in rows:
+        grouped.setdefault(row["tx_id"], []).append(row["code"])
+    return {tx_id: ", ".join(codes) for tx_id, codes in grouped.items()}
+
+
+def _attachments_by_transaction(conn, tx_where, tx_params):
+    rows = conn.execute(
+        f"""
+        SELECT
+            a.transaction_id AS tx_id,
+            a.attachment_type AS kind,
+            COALESCE(a.label, '') AS label,
+            COALESCE(a.original_filename, '') AS filename,
+            COALESCE(a.source_url, '') AS url
+        FROM attachments a
+        JOIN transactions t ON t.id = a.transaction_id
+        WHERE {tx_where} AND t.excluded = 0
+        ORDER BY a.created_at ASC
+        """,
+        tx_params,
+    ).fetchall()
+    grouped = {}
+    for row in rows:
+        grouped.setdefault(row["tx_id"], []).append(_format_attachment_reference(row))
+    return {tx_id: " | ".join(refs) for tx_id, refs in grouped.items()}
+
+
 def _report_query_rows(conn, profile, wallet=None):
     tx_filters = ["t.profile_id = ?"]
     tx_params = [profile["id"]]
@@ -979,9 +1028,10 @@ def _report_query_rows(conn, profile, wallet=None):
         tx_params,
     ).fetchall()
 
-    transactions = conn.execute(
+    transaction_rows = conn.execute(
         f"""
         SELECT
+            t.id AS row_id,
             t.occurred_at,
             w.label AS wallet,
             COALESCE(t.external_id, '') AS transaction_id,
@@ -989,7 +1039,9 @@ def _report_query_rows(conn, profile, wallet=None):
             t.asset,
             t.amount,
             t.fee,
-            COALESCE(t.description, '') AS description
+            COALESCE(t.description, '') AS description,
+            COALESCE(t.note, '') AS note,
+            COALESCE(t.counterparty, '') AS counterparty
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         WHERE {tx_where} AND t.excluded = 0
@@ -997,6 +1049,16 @@ def _report_query_rows(conn, profile, wallet=None):
         """,
         tx_params,
     ).fetchall()
+    tags_by_tx = _tags_by_transaction(conn, tx_where, tx_params)
+    attachments_by_tx = _attachments_by_transaction(conn, tx_where, tx_params)
+    transactions = [
+        {
+            **dict(row),
+            "tags": tags_by_tx.get(row["row_id"], ""),
+            "attachments": attachments_by_tx.get(row["row_id"], ""),
+        }
+        for row in transaction_rows
+    ]
 
     pair_filters = ["p.profile_id = ?", "p.deleted_at IS NULL"]
     pair_params = [profile["id"]]
@@ -4066,6 +4128,10 @@ def _generic_report_transaction_rows(context):
                 "fee": float(msat_to_btc(fee_msat)),
                 "fee_msat": fee_msat,
                 "description": row["description"],
+                "note": row.get("note", ""),
+                "counterparty": row.get("counterparty", ""),
+                "tags": row.get("tags", ""),
+                "attachments": row.get("attachments", ""),
             }
         )
     return rows
@@ -4244,6 +4310,10 @@ def _generic_report_section_specs(context):
                 "fee",
                 "fee_msat",
                 "description",
+                "note",
+                "counterparty",
+                "tags",
+                "attachments",
             ),
             "rows": _generic_report_transaction_rows(context),
         },
@@ -4446,6 +4516,7 @@ def _build_verification_data(conn, profile, hooks: ReportHooks):
             COALESCE(je.cost_basis, 0) AS cost_basis,
             COALESCE(je.proceeds, 0) AS proceeds,
             COALESCE(je.gain_loss, 0) AS gain_loss,
+            COALESCE(je.description, '') AS description,
             COALESCE(je.pricing_source_kind, '') AS pricing_source,
             COALESCE(je.pricing_quality, '') AS pricing_quality,
             CASE
@@ -4462,6 +4533,8 @@ def _build_verification_data(conn, profile, hooks: ReportHooks):
         (profile_id,),
     ).fetchall()
 
+    ledger_tags = _tags_by_transaction(conn, "t.profile_id = ?", [profile_id])
+
     acquisitions = []
     disposals = []
     for row in ledger_rows:
@@ -4474,6 +4547,8 @@ def _build_verification_data(conn, profile, hooks: ReportHooks):
             "entry_type": row["entry_type"],
             "quantity_msat": magnitude,
             "quantity": float(msat_to_btc(magnitude)),
+            "description": row["description"],
+            "tags": ledger_tags.get(row["transaction_id"], ""),
             "pricing_source": row["pricing_source"],
             "pricing_quality": row["pricing_quality"],
             "taxable": int(row["taxable"]),
