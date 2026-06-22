@@ -348,6 +348,54 @@ def _run(data_root, *args, input_text=None):
     return payload, result.returncode
 
 
+def _unescape_xml(text):
+    return (
+        text.replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", '"')
+        .replace("&apos;", "'")
+    )
+
+
+def _load_xlsx_sheets(path):
+    """Parse a workbook into {sheet_name: {row_number: {col_letter: value}}}.
+
+    Numbers become floats; shared/inline strings become Python strings. Used to
+    evaluate the verification sheets' reconciliation in Python the way Excel
+    would, without a formula engine.
+    """
+    with zipfile.ZipFile(path) as workbook:
+        names = re.findall(r'<sheet name="([^"]+)"', workbook.read("xl/workbook.xml").decode("utf-8"))
+        try:
+            ss_xml = workbook.read("xl/sharedStrings.xml").decode("utf-8")
+        except KeyError:
+            ss_xml = ""
+        shared = [
+            _unescape_xml("".join(re.findall(r"<t[^>]*>(.*?)</t>", si, re.DOTALL)))
+            for si in re.findall(r"<si>(.*?)</si>", ss_xml, re.DOTALL)
+        ]
+        sheets = {}
+        for index, name in enumerate(names, start=1):
+            xml = workbook.read(f"xl/worksheets/sheet{index}.xml").decode("utf-8")
+            rows = {}
+            for cell in re.finditer(r'<c r="([A-Z]+)(\d+)"([^>]*)>(.*?)</c>', xml, re.DOTALL):
+                col, rownum, attrs, body = cell.group(1), int(cell.group(2)), cell.group(3), cell.group(4)
+                vmatch = re.search(r"<v>(.*?)</v>", body, re.DOTALL)
+                if vmatch is None:
+                    continue
+                raw = vmatch.group(1)
+                if 't="s"' in attrs:
+                    value = shared[int(raw)]
+                elif 't="str"' in attrs:
+                    value = _unescape_xml(raw)
+                else:
+                    value = float(raw)
+                rows.setdefault(rownum, {})[col] = value
+            sheets[_unescape_xml(name)] = rows
+    return sheets
+
+
 class CliSmokeTest(unittest.TestCase):
     """Walks through init → workspace → profile → wallet → Phoenix import →
     journals → reports → rates, asserting envelope shape at each step.
@@ -1089,6 +1137,186 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIn('name="Transactions"', workbook_xml)
         self.assertIn("Executive summary", shared_strings)
         self.assertIn("Wallet Inventory", shared_strings)
+
+    def test_07ac_export_xlsx_self_verifying(self):
+        verify_path = Path(self._tmp.name) / "kassiber-report-verify.xlsx"
+        plain_path = Path(self._tmp.name) / "kassiber-report-plain.xlsx"
+        for path in (verify_path, plain_path):
+            if path.exists():
+                path.unlink()
+
+        def _read_workbook(path):
+            with zipfile.ZipFile(path) as workbook:
+                names = re.findall(r'<sheet name="([^"]+)"', workbook.read("xl/workbook.xml").decode("utf-8"))
+                sheets = {}
+                for index, name in enumerate(names, start=1):
+                    sheets[name.replace("&amp;", "&")] = workbook.read(
+                        f"xl/worksheets/sheet{index}.xml"
+                    ).decode("utf-8")
+                shared = workbook.read("xl/sharedStrings.xml").decode("utf-8")
+            return sheets, shared
+
+        # Verification is on by default and appends the verify sheets.
+        payload = self._cli(
+            "reports", "export-xlsx",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(verify_path),
+        )
+        self._assert_kind(payload, "reports.export-xlsx")
+        self.assertTrue(payload["data"]["verified"])
+        for sheet in ("Verify", "Acquisitions", "Disposals", "Control"):
+            self.assertIn(sheet, payload["data"]["sheets"])
+
+        sheets, shared = _read_workbook(verify_path)
+        for sheet in ("Verify", "Acquisitions", "Disposals", "Control"):
+            self.assertIn(sheet, sheets)
+        # The Control sheet recomputes every figure with live formulas.
+        control = sheets["Control"]
+        self.assertIn("<f>", control)
+        self.assertIn("SUMIFS(", control)
+        self.assertIn("Verify!$B$2", control)
+        # Quantities are msat; BTC = msat / 1e11.
+        self.assertIn("/100000000000", sheets["Acquisitions"])
+        # README guidance + the active lot method are surfaced.
+        self.assertIn("How to verify this report", shared)
+        self.assertIn("Holdings BTC (recompute)", shared)
+        self.assertIn("Active lot-selection method", shared)
+
+        # Cached results must equal Kassiber's numbers: each Disposals gain cell
+        # (column J = proceeds - basis) must match the stored engine gain
+        # (column K) within a cent. This guards against the formulas drifting
+        # from the report figures.
+        disposals = sheets["Disposals"]
+        formula_gains = {
+            int(row): float(val)
+            for row, val in re.findall(r'<c r="J(\d+)"[^>]*><f>.*?</f><v>([^<]*)</v>', disposals)
+        }
+        kassiber_gains = {
+            int(row): float(val)
+            for row, val in re.findall(r'<c r="K(\d+)"[^>]*><v>([^<]*)</v>', disposals)
+        }
+        compared = 0
+        for row, gain in formula_gains.items():
+            if row in kassiber_gains:
+                self.assertAlmostEqual(gain, kassiber_gains[row], places=2)
+                compared += 1
+        self.assertGreater(compared, 0, "expected at least one disposal gain to reconcile")
+
+        # --no-verify produces the lean workbook: no verify sheets, no formulas.
+        payload = self._cli(
+            "reports", "export-xlsx",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(plain_path),
+            "--no-verify",
+        )
+        self.assertFalse(payload["data"]["verified"])
+        self.assertNotIn("Control", payload["data"]["sheets"])
+        self.assertNotIn("Verify", payload["data"]["sheets"])
+        plain_sheets, _ = _read_workbook(plain_path)
+        self.assertNotIn("Control", plain_sheets)
+        self.assertFalse(any("<f>" in xml for xml in plain_sheets.values()))
+
+    def test_07ad_verify_xlsx_reconciles_including_income(self):
+        # Independent, formula-engine-free reconciliation on a book that
+        # includes an income/earn event. Income is emitted by the engine as BOTH
+        # an `acquisition` lot AND an `income` line, so a naive Σacq − Σdisp
+        # double-counts it. This test evaluates the verification sheets' SUMIFS
+        # logic in Python from the sheet inputs and asserts it reproduces
+        # Kassiber's portfolio + capital-gains figures.
+        with tempfile.TemporaryDirectory(prefix="kassiber-verify-income-") as tmp:
+            root = Path(tmp) / "data"
+            csv_path = Path(tmp) / "book.csv"
+            csv_path.write_text(
+                "date,txid,direction,asset,amount,fee,fiat_rate,description,kind\n"
+                "2026-01-01T10:00:00Z,buy-1,inbound,BTC,0.10000000,0,60000,Buy,buy\n"
+                "2026-02-01T10:00:00Z,int-1,inbound,BTC,0.01000000,0,65000,Interest,interest\n"
+                "2026-03-01T10:00:00Z,sell-1,outbound,BTC,0.02000000,0,70000,Sell,sell\n",
+                encoding="utf-8",
+            )
+            xlsx_path = Path(tmp) / "report.xlsx"
+
+            def run(*args):
+                payload, code = _run(root, *args)
+                self.assertEqual(code, 0, f"{args} -> {json.dumps(payload)[:300]}")
+                return payload
+
+            run("init")
+            run("workspaces", "create", "Main")
+            run("profiles", "create", "--workspace", "Main", "--fiat-currency", "USD", "--tax-country", "generic", "Default")
+            run("wallets", "create", "--workspace", "Main", "--profile", "Default", "--label", "W1", "--kind", "custom")
+            run("wallets", "import-csv", "--workspace", "Main", "--profile", "Default", "--wallet", "W1", "--file", str(csv_path))
+            run("journals", "process", "--workspace", "Main", "--profile", "Default")
+            export = run("reports", "export-xlsx", "--workspace", "Main", "--profile", "Default", "--file", str(xlsx_path))
+            self.assertTrue(export["data"]["verified"])
+
+            portfolio = run("reports", "portfolio-summary", "--workspace", "Main", "--profile", "Default")["data"]
+            capital = run("reports", "capital-gains", "--workspace", "Main", "--profile", "Default")["data"]
+            kassiber_qty, kassiber_basis, kassiber_realized = {}, {}, {}
+            for row in portfolio:
+                kassiber_qty[row["asset"]] = kassiber_qty.get(row["asset"], 0.0) + float(row["quantity"])
+                kassiber_basis[row["asset"]] = kassiber_basis.get(row["asset"], 0.0) + float(row["cost_basis"])
+            for row in capital:
+                kassiber_realized[row["asset"]] = kassiber_realized.get(row["asset"], 0.0) + float(row["gain_loss"])
+            # Sanity: the book really exercises income (otherwise the guard is vacuous).
+            self.assertAlmostEqual(kassiber_qty["BTC"], 0.09, places=8)
+            self.assertGreater(kassiber_realized["BTC"], 600.0)  # 200 disposal + 650 income
+
+            sheets = _load_xlsx_sheets(xlsx_path)
+            acq = sheets["Acquisitions"]
+            disp = sheets["Disposals"]
+
+            # Pin the load-bearing formula detail: the holdings recompute must
+            # exclude `income` rows on the add side, or recalc silently
+            # double-counts earned coins.
+            with zipfile.ZipFile(xlsx_path) as workbook:
+                names = re.findall(r'<sheet name="([^"]+)"', workbook.read("xl/workbook.xml").decode("utf-8"))
+                control_xml = workbook.read(
+                    f"xl/worksheets/sheet{names.index('Control') + 1}.xml"
+                ).decode("utf-8")
+            self.assertIn("<>income", _unescape_xml(control_xml))
+
+            def _accumulate(rows, key_fn):
+                totals = {}
+                for rownum, cells in rows.items():
+                    if rownum < 3 or "D" not in cells:  # skip header / placeholder
+                        continue
+                    asset = cells["D"]
+                    totals[asset] = totals.get(asset, 0.0) + key_fn(cells)
+                return totals
+
+            # Holdings exclude `income` rows on the add side (the paired lot carries them).
+            qty_add = _accumulate(acq, lambda c: c.get("F", 0.0) if c.get("E") != "income" else 0.0)
+            qty_sub = _accumulate(disp, lambda c: c.get("F", 0.0))
+            basis_add = _accumulate(acq, lambda c: c.get("H", 0.0) if c.get("E") != "income" else 0.0)
+            basis_sub = _accumulate(disp, lambda c: c.get("I", 0.0))
+            realized_disp = _accumulate(disp, lambda c: (c.get("H", 0.0) - c.get("I", 0.0)) if c.get("M") == 1 else 0.0)
+            realized_acq = _accumulate(acq, lambda c: c.get("J", 0.0) if c.get("K") == 1 else 0.0)
+
+            for asset, expected in kassiber_qty.items():
+                recompute = (qty_add.get(asset, 0.0) - qty_sub.get(asset, 0.0)) / 1e11
+                self.assertAlmostEqual(recompute, expected, places=8, msg=f"holdings qty {asset}")
+            for asset, expected in kassiber_basis.items():
+                recompute = basis_add.get(asset, 0.0) - basis_sub.get(asset, 0.0)
+                self.assertAlmostEqual(recompute, expected, places=2, msg=f"cost basis {asset}")
+            for asset, expected in kassiber_realized.items():
+                recompute = realized_disp.get(asset, 0.0) + realized_acq.get(asset, 0.0)
+                self.assertAlmostEqual(recompute, expected, places=2, msg=f"realized gain {asset}")
+
+            # The Control sheet's cached recompute values reconcile to Kassiber's
+            # (recompute | kassiber column pairs).
+            control = sheets["Control"]
+            pairs = [("C", "D"), ("F", "G"), ("I", "J"), ("L", "M"), ("O", "P"), ("R", "S")]
+            compared = 0
+            for rownum, cells in control.items():
+                if rownum < 3 or "A" not in cells:
+                    continue
+                for recompute_col, kassiber_col in pairs:
+                    if recompute_col in cells and kassiber_col in cells:
+                        self.assertAlmostEqual(cells[recompute_col], cells[kassiber_col], places=2)
+                        compared += 1
+            self.assertGreater(compared, 0, "expected Control rows to reconcile")
 
     def test_07aa_pdf_writer_reports_actual_page_count(self):
         from kassiber.pdf_report import write_text_pdf

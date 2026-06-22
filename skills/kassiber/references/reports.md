@@ -253,3 +253,28 @@ kassiber reports export-pdf --wallet satoshi-liquid --file satoshi-liquid-report
 
 Use these instead of inventing extra report renderers unless the user asks for
 a custom output beyond Kassiber's built-in exports.
+
+### Self-verifying XLSX (default)
+
+`reports export-xlsx` appends a verification layer so the reader can reproduce
+every figure in Excel/LibreOffice rather than trusting the static numbers:
+
+- **Acquisitions** / **Disposals** — the raw journal ledger. Only the
+  highlighted inputs (msat quantities, fiat values, proceeds, cost basis) are
+  hard numbers; quantities-in-BTC, per-row gain = proceeds − cost basis, and an
+  OK/DIFF check are live formulas.
+- **Control** — a per-asset reconciliation matrix. Holdings balance, cost
+  basis, average price, market value, unrealized and realized gain are each
+  recomputed with a live formula over the ledger sheets and shown next to
+  Kassiber's own number with an OK/DIFF check (the check references the editable
+  tolerance in `Verify!B2`).
+- **Verify** — a plain-language "how to verify" sheet (formula legend, the
+  recalc gotcha, the active lot method, and scope notes).
+
+Reconciliation is per asset across the whole profile (Bitcoin accounting is
+pooled per asset across wallets; per-wallet cost basis is an allocation).
+Per-disposal cost basis under FIFO/LIFO/HIFO/LOFO is engine-selected and cannot
+be re-derived by a plain formula — the Control sheet verifies the
+method-independent identities instead. Pass `--no-verify` for the lean
+value-only workbook. The daemon kind `ui.reports.export_xlsx` accepts
+`{"verify": false}` for the same effect.

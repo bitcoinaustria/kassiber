@@ -1865,6 +1865,13 @@ def build_parser() -> argparse.ArgumentParser:
     export_xlsx.add_argument("--wallet")
     export_xlsx.add_argument("--file", required=True)
     export_xlsx.add_argument("--history-limit", type=int, default=0)
+    export_xlsx.add_argument(
+        "--no-verify",
+        dest="verify",
+        action="store_false",
+        help="Skip the self-verification sheets (Verify/Acquisitions/Disposals/Control).",
+    )
+    export_xlsx.set_defaults(verify=True)
 
     lightning_profitability = reports_sub.add_parser("lightning-profitability")
     lightning_profitability.add_argument("--workspace")
@@ -3660,6 +3667,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     report_hooks,
                     wallet_ref=args.wallet,
                     history_limit=args.history_limit,
+                    verify=args.verify,
                 ),
             )
         if args.reports_command == "lightning-profitability":

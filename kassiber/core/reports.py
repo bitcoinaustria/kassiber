@@ -4403,8 +4403,127 @@ def export_csv_report(conn, workspace_ref, profile_ref, file_path, hooks: Report
     }
 
 
-def export_xlsx_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, wallet_ref=None, history_limit=None):
+_VERIFY_ADD_ENTRY_TYPES = ("acquisition", "income", "transfer_in")
+_VERIFY_SUB_ENTRY_TYPES = ("disposal", "fee", "transfer_fee", "transfer_out")
+
+
+def _build_verification_data(conn, profile, hooks: ReportHooks):
+    """Gather the profile-scope ledger and per-asset Kassiber aggregates that
+    drive the self-verifying ``Control`` / ``Acquisitions`` / ``Disposals``
+    sheets. Reconciliation is per asset across the whole profile (Bitcoin
+    accounting is pooled per asset across wallets), so the wallet filter on the
+    rest of the report does not apply here."""
+    workspace_id = profile["workspace_id"]
+    profile_id = profile["id"]
+
+    ledger_rows = conn.execute(
+        """
+        SELECT
+            je.occurred_at,
+            w.label AS wallet,
+            je.transaction_id,
+            je.entry_type,
+            je.asset,
+            je.quantity,
+            je.fiat_value,
+            COALESCE(je.cost_basis, 0) AS cost_basis,
+            COALESCE(je.proceeds, 0) AS proceeds,
+            COALESCE(je.gain_loss, 0) AS gain_loss,
+            CASE
+                WHEN COALESCE(t.taxability_override, 1) != 0
+                     AND COALESCE(je.at_category, '') != 'neu_swap'
+                THEN 1 ELSE 0
+            END AS taxable
+        FROM journal_entries je
+        JOIN wallets w ON w.id = je.wallet_id
+        LEFT JOIN transactions t ON t.id = je.transaction_id
+        WHERE je.profile_id = ?
+        ORDER BY je.occurred_at ASC, je.created_at ASC, je.id ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+
+    acquisitions = []
+    disposals = []
+    for row in ledger_rows:
+        magnitude = abs(int(row["quantity"]))
+        common = {
+            "occurred_at": row["occurred_at"],
+            "wallet": row["wallet"],
+            "transaction_id": row["transaction_id"],
+            "asset": row["asset"],
+            "entry_type": row["entry_type"],
+            "quantity_msat": magnitude,
+            "quantity": float(msat_to_btc(magnitude)),
+            "taxable": int(row["taxable"]),
+        }
+        if row["entry_type"] in _VERIFY_ADD_ENTRY_TYPES:
+            common["fiat_value"] = float(row["fiat_value"] or 0.0)
+            common["gain_loss"] = float(row["gain_loss"] or 0.0)
+            acquisitions.append(common)
+        elif row["entry_type"] in _VERIFY_SUB_ENTRY_TYPES:
+            common["proceeds"] = float(row["proceeds"] or 0.0)
+            common["cost_basis"] = float(row["cost_basis"] or 0.0)
+            common["gain_loss"] = float(row["gain_loss"] or 0.0)
+            common["gain_loss_kassiber"] = float(row["gain_loss"] or 0.0)
+            disposals.append(common)
+
+    portfolio_rows = report_portfolio_summary(conn, workspace_id, profile_id, hooks)
+    capital_rows = report_capital_gains(conn, workspace_id, profile_id, hooks)
+
+    holdings_by_asset = {}
+    for row in portfolio_rows:
+        bucket = holdings_by_asset.setdefault(
+            row["asset"],
+            {"quantity": 0.0, "cost_basis": 0.0, "market_value": 0.0, "unrealized_pnl": 0.0},
+        )
+        bucket["quantity"] += float(row["quantity"])
+        bucket["cost_basis"] += float(row["cost_basis"])
+        bucket["market_value"] += float(row["market_value"])
+        bucket["unrealized_pnl"] += float(row["unrealized_pnl"])
+
+    realized_by_asset = {}
+    for row in capital_rows:
+        realized_by_asset[row["asset"]] = realized_by_asset.get(row["asset"], 0.0) + float(row["gain_loss"])
+
+    asset_rows = []
+    for asset in sorted(set(holdings_by_asset) | set(realized_by_asset)):
+        holding = holdings_by_asset.get(
+            asset, {"quantity": 0.0, "cost_basis": 0.0, "market_value": 0.0, "unrealized_pnl": 0.0}
+        )
+        quantity = holding["quantity"]
+        cost_basis = holding["cost_basis"]
+        market_value = holding["market_value"]
+        rate = market_value / quantity if quantity else 0.0
+        avg_cost = cost_basis / quantity if quantity else 0.0
+        realized = realized_by_asset.get(asset, 0.0)
+        asset_rows.append(
+            {
+                "asset": asset,
+                "rate": rate,
+                "quantity": quantity,
+                "holdings_qty_kassiber": quantity,
+                "cost_basis": cost_basis,
+                "cost_basis_kassiber": cost_basis,
+                "avg_cost_kassiber": avg_cost,
+                "market_value": market_value,
+                "market_value_kassiber": market_value,
+                "unrealized_pnl": holding["unrealized_pnl"],
+                "unrealized_kassiber": holding["unrealized_pnl"],
+                "realized_gain": realized,
+                "realized_gain_kassiber": realized,
+            }
+        )
+
+    return {"acquisitions": acquisitions, "disposals": disposals, "asset_rows": asset_rows}
+
+
+def export_xlsx_report(
+    conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, wallet_ref=None, history_limit=None, verify=True
+):
     import xlsxwriter
+
+    from . import report_verify
 
     context = _build_full_report_context(
         conn,
@@ -4419,6 +4538,9 @@ def export_xlsx_report(conn, workspace_ref, profile_ref, file_path, hooks: Repor
     path.parent.mkdir(parents=True, exist_ok=True)
 
     workbook = xlsxwriter.Workbook(str(path))
+    if verify:
+        # Verification-sheet formulas should recompute when the file is opened.
+        workbook.set_calc_mode("auto")
     workbook.set_properties(
         {
             "title": context["title"],
@@ -4430,13 +4552,28 @@ def export_xlsx_report(conn, workspace_ref, profile_ref, file_path, hooks: Repor
     formats = _generic_report_xlsx_formats(workbook)
     for spec in sections:
         _generic_report_xlsx_write_sheet(workbook, spec, formats)
+
+    verify_sheets = []
+    if verify:
+        verification = _build_verification_data(conn, context["profile"], hooks)
+        verify_sheets = report_verify.augment_workbook(
+            workbook,
+            gains_algorithm=context["profile"]["gains_algorithm"],
+            tax_country=context["profile"]["tax_country"],
+            fiat_currency=context["profile"]["fiat_currency"],
+            wallet_scope_label=context["wallet"]["label"] if context["wallet"] else None,
+            acquisitions=verification["acquisitions"],
+            disposals=verification["disposals"],
+            asset_rows=verification["asset_rows"],
+        )
     workbook.close()
     return {
         "file": str(path.resolve()),
         "bytes": path.stat().st_size,
         "title": context["title"],
         "wallet": wallet_ref or "",
-        "sheets": [spec["sheet_name"] for spec in sections],
+        "sheets": [spec["sheet_name"] for spec in sections] + verify_sheets,
+        "verified": bool(verify),
         "rows": sum(len(spec["rows"]) for spec in sections),
     }
 

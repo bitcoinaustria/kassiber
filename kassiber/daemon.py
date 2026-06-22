@@ -2086,6 +2086,15 @@ def _ui_report_export_payload(
                 f"{kind} wallet must be a string",
                 code="validation",
             )
+        extra: dict[str, Any] = {}
+        if kind == "ui.reports.export_xlsx":
+            verify = args.get("verify", True)
+            if not isinstance(verify, bool):
+                raise AppError(
+                    f"{kind} verify must be a boolean",
+                    code="validation",
+                )
+            extra["verify"] = verify
         payload = dict(
             exporter(
                 conn,
@@ -2095,6 +2104,7 @@ def _ui_report_export_payload(
                 hooks,
                 wallet_ref=wallet,
                 history_limit=args.get("history_limit", 0),
+                **extra,
             )
         )
         payload.update(
