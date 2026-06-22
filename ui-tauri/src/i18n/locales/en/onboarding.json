@@ -34,7 +34,7 @@
       "newBook": "New book"
     },
     "profileCard": {
-      "editName": "Edit {{name}} name",
+      "settings": "Book settings for {{name}}",
       "current": "Current books: {{name}}",
       "switchTo": "Switch to {{name}} books",
       "opened": "Opened {{date}}",
@@ -48,25 +48,41 @@
     "create": {
       "title": "New book",
       "descriptionFromSource": "Create a separate book in {{workspace}} from {{source}}'s tax settings.",
-      "descriptionInWorkspace": "Create a separate book in {{workspace}}.",
+      "descriptionInWorkspace": "Create a separate book in {{workspace}} and choose its region and accounting method.",
       "descriptionDefault": "Create a separate book using default settings.",
       "startFrom": "Start from",
       "defaultSettings": "Default settings",
       "copyHint": "Copying settings only copies tax policy, currency, holding period, and lot selection. Wallets, accounts, and transactions stay in the original books.",
       "nameLabel": "Book name",
       "namePlaceholder": "Book name",
+      "regionLabel": "Region",
+      "methodLabel": "Accounting method",
+      "austrianMethodNote": "Austrian books use the moving-average method (gleitender Durchschnittspreis); other methods aren't valid for Austria.",
       "submit": "Create book",
       "errorEmptyName": "Enter a book name.",
       "errorGeneric": "Could not create book."
     },
     "renameProfile": {
-      "title": "Edit book",
-      "description": "Rename the book or change its accounting method. Changing the method reprocesses journals so reports recompute.",
+      "title": "Book settings",
+      "description": "Rename the book or change its region and accounting method. Changing the region or method reprocesses journals so reports recompute.",
       "nameLabel": "Book name",
+      "regionLabel": "Region",
       "methodLabel": "Accounting method",
+      "austrianMethodNote": "Austrian books use the moving-average method (gleitender Durchschnittspreis); other methods aren't valid for Austria.",
+      "switchRegion": {
+        "title": "Switch region?",
+        "body": "Change this book from {{from}} to {{to}}, resetting the accounting method to {{method}}.",
+        "warning": "All journals are reprocessed so reports recompute.",
+        "confirm": "Switch region and reprocess",
+        "back": "Back"
+      },
       "submit": "Save",
       "errorEmptyName": "Enter a book name.",
       "errorGeneric": "Could not save book."
+    },
+    "region": {
+      "generic": "Generic",
+      "at": "Austria"
     },
     "method": {
       "MOVING_AVERAGE_AT": "Moving average (Austrian)",

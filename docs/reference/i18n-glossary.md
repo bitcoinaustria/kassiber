@@ -155,6 +155,8 @@ FIFO, KESt, ESt, Kz./KZ, **Formular E 1**, **Beilage E 1kv**, § 27 / § 27a /
 | Acquisition | Anschaffung | verb „anschaffen/erwerben". |
 | Pricing / Valuation | Bewertung | Plain price = „Kurs"/„Preis". |
 | Lot | Tranche | a.k.a. Posten. Rarely surfaces under moving-average default. |
+| Region (tax country of a book) | Region | The book's tax jurisdiction toggle (Austria vs Generic). Not „Land". |
+| Generic (region, no country rules) | Generisch | The non-country tax region (FIFO/LIFO/…). Austria = „Österreich". |
 
 ## Finance / accounting terms
 

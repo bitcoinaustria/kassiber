@@ -4958,6 +4958,23 @@ def _update_profile_payload(
             hint="Choose an accounting method for the book.",
             retryable=False,
         )
+    updates: dict[str, Any] = {"gains_algorithm": gains_algorithm.strip()}
+    # Region (tax_country) is optional: the book-settings dialog only sends it
+    # when the user explicitly switches region, and always pairs it with a
+    # region-valid method in the same update. update_profile enforces the
+    # per-country method then (Austrian books coerced to moving_average_at) and
+    # only re-coerces because the method/country are explicitly present here —
+    # an incidental update never silently rewrites a stored method.
+    tax_country = args.get("tax_country")
+    if tax_country is not None:
+        if not isinstance(tax_country, str) or not tax_country.strip():
+            raise AppError(
+                "Region is required.",
+                code="validation",
+                hint="Choose a supported region for the book.",
+                retryable=False,
+            )
+        updates["tax_country"] = tax_country.strip()
     row = conn.execute(
         "SELECT id, workspace_id FROM profiles WHERE id = ?",
         (profile_id,),
@@ -4971,13 +4988,13 @@ def _update_profile_payload(
             retryable=False,
         )
     # update_profile normalizes/enforces the method (Austrian books are coerced
-    # to moving_average_at) and invalidates journals when it changes, so reports
-    # recompute with the new method.
+    # to moving_average_at), validates the region, and invalidates journals when
+    # the policy changes, so reports recompute with the new region/method.
     return core_accounts.update_profile(
         conn,
         row["workspace_id"],
         profile_id,
-        {"gains_algorithm": gains_algorithm.strip()},
+        updates,
     )
 
 
@@ -5086,14 +5103,34 @@ def _create_profile_payload(
         workspace_id,
         source_profile_id,
     )
+    fiat_currency = defaults["fiat_currency"]
+    tax_country = defaults["tax_country"]
+    gains_algorithm = defaults["gains_algorithm"]
+    tax_long_term_days = int(defaults["tax_long_term_days"])
+    # The "New book" dialog can pick a region + method explicitly. Copying from a
+    # source book inherits its settings verbatim (region/method come from the
+    # source), so explicit picks only apply when no source is chosen. core
+    # create_profile validates the region and coerces/validates the method per
+    # country (Austrian books -> moving_average_at).
+    if source_profile_id is None:
+        requested_country = _optional_string_arg(args, "tax_country")
+        requested_algo = _optional_string_arg(args, "gains_algorithm")
+        if requested_country is not None and requested_country != tax_country:
+            tax_country = requested_country
+            # Region picked away from the inherited default: use that region's
+            # standard holding period instead of a mismatched one (the Austrian
+            # policy overrides this regardless).
+            tax_long_term_days = 365
+        if requested_algo is not None:
+            gains_algorithm = requested_algo
     profile = core_accounts.create_profile(
         conn,
         workspace_id,
         label.strip(),
-        defaults["fiat_currency"],
-        defaults["gains_algorithm"],
-        defaults["tax_country"],
-        int(defaults["tax_long_term_days"]),
+        fiat_currency,
+        gains_algorithm,
+        tax_country,
+        tax_long_term_days,
     )
     workspace = conn.execute(
         "SELECT id, label FROM workspaces WHERE id = ?",
