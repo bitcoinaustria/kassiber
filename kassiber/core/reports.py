@@ -3582,18 +3582,23 @@ def _austrian_e1kv_xlsx_write_detail_sheet(
     worksheet.set_margins(left=0.35, right=0.35, top=0.5, bottom=0.5)
 
     last_column = len(headers) - 1
+    widths = [column_widths[i] if i < len(column_widths) else 16 for i in range(len(headers))]
     worksheet.set_row(0, 31)
     worksheet.merge_range(0, 0, 0, last_column, title, formats["detail_title"])
-    worksheet.set_row(1, 34)
+    header_lines = max((_estimate_wrapped_lines(header, widths[i]) for i, header in enumerate(headers)), default=1)
+    worksheet.set_row(1, max(34, header_lines * 15 + 6))
     for column_index, header in enumerate(headers):
-        width = column_widths[column_index] if column_index < len(column_widths) else 16
-        worksheet.set_column(column_index, column_index, width)
+        worksheet.set_column(column_index, column_index, widths[column_index])
         worksheet.write_string(1, column_index, header, formats["header"])
 
     row_index = 2
     if rows:
         for values in rows:
-            worksheet.set_row(row_index, 22)
+            lines = max(
+                (_estimate_wrapped_lines(values[i], widths[i]) for i in range(min(len(values), len(widths)))),
+                default=1,
+            )
+            worksheet.set_row(row_index, max(22, lines * 15 + 4))
             for column_index, value in enumerate(values):
                 format_name = row_format_names[column_index] if column_index < len(row_format_names) else "text"
                 _xlsx_write_value(worksheet, row_index, column_index, value, formats[format_name])
@@ -3605,8 +3610,9 @@ def _austrian_e1kv_xlsx_write_detail_sheet(
         row_index += 1
 
     row_index += 1
+    total_label_width = sum(widths[:value_column]) if value_column > 0 else (widths[0] if widths else 16)
     for label, value in total_rows:
-        worksheet.set_row(row_index, 22)
+        worksheet.set_row(row_index, max(22, _estimate_wrapped_lines(label, total_label_width) * 15 + 4))
         _austrian_e1kv_xlsx_write_total_row(
             worksheet,
             row_index,
@@ -3630,15 +3636,17 @@ def _austrian_e1kv_xlsx_write_overview(report, workbook, formats):
     worksheet.merge_range(0, 0, 0, 2, "I. Übersicht", formats["overview_title"])
     row_index = 2
     for entry in _austrian_e1kv_overview_entries(report):
-        worksheet.set_row(row_index, 25)
         if entry[0] == "heading":
+            worksheet.set_row(row_index, max(25, _estimate_wrapped_lines(entry[1], 100) * 15 + 6))
             worksheet.merge_range(row_index, 0, row_index, 2, entry[1], formats["overview_group"])
             row_index += 2
         elif entry[0] == "section":
+            worksheet.set_row(row_index, max(25, _estimate_wrapped_lines(entry[1], 100) * 15 + 6))
             worksheet.merge_range(row_index, 0, row_index, 2, entry[1], formats["overview_section"])
             row_index += 1
         else:
             _kind, label, cents, total = entry
+            worksheet.set_row(row_index, max(22, _estimate_wrapped_lines(label, 72) * 15 + 4))
             label_format = formats["overview_total_label"] if total else formats["overview_label"]
             value_format = formats["overview_total_money"] if total else formats["overview_money"]
             worksheet.write_string(row_index, 0, label, label_format)
@@ -3704,7 +3712,12 @@ def _austrian_e1kv_xlsx_write_explanations(report, workbook, formats):
         ]
     )
     for row_index, (text, format_name) in enumerate(rows):
-        worksheet.set_row(row_index, 26 if format_name.endswith("heading") or format_name.endswith("title") else 46)
+        if format_name.endswith("heading") or format_name.endswith("title"):
+            worksheet.set_row(row_index, 26)
+        elif text:
+            worksheet.set_row(row_index, max(20, _estimate_wrapped_lines(text, 105) * 15 + 6))
+        else:
+            worksheet.set_row(row_index, 12)
         if text:
             worksheet.write_string(row_index, 0, text, formats[format_name])
         else:
