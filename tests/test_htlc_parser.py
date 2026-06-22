@@ -22,6 +22,7 @@ from embit import hashes as _embit_hashes
 from kassiber.core.htlc_parser import (
     HtlcExtraction,
     extract_from_claim_witness,
+    extract_from_refund_witness,
     parse_htlc_redeem_script,
     script_matches_payment_hash,
 )
@@ -149,6 +150,69 @@ class ExtractFromClaimWitnessTests(unittest.TestCase):
     def test_empty_witness_returns_none(self):
         self.assertIsNone(extract_from_claim_witness([]))
         self.assertIsNone(extract_from_claim_witness([bytes(33)]))
+
+
+class ExtractFromRefundWitnessTests(unittest.TestCase):
+    def _build_refund_witness(self, *, script: bytes, selector: bytes = b""):
+        # CLTV timeout spend: an empty (falsy) selector where a claim would
+        # push the preimage, so the script falls through to the ELSE branch.
+        return [
+            bytes.fromhex("3045" + "00" * 70),  # synthetic signature placeholder
+            selector,
+            script,
+        ]
+
+    def test_refund_witness_recognized(self):
+        hashlock160 = _embit_hashes.hash160(_PREIMAGE)
+        script = _build_submarine_redeem_script(hashlock160)
+        witness = self._build_refund_witness(script=script)
+        result = extract_from_refund_witness(witness)
+        self.assertIsNotNone(result)
+        self.assertIsInstance(result, HtlcExtraction)
+        self.assertEqual(result.role, "refund")
+        self.assertEqual(result.template, "boltz_v1_submarine")
+        self.assertEqual(result.hashlock160, hashlock160.hex())
+        self.assertIsNone(result.payment_hash)
+        self.assertIsNone(result.preimage)
+
+    def test_refund_witness_reverse_variant(self):
+        hashlock160 = _embit_hashes.hash160(_PREIMAGE)
+        script = _build_submarine_redeem_script(hashlock160, reverse_variant=True)
+        result = extract_from_refund_witness(self._build_refund_witness(script=script))
+        self.assertIsNotNone(result)
+        self.assertEqual(result.role, "refund")
+        self.assertEqual(result.template, "boltz_v1_reverse")
+
+    def test_claim_witness_is_not_a_refund(self):
+        # A witness that reveals the preimage is a claim; the refund decoder
+        # must decline it so the two paths never both fire on one spend.
+        hashlock160 = _embit_hashes.hash160(_PREIMAGE)
+        script = _build_submarine_redeem_script(hashlock160)
+        claim_witness = [
+            bytes.fromhex("3045" + "00" * 70),
+            _PREIMAGE,
+            bytes([0x01]),
+            script,
+        ]
+        self.assertIsNone(extract_from_refund_witness(claim_witness))
+
+    def test_unrelated_non_preimage_selector_still_refund(self):
+        # A non-empty selector that is not the 32-byte preimage still spends
+        # the timeout branch — it just has to be falsy on-chain.
+        hashlock160 = _embit_hashes.hash160(_PREIMAGE)
+        script = _build_submarine_redeem_script(hashlock160)
+        witness = self._build_refund_witness(script=script, selector=bytes([0x00]))
+        result = extract_from_refund_witness(witness)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.role, "refund")
+
+    def test_non_htlc_witness_returns_none(self):
+        self.assertIsNone(extract_from_refund_witness([bytes(64)]))
+        self.assertIsNone(extract_from_refund_witness([b"", b"\x00" * 80]))
+
+    def test_empty_or_short_witness_returns_none(self):
+        self.assertIsNone(extract_from_refund_witness([]))
+        self.assertIsNone(extract_from_refund_witness([bytes(33)]))
 
 
 class ScriptMatchesPaymentHashTests(unittest.TestCase):
