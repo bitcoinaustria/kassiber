@@ -869,13 +869,29 @@ def _wallet_scope_sql(column: str, wallets: Sequence[Mapping[str, Any]]) -> tupl
     return f"{column} IN ({placeholders})", ids
 
 
-def _format_attachment_reference(row):
+def _attachment_entry(row):
+    """Normalize an attachment row into a display entry.
+
+    ``display_name`` is the human label shown in the sheet (the URL/file is the
+    link target); ``url`` is empty for file attachments.
+    """
     label = (row["label"] or "").strip()
-    if str(row["kind"]).lower() == "url":
-        ref = (row["url"] or "").strip() or "(url)"
-        return f"{label}: {ref}" if label else ref
-    name = (row["filename"] or "").strip() or label or "(file)"
-    return f"{name} ({label})" if label and label != name else name
+    url = (row["url"] or "").strip()
+    filename = (row["filename"] or "").strip()
+    is_url = str(row["kind"]).lower() == "url"
+    if is_url:
+        display_name = label or url or "(link)"
+        reference = url
+    else:
+        display_name = filename or label or "(file)"
+        reference = filename
+    return {
+        "kind": "url" if is_url else "file",
+        "label": label,
+        "display_name": display_name,
+        "url": url if is_url else "",
+        "reference": reference,
+    }
 
 
 def _tags_by_transaction(conn, tx_where, tx_params):
@@ -896,7 +912,7 @@ def _tags_by_transaction(conn, tx_where, tx_params):
     return {tx_id: ", ".join(codes) for tx_id, codes in grouped.items()}
 
 
-def _attachments_by_transaction(conn, tx_where, tx_params):
+def _attachment_entries_by_transaction(conn, tx_where, tx_params):
     rows = conn.execute(
         f"""
         SELECT
@@ -914,8 +930,8 @@ def _attachments_by_transaction(conn, tx_where, tx_params):
     ).fetchall()
     grouped = {}
     for row in rows:
-        grouped.setdefault(row["tx_id"], []).append(_format_attachment_reference(row))
-    return {tx_id: " | ".join(refs) for tx_id, refs in grouped.items()}
+        grouped.setdefault(row["tx_id"], []).append(_attachment_entry(row))
+    return grouped
 
 
 def _report_query_rows(conn, profile, wallet=None):
@@ -1050,15 +1066,18 @@ def _report_query_rows(conn, profile, wallet=None):
         tx_params,
     ).fetchall()
     tags_by_tx = _tags_by_transaction(conn, tx_where, tx_params)
-    attachments_by_tx = _attachments_by_transaction(conn, tx_where, tx_params)
-    transactions = [
-        {
-            **dict(row),
-            "tags": tags_by_tx.get(row["row_id"], ""),
-            "attachments": attachments_by_tx.get(row["row_id"], ""),
-        }
-        for row in transaction_rows
-    ]
+    attachments_by_tx = _attachment_entries_by_transaction(conn, tx_where, tx_params)
+    transactions = []
+    for row in transaction_rows:
+        entries = attachments_by_tx.get(row["row_id"], [])
+        transactions.append(
+            {
+                **dict(row),
+                "tags": tags_by_tx.get(row["row_id"], ""),
+                "attachments": "\n".join(entry["display_name"] for entry in entries),
+                "attachments_list": entries,
+            }
+        )
 
     pair_filters = ["p.profile_id = ?", "p.deleted_at IS NULL"]
     pair_params = [profile["id"]]
@@ -4132,6 +4151,7 @@ def _generic_report_transaction_rows(context):
                 "counterparty": row.get("counterparty", ""),
                 "tags": row.get("tags", ""),
                 "attachments": row.get("attachments", ""),
+                "attachments_list": row.get("attachments_list", []),
             }
         )
     return rows
@@ -4353,6 +4373,9 @@ def _generic_report_xlsx_formats(workbook):
         "int": workbook.add_format({"font_size": 11, "valign": "top", "num_format": "0"}),
         "quantity": workbook.add_format({"font_size": 11, "valign": "top", "num_format": "0.00000000"}),
         "money": workbook.add_format({"font_size": 11, "valign": "top", "num_format": "#,##0.00"}),
+        "link": workbook.add_format(
+            {"font_size": 11, "valign": "top", "text_wrap": True, "font_color": "#185FA5", "underline": 1}
+        ),
     }
 
 
@@ -4438,6 +4461,9 @@ def _generic_report_xlsx_write_sheet(workbook, spec, formats):
     if rows:
         for row in rows:
             for column_index, header in enumerate(headers):
+                if header == "attachments" and "attachments_list" in row:
+                    _write_attachments_cell(worksheet, row_index, column_index, row, formats)
+                    continue
                 value = row.get(header, "")
                 format_name = _generic_report_xlsx_format_name(header, value)
                 _xlsx_write_value(worksheet, row_index, column_index, value, formats[format_name])
@@ -4447,6 +4473,24 @@ def _generic_report_xlsx_write_sheet(workbook, spec, formats):
         row_index += 1
     worksheet.autofilter(1, 0, max(row_index - 1, 1), last_column)
     return worksheet
+
+
+def _write_attachments_cell(worksheet, row_index, column_index, row, formats):
+    """Render the attachments cell: a single URL becomes a clickable link shown
+    behind its name; multiple attachments are listed one per line (Excel allows
+    only one hyperlink per cell, so the per-link clickables live on Evidence)."""
+    entries = row.get("attachments_list") or []
+    if not entries:
+        worksheet.write_blank(row_index, column_index, None, formats["text"])
+        return
+    url_entries = [entry for entry in entries if entry.get("url")]
+    if len(entries) == 1 and url_entries:
+        entry = url_entries[0]
+        worksheet.write_url(row_index, column_index, entry["url"], formats["link"], entry["display_name"])
+        return
+    worksheet.write_string(
+        row_index, column_index, "\n".join(entry["display_name"] for entry in entries), formats["text"]
+    )
 
 
 def export_csv_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, wallet_ref=None, history_limit=None):
@@ -4596,6 +4640,41 @@ def _build_verification_data(conn, profile, hooks: ReportHooks):
             }
         )
 
+    evidence = conn.execute(
+        """
+        SELECT
+            t.occurred_at,
+            w.label AS wallet,
+            COALESCE(t.external_id, '') AS transaction_id,
+            t.asset,
+            a.attachment_type AS kind,
+            COALESCE(a.label, '') AS label,
+            COALESCE(a.original_filename, '') AS filename,
+            COALESCE(a.source_url, '') AS url
+        FROM attachments a
+        JOIN transactions t ON t.id = a.transaction_id
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE a.profile_id = ? AND t.excluded = 0
+        ORDER BY t.occurred_at ASC, a.created_at ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    attachments = []
+    for row in evidence:
+        entry = _attachment_entry(row)
+        attachments.append(
+            {
+                "occurred_at": row["occurred_at"] or "",
+                "wallet": row["wallet"],
+                "transaction_id": row["transaction_id"],
+                "asset": row["asset"] or "",
+                "type": entry["kind"],
+                "name": entry["display_name"],
+                "url": entry["url"],
+                "reference": entry["reference"],
+            }
+        )
+
     portfolio_rows = report_portfolio_summary(conn, workspace_id, profile_id, hooks)
     capital_rows = report_capital_gains(conn, workspace_id, profile_id, hooks)
 
@@ -4668,6 +4747,7 @@ def _build_verification_data(conn, profile, hooks: ReportHooks):
         "disposals": disposals,
         "asset_rows": asset_rows,
         "quarantines": quarantine_rows,
+        "attachments": attachments,
     }
 
 
@@ -4733,6 +4813,7 @@ def export_xlsx_report(
             disposals=verification["disposals"],
             asset_rows=verification["asset_rows"],
             quarantines=verification["quarantines"],
+            attachments=verification["attachments"],
         )
     workbook.close()
     return {

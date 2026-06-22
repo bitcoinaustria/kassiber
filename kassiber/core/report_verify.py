@@ -139,6 +139,9 @@ def _build_formats(workbook) -> dict[str, Any]:
             {"bg_color": "#C6EFCE", "font_color": "#006100", "bold": True, "font_size": 11}
         ),
         "coarse": workbook.add_format({"bg_color": "#FFEB9C", "font_color": "#9C6500"}),
+        "link": workbook.add_format(
+            {"font_size": 11, "valign": "top", "text_wrap": True, "font_color": "#185FA5", "underline": 1}
+        ),
     }
 
 
@@ -210,12 +213,19 @@ def _write_data_sheet(
             for index, column in enumerate(columns):
                 fmt = formats[column["fmt"]]
                 formula = column.get("formula")
+                link_url = str(row.get(column["link_key"], "")) if column.get("link_key") else ""
                 if formula is not None:
                     expr, cached = formula(col_index, excel_row, row)
                     if expr is None:
                         _write_value(worksheet, row_index, index, cached, fmt)
                     else:
                         worksheet.write_formula(row_index, index, expr, fmt, cached)
+                elif column.get("link_key"):
+                    name = str(row.get(column["key"], ""))
+                    if link_url:
+                        worksheet.write_url(row_index, index, link_url, formats["link"], name)
+                    else:
+                        _write_value(worksheet, row_index, index, name, formats["text"])
                 else:
                     _write_value(worksheet, row_index, index, row.get(column["key"], ""), fmt)
             row_index += 1
@@ -319,6 +329,18 @@ def _disposals_columns() -> list[dict]:
         {"key": "pricing_quality", "label": "Pricing Quality", "fmt": "text"},
         {"key": "description", "label": "Description", "fmt": "text"},
         {"key": "tags", "label": "Tags", "fmt": "text"},
+    ]
+
+
+def _evidence_columns() -> list[dict]:
+    return [
+        {"key": "occurred_at", "label": "Occurred At", "fmt": "text"},
+        {"key": "wallet", "label": "Wallet", "fmt": "text"},
+        {"key": "transaction_id", "label": "Transaction ID", "fmt": "text"},
+        {"key": "asset", "label": "Asset", "fmt": "text"},
+        {"key": "type", "label": "Type", "fmt": "text"},
+        {"key": "name", "label": "Name (link)", "fmt": "link", "link_key": "url"},
+        {"key": "reference", "label": "Reference", "fmt": "text"},
     ]
 
 
@@ -608,8 +630,10 @@ def _verify_readme_rows(
                 "Each Acquisitions/Disposals row shows its description and tags. The "
                 "main report's Transactions sheet is the full per-transaction record: "
                 "description, note, counterparty, tags, and an Attachments column "
-                "listing every linked file name and URL. Match a ledger row to its "
-                "evidence by the Transaction ID.",
+                "where a linked URL is shown as a clickable link behind its name "
+                "(multiple links are listed one per line). The Evidence sheet lists "
+                "every attachment as its own row with a clickable link. Match a ledger "
+                "row to its evidence by the Transaction ID.",
                 "text",
             ),
             ("Missing rows", "subheader"),
@@ -717,6 +741,7 @@ def augment_workbook(
     disposals: list[dict],
     asset_rows: list[dict],
     quarantines: list[dict] | None = None,
+    attachments: list[dict] | None = None,
 ) -> list[str]:
     """Append the verification sheets to an open xlsxwriter workbook.
 
@@ -770,6 +795,16 @@ def augment_workbook(
     _write_status_banner(verify_ws, formats, control_ref, sub_ref)
 
     sheets = list(VERIFY_SHEET_NAMES)
+    if attachments:
+        _write_data_sheet(
+            workbook,
+            formats,
+            sheet_name="Evidence",
+            title="Linked evidence — one clickable link per attachment",
+            rows=attachments,
+            columns=_evidence_columns(),
+        )
+        sheets.append("Evidence")
     if quarantines:
         _write_data_sheet(
             workbook,

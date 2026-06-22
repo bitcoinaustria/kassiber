@@ -279,10 +279,13 @@ every figure in Excel/LibreOffice rather than trusting the static numbers:
   excluded from every figure.
 
 The main report's **Transactions** sheet is the full per-transaction record:
-description, note, counterparty, tags, and an **Attachments** column listing
-every linked file name and URL. The Acquisitions/Disposals ledgers also carry
-each row's description and tags; match a ledger row to its evidence by the
-Transaction ID.
+description, note, counterparty, tags, and an **Attachments** column. A single
+linked URL renders as a clickable link shown behind its name; multiple
+attachments are listed one per line (Excel allows only one hyperlink per cell).
+The Acquisitions/Disposals ledgers also carry each row's description and tags;
+match a ledger row to its evidence by the Transaction ID. When any attachments
+exist, an **Evidence** sheet lists every link as its own row with a clickable
+styled link — so even a transaction with several links has each one clickable.
 
 Reconciliation is per asset across the whole profile (Bitcoin accounting is
 pooled per asset across wallets; per-wallet cost basis is an allocation).

@@ -1197,6 +1197,15 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIn("Counterparty", shared)
         # The URL attachment added in the attachments lifecycle is surfaced.
         self.assertIn("docs.google.com", shared)
+        # Every linked attachment is a clickable styled link on the Evidence sheet.
+        self.assertIn("Evidence", payload["data"]["sheets"])
+        self.assertIn("Name (link)", shared)
+        with zipfile.ZipFile(verify_path) as workbook:
+            names = re.findall(r'<sheet name="([^"]+)"', workbook.read("xl/workbook.xml").decode("utf-8"))
+            evidence_rels = workbook.read(
+                f"xl/worksheets/_rels/sheet{names.index('Evidence') + 1}.xml.rels"
+            ).decode("utf-8")
+        self.assertIn("docs.google.com", evidence_rels)  # real hyperlink target
 
         # Cached results must equal Kassiber's numbers: each Disposals gain cell
         # (column J = proceeds - basis) must match the stored engine gain
@@ -1262,9 +1271,14 @@ class CliSmokeTest(unittest.TestCase):
             run("profiles", "create", "--workspace", "Main", "--fiat-currency", "USD", "--tax-country", "generic", "Default")
             run("wallets", "create", "--workspace", "Main", "--profile", "Default", "--label", "W1", "--kind", "custom")
             run("wallets", "import-csv", "--workspace", "Main", "--profile", "Default", "--wallet", "W1", "--file", str(csv_path))
+            # A single Google Docs link on the sale -> styled clickable name.
+            sale_doc = "https://docs.google.com/document/d/1sAmPleSaLeReceipt/edit"
+            run("attachments", "add", "--workspace", "Main", "--profile", "Default",
+                "--transaction", "sell-1", "--url", sale_doc, "--label", "Sale receipt")
             run("journals", "process", "--workspace", "Main", "--profile", "Default")
             export = run("reports", "export-xlsx", "--workspace", "Main", "--profile", "Default", "--file", str(xlsx_path))
             self.assertTrue(export["data"]["verified"])
+            self.assertIn("Evidence", export["data"]["sheets"])
 
             portfolio = run("reports", "portfolio-summary", "--workspace", "Main", "--profile", "Default")["data"]
             capital = run("reports", "capital-gains", "--workspace", "Main", "--profile", "Default")["data"]
@@ -1374,6 +1388,25 @@ class CliSmokeTest(unittest.TestCase):
             for headers in (acq_h, disp_h):
                 self.assertIn("Description", headers)
                 self.assertIn("Tags", headers)
+
+            # The single Google Docs link is a real hyperlink: shown behind its
+            # name on the Transactions sheet and listed on the Evidence sheet.
+            with zipfile.ZipFile(xlsx_path) as workbook:
+                names = re.findall(r'<sheet name="([^"]+)"', workbook.read("xl/workbook.xml").decode("utf-8"))
+                tx_rels = workbook.read(
+                    f"xl/worksheets/_rels/sheet{names.index('Transactions') + 1}.xml.rels"
+                ).decode("utf-8")
+                ev_rels = workbook.read(
+                    f"xl/worksheets/_rels/sheet{names.index('Evidence') + 1}.xml.rels"
+                ).decode("utf-8")
+            self.assertIn(sale_doc, tx_rels)  # clickable link in the Transactions cell
+            self.assertIn(sale_doc, ev_rels)  # clickable link on the Evidence sheet
+            # The visible cell text is the name, not the raw URL.
+            tx = sheets["Transactions"]
+            tx_h = {l: c for c, l in tx.get(2, {}).items()}
+            att_values = [tx[r].get(tx_h["Attachments"]) for r in tx if r >= 3 and tx_h["Attachments"] in tx[r]]
+            self.assertIn("Sale receipt", att_values)
+            self.assertNotIn(sale_doc, att_values)  # URL is the link target, not the shown text
 
     def test_07aa_pdf_writer_reports_actual_page_count(self):
         from kassiber.pdf_report import write_text_pdf
