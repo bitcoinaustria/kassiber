@@ -1,5 +1,7 @@
 import {
+  LineChart,
   Maximize2,
+  RefreshCw,
   Settings,
   X,
 } from "lucide-react";
@@ -54,6 +56,7 @@ import {
   formatTreasuryTick,
   fullTreasuryBrushRange,
   getDataForPeriod,
+  hasTreasuryChartData,
   initialActivityMarkerMinimumFromUrl,
   initialTimePeriodFromUrl,
   INCOMING_MARKER_MIN_PARAM,
@@ -90,15 +93,23 @@ export const BtcActivityChart = ({
   hideSensitive,
   currency,
   onOpenTransactionDetail,
+  onRefresh,
+  isRefreshing = false,
   fiatSeriesEnabled = true,
 }: {
   snapshot: OverviewSnapshot;
   hideSensitive: boolean;
   currency: Currency;
   onOpenTransactionDetail?: (transactionId: string) => void;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
   fiatSeriesEnabled?: boolean;
 }) => {
   const { t } = useTranslation(["overview", "common"]);
+  const hasChartData = React.useMemo(
+    () => hasTreasuryChartData(snapshot),
+    [snapshot],
+  );
   const to = t as OverviewTranslate;
   const [period, setPeriod] =
     React.useState<TimePeriod>(initialTimePeriodFromUrl);
@@ -556,9 +567,11 @@ export const BtcActivityChart = ({
               <p className="text-sm font-semibold text-foreground">
                 {t("treasury.title")}
               </p>
-              <span className="text-[10px] text-muted-foreground">
-                {t("treasury.asOf", { date: detailDate })}
-              </span>
+              {hasChartData && (
+                <span className="text-[10px] text-muted-foreground">
+                  {t("treasury.asOf", { date: detailDate })}
+                </span>
+              )}
               {priceSyncLabel && (
                 <span
                   className="text-[10px] text-muted-foreground"
@@ -568,6 +581,7 @@ export const BtcActivityChart = ({
                 </span>
               )}
             </div>
+            {hasChartData && (
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span>
                 <span className={cn("font-semibold text-foreground", blurClass(hideSensitive))}>
@@ -627,6 +641,7 @@ export const BtcActivityChart = ({
                 </span>
               )}
             </div>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -706,6 +721,8 @@ export const BtcActivityChart = ({
           </div>
         )}
 
+        {hasChartData ? (
+          <>
         <div className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
           {legendItems.map((item) => (
             <button
@@ -1064,6 +1081,44 @@ export const BtcActivityChart = ({
             </div>
           )}
         </div>
+        </>
+        ) : (
+          <div
+            className={cn(
+              "flex w-full min-w-0 flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-background/40 px-6 text-center",
+              expanded ? "h-[min(64vh,620px)]" : "h-[380px] sm:h-[456px]",
+            )}
+          >
+            <LineChart
+              className="size-8 text-muted-foreground/60"
+              aria-hidden="true"
+            />
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-foreground">
+                {t("treasury.empty.title")}
+              </p>
+              <p className="mx-auto max-w-xs text-xs text-muted-foreground">
+                {t("treasury.empty.body")}
+              </p>
+            </div>
+            {onRefresh ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-2"
+                onClick={onRefresh}
+                disabled={isRefreshing}
+              >
+                <RefreshCw
+                  className={cn("size-4", isRefreshing && "animate-spin")}
+                  aria-hidden="true"
+                />
+                {isRefreshing ? t("welcome.refreshing") : t("welcome.refresh")}
+              </Button>
+            ) : null}
+          </div>
+        )}
       </div>
     );
   };

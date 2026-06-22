@@ -861,6 +861,17 @@ export function fallbackPortfolioData(
   });
 }
 
+// Whether the snapshot carries real treasury data worth plotting. Mirrors the
+// fallback gate inside `getDataForPeriod`: with no portfolio series, an
+// all-zero balance series, and no activity events, the chart would otherwise
+// render synthetic demo points. Callers use this to show an empty state with a
+// refresh prompt instead of misleading placeholder data.
+export function hasTreasuryChartData(snapshot: OverviewSnapshot): boolean {
+  if (snapshot.portfolioSeries?.length) return true;
+  if (snapshot.balanceSeries.some((value) => value !== 0)) return true;
+  return activityTxs(snapshot).length > 0;
+}
+
 export function getDataForPeriod(
   period: TimePeriod,
   snapshot: OverviewSnapshot,

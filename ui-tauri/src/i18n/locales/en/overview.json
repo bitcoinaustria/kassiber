@@ -333,6 +333,10 @@
     "seriesToggle": "{{action}} {{label}}",
     "btcPriceAxis": "BTC Price ({{currency}})",
     "dragHint": "Drag the timeline window or handles to adjust the timeframe; double-click to reset",
+    "empty": {
+      "title": "Nothing to chart yet",
+      "body": "Connect a wallet or import transactions, then refresh to see your Bitcoin balance and activity here."
+    },
     "stat": {
       "changeInBalance": "Change in Bitcoin balance",
       "highestPosition": "Highest BTC position",

@@ -196,6 +196,8 @@ export const OverviewDashboard = ({
               hideSensitive={hideSensitive}
               currency={currency}
               onOpenTransactionDetail={openTransactionDetail}
+              onRefresh={refreshOverviewState}
+              isRefreshing={isRefreshingOverview}
             />
             <RecentTransactionsTable
               className="min-w-0"
