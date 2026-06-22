@@ -610,6 +610,19 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   source outflow, target payout amount, reviewed sale proceeds, swap fee,
   and Austrian carrying-value handoff are modeled without fake recipient
   wallets.
+- [x] Failed-swap refund handling: same-wallet same-asset pairs are
+  allowed (carrying-value, no longer rejected), the HTLC parser decodes
+  the refund/timeout branch, esplora/electrum sync links a refund to its
+  lockup via `transactions.swap_refund_funding_txid`, and the matcher
+  surfaces it as an exact `swap-refund` candidate (method `htlc_refund`,
+  same-wallet and window-independent). Surfacing only — no silent
+  auto-pair; the round trip books only the fee, not a SELL + BUY.
+- [ ] Widen the failed-swap refund link beyond chain-synced Boltz v1
+  P2WSH refunds: backfill `swap_refund_funding_txid` from `raw_json` for
+  rows synced before the column existed, accept it as a CSV/importer
+  column, and fold it into the bitcoinrpc HTLC enrichment below. Boltz v2
+  Taproot cooperative refunds reveal no witness, so they stay
+  heuristic-only by physics.
 - [ ] Daemon kind for ``detect_repeating_patterns`` + "Create rule from
   this pattern?" prompt in the swap review UI (pattern-detector helper
   already exists in `kassiber/core/swap_rules.py`).
