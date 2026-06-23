@@ -242,6 +242,54 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
             all(q["reason"] == "owned_fanout_unresolved" for q in inputs.quarantines)
         )
 
+    def test_zero_value_inbound_does_not_block_self_transfer(self):
+        # A stray 0-value inbound row sharing the txid of a real cold->hot
+        # self-transfer must not inflate the inbound count: detect_intra_transfers
+        # still pairs the real legs (rather than skipping a non-1-out/1-in group),
+        # and _owned_fanout_row_ids does not flip the group into a spurious
+        # owned_fanout_unresolved quarantine.
+        from kassiber.transfers import detect_intra_transfers
+
+        refs = {
+            "wallet-a": {"id": "wallet-a", "label": "Wallet A"},
+            "wallet-b": {"id": "wallet-b", "label": "Wallet B"},
+            "wallet-c": {"id": "wallet-c", "label": "Wallet C"},
+        }
+        out_row = _row("move-out", "wallet-a", "outbound", 50_000_000_000,
+                       fee=10_000_000, fiat_rate=60_000, external_id="move-1")
+        in_row = _row("move-in", "wallet-b", "inbound", 50_000_000_000,
+                      fiat_rate=60_000, external_id="move-1")
+        zero_in = _row("zero-in", "wallet-c", "inbound", 0,
+                       fiat_rate=60_000, external_id="move-1")
+        rows = [out_row, in_row, zero_in]
+
+        pairs, matched = detect_intra_transfers(rows)
+        self.assertEqual(len(pairs), 1)
+        self.assertEqual(pairs[0]["out"]["id"], "move-out")
+        self.assertEqual(pairs[0]["in"]["id"], "move-in")
+        self.assertEqual(matched, {"move-out", "move-in"})
+
+        inputs = normalize_tax_asset_inputs(self.profile, "BTC", rows, refs, pairs)
+        self.assertEqual(len(inputs.transfers), 1)
+        self.assertFalse(
+            any(q["reason"] == "owned_fanout_unresolved" for q in inputs.quarantines)
+        )
+
+    def test_detect_intra_transfers_folds_mixed_case_txid(self):
+        # A txid recorded uppercase in one wallet and lowercase in another is the
+        # same on-chain transaction; the grouping must fold case so the pair is
+        # detected rather than split into a phantom disposal + acquisition.
+        from kassiber.transfers import detect_intra_transfers
+
+        txid = "cd" * 32
+        out_row = _row("o", "wallet-a", "outbound", 50_000_000_000,
+                       external_id=txid.upper())
+        in_row = _row("i", "wallet-b", "inbound", 50_000_000_000,
+                      external_id=txid.lower())
+        pairs, matched = detect_intra_transfers([out_row, in_row])
+        self.assertEqual(len(pairs), 1)
+        self.assertEqual(matched, {"o", "i"})
+
     def test_transfer_mismatch_quarantines_without_normalized_transfer(self):
         out_row = _row(
             "tx-out",

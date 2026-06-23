@@ -399,6 +399,48 @@ def report_balance_sheet(conn, workspace_ref, profile_ref, hooks: ReportHooks):
     return rows
 
 
+# Reconstructing holdings by summing raw journal_entries quantities must mirror
+# the entry-type compensation baked into report_verify._holdings_quantity_formula.
+# The engine books a self-transfer's network fee in TWO rows (transfer_out's
+# quantity already includes the fee, and a separate transfer_fee disposes that
+# same fee) and books earned coins in TWO rows (an `acquisition` lot plus an
+# `income` recognition line). A naive Σ(quantity) therefore double-subtracts the
+# fee and double-counts income, diverging from the BalanceSet-derived holdings
+# tables the live (non-historical) reports read. These helpers keep the as-of
+# portfolio and balance-history paths in lockstep with that canonical balance.
+_HOLDINGS_QUANTITY_SKIP_ENTRY_TYPES = frozenset({"income", "transfer_fee"})
+_HOLDINGS_BASIS_SKIP_ENTRY_TYPES = frozenset({"income"})
+
+
+def _holdings_quantity_delta(entry_type, quantity):
+    """Net-holdings quantity contribution of one journal entry.
+
+    ``transfer_fee`` is skipped (its quantity is already inside ``transfer_out``'s
+    ``sent``); ``income`` is skipped (the coins are already counted by their
+    paired ``acquisition`` lot). Every other entry's stored quantity already
+    carries the correct sign (acquisition / transfer_in positive,
+    disposal / fee / transfer_out negative).
+    """
+    if entry_type in _HOLDINGS_QUANTITY_SKIP_ENTRY_TYPES:
+        return Decimal("0")
+    return quantity
+
+
+def _holdings_basis_delta(entry_type, quantity, fiat_value, cost_basis):
+    """Ending cost-basis contribution of one journal entry.
+
+    Mirrors ``report_verify.basis_recompute``: add acquisition / transfer_in
+    ``fiat_value``, subtract every sub-side ``cost_basis`` (disposal / fee /
+    transfer_out / transfer_fee). ``income`` is skipped because its basis rides
+    on the paired ``acquisition`` lot.
+    """
+    if entry_type in _HOLDINGS_BASIS_SKIP_ENTRY_TYPES:
+        return Decimal("0")
+    if quantity >= 0:
+        return fiat_value
+    return -cost_basis
+
+
 def _historical_portfolio_summary(conn, profile, hooks: ReportHooks, as_of_dt, *, include_wallet_id=False):
     rows = conn.execute(
         """
@@ -408,6 +450,7 @@ def _historical_portfolio_summary(conn, profile, hooks: ReportHooks, as_of_dt, *
             w.label AS wallet,
             COALESCE(a.code, a.label, '') AS account,
             je.asset,
+            je.entry_type,
             je.quantity,
             je.fiat_value,
             COALESCE(je.cost_basis, 0) AS cost_basis
@@ -451,11 +494,30 @@ def _historical_portfolio_summary(conn, profile, hooks: ReportHooks, as_of_dt, *
     for row in rows:
         quantity = msat_to_btc(row["quantity"])
         key = (row["wallet_id"], row["wallet"], row["account"], row["asset"])
-        holdings[key]["quantity"] += quantity
-        if quantity >= 0:
-            holdings[key]["cost_basis"] += dec(row["fiat_value"])
-        else:
-            holdings[key]["cost_basis"] -= dec(row["cost_basis"])
+        holdings[key]["quantity"] += _holdings_quantity_delta(row["entry_type"], quantity)
+        holdings[key]["cost_basis"] += _holdings_basis_delta(
+            row["entry_type"], quantity, dec(row["fiat_value"]), dec(row["cost_basis"])
+        )
+
+    # Per-wallet basis is an allocation, not the raw per-wallet journal sum:
+    # a self-transfer's `transfer_out` carries no cost_basis and `transfer_in`
+    # no fiat_value, so summing per wallet would strand the moved basis in the
+    # source wallet and leave the destination with zero basis. Mirror the live
+    # report's _accumulate_asset_holdings — price each wallet's residual quantity
+    # at the asset's pooled average residual basis (the profile-scope basis total
+    # is method-independent and matches report_verify). The profile-wide cost
+    # basis is unchanged; only its per-wallet attribution becomes the allocation.
+    pool_quantity = defaultdict(lambda: Decimal("0"))
+    pool_cost_basis = defaultdict(lambda: Decimal("0"))
+    for (_pwid, _pwlabel, _pacct, pool_asset), value in holdings.items():
+        pool_quantity[pool_asset] += value["quantity"]
+        pool_cost_basis[pool_asset] += value["cost_basis"]
+    avg_basis_per_unit = {
+        pool_asset: (pool_cost_basis[pool_asset] / pool_quantity[pool_asset])
+        if pool_quantity[pool_asset] > 0
+        else Decimal("0")
+        for pool_asset in pool_quantity
+    }
 
     results = []
     for (wallet_id, wallet_label, account_code, asset), value in sorted(
@@ -465,10 +527,10 @@ def _historical_portfolio_summary(conn, profile, hooks: ReportHooks, as_of_dt, *
         quantity = value["quantity"]
         if quantity <= 0:
             continue
-        cost_basis = value["cost_basis"]
+        avg_cost = avg_basis_per_unit.get(asset, Decimal("0"))
+        cost_basis = quantity * avg_cost
         latest_rate = latest_rates.get(asset, Decimal("0"))
         market_value = quantity * latest_rate
-        avg_cost = cost_basis / quantity if quantity else Decimal("0")
         result = {
             "wallet": wallet_label,
             "account": account_code,
@@ -669,6 +731,7 @@ def report_balance_history(
         SELECT
             je.occurred_at,
             je.asset,
+            je.entry_type,
             je.quantity,
             je.fiat_value,
             COALESCE(je.cost_basis, 0) AS cost_basis
@@ -690,6 +753,39 @@ def report_balance_history(
         params.append(asset)
     sql += " ORDER BY je.occurred_at ASC, je.created_at ASC, je.id ASC"
     rows = conn.execute(sql, params).fetchall()
+    scoped_basis_allocation = bool(wallet_ref or account_ref)
+    pool_events = []
+    if scoped_basis_allocation:
+        # Scoped history reports quantity for the selected wallet/account, but
+        # cost basis follows the profile-wide residual pool allocation used by
+        # the live/as-of portfolio reports.
+        pool_sql = """
+            SELECT
+                je.occurred_at,
+                je.asset,
+                je.entry_type,
+                je.quantity,
+                je.fiat_value,
+                COALESCE(je.cost_basis, 0) AS cost_basis
+            FROM journal_entries je
+            WHERE je.profile_id = ?
+        """
+        pool_params = [profile["id"]]
+        if asset:
+            pool_sql += " AND je.asset = ?"
+            pool_params.append(asset)
+        pool_sql += " ORDER BY je.occurred_at ASC, je.created_at ASC, je.id ASC"
+        for row in conn.execute(pool_sql, pool_params).fetchall():
+            pool_events.append(
+                (
+                    hooks.parse_iso_datetime(row["occurred_at"], "occurred_at"),
+                    row["asset"],
+                    row["entry_type"],
+                    msat_to_btc(row["quantity"]),
+                    dec(row["fiat_value"]),
+                    dec(row["cost_basis"]),
+                )
+            )
     rate_rows = conn.execute(
         """
         SELECT occurred_at, asset, amount, fiat_rate, fiat_value
@@ -711,6 +807,7 @@ def report_balance_history(
             (
                 row_dt,
                 row["asset"],
+                row["entry_type"],
                 msat_to_btc(row["quantity"]),
                 dec(row["fiat_value"]),
                 dec(row["cost_basis"]),
@@ -735,7 +832,10 @@ def report_balance_history(
 
     cumulative = defaultdict(lambda: Decimal("0"))
     cumulative_fiat = defaultdict(lambda: Decimal("0"))
+    pool_quantity = defaultdict(lambda: Decimal("0"))
+    pool_cost_basis = defaultdict(lambda: Decimal("0"))
     event_idx = 0
+    pool_event_idx = 0
     rate_idx = 0
     current_rates = {}
     bucket_start = _floor_to_interval(range_start, interval)
@@ -745,13 +845,25 @@ def report_balance_history(
     while bucket_start <= end_cap:
         bucket_end = _next_interval(bucket_start, interval)
         while event_idx < len(events) and events[event_idx][0] < bucket_end:
-            _, ev_asset, ev_qty, ev_fiat, ev_cost_basis = events[event_idx]
-            cumulative[ev_asset] += ev_qty
-            if ev_qty >= 0:
-                cumulative_fiat[ev_asset] += ev_fiat
-            else:
-                cumulative_fiat[ev_asset] -= ev_cost_basis
+            _, ev_asset, ev_entry_type, ev_qty, ev_fiat, ev_cost_basis = events[event_idx]
+            cumulative[ev_asset] += _holdings_quantity_delta(ev_entry_type, ev_qty)
+            cumulative_fiat[ev_asset] += _holdings_basis_delta(
+                ev_entry_type, ev_qty, ev_fiat, ev_cost_basis
+            )
             event_idx += 1
+        while (
+            scoped_basis_allocation
+            and pool_event_idx < len(pool_events)
+            and pool_events[pool_event_idx][0] < bucket_end
+        ):
+            _, ev_asset, ev_entry_type, ev_qty, ev_fiat, ev_cost_basis = pool_events[
+                pool_event_idx
+            ]
+            pool_quantity[ev_asset] += _holdings_quantity_delta(ev_entry_type, ev_qty)
+            pool_cost_basis[ev_asset] += _holdings_basis_delta(
+                ev_entry_type, ev_qty, ev_fiat, ev_cost_basis
+            )
+            pool_event_idx += 1
         while rate_idx < len(rate_events) and rate_events[rate_idx][0] < bucket_end:
             _, rate_asset, rate = rate_events[rate_idx]
             current_rates[rate_asset] = rate
@@ -762,13 +874,23 @@ def report_balance_history(
             if qty == 0 and asset is None:
                 continue
             rate = current_rates.get(ev_asset, Decimal("0"))
+            if scoped_basis_allocation:
+                pool_qty = pool_quantity.get(ev_asset, Decimal("0"))
+                if pool_qty > 0:
+                    cost_basis = qty * (
+                        pool_cost_basis.get(ev_asset, Decimal("0")) / pool_qty
+                    )
+                else:
+                    cost_basis = Decimal("0")
+            else:
+                cost_basis = cumulative_fiat.get(ev_asset, Decimal("0"))
             results.append(
                 {
                     "period_start": hooks.iso_z(bucket_start),
                     "period_end": hooks.iso_z(bucket_end - timedelta(seconds=1)),
                     "asset": ev_asset,
                     "quantity": float(qty),
-                    "cumulative_cost_basis": float(cumulative_fiat.get(ev_asset, Decimal("0"))),
+                    "cumulative_cost_basis": float(cost_basis),
                     "market_value": float(qty * rate),
                 }
             )

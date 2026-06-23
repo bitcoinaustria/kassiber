@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import Any, Literal, Mapping, Optional, Sequence
 
 from ..msat import msat_to_btc
+from ..transfers import normalize_group_txid
 from . import pricing
 from .austrian import infer_outbound_regimes, infer_regime_from_timestamp, resolve_pool_id
 from .privacy_hops import privacy_hop_evidence_from_row
@@ -558,7 +559,7 @@ def _owned_fanout_row_ids(
         external_id = _row_get(row, "external_id")
         if not external_id:
             continue
-        groups.setdefault((str(external_id), row["asset"]), []).append(row)
+        groups.setdefault((normalize_group_txid(external_id), row["asset"]), []).append(row)
     fanout_ids: set[str] = set()
     for group in groups.values():
         if len(group) < 2:
@@ -573,7 +574,15 @@ def _owned_fanout_row_ids(
             for row in group
             if _row_get(row, "direction") == "outbound" and (row["amount"] or 0) > 0
         ]
-        ins = [row for row in group if _row_get(row, "direction") == "inbound"]
+        # Symmetric with the outbound filter and with detect_intra_transfers: a
+        # non-positive inbound is never a real receiving leg, so it must not
+        # inflate the inbound count and flip a clean self-transfer into a
+        # spurious owned_fanout_unresolved quarantine.
+        ins = [
+            row
+            for row in group
+            if _row_get(row, "direction") == "inbound" and (row["amount"] or 0) > 0
+        ]
         wallets = {row["wallet_id"] for row in group}
         if outs and ins and (len(outs) > 1 or len(ins) > 1) and len(wallets) >= 2:
             fanout_ids.update(row["id"] for row in group)

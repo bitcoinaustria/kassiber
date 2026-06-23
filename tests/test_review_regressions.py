@@ -19,6 +19,7 @@ from kassiber.cli.main import command_needs_db
 from kassiber.cli.handlers import (
     _attachment_hooks,
     _audit_transaction_refs,
+    _report_hooks,
     create_direct_swap_payout,
     create_transaction_pair,
     latest_rates_for_profile,
@@ -32,6 +33,8 @@ from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
 from kassiber.core.reports import (
     ReportHooks,
     _generic_report_transfer_pair_rows,
+    _holdings_basis_delta,
+    _holdings_quantity_delta,
     latest_transaction_rates_for_profile,
     report_austrian_e1kv,
     report_balance_sheet,
@@ -9683,6 +9686,181 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertAlmostEqual(january["market_value"], 10000.0, places=4)
         self.assertAlmostEqual(february["cumulative_cost_basis"], 5000.0, places=4)
         self.assertAlmostEqual(february["market_value"], 10000.0, places=4)
+
+    def test_holdings_delta_helpers_skip_double_counted_entry_types(self):
+        # The engine books a self-transfer's network fee twice (transfer_out's
+        # quantity already includes it AND a separate transfer_fee disposes the
+        # same fee) and earned coins twice (an acquisition lot plus an income
+        # recognition line). The holdings helpers must skip transfer_fee on the
+        # quantity axis and income on both axes so a raw Σ(quantity) does not
+        # double-count, matching report_verify._holdings_quantity_formula.
+        self.assertEqual(_holdings_quantity_delta("acquisition", Decimal("1.0")), Decimal("1.0"))
+        self.assertEqual(_holdings_quantity_delta("transfer_in", Decimal("0.5")), Decimal("0.5"))
+        self.assertEqual(_holdings_quantity_delta("transfer_out", Decimal("-0.501")), Decimal("-0.501"))
+        self.assertEqual(_holdings_quantity_delta("disposal", Decimal("-0.2")), Decimal("-0.2"))
+        self.assertEqual(_holdings_quantity_delta("fee", Decimal("-0.001")), Decimal("-0.001"))
+        self.assertEqual(_holdings_quantity_delta("transfer_fee", Decimal("-0.001")), Decimal("0"))
+        self.assertEqual(_holdings_quantity_delta("income", Decimal("0.1")), Decimal("0"))
+        # Basis axis: add acquisition/transfer_in fiat_value, subtract every
+        # sub-side cost_basis (including transfer_fee), skip income entirely.
+        self.assertEqual(
+            _holdings_basis_delta("acquisition", Decimal("1.0"), Decimal("60000"), Decimal("0")),
+            Decimal("60000"),
+        )
+        self.assertEqual(
+            _holdings_basis_delta("transfer_in", Decimal("0.5"), Decimal("0"), Decimal("0")),
+            Decimal("0"),
+        )
+        self.assertEqual(
+            _holdings_basis_delta("transfer_out", Decimal("-0.501"), Decimal("0"), Decimal("0")),
+            Decimal("0"),
+        )
+        self.assertEqual(
+            _holdings_basis_delta("transfer_fee", Decimal("-0.001"), Decimal("65"), Decimal("60")),
+            Decimal("-60"),
+        )
+        self.assertEqual(
+            _holdings_basis_delta("disposal", Decimal("-0.2"), Decimal("0"), Decimal("12000")),
+            Decimal("-12000"),
+        )
+        self.assertEqual(
+            _holdings_basis_delta("income", Decimal("0.1"), Decimal("6000"), Decimal("0")),
+            Decimal("0"),
+        )
+
+    def test_balance_history_and_as_of_portfolio_do_not_double_count_transfer_fee(self):
+        # Drive the real engine over the cold->hot self-transfer fixture (1.0 BTC
+        # acquired, 0.5 BTC moved with a 0.001 BTC miner fee). The engine emits
+        # transfer_out (-0.501, fee included), transfer_in (+0.5) and a separate
+        # transfer_fee (-0.001). Both journal-quantity-summing report paths must
+        # net the fee ONCE -> profile holdings 0.999 BTC (matching the
+        # BalanceSet-derived live portfolio-summary), not 0.998.
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+        payload, result = self._run_json("workspaces", "create", "Main")
+        self._assert_ok(payload, result, "workspaces.create")
+        payload, result = self._run_json(
+            "profiles", "create",
+            "--workspace", "Main",
+            "--fiat-currency", "USD",
+            "--tax-country", "generic",
+            "FixtureTransfer",
+        )
+        self._assert_ok(payload, result, "profiles.create")
+
+        cold_csv = self.case_dir / "fixture-cold.csv"
+        hot_csv = self.case_dir / "fixture-hot.csv"
+        cold_csv.write_text(_FIXTURE_COLD_TRANSFER_CSV, encoding="utf-8")
+        hot_csv.write_text(_FIXTURE_HOT_TRANSFER_CSV, encoding="utf-8")
+        for label in ("Cold", "Hot"):
+            payload, result = self._run_json(
+                "wallets", "create",
+                "--workspace", "Main",
+                "--profile", "FixtureTransfer",
+                "--label", label,
+                "--kind", "custom",
+            )
+            self._assert_ok(payload, result, "wallets.create")
+        payload, result = self._run_json(
+            "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "FixtureTransfer",
+            "--wallet", "Cold",
+            "--file", str(cold_csv),
+        )
+        self._assert_ok(payload, result, "wallets.import-csv")
+        payload, result = self._run_json(
+            "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "FixtureTransfer",
+            "--wallet", "Hot",
+            "--file", str(hot_csv),
+        )
+        self._assert_ok(payload, result, "wallets.import-csv")
+        summary, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "FixtureTransfer",
+        )
+        self._assert_ok(summary, result, "journals.process")
+
+        # balance-history (powers the GUI portfolio chart and the summary PDF):
+        # profile-wide BTC holdings net the miner fee once -> 0.999, never 0.998.
+        history, result = self._run_json(
+            "reports", "balance-history",
+            "--workspace", "Main",
+            "--profile", "FixtureTransfer",
+            "--interval", "month",
+        )
+        self._assert_ok(history, result, "reports.balance-history")
+        feb = next(
+            row for row in history["data"]
+            if row["asset"] == "BTC" and row["period_start"] == "2026-02-01T00:00:00Z"
+        )
+        self.assertAlmostEqual(feb["quantity"], 0.999, places=8)
+
+        # source-wallet-scoped: Cold loses sent (0.501) once, not sent + fee.
+        cold_history, result = self._run_json(
+            "reports", "balance-history",
+            "--workspace", "Main",
+            "--profile", "FixtureTransfer",
+            "--wallet", "Cold",
+            "--interval", "month",
+        )
+        self._assert_ok(cold_history, result, "reports.balance-history")
+        cold_feb = next(
+            row for row in cold_history["data"]
+            if row["asset"] == "BTC" and row["period_start"] == "2026-02-01T00:00:00Z"
+        )
+        self.assertAlmostEqual(cold_feb["quantity"], 0.499, places=8)
+
+        # destination-wallet-scoped basis is allocated from the same profile pool
+        # as the live/as-of portfolio path; the transfer_in row itself carries no
+        # fiat_value, so the old raw wallet sum left Hot at zero basis.
+        hot_history, result = self._run_json(
+            "reports", "balance-history",
+            "--workspace", "Main",
+            "--profile", "FixtureTransfer",
+            "--wallet", "Hot",
+            "--interval", "month",
+        )
+        self._assert_ok(hot_history, result, "reports.balance-history")
+        hot_feb = next(
+            row for row in hot_history["data"]
+            if row["asset"] == "BTC" and row["period_start"] == "2026-02-01T00:00:00Z"
+        )
+        self.assertAlmostEqual(hot_feb["quantity"], 0.5, places=8)
+        self.assertAlmostEqual(hot_feb["cumulative_cost_basis"], 30000.0, places=0)
+
+        # as-of portfolio-summary (the summary-PDF holdings path; not exposed on
+        # the CLI) must agree with the live BalanceSet path: Cold 0.499, Hot 0.5.
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        as_of_rows = {
+            row["wallet"]: row
+            for row in report_portfolio_summary(
+                conn,
+                "Main",
+                "FixtureTransfer",
+                _report_hooks(),
+                as_of="2099-01-01T00:00:00Z",
+                include_wallet_id=True,
+            )
+            if row["asset"] == "BTC"
+        }
+        self.assertAlmostEqual(as_of_rows["Cold"]["quantity"], 0.499, places=8)
+        self.assertAlmostEqual(as_of_rows["Hot"]["quantity"], 0.5, places=8)
+
+        # Per-wallet basis is allocated from the asset's pooled average (matching
+        # the live report), so the moved basis follows the coins to Hot instead
+        # of stranding in Cold. Both wallets share the ~60000 avg cost, and the
+        # destination is no longer zero-basis (the pre-fix raw per-wallet sum gave
+        # Cold avg ~120000 and Hot avg 0).
+        self.assertAlmostEqual(
+            as_of_rows["Cold"]["avg_cost"], as_of_rows["Hot"]["avg_cost"], places=4
+        )
+        self.assertAlmostEqual(as_of_rows["Cold"]["avg_cost"], 60000.0, places=0)
+        self.assertGreater(as_of_rows["Hot"]["cost_basis"], 1000.0)
 
     def test_table_output_honors_output_path(self):
         output_path = self.case_dir / "init.txt"
