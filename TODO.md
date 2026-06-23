@@ -714,6 +714,61 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 
 ## Open bugs and debt
 
+- [ ] Self-transfer audit follow-ups (deferred from the
+  `claude/self-transfer-fixes` PR, which fixed the as-of/balance-history fee +
+  income double-count, the non-positive-inbound detection asymmetry, and
+  mixed-case txid grouping). These remain because each needs a representation or
+  ordering decision and touches shared import/persistence paths where a rushed
+  change risks regressions:
+  - [ ] **BTCPay amount/fee convention (P1).** BTCPay's Greenfield
+    wallet-transactions API has no per-tx fee field, so
+    `normalize_btcpay_record` (`kassiber/importers.py:676-677`) stores
+    `amount = abs(net wallet delta)` (fee folded in) with `fee = Decimal("0")`,
+    diverging from esplora/electrum/bitcoinrpc which store recipient-only amount
+    + a separate fee. Consequences: (a) a self-transfer leg synced via BTCPay
+    is falsely quarantined `transfer_fee_implausible` because the embedded miner
+    fee reads as "unrecognized outflow" (`tax_events.py:721`, lockstep mirror
+    `transfer_matching.py:433`), so identical events are taxed differently by
+    backend; (b) a standalone BTCPay external payment loses the fee deduction,
+    overstating the realized gain by `fee * spot` (`rp2.py:792`). Fix needs a
+    `fee_unknown` representation threaded through the msat columns + the
+    implausible-fee guard (the fee genuinely cannot be read back from the API),
+    so it warrants its own design + test pass. Add a regression pairing a
+    BTCPay outbound (amount-includes-fee, fee=0) with an esplora inbound at a
+    plausible feerate and assert no false quarantine.
+  - [ ] **Sub-ceiling external payment absorbed as a transfer fee (P2).** When
+    one tx pays an owned wallet + a small external address + change, and both
+    owned wallets synced the shared txid, `detect_intra_transfers` pairs the
+    self-transfer leg and pre-empts the on-chain ownership deriver
+    (`already_paired_ids`, `rp2.py:1850`; deriver skip at
+    `ownership_transfers.py:142`). The external payment (under
+    `max(1% of out, 2500 sats)`) then falls through to a non-taxable MOVE fee
+    instead of a taxable disposal (`tax_events.py:729->805`). Fix: let the
+    ownership deriver inspect graph-readable sources before accepting a
+    same-txid 1-out/1-in pair, keeping `detect_intra` as the fallback for
+    graph-less (CSV) rows.
+  - [ ] **Swap-review fee omits out.fee (P2).** `compute_swap_fee = out.amount -
+    in.amount` (`transfer_matching.py:257`) ignores `out.fee`, so the review
+    surface, the persisted `transaction_pairs.swap_fee_msat`, and the GUI
+    "Transfer fee" line (`ui_snapshot.py:1085`) show 0 / "no_fee_detected" for a
+    same-asset on-chain self-transfer whose journal books a real miner-fee
+    disposal. Tax math is correct; this is a display/persistence consistency
+    bug. Fix changes the semantics of a persisted column + 3 call sites
+    (`transfer_matching.py:593`, `handlers.py:507,632`) + GUI + tests, so do it
+    as a focused slice: `swap_fee_msat = out.amount + out.fee - in.amount`.
+  - [ ] **RBF dropped-import phantom disposal (P3).** An RBF-replaced outbound
+    captured in the mempool before eviction has no matching inbound and falls
+    through to a taxable disposal (`tax_events.py:877`). Gated behind the
+    esplora/mempool backend + a sync-timing race (BTCPay is confirmed-only and
+    immune). Fix: a confirmed-only tax gate (`confirmed_at IS NOT NULL`) + a
+    shared-prevout RBF/conflict-dedup pass (matches the deferred BDK-eval note).
+  - [ ] **Fee-tolerance flag desync (P3).** `_deterministic_self_transfer_ids`
+    honors caller `--fee-pct-max/--fee-sats-min` but `tax_events`'s
+    `transfer_fee_implausible` ceiling is hardcoded to the defaults, so
+    `transfers suggest --fee-pct-max 0.5` empties a pair from the swap queue
+    while the report still quarantines it. Fix: make the deterministic
+    self-transfer suppression always use the defaults so the flag only widens
+    heuristic candidate generation.
 - [x] Austrian E 1kv PDF export no longer uses the Latin-1 text writer:
   `reports export-austrian-e1kv-pdf` / `reports export-austrian` now render a
   ReportLab-backed Steuerbericht with cover, summary/detail sections,
