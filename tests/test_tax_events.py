@@ -22,6 +22,7 @@ def _row(
     external_id=None,
     raw_json=None,
     privacy_boundary=None,
+    amount_includes_fee=False,
 ):
     return {
         "id": tx_id,
@@ -31,6 +32,7 @@ def _row(
         "asset": "BTC",
         "amount": amount,
         "fee": fee,
+        "amount_includes_fee": amount_includes_fee,
         "fiat_rate": fiat_rate,
         "fiat_value": fiat_value,
         "kind": "deposit" if direction == "inbound" else "withdrawal",
@@ -166,6 +168,46 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         self.assertAlmostEqual(detail["implied_fee"], 0.01952253, places=8)
         self.assertGreater(detail["implied_fee"], detail["fee_ceiling"])
         self.assertEqual(detail["required_for"], "transfer_fee_review")
+
+    def test_btcpay_fee_inclusive_self_transfer_books_with_correct_fee(self):
+        # BTCPay reports the net wallet delta with the miner fee folded into
+        # `amount` (fee column 0, amount_includes_fee=1). For a 0.001 BTC move
+        # synced as a BTCPay outbound (0.00103 net) paired with an esplora-style
+        # inbound (0.001 recipient), the 0.00003 gap IS the miner fee — it must
+        # book as a transfer, NOT quarantine transfer_fee_implausible the way the
+        # same gap would for a node-backed (recipient-only) outbound.
+        out_row = _row(
+            "btcpay-out", "wallet-a", "outbound", 103_000_000,
+            fiat_rate=65_000, external_id="btcpay-move", amount_includes_fee=True,
+        )
+        in_row = _row(
+            "node-in", "wallet-b", "inbound", 100_000_000, external_id="btcpay-move",
+        )
+        inputs = normalize_tax_asset_inputs(
+            self.profile, "BTC", [out_row, in_row], self.wallet_refs_by_id,
+            [{"out": out_row, "in": in_row}],
+        )
+        self.assertEqual(inputs.quarantines, [])
+        self.assertEqual(len(inputs.transfers), 1)
+        self.assertAlmostEqual(float(inputs.transfers[0].fee), 0.00003, places=8)
+
+        # Control: the identical amounts WITHOUT the fee-inclusive flag (a
+        # node-backed recipient-only outbound) stay quarantined, so the
+        # split-peg/unrecognized-outflow guard is not weakened in general.
+        out_node = _row(
+            "node-out", "wallet-a", "outbound", 103_000_000,
+            fiat_rate=65_000, external_id="node-move",
+        )
+        in_node = _row(
+            "node-in-2", "wallet-b", "inbound", 100_000_000, external_id="node-move",
+        )
+        control = normalize_tax_asset_inputs(
+            self.profile, "BTC", [out_node, in_node], self.wallet_refs_by_id,
+            [{"out": out_node, "in": in_node}],
+        )
+        self.assertEqual(control.transfers, [])
+        self.assertEqual(len(control.quarantines), 1)
+        self.assertEqual(control.quarantines[0]["reason"], "transfer_fee_implausible")
 
     def test_high_recorded_fee_self_transfer_not_implausible(self):
         # 0.001 BTC moved with a high 0.00005 BTC RECORDED network fee. The full

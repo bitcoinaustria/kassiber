@@ -6902,6 +6902,41 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["input_format"], "btcpay_csv")
         self.assertEqual(payload["data"]["imported"], 1)
 
+    def test_btcpay_import_marks_outbound_amount_includes_fee(self):
+        # BTCPay's net-wallet-delta amounts fold the miner fee into an outbound's
+        # `amount`. The importer must flag outbound rows `amount_includes_fee=1`
+        # (and inbound rows 0) and persist it through normalize_import_record and
+        # the INSERT, so the transfer-fee guard treats the out/in gap as the fee.
+        self._bootstrap_wallet(label="BTCPay")
+        btcpay_csv = self.case_dir / "btcpay.csv"
+        btcpay_csv.write_text(
+            "TransactionId,Timestamp,Currency,Amount,Comment,Labels\n"
+            "send-1,2024-02-01T00:00:00Z,BTC,-0.00103 BTC,send,\n"
+            "recv-1,2024-01-01T00:00:00Z,BTC,0.5 BTC,receive,\n",
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "wallets", "import-btcpay",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "BTCPay",
+            "--file", str(btcpay_csv),
+            "--format", "csv",
+        )
+        self._assert_ok(payload, result, "wallets.import-btcpay")
+        self.assertEqual(payload["data"]["imported"], 2)
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        self.addCleanup(conn.close)
+        flags = {
+            row["external_id"]: row["amount_includes_fee"]
+            for row in conn.execute(
+                "SELECT external_id, amount_includes_fee FROM transactions"
+            ).fetchall()
+        }
+        self.assertEqual(flags["send-1"], 1)
+        self.assertEqual(flags["recv-1"], 0)
+
     def test_btcpay_import_json_accepts_object_label_shape(self):
         self._bootstrap_wallet(label="BTCPayJSON")
         btcpay_json = self.case_dir / "btcpay.json"

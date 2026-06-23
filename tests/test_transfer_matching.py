@@ -260,6 +260,27 @@ class HeuristicMatchTests(unittest.TestCase):
         self.assertEqual(_deterministic_self_transfer_ids(rows), {"o", "i"})
         self.assertEqual(suggest_swap_candidates(rows, tax_country="at"), [])
 
+    def test_fee_inclusive_leg_claimed_as_deterministic(self):
+        # A BTCPay outbound folds the miner fee into `amount` (amount_includes_fee),
+        # so the out/in gap is the fee, not an implausible residual. It must be
+        # claimed as a proven self-transfer (suppressed from swap review), in
+        # lockstep with the journal's fee-inclusive transfer guard — even when the
+        # gap exceeds the standard max(1%, 2500 sats) ceiling.
+        out = _row(id="o", external_id="txid", wallet_id="btcpay",
+                   direction="outbound", asset="BTC", amount=103_000_000,
+                   amount_includes_fee=1)
+        inbound = _row(id="i", external_id="txid", wallet_id="hot",
+                       direction="inbound", asset="BTC", amount=100_000_000)
+        self.assertEqual(_deterministic_self_transfer_ids([out, inbound]), {"o", "i"})
+
+        # Control: the identical gap on a node-backed (recipient-only) outbound is
+        # NOT claimed — it stays eligible for swap review.
+        out_node = _row(id="o2", external_id="txid2", wallet_id="cold",
+                        direction="outbound", asset="BTC", amount=103_000_000)
+        in_node = _row(id="i2", external_id="txid2", wallet_id="hot",
+                       direction="inbound", asset="BTC", amount=100_000_000)
+        self.assertEqual(_deterministic_self_transfer_ids([out_node, in_node]), set())
+
     def test_implausible_fee_self_transfer_not_claimed_as_deterministic(self):
         # The id=47 split-peg shape: a ~41x-tolerance implied fee means the
         # outbound fanned out to an unrecognized recipient, so it must NOT be

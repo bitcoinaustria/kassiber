@@ -133,6 +133,11 @@ CREATE TABLE IF NOT EXISTS transactions (
     asset TEXT NOT NULL,
     amount INTEGER NOT NULL,
     fee INTEGER NOT NULL DEFAULT 0,
+    -- 1 when `amount` is a net wallet-balance delta with the network fee folded
+    -- in and no separate fee is available (BTCPay Greenfield sync). 0 (the
+    -- default) means `amount` is recipient-only and `fee` carries the miner fee
+    -- (esplora/electrum/bitcoinrpc and every CSV importer).
+    amount_includes_fee INTEGER NOT NULL DEFAULT 0,
     fiat_currency TEXT,
     fiat_rate REAL,
     fiat_value REAL,
@@ -1344,6 +1349,9 @@ def ensure_schema_compat(conn):
     _ensure_ai_provider_secret_refs_schema(conn)
     _drop_legacy_source_funds_recipients_unique(conn)
     _migrate_msat_columns(conn)
+    # Added after the msat rebuild, whose fixed column list would otherwise drop
+    # it on a legacy REAL-typed database.
+    ensure_column(conn, "transactions", "amount_includes_fee", "INTEGER NOT NULL DEFAULT 0")
     _migrate_attachment_table_shape(conn)
     ensure_column(conn, "attachments", "copied_from_attachment_id", "TEXT")
     ensure_column(conn, "attachments", "copied_from_transaction_id", "TEXT")

@@ -727,7 +727,17 @@ def normalize_tax_asset_inputs(
             # this 1-out/1-in pairing would otherwise absorb as a giant "fee" and
             # tax as a disposal. Quarantine for explicit review (the user splits
             # it into the real self-transfer + a cross-asset pair / swap payout).
-            unrecognized_outflow = msat_to_btc(out_row["amount"]) - msat_to_btc(in_row["amount"])
+            #
+            # Exception: when the source backend reports `amount` as a net wallet
+            # delta with the fee folded in (BTCPay; `amount_includes_fee`), the
+            # out/in gap IS the miner fee by construction — the fee lives in
+            # `amount`, not the separate `fee` column — so there is no
+            # "unrecognized" residual to flag. Treat it as fully recognized;
+            # `fee = sent - received` already books that miner fee correctly.
+            if _row_get(out_row, "amount_includes_fee"):
+                unrecognized_outflow = Decimal("0")
+            else:
+                unrecognized_outflow = msat_to_btc(out_row["amount"]) - msat_to_btc(in_row["amount"])
             fee_ceiling = msat_to_btc(
                 fee_threshold_msat(
                     int(out_row["amount"] or 0),

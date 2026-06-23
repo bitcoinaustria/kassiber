@@ -867,7 +867,8 @@ def _load_matcher_rows(conn, profile_id):
         SELECT
             t.id, t.profile_id, t.wallet_id, t.external_id, t.payment_hash,
             t.swap_refund_funding_txid,
-            t.occurred_at, t.direction, t.asset, t.amount, t.excluded,
+            t.occurred_at, t.direction, t.asset, t.amount, t.amount_includes_fee,
+            t.excluded,
             w.label AS wallet_label, w.kind AS wallet_kind
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id

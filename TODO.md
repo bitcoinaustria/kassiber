@@ -793,22 +793,34 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   mixed-case txid grouping). These remain because each needs a representation or
   ordering decision and touches shared import/persistence paths where a rushed
   change risks regressions:
-  - [ ] **BTCPay amount/fee convention (P1).** BTCPay's Greenfield
-    wallet-transactions API has no per-tx fee field, so
-    `normalize_btcpay_record` (`kassiber/importers.py:676-677`) stores
-    `amount = abs(net wallet delta)` (fee folded in) with `fee = Decimal("0")`,
-    diverging from esplora/electrum/bitcoinrpc which store recipient-only amount
-    + a separate fee. Consequences: (a) a self-transfer leg synced via BTCPay
-    is falsely quarantined `transfer_fee_implausible` because the embedded miner
-    fee reads as "unrecognized outflow" (`tax_events.py:721`, lockstep mirror
-    `transfer_matching.py:433`), so identical events are taxed differently by
-    backend; (b) a standalone BTCPay external payment loses the fee deduction,
-    overstating the realized gain by `fee * spot` (`rp2.py:792`). Fix needs a
-    `fee_unknown` representation threaded through the msat columns + the
-    implausible-fee guard (the fee genuinely cannot be read back from the API),
-    so it warrants its own design + test pass. Add a regression pairing a
-    BTCPay outbound (amount-includes-fee, fee=0) with an esplora inbound at a
-    plausible feerate and assert no false quarantine.
+  - [x] **BTCPay amount/fee convention — false self-transfer quarantine (P1).**
+    BTCPay's Greenfield wallet-transactions API has no per-tx fee field, so
+    `normalize_btcpay_record` stores `amount = abs(net wallet delta)` (fee folded
+    in) with `fee = 0`, diverging from esplora/electrum/bitcoinrpc (recipient-only
+    amount + separate fee). Fixed via a `transactions.amount_includes_fee` marker
+    (set on BTCPay outbound rows): the transfer-fee guard
+    (`tax_events.normalize_tax_asset_inputs`) and its lockstep mirror
+    (`transfer_matching._deterministic_self_transfer_ids`) now treat the out/in
+    gap on a fee-inclusive leg as the miner fee, not an unrecognized outflow, so a
+    BTCPay-leg self-transfer books correctly instead of being quarantined /
+    routed to swap review. Node backends (marker 0) are unchanged.
+  - [ ] **BTCPay folded-in fee — residual disposals (P2, residual of the above).**
+    The marker fixes the *pure* self-transfer, but the fee value still cannot be
+    read back from the Greenfield API, so the folded-in fee cannot be separated
+    from any other outflow in `amount`. Two residual cases remain, both
+    BTCPay-only, both leaving holdings correct (the net delta is what left):
+    (a) *Standalone payment* — a BTCPay external payment folds the fee into
+    `amount` with `fee = 0`, so its disposal overstates taxable proceeds by
+    `fee * spot` (`rp2.py` SELL `crypto_out_no_fee = amount`, `crypto_fee = 0`).
+    (b) *Paired/batched* — when one BTCPay tx pays a separately-synced owned
+    wallet *and* an external recipient, `detect_intra_transfers` pairs the
+    1-out/1-in legs and the P1 fix's `unrecognized_outflow = 0` books the whole
+    out/in gap (external payment + miner fee) as a transfer fee instead of
+    quarantining it, so the external payment is absorbed silently *regardless of
+    size* — unlike the node-backed sub-ceiling case below, which is bounded by
+    `max(1% of out, 2500 sats)`. A real fix needs out-of-band fee recovery (raw
+    tx / NBXplorer) or a surfaced "fee unknown" state on the disposal; the marker
+    added here is the groundwork.
   - [ ] **Sub-ceiling external payment absorbed as a transfer fee (P2).** When
     one tx pays an owned wallet + a small external address + change, and both
     owned wallets synced the shared txid, `detect_intra_transfers` pairs the

@@ -675,6 +675,11 @@ def normalize_btcpay_record(record):
         "asset": currency,
         "amount": abs(amount),
         "fee": Decimal("0"),
+        # BTCPay's Greenfield wallet-transactions API reports only the net wallet
+        # balance change, with no per-tx fee field. For a send that net delta
+        # already includes the miner fee, so flag it: the transfer-fee guard must
+        # treat the out/in discrepancy as the fee, not an unrecognized outflow.
+        "amount_includes_fee": amount < 0,
         "fiat_rate": None,
         "fiat_value": None,
         "kind": "withdrawal" if amount < 0 else "deposit",

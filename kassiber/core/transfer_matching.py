@@ -441,8 +441,14 @@ def _deterministic_self_transfer_ids(
             continue
         out_amount = int(_record_get(out_row, "amount") or 0)
         in_amount = int(_record_get(in_row, "amount") or 0)
-        if out_amount - in_amount > fee_threshold_msat(
-            out_amount, fee_pct_max, fee_sats_min
+        # When the out leg's `amount` is a net wallet delta with the fee folded
+        # in (BTCPay; `amount_includes_fee`), the out/in gap IS the miner fee, so
+        # it is not an implausible residual — keep it a proven self-transfer
+        # (suppressed from swap review), matching the journal's transfer-fee guard
+        # in tax_events.normalize_tax_asset_inputs.
+        if not _record_get(out_row, "amount_includes_fee") and (
+            out_amount - in_amount
+            > fee_threshold_msat(out_amount, fee_pct_max, fee_sats_min)
         ):
             # Implausible implied fee — likely an unrecognized peg/payment leg.
             # Don't claim it as a proven self-transfer; let it reach swap review.
