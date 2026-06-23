@@ -315,9 +315,9 @@
       "previewIssue": "Vorschau-Problembeschreibung",
       "bundleMode": "Bundle-Modus",
       "highSignalTitle": "High-Signal",
-      "highSignalDescription": "Hält Beträge, Adressen, txids, Pfade, Bezeichnungen, URLs und Fehlertext lesbar.",
+      "highSignalDescription": "Hält Adressen, Pfade, Bezeichnungen, URLs und Fehlertext lesbar. Txids und Beträge werden immer zu stabilen Pseudonymen (Beträge mit grober Größenordnung) – nie der Rohwert.",
       "publicSafeTitle": "Öffentlich-sicher",
-      "publicSafeDescription": "Maskiert betriebliche Felder und exakte Beträge, nachdem Wallet- und Zugangsdaten entfernt wurden.",
+      "publicSafeDescription": "Maskiert betriebliche Felder, nachdem Wallet- und Zugangsdaten entfernt wurden. Txids und Beträge werden zu stabilen Pseudonymen ohne Größenordnung.",
       "preview": "Vorschau",
       "firstLines": "Erste {{count}} Zeilen",
       "saveBundle": "Bundle speichern",
@@ -364,7 +364,7 @@
     "search": "Suche",
     "regexSearch": "Regex-Suche",
     "redactedView": "Geschwärzte Ansicht",
-    "maskAmounts": "Beträge maskieren"
+    "maskAmounts": "Größenordnung ausblenden"
   },
   "imports": {
     "eyebrow": "Verbindungen · Importe · Integrationen",

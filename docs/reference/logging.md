@@ -57,9 +57,38 @@ session) or `public_safe` (operational data masked, for public bug
 reports). Because operational redaction is a view concern, the raw-view
 window and the two export tiers all work from the same captured records.
 
+**Txids and amounts are the exception — pseudonymized in *both* tiers, never
+raw.** They are the wallet fingerprint: a single txid or amount in a bundle
+handed to an AI debugging session (the common workflow after a test sync
+against a real wallet) ties the log back to a real wallet on a block
+explorer. So instead of "readable in high_signal" they are always replaced
+with a *stable pseudonym* — a txid becomes `txid#<fnv>` and an amount becomes
+`amount#<fnv>`. The pseudonym is deterministic, so the same value collapses to
+the same token across every line (and across the Python/Rust/TS boundary,
+since the daemon mirrors the webview's FNV-1a), which keeps cross-line
+correlation — the actual debugging signal — intact. `high_signal` additionally
+appends a coarse order-of-magnitude bucket to amounts (`amount#a1b2 (~0.01
+BTC)`) for sat/msat-scale and fee-plausibility debugging; `public_safe` drops
+the magnitude. Addresses, paths, URLs and labels stay readable in
+`high_signal` as before. The only place a raw txid/amount can still reach disk
+is the explicitly watermarked, confirm-gated raw export
+(`redacted: false`). Market *rates* (`BTC/EUR 64000.12`) are public data, not
+the user's amount, and stay readable in `high_signal`.
+
+The pseudonymizers live in `redactSecretFloorText`'s sibling helpers in
+[`appLogs.ts`](../../ui-tauri/src/lib/appLogs.ts) (`pseudoTxid` /
+`pseudoAmount`) and in `redact_operational_text`
+([`kassiber/redaction.py`](../../kassiber/redaction.py)); the Python copy runs
+inside `sanitize_traceback_text` (so ring tracebacks, `error.debug` and the CLI
+`--debug` envelope are covered) and on the freshness disk write / UI snapshot,
+the two egresses that do not pass through the webview renderer.
+
 Prefer typed fields over free text when adding log producers: a field
 typed `address`/`txid`/`path` is masked by type at render time, while free
-text relies on the regex backstop, which is best-effort.
+text relies on the regex backstop, which is best-effort. A bare, unit-less
+integer amount (e.g. `12345678` with no `sats`/`BTC`) cannot be safely
+auto-detected in free text — emit it as a typed `amount` field, not
+interpolated into a message.
 
 ## What gets captured
 

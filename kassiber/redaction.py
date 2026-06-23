@@ -54,6 +54,69 @@ _RECOVERY_ASSIGNMENT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# --- Operational pseudonymization (txids + amounts) -------------------------
+# Unlike the secret floor above (credentials), txids and amounts are not
+# secrets but ARE the wallet fingerprint: a single txid/amount lets an AI
+# debugging session (or a public bug report) tie a log back to a real wallet.
+# They are replaced with STABLE pseudonyms so cross-line correlation survives.
+# The FNV-1a hash + token shapes mirror the webview redactor
+# (ui-tauri/src/lib/appLogs.ts) so a value pseudonymized here and one
+# pseudonymized in the UI collapse to the same token across the merged stream.
+_TXID_RE = re.compile(r"\b[0-9a-f]{64}\b", re.IGNORECASE)
+_AMOUNT_UNITS = (
+    "BTC|XBT|LBTC|sats?|msats?|EUR|USD|CHF|GBP|JPY|CAD|AUD|NZD|SEK|NOK|DKK|PLN|CZK|HUF"
+)
+_AMOUNT_NUMBER = r"[+-]?(?:(?:\d{1,3}(?:[,_ .]\d{3})+)|\d+)(?:[.,]\d+)?"
+_CURRENCY_SYMBOLS = "€$£¥₿"
+_AMOUNT_RE = re.compile(
+    "|".join(
+        (
+            rf"\b(?:{_AMOUNT_UNITS})\s*{_AMOUNT_NUMBER}\b",
+            rf"\b{_AMOUNT_NUMBER}\s*(?:{_AMOUNT_UNITS})\b",
+            rf"[{_CURRENCY_SYMBOLS}]\s*{_AMOUNT_NUMBER}\b",
+            rf"\b{_AMOUNT_NUMBER}\s*[{_CURRENCY_SYMBOLS}]",
+        )
+    ),
+    re.IGNORECASE,
+)
+_AMOUNT_NUM_RE = re.compile(r"[+-]?\d[\d.,_ ]*\d|[+-]?\d")
+
+
+def _stable_hash(value: str) -> str:
+    """FNV-1a (32-bit), byte-for-byte identical to the webview `stableHash`."""
+    h = 0x811C9DC5
+    for ch in value:
+        h = (h ^ (ord(ch) & 0xFFFFFFFF)) & 0xFFFFFFFF
+        h = (h * 0x01000193) & 0xFFFFFFFF
+    return format(h, "08x")
+
+
+def redact_operational_text(value: str) -> str:
+    """Pseudonymize txids and unit-tagged amounts in free text crossing egress.
+
+    A txid becomes ``txid#<fnv>`` and a unit-tagged amount becomes
+    ``amount#<fnv>``. Addresses/paths are intentionally left readable (the
+    operational tier keeps them for debugging). Bare unit-less integers cannot
+    be safely auto-detected without context and are left as-is; structure such
+    values into typed log fields instead of interpolating them into messages.
+    """
+    text = _TXID_RE.sub(lambda m: f"txid#{_stable_hash(m.group(0).lower())}", value)
+
+    def _amount(match: "re.Match[str]") -> str:
+        token = match.group(0)
+        start = match.start()
+        # A market-rate tail ("BTC/EUR 64000.12") is public data, not the
+        # user's amount; its number is preceded by the pair separator.
+        if start > 0 and text[start - 1] in "/-":
+            return token
+        num_match = _AMOUNT_NUM_RE.search(token)
+        num = num_match.group(0) if num_match else token
+        unit = re.sub(r"\s+", "", token.replace(num, "", 1))
+        key = f"{re.sub(r'[,_ ]', '', num)}|{unit.lower()}"
+        return f"amount#{_stable_hash(key)}"
+
+    return _AMOUNT_RE.sub(_amount, text)
+
 
 def is_sensitive_key(key: str) -> bool:
     lowered = key.lower().replace("-", "_")

@@ -13,6 +13,7 @@ from typing import Any, Callable, Mapping
 
 from ..envelope import json_ready
 from ..errors import AppError
+from ..redaction import redact_operational_text
 from ..time_utils import now_iso, parse_iso_datetime_or_none
 
 # Job failures recorded here also flow to the RAM-only log ring via the stdlib
@@ -859,11 +860,15 @@ def _mark_error(
     else:
         _LOGGER.error("Freshness %s failed (%s)", source_name, error_code)
     now = now_iso()
+    # This is a disk write (freshness_jobs.error_json), so pseudonymize txids /
+    # amounts the backend exception may have interpolated before they are
+    # persisted — redact_freshness_payload only scrubs secret *keys*, not
+    # operational ids inside a free-text message.
     error_payload = redact_freshness_payload(
         {
             "code": exc.code or "freshness_job_failed",
-            "message": str(exc),
-            "hint": exc.hint,
+            "message": redact_operational_text(str(exc)),
+            "hint": redact_operational_text(exc.hint) if exc.hint else exc.hint,
             "retryable": exc.retryable,
             "details": exc.details,
             "rate_limited_until": cooldown_until,
@@ -904,7 +909,7 @@ def _mark_error(
         retry_count=int(job.get("attempts") or 0),
         last_error_at=now,
         last_error_code=exc.code or "freshness_job_failed",
-        last_error_message=str(exc),
+        last_error_message=redact_operational_text(str(exc)),
         last_phase=PHASE_ERROR,
         progress={"phase": PHASE_ERROR},
         checkpoint=(state or {}).get("checkpoint", {}),

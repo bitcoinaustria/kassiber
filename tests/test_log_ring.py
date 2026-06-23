@@ -14,6 +14,10 @@ from kassiber.log_ring import (
     sanitize_exception,
     sanitize_traceback_text,
 )
+from kassiber.redaction import _stable_hash, redact_operational_text
+
+# A real-shaped (all-hex) txid; the value never matters, only that it is 64 hex.
+TXID = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"
 
 # BIP32 test-vector keys: public, Bitcoin-shaped material safe for fixtures.
 XPRV = "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi"
@@ -302,6 +306,63 @@ class SanitizeTest(unittest.TestCase):
 
     def test_sanitize_traceback_text_short_input_unchanged(self):
         self.assertEqual(sanitize_traceback_text("short message"), "short message")
+
+    def test_sanitize_traceback_pseudonymizes_txid(self):
+        # A backend exception message that interpolates a txid:vout outpoint must
+        # not ride raw into the ring traceback field / error.debug / CLI export.
+        text = f'  raise AppError("Liquid UTXO {TXID}:3 did not match")'
+        sanitized = sanitize_traceback_text(text)
+        self.assertNotIn(TXID, sanitized)
+        self.assertIn(f"txid#{_stable_hash(TXID)}", sanitized)
+        self.assertIn(":3", sanitized)  # vout stays readable
+
+
+class OperationalRedactionTest(unittest.TestCase):
+    def test_txid_becomes_stable_pseudonym(self):
+        out = redact_operational_text(f"could not price {TXID} now")
+        self.assertNotIn(TXID, out)
+        self.assertEqual(out, f"could not price txid#{_stable_hash(TXID)} now")
+
+    def test_same_txid_same_token_distinct_txids_distinct(self):
+        other = "f" * 64
+        out = redact_operational_text(f"{TXID} and {TXID} but not {other}")
+        token = f"txid#{_stable_hash(TXID)}"
+        self.assertEqual(out.count(token), 2)
+        self.assertNotEqual(_stable_hash(TXID), _stable_hash(other))
+
+    def test_unit_tagged_amounts_pseudonymized(self):
+        for text, raw in (
+            ("moving 12345678 sats", "12345678 sats"),
+            ("value 0.0123 BTC here", "0.0123 BTC"),
+            ("paid € 4500.00 today", "€ 4500.00"),
+        ):
+            out = redact_operational_text(text)
+            self.assertNotIn(raw, out)
+            self.assertIn("amount#", out)
+
+    def test_market_rate_stays_readable(self):
+        # A BTC/EUR rate is public market data, not the user's amount.
+        out = redact_operational_text("rate BTC/EUR 64000.12 applied")
+        self.assertEqual(out, "rate BTC/EUR 64000.12 applied")
+
+    def test_bare_integer_left_unchanged(self):
+        # No unit/symbol -> cannot be safely auto-detected; documented limitation.
+        self.assertEqual(
+            redact_operational_text("amount 12345678 invalid"),
+            "amount 12345678 invalid",
+        )
+
+    def test_addresses_left_readable(self):
+        # Owner scope is txid + amount only; addresses stay readable.
+        text = "spent to bc1qexampleaddress000000000000000000000"
+        self.assertEqual(redact_operational_text(text), text)
+
+    def test_fnv_matches_webview_contract(self):
+        # The daemon and the webview (ui-tauri/src/lib/appLogs.ts::stableHash)
+        # MUST produce identical tokens so a value pseudonymized on either side
+        # collapses to one token in the merged stream. This pins the contract;
+        # appLogs.test.ts asserts the same literal from the TS side.
+        self.assertEqual(_stable_hash("a" * 64), "d96f0f85")
 
 
 class RelativizePathTest(unittest.TestCase):
