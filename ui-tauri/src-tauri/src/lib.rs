@@ -190,6 +190,8 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.reports.export_austrian_e1kv_xlsx",
     "ui.reports.export_austrian_e1kv_csv",
     "ui.reports.export_audit_package",
+    "ui.transactions.export_csv",
+    "ui.transactions.export_xlsx",
     "ui.journals.snapshot",
     "ui.journals.events.list",
     "ui.journals.quarantine",
@@ -2760,6 +2762,22 @@ mod tests {
             "ui.attachments.rename",
             "ui.attachments.remove",
             "ui.attachments.open",
+        ];
+        for kind in required {
+            assert!(
+                ALLOWED_DAEMON_KINDS.contains(kind),
+                "daemon kind missing from Tauri allowlist: {kind}"
+            );
+        }
+    }
+
+    #[test]
+    fn transactions_export_daemon_kinds_are_in_allowlist() {
+        // The Transactions screen Export button invokes these directly from the
+        // webview; packaged desktop mode rejects any unlisted kind.
+        let required: &[&str] = &[
+            "ui.transactions.export_csv",
+            "ui.transactions.export_xlsx",
         ];
         for kind in required {
             assert!(
