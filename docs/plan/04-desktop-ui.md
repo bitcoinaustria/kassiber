@@ -180,23 +180,29 @@ boundary, the safe-view boundary becomes load-bearing — the webview must
 unit tests cover that `to_safe_view()` strips the documented sensitive
 keys.
 
-### 0.4 Add a logging directory contract
+### 0.4 Logging contract (superseded — RAM-only by design)
 
-Today there is no central log dir. Add `~/.kassiber/logs/` (or per-project
-`logs/` once the project-bundle migration lands per
-[03-storage-conventions.md](03-storage-conventions.md)) with rotation
-rules:
+> **Status:** the original "central on-disk `~/.kassiber/logs/` directory with
+> rotation, `diagnostics collect` folds all logs" design below is **rejected**.
+> The shipped contract is **RAM-only** — see
+> [docs/reference/logging.md](../reference/logging.md). An always-on log file is
+> an explicitly rejected design; logs live in a bounded in-memory ring buffer
+> and reach disk only on explicit, redacted user export. `diagnostics collect`
+> deliberately folds **no** logs.
 
-- `cli.log` — current CLI invocations (rotated daily, 7d retention).
-- `daemon.log` — added in Phase 1.
-- `supervisor.log` — added in Phase 2 (Rust side).
-- `webview.log` — added in Phase 2 (intercepted webview console).
+Originally planned (not built): a central log dir `~/.kassiber/logs/` (or
+per-project `logs/` per [03-storage-conventions.md](03-storage-conventions.md))
+with rotation — `cli.log` (daily, 7d retention), `daemon.log`, `supervisor.log`,
+`webview.log` — all redacted and folded into `diagnostics collect`.
 
-Logs follow the same redaction rules as the safe-view contract. The
-`diagnostics collect` command grows to fold all logs.
+What shipped instead: a Developer-tools-gated Logs view backed by a bounded
+RAM-only ring buffer with field-type redaction, copy-last-200, and
+Markdown/JSONL/log exports, plus a support-bundle export with High-signal and
+Public-safe redaction modes. Redaction follows the same secret-floor rules as
+the safe-view contract.
 
-**Verification:** logs appear, redaction is unit-tested,
-`diagnostics collect` includes them in its sanitized envelope.
+**Verification:** the RAM-only ring buffer + redaction are unit-tested;
+`diagnostics collect` stays public-safe and does not include raw logs.
 
 ## Phase 1 — Daemon mode (no UI yet)
 
@@ -797,8 +803,10 @@ These should be tracked at the project level, not silently accepted.
    the schema-drift CI check fails the build.
 5. **Three-language debugging fatigue.** A bug spans Rust supervisor,
    Python daemon, and React webview. Mitigation: unified
-   `request_id` across all three logs; `diagnostics collect` includes
-   all three; a "show last 50 envelopes" devtools panel in dev mode.
+   `request_id` across all three logs, surfaced through the RAM-only
+   Logs view + redacted support-bundle export (not `diagnostics
+   collect`, which stays log-free and public-safe); a "show last 50
+   envelopes" devtools panel in dev mode.
 6. **Apple notarization quirks.** Notarization can reject builds for
    embedded native libs (Python's `.dylib` files). Mitigation: budget
    for a notarization-only first cycle in Phase 5; capture the
