@@ -111,7 +111,16 @@ def detect_intra_transfers(rows):
             for r in group
             if r["direction"] == "outbound" and (r["amount"] or 0) > 0
         ]
-        ins = [r for r in group if r["direction"] == "inbound"]
+        # A non-positive inbound (0-value/placeholder import row sharing the
+        # txid) is never a real receiving leg; counting it would push a clean
+        # 1-out/1-in self-transfer into the >1-inbound "skip" branch and, via
+        # _owned_fanout_row_ids, into a spurious owned_fanout_unresolved
+        # quarantine. Filter it out symmetrically with the outbound filter.
+        ins = [
+            r
+            for r in group
+            if r["direction"] == "inbound" and (r["amount"] or 0) > 0
+        ]
         if len(outs) != 1 or len(ins) != 1:
             continue
         out_row, in_row = outs[0], ins[0]
