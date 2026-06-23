@@ -9833,6 +9833,17 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertAlmostEqual(as_of_rows["Cold"]["quantity"], 0.499, places=8)
         self.assertAlmostEqual(as_of_rows["Hot"]["quantity"], 0.5, places=8)
 
+        # Per-wallet basis is allocated from the asset's pooled average (matching
+        # the live report), so the moved basis follows the coins to Hot instead
+        # of stranding in Cold. Both wallets share the ~60000 avg cost, and the
+        # destination is no longer zero-basis (the pre-fix raw per-wallet sum gave
+        # Cold avg ~120000 and Hot avg 0).
+        self.assertAlmostEqual(
+            as_of_rows["Cold"]["avg_cost"], as_of_rows["Hot"]["avg_cost"], places=4
+        )
+        self.assertAlmostEqual(as_of_rows["Cold"]["avg_cost"], 60000.0, places=0)
+        self.assertGreater(as_of_rows["Hot"]["cost_basis"], 1000.0)
+
     def test_table_output_honors_output_path(self):
         output_path = self.case_dir / "init.txt"
         result = self._run_cli("init", output=output_path)

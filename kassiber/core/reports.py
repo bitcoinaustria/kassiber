@@ -499,6 +499,26 @@ def _historical_portfolio_summary(conn, profile, hooks: ReportHooks, as_of_dt, *
             row["entry_type"], quantity, dec(row["fiat_value"]), dec(row["cost_basis"])
         )
 
+    # Per-wallet basis is an allocation, not the raw per-wallet journal sum:
+    # a self-transfer's `transfer_out` carries no cost_basis and `transfer_in`
+    # no fiat_value, so summing per wallet would strand the moved basis in the
+    # source wallet and leave the destination with zero basis. Mirror the live
+    # report's _accumulate_asset_holdings — price each wallet's residual quantity
+    # at the asset's pooled average residual basis (the profile-scope basis total
+    # is method-independent and matches report_verify). The profile-wide cost
+    # basis is unchanged; only its per-wallet attribution becomes the allocation.
+    pool_quantity = defaultdict(lambda: Decimal("0"))
+    pool_cost_basis = defaultdict(lambda: Decimal("0"))
+    for (_pwid, _pwlabel, _pacct, pool_asset), value in holdings.items():
+        pool_quantity[pool_asset] += value["quantity"]
+        pool_cost_basis[pool_asset] += value["cost_basis"]
+    avg_basis_per_unit = {
+        pool_asset: (pool_cost_basis[pool_asset] / pool_quantity[pool_asset])
+        if pool_quantity[pool_asset] > 0
+        else Decimal("0")
+        for pool_asset in pool_quantity
+    }
+
     results = []
     for (wallet_id, wallet_label, account_code, asset), value in sorted(
         holdings.items(),
@@ -507,10 +527,10 @@ def _historical_portfolio_summary(conn, profile, hooks: ReportHooks, as_of_dt, *
         quantity = value["quantity"]
         if quantity <= 0:
             continue
-        cost_basis = value["cost_basis"]
+        avg_cost = avg_basis_per_unit.get(asset, Decimal("0"))
+        cost_basis = quantity * avg_cost
         latest_rate = latest_rates.get(asset, Decimal("0"))
         market_value = quantity * latest_rate
-        avg_cost = cost_basis / quantity if quantity else Decimal("0")
         result = {
             "wallet": wallet_label,
             "account": account_code,
