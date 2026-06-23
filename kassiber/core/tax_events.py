@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import Any, Literal, Mapping, Optional, Sequence
 
 from ..msat import msat_to_btc
+from ..transfers import normalize_group_txid
 from . import pricing
 from .austrian import infer_outbound_regimes, infer_regime_from_timestamp, resolve_pool_id
 from .privacy_hops import privacy_hop_evidence_from_row
@@ -558,7 +559,7 @@ def _owned_fanout_row_ids(
         external_id = _row_get(row, "external_id")
         if not external_id:
             continue
-        groups.setdefault((str(external_id), row["asset"]), []).append(row)
+        groups.setdefault((normalize_group_txid(external_id), row["asset"]), []).append(row)
     fanout_ids: set[str] = set()
     for group in groups.values():
         if len(group) < 2:
