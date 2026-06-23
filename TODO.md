@@ -118,8 +118,9 @@ Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the 
     strings.
   - Shared `lib/` enum→label maps consumed across surfaces
     (`lib/connectionDisplay.ts`, `lib/syncProgress.ts`,
-    `lib/connectionCatalog.ts`, journals `model.ts` helpers): thread the active
-    `t`/`TFunction` so the conversion stays consistent across every consumer.
+    `lib/connectionCatalog.tsx`, `components/kb/journalReportableEntriesModel.ts`):
+    thread the active `t`/`TFunction` so the conversion stays consistent across
+    every consumer.
   - Locale-driven formatting: migrate hardcoded `en-US` `toLocaleString`/`Intl`
     call sites (chart axes, dates, percentages) to `localeForLanguage(lang)`
     with AT decimal-comma / space-before-`%` / `Jänner` conventions. This is
@@ -266,7 +267,7 @@ top of the monolith.
 
 ### 0.5f - External document reconciliation groundwork
 
-- [ ] Add [docs/plan/08-external-document-reconciliation.md](docs/plan/08-external-document-reconciliation.md) follow-through in code and schema rather than letting merchant/invoice scope drift ad hoc
+- [x] Add [docs/plan/08-external-document-reconciliation.md](docs/plan/08-external-document-reconciliation.md) follow-through in code and schema (Implementation Order steps 1-6 shipped: 4-table schema, BTCPay provenance ingest, deterministic matching/allocation, review/confirm workflow, conservative tax normalization, CSV subledger export — daemon/CLI-backed with tests). The remaining tail is tracked separately: optional local AI extraction/tie-breaking (step 7, later-backlog item below) and the richer desktop reconciliation workbench
 - [x] Persist BTCPay confirmed wallet-sync config on wallets so `wallets sync` / `wallets sync --all` can reuse store-backed sources without retyping `--store-id`
 - [x] Let desktop BTCPay setup either create BTCPay-only wallet sources or map store payment methods onto existing settlement wallets for provenance
 - [ ] Keep BTCPay file import conservative (`deposit` / `withdrawal`) until a confirmed document match or explicit review step reclassifies the transaction
@@ -315,8 +316,15 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   modules so each handler is a pure `(args_dict) -> envelope_dict` callable
 - [ ] Centralize the safe-view contract in `kassiber/core/api/safe_views.py`
   so every consumer sees the same redaction
-- [ ] Add `~/.kassiber/logs/` (or per-project `logs/`) with rotation; teach
-  `diagnostics collect` to fold all logs
+- [x] Local log inspection & export (RAM-only by design). The original
+  "`~/.kassiber/logs/` with rotation + `diagnostics collect` folds all logs"
+  plan is **retired**: an always-on on-disk log file is an explicitly rejected
+  design (see [docs/reference/logging.md](docs/reference/logging.md)) and
+  `collect_public_diagnostics` deliberately folds no logs. The log-export need
+  was met instead by the RAM-only Logs view + redacted support bundles below.
+  (Follow-up: the stale on-disk-logs section in
+  [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md) still contradicts
+  logging.md and should be reconciled.)
   - [x] Add a redacted in-app daemon log screen with a downloadable JSON
     export so prerelease/dev desktop failures can be inspected without losing
     the terse notification surface
@@ -333,11 +341,23 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Add `kassiber/daemon.py` and a `kassiber daemon` subcommand
 - [x] JSONL request/response with `request_id`, `daemon.ready`, and a first
   `status` round-trip
-- [ ] Add `progress` envelopes and mutation-safe long-running request handling
-  beyond the AI chat cancel path
+- [x] `progress` envelopes for sync/freshness kinds beyond the AI chat cancel
+  path (`ui.wallets.sync.progress`, `ui.freshness.run.progress`,
+  `ui.workspace.freshness.run.progress`, background `ui.freshness.progress`),
+  with supervisor streaming/non-streaming classification + non-fatal request
+  timeout
+- [ ] Generic mutation-safe cancellation + long-running handling for the
+  non-sync mutating kinds: the generic `cancel` kind still returns "daemon
+  cancellation is not wired yet" (`daemon.py`) and the serial main loop has no
+  worker pool (depends on the worker-pool item below; overlaps the live-action
+  items in §1.4)
 - [ ] Worker pool with one SQLite connection per worker
 - [x] Smoke coverage for daemon ready/status/shutdown
-- [ ] Redaction audit in CI
+- [ ] Redaction audit in CI: redaction is already partially exercised in the
+  gate (`test_secrets_smoke`, `test_freshness`, and the Vitest
+  `appLogs`/`bridgeContainment` tests), but the dedicated Python redaction suite
+  `tests/test_log_ring.py` is not wired into `scripts/quality-gate.sh` and there
+  is no systematic secret-leak scan — add both
 
 ### 1.2 Tauri shell skeleton + typed IPC + first screen
 
@@ -426,17 +446,25 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Replace the temporary `daemon_unavailable` Tauri command body with a
   Rust supervisor that spawns the Python daemon and dispatches JSONL by
   `request_id`
-- [ ] Generate the Rust daemon kind allowlist from Pydantic contracts instead
-  of the current hand-maintained bootstrap list
+- [ ] Generate the daemon kind allowlists from a single contract source instead
+  of the three hand-maintained lists kept in sync only by
+  `tests/test_connection_catalog_drift.py` (Python `SUPPORTED_KINDS`, Rust
+  `ALLOWED_DAEMON_KINDS`, Vite `ALLOWED_BRIDGE_KINDS`). Note: the `lib.rs` error
+  text already says "the generated daemon allowlist" although nothing generates
+  it yet
 - [ ] Pydantic v2 contracts to JSON Schema to TS types in CI; schema-drift
   fails the build
-- [ ] Bridge mode containment tests (per
-  [04-desktop-ui.md](docs/plan/04-desktop-ui.md) §2.6 + 2.7): negative
-  tests for cross-origin / no-Origin / non-loopback bind / production-env
-  startup / missing-or-wrong token / mutation-disabled-by-default;
-  positive test that `daemon.log` and `supervisor.log` from a captured
-  bridge session contain zero token occurrences. Each gate must be wired
-  into the quality-gate before the bridge code is allowed to land.
+- [ ] Bridge containment tests — partial + spec drift. What shipped is a Vite
+  dev-server HTTP middleware (`ui-tauri/vite.config.ts`), **not** the
+  `daemon --bridge ws://` token-authed WebSocket assumed by
+  [04-desktop-ui.md](docs/plan/04-desktop-ui.md) §2.6/2.7.
+  `ui-tauri/src/lib/bridgeContainment.test.ts` covers loopback-host +
+  cross-origin/no-Origin rejection and stderr redaction (gate-wired via
+  `vitest`). Still open: (a) reconcile the §2.6 token-WS spec with the shipped
+  Vite-proxy model; (b) missing/wrong-token + non-loopback-bind + production-env
+  (`KASSIBER_ENV`) startup refusal + zero-token log grep — none exist today;
+  (c) reconcile "mutation-disabled-by-default" — `ALLOWED_BRIDGE_KINDS`
+  currently permits mutations with no read-only/`--allow-mutations` gate.
 
 ### 1.3 Read-only screens
 
@@ -461,8 +489,13 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   per-book fiat rows, and a readiness manifest; keep capital-gains/tax exports
   book-scoped so lots, transfers, and mixed-fiat semantics never merge across
   books.
-- [ ] Continue hardening book-management edges: destructive book/book-set
-  deletion UX, backup/restore path, and remaining Settings fixture replacement.
+- [ ] Continue hardening book-management edges. Done: destructive **book-set**
+  (workspace) deletion UX (`ui.workspace.delete` with passphrase + label +
+  plaintext-ack), and Settings fixture replacement (folded into the line below).
+  Remaining: (a) destructive single-**book** deletion UX + a `ui.profiles.delete`
+  daemon kind (today only `ui.profiles.reset_data` exists, which clears data but
+  keeps the book); (b) a GUI backup/restore action behind `ui.backup.*` daemon
+  kinds (currently CLI-only command hints in the Data settings panel).
 - [x] Welcome/onboarding screen refreshed with a shadcn-style, SQLCipher-aware
   setup flow that captures books/tax defaults and database
   protection by initializing the local SQLCipher database through the daemon,
@@ -492,8 +525,12 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Add a Developer tools-gated Logs screen that shows the recent structured
   daemon/transport stream from RAM only and exports redacted snapshots for
   local debugging on explicit download
-- [ ] Replace remaining Settings mock fixture data with typed daemon calls once
-  phase 1.1 exists
+- [x] Replace remaining Settings mock fixture data with typed daemon calls
+  (phase 1.1 daemon mode exists; SettingsScreen + panels read backends /
+  maintenance / AI-provider / status through real daemon kinds). Residual
+  cleanup only: delete the now-orphaned `DEFAULT_BACKENDS`/`DEFAULT_RATE_BACKENDS`
+  exports in `SettingsModel.ts` and the stale "controls are local UI state"
+  header comment in `SettingsScreen.tsx`
 
 ### 1.4 Live actions and workers
 
@@ -509,12 +546,23 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   one-shot worker handoff, and bound repeat BTCPay page scans with stable-id
   fingerprints, explicit stop reasons, and rotating deep audits for older
   metadata edits.
-- [ ] Finish the remaining live-action worker surfaces: file/import flows,
-  metadata edits, transfer pairing, attachments, quarantine resolve,
-  profile/wallet/backend CRUD, backup/restore.
+- [ ] Finish the remaining live-action worker surfaces. Now wired (daemon kind +
+  UI mutation): file/import flows, metadata edits, transfer pairing, attachments,
+  quarantine resolve (via the per-transaction metadata editor's price-override +
+  exclude), and profile/wallet/backend CRUD. Genuinely unbuilt as a UI/daemon
+  surface: **backup/restore** (CLI-only via `kassiber/backup/cli.py`; Settings
+  explicitly defers to the terminal).
 - [ ] Expand the dedicated progress + cancellation UI beyond sync/freshness
   helpers into every long-running live action.
-- [ ] Separate secret-entry IPC channel; OS-keychain-backed secret refs
+- [x] Separate secret-entry IPC channel (daemon-only
+  `supervisor.ai_secret_store.request/.response` control bridge, not exposed to
+  the webview/assistant) and OS-keychain-backed AI-provider secret refs
+  (`NativeSecretStore`: macOS Keychain / Windows user-scope DPAPI / Linux Secret
+  Service) with per-platform policy, `ai_provider_secret_refs` state,
+  `ai.providers.set_api_key` as the sole api-key ingress, use-time
+  `secret_ref_unavailable`, move/repair/restore handling, a `MockSecretStore`
+  for CI, and leak-regression tests (PR #116). Backend tokens / descriptors /
+  passphrases stay SQLCipher-only by design
 
 ### 1.5 Packaging, signing, distribution
 
@@ -529,7 +577,11 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   prerelease artifact with commit, ref, run id, and build timestamp
 - [ ] Decide whether production installers should keep the PyInstaller sidecar
   or switch to a `python-build-standalone` runtime tree
-- [ ] Tauri bundler per OS; Apple Developer ID, Windows EV, GPG `.deb`
+- [x] Per-OS Tauri bundles produced as **unsigned** previews in CI (macOS
+  dmg/app, Linux AppImage, Windows msi/nsis via `pnpm tauri build --bundles`)
+- [ ] Production code-signing & distribution: Apple Developer ID + notarization
+  (macOS), Windows EV cert, GPG-signed `.deb` (Linux target is currently
+  AppImage, not `.deb`); flip `tauri.conf.json` `bundle.active` for production
 - [ ] User-initiated update check only; no background polling
 
 ## Later backlog
@@ -572,12 +624,13 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [ ] Full double-entry account model only if a future ledger design needs it:
   explicit counterpart postings, account-type rollups, adjustments, and
   migrations; current `accounts` are wallet/reporting buckets
-- [ ] Per-profile Tor proxy configuration. The Electrum client now
-  speaks SOCKS5 against `backend.tor_proxy`, and onboarding/settings
-  expose a proxy field for the `ui.backends.electrum.test` flow, but
-  the proxy value still has to be wired through `kassiber backends
-  create/update` and through the desktop save path so it actually
-  reaches the column at rest.
+- [x] Per-profile Tor proxy configuration. The Electrum client speaks SOCKS5
+  against `backend.tor_proxy`, and the proxy value is now wired end-to-end:
+  `kassiber backends create/update --tor-proxy` → `core.accounts` →
+  `backends.py` INSERT/UPDATE of the `tor_proxy` column, and the desktop save
+  path serializes `payload.tor_proxy` (or clears it) through
+  `ui.backends.create/update` to the same write. (SOCKS5 user/pass auth for
+  corporate proxies remains the separate open item below.)
 - [ ] SOCKS5 username/password auth (RFC 1928 method 0x02) for
   Electrum proxies. Today `_connect_via_socks5` only offers no-auth
   and emits a precise error when a proxy refuses it, which covers Tor
@@ -599,9 +652,15 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   provenance panel for BTCPay payment -> invoice -> payment-request/app-origin
   -> document context; the remaining work is the dedicated reconciliation
   queue/workbench for reviewing and resolving suggestions at scale.
-- [ ] Richer transfer pairing for multi-leg self-transfers, including
-  one-outbound/multiple-inbound same-txid moves that should not linger as
-  swap-review noise
+- [ ] Richer transfer pairing for multi-leg self-transfers. The **tax pipeline**
+  half is done (`derive_recorded_fanout_transfers` / `derive_ownership_transfers`
+  decompose 1→N fan-outs in the rp2 engine, with `owned_fanout_unresolved`
+  quarantine for un-decomposable ones). Still open: the **swap-review** half —
+  `_deterministic_self_transfer_ids` (`transfer_matching.py`) only suppresses the
+  clean 1-out/1-in shape, so a conserving 1-outbound/N-inbound same-txid fan-out
+  still surfaces as a spurious strong swap candidate in CLI + daemon review;
+  extend the deterministic suppression to the fan-out shape and emit proper
+  per-leg pairings
 - [x] Better cross-asset transfer accounting beyond audit metadata
   (matcher + rules + saved views + `/swaps` review queue land swap
   pairing end-to-end; AT carrying-value continues through rp2; generic
@@ -632,12 +691,19 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   physical-lot answers
 - [ ] Adopt a per-project storage layout: one SQLite DB per project,
   minimal global app state, and no active top-level wallet side tree
-- [ ] Add scoped handoff export/import flows on top of the per-project layout:
-  tax advisor reports stay report-only, audit packages are explicit
-  one-book-or-selected-books packages, and technical wallet evidence remains a
-  separate restricted approval path rather than a normal export checkbox
-- [ ] Keep transaction document links in the project DB; only add managed
-  copied-file storage if a concrete offline/self-contained workflow needs it
+- [ ] Add scoped handoff export/import flows on top of the per-project layout.
+  Shipped: the book-scoped audit-package **export** and the
+  tax-advisor/technical-evidence taxonomy (`ui-tauri/src/lib/handoffExports.ts`).
+  Remaining: (a) the **import** side (none exists); (b) extend audit-package
+  scope from single-book to explicit selected-books packaging; (c) make the
+  restricted technical-wallet-evidence path actionable (today a display-only
+  card with no daemon kind); (d) the per-project DB layout it depends on (item
+  above) is itself still unbuilt
+- [ ] When the per-project storage layout (item above) lands, migrate attachment
+  links **and** the managed-copy blobs into each project bundle rather than the
+  global state-root tree. (The link-only-by-default contingency is already
+  resolved: sha256 hash-and-copy managed storage with gc/verify shipped and is
+  used by the audit-evidence handoff — reuse that copy path, don't rebuild it.)
 - [x] Keep backend definitions and default-backend selection canonical in
   SQLite; dotenv files now bootstrap older/new stores instead of serving as
   the long-term storage path
@@ -689,13 +755,20 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   and `bootstrap_runtime` warns to stderr whenever the dotenv still contains
   secret-shaped entries while the DB is encrypted. URLs / kinds / chain /
   network stay in the dotenv (they are addresses, not credentials).
-- [ ] Tauri supervisor wiring: passphrase modal at startup, private fd hand-off
-  to the Python sidecar, `auth_required`/`auth_response` relay for reveal
-  flows, and log redaction of `passphrase_secret` / `token` / `descriptor` /
-  `change_descriptor` / `blinding_key` / `auth_header` / `password` envelopes.
+- [ ] Tauri supervisor wiring — mostly shipped; one redaction gap remains. Done:
+  startup passphrase modal (LockScreen → `daemon.unlock`), the stdin
+  `auth_response.passphrase_secret` hand-off, the `auth_required`/`auth_response`
+  reveal relay, and redaction of every named field **except `blinding_key`**.
+  Remaining (security-relevant): add `blinding_key` (and the bare `blinding`
+  substring) to all three secret-floor redaction layers (`supervisor.rs`,
+  `kassiber/redaction.py`, `ui-tauri/src/lib/appLogs.ts`) plus a regression
+  test — `docs/reference/daemon.md` requires it but the reveal payload's
+  `blinding_key` currently passes through unredacted.
 - [ ] Cross-platform CI for SQLCipher: PyInstaller bundle smoke tests on
-  macOS arm64/x86_64, Linux x86_64, Windows x86_64. Today's tracer bullet
-  ran on macOS arm64 only.
+  macOS arm64/x86_64, Linux x86_64, Windows x86_64. The CLI-binary smoke matrix
+  now runs **macOS arm64 (macos-latest) + macOS x86_64 (macos-15-intel) + Linux
+  x86_64 (ubuntu-22.04)**; the remaining gap is **Windows x86_64** CLI-bundle
+  smoke (Windows currently builds only the desktop preview).
 - [ ] Optional convenience: opt-in OS-keychain remember-me layer and biometric
   reveal gate. macOS desktop builds now have the first half for database
   unlock: first lock-screen passphrase entry can enroll Touch ID for the next
@@ -748,9 +821,11 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   (`atk-sys`, `gdk`, ...) pins it to `^0.18`, so reaching 0.20 requires
   upgrading that whole stack (Linux-only surface). Fold into the next
   Tauri/GTK dependency upgrade rather than forcing a standalone `cargo update`.
-- [ ] Add live provider-backed FX adapters beyond CoinGecko and local Kraken
-  CSV archive ingest only after the UI and daemon can expose provider limits,
-  granularity, and review state honestly
+- [x] Add live provider-backed FX adapters beyond CoinGecko and local Kraken CSV
+  (Coinbase Exchange — now the default — and Mempool shipped), under the
+  honest-exposure bar: the UI/daemon expose the provider list, per-rate
+  granularity, and coarse-review state (and dropped fabricated synthetic
+  provider-health rows). Any further providers must keep that same bar
 - [ ] Keep the machine envelope boundary centralized and explicit
 - [ ] Keep docs and examples Bitcoin-only
 - [ ] Add a narrow docs-drift check for shared command / verification /
@@ -771,8 +846,6 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   actual dispatch table, or drop the example and direct readers to the
   live `daemon.ready` payload. The PR added a "representative" disclaimer
   as an interim.
-- [ ] Clean up legacy schema-version fixtures called out as a follow-up in
-  PR #101. Original author should point at the specific fixtures meant.
 - [ ] Derive `kassiber.__version__` from package metadata
   (`importlib.metadata.version("kassiber")`) so it stops being a fifth
   place the version drifts. Drift test already catches divergence; this
