@@ -943,6 +943,7 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
         "asset": normalize_asset_code(record.get("asset") or "BTC"),
         "amount": amount,
         "fee": fee,
+        "amount_includes_fee": bool(record.get("amount_includes_fee")),
         "fiat_currency": _import_price_currency(record),
         **payload,
         "kind": record.get("kind"),
@@ -1057,7 +1058,8 @@ def insert_wallet_records(
             """
             INSERT INTO transactions(
                 id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
-                occurred_at, confirmed_at, direction, asset, amount, fee, fiat_currency,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                amount_includes_fee, fiat_currency,
                 fiat_rate, fiat_value, fiat_price_source, fiat_rate_exact,
                 fiat_value_exact, pricing_source_kind, pricing_provider, pricing_pair,
                 pricing_timestamp, pricing_fetched_at, pricing_granularity,
@@ -1065,7 +1067,7 @@ def insert_wallet_records(
                 privacy_boundary, description, counterparty, raw_json,
                 payment_hash, payment_hash_source, swap_refund_funding_txid,
                 created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 tx_id,
@@ -1080,6 +1082,7 @@ def insert_wallet_records(
                 normalized["asset"],
                 btc_to_msat(normalized["amount"]),
                 btc_to_msat(normalized["fee"]),
+                1 if normalized.get("amount_includes_fee") else 0,
                 normalized["fiat_currency"] or profile["fiat_currency"],
                 normalized["fiat_rate"],
                 normalized["fiat_value"],
