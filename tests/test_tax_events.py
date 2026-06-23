@@ -275,6 +275,21 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
             any(q["reason"] == "owned_fanout_unresolved" for q in inputs.quarantines)
         )
 
+    def test_detect_intra_transfers_folds_mixed_case_txid(self):
+        # A txid recorded uppercase in one wallet and lowercase in another is the
+        # same on-chain transaction; the grouping must fold case so the pair is
+        # detected rather than split into a phantom disposal + acquisition.
+        from kassiber.transfers import detect_intra_transfers
+
+        txid = "cd" * 32
+        out_row = _row("o", "wallet-a", "outbound", 50_000_000_000,
+                       external_id=txid.upper())
+        in_row = _row("i", "wallet-b", "inbound", 50_000_000_000,
+                      external_id=txid.lower())
+        pairs, matched = detect_intra_transfers([out_row, in_row])
+        self.assertEqual(len(pairs), 1)
+        self.assertEqual(matched, {"o", "i"})
+
     def test_transfer_mismatch_quarantines_without_normalized_transfer(self):
         out_row = _row(
             "tx-out",

@@ -56,6 +56,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable, Mapping, Optional, Sequence
 
+from ..transfers import normalize_group_txid
+
 
 LIGHTNING_WALLET_KINDS = frozenset({"phoenix", "coreln", "lnd", "nwc"})
 # On-chain self-custody BTC wallet kinds — eligible ends of a base-layer <-> Liquid
@@ -412,7 +414,9 @@ def _deterministic_self_transfer_ids(
         external_id = _record_get(row, "external_id")
         if not external_id:
             continue
-        key = (str(external_id), _record_get(row, "asset"))
+        # Mirror transfers.detect_intra_transfers so a mixed-case txid does not
+        # desync the swap queue from the journal (same self-transfer grouping).
+        key = (normalize_group_txid(external_id), _record_get(row, "asset"))
         grouped.setdefault(key, []).append(row)
 
     deterministic_ids: set[object] = set()

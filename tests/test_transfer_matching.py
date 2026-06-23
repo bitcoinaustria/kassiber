@@ -229,6 +229,19 @@ class HeuristicMatchTests(unittest.TestCase):
         ids = _deterministic_self_transfer_ids([out, inbound])
         self.assertEqual(ids, {"o", "i"})
 
+    def test_mixed_case_txid_still_claimed_as_deterministic(self):
+        # Bitcoin txids are case-insensitive hex; two wallets recording the same
+        # self-transfer with opposite casing must still group as one proven
+        # self-transfer (in lockstep with detect_intra_transfers grouping), so
+        # the clean move is not surfaced as a swap candidate.
+        txid = "ab" * 32
+        out = _row(id="o", external_id=txid.upper(), wallet_id="cold",
+                   direction="outbound", asset="BTC", amount=100_100_000_000)
+        inbound = _row(id="i", external_id=txid.lower(), wallet_id="hot",
+                       direction="inbound", asset="BTC", amount=100_000_000_000)
+        ids = _deterministic_self_transfer_ids([out, inbound])
+        self.assertEqual(ids, {"o", "i"})
+
     def test_implausible_fee_self_transfer_not_claimed_as_deterministic(self):
         # The id=47 split-peg shape: a ~41x-tolerance implied fee means the
         # outbound fanned out to an unrecognized recipient, so it must NOT be

@@ -20,6 +20,25 @@ Detection rule (intentionally conservative):
 
 from collections import defaultdict
 
+_HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
+
+
+def normalize_group_txid(external_id):
+    """Fold a 64-hex txid to lowercase for grouping; leave other ids verbatim.
+
+    Bitcoin txids are case-insensitive hex, but ``external_id`` is stored
+    verbatim, so two wallets that recorded the same self-transfer with different
+    casing (e.g. one esplora-synced, one imported from an uppercase CSV) would
+    otherwise land in different ``(external_id, asset)`` groups and never pair.
+    Only fold real 64-char hex ids so Lightning ``payment_hash`` values and
+    synthetic CSV ids are untouched. ``transfer_matching._deterministic_self_transfer_ids``
+    uses the same normalization — keep both in lockstep.
+    """
+    text = str(external_id)
+    if len(text) == 64 and all(char in _HEX_DIGITS for char in text):
+        return text.lower()
+    return text
+
 
 def apply_manual_pairs(rows, auto_pairs, manual_pair_records):
     """Merge manual pair records with auto-detected pairs.
@@ -101,7 +120,7 @@ def detect_intra_transfers(rows):
         external_id = row["external_id"] if "external_id" in row.keys() else None
         if not external_id:
             continue
-        by_key[(external_id, row["asset"])].append(row)
+        by_key[(normalize_group_txid(external_id), row["asset"])].append(row)
 
     pairs = []
     matched_ids = set()
