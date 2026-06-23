@@ -340,10 +340,28 @@ class OperationalRedactionTest(unittest.TestCase):
             self.assertNotIn(raw, out)
             self.assertIn("amount#", out)
 
+    def test_signed_amounts_pseudonymized(self):
+        for text, raw in (
+            ("fee -2500 sats", "-2500 sats"),
+            ("delta -0.0001 BTC", "-0.0001 BTC"),
+        ):
+            out = redact_operational_text(text)
+            self.assertNotIn(raw, out)
+            self.assertIn("amount#", out)
+
+    def test_amount_token_is_not_unsalted_exact_value_hash(self):
+        out = redact_operational_text("fee 2500 sats")
+        self.assertIn("amount#", out)
+        self.assertNotIn(f"amount#{_stable_hash('2500|sats')}", out)
+
     def test_market_rate_stays_readable(self):
         # A BTC/EUR rate is public market data, not the user's amount.
         out = redact_operational_text("rate BTC/EUR 64000.12 applied")
         self.assertEqual(out, "rate BTC/EUR 64000.12 applied")
+
+    def test_dash_market_rate_stays_readable(self):
+        out = redact_operational_text("rate BTC-EUR 64000.12 applied")
+        self.assertEqual(out, "rate BTC-EUR 64000.12 applied")
 
     def test_bare_integer_left_unchanged(self):
         # No unit/symbol -> cannot be safely auto-detected; documented limitation.

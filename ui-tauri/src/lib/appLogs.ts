@@ -90,6 +90,7 @@ const OPERATIONAL_FIELD_TYPES = new Set<AppLogFieldType>([
 let memoryRing: AppLogRecord[] = [];
 let memoryRingBytes = 2;
 const subscribers = new Set<() => void>();
+const AMOUNT_PSEUDONYM_SALT = createAmountPseudonymSalt();
 
 type TextBackstopReplacement = string | ((...matches: string[]) => string);
 
@@ -166,12 +167,36 @@ const PS_PATH_RE =
 const AMOUNT_TOKEN_RE = new RegExp(
   [
     `\\b(?:${PUBLIC_SAFE_AMOUNT_UNITS})\\s*${PUBLIC_SAFE_AMOUNT_NUMBER}\\b`,
-    `\\b${PUBLIC_SAFE_AMOUNT_NUMBER}\\s*(?:${PUBLIC_SAFE_AMOUNT_UNITS})\\b`,
+    `(?<![A-Za-z0-9])${PUBLIC_SAFE_AMOUNT_NUMBER}\\s*(?:${PUBLIC_SAFE_AMOUNT_UNITS})\\b`,
     `[${PUBLIC_SAFE_CURRENCY_SYMBOLS}]\\s*${PUBLIC_SAFE_AMOUNT_NUMBER}\\b`,
-    `\\b${PUBLIC_SAFE_AMOUNT_NUMBER}\\s*[${PUBLIC_SAFE_CURRENCY_SYMBOLS}]`,
+    `(?<![A-Za-z0-9])${PUBLIC_SAFE_AMOUNT_NUMBER}\\s*[${PUBLIC_SAFE_CURRENCY_SYMBOLS}]`,
   ].join("|"),
   "gi",
 );
+const MARKET_RATE_PAIR_PREFIX_RE = new RegExp(
+  `(?:^|\\b)(?:${PUBLIC_SAFE_PAIR_UNITS})$`,
+  "i",
+);
+
+function createAmountPseudonymSalt(): string {
+  try {
+    const bytes = new Uint32Array(2);
+    globalThis.crypto?.getRandomValues?.(bytes);
+    if (bytes.some((part) => part !== 0)) {
+      return Array.from(bytes, (part) => part.toString(16).padStart(8, "0")).join("");
+    }
+  } catch {
+    // Fall through to a non-cryptographic runtime nonce. The salt is not exported;
+    // it only prevents offline dictionary reversal of low-entropy exact amounts.
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function isMarketRateTail(full: string, offset: number): boolean {
+  const prev = full[offset - 1];
+  if (prev !== "/" && prev !== "-") return false;
+  return MARKET_RATE_PAIR_PREFIX_RE.test(full.slice(0, offset - 1).trimEnd());
+}
 
 function replaceAmounts(text: string, showScale: boolean): string {
   return text.replace(
@@ -180,8 +205,7 @@ function replaceAmounts(text: string, showScale: boolean): string {
       // A market rate ("BTC/EUR 64000.12") is public data, not the user's
       // amount — its trailing "EUR 64000.12" is preceded by the pair separator,
       // so leave it readable (public_safe masks the whole rate separately).
-      const prev = full[offset - 1];
-      if (prev === "/" || prev === "-") return match;
+      if (isMarketRateTail(full, offset)) return match;
       const numMatch = match.match(/[+-]?\d[\d.,_ ]*\d|[+-]?\d/);
       const num = numMatch ? numMatch[0] : match;
       const unit = match.replace(num, "").replace(/\s+/g, "").trim();
@@ -432,9 +456,9 @@ export function exportSupportBundleRecords(
 
 function supportBundleFormatNote(mode: AppLogRedactionMode): string {
   if (mode === "public_safe") {
-    return "Each following JSONL row is independently redacted for public support: wallet/credential material is stripped, txids and amounts are replaced with stable pseudonyms (txid#…, amount#…), and operational fields such as addresses, paths, URLs, emails, IPs, labels, and onion hosts are masked.";
+    return "Each following JSONL row is independently redacted for public support: wallet/credential material is stripped, txids are replaced with stable pseudonyms (txid#…), amounts are replaced with salted runtime pseudonyms (amount#…), and operational fields such as addresses, paths, URLs, emails, IPs, labels, and onion hosts are masked.";
   }
-  return "High-signal support bundles keep operational debugging data readable, including addresses, paths, URLs, labels, emails, IPs, onion hosts, and error text. Txids and amounts are ALWAYS replaced with stable pseudonyms (txid#…, amount#… with a coarse ~magnitude) — never the raw value — so cross-line correlation survives without leaking the wallet fingerprint. Wallet/credential material is stripped. Intended for the maintainer or a trusted debugging session, not public posting.";
+  return "High-signal support bundles keep operational debugging data readable, including addresses, paths, URLs, labels, emails, IPs, onion hosts, and error text. Txids are replaced with stable pseudonyms (txid#…), and amounts are replaced with salted runtime pseudonyms (amount#… with a coarse ~magnitude) — never the raw value — so cross-line correlation survives without exposing exact amounts. Wallet/credential material is stripped. Intended for the maintainer or a trusted debugging session, not public posting.";
 }
 
 export function stableMaskedValue(field: AppLogField): string {
@@ -465,8 +489,10 @@ export function stableMaskedValue(field: AppLogField): string {
       return `email#${stableHash(value)}`;
     case "ip":
       return `ip#${stableHash(value)}`;
-    case "amount":
-      return `amount#${stableHash(value)}`;
+    case "amount": {
+      const { num, unit } = parseTypedAmount(value);
+      return pseudoAmount(num, unit, false);
+    }
     default:
       return value;
   }
@@ -867,8 +893,8 @@ function stableHash(value: string): string {
 
 // txids and amounts are NEVER readable in an export (any tier) — they are the
 // wallet-fingerprinting data a developer must not hand to an AI after a
-// real-wallet test sync. They become STABLE pseudonyms instead of [redacted]
-// so cross-line correlation (and, for amounts, coarse magnitude) survives.
+// real-wallet test sync. Txids stay globally stable for correlation; amount
+// tokens are salted so low-entropy exact amounts cannot be dictionary-reversed.
 const TXID_RE = /\b[0-9a-f]{64}\b/gi;
 
 function pseudoTxid(value: string): string {
@@ -897,10 +923,10 @@ function amountMagnitude(raw: string): string {
 }
 
 function pseudoAmount(rawNumber: string, unit: string, showScale: boolean): string {
-  // Hash a pure-string key (strip grouping separators, lowercase the unit) so
-  // the daemon's Python mirror produces the identical token without any
-  // float-formatting drift between the two runtimes.
-  const key = `${rawNumber.replace(/[,_ ]/g, "")}|${unit.toLowerCase()}`;
+  // Include a runtime-only salt so low-entropy exact amounts cannot be recovered
+  // by enumerating likely values against a public `amount#...` token. The raw
+  // amount still normalizes as a string to avoid float-formatting drift.
+  const key = `${AMOUNT_PSEUDONYM_SALT}|${rawNumber.replace(/[,_ ]/g, "")}|${unit.toLowerCase()}`;
   const token = `amount#${stableHash(key)}`;
   if (!showScale) return token;
   const mag = amountMagnitude(rawNumber);

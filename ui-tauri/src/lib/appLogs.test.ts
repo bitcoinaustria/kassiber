@@ -140,6 +140,9 @@ describe("typed app logs", () => {
     expect(stableMaskedValue({ type: "label", value: "Treasury hot wallet" })).toBe(
       stableMaskedValue({ type: "label", value: "Treasury hot wallet" }),
     );
+    expect(stableMaskedValue({ type: "amount", value: "2500 sats" })).not.toBe(
+      "amount#c2d60ca1",
+    );
   });
 
   it("keeps a redaction backstop for message and text fields", () => {
@@ -316,6 +319,7 @@ describe("typed app logs", () => {
     const fiatAmountText = "\u20ac12,345.67";
     const prefixedFiatAmountText = "USD 42.10";
     const satsText = "2500 sats";
+    const signedSatsText = "-2500 sats";
     const rateText = "BTC/EUR 64000.12";
     const records: AppLogRecord[] = [
       {
@@ -329,7 +333,7 @@ describe("typed app logs", () => {
           amount: { type: "amount", value: "1.234 BTC" },
           error_message: {
             type: "text",
-            value: `lost ${amountText}, fee ${satsText}, fiat ${fiatAmountText}, proceeds ${prefixedFiatAmountText}, rate ${rateText}`,
+            value: `lost ${amountText}, fee ${satsText}, signed fee ${signedSatsText}, fiat ${fiatAmountText}, proceeds ${prefixedFiatAmountText}, rate ${rateText}`,
           },
         }),
         id: "log-1",
@@ -406,6 +410,8 @@ describe("typed app logs", () => {
     expect(exported).not.toContain(fiatAmountText);
     expect(exported).not.toContain(prefixedFiatAmountText);
     expect(exported).not.toContain(satsText);
+    expect(exported).not.toContain(signedSatsText);
+    expect(exported).not.toContain("amount#c2d60ca1");
     expect(exported).not.toContain(rateText);
     expect(exported).not.toContain("xpub661MyMwAqRbcFsecret");
     expect(exported).not.toContain("sk-url-secret");
@@ -427,7 +433,7 @@ describe("typed app logs", () => {
         txid: { type: "txid", value: txid },
         fee: { type: "amount", value: "2500 sats" },
       }),
-      msg: `synced ${txid} fee 0.0001 BTC, rate BTC/EUR 64000.12, also ${otherTxid}`,
+      msg: `synced ${txid} fee 0.0001 BTC, signed fee -2500 sats, rate BTC/EUR 64000.12, dash rate BTC-EUR 64000.12, also ${otherTxid}`,
     });
     expect(emitted).not.toBeNull();
 
@@ -445,7 +451,11 @@ describe("typed app logs", () => {
     expect(high).toContain("txid#");
     expect(high).toContain("amount#");
     expect(high).toContain("(~0.0001 BTC)"); // free-text amount keeps magnitude
+    expect(high).toContain("(~-1000 sats)"); // signed amount keeps only coarse magnitude
     expect(high).toContain("BTC/EUR 64000.12"); // market rate is public, stays readable
+    expect(high).toContain("BTC-EUR 64000.12");
+    expect(high).not.toContain("-2500 sats");
+    expect(high).not.toContain("amount#c2d60ca1");
 
     // The txid in the typed field and in the message resolve to the SAME token
     // (cross-line correlation), and the two distinct txids get two tokens.
@@ -465,6 +475,8 @@ describe("typed app logs", () => {
     expect(pub).toContain(fieldToken!); // same pseudonym across tiers
     expect(pub).not.toContain("(~");
     expect(pub).not.toContain(txid);
+    expect(pub).not.toContain("-2500 sats");
+    expect(pub).not.toContain("amount#c2d60ca1");
   });
 
   it("keeps logs in RAM and does not touch browser storage", () => {

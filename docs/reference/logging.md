@@ -62,18 +62,19 @@ raw.** They are the wallet fingerprint: a single txid or amount in a bundle
 handed to an AI debugging session (the common workflow after a test sync
 against a real wallet) ties the log back to a real wallet on a block
 explorer. So instead of "readable in high_signal" they are always replaced
-with a *stable pseudonym* — a txid becomes `txid#<fnv>` and an amount becomes
-`amount#<fnv>`. The pseudonym is deterministic, so the same value collapses to
-the same token across every line (and across the Python/Rust/TS boundary,
-since the daemon mirrors the webview's FNV-1a), which keeps cross-line
-correlation — the actual debugging signal — intact. `high_signal` additionally
-appends a coarse order-of-magnitude bucket to amounts (`amount#a1b2 (~0.01
-BTC)`) for sat/msat-scale and fee-plausibility debugging; `public_safe` drops
-the magnitude. Addresses, paths, URLs and labels stay readable in
-`high_signal` as before. The only place a raw txid/amount can still reach disk
-is the explicitly watermarked, confirm-gated raw export
-(`redacted: false`). Market *rates* (`BTC/EUR 64000.12`) are public data, not
-the user's amount, and stay readable in `high_signal`.
+with a pseudonym — a txid becomes `txid#<fnv>` and an amount becomes
+`amount#<salted-fnv>`. Txids stay deterministic across the Python/Rust/TS
+boundary so transaction correlation survives. Amounts are salted per runtime so
+low-entropy values like `2500 sats` cannot be recovered by enumerating likely
+amounts against a public token; the same amount still correlates within the
+same redaction runtime. `high_signal` additionally appends a coarse
+order-of-magnitude bucket to amounts (`amount#a1b2 (~0.01 BTC)`) for
+sat/msat-scale and fee-plausibility debugging; `public_safe` drops the
+magnitude. Addresses, paths, URLs and labels stay readable in `high_signal` as
+before. The only place a raw txid/amount can still reach disk is the explicitly
+watermarked, confirm-gated raw export (`redacted: false`). Market *rates*
+(`BTC/EUR 64000.12`) are public data, not the user's amount, and stay readable
+in `high_signal`.
 
 The pseudonymizers live in `redactSecretFloorText`'s sibling helpers in
 [`appLogs.ts`](../../ui-tauri/src/lib/appLogs.ts) (`pseudoTxid` /
