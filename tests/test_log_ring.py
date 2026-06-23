@@ -14,7 +14,11 @@ from kassiber.log_ring import (
     sanitize_exception,
     sanitize_traceback_text,
 )
-from kassiber.redaction import _stable_hash, redact_operational_text
+from kassiber.redaction import (
+    _stable_hash,
+    redact_operational_text,
+    redact_operational_value,
+)
 
 # A real-shaped (all-hex) txid; the value never matters, only that it is 64 hex.
 TXID = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"
@@ -297,11 +301,13 @@ class SanitizeTest(unittest.TestCase):
         self.assertIn("[redacted-private-key]", text)
 
     def test_sanitize_traceback_text_caps_length(self):
-        text = "a" * 1000 + "b" * 9000
+        # Non-hex filler: a long hex run would now be collapsed to a txid
+        # pseudonym before the cap, which is correct but not what this asserts.
+        text = "x" * 1000 + "y" * 9000
         capped = sanitize_traceback_text(text)
         self.assertIn("...[truncated]...", capped)
-        self.assertTrue(capped.startswith("a" * 1000))
-        self.assertTrue(capped.endswith("b" * 7000))
+        self.assertTrue(capped.startswith("x" * 1000))
+        self.assertTrue(capped.endswith("y" * 7000))
         self.assertEqual(len(capped), 1000 + len("...[truncated]...") + 7000)
 
     def test_sanitize_traceback_text_short_input_unchanged(self):
@@ -381,6 +387,58 @@ class OperationalRedactionTest(unittest.TestCase):
         # collapses to one token in the merged stream. This pins the contract;
         # appLogs.test.ts asserts the same literal from the TS side.
         self.assertEqual(_stable_hash("a" * 64), "d96f0f85")
+
+    def test_keyed_sat_amounts_pseudonymized(self):
+        # Glued/keyed units (amount_sat=, fee_msat:, JSON) look protected but the
+        # standalone-unit detector never fires; the keyed detector covers them.
+        for text, raw in (
+            ("backend amount_sat=50000 reported", "50000"),
+            ('{"fee_msat": 100000} drained', "100000"),
+            ('{"value_sats":12345678,"note":"keep"}', "12345678"),
+        ):
+            out = redact_operational_text(text)
+            self.assertIn("amount#", out)
+            self.assertNotIn(f"={raw}", out)
+            self.assertNotIn(f": {raw}", out)
+            self.assertNotIn(f":{raw}", out)
+        # the key name (and unrelated JSON) stays readable
+        self.assertIn("amount_sat=", redact_operational_text("amount_sat=50000"))
+        self.assertIn('"note":"keep"', redact_operational_text('{"value_sats":1,"note":"keep"}'))
+
+    def test_non_amount_identifier_not_touched(self):
+        # Identifiers that merely contain letters but do not END in a sat/msat
+        # unit must not be pseudonymized (over-redaction guard).
+        for text in ("habitats=5 results=7", "stats=10", "format=3"):
+            self.assertEqual(redact_operational_text(text), text)
+
+    def test_hex_run_over_64_pseudonymized(self):
+        run = "a" * 72
+        out = redact_operational_text(f"blob {run} end")
+        self.assertNotIn(run, out)
+        self.assertIn("txid#", out)
+
+
+class OperationalValueTest(unittest.TestCase):
+    def test_recurses_string_leaves(self):
+        details = {
+            "stderr": f"node: bad utxo {TXID}:3 fee_msat=1200",
+            "response_preview": "unspent 0.5 BTC",
+            "code": "lightning_error",
+            "nested": ["plain", f"see {TXID}"],
+        }
+        out = redact_operational_value(details)
+        flat = repr(out)
+        self.assertNotIn(TXID, flat)
+        self.assertIn(f"txid#{_stable_hash(TXID)}", out["stderr"])
+        self.assertIn(":3", out["stderr"])  # vout stays readable
+        self.assertIn("amount#", out["stderr"])  # keyed fee_msat
+        self.assertIn("amount#", out["response_preview"])  # 0.5 BTC
+        self.assertEqual(out["code"], "lightning_error")  # non-operational untouched
+        self.assertIn(f"txid#{_stable_hash(TXID)}", out["nested"][1])
+
+    def test_non_string_values_untouched(self):
+        details = {"vout": 3, "ok": True, "ratio": 0.5, "missing": None}
+        self.assertEqual(redact_operational_value(details), details)
 
 
 class RelativizePathTest(unittest.TestCase):

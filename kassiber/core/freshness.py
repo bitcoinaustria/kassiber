@@ -13,7 +13,7 @@ from typing import Any, Callable, Mapping
 
 from ..envelope import json_ready
 from ..errors import AppError
-from ..redaction import redact_operational_text
+from ..redaction import redact_operational_text, redact_operational_value
 from ..time_utils import now_iso, parse_iso_datetime_or_none
 
 # Job failures recorded here also flow to the RAM-only log ring via the stdlib
@@ -870,7 +870,10 @@ def _mark_error(
             "message": redact_operational_text(str(exc)),
             "hint": redact_operational_text(exc.hint) if exc.hint else exc.hint,
             "retryable": exc.retryable,
-            "details": exc.details,
+            # details can carry raw backend output (CLN stderr, Electrum
+            # response_preview) with txids/amounts; pseudonymize its string
+            # leaves before this disk write, not only at read-back render.
+            "details": redact_operational_value(exc.details),
             "rate_limited_until": cooldown_until,
         }
     )

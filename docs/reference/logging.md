@@ -78,18 +78,24 @@ in `high_signal`.
 
 The pseudonymizers live in `redactSecretFloorText`'s sibling helpers in
 [`appLogs.ts`](../../ui-tauri/src/lib/appLogs.ts) (`pseudoTxid` /
-`pseudoAmount`) and in `redact_operational_text`
-([`kassiber/redaction.py`](../../kassiber/redaction.py)); the Python copy runs
+`pseudoAmount`) and in `redact_operational_text` /
+`redact_operational_value`
+([`kassiber/redaction.py`](../../kassiber/redaction.py)). The Python copy runs
 inside `sanitize_traceback_text` (so ring tracebacks, `error.debug` and the CLI
-`--debug` envelope are covered) and on the freshness disk write / UI snapshot,
-the two egresses that do not pass through the webview renderer.
+`--debug` envelope are covered), over structured `error.details` at the daemon
+error-envelope boundary (`redact_operational_value`, symmetric with the
+secret-*key* scrub), and on the freshness disk write / UI snapshot — the
+egresses that do not pass through the webview renderer (a backend exception's
+`details` can carry a node `stderr` blob or `response_preview` with txids).
 
 Prefer typed fields over free text when adding log producers: a field
 typed `address`/`txid`/`path` is masked by type at render time, while free
-text relies on the regex backstop, which is best-effort. A bare, unit-less
-integer amount (e.g. `12345678` with no `sats`/`BTC`) cannot be safely
-auto-detected in free text — emit it as a typed `amount` field, not
-interpolated into a message.
+text relies on the regex backstop, which is best-effort. Keyed/glued sat
+amounts (`amount_sat=50000`, `fee_msat: 100000`, `"value_sats":123`) are caught
+by an identifier-aware detector, but a *free-standing* unit-less integer
+(e.g. `amount 12345678` with no adjacent or glued `sats`/`BTC`) cannot be
+auto-detected — emit it as a typed `amount` field, not interpolated into a
+message.
 
 ## What gets captured
 

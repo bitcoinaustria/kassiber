@@ -214,6 +214,23 @@ function replaceAmounts(text: string, showScale: boolean): string {
   );
 }
 
+// Glued/keyed sat amounts: amount_sat=50000, fee_msat: 100000, "value_sats":12345.
+// The unit is part of the identifier, so AMOUNT_TOKEN_RE's \b never fires and the
+// integer LOOKS protected while leaking. Match key=value / key:value where the
+// key ends in a sat/msat unit and pseudonymize just the number, keeping the key.
+const KEYED_AMOUNT_RE =
+  /\b([A-Za-z][A-Za-z0-9_]*(?:msats?|sats?))\b(['"]?\s*[:=]\s*['"]?)([+-]?\d[\d.,_]*\d|[+-]?\d)/gi;
+
+function replaceKeyedAmounts(text: string, showScale: boolean): string {
+  return text.replace(
+    KEYED_AMOUNT_RE,
+    (_m: string, key: string, sep: string, num: string) => {
+      const unit = /msat/i.test(key) ? "msat" : "sat";
+      return `${key}${sep}${pseudoAmount(num, unit, showScale)}`;
+    },
+  );
+}
+
 export function appLogLevels(): AppLogLevel[] {
   return ["trace", "debug", "info", "warning", "error"];
 }
@@ -330,7 +347,13 @@ export function exportLogRecords(
     `- OS: ${options.header.os}`,
     `- Generated: ${options.header.generatedAt ?? new Date().toISOString()}`,
     `- Time range: ${options.header.timeRange}`,
-    `- Active filter: ${options.header.activeFilter}`,
+    // The active filter embeds the user's raw log-search query, which can be a
+    // txid/amount they pasted in to find a record; scrub it in redacted exports.
+    `- Active filter: ${
+      options.redacted
+        ? redactTextForMode(options.header.activeFilter, options)
+        : options.header.activeFilter
+    }`,
     `- Redaction: ${options.header.redaction}`,
     "",
     "```log",
@@ -395,7 +418,9 @@ export function exportSupportBundleRecords(
       app_version: options.header.appVersion,
       os: options.header.os,
       time_range: options.header.timeRange,
-      active_filter: options.header.activeFilter,
+      // The active filter carries the user's raw log-search query (possibly a
+      // pasted txid/amount); pseudonymize it like any other operational text.
+      active_filter: redactTextForMode(options.header.activeFilter, renderOptions),
       redaction: mode,
       public_safe: mode === "public_safe",
       format_note: supportBundleFormatNote(mode),
@@ -534,6 +559,12 @@ function redactField(
     };
   }
   if (mode === "high_signal") {
+    // Number/boolean/duration values can't hide a txid/amount string, but a
+    // STRING value mislabeled under a non-operational type can — scrub those
+    // rather than passing them through verbatim.
+    if (typeof field.value === "string") {
+      return { ...field, value: redactTextForMode(field.value, options) };
+    }
     return field;
   }
   const value = stringifyLogValue(field.value);
@@ -624,8 +655,11 @@ function redactSecretFloorText(value: string): string {
 // for debugging, but txids and amounts are ALWAYS pseudonymized — they are the
 // wallet fingerprint an AI debugging session must never receive raw.
 function redactHighSignalText(value: string, showScale: boolean): string {
-  const out = value.replace(TXID_RE, (m) => pseudoTxid(m));
-  return replaceAmounts(out, showScale);
+  let out = value.replace(TXID_RE, (m) => pseudoTxid(m));
+  out = replaceAmounts(out, showScale);
+  // Keyed amounts last: replaceAmounts has already run, so the "~magnitude unit"
+  // the keyed pseudonym emits is never re-scanned and double-masked.
+  return replaceKeyedAmounts(out, showScale);
 }
 
 function redactPublicSafeText(value: string, showScale: boolean): string {
@@ -637,6 +671,7 @@ function redactPublicSafeText(value: string, showScale: boolean): string {
   // bundle keeps cross-line correlation; addresses/onion/paths stay hard-masked.
   out = out.replace(TXID_RE, (m) => pseudoTxid(m));
   out = replaceAmounts(out, showScale);
+  out = replaceKeyedAmounts(out, showScale);
   out = out.replace(PS_BECH32_RE, "[redacted-address]");
   out = out.replace(PS_BASE58_RE, "[redacted-address]");
   out = out.replace(PS_ONION_RE, "[redacted-onion]");
@@ -895,7 +930,10 @@ function stableHash(value: string): string {
 // wallet-fingerprinting data a developer must not hand to an AI after a
 // real-wallet test sync. Txids stay globally stable for correlation; amount
 // tokens are salted so low-entropy exact amounts cannot be dictionary-reversed.
-const TXID_RE = /\b[0-9a-f]{64}\b/gi;
+// {64,} (not {64}) so a >=65-hex run (two concatenated txids, a txid glued to
+// trailing hex) still has a word boundary and is pseudonymized as one token
+// instead of slipping through the {64}\b gap.
+const TXID_RE = /\b[0-9a-f]{64,}\b/gi;
 
 function pseudoTxid(value: string): string {
   return `txid#${stableHash(value.toLowerCase())}`;

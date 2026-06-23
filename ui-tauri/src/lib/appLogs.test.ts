@@ -479,6 +479,43 @@ describe("typed app logs", () => {
     expect(pub).not.toContain("amount#c2d60ca1");
   });
 
+  it("pseudonymizes keyed sat amounts, long hex runs, and the search-query header", () => {
+    const txid = "d".repeat(64);
+    const longHex = "e".repeat(72);
+    const emitted = emitAppLog({
+      ...record(),
+      msg: `fee_msat=100000 and amount_sat=50000 for ${txid} blob ${longHex}`,
+    });
+    const high = formatLogRecord(emitted!, { redacted: true, mode: "high_signal" });
+    // keyed/glued sat amounts: the integer is gone, the key stays readable
+    expect(high).toContain("fee_msat=amount#");
+    expect(high).toContain("amount_sat=amount#");
+    expect(high).not.toContain("=100000");
+    expect(high).not.toContain("=50000");
+    // a >64-hex run is pseudonymized as one token, not left raw past 64 chars
+    expect(high).not.toContain(longHex);
+    expect(high).not.toContain(txid);
+    expect(high).toContain("txid#");
+
+    // the md export header's active filter carries the user's raw search query
+    // (here a pasted txid) and must be scrubbed in a redacted export
+    const md = exportLogRecords([emitted!], "md", {
+      redacted: true,
+      mode: "high_signal",
+      header: {
+        appVersion: "0.0.0",
+        os: "macOS",
+        timeRange: "all",
+        activeFilter: `search=${txid}`,
+        redaction: "high_signal",
+        generatedAt: "2026-06-23T00:00:00Z",
+      },
+    });
+    expect(md).toContain("Active filter:");
+    expect(md).not.toContain(txid);
+    expect(md).toContain("txid#");
+  });
+
   it("keeps logs in RAM and does not touch browser storage", () => {
     const setItem = vi.fn();
     vi.stubGlobal("localStorage", {
