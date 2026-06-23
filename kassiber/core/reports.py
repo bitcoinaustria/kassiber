@@ -399,6 +399,48 @@ def report_balance_sheet(conn, workspace_ref, profile_ref, hooks: ReportHooks):
     return rows
 
 
+# Reconstructing holdings by summing raw journal_entries quantities must mirror
+# the entry-type compensation baked into report_verify._holdings_quantity_formula.
+# The engine books a self-transfer's network fee in TWO rows (transfer_out's
+# quantity already includes the fee, and a separate transfer_fee disposes that
+# same fee) and books earned coins in TWO rows (an `acquisition` lot plus an
+# `income` recognition line). A naive Σ(quantity) therefore double-subtracts the
+# fee and double-counts income, diverging from the BalanceSet-derived holdings
+# tables the live (non-historical) reports read. These helpers keep the as-of
+# portfolio and balance-history paths in lockstep with that canonical balance.
+_HOLDINGS_QUANTITY_SKIP_ENTRY_TYPES = frozenset({"income", "transfer_fee"})
+_HOLDINGS_BASIS_SKIP_ENTRY_TYPES = frozenset({"income"})
+
+
+def _holdings_quantity_delta(entry_type, quantity):
+    """Net-holdings quantity contribution of one journal entry.
+
+    ``transfer_fee`` is skipped (its quantity is already inside ``transfer_out``'s
+    ``sent``); ``income`` is skipped (the coins are already counted by their
+    paired ``acquisition`` lot). Every other entry's stored quantity already
+    carries the correct sign (acquisition / transfer_in positive,
+    disposal / fee / transfer_out negative).
+    """
+    if entry_type in _HOLDINGS_QUANTITY_SKIP_ENTRY_TYPES:
+        return Decimal("0")
+    return quantity
+
+
+def _holdings_basis_delta(entry_type, quantity, fiat_value, cost_basis):
+    """Ending cost-basis contribution of one journal entry.
+
+    Mirrors ``report_verify.basis_recompute``: add acquisition / transfer_in
+    ``fiat_value``, subtract every sub-side ``cost_basis`` (disposal / fee /
+    transfer_out / transfer_fee). ``income`` is skipped because its basis rides
+    on the paired ``acquisition`` lot.
+    """
+    if entry_type in _HOLDINGS_BASIS_SKIP_ENTRY_TYPES:
+        return Decimal("0")
+    if quantity >= 0:
+        return fiat_value
+    return -cost_basis
+
+
 def _historical_portfolio_summary(conn, profile, hooks: ReportHooks, as_of_dt, *, include_wallet_id=False):
     rows = conn.execute(
         """
@@ -408,6 +450,7 @@ def _historical_portfolio_summary(conn, profile, hooks: ReportHooks, as_of_dt, *
             w.label AS wallet,
             COALESCE(a.code, a.label, '') AS account,
             je.asset,
+            je.entry_type,
             je.quantity,
             je.fiat_value,
             COALESCE(je.cost_basis, 0) AS cost_basis
@@ -451,11 +494,10 @@ def _historical_portfolio_summary(conn, profile, hooks: ReportHooks, as_of_dt, *
     for row in rows:
         quantity = msat_to_btc(row["quantity"])
         key = (row["wallet_id"], row["wallet"], row["account"], row["asset"])
-        holdings[key]["quantity"] += quantity
-        if quantity >= 0:
-            holdings[key]["cost_basis"] += dec(row["fiat_value"])
-        else:
-            holdings[key]["cost_basis"] -= dec(row["cost_basis"])
+        holdings[key]["quantity"] += _holdings_quantity_delta(row["entry_type"], quantity)
+        holdings[key]["cost_basis"] += _holdings_basis_delta(
+            row["entry_type"], quantity, dec(row["fiat_value"]), dec(row["cost_basis"])
+        )
 
     results = []
     for (wallet_id, wallet_label, account_code, asset), value in sorted(
@@ -669,6 +711,7 @@ def report_balance_history(
         SELECT
             je.occurred_at,
             je.asset,
+            je.entry_type,
             je.quantity,
             je.fiat_value,
             COALESCE(je.cost_basis, 0) AS cost_basis
@@ -711,6 +754,7 @@ def report_balance_history(
             (
                 row_dt,
                 row["asset"],
+                row["entry_type"],
                 msat_to_btc(row["quantity"]),
                 dec(row["fiat_value"]),
                 dec(row["cost_basis"]),
@@ -745,12 +789,11 @@ def report_balance_history(
     while bucket_start <= end_cap:
         bucket_end = _next_interval(bucket_start, interval)
         while event_idx < len(events) and events[event_idx][0] < bucket_end:
-            _, ev_asset, ev_qty, ev_fiat, ev_cost_basis = events[event_idx]
-            cumulative[ev_asset] += ev_qty
-            if ev_qty >= 0:
-                cumulative_fiat[ev_asset] += ev_fiat
-            else:
-                cumulative_fiat[ev_asset] -= ev_cost_basis
+            _, ev_asset, ev_entry_type, ev_qty, ev_fiat, ev_cost_basis = events[event_idx]
+            cumulative[ev_asset] += _holdings_quantity_delta(ev_entry_type, ev_qty)
+            cumulative_fiat[ev_asset] += _holdings_basis_delta(
+                ev_entry_type, ev_qty, ev_fiat, ev_cost_basis
+            )
             event_idx += 1
         while rate_idx < len(rate_events) and rate_events[rate_idx][0] < bucket_end:
             _, rate_asset, rate = rate_events[rate_idx]
