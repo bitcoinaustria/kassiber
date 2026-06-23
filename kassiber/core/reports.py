@@ -753,6 +753,39 @@ def report_balance_history(
         params.append(asset)
     sql += " ORDER BY je.occurred_at ASC, je.created_at ASC, je.id ASC"
     rows = conn.execute(sql, params).fetchall()
+    scoped_basis_allocation = bool(wallet_ref or account_ref)
+    pool_events = []
+    if scoped_basis_allocation:
+        # Scoped history reports quantity for the selected wallet/account, but
+        # cost basis follows the profile-wide residual pool allocation used by
+        # the live/as-of portfolio reports.
+        pool_sql = """
+            SELECT
+                je.occurred_at,
+                je.asset,
+                je.entry_type,
+                je.quantity,
+                je.fiat_value,
+                COALESCE(je.cost_basis, 0) AS cost_basis
+            FROM journal_entries je
+            WHERE je.profile_id = ?
+        """
+        pool_params = [profile["id"]]
+        if asset:
+            pool_sql += " AND je.asset = ?"
+            pool_params.append(asset)
+        pool_sql += " ORDER BY je.occurred_at ASC, je.created_at ASC, je.id ASC"
+        for row in conn.execute(pool_sql, pool_params).fetchall():
+            pool_events.append(
+                (
+                    hooks.parse_iso_datetime(row["occurred_at"], "occurred_at"),
+                    row["asset"],
+                    row["entry_type"],
+                    msat_to_btc(row["quantity"]),
+                    dec(row["fiat_value"]),
+                    dec(row["cost_basis"]),
+                )
+            )
     rate_rows = conn.execute(
         """
         SELECT occurred_at, asset, amount, fiat_rate, fiat_value
@@ -799,7 +832,10 @@ def report_balance_history(
 
     cumulative = defaultdict(lambda: Decimal("0"))
     cumulative_fiat = defaultdict(lambda: Decimal("0"))
+    pool_quantity = defaultdict(lambda: Decimal("0"))
+    pool_cost_basis = defaultdict(lambda: Decimal("0"))
     event_idx = 0
+    pool_event_idx = 0
     rate_idx = 0
     current_rates = {}
     bucket_start = _floor_to_interval(range_start, interval)
@@ -815,6 +851,19 @@ def report_balance_history(
                 ev_entry_type, ev_qty, ev_fiat, ev_cost_basis
             )
             event_idx += 1
+        while (
+            scoped_basis_allocation
+            and pool_event_idx < len(pool_events)
+            and pool_events[pool_event_idx][0] < bucket_end
+        ):
+            _, ev_asset, ev_entry_type, ev_qty, ev_fiat, ev_cost_basis = pool_events[
+                pool_event_idx
+            ]
+            pool_quantity[ev_asset] += _holdings_quantity_delta(ev_entry_type, ev_qty)
+            pool_cost_basis[ev_asset] += _holdings_basis_delta(
+                ev_entry_type, ev_qty, ev_fiat, ev_cost_basis
+            )
+            pool_event_idx += 1
         while rate_idx < len(rate_events) and rate_events[rate_idx][0] < bucket_end:
             _, rate_asset, rate = rate_events[rate_idx]
             current_rates[rate_asset] = rate
@@ -825,13 +874,23 @@ def report_balance_history(
             if qty == 0 and asset is None:
                 continue
             rate = current_rates.get(ev_asset, Decimal("0"))
+            if scoped_basis_allocation:
+                pool_qty = pool_quantity.get(ev_asset, Decimal("0"))
+                if pool_qty > 0:
+                    cost_basis = qty * (
+                        pool_cost_basis.get(ev_asset, Decimal("0")) / pool_qty
+                    )
+                else:
+                    cost_basis = Decimal("0")
+            else:
+                cost_basis = cumulative_fiat.get(ev_asset, Decimal("0"))
             results.append(
                 {
                     "period_start": hooks.iso_z(bucket_start),
                     "period_end": hooks.iso_z(bucket_end - timedelta(seconds=1)),
                     "asset": ev_asset,
                     "quantity": float(qty),
-                    "cumulative_cost_basis": float(cumulative_fiat.get(ev_asset, Decimal("0"))),
+                    "cumulative_cost_basis": float(cost_basis),
                     "market_value": float(qty * rate),
                 }
             )

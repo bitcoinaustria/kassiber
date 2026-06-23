@@ -762,17 +762,6 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     esplora/mempool backend + a sync-timing race (BTCPay is confirmed-only and
     immune). Fix: a confirmed-only tax gate (`confirmed_at IS NOT NULL`) + a
     shared-prevout RBF/conflict-dedup pass (matches the deferred BDK-eval note).
-  - [ ] **Wallet-scoped balance-history cost basis (P2).** `report_balance_history`
-    accumulates per-wallet basis from the raw journal sum, so a `--wallet`-scoped
-    series strands a self-transfer's moved basis in the source wallet
-    (`transfer_out` carries no cost_basis, `transfer_in` no fiat_value). The
-    as-of `portfolio-summary` path was fixed to allocate from the asset's pooled
-    average (mirroring `_accumulate_asset_holdings`), but balance-history needs a
-    profile-pool query (it filters to the wallet, so it cannot see the pool) to
-    do the same per bucket. Profile-wide balance-history basis and the
-    market_value series are correct; only the wallet-scoped `cumulative_cost_basis`
-    is wrong. Fix: load the profile-wide per-asset pool alongside the filtered
-    quantity and allocate `wallet_qty * pooled_avg` per bucket.
   - [ ] **Fee-tolerance flag desync (P3).** `_deterministic_self_transfer_ids`
     honors caller `--fee-pct-max/--fee-sats-min` but `tax_events`'s
     `transfer_fee_implausible` ceiling is hardcoded to the defaults, so

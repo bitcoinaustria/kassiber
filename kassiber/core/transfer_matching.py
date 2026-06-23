@@ -427,7 +427,12 @@ def _deterministic_self_transfer_ids(
             if _record_get(row, "direction") == "outbound"
             and int(_record_get(row, "amount") or 0) > 0
         ]
-        ins = [row for row in group if _record_get(row, "direction") == "inbound"]
+        ins = [
+            row
+            for row in group
+            if _record_get(row, "direction") == "inbound"
+            and int(_record_get(row, "amount") or 0) > 0
+        ]
         if len(outs) != 1 or len(ins) != 1:
             continue
         out_row = outs[0]

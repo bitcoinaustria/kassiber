@@ -9814,6 +9814,24 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         self.assertAlmostEqual(cold_feb["quantity"], 0.499, places=8)
 
+        # destination-wallet-scoped basis is allocated from the same profile pool
+        # as the live/as-of portfolio path; the transfer_in row itself carries no
+        # fiat_value, so the old raw wallet sum left Hot at zero basis.
+        hot_history, result = self._run_json(
+            "reports", "balance-history",
+            "--workspace", "Main",
+            "--profile", "FixtureTransfer",
+            "--wallet", "Hot",
+            "--interval", "month",
+        )
+        self._assert_ok(hot_history, result, "reports.balance-history")
+        hot_feb = next(
+            row for row in hot_history["data"]
+            if row["asset"] == "BTC" and row["period_start"] == "2026-02-01T00:00:00Z"
+        )
+        self.assertAlmostEqual(hot_feb["quantity"], 0.5, places=8)
+        self.assertAlmostEqual(hot_feb["cumulative_cost_basis"], 30000.0, places=0)
+
         # as-of portfolio-summary (the summary-PDF holdings path; not exposed on
         # the CLI) must agree with the live BalanceSet path: Cold 0.499, Hot 0.5.
         conn = open_db(self.data_root)
