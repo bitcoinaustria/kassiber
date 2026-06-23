@@ -804,14 +804,23 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     gap on a fee-inclusive leg as the miner fee, not an unrecognized outflow, so a
     BTCPay-leg self-transfer books correctly instead of being quarantined /
     routed to swap review. Node backends (marker 0) are unchanged.
-  - [ ] **BTCPay standalone-payment fee deduction (P2, residual of the above).**
-    A standalone BTCPay external payment still folds the fee into `amount` with
-    `fee = 0`, so its disposal overstates taxable proceeds by `fee * spot`
-    (`rp2.py` SELL `crypto_out_no_fee = amount`, `crypto_fee = 0`); holdings are
-    correct (the net delta is what left). The `amount_includes_fee` marker now
-    exists, but the fee value cannot be read back from the Greenfield API, so a
-    real fix needs out-of-band fee recovery (raw tx / NBXplorer) or surfacing a
-    "fee unknown" state on the disposal. Bounded by `fee * spot`; BTCPay-only.
+  - [ ] **BTCPay folded-in fee — residual disposals (P2, residual of the above).**
+    The marker fixes the *pure* self-transfer, but the fee value still cannot be
+    read back from the Greenfield API, so the folded-in fee cannot be separated
+    from any other outflow in `amount`. Two residual cases remain, both
+    BTCPay-only, both leaving holdings correct (the net delta is what left):
+    (a) *Standalone payment* — a BTCPay external payment folds the fee into
+    `amount` with `fee = 0`, so its disposal overstates taxable proceeds by
+    `fee * spot` (`rp2.py` SELL `crypto_out_no_fee = amount`, `crypto_fee = 0`).
+    (b) *Paired/batched* — when one BTCPay tx pays a separately-synced owned
+    wallet *and* an external recipient, `detect_intra_transfers` pairs the
+    1-out/1-in legs and the P1 fix's `unrecognized_outflow = 0` books the whole
+    out/in gap (external payment + miner fee) as a transfer fee instead of
+    quarantining it, so the external payment is absorbed silently *regardless of
+    size* — unlike the node-backed sub-ceiling case below, which is bounded by
+    `max(1% of out, 2500 sats)`. A real fix needs out-of-band fee recovery (raw
+    tx / NBXplorer) or a surfaced "fee unknown" state on the disposal; the marker
+    added here is the groundwork.
   - [ ] **Sub-ceiling external payment absorbed as a transfer fee (P2).** When
     one tx pays an owned wallet + a small external address + change, and both
     owned wallets synced the shared txid, `detect_intra_transfers` pairs the
