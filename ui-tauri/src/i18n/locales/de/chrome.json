@@ -290,7 +290,9 @@
   },
   "firstSync": {
     "defaultTitle": "Dein Buch wird eingerichtet",
+    "defaultTitleRefresh": "Dein Buch wird aktualisiert",
     "body": "Erster Sync — deine Historie wird aus den konfigurierten Quellen aufgebaut. Das läuft einmalig und kann ein paar Minuten dauern.",
+    "bodyRefresh": "Aktualisierung aus deinen konfigurierten Quellen.",
     "preparing": "Quellenaktualisierung wird vorbereitet",
     "working": "Wird bearbeitet…",
     "keepUsing": "Du kannst Kassiber weiter nutzen, während das fertig wird.",

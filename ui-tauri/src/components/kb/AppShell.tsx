@@ -541,40 +541,37 @@ export function AppShell() {
   const bookRefreshActive =
     activeMaintenanceProgress?.id === BOOK_REFRESH_PROGRESS_ID &&
     Boolean(activeMaintenanceProgress?.active);
-  const firstSyncEligible =
-    bookRefreshActive && bookKey !== null && !firstSyncDone[bookKey];
-  // Dismissed state lives in the store (keyed by book) so the book-refresh
-  // notification in the header can re-open the card via reopenFirstSyncCard.
-  const firstSyncCardDismissedMap = useUiStore((s) => s.firstSyncCardDismissed);
-  const dismissFirstSyncCardStore = useUiStore((s) => s.dismissFirstSyncCard);
-  const reopenFirstSyncCardStore = useUiStore((s) => s.reopenFirstSyncCard);
-  const firstSyncCardDismissed =
-    bookKey !== null && Boolean(firstSyncCardDismissedMap[bookKey]);
+  // Show the full-screen sync card for ANY active book refresh (the first sync
+  // OR a later incremental refresh), not only the very first one.
+  const syncCardEligible = bookRefreshActive && bookKey !== null;
+  // Whether this is the book's very first sync — only switches the card's copy
+  // ("setting up / building your history" vs a plain refresh).
+  const isFirstSync = bookKey !== null && !firstSyncDone[bookKey];
+  // Minimized state lives in the store (keyed by book) so the book-refresh
+  // notification in the header can re-open the card. (The store field is still
+  // named `firstSyncCardDismissed` for historical reasons; it now tracks the
+  // minimized state of the sync card for any refresh.)
+  const syncCardMinimizedMap = useUiStore((s) => s.firstSyncCardDismissed);
+  const minimizeSyncCardStore = useUiStore((s) => s.dismissFirstSyncCard);
+  const restoreSyncCardStore = useUiStore((s) => s.reopenFirstSyncCard);
+  const syncCardMinimized =
+    bookKey !== null && Boolean(syncCardMinimizedMap[bookKey]);
   React.useEffect(() => {
-    // Once a book is no longer mid-first-sync, drop any "continue in
-    // background" choice so its next first-sync run starts expanded again.
-    if (
-      !firstSyncEligible &&
-      bookKey !== null &&
-      firstSyncCardDismissedMap[bookKey]
-    ) {
-      reopenFirstSyncCardStore(bookKey);
+    // Once a book is no longer syncing, drop any "continue in background" choice
+    // so its next refresh starts expanded again.
+    if (!syncCardEligible && bookKey !== null && syncCardMinimizedMap[bookKey]) {
+      restoreSyncCardStore(bookKey);
     }
-  }, [
-    firstSyncEligible,
-    bookKey,
-    firstSyncCardDismissedMap,
-    reopenFirstSyncCardStore,
-  ]);
-  const isFirstSync = firstSyncEligible && !firstSyncCardDismissed;
-  const dismissFirstSyncCard = React.useCallback(() => {
-    if (bookKey !== null) dismissFirstSyncCardStore(bookKey);
-  }, [bookKey, dismissFirstSyncCardStore]);
+  }, [syncCardEligible, bookKey, syncCardMinimizedMap, restoreSyncCardStore]);
+  const showSyncCard = syncCardEligible && !syncCardMinimized;
+  const minimizeSyncCard = React.useCallback(() => {
+    if (bookKey !== null) minimizeSyncCardStore(bookKey);
+  }, [bookKey, minimizeSyncCardStore]);
   // The card already shows the title in its header, so feed it the raw phase
   // label rather than the route-composed "Title: detail" string. Gated on
   // `active` to match `shellProgress`, so a stale maintenance record can't leak
   // a value in.
-  const firstSyncCardProgress: RouteProgressState | null =
+  const syncCardProgress: RouteProgressState | null =
     activeMaintenanceProgress?.active
       ? {
           indeterminate: Boolean(
@@ -1368,19 +1365,20 @@ export function AppShell() {
                 {!locked && !importRootBlocked ? (
                   <>
                     <RouteTopProgressLine
-                      // While the full-screen first-sync card is up it already
-                      // shows this progress (plus the blur scrim), so suppress
-                      // the hairline here — it returns once "Continue in
-                      // background" demotes the card.
-                      active={shellBusy && !isFirstSync}
+                      // While the full-screen sync card is up it already shows
+                      // this progress (plus the blur scrim), so suppress the
+                      // hairline here — it returns once "Continue in background"
+                      // minimizes the card.
+                      active={shellBusy && !showSyncCard}
                       progress={shellProgress}
-                      announce={!isFirstSync}
+                      announce={!showSyncCard}
                     />
-                    {isFirstSync ? (
+                    {showSyncCard ? (
                       <FirstSyncCard
-                        progress={firstSyncCardProgress}
+                        progress={syncCardProgress}
                         title={activeMaintenanceProgress?.title}
-                        onDismiss={dismissFirstSyncCard}
+                        isFirstSync={isFirstSync}
+                        onDismiss={minimizeSyncCard}
                       />
                     ) : null}
                   </>
@@ -1875,7 +1873,6 @@ function AppDashboardHeader({
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const identity = useUiStore((s) => s.identity);
-  const firstSyncDone = useUiStore((s) => s.firstSyncDone);
   const reopenFirstSyncCard = useUiStore((s) => s.reopenFirstSyncCard);
   const headerBookKey = bookIdentityKey(identity);
   const setDeferredConnectionSetup = useUiStore(
@@ -2350,14 +2347,15 @@ function AppDashboardHeader({
                 <DropdownMenuItem
                   className="flex cursor-pointer items-start justify-between gap-3 whitespace-normal rounded-md"
                   onSelect={(event) => {
-                    // An in-progress book refresh collapsed via "Continue in
-                    // background" re-opens the first-sync card (rather than
+                    // An in-progress book refresh minimized via "Continue in
+                    // background" re-opens the full-screen sync card (rather than
                     // navigating); letting the menu close on select reveals it.
+                    // A live `progress` means a refresh is active, so this covers
+                    // first sync AND later incremental refreshes.
                     if (
                       item.dedupeKey === "book-refresh" &&
                       item.progress &&
-                      headerBookKey !== null &&
-                      !firstSyncDone[headerBookKey]
+                      headerBookKey !== null
                     ) {
                       reopenFirstSyncCard(headerBookKey);
                       return;
