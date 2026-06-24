@@ -7387,7 +7387,8 @@ def _update_wallet_payload(
         config_updates["source_file"] = source_file
     wallet_material = _optional_str_arg(args, "wallet_material")
     if wallet_material is not None:
-        material_config = normalize_wallet_material(wallet_material)
+        script_type = _optional_str_arg(args, "script_type")
+        material_config = normalize_wallet_material(wallet_material, script_type=script_type)
         config_updates["descriptor"] = material_config["descriptor"]
         if "change_descriptor" in material_config:
             config_updates["change_descriptor"] = material_config["change_descriptor"]
