@@ -91,6 +91,16 @@ class FreshSchemaTests(unittest.TestCase):
                 self.assertIn("transaction_pair_dismissals", tables)
                 self.assertIn("swap_matching_rules", tables)
                 self.assertIn("saved_views", tables)
+                self.assertIn("loans", tables)
+                self.assertIn("loan_legs", tables)
+                self.assertIn("loan_escrow_positions", tables)
+
+                loan_cols = {row["name"] for row in conn.execute("PRAGMA table_info(loans)").fetchall()}
+                for name in ("custody_type", "rehypothecation", "control_mechanism", "public_offering"):
+                    self.assertIn(name, loan_cols)
+                leg_cols = {row["name"] for row in conn.execute("PRAGMA table_info(loan_legs)").fetchall()}
+                for name in ("loan_id", "role", "transaction_id", "on_chain_present"):
+                    self.assertIn(name, leg_cols)
 
                 tx_cols = {row["name"] for row in conn.execute("PRAGMA table_info(transactions)").fetchall()}
                 self.assertIn("payment_hash", tx_cols)

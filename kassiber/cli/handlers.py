@@ -35,6 +35,7 @@ from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
 from ..core import imports as core_imports
 from ..core.lightning import cln as core_lightning_cln
+from ..core import loans as core_loans
 from ..core import metadata as core_metadata
 from ..core import output_inventory as core_output_inventory
 from ..core import ownership as core_ownership
@@ -3220,6 +3221,17 @@ def build_ledger_state(conn, profile):
             {"code": "ownership_index", "message": str(message)}
             for message in ownership_warnings or ()
         )
+    # Active loan legs that classify a journal transaction by role (lock/release
+    # are non-events that keep the coins in the owned pool; liquidation falls
+    # through to the normal disposal path). Only legs bound to a real transaction
+    # affect the ledger.
+    loan_legs = conn.execute(
+        """
+        SELECT transaction_id, role FROM loan_legs
+        WHERE profile_id = ? AND deleted_at IS NULL AND transaction_id IS NOT NULL
+        """,
+        (profile["id"],),
+    ).fetchall()
     engine_state = tax_engine.build_ledger_state(
         TaxEngineLedgerInputs(
             rows=rows,
@@ -3227,6 +3239,7 @@ def build_ledger_state(conn, profile):
             manual_pair_records=manual_pair_records,
             direct_payout_records=direct_payout_records,
             owned_index=owned_index,
+            loan_legs=loan_legs,
         )
     )
     return {
@@ -4328,3 +4341,148 @@ def cmd_context_set(conn, args):
     else:
         raise AppError("Provide --workspace and/or --profile")
     cmd_context_show(conn, args)
+
+
+# --- Bitcoin-backed loans --------------------------------------------------
+
+
+def loans_add(
+    conn,
+    workspace_ref,
+    profile_ref,
+    *,
+    role="borrower",
+    platform=None,
+    preset=None,
+    custody_type=None,
+    rehypothecation=None,
+    control_mechanism=None,
+    principal_asset=None,
+    principal_amount=None,
+    collateral_asset="BTC",
+    status="open",
+    public_offering=False,
+    interest_asset=None,
+    interest_terms=None,
+    as_of=None,
+    note=None,
+):
+    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    return core_loans.create_loan(
+        conn,
+        workspace["id"],
+        profile["id"],
+        role=role,
+        platform=platform,
+        preset_id=preset,
+        custody_type=custody_type,
+        rehypothecation=rehypothecation,
+        control_mechanism=control_mechanism,
+        principal_asset=principal_asset,
+        principal_amount=principal_amount,
+        collateral_asset=collateral_asset,
+        status=status,
+        public_offering=public_offering,
+        interest_asset=interest_asset,
+        interest_terms=interest_terms,
+        as_of_custody_date=as_of,
+        notes=note,
+    )
+
+
+def loans_list(conn, workspace_ref, profile_ref):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    return core_loans.list_loans(conn, profile["id"])
+
+
+def loans_show(conn, workspace_ref, profile_ref, loan_id):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    loan = core_loans.get_loan(conn, profile["id"], loan_id)
+    if loan is None:
+        raise AppError(f"Loan '{loan_id}' not found", code="not_found")
+    loan["legs"] = core_loans.list_loan_legs(conn, profile["id"], loan_id=loan_id)
+    return loan
+
+
+def loans_set(conn, workspace_ref, profile_ref, loan_id, **fields):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    loan = core_loans.update_loan(conn, profile["id"], loan_id, commit=False, **fields)
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
+    return loan
+
+
+def loans_delete(conn, workspace_ref, profile_ref, loan_id):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    result = core_loans.delete_loan(conn, profile["id"], loan_id, commit=False)
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
+    return result
+
+
+def loans_add_leg(
+    conn,
+    workspace_ref,
+    profile_ref,
+    loan_id,
+    *,
+    role,
+    txid=None,
+    escrow_address=None,
+    escrow_txid=None,
+    escrow_vout=None,
+    amount=None,
+    occurred_at=None,
+    off_chain=False,
+    note=None,
+):
+    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    amount_msat = btc_to_msat(amount) if amount is not None else None
+    if txid is not None:
+        tx_row = conn.execute(
+            "SELECT id FROM transactions WHERE profile_id = ? AND (id = ? OR external_id = ?)",
+            (profile["id"], txid, txid),
+        ).fetchone()
+        if tx_row is None:
+            raise AppError(
+                f"Transaction '{txid}' not found in this book",
+                code="not_found",
+                details={"txid": txid},
+            )
+        txid = tx_row["id"]
+    leg = core_loans.create_loan_leg(
+        conn,
+        workspace["id"],
+        profile["id"],
+        loan_id,
+        role=role,
+        transaction_id=txid,
+        escrow_address=escrow_address,
+        escrow_txid=escrow_txid,
+        escrow_vout=escrow_vout,
+        amount=amount_msat,
+        occurred_at=occurred_at,
+        on_chain_present=not off_chain,
+        notes=note,
+        commit=False,
+    )
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
+    return leg
+
+
+def loans_delete_leg(conn, workspace_ref, profile_ref, leg_id):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    result = core_loans.delete_loan_leg(conn, profile["id"], leg_id, commit=False)
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
+    return result
+
+
+def loans_status(conn, workspace_ref, profile_ref):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    return core_loans.loan_action_items(conn, profile["id"])
+
+
+def loans_presets(conn):
+    return core_loans.list_provider_presets()

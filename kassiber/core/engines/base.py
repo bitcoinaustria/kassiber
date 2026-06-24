@@ -16,6 +16,11 @@ class TaxEngineLedgerInputs:
     # OwnedIndex) used to derive self-transfers from the transaction graph;
     # ``None`` when no on-chain transaction JSON is available to read.
     owned_index: Any = None
+    # Active loan legs (rows from ``loan_legs`` with a non-null transaction_id).
+    # Each carries a ``role`` that classifies the matching journal transaction:
+    # a collateral lock/release is a non-event that keeps the coins in the owned
+    # pool (encumbered), a liquidation falls through to the normal disposal path.
+    loan_legs: Sequence[Mapping[str, Any]] = ()
 
 
 @dataclass(frozen=True)

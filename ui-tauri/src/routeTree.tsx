@@ -48,6 +48,7 @@ const Activity = lazyRouteComponent(
 );
 const Reports = lazyRouteComponent(() => import("./routes/Reports"), "Reports");
 const ExitTax = lazyRouteComponent(() => import("./routes/ExitTax"), "ExitTax");
+const Loans = lazyRouteComponent(() => import("./routes/Loans"), "Loans");
 const SourceFunds = lazyRouteComponent(
   () => import("./routes/SourceFunds"),
   "SourceFunds",
@@ -165,6 +166,12 @@ const exitTaxRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/exit-tax",
   component: ExitTax,
+});
+
+const loansRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/loans",
+  component: Loans,
 });
 
 const sourceFundsRoute = createRoute({
@@ -328,6 +335,7 @@ const routeTree = rootRoute.addChildren([
     activityRoute,
     reportsRoute,
     exitTaxRoute,
+    loansRoute,
     sourceFundsRoute,
     journalsRoute,
     swapMatchingRoute,

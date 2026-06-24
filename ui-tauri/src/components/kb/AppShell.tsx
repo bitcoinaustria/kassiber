@@ -31,6 +31,7 @@ import {
   Heart,
   History,
   LifeBuoy,
+  HandCoins,
   LockKeyhole,
   LogOut,
   MessageSquareText,
@@ -227,6 +228,7 @@ const NAV_GROUPS: NavGroup[] = [
       { labelKey: "book.quarantine", icon: ShieldAlert, href: "/quarantine" },
       { labelKey: "book.reconcile", icon: Fingerprint, href: "/reconcile" },
       { labelKey: "book.sourceFunds", icon: BadgeCheck, href: "/source-of-funds" },
+      { labelKey: "book.loans", icon: HandCoins, href: "/loans" },
       { labelKey: "book.swaps", icon: ArrowLeftRight, href: "/swaps" },
       { labelKey: "book.ledger", icon: BookOpen, href: "/journals" },
     ],
@@ -315,6 +317,14 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       titleKey: "nav:book.exitTax",
       icon: Plane,
       searchKey: "routeMeta.exitTax",
+    },
+  ],
+  [
+    "/loans",
+    {
+      titleKey: "nav:book.loans",
+      icon: HandCoins,
+      searchKey: "routeMeta.loans",
     },
   ],
   [

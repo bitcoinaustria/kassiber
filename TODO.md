@@ -112,6 +112,37 @@ Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the 
   Veräußerung, gleitender Durchschnittspreis, Wegzugsbesteuerung, Kennzahl,
   Beilage E 1kv, KESt…), Austrian month/“heuer”. Verified via typecheck, the
   en/de parity test, build, and live browser screenshots.
+- [ ] **Model Bitcoin-backed lending as first-class** (custodial + non-custodial
+  multisig) — researched + red-teamed implementation design in
+  [docs/plan/12-collateralized-loans.md](docs/plan/12-collateralized-loans.md).
+  Hybrid approach: a provider-agnostic `loans` + `loan_legs` core (correctness lives
+  here — the chain carries no loan semantics for any provider) + editable provider
+  presets + a thin import-tier registry. Architecture correction baked in:
+  encumbrance is a **lot-partition tag in the global per-asset pool**, NOT a synthetic
+  RP2 exchange/account (that re-introduces the per-`(exchange,holder)` "went negative"
+  crash). The lock **suppresses the outbound→disposal branch** at
+  [`tax_events.py:896`](kassiber/core/tax_events.py) and tags the lot encumbered;
+  release clears it (basis + acquisition date carry); liquidation is the one SELL.
+  Two orthogonal tax linchpins (`custody_type` + `rehypothecation`), contested-disposal
+  is advisory-never-default, lender interest defaults to progressive ≤55 % (27.5 % only
+  if `public_offering` confirmed, §27a Abs 2 — needs its own citation). Detection is
+  heuristic/import-only — never auto-SELL an unlabeled outbound; escrow addresses are a
+  third "encumbered/co-controlled" ownership category, never "owned".
+  - [x] Resilience precursor (shipped): a carrying-value swap whose leg was blocked in
+    phase 1 (e.g. `insufficient_lots` on a self-custody round-trip paired as a BTC↔L-BTC
+    swap) is quarantined as a pair in `_select_at_cross_asset_swap_links` instead of
+    being promoted to an `at_swap_link` that bypassed the quantity gate and aborted the
+    whole report. Regression: `ATSwapOverSellQuarantineTest`; contract in
+    [docs/austrian-handoff.md](docs/austrian-handoff.md).
+  - [ ] Phase 1: `loans`/`loan_legs` tables, encumbrance lot-tag + lock-suppression
+    regime + guards, 3-question wizard + `/loans` route, CLI `loans add/leg/pair/status`,
+    "Find in my wallets" reconciliation assist, and the Altvermögen lock→release
+    round-trip test.
+  - [ ] Phase 2: import on-ramps (Unchained descriptor read-only, Hodl Hodl escrow-object
+    pairing, Ledn/Nexo CSV quarantine-first via sampled-not-hardcoded mapping).
+  - [ ] Defense-in-depth: catch-quarantine-retry around `compute_tax_for_assets`
+    (reuse the existing `excluded_row_ids` re-prepare path) so no residual
+    negative-balance error can abort a whole report.
 - [ ] **Finish the i18n long tail:**
   - Reporting surfaces deferred by product call: `routes/Reports.tsx`,
     `routes/ExitTax.tsx`, `LightningProfitabilityPanel.tsx`, and report-output

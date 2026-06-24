@@ -469,6 +469,79 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_direct_swap_payouts_active_out
 CREATE INDEX IF NOT EXISTS idx_direct_swap_payouts_profile_active
     ON direct_swap_payouts(profile_id) WHERE deleted_at IS NULL;
 
+CREATE TABLE IF NOT EXISTS loans (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'borrower',
+    platform TEXT,
+    preset_label TEXT,
+    preset_version TEXT,
+    custody_type TEXT,
+    rehypothecation TEXT NOT NULL DEFAULT 'unknown',
+    control_mechanism TEXT NOT NULL DEFAULT 'live_key',
+    principal_asset TEXT,
+    principal_amount INTEGER,
+    collateral_asset TEXT NOT NULL DEFAULT 'BTC',
+    status TEXT NOT NULL DEFAULT 'open',
+    public_offering INTEGER NOT NULL DEFAULT 0,
+    interest_asset TEXT,
+    interest_terms TEXT,
+    as_of_custody_date TEXT,
+    notes TEXT,
+    deleted_at TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS loan_legs (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    loan_id TEXT NOT NULL REFERENCES loans(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,
+    transaction_id TEXT REFERENCES transactions(id) ON DELETE CASCADE,
+    escrow_address TEXT,
+    escrow_txid TEXT,
+    escrow_vout INTEGER,
+    amount INTEGER,
+    fiat_value REAL,
+    occurred_at TEXT,
+    policy TEXT NOT NULL DEFAULT 'carrying-value',
+    on_chain_present INTEGER NOT NULL DEFAULT 1,
+    notes TEXT,
+    deleted_at TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS loan_escrow_positions (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    loan_id TEXT NOT NULL REFERENCES loans(id) ON DELETE CASCADE,
+    escrow_address TEXT,
+    output_type TEXT NOT NULL DEFAULT 'unknown',
+    amount INTEGER,
+    acquired_basis_ref TEXT,
+    deleted_at TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_loans_profile_active
+    ON loans(profile_id) WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_loan_legs_loan_active
+    ON loan_legs(loan_id) WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_loan_legs_profile_active
+    ON loan_legs(profile_id) WHERE deleted_at IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_loan_legs_active_transaction
+    ON loan_legs(profile_id, transaction_id)
+    WHERE deleted_at IS NULL AND transaction_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_loan_escrow_positions_loan_active
+    ON loan_escrow_positions(loan_id) WHERE deleted_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS swap_matching_rules (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

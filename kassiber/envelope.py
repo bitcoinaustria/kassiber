@@ -71,6 +71,7 @@ _KIND_SUBCOMMAND_ATTRS = (
     "journals_command",
     "journal_transfers_command",
     "transfers_command",
+    "loans_command",
     "payouts_command",
     "transfers_rules_command",
     "views_command",

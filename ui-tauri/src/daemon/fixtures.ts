@@ -34,6 +34,90 @@ const SOURCE_FUNDS_FIXTURE_EXPLORER_LINKS = [
 ];
 
 export const fixtures: Record<string, unknown> = {
+  "ui.loans.list": {
+    loans: [
+      {
+        id: "loan:firefish-demo",
+        role: "borrower",
+        platform: "Firefish",
+        custody_type: "non_custodial_presigned",
+        rehypothecation: "none",
+        status: "open",
+        collateral_asset: "BTC",
+        legs: [
+          {
+            id: "leg:lock-1",
+            role: "collateral_lock",
+            transaction_id: "lock-demo-txid",
+            amount: 50_000_000,
+          },
+        ],
+      },
+      {
+        id: "loan:ledn-demo",
+        role: "borrower",
+        platform: "Ledn",
+        custody_type: "custodial_rehypothecated",
+        rehypothecation: "allowed",
+        status: "open",
+        collateral_asset: "BTC",
+        legs: [],
+      },
+    ],
+    actions: [
+      {
+        loan_id: "loan:ledn-demo",
+        platform: "Ledn",
+        action: "needs_lock",
+        detail: "No collateral lock leg is recorded yet.",
+      },
+      {
+        loan_id: "loan:ledn-demo",
+        platform: "Ledn",
+        action: "rehyp_review",
+        detail: "Rehypothecating custodial lock — possible disposal at FMV (contested; advisory).",
+      },
+    ],
+    presets: [
+      { preset_id: "firefish", label: "Firefish", custody_type: "non_custodial_presigned" },
+      { preset_id: "hodlhodl", label: "Hodl Hodl Lend", custody_type: "non_custodial_multisig" },
+      { preset_id: "unchained", label: "Unchained", custody_type: "collaborative_multisig" },
+      { preset_id: "ledn", label: "Ledn", custody_type: "custodial_segregated" },
+      { preset_id: "private", label: "Other / private", custody_type: null },
+    ],
+    enums: {
+      roles: ["borrower", "lender"],
+      custody_types: [
+        "non_custodial_multisig",
+        "non_custodial_presigned",
+        "collaborative_multisig",
+        "custodial_segregated",
+        "custodial_rehypothecated",
+        "onchain_smartcontract",
+      ],
+      statuses: ["open", "repaid", "defaulted", "liquidated", "cancelled", "disputed"],
+      leg_roles: [
+        "collateral_lock",
+        "collateral_topup",
+        "principal_draw",
+        "interest_payment",
+        "principal_repay",
+        "collateral_release",
+        "liquidation",
+        "liquidation_surplus_return",
+        "collateral_repay_sale",
+        "recovery_release",
+        "cancellation_release",
+        "escrow_consolidation",
+        "wrapped_conversion_out",
+      ],
+    },
+  },
+  "ui.loans.create": { id: "loan:new" },
+  "ui.loans.update": { id: "loan:firefish-demo" },
+  "ui.loans.delete": { deleted: "loan:firefish-demo" },
+  "ui.loans.add_leg": { id: "leg:new", role: "collateral_lock" },
+  "ui.loans.delete_leg": { deleted: "leg:lock-1" },
   status: {
     version: "0.0.0-ui-scaffold",
     data_root: "~/.kassiber",

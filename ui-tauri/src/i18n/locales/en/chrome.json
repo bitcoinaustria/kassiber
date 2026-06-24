@@ -89,6 +89,10 @@
       "label": "Search exit tax",
       "placeholder": "Search departure date, destination..."
     },
+    "loans": {
+      "label": "Search loans",
+      "placeholder": "Search provider, custody..."
+    },
     "sourceOfFunds": {
       "title": "Source of Funds",
       "label": "Search source of funds",
