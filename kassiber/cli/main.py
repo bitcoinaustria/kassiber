@@ -97,6 +97,7 @@ from .handlers import (
     sync_btcpay_commercial_provenance,
     sync_btcpay_into_wallet,
     sync_wallet,
+    update_transaction_pair,
 )
 from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
@@ -1422,6 +1423,16 @@ def build_parser() -> argparse.ArgumentParser:
     transfers_unpair.add_argument("--workspace")
     transfers_unpair.add_argument("--profile")
     transfers_unpair.add_argument("--pair-id", required=True, dest="pair_id")
+
+    transfers_update = transfers_sub.add_parser(
+        "update", help="Edit the kind / policy / note of an existing pair in place"
+    )
+    transfers_update.add_argument("--workspace")
+    transfers_update.add_argument("--profile")
+    transfers_update.add_argument("--pair-id", required=True, dest="pair_id")
+    transfers_update.add_argument("--kind", choices=list(TRANSFER_PAIR_KINDS))
+    transfers_update.add_argument("--policy", choices=list(TRANSFER_PAIR_POLICIES))
+    transfers_update.add_argument("--note", dest="note")
 
     transfers_payouts = transfers_sub.add_parser("payouts")
     transfers_payouts_sub = transfers_payouts.add_subparsers(dest="payouts_command", required=True)
@@ -3061,6 +3072,20 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             return emit(
                 args,
                 delete_transaction_pair(conn, args.workspace, args.profile, args.pair_id),
+            )
+        if args.transfers_command == "update":
+            update_kwargs = {}
+            if args.kind is not None:
+                update_kwargs["kind"] = args.kind
+            if args.policy is not None:
+                update_kwargs["policy"] = args.policy
+            if args.note is not None:
+                update_kwargs["notes"] = args.note
+            return emit(
+                args,
+                update_transaction_pair(
+                    conn, args.workspace, args.profile, args.pair_id, **update_kwargs
+                ),
             )
         if args.transfers_command == "payouts":
             if args.payouts_command == "list":
