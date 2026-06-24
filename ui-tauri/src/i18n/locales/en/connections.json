@@ -420,7 +420,7 @@
   "scanner": {
     "title": "Scan wallet export",
     "scanTitle": "Scan {{title}}",
-    "description": "Scan a descriptor, xpub-family export, Liquid descriptor, or BBQR sequence from a wallet display.",
+    "description": "Scan an output descriptor, xpub-family export, or BBQR sequence from a wallet display.",
     "mode": {
       "auto": "Auto",
       "single": "Single QR",
@@ -499,7 +499,7 @@
     },
     "descriptor": {
       "walletExport": "Wallet export",
-      "scanHint": "Paste or scan a descriptor, xpub-family export, Liquid descriptor, or BBQR sequence.",
+      "scanHint": "Paste or scan an output descriptor, xpub-family export, or BBQR sequence.",
       "scan": "Scan",
       "gapLimit": "Gap limit",
       "gapLimitHelper": "Default is 40 unused addresses per branch. Raise it for older or heavily used wallets, up to 5,000; long scans keep running until the daemon finishes.",
@@ -514,7 +514,17 @@
       "copy": "Copy",
       "detected": "Detected: {{label}}",
       "detectedWithHint": "Detected: {{label}} — {{hint}}",
-      "couldNotDerive": "Could not derive addresses."
+      "couldNotDerive": "Could not derive addresses.",
+      "scriptTypeLabel": "Script type",
+      "scriptTypeHelper": "A bare xpub doesn't say which address type to derive. Pick the one your wallet uses.",
+      "scriptTypeChoose": "Choose a script type",
+      "scriptType": {
+        "p2wpkh": "Native SegWit · P2WPKH (bc1q…)",
+        "p2shp2wpkh": "Nested SegWit · P2SH-P2WPKH (3…)",
+        "p2pkh": "Legacy · P2PKH (1…)",
+        "p2tr": "Taproot · P2TR (bc1p…)"
+      },
+      "bareXpubResolved": "{{label}} will be derived as {{scriptType}}."
     },
     "exportFile": {
       "label": "Export file path",
@@ -714,6 +724,7 @@
     "validation": {
       "labelRequired": "Connection label is required.",
       "pasteWalletMaterial": "Paste a wallet export, descriptor, or extended public key.",
+      "selectScriptType": "Bare xpub is ambiguous — pick a script type so we can build the descriptor.",
       "gapPositive": "Gap limit must be a positive integer.",
       "gapMax": "Gap limit must be {{max}} or lower.",
       "chooseBackend": "Choose a backend."

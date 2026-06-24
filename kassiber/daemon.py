@@ -5931,7 +5931,8 @@ def _create_wallet_payload(
         config["change_descriptor"] = change_descriptor
     wallet_material = _optional_str_arg(args, "wallet_material")
     if wallet_material is not None:
-        material_config = normalize_wallet_material(wallet_material)
+        script_type = _optional_str_arg(args, "script_type")
+        material_config = normalize_wallet_material(wallet_material, script_type=script_type)
         config.setdefault("descriptor", material_config["descriptor"])
         if "change_descriptor" in material_config:
             config.setdefault("change_descriptor", material_config["change_descriptor"])
@@ -7235,7 +7236,8 @@ def _preview_descriptor_payload(args: dict[str, Any]) -> dict[str, Any]:
     change_descriptor_text = _optional_str_arg(args, "change_descriptor")
     wallet_material = _optional_str_arg(args, "wallet_material")
     if wallet_material is not None:
-        material = normalize_wallet_material(wallet_material)
+        script_type = _optional_str_arg(args, "script_type")
+        material = normalize_wallet_material(wallet_material, script_type=script_type)
         descriptor_text = descriptor_text or material["descriptor"]
         change_descriptor_text = change_descriptor_text or material.get("change_descriptor")
     if not descriptor_text:

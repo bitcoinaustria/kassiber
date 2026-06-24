@@ -43,7 +43,11 @@ import {
   buildWasabiBundle,
   type WasabiImportMode,
 } from "@/lib/wasabiBundle";
-import { detectWalletMaterial } from "@/lib/walletMaterialFormat";
+import {
+  BARE_XPUB_SCRIPT_TYPES,
+  type BareXpubScriptType,
+  detectWalletMaterial,
+} from "@/lib/walletMaterialFormat";
 
 const WalletMaterialScannerDialog = React.lazy(() =>
   import("./WalletMaterialScannerDialog").then((module) => ({
@@ -69,6 +73,7 @@ interface SetupFormState {
   btcpayServerUrl: string;
   btcpayApiKey: string;
   walletMaterial: string;
+  descriptorScriptType: string;
   gapLimit: string;
   targetWallet: string;
   sourceFile: string;
@@ -404,6 +409,7 @@ const formDefaultsFor = (
     btcpayServerUrl: "",
     btcpayApiKey: "",
     walletMaterial: "",
+    descriptorScriptType: "",
     gapLimit: "40",
     targetWallet: "",
     sourceFile: "",
@@ -933,8 +939,13 @@ export function AddConnectionDialog({
         errors.walletMaterial = t("add.validation.pasteWalletMaterial");
       } else {
         const detection = detectWalletMaterial(form.walletMaterial);
-        if (detection.kind === "bare-xpub" || detection.kind === "unknown") {
+        if (detection.kind === "unknown") {
           errors.walletMaterial = detection.hint ?? detection.label;
+        } else if (
+          detection.kind === "bare-xpub" &&
+          !form.descriptorScriptType
+        ) {
+          errors.walletMaterial = t("add.validation.selectScriptType");
         }
       }
       const gapLimit = Number.parseInt(form.gapLimit, 10);
@@ -1095,6 +1106,8 @@ export function AddConnectionDialog({
       }
       if (setupKind === "descriptor") {
         const gapLimit = Number.parseInt(form.gapLimit, 10);
+        const isBareXpub =
+          detectWalletMaterial(form.walletMaterial).kind === "bare-xpub";
         await createWallet.mutateAsync({
           label,
           kind: selected.walletKind ?? "descriptor",
@@ -1102,6 +1115,7 @@ export function AddConnectionDialog({
           chain: selected.chain,
           network: selected.network,
           wallet_material: form.walletMaterial.trim(),
+          script_type: isBareXpub ? form.descriptorScriptType : undefined,
           gap_limit: Number.isFinite(gapLimit) ? gapLimit : undefined,
         });
         if (form.syncAfterCreate) {
@@ -1520,9 +1534,35 @@ export function AddConnectionDialog({
     </label>
   );
 
+  // Static literal keys so the typed `t()` resolves them (it rejects
+  // template-literal keys). The hyphen in p2sh-p2wpkh isn't a valid i18n key
+  // segment, hence the p2shp2wpkh suffix.
+  const scriptTypeLabelKeys = {
+    p2wpkh: "add.descriptor.scriptType.p2wpkh",
+    "p2sh-p2wpkh": "add.descriptor.scriptType.p2shp2wpkh",
+    p2pkh: "add.descriptor.scriptType.p2pkh",
+    p2tr: "add.descriptor.scriptType.p2tr",
+  } as const satisfies Record<BareXpubScriptType, string>;
+
+  const scriptTypeLabel = (value: BareXpubScriptType) =>
+    t(scriptTypeLabelKeys[value]);
+
   const renderWalletMaterialFeedback = () => {
     const detection = detectWalletMaterial(form.walletMaterial);
     if (detection.kind === "empty") return null;
+    // A bare xpub stops being ambiguous once the user picks a script type.
+    if (detection.kind === "bare-xpub" && form.descriptorScriptType) {
+      return (
+        <p className="text-xs text-emerald-700 dark:text-emerald-300">
+          {t("add.descriptor.bareXpubResolved", {
+            label: detection.label,
+            scriptType: scriptTypeLabel(
+              form.descriptorScriptType as BareXpubScriptType,
+            ),
+          })}
+        </p>
+      );
+    }
     const tone =
       detection.kind === "bare-xpub" || detection.kind === "unknown"
         ? "text-amber-700 dark:text-amber-300"
@@ -1536,6 +1576,38 @@ export function AddConnectionDialog({
             })
           : t("add.descriptor.detected", { label: detection.label })}
       </p>
+    );
+  };
+
+  const renderBareXpubScriptType = () => {
+    if (detectWalletMaterial(form.walletMaterial).kind !== "bare-xpub") {
+      return null;
+    }
+    return (
+      <SetupField
+        id="connection-script-type"
+        label={t("add.descriptor.scriptTypeLabel")}
+        helper={t("add.descriptor.scriptTypeHelper")}
+      >
+        <select
+          id="connection-script-type"
+          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+          value={form.descriptorScriptType}
+          onChange={(event) =>
+            updateForm("descriptorScriptType", event.target.value)
+          }
+          required
+        >
+          <option value="" disabled>
+            {t("add.descriptor.scriptTypeChoose")}
+          </option>
+          {BARE_XPUB_SCRIPT_TYPES.map((value) => (
+            <option key={value} value={value}>
+              {scriptTypeLabel(value)}
+            </option>
+          ))}
+        </select>
+      </SetupField>
     );
   };
 
@@ -1657,6 +1729,7 @@ export function AddConnectionDialog({
               value={form.walletMaterial}
               onChange={(event) => {
                 updateForm("walletMaterial", event.target.value);
+                updateForm("descriptorScriptType", "");
                 setPreviewAddresses(null);
                 setPreviewError(null);
               }}
@@ -1664,6 +1737,7 @@ export function AddConnectionDialog({
             />
             {renderWalletMaterialFeedback()}
           </SetupField>
+          {renderBareXpubScriptType()}
           <SetupField
             id="connection-gap-limit"
             label={t("add.descriptor.gapLimit")}
@@ -1690,8 +1764,14 @@ export function AddConnectionDialog({
               onClick={async () => {
                 setPreviewError(null);
                 try {
+                  const isBareXpub =
+                    detectWalletMaterial(form.walletMaterial).kind ===
+                    "bare-xpub";
                   const envelope = await previewDescriptor.mutateAsync({
                     wallet_material: form.walletMaterial.trim(),
+                    script_type: isBareXpub
+                      ? form.descriptorScriptType
+                      : undefined,
                     chain: selected.chain,
                     network: selected.network,
                     count: 5,
