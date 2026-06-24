@@ -8,7 +8,7 @@ DEFAULT_TAX_COUNTRY = "generic"
 AUSTRIAN_TAX_COUNTRY = "at"
 DEFAULT_LONG_TERM_DAYS = 365
 DEFAULT_REPORT_GENERATORS = ("open_positions", "rp2_full_report")
-DEFAULT_ACCOUNTING_METHODS = ("fifo", "lifo", "hifo", "lofo")
+DEFAULT_ACCOUNTING_METHODS = ("fifo", "lifo", "hifo", "lofo", "moving_average")
 ACTIVE_TAX_COUNTRIES = (DEFAULT_TAX_COUNTRY, AUSTRIAN_TAX_COUNTRY)
 
 
@@ -78,11 +78,20 @@ def _load_rp2_austrian_country():
 
 def build_austrian_policy(profile):
     country = _load_rp2_austrian_country()
+    # Austria's standard method is the moving average (gleitender
+    # Durchschnittspreis, §2 KryptowährungsVO) and stays the default. The other
+    # generic RP2 methods (FIFO/LIFO/HIFO/LOFO) are also offered for Austrian
+    # books as a user-selectable choice, so widen the allowed set to the union
+    # of the AT plugin's methods and the generic methods. The default remains
+    # the AT plugin default; only an explicit, deliberate pick deviates from it.
+    allowed_methods = tuple(
+        sorted(set(country.get_accounting_methods()) | set(DEFAULT_ACCOUNTING_METHODS))
+    )
     return TaxPolicy(
         tax_country=AUSTRIAN_TAX_COUNTRY,
         fiat_currency=country.currency_iso_code.upper(),
         long_term_days=country.get_long_term_capital_gain_period(),
-        accounting_methods=tuple(sorted(country.get_accounting_methods())),
+        accounting_methods=allowed_methods,
         report_generators=tuple(sorted(country.get_report_generators())),
         default_accounting_method=country.get_default_accounting_method(),
         generation_language=country.get_default_generation_language(),

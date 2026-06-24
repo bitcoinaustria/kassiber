@@ -50,9 +50,10 @@ class ProfilePolicyLabelTest(unittest.TestCase):
 
 
 class AustrianMethodEnforcementTest(unittest.TestCase):
-    """An Austrian book must always resolve to the moving-average method; FIFO
-    (or any other) is coerced, so a book can never silently inherit/keep FIFO
-    for Austria the way this one did."""
+    """An Austrian book defaults to the moving-average method (gleitender
+    Durchschnittspreis) but may use any RP2 method. An explicit, caller-supplied
+    method is preserved verbatim — no coercion — and only an unspecified method
+    falls back to the Austrian default."""
 
     def _policy(self, country):
         return build_tax_policy(
@@ -63,15 +64,18 @@ class AustrianMethodEnforcementTest(unittest.TestCase):
             }
         )
 
-    def test_austrian_book_is_coerced_to_moving_average(self):
+    def test_austrian_book_preserves_explicit_method_and_defaults_to_moving_average(self):
         at = self._policy("at")
-        self.assertEqual(_normalized_profile_algorithm("FIFO", at), "MOVING_AVERAGE_AT")
-        self.assertEqual(_normalized_profile_algorithm("HIFO", at), "MOVING_AVERAGE_AT")
-        self.assertEqual(_normalized_profile_algorithm(None, at), "MOVING_AVERAGE_AT")
+        # Explicit methods are kept — Austrian books accept the generic methods
+        # too, not only moving-average.
+        self.assertEqual(_normalized_profile_algorithm("FIFO", at), "FIFO")
+        self.assertEqual(_normalized_profile_algorithm("HIFO", at), "HIFO")
         self.assertEqual(
             _normalized_profile_algorithm("moving_average_at", at),
             "MOVING_AVERAGE_AT",
         )
+        # No explicit method falls back to the Austrian default.
+        self.assertEqual(_normalized_profile_algorithm(None, at), "MOVING_AVERAGE_AT")
 
     def test_generic_book_keeps_the_chosen_method(self):
         generic = self._policy("generic")
@@ -81,10 +85,10 @@ class AustrianMethodEnforcementTest(unittest.TestCase):
 
 class UpdateProfileMethodPreservationTest(unittest.TestCase):
     """A non-method profile update (coarse-review toggle, label edit) must NOT
-    silently re-coerce a legacy Austrian-on-FIFO book to moving-average. That
-    incidental coercion is exactly the silent tax-method mutation the
-    explicit-surface revert (3896bdd3) removed; only an explicit method/country
-    change may re-enforce the Austrian method.
+    silently mutate an Austrian-on-FIFO book's method. That incidental coercion
+    is exactly the silent tax-method mutation the explicit-surface revert
+    (3896bdd3) removed; only an explicit method/country change alters the stored
+    method.
     """
 
     def _legacy_at_fifo_book(self):
@@ -99,16 +103,12 @@ class UpdateProfileMethodPreservationTest(unittest.TestCase):
         conn = open_db(Path(tmp.name) / "data")
         self.addCleanup(conn.close)
         core_accounts.create_workspace(conn, "MB")
-        # create_profile coerces AT -> moving-average, so reproduce the legacy
-        # state (FIFO inherited before enforcement existed) with a direct write.
+        # Austrian books accept any method now, so create the AT-on-FIFO book
+        # directly — no coercion to work around.
         row = core_accounts.create_profile(
-            conn, "MB", "Dep", "EUR", "MOVING_AVERAGE_AT", "at", 365
+            conn, "MB", "Dep", "EUR", "FIFO", "at", 365
         )
         profile_id = row["id"]
-        conn.execute(
-            "UPDATE profiles SET gains_algorithm='FIFO' WHERE id=?", (profile_id,)
-        )
-        conn.commit()
         return conn, core_accounts, profile_id
 
     def _row(self, conn, profile_id):
@@ -134,25 +134,27 @@ class UpdateProfileMethodPreservationTest(unittest.TestCase):
         self.assertEqual(algo, "FIFO")
         self.assertEqual(after, before)
 
-    def test_explicit_method_change_still_enforces_austrian_method(self):
+    def test_explicit_method_change_applies_requested_method(self):
         conn, core_accounts, profile_id = self._legacy_at_fifo_book()
         _, before = self._row(conn, profile_id)
-        # The dialog sends gains_algorithm explicitly; even a non-AT request is
-        # coerced to moving-average for an Austrian book, and journals recompute.
+        # The dialog sends gains_algorithm explicitly; Austrian books accept any
+        # RP2 method now, so the requested method is applied (not coerced) and
+        # journals recompute.
         core_accounts.update_profile(
-            conn, "MB", profile_id, {"gains_algorithm": "FIFO"}
+            conn, "MB", profile_id, {"gains_algorithm": "LIFO"}
         )
         algo, after = self._row(conn, profile_id)
-        self.assertEqual(algo, "MOVING_AVERAGE_AT")
+        self.assertEqual(algo, "LIFO")
         self.assertGreater(after, before)
 
 
 class ProfileRegionSwitchTest(unittest.TestCase):
     """The book-settings dialog can switch a book's region (tax_country).
-    update_profile must apply the new region, coerce/validate the method for that
+    update_profile must apply the new region, validate the method for that
     region, and reprocess journals. The dialog always pairs the switch with a
-    region-valid method, because a generic book rejects the Austrian method and an
-    Austrian book is coerced to moving-average regardless of what is sent.
+    region-valid method; a generic book still rejects the Austrian method, but an
+    Austrian book now accepts any RP2 method (the sent method is applied, not
+    coerced to moving-average).
     """
 
     def _book(self, gains_algorithm, tax_country):
@@ -184,7 +186,7 @@ class ProfileRegionSwitchTest(unittest.TestCase):
             int(row["journal_input_version"] or 0),
         )
 
-    def test_switch_generic_to_austria_coerces_method_and_reprocesses(self):
+    def test_switch_generic_to_austria_applies_method_and_reprocesses(self):
         conn, core_accounts, profile_id = self._book("FIFO", "generic")
         _, _, before = self._row(conn, profile_id)
         core_accounts.update_profile(
@@ -198,7 +200,7 @@ class ProfileRegionSwitchTest(unittest.TestCase):
         self.assertEqual(algo, "MOVING_AVERAGE_AT")
         self.assertGreater(after, before)
 
-    def test_switch_to_austria_coerces_even_a_stale_non_austrian_method(self):
+    def test_switch_to_austria_keeps_an_explicit_non_austrian_method(self):
         conn, core_accounts, profile_id = self._book("FIFO", "generic")
         core_accounts.update_profile(
             conn,
@@ -207,7 +209,9 @@ class ProfileRegionSwitchTest(unittest.TestCase):
             {"tax_country": "at", "gains_algorithm": "FIFO"},
         )
         country, algo, _ = self._row(conn, profile_id)
-        self.assertEqual((country, algo), ("at", "MOVING_AVERAGE_AT"))
+        # Austrian books accept any RP2 method now, so an explicit FIFO survives
+        # the region switch instead of being coerced to moving-average.
+        self.assertEqual((country, algo), ("at", "FIFO"))
 
     def test_switch_austria_to_generic_with_region_valid_method(self):
         conn, core_accounts, profile_id = self._book("MOVING_AVERAGE_AT", "at")
@@ -356,7 +360,7 @@ class DaemonCreateProfilePayloadRegionTest(unittest.TestCase):
         self.assertEqual(res["defaults"]["tax_country"], "generic")
         self.assertEqual(res["defaults"]["gains_algorithm"], "HIFO")
 
-    def test_explicit_austria_coerces_non_austrian_method(self):
+    def test_explicit_austria_keeps_non_austrian_method(self):
         from kassiber.daemon import _create_profile_payload
 
         conn, _core, ws = self._conn()
@@ -364,12 +368,14 @@ class DaemonCreateProfilePayloadRegionTest(unittest.TestCase):
             conn,
             {
                 "workspace_id": ws,
-                "label": "AT coerced",
+                "label": "AT with FIFO",
                 "tax_country": "at",
                 "gains_algorithm": "FIFO",
             },
         )
-        self.assertEqual(res["defaults"]["gains_algorithm"], "MOVING_AVERAGE_AT")
+        # Austrian books accept any RP2 method now — the explicit FIFO is kept.
+        self.assertEqual(res["defaults"]["tax_country"], "at")
+        self.assertEqual(res["defaults"]["gains_algorithm"], "FIFO")
 
     def test_explicit_generic_after_at_context_resets_holding_period(self):
         # The default-derived region would be AT (the last created book becomes

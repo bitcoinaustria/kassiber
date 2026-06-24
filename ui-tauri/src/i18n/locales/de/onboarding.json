@@ -57,7 +57,7 @@
       "namePlaceholder": "Buchname",
       "regionLabel": "Region",
       "methodLabel": "Buchhaltungsmethode",
-      "austrianMethodNote": "Österreichische Bücher nutzen den gleitenden Durchschnittspreis; andere Methoden sind für Österreich nicht gültig.",
+      "austrianMethodNote": "Österreichische Bücher nutzen standardmäßig den gleitenden Durchschnittspreis. Andere Methoden stehen zur Auswahl, sind für Österreich aber nicht der Standard.",
       "submit": "Buch erstellen",
       "errorEmptyName": "Gib einen Buchnamen ein.",
       "errorGeneric": "Buch konnte nicht erstellt werden."
@@ -68,7 +68,7 @@
       "nameLabel": "Buchname",
       "regionLabel": "Region",
       "methodLabel": "Buchhaltungsmethode",
-      "austrianMethodNote": "Österreichische Bücher nutzen den gleitenden Durchschnittspreis; andere Methoden sind für Österreich nicht gültig.",
+      "austrianMethodNote": "Österreichische Bücher nutzen standardmäßig den gleitenden Durchschnittspreis. Andere Methoden stehen zur Auswahl, sind für Österreich aber nicht der Standard.",
       "switchRegion": {
         "title": "Region wechseln?",
         "body": "Ändere dieses Buch von {{from}} auf {{to}} und setze die Buchhaltungsmethode auf {{method}} zurück.",
@@ -86,6 +86,7 @@
     },
     "method": {
       "MOVING_AVERAGE_AT": "Gleitender Durchschnittspreis (österreichisch)",
+      "MOVING_AVERAGE": "Gleitender Durchschnittspreis (Durchschnittskosten)",
       "FIFO": "FIFO (First In, First Out)",
       "LIFO": "LIFO (Last In, First Out)",
       "HIFO": "HIFO (Highest In, First Out)",
@@ -313,7 +314,6 @@
     "fiatCurrency": "Fiat-Währung",
     "fiatSample": "Beispiel: {{sample}}",
     "accountingMethod": "Bewertungsmethode",
-    "movingAverage": "Gleitender Durchschnittspreis",
     "movingAverageNote": "Altbestand kann später pro Wallet markiert werden.",
     "lotSelection": "Tranchen-Auswahl",
     "longTermDays": "Tage für langfristige Behaltedauer",

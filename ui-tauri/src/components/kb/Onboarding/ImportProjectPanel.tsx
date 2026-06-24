@@ -370,6 +370,7 @@ const GAINS_ALGORITHMS = new Set<NonNullable<Identity["gainsAlgorithm"]>>([
   "LIFO",
   "HIFO",
   "LOFO",
+  "MOVING_AVERAGE",
   "MOVING_AVERAGE_AT",
 ]);
 
