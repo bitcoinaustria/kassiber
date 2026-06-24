@@ -25,6 +25,7 @@ from ..db import APP_NAME
 from ..envelope import json_ready
 from ..errors import AppError
 from ..msat import SATS_PER_BTC, dec
+from ..redaction import redact_operational_text
 from ..retry import retry_after_seconds_from_http_error
 from ..time_utils import UNKNOWN_OCCURRED_AT, parse_iso_datetime_or_none, timestamp_to_iso
 from ..util import normalize_chain_value, normalize_network_value, parse_bool, parse_int
@@ -466,7 +467,11 @@ class ElectrumClient:
                     detail = f"({error.get('code', 'unknown')}): {error.get('message', error)}"
                 else:
                     detail = str(error)
-                raise AppError(f"Electrum call {method} failed {detail}")
+                # The Electrum server message is untrusted free text that can
+                # echo a txid/amount; pseudonymize at the source.
+                raise AppError(
+                    f"Electrum call {method} failed {redact_operational_text(detail)}"
+                )
             return message.get("result")
 
     def batch_call(self, requests):
@@ -507,7 +512,11 @@ class ElectrumClient:
                     detail = f"({error.get('code', 'unknown')}): {error.get('message', error)}"
                 else:
                     detail = str(error)
-                raise AppError(f"Electrum call {method} failed {detail}")
+                # The Electrum server message is untrusted free text that can
+                # echo a txid/amount; pseudonymize at the source.
+                raise AppError(
+                    f"Electrum call {method} failed {redact_operational_text(detail)}"
+                )
             results[index] = message.get("result")
             remaining -= 1
         return results

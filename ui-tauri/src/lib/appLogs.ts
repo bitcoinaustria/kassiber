@@ -975,6 +975,10 @@ function pseudoAmount(rawNumber: string, unit: string, showScale: boolean): stri
 // number) into its numeric and unit parts for pseudonymization.
 function parseTypedAmount(value: unknown): { num: string; unit: string } {
   const text = typeof value === "number" ? String(value) : String(value ?? "").trim();
+  // Leading currency symbol ("€12,345.67"): fold the symbol into `unit` so the
+  // token matches the free-text path, which derives the unit the same way.
+  const sym = text.match(/^([€$£¥₿])\s*([+-]?[\d.,_ ]*\d)/);
+  if (sym) return { num: sym[2].trim(), unit: sym[1] };
   const match = text.match(
     /^([+-]?[\d.,_ ]*\d)\s*([A-Za-z]{1,6}|[€$£¥₿])?/,
   );

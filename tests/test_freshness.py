@@ -203,6 +203,59 @@ class FreshnessTest(unittest.TestCase):
             captured.output,
         )
 
+    def test_failed_job_txid_and_amount_pseudonymized_on_disk(self):
+        # The freshness DISK write (freshness_jobs.error_json + source-state
+        # last_error_message) must pseudonymize txids/amounts in BOTH the message
+        # and the structured details before persisting — not rely on read-back
+        # render. (URLs are a separate policy: kept raw on the encrypted disk,
+        # scrubbed at the UI boundary — see the URL test below.)
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        txid = "a" * 64
+        freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            job_type=freshness.JOB_ONCHAIN_WALLET,
+            source_key="onchain_wallet:cold",
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Cold wallet",
+            priority=10,
+        )
+        conn.commit()
+
+        def boom(conn, job, progress, check_cancelled):
+            raise AppError(
+                f"Liquid UTXO {txid}:3 mismatch",
+                code="liquid_mismatch",
+                details={
+                    "stderr": f"node fee_msat=1200 utxo {txid}",
+                    "response_preview": "unspent 0.5 BTC",
+                },
+            )
+
+        freshness.run_due_jobs(
+            conn,
+            {freshness.JOB_ONCHAIN_WALLET: boom},
+            profile_id=profile_id,
+            limit=1,
+        )
+
+        # message persisted to source state (disk) — scrubbed before write
+        state = freshness.get_source_state(conn, profile_id, "onchain_wallet:cold")
+        self.assertNotIn(txid, state["last_error_message"])
+        self.assertIn("txid#", state["last_error_message"])
+
+        # structured details persisted to freshness_jobs.error_json (disk)
+        row = conn.execute(
+            "SELECT error_json FROM freshness_jobs WHERE source_key = ?",
+            ("onchain_wallet:cold",),
+        ).fetchone()
+        error_json = row["error_json"]
+        self.assertNotIn(txid, error_json)
+        self.assertIn("txid#", error_json)
+        self.assertIn("amount#", error_json)  # keyed fee_msat + standalone 0.5 BTC
+        self.assertNotIn("fee_msat=1200", error_json)
+
     def test_swallowed_non_apperror_logs_exception_type(self):
         # A non-AppError that escapes a handler's own guards (e.g. an RP2/Liquid
         # balance error during the journal refresh) is wrapped as the opaque

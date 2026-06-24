@@ -516,6 +516,25 @@ describe("typed app logs", () => {
     expect(md).toContain("txid#");
   });
 
+  it("hashes a typed currency-symbol amount the same as its free-text form", () => {
+    // parseTypedAmount must fold a leading currency symbol into the unit so the
+    // typed-field and free-text paths produce the same amount# token.
+    const typed = emitAppLog({
+      ...record({ fee: { type: "amount", value: "€12,345.67" } }),
+      msg: "typed",
+    });
+    const typedOut = formatLogRecord(typed!, { redacted: true, mode: "high_signal" });
+    const typedToken = typedOut.match(/fee=(amount#[0-9a-f]{8})/)?.[1];
+
+    const free = emitAppLog({ ...record(), msg: "charged €12,345.67 today" });
+    const freeOut = formatLogRecord(free!, { redacted: true, mode: "high_signal" });
+    const freeToken = freeOut.match(/(amount#[0-9a-f]{8})/)?.[1];
+
+    expect(typedToken).toBeTruthy();
+    expect(typedToken).toBe(freeToken);
+    expect(typedOut).not.toContain("12,345.67");
+  });
+
   it("keeps logs in RAM and does not touch browser storage", () => {
     const setItem = vi.fn();
     vi.stubGlobal("localStorage", {

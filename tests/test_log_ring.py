@@ -279,6 +279,22 @@ class RingHandlerTest(unittest.TestCase):
         self.assertIn("[redacted-private-key]", tb["value"])
         self.assertNotIn("/Users/", tb["value"])
 
+    def test_exc_info_pseudonymizes_operational_ids(self):
+        # End-to-end through the REAL RingHandler (not the helper): a backend
+        # exception carrying a txid + keyed amount must land in the ring
+        # traceback field pseudonymized — error.debug is built the same way.
+        ring = LogRing()
+        logger = self._logger(ring)
+        try:
+            raise ValueError(f"Liquid UTXO {TXID}:3 had fee_msat=1200")
+        except ValueError:
+            logger.error("sync failed", exc_info=True)
+        tb = ring.snapshot()["records"][0]["fields"]["traceback"]["value"]
+        self.assertNotIn(TXID, tb)
+        self.assertIn(f"txid#{_stable_hash(TXID)}", tb)
+        self.assertIn("amount#", tb)  # keyed fee_msat pseudonymized
+        self.assertIn(":3", tb)  # vout stays readable
+
     def test_formatting_errors_do_not_raise(self):
         ring = LogRing()
         logger = self._logger(ring)

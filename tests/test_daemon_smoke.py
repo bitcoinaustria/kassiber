@@ -8072,5 +8072,33 @@ class DaemonSmokeTest(unittest.TestCase):
         self.assertIn("traceback", crashed[0]["fields"])
 
 
+class ErrorEnvelopeRedactionTest(unittest.TestCase):
+    def test_error_details_pseudonymized_at_egress(self):
+        # The REAL daemon error-envelope path must pseudonymize txids/amounts in
+        # structured error.details before the envelope reaches the UI or a CLI
+        # --output disk write (previously only secret KEYS were scrubbed).
+        txid = "a" * 64
+        details = {
+            "stderr": f"node: utxo {txid} fee_msat=1200",
+            "response_preview": "unspent 0.5 BTC",
+            "vout": 2,
+        }
+        envelope = daemon_module._error_envelope(
+            "liquid_mismatch", "sync failed", details=details
+        )
+        whole = json.dumps(envelope)
+        self.assertNotIn(txid, whole)
+        self.assertIn("txid#", whole)
+        self.assertIn("amount#", whole)  # keyed fee_msat + standalone 0.5 BTC
+        self.assertNotIn("fee_msat=1200", whole)
+
+        payload = daemon_module._app_error_payload(
+            AppError("sync failed", code="liquid_mismatch", details=details)
+        )
+        encoded = json.dumps(payload["details"])
+        self.assertNotIn(txid, encoded)
+        self.assertIn("txid#", encoded)
+
+
 if __name__ == "__main__":
     unittest.main()
