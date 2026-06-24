@@ -33,6 +33,7 @@ from urllib import error as urlerror
 from urllib import parse as urlparse
 
 from .errors import AppError
+from .redaction import redact_operational_text, redact_secret_text
 from .retry import retry_after_seconds_from_http_error
 
 # Matches the per-wallet HTTP worker cap in
@@ -113,8 +114,14 @@ def request_with_retry(
         except urlerror.HTTPError as exc:
             if exc.code not in RETRY_STATUS:
                 detail = exc.read().decode("utf-8", errors="replace")
+                # The server response body is untrusted free text that routinely
+                # echoes txids/amounts; scrub secrets + pseudonymize operational
+                # ids at the source so the error never carries them raw into the
+                # ring/envelope/disk (the render pass is a backstop, not the only
+                # line of defense).
+                detail = redact_operational_text(redact_secret_text(detail[:200]))
                 raise AppError(
-                    f"HTTP {exc.code} from backend for {url}: {detail[:200]}"
+                    f"HTTP {exc.code} from backend for {url}: {detail}"
                 ) from exc
             last_error = exc
             retry_after = retry_after_seconds_from_http_error(exc)

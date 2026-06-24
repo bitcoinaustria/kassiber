@@ -157,7 +157,7 @@ from .log_ring import (
     install_ring_logging,
     sanitize_exception,
 )
-from .redaction import redact_secret_text, redact_secret_value
+from .redaction import redact_operational_value, redact_secret_text, redact_secret_value
 from .util import str_or_none
 from .daemon_swap_review import (
     SWAP_REVIEW_DEFAULT_LIMIT,
@@ -853,7 +853,9 @@ def _error_envelope(
         build_error_envelope(
             code,
             redact_secret_text(message),
-            details=redact_secret_value(details) if details is not None else None,
+            details=redact_operational_value(redact_secret_value(details))
+            if details is not None
+            else None,
             hint=redact_secret_text(hint) if hint is not None else None,
             retryable=retryable,
             debug=debug,
@@ -867,7 +869,9 @@ def _app_error_payload(exc: AppError) -> dict[str, Any]:
         "code": exc.code,
         "message": redact_secret_text(str(exc)),
         "hint": redact_secret_text(exc.hint) if exc.hint else None,
-        "details": redact_secret_value(exc.details) if exc.details is not None else None,
+        "details": redact_operational_value(redact_secret_value(exc.details))
+        if exc.details is not None
+        else None,
         "retryable": bool(exc.retryable),
     }
 

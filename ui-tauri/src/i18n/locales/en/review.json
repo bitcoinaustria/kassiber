@@ -315,9 +315,9 @@
       "previewIssue": "Preview issue description",
       "bundleMode": "Bundle mode",
       "highSignalTitle": "High-signal",
-      "highSignalDescription": "Keeps amounts, addresses, txids, paths, labels, URLs, and error text readable.",
+      "highSignalDescription": "Keeps addresses, paths, labels, URLs, and error text readable. Txids and amounts always become stable pseudonyms (amounts keep a coarse magnitude) — never the raw value.",
       "publicSafeTitle": "Public-safe",
-      "publicSafeDescription": "Masks operational fields and exact amounts after stripping wallet and credential material.",
+      "publicSafeDescription": "Masks operational fields after stripping wallet and credential material. Txids and amounts become stable pseudonyms with no magnitude.",
       "preview": "Preview",
       "firstLines": "First {{count}} lines",
       "saveBundle": "Save bundle",
@@ -364,7 +364,7 @@
     "search": "Search",
     "regexSearch": "Regex search",
     "redactedView": "Redacted view",
-    "maskAmounts": "Mask amounts"
+    "maskAmounts": "Hide amount scale"
   },
   "imports": {
     "eyebrow": "Connections · imports · integrations",

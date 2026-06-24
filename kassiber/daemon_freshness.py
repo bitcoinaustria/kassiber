@@ -31,6 +31,7 @@ from .core.sync import sync_progress_emitter
 from .core.ui_snapshot import build_report_blockers_snapshot
 from .db import open_db
 from .envelope import build_envelope, build_event_envelope
+from .redaction import redact_operational_text
 from .errors import AppError
 from .log_ring import current_request_id
 from .time_utils import now_iso, parse_iso_datetime_or_none
@@ -218,7 +219,11 @@ def _redact_sync_text_for_ui(value: str) -> str:
         return f"<backend-url>{suffix}"
 
     scrubbed = _SYNC_URL_RE.sub(replace, value)
-    return _SYNC_HOST_KW_RE.sub("host=<backend-host>", scrubbed)
+    scrubbed = _SYNC_HOST_KW_RE.sub("host=<backend-host>", scrubbed)
+    # Backend exception messages routinely interpolate a txid:vout outpoint;
+    # pseudonymize txids/amounts before the snapshot reaches the UI (and the log
+    # ring through it). Addresses stay readable per the operational-tier policy.
+    return redact_operational_text(scrubbed)
 
 
 def _sync_error_rows(payload: dict[str, Any] | None) -> list[dict[str, Any]]:

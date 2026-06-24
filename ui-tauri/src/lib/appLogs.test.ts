@@ -128,7 +128,10 @@ describe("typed app logs", () => {
     expect(redacted).toContain("bc1qe...f3xy");
     expect(redacted).toContain("wallet#");
     expect(redacted).toContain("~/.../data");
-    expect(redacted).toContain("1.234 BTC");
+    // amounts are always pseudonymized; with scale shown they keep a coarse magnitude
+    expect(redacted).toContain("amount=amount#");
+    expect(redacted).toContain("(~1 BTC)");
+    expect(redacted).not.toContain("1.234 BTC");
     expect(redacted).not.toContain("xpub");
     expect(redacted).not.toContain("descriptor");
     expect(redacted).not.toContain("/Users/");
@@ -136,6 +139,9 @@ describe("typed app logs", () => {
 
     expect(stableMaskedValue({ type: "label", value: "Treasury hot wallet" })).toBe(
       stableMaskedValue({ type: "label", value: "Treasury hot wallet" }),
+    );
+    expect(stableMaskedValue({ type: "amount", value: "2500 sats" })).not.toBe(
+      "amount#c2d60ca1",
     );
   });
 
@@ -265,15 +271,27 @@ describe("typed app logs", () => {
     });
 
     expect(exported).toContain('"redaction":"high_signal"');
-    expect(exported).toContain("1.234 BTC");
-    expect(exported).toContain(amountText);
+    // txids + amounts are pseudonymized even in high_signal (the AI-debug tier),
+    // never raw — they are the wallet fingerprint.
+    expect(exported).not.toContain(txid);
+    expect(exported).not.toContain("1.234 BTC");
+    expect(exported).not.toContain(amountText);
+    expect(exported).toContain("txid#");
+    expect(exported).toContain("amount#");
+    expect(exported).toContain("(~1 BTC)"); // typed amount keeps a coarse magnitude
+    expect(exported).toContain("(~0.1 BTC)"); // free-text amount in the issue description
+    // the same txid collapses to ONE stable token everywhere it appears, so
+    // cross-line correlation (the real debugging signal) survives.
+    const txidTokens = new Set(
+      [...exported.matchAll(/txid#[0-9a-f]{8}/g)].map((m) => m[0]),
+    );
+    expect(txidTokens.size).toBe(1);
+    // operational data the owner chose to keep readable in high_signal
     expect(exported).toContain(rateText);
     expect(exported).toContain(address);
-    expect(exported).toContain(txid);
     expect(exported).toContain(localPath);
     expect(exported).toContain("dev@example.test");
-    expect(exported).toContain("Could not price");
-    expect(exported).toContain(`Could not price ${txid} for ${address} in ${localPath}`);
+    expect(exported).toContain("Could not price txid#");
     expect(exported).toContain("https://[redacted-credentials]@example.test/wallet?api_key=[redacted]");
     expect(exported).toContain("xpub#");
     expect(exported).toContain("wpkh([abcd1234/84h/0h/0h][redacted-key])");
@@ -301,6 +319,7 @@ describe("typed app logs", () => {
     const fiatAmountText = "\u20ac12,345.67";
     const prefixedFiatAmountText = "USD 42.10";
     const satsText = "2500 sats";
+    const signedSatsText = "-2500 sats";
     const rateText = "BTC/EUR 64000.12";
     const records: AppLogRecord[] = [
       {
@@ -314,7 +333,7 @@ describe("typed app logs", () => {
           amount: { type: "amount", value: "1.234 BTC" },
           error_message: {
             type: "text",
-            value: `lost ${amountText}, fee ${satsText}, fiat ${fiatAmountText}, proceeds ${prefixedFiatAmountText}, rate ${rateText}`,
+            value: `lost ${amountText}, fee ${satsText}, signed fee ${signedSatsText}, fiat ${fiatAmountText}, proceeds ${prefixedFiatAmountText}, rate ${rateText}`,
           },
         }),
         id: "log-1",
@@ -376,17 +395,23 @@ describe("typed app logs", () => {
     expect(exported).toContain("kassiber.support_bundle.ai_provenance");
     expect(exported).toContain('"redaction":"public_safe"');
     expect(exported).toContain("missing_price");
+    // txids + amounts are stable pseudonyms in public_safe too, but with NO
+    // magnitude (the public tier drops scale).
     expect(exported).toContain("amount#");
-    expect(exported).toContain("[redacted-amount]");
+    expect(exported).toContain("txid#");
+    expect(exported).not.toContain("[redacted-amount]");
+    expect(exported).not.toContain("[redacted-txid]");
+    expect(exported).not.toContain("(~");
     expect(exported).toContain("[redacted-rate]");
     expect(exported).toContain("[redacted-url]");
-    expect(exported).toContain("[redacted-txid]");
     expect(exported).toContain("[redacted-address]");
     expect(exported).not.toContain("1.234 BTC");
     expect(exported).not.toContain(amountText);
     expect(exported).not.toContain(fiatAmountText);
     expect(exported).not.toContain(prefixedFiatAmountText);
     expect(exported).not.toContain(satsText);
+    expect(exported).not.toContain(signedSatsText);
+    expect(exported).not.toContain("amount#c2d60ca1");
     expect(exported).not.toContain(rateText);
     expect(exported).not.toContain("xpub661MyMwAqRbcFsecret");
     expect(exported).not.toContain("sk-url-secret");
@@ -398,6 +423,116 @@ describe("typed app logs", () => {
     expect(exported).not.toContain(scriptHashAddress);
     expect(exported).not.toContain(liquidAddress);
     expect(exported).not.toContain("mnemonic=abandon");
+  });
+
+  it("pseudonymizes txids and amounts in both tiers while keeping them correlatable", () => {
+    const txid = "b".repeat(64);
+    const otherTxid = "c".repeat(64);
+    const emitted = emitAppLog({
+      ...record({
+        txid: { type: "txid", value: txid },
+        fee: { type: "amount", value: "2500 sats" },
+      }),
+      msg: `synced ${txid} fee 0.0001 BTC, signed fee -2500 sats, rate BTC/EUR 64000.12, dash rate BTC-EUR 64000.12, also ${otherTxid}`,
+    });
+    expect(emitted).not.toBeNull();
+
+    // cross-impl contract: the daemon mirror (kassiber/redaction.py::_stable_hash)
+    // pins this same literal so a txid pseudonymized on either side is one token.
+    expect(stableMaskedValue({ type: "txid", value: "a".repeat(64) })).toBe(
+      "txid#d96f0f85",
+    );
+
+    // high_signal: txids/amounts pseudonymized (never raw), amounts keep a
+    // coarse magnitude, market rate stays readable.
+    const high = formatLogRecord(emitted!, { redacted: true, mode: "high_signal" });
+    expect(high).not.toContain(txid);
+    expect(high).not.toContain(otherTxid);
+    expect(high).toContain("txid#");
+    expect(high).toContain("amount#");
+    expect(high).toContain("(~0.0001 BTC)"); // free-text amount keeps magnitude
+    expect(high).toContain("(~-1000 sats)"); // signed amount keeps only coarse magnitude
+    expect(high).toContain("BTC/EUR 64000.12"); // market rate is public, stays readable
+    expect(high).toContain("BTC-EUR 64000.12");
+    expect(high).not.toContain("-2500 sats");
+    expect(high).not.toContain("amount#c2d60ca1");
+
+    // The txid in the typed field and in the message resolve to the SAME token
+    // (cross-line correlation), and the two distinct txids get two tokens.
+    const fieldToken = high.match(/txid=(txid#[0-9a-f]{8})/)?.[1];
+    expect(fieldToken).toBeTruthy();
+    expect(high.split(fieldToken!).length - 1).toBeGreaterThanOrEqual(2);
+    const tokens = new Set([...high.matchAll(/txid#[0-9a-f]{8}/g)].map((m) => m[0]));
+    expect(tokens.size).toBe(2);
+
+    // public_safe with scale hidden: same correlatable token, no magnitude.
+    const pub = formatLogRecord(emitted!, {
+      redacted: true,
+      mode: "public_safe",
+      maskAmounts: true,
+    });
+    expect(pub).toContain("amount#");
+    expect(pub).toContain(fieldToken!); // same pseudonym across tiers
+    expect(pub).not.toContain("(~");
+    expect(pub).not.toContain(txid);
+    expect(pub).not.toContain("-2500 sats");
+    expect(pub).not.toContain("amount#c2d60ca1");
+  });
+
+  it("pseudonymizes keyed sat amounts, long hex runs, and the search-query header", () => {
+    const txid = "d".repeat(64);
+    const longHex = "e".repeat(72);
+    const emitted = emitAppLog({
+      ...record(),
+      msg: `fee_msat=100000 and amount_sat=50000 for ${txid} blob ${longHex}`,
+    });
+    const high = formatLogRecord(emitted!, { redacted: true, mode: "high_signal" });
+    // keyed/glued sat amounts: the integer is gone, the key stays readable
+    expect(high).toContain("fee_msat=amount#");
+    expect(high).toContain("amount_sat=amount#");
+    expect(high).not.toContain("=100000");
+    expect(high).not.toContain("=50000");
+    // a >64-hex run is pseudonymized as one token, not left raw past 64 chars
+    expect(high).not.toContain(longHex);
+    expect(high).not.toContain(txid);
+    expect(high).toContain("txid#");
+
+    // the md export header's active filter carries the user's raw search query
+    // (here a pasted txid) and must be scrubbed in a redacted export
+    const md = exportLogRecords([emitted!], "md", {
+      redacted: true,
+      mode: "high_signal",
+      header: {
+        appVersion: "0.0.0",
+        os: "macOS",
+        timeRange: "all",
+        activeFilter: `search=${txid}`,
+        redaction: "high_signal",
+        generatedAt: "2026-06-23T00:00:00Z",
+      },
+    });
+    expect(md).toContain("Active filter:");
+    expect(md).not.toContain(txid);
+    expect(md).toContain("txid#");
+  });
+
+  it("hashes a typed currency-symbol amount the same as its free-text form", () => {
+    // parseTypedAmount must fold a leading currency symbol into the unit so the
+    // typed-field and free-text paths produce the same amount# token.
+    const typed = emitAppLog({
+      ...record({ fee: { type: "amount", value: "€12,345.67" } }),
+      msg: "typed",
+    });
+    const typedOut = formatLogRecord(typed!, { redacted: true, mode: "high_signal" });
+    const typedToken = typedOut.match(/fee=(amount#[0-9a-f]{8})/)?.[1];
+
+    const free = emitAppLog({ ...record(), msg: "charged €12,345.67 today" });
+    const freeOut = formatLogRecord(free!, { redacted: true, mode: "high_signal" });
+    const freeToken = freeOut.match(/(amount#[0-9a-f]{8})/)?.[1];
+
+    expect(typedToken).toBeTruthy();
+    expect(typedToken).toBe(freeToken);
+    expect(typedOut).not.toContain("12,345.67");
   });
 
   it("keeps logs in RAM and does not touch browser storage", () => {

@@ -57,9 +57,45 @@ session) or `public_safe` (operational data masked, for public bug
 reports). Because operational redaction is a view concern, the raw-view
 window and the two export tiers all work from the same captured records.
 
+**Txids and amounts are the exception — pseudonymized in *both* tiers, never
+raw.** They are the wallet fingerprint: a single txid or amount in a bundle
+handed to an AI debugging session (the common workflow after a test sync
+against a real wallet) ties the log back to a real wallet on a block
+explorer. So instead of "readable in high_signal" they are always replaced
+with a pseudonym — a txid becomes `txid#<fnv>` and an amount becomes
+`amount#<salted-fnv>`. Txids stay deterministic across the Python/Rust/TS
+boundary so transaction correlation survives. Amounts are salted per runtime so
+low-entropy values like `2500 sats` cannot be recovered by enumerating likely
+amounts against a public token; the same amount still correlates within the
+same redaction runtime. `high_signal` additionally appends a coarse
+order-of-magnitude bucket to amounts (`amount#a1b2 (~0.01 BTC)`) for
+sat/msat-scale and fee-plausibility debugging; `public_safe` drops the
+magnitude. Addresses, paths, URLs and labels stay readable in `high_signal` as
+before. The only place a raw txid/amount can still reach disk is the explicitly
+watermarked, confirm-gated raw export (`redacted: false`). Market *rates*
+(`BTC/EUR 64000.12`) are public data, not the user's amount, and stay readable
+in `high_signal`.
+
+The pseudonymizers live in `redactSecretFloorText`'s sibling helpers in
+[`appLogs.ts`](../../ui-tauri/src/lib/appLogs.ts) (`pseudoTxid` /
+`pseudoAmount`) and in `redact_operational_text` /
+`redact_operational_value`
+([`kassiber/redaction.py`](../../kassiber/redaction.py)). The Python copy runs
+inside `sanitize_traceback_text` (so ring tracebacks, `error.debug` and the CLI
+`--debug` envelope are covered), over structured `error.details` at the daemon
+error-envelope boundary (`redact_operational_value`, symmetric with the
+secret-*key* scrub), and on the freshness disk write / UI snapshot — the
+egresses that do not pass through the webview renderer (a backend exception's
+`details` can carry a node `stderr` blob or `response_preview` with txids).
+
 Prefer typed fields over free text when adding log producers: a field
 typed `address`/`txid`/`path` is masked by type at render time, while free
-text relies on the regex backstop, which is best-effort.
+text relies on the regex backstop, which is best-effort. Keyed/glued sat
+amounts (`amount_sat=50000`, `fee_msat: 100000`, `"value_sats":123`) are caught
+by an identifier-aware detector, but a *free-standing* unit-less integer
+(e.g. `amount 12345678` with no adjacent or glued `sats`/`BTC`) cannot be
+auto-detected — emit it as a typed `amount` field, not interpolated into a
+message.
 
 ## What gets captured
 

@@ -22,7 +22,7 @@ import traceback
 from collections import deque
 from datetime import datetime, timezone
 
-from .redaction import redact_secret_text
+from .redaction import redact_operational_text, redact_secret_text
 from .time_utils import now_iso
 
 
@@ -91,9 +91,16 @@ def relativize_path(path: str) -> str:
 
 
 def sanitize_traceback_text(text: str) -> str:
-    """Relativize paths, redact secrets, and cap traceback-shaped text."""
+    """Relativize paths, redact secrets + operational ids, and cap traceback text.
+
+    Tracebacks are a `cleaned` egress artifact (they feed the ring's `traceback`
+    field, the `internal_error` envelope's `error.debug`, and the CLI `--debug`
+    envelope copy), so beyond path/secret scrubbing they also pseudonymize
+    txids/amounts that backend exception messages routinely interpolate.
+    """
     text = _PATH_SEGMENT_RE.sub(lambda m: relativize_path(m.group(0)), text)
     text = redact_secret_text(text)
+    text = redact_operational_text(text)
     if len(text) > _TRACEBACK_CAP:
         text = text[:_TRACEBACK_HEAD] + "...[truncated]..." + text[-_TRACEBACK_TAIL:]
     return text
