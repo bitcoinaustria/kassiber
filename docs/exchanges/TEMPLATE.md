@@ -3,7 +3,8 @@
 > Copy this file to `docs/exchanges/<slug>.md` and fill every section before
 > any importer code is written. Driven by the intake interview in
 > [skills/kassiber/references/add-exchange.md](../../skills/kassiber/references/add-exchange.md).
-> Keep secrets and personal data out of this file.
+> See [strike.md](strike.md) for a filled worked example. Keep secrets and
+> personal data out of this file.
 
 - **Display name:**
 - **Slug:** <!-- lowercase; becomes <slug>_csv source format, <slug> wallet kind, import-<slug> CLI command, pricing_provider -->

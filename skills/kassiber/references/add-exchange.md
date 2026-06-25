@@ -43,11 +43,14 @@ code change.
   model a full multi-asset ledger here. A BTC↔fiat trade is in scope; a
   BTC↔ETH trade is a disposal on the BTC side only and needs care (often
   quarantine). Capture this in the spec.
-- **Export format.** CSV is the supported shape. **XLSX** → have the user save
-  the relevant sheet as CSV, or parse the one sheet (stdlib only — do not add an
-  Excel dependency without owner approval). **JSON** → use the generic JSON
-  import or a JSON parser. **PDF statements are not machine-importable** — ask
-  for a CSV/XLSX/API export instead; do not try to scrape a PDF.
+- **Export format.** CSV is the supported shape. **XLSX** → have the user
+  save-as / export the relevant sheet to CSV; the bundled `XlsxWriter` is
+  **write-only** and there is no XLSX *reader* in the project, so reading `.xlsx`
+  would mean a new reader dependency (e.g. `openpyxl`) — get owner approval
+  before reaching for that, and prefer Save-As-CSV. **JSON** → use the generic
+  `import-json` path or a JSON parser. **PDF statements are not
+  machine-importable** — ask for a CSV/XLSX/API export instead; do not scrape a
+  PDF.
 
 ---
 
@@ -84,7 +87,9 @@ This is the single most important question — it decides the integration shape.
   wallet, so the provider export is **order/execution evidence**, not a new
   balance source. Import it as **match-existing-only enrichment** (`relevant`
   mode) so buys gain exact pricing without duplicating the on-chain rows.
-  Pattern to mirror: Bull Bitcoin / Coinfinity.
+  Pattern to mirror: Bull Bitcoin / Coinfinity. Evidence imports only enrich
+  rows that already exist, so the on-chain wallet must be synced **before** the
+  evidence import or there is nothing to match.
 - **Both** (Strike-style apps used as wallet *and* exchange): import the
   platform ledger in `full` mode but skip fiat-only rows, and let withdrawals
   pair with external wallets. Pattern to mirror: Strike.
