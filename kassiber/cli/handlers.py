@@ -228,8 +228,8 @@ def cache_swap_candidate_count(conn, workspace_ref, profile_ref, total):
     """
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     conn.execute(
-        "UPDATE profiles SET swap_candidate_count = ?, swap_candidate_count_at = ? WHERE id = ?",
-        (int(total), now_iso(), profile["id"]),
+        "UPDATE profiles SET swap_candidate_count = ? WHERE id = ?",
+        (int(total), profile["id"]),
     )
 
 

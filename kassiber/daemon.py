@@ -355,6 +355,7 @@ SUPPORTED_KINDS = (
     "ui.secrets.init",
     "ui.secrets.change_passphrase",
     "ui.next_actions",
+    "ui.review.badges",
     "ui.wallets.create",
     "ui.wallets.import_file",
     "ui.wallets.import_samourai",
@@ -8511,7 +8512,7 @@ def handle_request(
             _with_request_id(
                 build_envelope(
                     "ui.review.badges",
-                    build_review_badges_snapshot(ctx.conn, request.get("args")),
+                    build_review_badges_snapshot(ctx.conn),
                 ),
                 request_id,
             ),

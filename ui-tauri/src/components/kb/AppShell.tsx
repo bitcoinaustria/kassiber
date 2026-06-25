@@ -1763,7 +1763,7 @@ function NavItemBadge({ badge }: { badge: NavBadge }) {
         </span>
       )}
       <span
-        aria-hidden="true"
+        aria-label={label}
         className={cn(
           "pointer-events-none absolute top-1.5 right-1.5 hidden size-2 rounded-full ring-2 ring-sidebar group-data-[collapsible=icon]:block",
           NAV_BADGE_DOT_TONE[badge.tone],
