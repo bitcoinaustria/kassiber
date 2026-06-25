@@ -17,6 +17,8 @@
 - **Integration shape:** <!-- active custodial ledger (full) | match-existing-only evidence (relevant) | both -->
 - **Mirror importer:** <!-- 21bitcoin | strike | bull | coinfinity | pocket -->
 - **What the export adds over a plain descriptor wallet:** <!-- exact prices? fees? fiat legs? if "nothing", reconsider building it -->
+- **Assets:** <!-- BTC-only? also LBTC? multi-asset? Kassiber imports only BTC/LBTC rows; note how non-BTC legs are handled (skip / evidence / quarantine) -->
+- **No-code alternative considered?** <!-- could generic import-csv/import-json cover the user's need without a new importer? -->
 
 ## 2. Austrian tax notes
 
@@ -50,12 +52,13 @@ import / skip / quarantine. `Source` is `sample` (a real row exists) or `docs`
 
 ## 5. Export format details
 
+- **Format:** <!-- CSV | XLSX (export one sheet as CSV) | JSON (generic import) | PDF (not machine-importable — ask for another export) -->
 - **Documentation URL:**
 - **Delimiter / encoding:**
 - **Timezone of timestamps:** <!-- assume UTC only if documented -->
 - **Number locale:** <!-- comma vs dot decimals -->
 - **Are amounts signed?** <!-- and which column drives direction -->
-- **Stable row id column (for txid / pricing_external_ref):**
+- **Stable row id column** (for `txid` / `pricing_external_ref`, so re-import dedupes):
 - **On-chain txid column / Lightning hash column:**
 - **Fee columns (BTC fee, fiat fee):**
 

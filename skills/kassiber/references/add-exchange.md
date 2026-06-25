@@ -24,6 +24,33 @@ guessed, and the implementation checklist makes sure no touchpoint is missed.
 
 ---
 
+## Before you build: do you need code at all?
+
+Two things to settle first — they decide whether this is a five-minute job or a
+code change.
+
+- **No-code path (works today, no PR).** If the user can reshape their export
+  into Kassiber's generic columns (the field list under "Generic transaction
+  imports" in [docs/reference/imports.md](../../../docs/reference/imports.md)),
+  `kassiber wallets import-csv` / `import-json` imports it now — no parser, no
+  catalog entry, no merge. This is the right answer for a one-off or personal
+  book. Build a dedicated `import-<slug>` importer only when you want
+  *repeatable* imports of the raw provider export, exact execution pricing
+  applied automatically, and a shareable connection in the desktop modal.
+- **Scope: Kassiber is the BTC-side subledger.** Only `BTC` / `LBTC` rows are
+  imported. On a multi-asset exchange (ETH, USDT, altcoins), the non-BTC legs
+  are **out of scope** — skip them, or keep them as excluded evidence; never
+  model a full multi-asset ledger here. A BTC↔fiat trade is in scope; a
+  BTC↔ETH trade is a disposal on the BTC side only and needs care (often
+  quarantine). Capture this in the spec.
+- **Export format.** CSV is the supported shape. **XLSX** → have the user save
+  the relevant sheet as CSV, or parse the one sheet (stdlib only — do not add an
+  Excel dependency without owner approval). **JSON** → use the generic JSON
+  import or a JSON parser. **PDF statements are not machine-importable** — ask
+  for a CSV/XLSX/API export instead; do not try to scrape a PDF.
+
+---
+
 ## Part 1 — Intake interview
 
 Ask these in order. Record answers straight into the spec template
@@ -159,8 +186,16 @@ This is the normal situation, not a failure. Handle it like this:
 Only start once `docs/exchanges/<slug>.md` is complete. The normalized record
 shape every parser returns is documented under "Generic transaction imports" in
 [docs/reference/imports.md](../../../docs/reference/imports.md); read it before
-writing the parser. Mirror the closest existing importer (custodial → 21bitcoin
-/ Strike; evidence → Bull / Coinfinity).
+writing the parser. Mirror the closest existing importer — read its
+`normalize_*_record` in `kassiber/importers.py` and its `## ` section in
+`docs/reference/imports.md` as worked examples:
+
+| Provider | Custodial model | Default mode | Mirror for... |
+|---|---|---|---|
+| `strike` | custodial wallet + exchange | `full`, skip fiat-only | Lightning + on-chain rows, provider-scoped ids |
+| `21bitcoin` | custodial ledger | `full`/`relevant` | withdrawals that pair out to a receiving wallet |
+| `pocketbitcoin` | non-custodial broker | `relevant` | matching when the export has no on-chain txid |
+| `bullbitcoin` / `coinfinity` | non-custodial broker | `relevant` | order/execution evidence enriching existing rows |
 
 Touch these files, in order. Each is required for the connection to work
 end-to-end and to pass the drift test.
@@ -172,7 +207,10 @@ end-to-end and to pass the drift test.
    `AppError` on unparseable input. Skip fiat-only rows for BTC-side custodial
    ledgers. Set `pricing_source_kind="exchange_execution"`,
    `pricing_provider="<DisplayName>"`, and `pricing_quality="exact"` only when
-   the export gives an exact price.
+   the export gives an exact price. Give every row a **stable** `txid` — the
+   on-chain hash when present, else a provider-scoped id (`<slug>:<ref>`) from a
+   stable column — so re-importing an updated export dedupes instead of
+   duplicating rows.
 
 2. **`kassiber/core/wallets.py`** — add `<slug>` to `WALLET_KINDS` and register
    its kind metadata (`config_fields: ["source_file", "source_format"]`,
@@ -291,3 +329,28 @@ pnpm typecheck && pnpm test --run && pnpm lint
 Confirm: every spec row type is mapped/skipped/quarantined, exact pricing only
 where the export is exact, withdrawals pair instead of disposing, and the
 connection appears in `wallets kinds` and the desktop Add Connection modal.
+
+---
+
+## Part 3 — Contribute it back (open a PR)
+
+A finished importer (or even just a finished spec) is worth sharing so the next
+person with that exchange gets it for free. Offer to open a PR — there are two
+shapes depending on who did the work:
+
+- **Implemented importer → full PR.** Commit on a feature branch in small,
+  reviewable slices (parser+test, then wiring, then catalog+logo, then docs —
+  see the commit guidance in `AGENTS.md`), make sure
+  `./scripts/quality-gate.sh` is green (plus the `ui-tauri/` checks for catalog
+  changes), and open the PR. Include the spec `docs/exchanges/<slug>.md`, a
+  scrubbed sample (or note why none is committed), and the verification you ran.
+- **Spec only (the user can't code) → spec PR or issue.** The intake is the hard
+  part and it is done — do not let it evaporate. Open a PR that adds just
+  `docs/exchanges/<slug>.md` (or file an issue with the spec inline) so a
+  maintainer or a later agent can implement Part 2 from a complete spec. Title
+  it so it's findable, e.g. "Exchange spec: <DisplayName>".
+
+Only open a PR when the user asks for one (per repo policy, do not create PRs
+unprompted) — but do *suggest* it, since a tracked spec is the unit other people
+build on. Keep secrets and personal data out of the branch, the PR body, and any
+committed sample.
