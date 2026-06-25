@@ -1,0 +1,172 @@
+{
+  "panel": {
+    "label": "Name der Verbindung",
+    "labelPlaceholder": "z. B. Meine Exchange",
+    "downloadStep": "Lade die Vorlage herunter, fülle sie mit deinen Transaktionen und speichere sie.",
+    "download": "Beispiel-CSV herunterladen",
+    "downloading": "Wird vorbereitet…",
+    "downloaded": "Gespeichert unter {{file}}",
+    "uploadStep": "Wähle dann deine ausgefüllte Datei:",
+    "pick": "Datei wählen",
+    "change": "Datei ändern",
+    "pickUnavailable": "Dateiauswahl ist in diesem Modus nicht verfügbar.",
+    "recognized": "Deine Spalten erkannt:",
+    "notRecognized": "Diese Spalten konnten nicht automatisch erkannt werden.",
+    "notRecognizedHint": "Fülle stattdessen die Beispieldatei oben aus, oder ordne die Spalten selbst zu.",
+    "advanced": "Spalten selbst zuordnen",
+    "createsWallet": "Legt eine Wallet namens „{{label}}“ an.",
+    "import": "{{count}} Zeilen importieren",
+    "importing": "Wird importiert…",
+    "doneTitle": "Importiert",
+    "done": "{{imported}} importiert, {{skipped}} bereits in der Wallet übersprungen.",
+    "another": "Weitere Datei importieren",
+    "field": {
+      "date": "Datum",
+      "amount": "Betrag",
+      "direction": "Richtung",
+      "received": "Eingang",
+      "sent": "Ausgang",
+      "fee": "Gebühr",
+      "txid": "Transaktions-ID",
+      "description": "Notiz",
+      "kind": "Art",
+      "counterparty": "Gegenpartei",
+      "fiat_currency": "Währung",
+      "fiat_rate": "Preis",
+      "fiat_value": "Wert"
+    }
+  },
+  "file": {
+    "none": "Noch keine Datei gewählt."
+  },
+  "parsing": {
+    "heading": "Datei & Einlesen",
+    "delimiter": "Trennzeichen",
+    "delimiterAuto": "Automatisch erkennen",
+    "encoding": "Kodierung",
+    "skipRows": "Zeilen vor der Kopfzeile überspringen",
+    "skipRowsHint": "Für Exporte mit einer Titel- oder Leerzeile über der Spaltenzeile."
+  },
+  "timestamp": {
+    "heading": "Datum & Uhrzeit",
+    "column": "Datum-Spalte",
+    "format": "Datumsformat",
+    "formatAuto": "Automatisch (ISO 8601)",
+    "formatHint": "Für ISO-Daten leer lassen, oder strptime-Tokens wie %d.%m.%Y %H:%M verwenden.",
+    "timezone": "Zeitzone"
+  },
+  "amount": {
+    "heading": "Betrag",
+    "modeSigned": "Eine vorzeichenbehaftete Spalte",
+    "modeSplit": "Getrennte Ein-/Ausgangsspalten",
+    "modeAbsolute": "Betrag + Richtungsspalte",
+    "unit": "Einheit",
+    "column": "Betrags-Spalte",
+    "inboundColumn": "Eingangs-Spalte",
+    "outboundColumn": "Ausgangs-Spalte",
+    "decimalSeparator": "Dezimaltrennzeichen",
+    "direction": "Richtung",
+    "directionConst": "Für jede Zeile gleich",
+    "directionColumn": "Aus einer Spalte",
+    "directionColumnLabel": "Richtungs-Spalte",
+    "inboundValues": "Werte, die Eingang bedeuten",
+    "outboundValues": "Werte, die Ausgang bedeuten",
+    "valuesHint": "Kommagetrennt, Groß-/Kleinschreibung egal.",
+    "default": "Wenn nichts passt",
+    "defaultNone": "Als Fehler behandeln"
+  },
+  "unit": {
+    "btc": "BTC",
+    "sat": "Satoshi",
+    "msat": "Millisatoshi"
+  },
+  "decimal": {
+    "dot": "Punkt (1,234.56)",
+    "comma": "Komma (1.234,56)"
+  },
+  "fee": {
+    "heading": "Gebühr",
+    "column": "Gebühr-Spalte",
+    "unit": "Gebühr-Einheit",
+    "none": "Keine Gebühr-Spalte"
+  },
+  "identity": {
+    "heading": "Kennung & Felder",
+    "txid": "Transaktions-ID",
+    "txidHint": "Optional. Zeilen ohne ID bekommen eine stabile synthetische — so bleibt ein erneuter Import dedupliziert."
+  },
+  "field": {
+    "kind": "Art",
+    "description": "Notiz",
+    "counterparty": "Gegenpartei",
+    "notMapped": "— nicht zugeordnet —",
+    "fromColumn": "Aus Spalte",
+    "fixedValue": "Fester Wert",
+    "constPlaceholder": "Wert für jede Zeile"
+  },
+  "pricing": {
+    "heading": "Preise (optional)",
+    "enable": "Fiat-Preise aus dieser Datei importieren",
+    "currency": "Währung",
+    "rate": "Stückpreis",
+    "value": "Gesamtwert"
+  },
+  "filters": {
+    "heading": "Zeilenfilter",
+    "add": "Filter hinzufügen",
+    "remove": "Filter entfernen",
+    "opEquals": "ist gleich",
+    "opIn": "ist eines von",
+    "opNotEmpty": "ist nicht leer",
+    "valuePlaceholder": "Wert",
+    "valueInPlaceholder": "Kommagetrennte Werte",
+    "empty": "Keine Filter — jede Zeile wird berücksichtigt.",
+    "hint": "Zeilen, die einen Filter nicht erfüllen, werden übersprungen (keine Fehler). So behältst du nur Bitcoin-Zeilen."
+  },
+  "preview": {
+    "heading": "Vorschau",
+    "onlyProblems": "Nur Problemzeilen",
+    "empty": "Wähle ein CSV und ordne Datum + Betrag zu, um eine Vorschau zu sehen.",
+    "loading": "Vorschau wird erstellt…",
+    "truncated": "Zeige die ersten {{count}} zugeordneten Zeilen.",
+    "unitHint": "Diese Beträge wirken ungewöhnlich groß — ist die Einheit Satoshi statt BTC?",
+    "colDate": "Datum",
+    "colDirection": "Richtung",
+    "colAmount": "Betrag",
+    "colFee": "Gebühr",
+    "colDescription": "Notiz",
+    "colValue": "Wert"
+  },
+  "direction": {
+    "inbound": "Eingang",
+    "outbound": "Ausgang"
+  },
+  "counts": {
+    "ready": "{{count}} bereit",
+    "filtered": "{{count}} gefiltert",
+    "errors": "{{count}} mit Fehlern"
+  },
+  "problem": {
+    "row": "Zeile {{row}}",
+    "reason": {
+      "amount_missing": "Kein Betrag",
+      "bad_amount": "Betrag nicht lesbar",
+      "bad_fee": "Gebühr nicht lesbar",
+      "bad_timestamp": "Datum nicht lesbar",
+      "split_ambiguous": "Ein- und Ausgang haben beide einen Wert",
+      "direction_unresolved": "Richtungswert nicht erkannt",
+      "filtered_equals": "Gefiltert (entspricht dem Wert nicht)",
+      "filtered_in": "Gefiltert (keiner der Werte)",
+      "filtered_not_empty": "Gefiltert (Spalte ist leer)"
+    }
+  },
+  "result": {
+    "withFiltered": "{{filtered}} Zeilen wurden durch Filter übersprungen.",
+    "viewTransactions": "Transaktionen ansehen"
+  },
+  "error": {
+    "inspectFailed": "Diese Datei konnte nicht gelesen werden.",
+    "previewFailed": "Vorschau konnte nicht erstellt werden.",
+    "importFailed": "Import fehlgeschlagen."
+  }
+}

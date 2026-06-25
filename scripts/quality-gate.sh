@@ -88,6 +88,9 @@ smoke_py -m kassiber wallets sync-btcpay --help >/dev/null
 smoke_py -m kassiber wallets import-river --help >/dev/null
 smoke_py -m kassiber wallets import-21bitcoin --help >/dev/null
 smoke_py -m kassiber wallets import-strike --help >/dev/null
+smoke_py -m kassiber wallets import-mapped-csv --help >/dev/null
+smoke_py -m kassiber wallets mapping-template --help >/dev/null
+smoke_py -m kassiber wallets csv-example --help >/dev/null
 smoke_py -m kassiber profiles create --help >/dev/null
 smoke_py -m kassiber metadata records --help >/dev/null
 smoke_py -m kassiber attachments list --help >/dev/null

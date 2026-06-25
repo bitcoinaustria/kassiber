@@ -18,6 +18,7 @@ import deAssistant from "./locales/de/assistant.json";
 import deChrome from "./locales/de/chrome.json";
 import deCommon from "./locales/de/common.json";
 import deConnections from "./locales/de/connections.json";
+import deCsvMapping from "./locales/de/csvMapping.json";
 import deJournals from "./locales/de/journals.json";
 import deNav from "./locales/de/nav.json";
 import deOnboarding from "./locales/de/onboarding.json";
@@ -31,6 +32,7 @@ import enAssistant from "./locales/en/assistant.json";
 import enChrome from "./locales/en/chrome.json";
 import enCommon from "./locales/en/common.json";
 import enConnections from "./locales/en/connections.json";
+import enCsvMapping from "./locales/en/csvMapping.json";
 import enJournals from "./locales/en/journals.json";
 import enNav from "./locales/en/nav.json";
 import enOnboarding from "./locales/en/onboarding.json";
@@ -59,6 +61,7 @@ export const resources = {
     sourceFunds: enSourceFunds,
     review: enReview,
     search: enSearch,
+    csvMapping: enCsvMapping,
   },
   de: {
     common: deCommon,
@@ -74,6 +77,7 @@ export const resources = {
     sourceFunds: deSourceFunds,
     review: deReview,
     search: deSearch,
+    csvMapping: deCsvMapping,
   },
 } as const;
 

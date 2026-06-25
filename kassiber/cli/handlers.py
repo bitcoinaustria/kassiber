@@ -33,6 +33,7 @@ from ..backends import (
 from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
+from ..core import csv_mapping as core_csv_mapping
 from ..core import imports as core_imports
 from ..core.lightning import cln as core_lightning_cln
 from ..core import loans as core_loans
@@ -1969,6 +1970,121 @@ def _import_coordinator_hooks():
         ),
         invalidate_journals=invalidate_journals,
     )
+
+
+def mapping_template_payload(layout="signed"):
+    """Return a starter CSV mapping spec for the requested column layout."""
+    layout = layout or "signed"
+    return {"layout": layout, "mapping": core_csv_mapping.mapping_template(layout)}
+
+
+def csv_example_payload(file_path=None):
+    """Return the fill-in example CSV text, optionally writing it to a file."""
+    text = core_csv_mapping.example_csv()
+    payload = {"csv": text, "headers": core_csv_mapping.EXAMPLE_HEADERS}
+    if file_path:
+        target = os.path.abspath(os.path.expanduser(file_path))
+        try:
+            with open(target, "w", encoding="utf-8", newline="") as handle:
+                handle.write(text)
+        except OSError as exc:
+            raise AppError(
+                f"Could not write the example file: {exc}",
+                code="validation",
+                hint="Choose a writable path.",
+            ) from exc
+        payload["file"] = target
+    return payload
+
+
+def _resolve_csv_mapping(file_path, mapping_source):
+    """Resolve a mapping spec for a CSV — auto-detect when no mapping is given.
+
+    Returns ``(spec, headers, rows, detected)``. Raises
+    ``csv_mapping_unrecognized`` when auto-detection cannot find a date + amount
+    so the caller can steer the user to the example template or manual mapping.
+    """
+    if mapping_source in (None, "", {}):
+        headers, rows = core_csv_mapping.read_table(file_path)
+        inferred = core_csv_mapping.infer_mapping(headers)
+        if not inferred["confident"]:
+            raise AppError(
+                "Could not recognize the columns in this CSV.",
+                code="csv_mapping_unrecognized",
+                hint="Download the example file, fill it in, and import again — or supply a mapping.",
+                details={"headers": headers, "detected": inferred["detected"]},
+            )
+        spec = core_csv_mapping.validate_mapping_spec(inferred["spec"])
+        return spec, headers, rows, inferred["detected"]
+    spec = core_csv_mapping.validate_mapping_spec(
+        core_csv_mapping.load_mapping_spec(mapping_source)
+    )
+    headers, rows = core_csv_mapping.read_table(
+        file_path,
+        delimiter=spec["delimiter"],
+        encoding=spec["encoding"],
+        skip_rows=spec["skip_rows"],
+    )
+    return spec, headers, rows, None
+
+
+def import_mapped_csv_into_wallet(
+    conn,
+    workspace_ref,
+    profile_ref,
+    wallet_ref,
+    file_path,
+    mapping_source=None,
+    *,
+    dry_run=False,
+    limit=None,
+):
+    """Import an arbitrary CSV into a wallet, auto-detecting columns by default.
+
+    With no ``mapping_source`` the columns are auto-detected (the primary path);
+    pass a mapping spec to override. ``dry_run`` validates + transforms the file
+    and returns a bounded preview (records + per-row problems + counts + the
+    detected column summary) without persisting; the real path hands the mapped
+    records to the shared ``import_records_into_wallet`` tail.
+    """
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    wallet = resolve_wallet(conn, profile["id"], wallet_ref)
+    spec, headers, rows, detected = _resolve_csv_mapping(file_path, mapping_source)
+    core_csv_mapping.validate_columns(spec, headers)
+    records, problems = core_csv_mapping.apply_mapping(rows, spec)
+    if dry_run:
+        preview = core_csv_mapping.build_preview(
+            records, problems, limit=limit, mapping_name=spec.get("name", "")
+        )
+        preview["dry_run"] = True
+        preview["detected"] = detected
+        preview["input_format"] = core_csv_mapping.INPUT_FORMAT
+        preview["file"] = os.path.abspath(file_path)
+        preview["wallet_id"] = wallet["id"]
+        return preview
+    outcome = core_imports.import_records_into_wallet(
+        conn,
+        profile,
+        wallet,
+        records,
+        core_csv_mapping.SOURCE_LABEL,
+        _import_coordinator_hooks(),
+        commit=True,
+    )
+    errors = [p for p in problems if p["kind"] == "error"]
+    filtered = [p for p in problems if p["kind"] == "filtered"]
+    outcome.setdefault("wallet_id", wallet["id"])
+    outcome["dry_run"] = False
+    outcome["mapping_name"] = spec.get("name", "")
+    outcome["detected"] = detected
+    outcome["rows_read"] = len(records) + len(problems)
+    outcome["mapped"] = len(records)
+    outcome["errors"] = len(errors)
+    outcome["filtered"] = len(filtered)
+    outcome["problems"] = problems
+    outcome["input_format"] = core_csv_mapping.INPUT_FORMAT
+    outcome["file"] = os.path.abspath(file_path)
+    return outcome
 
 
 def _import_file_for_sync(conn, profile, wallet, file_path, input_format, *, commit=True):

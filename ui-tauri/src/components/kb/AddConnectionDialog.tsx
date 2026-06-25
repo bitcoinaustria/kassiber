@@ -34,6 +34,7 @@ import {
   type ConnectionSource,
   type ConnectionSourceFormat,
 } from "@/lib/connectionCatalog";
+import { CsvImportPanel } from "@/components/kb/csv-mapping/CsvImportPanel";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 import {
   buildSamouraiSourceSet,
@@ -1085,6 +1086,11 @@ export function AddConnectionDialog({
 
   const onSetupSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    // The generic CSV source owns its own import action (CsvImportPanel); the
+    // shared footer submit is hidden for it, so a stray Enter must do nothing.
+    if (selected.id === "csv") {
+      return;
+    }
     if (setupKind === "planned") {
       addNotification({
         title: t("add.planned.title"),
@@ -2019,27 +2025,15 @@ export function AddConnectionDialog({
           </>
         );
       }
+      if (selected.id === "csv") {
+        // Generic CSV: download a fill-in example, then auto-detect columns on
+        // upload (with an Advanced manual-mapping fallback). Self-contained —
+        // it owns its own import action (the footer submit is hidden for CSV).
+        return <CsvImportPanel onDone={() => onOpenChange(false)} />;
+      }
       return (
         <>
           {renderConnectionLabelField()}
-          {selected.id === "csv" ? (
-            <SetupField
-              id="connection-source-format"
-              label={t("add.fileWallet.fileFormat")}
-            >
-              <select
-                id="connection-source-format"
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                value={form.sourceFormat}
-                onChange={(event) =>
-                  updateForm("sourceFormat", event.target.value as "csv" | "json")
-                }
-              >
-                <option value="csv">{t("add.fileWallet.formatCsv")}</option>
-                <option value="json">{t("add.fileWallet.formatJson")}</option>
-              </select>
-            </SetupField>
-          ) : null}
           {renderSourceFileSetup(t("add.fileWallet.importAfter"))}
         </>
       );
@@ -3373,7 +3367,9 @@ export function AddConnectionDialog({
               >
                 {t("common:actions.cancel")}
               </Button>
-              {isSetupStep ? (
+              {isSetupStep && selected.id === "csv" ? (
+                <span />
+              ) : isSetupStep ? (
                 <Button
                   type="submit"
                   form="connection-setup-form"

@@ -1,0 +1,172 @@
+{
+  "panel": {
+    "label": "Connection name",
+    "labelPlaceholder": "e.g. My exchange",
+    "downloadStep": "Download the example, fill it with your transactions, and save it.",
+    "download": "Download example CSV",
+    "downloading": "Preparing…",
+    "downloaded": "Saved to {{file}}",
+    "uploadStep": "Then choose your filled-in file:",
+    "pick": "Choose file",
+    "change": "Change file",
+    "pickUnavailable": "File selection isn't available in this mode.",
+    "recognized": "Recognized your columns:",
+    "notRecognized": "Couldn't recognize these columns automatically.",
+    "notRecognizedHint": "Fill in the example file above instead, or map the columns yourself.",
+    "advanced": "Map columns myself",
+    "createsWallet": "Creates a wallet named \"{{label}}\".",
+    "import": "Import {{count}} rows",
+    "importing": "Importing…",
+    "doneTitle": "Imported",
+    "done": "Imported {{imported}}, skipped {{skipped}} already in the wallet.",
+    "another": "Import another file",
+    "field": {
+      "date": "date",
+      "amount": "amount",
+      "direction": "direction",
+      "received": "received",
+      "sent": "sent",
+      "fee": "fee",
+      "txid": "transaction ID",
+      "description": "note",
+      "kind": "kind",
+      "counterparty": "counterparty",
+      "fiat_currency": "currency",
+      "fiat_rate": "price",
+      "fiat_value": "value"
+    }
+  },
+  "file": {
+    "none": "No file chosen yet."
+  },
+  "parsing": {
+    "heading": "File & parsing",
+    "delimiter": "Delimiter",
+    "delimiterAuto": "Auto-detect",
+    "encoding": "Encoding",
+    "skipRows": "Lines to skip before the header",
+    "skipRowsHint": "For exports with a title or blank line above the column row."
+  },
+  "timestamp": {
+    "heading": "Date & time",
+    "column": "Date column",
+    "format": "Date format",
+    "formatAuto": "Auto (ISO 8601)",
+    "formatHint": "Leave empty for ISO dates, or use strptime tokens like %d.%m.%Y %H:%M.",
+    "timezone": "Time zone"
+  },
+  "amount": {
+    "heading": "Amount",
+    "modeSigned": "Single signed column",
+    "modeSplit": "Separate sent / received columns",
+    "modeAbsolute": "Magnitude + direction column",
+    "unit": "Unit",
+    "column": "Amount column",
+    "inboundColumn": "Received column",
+    "outboundColumn": "Sent column",
+    "decimalSeparator": "Decimal separator",
+    "direction": "Direction",
+    "directionConst": "Same for every row",
+    "directionColumn": "From a column",
+    "directionColumnLabel": "Direction column",
+    "inboundValues": "Values meaning inbound",
+    "outboundValues": "Values meaning outbound",
+    "valuesHint": "Comma-separated, case-insensitive.",
+    "default": "If unmatched",
+    "defaultNone": "Treat as an error"
+  },
+  "unit": {
+    "btc": "BTC",
+    "sat": "Satoshis",
+    "msat": "Millisatoshis"
+  },
+  "decimal": {
+    "dot": "Point (1,234.56)",
+    "comma": "Comma (1.234,56)"
+  },
+  "fee": {
+    "heading": "Fee",
+    "column": "Fee column",
+    "unit": "Fee unit",
+    "none": "No fee column"
+  },
+  "identity": {
+    "heading": "Identity & fields",
+    "txid": "Transaction ID",
+    "txidHint": "Optional. Rows without an ID get a stable synthetic one so re-imports stay deduplicated."
+  },
+  "field": {
+    "kind": "Kind",
+    "description": "Note",
+    "counterparty": "Counterparty",
+    "notMapped": "— not mapped —",
+    "fromColumn": "From column",
+    "fixedValue": "Fixed value",
+    "constPlaceholder": "Value applied to every row"
+  },
+  "pricing": {
+    "heading": "Pricing (optional)",
+    "enable": "Import fiat prices from this file",
+    "currency": "Currency",
+    "rate": "Unit price",
+    "value": "Total value"
+  },
+  "filters": {
+    "heading": "Row filters",
+    "add": "Add filter",
+    "remove": "Remove filter",
+    "opEquals": "equals",
+    "opIn": "is one of",
+    "opNotEmpty": "is not empty",
+    "valuePlaceholder": "Value",
+    "valueInPlaceholder": "Comma-separated values",
+    "empty": "No filters — every row is considered.",
+    "hint": "Rows that fail a filter are skipped (not errors). Use this to keep only Bitcoin rows."
+  },
+  "preview": {
+    "heading": "Preview",
+    "onlyProblems": "Only problem rows",
+    "empty": "Choose a CSV and map a date + amount to see a preview.",
+    "loading": "Building preview…",
+    "truncated": "Showing the first {{count}} mapped rows.",
+    "unitHint": "These amounts look unusually large — is the unit Satoshis, not BTC?",
+    "colDate": "Date",
+    "colDirection": "Direction",
+    "colAmount": "Amount",
+    "colFee": "Fee",
+    "colDescription": "Note",
+    "colValue": "Value"
+  },
+  "direction": {
+    "inbound": "Inbound",
+    "outbound": "Outbound"
+  },
+  "counts": {
+    "ready": "{{count}} ready",
+    "filtered": "{{count}} filtered",
+    "errors": "{{count}} with errors"
+  },
+  "problem": {
+    "row": "Row {{row}}",
+    "reason": {
+      "amount_missing": "No amount",
+      "bad_amount": "Amount could not be read",
+      "bad_fee": "Fee could not be read",
+      "bad_timestamp": "Date could not be read",
+      "split_ambiguous": "Both sent and received have a value",
+      "direction_unresolved": "Direction value not recognized",
+      "filtered_equals": "Filtered out (does not equal the value)",
+      "filtered_in": "Filtered out (not one of the values)",
+      "filtered_not_empty": "Filtered out (column is empty)"
+    }
+  },
+  "result": {
+    "withFiltered": "{{filtered}} rows were skipped by filters.",
+    "viewTransactions": "View transactions"
+  },
+  "error": {
+    "inspectFailed": "Could not read that file.",
+    "previewFailed": "Could not build a preview.",
+    "importFailed": "Import failed."
+  }
+}

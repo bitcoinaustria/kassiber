@@ -73,8 +73,11 @@ from .cli.handlers import (
     invalidate_journals,
     loans_mark,
     loans_unmark,
+    csv_example_payload,
     import_into_profile,
     import_into_wallet,
+    import_mapped_csv_into_wallet,
+    mapping_template_payload,
     list_saved_views_cli,
     list_direct_swap_payouts,
     list_transaction_pairs,
@@ -92,6 +95,7 @@ from .core import chat_history as core_chat_history
 from .core import loans as core_loans
 from .core import commercial as core_commercial
 from .core import attachments as core_attachments
+from .core import csv_mapping as core_csv_mapping
 from .core import lightning as core_lightning
 from .core.lightning import lnd as _core_lightning_lnd  # noqa: F401 — registers the LND adapter on import.
 from .core import reports as core_reports
@@ -365,7 +369,11 @@ SUPPORTED_KINDS = (
     "ui.next_actions",
     "ui.review.badges",
     "ui.wallets.create",
+    "ui.wallets.csv_example",
+    "ui.wallets.csv_inspect",
+    "ui.wallets.csv_preview",
     "ui.wallets.import_file",
+    "ui.wallets.import_mapped_csv",
     "ui.wallets.import_samourai",
     "ui.wallets.preview_descriptor",
     "ui.connections.sources",
@@ -5833,6 +5841,16 @@ def _coerce_int(
     return result
 
 
+def _coerce_optional_int(value: Any) -> int | None:
+    """Coerce to int, returning None for None/blank/unparseable input."""
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _backend_config_arg(args: dict[str, Any]) -> dict[str, Any] | None:
     value = args.get("config")
     if value is None:
@@ -6118,6 +6136,124 @@ def _import_wallet_file_payload(
         )
     wallet_ref = _required_str_arg(args, "wallet", "Wallet")
     return import_into_wallet(conn, None, None, wallet_ref, source_file, source_format)
+
+
+def _csv_inspect_payload(args: dict[str, Any]) -> dict[str, Any]:
+    """Read-only: detect delimiter + headers + a bounded row sample.
+
+    Powers the desktop column pickers before any mapping spec exists.
+    """
+    source_file = _source_file_arg(args)
+    if not source_file:
+        raise AppError(
+            "source_file is required",
+            code="validation",
+            hint="Choose the CSV to inspect.",
+            retryable=False,
+        )
+    delimiter = _optional_str_arg(args, "delimiter")
+    encoding = _optional_str_arg(args, "encoding") or core_csv_mapping.DEFAULT_ENCODING
+    skip_rows = _coerce_optional_int(args.get("skip_rows")) or 0
+    sample = _coerce_optional_int(args.get("sample"))
+    return core_csv_mapping.inspect_csv(
+        source_file,
+        delimiter=delimiter,
+        encoding=encoding,
+        skip_rows=skip_rows,
+        sample=20 if sample is None else sample,
+    )
+
+
+def _csv_example_payload(args: dict[str, Any]) -> dict[str, Any]:
+    """Read-only: return the fill-in example CSV (and write it if a path is given)."""
+    return csv_example_payload(_optional_str_arg(args, "target_file"))
+
+
+def _csv_preview_payload(args: dict[str, Any]) -> dict[str, Any]:
+    """Read-only: preview a CSV. Auto-detects columns when no mapping is given.
+
+    Returns the bounded transformed preview plus ``confident`` and a ``detected``
+    column summary; when columns can't be recognized, returns ``confident=False``
+    (and the inferred partial ``mapping``) so the UI can steer to the example
+    template or manual mapping instead of importing.
+    """
+    source_file = _source_file_arg(args)
+    if not source_file:
+        raise AppError(
+            "source_file is required",
+            code="validation",
+            hint="Choose the CSV to preview.",
+            retryable=False,
+        )
+    limit = _coerce_optional_int(args.get("limit"))
+    bound = 200 if limit is None else limit
+    mapping_arg = args.get("mapping")
+    detected = None
+    if mapping_arg in (None, "", {}):
+        headers, rows = core_csv_mapping.read_table(source_file)
+        inferred = core_csv_mapping.infer_mapping(headers)
+        detected = inferred["detected"]
+        if not inferred["confident"]:
+            return {
+                "confident": False,
+                "detected": detected,
+                "headers": headers,
+                "mapping": inferred["spec"],
+                "rows_read": len(rows),
+                "mapped": 0,
+                "errors": 0,
+                "filtered": 0,
+                "problems": [],
+                "preview": [],
+                "truncated": False,
+            }
+        spec = core_csv_mapping.validate_mapping_spec(inferred["spec"])
+    else:
+        spec = core_csv_mapping.validate_mapping_spec(
+            core_csv_mapping.load_mapping_spec(mapping_arg)
+        )
+        headers, rows = core_csv_mapping.read_table(
+            source_file,
+            delimiter=spec["delimiter"],
+            encoding=spec["encoding"],
+            skip_rows=spec["skip_rows"],
+        )
+    core_csv_mapping.validate_columns(spec, headers)
+    records, problems = core_csv_mapping.apply_mapping(rows, spec)
+    preview = core_csv_mapping.build_preview(
+        records, problems, limit=bound, mapping_name=spec.get("name", "")
+    )
+    preview["headers"] = headers
+    preview["confident"] = True
+    preview["detected"] = detected
+    preview["mapping"] = spec
+    return preview
+
+
+def _import_mapped_csv_payload(
+    conn: sqlite3.Connection,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    """Import an arbitrary CSV into a wallet using an inline mapping spec."""
+    wallet_ref = _required_str_arg(args, "wallet", "Wallet")
+    source_file = _source_file_arg(args)
+    if not source_file:
+        raise AppError(
+            "source_file is required",
+            code="validation",
+            hint="Choose the local CSV to import.",
+            retryable=False,
+        )
+    return import_mapped_csv_into_wallet(
+        conn,
+        None,
+        None,
+        wallet_ref,
+        source_file,
+        args.get("mapping"),
+        dry_run=bool(args.get("dry_run")),
+        limit=_coerce_optional_int(args.get("limit")),
+    )
 
 
 def _import_samourai_payload(
@@ -9134,6 +9270,57 @@ def handle_request(
                 build_envelope(
                     "ui.wallets.create",
                     _create_wallet_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.wallets.csv_example":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.wallets.csv_example",
+                    _csv_example_payload(_coerce_args_dict(request_id, request.get("args"))),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.wallets.csv_inspect":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.wallets.csv_inspect",
+                    _csv_inspect_payload(_coerce_args_dict(request_id, request.get("args"))),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.wallets.csv_preview":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.wallets.csv_preview",
+                    _csv_preview_payload(_coerce_args_dict(request_id, request.get("args"))),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.wallets.import_mapped_csv":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.wallets.import_mapped_csv",
+                    _import_mapped_csv_payload(
                         ctx.conn,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),

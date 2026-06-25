@@ -313,6 +313,25 @@ kassiber wallets import-json --wallet wallet-name --file /path/to/data.json
 kassiber wallets import-csv --wallet wallet-name --file /path/to/data.csv
 ```
 
+`import-csv` is pass-through: it only works when the CSV's headers already match
+canonical field names. For an arbitrary export, use the **generic CSV import**,
+which auto-detects the columns — download a fill-in example, paste the data in,
+and import (no manual mapping needed):
+
+```bash
+kassiber wallets csv-example --file import.csv                       # fill it in
+kassiber wallets import-mapped-csv --wallet wallet-name --file import.csv --dry-run  # auto-detect preview
+kassiber wallets import-mapped-csv --wallet wallet-name --file import.csv            # import
+```
+
+Omit `--mapping` to auto-detect (the primary path); unrecognized columns return
+`csv_mapping_unrecognized`. For unusual files pass an explicit `--mapping` (a JSON
+spec; `kassiber wallets mapping-template` prints a starter). `--dry-run` previews
+without importing; re-running the same file is idempotent. Full spec (amount
+modes, units, filters, pricing, timezones) and the desktop **CSV import**
+connection flow in
+[docs/reference/csv-mapping.md](../../../docs/reference/csv-mapping.md).
+
 Adding a provider Kassiber does not support yet (a dedicated `import-<slug>`
 instead of generic CSV) is a separate workflow: see
 [add-exchange.md](add-exchange.md) for the intake interview and importer

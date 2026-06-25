@@ -78,7 +78,10 @@ from .handlers import (
     emit,
     get_journal_event,
     identify_wallet_owners,
+    csv_example_payload,
     import_into_wallet,
+    import_mapped_csv_into_wallet,
+    mapping_template_payload,
     inspect_transfer_audit,
     list_direct_swap_payouts,
     list_journal_entries,
@@ -985,6 +988,46 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_import_strike.add_argument("--profile")
     wallets_import_strike.add_argument("--wallet")
     wallets_import_strike.add_argument("--file", required=True)
+    wallets_import_mapped = wallets_sub.add_parser(
+        "import-mapped-csv",
+        help="Import an arbitrary CSV, auto-detecting columns (or with a mapping spec)",
+    )
+    wallets_import_mapped.add_argument("--workspace")
+    wallets_import_mapped.add_argument("--profile")
+    wallets_import_mapped.add_argument("--wallet", required=True)
+    wallets_import_mapped.add_argument("--file", required=True)
+    wallets_import_mapped.add_argument(
+        "--mapping",
+        help="Optional mapping spec (path to a JSON file or inline JSON). Omit to auto-detect columns.",
+    )
+    wallets_import_mapped.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview the transformed transactions and problems without importing",
+    )
+    wallets_import_mapped.add_argument(
+        "--limit",
+        type=int,
+        help="Limit the number of preview rows returned with --dry-run",
+    )
+    wallets_csv_example = wallets_sub.add_parser(
+        "csv-example",
+        help="Print (or write with --file) a fill-in example CSV for generic import",
+    )
+    wallets_csv_example.add_argument(
+        "--file",
+        help="Write the example CSV to this path instead of printing it",
+    )
+    wallets_mapping_template = wallets_sub.add_parser(
+        "mapping-template",
+        help="Print a starter CSV mapping spec for advanced import-mapped-csv use",
+    )
+    wallets_mapping_template.add_argument(
+        "--layout",
+        choices=["signed", "split", "absolute"],
+        default="signed",
+        help="Amount column layout the starter spec targets",
+    )
     wallets_import_samourai = wallets_sub.add_parser("import-samourai")
     wallets_import_samourai.add_argument("--workspace")
     wallets_import_samourai.add_argument("--profile")
@@ -2519,6 +2562,24 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     "full",
                 ),
             )
+        if args.wallets_command == "csv-example":
+            return emit(args, csv_example_payload(args.file))
+        if args.wallets_command == "mapping-template":
+            return emit(args, mapping_template_payload(args.layout))
+        if args.wallets_command == "import-mapped-csv":
+            return emit(
+                args,
+                import_mapped_csv_into_wallet(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.wallet,
+                    args.file,
+                    args.mapping,
+                    dry_run=args.dry_run,
+                    limit=args.limit,
+                ),
+            )
         if args.wallets_command == "import-samourai":
             return emit(
                 args,
@@ -4036,7 +4097,11 @@ def command_needs_db(args: argparse.Namespace) -> bool:
         return False
     if args.command == "backends" and getattr(args, "backends_command", None) == "kinds":
         return False
-    if args.command == "wallets" and getattr(args, "wallets_command", None) == "kinds":
+    if args.command == "wallets" and getattr(args, "wallets_command", None) in {
+        "kinds",
+        "mapping-template",
+        "csv-example",
+    }:
         return False
     if args.command == "secrets":
         return False

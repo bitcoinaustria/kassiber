@@ -641,7 +641,24 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   see stale-report prompts, and opt edit history into audit-package export
   without exposing descriptors, xpubs, backend credentials, wallet files, or
   unrelated wallet history.
-- [ ] Custom CSV mapping DSL for arbitrary wallet exports
+- [x] Custom CSV import for arbitrary wallet exports — primary UX is **download a
+  fill-in example → paste your data → import, with columns auto-detected**. Pure
+  `Decimal`-exact engine [`kassiber/core/csv_mapping.py`](kassiber/core/csv_mapping.py):
+  `infer_mapping` recognizes common header aliases and builds a declarative spec
+  (signed/split/absolute amount modes, btc/sat/msat units, EU decimal commas,
+  strptime+timezone dates, row filters, optional pricing, synthetic stable
+  `csvmap:` ids for txid-less rows so distinct same-day/same-amount rows stay
+  separate and re-imports stay idempotent); `example_csv` is the template. Exposed
+  as `wallets csv-example`, `wallets import-mapped-csv [--mapping] [--dry-run]`
+  (mapping optional → auto-detect; `csv_mapping_unrecognized` otherwise), and
+  `wallets mapping-template` (advanced). Daemon kinds `ui.wallets.csv_example` /
+  `csv_inspect` / `csv_preview` (mapping optional) / `import_mapped_csv` (all three
+  allowlists). Desktop: the **CSV import** connection in the Add Connection modal
+  (`CsvImportPanel`) — download example → choose file → auto-detect preview →
+  confirm, with a localized (EN + AT-`du`) Advanced manual-mapping fallback. No
+  separate screen. Docs: [docs/reference/csv-mapping.md](docs/reference/csv-mapping.md).
+  Deferred (seams left open): persisted/named mappings, attach-to-wallet recurring
+  imports, AI column-guessing.
 - [ ] Rates/manual adjustment surface
 - [ ] Full double-entry account model only if a future ledger design needs it:
   explicit counterpart postings, account-type rollups, adjustments, and

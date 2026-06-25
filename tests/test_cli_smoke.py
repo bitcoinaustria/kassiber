@@ -1438,6 +1438,119 @@ class CliSmokeTest(unittest.TestCase):
             self.assertIn("Sale receipt", att_values)
             self.assertNotIn(sale_doc, att_values)  # URL is the link target, not the shown text
 
+    def test_07ag_mapped_csv_import_roundtrip(self):
+        # The custom CSV mapping DSL: template -> dry-run preview -> import ->
+        # idempotent re-import, plus split-layout filtering and an invalid spec.
+        # Isolated data root so report/journal pins above are not perturbed.
+        # mapping-template needs no DB.
+        tmpl, code = _run(self.data_root, "wallets", "mapping-template", "--layout", "split")
+        self.assertEqual(code, 0)
+        self._assert_kind(tmpl, "wallets.mapping-template")
+        self.assertEqual(tmpl["data"]["mapping"]["amount"]["mode"], "split")
+
+        with tempfile.TemporaryDirectory(prefix="kassiber-mapped-csv-") as tmp:
+            root = Path(tmp) / "data"
+            # A messy arbitrary export: signed amount, custom headers, a non-BTC
+            # row to filter, and a row with no transaction id (synthetic id path).
+            signed_csv = Path(tmp) / "export.csv"
+            signed_csv.write_text(
+                "When,Net BTC,Miner Fee,Asset,Ref,Memo\n"
+                "2026-01-15,0.50000000,0.00010000,BTC,tx-aaa,Bought\n"
+                "2026-01-20,-0.10000000,0.00005000,BTC,tx-bbb,Sent to Bob\n"
+                "2026-02-01,0.25000000,0,LBTC,,Not mainchain BTC\n"
+                "2026-02-02,0.30000000,0,BTC,,No reference here\n",
+                encoding="utf-8",
+            )
+            signed_map = Path(tmp) / "map.json"
+            signed_map.write_text(
+                json.dumps(
+                    {
+                        "name": "Acme signed",
+                        "timestamp": {"column": "When"},
+                        "amount": {"mode": "signed", "column": "Net BTC", "unit": "btc"},
+                        "fee": {"column": "Miner Fee", "unit": "btc"},
+                        "txid": {"column": "Ref"},
+                        "fields": {"description": {"column": "Memo"}},
+                        "filters": [{"column": "Asset", "op": "equals", "value": "BTC"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            def run(*args):
+                payload, rc = _run(root, *args)
+                self.assertEqual(rc, 0, f"{args} -> {json.dumps(payload)[:300]}")
+                return payload
+
+            run("init")
+            run("workspaces", "create", "Main")
+            run("profiles", "create", "--workspace", "Main", "--fiat-currency", "EUR", "--tax-country", "generic", "Default")
+            run("wallets", "create", "--workspace", "Main", "--profile", "Default", "--label", "Acme", "--kind", "custom")
+
+            base = ["wallets", "import-mapped-csv", "--workspace", "Main", "--profile", "Default",
+                    "--wallet", "Acme", "--file", str(signed_csv), "--mapping", str(signed_map)]
+
+            # Dry run: preview without persisting; the LBTC row is filtered.
+            dry = run(*base, "--dry-run")
+            self._assert_kind(dry, "wallets.import-mapped-csv")
+            self.assertTrue(dry["data"]["dry_run"])
+            self.assertEqual(dry["data"]["mapped"], 3)
+            self.assertEqual(dry["data"]["errors"], 0)
+            self.assertEqual(dry["data"]["filtered"], 1)
+            self.assertEqual(len(dry["data"]["preview"]), 3)
+            self.assertEqual(dry["data"]["preview"][0]["direction"], "inbound")
+            self.assertEqual(dry["data"]["preview"][1]["direction"], "outbound")
+            # Nothing persisted yet.
+            txs = run("transactions", "list", "--workspace", "Main", "--profile", "Default")["data"]
+            rows = txs if isinstance(txs, list) else txs.get("transactions", txs.get("items", []))
+            self.assertEqual(len(rows), 0)
+
+            # Real import.
+            imported = run(*base)
+            self.assertFalse(imported["data"]["dry_run"])
+            self.assertEqual(imported["data"]["imported"], 3)
+            self.assertEqual(imported["data"]["filtered"], 1)
+            self.assertEqual(imported["data"]["input_format"], "mapped_csv")
+
+            # Re-import the same file is idempotent (fingerprint dedupe).
+            again = run(*base)
+            self.assertEqual(again["data"]["imported"], 0)
+            self.assertEqual(again["data"]["skipped"], 3)
+
+            # Invalid mapping -> structured error envelope, non-zero exit.
+            bad_map = Path(tmp) / "bad.json"
+            bad_map.write_text(json.dumps({"timestamp": {"column": "When"}, "amount": {"mode": "bogus"}}), encoding="utf-8")
+            payload, rc = _run(
+                root, "wallets", "import-mapped-csv", "--workspace", "Main", "--profile", "Default",
+                "--wallet", "Acme", "--file", str(signed_csv), "--mapping", str(bad_map),
+            )
+            self.assertNotEqual(rc, 0)
+            self.assertEqual(payload["error"]["code"], "csv_mapping_invalid")
+
+            # Auto-detect path: download the example, fill nothing extra, import
+            # with NO --mapping. The program recognizes the columns itself.
+            example = Path(tmp) / "example.csv"
+            tmpl = run("wallets", "csv-example", "--file", str(example))
+            self._assert_kind(tmpl, "wallets.csv-example")
+            self.assertTrue(example.exists())
+            run("wallets", "create", "--workspace", "Main", "--profile", "Default", "--label", "Auto", "--kind", "custom")
+            auto = run(
+                "wallets", "import-mapped-csv", "--workspace", "Main", "--profile", "Default",
+                "--wallet", "Auto", "--file", str(example),
+            )
+            self.assertEqual(auto["data"]["imported"], 2)
+            self.assertTrue(any(d["field"] == "amount" for d in auto["data"]["detected"]))
+
+            # Unrecognizable columns -> a steerable error, not a silent import.
+            junk = Path(tmp) / "junk.csv"
+            junk.write_text("foo,bar,baz\n1,2,3\n", encoding="utf-8")
+            payload, rc = _run(
+                root, "wallets", "import-mapped-csv", "--workspace", "Main", "--profile", "Default",
+                "--wallet", "Auto", "--file", str(junk),
+            )
+            self.assertNotEqual(rc, 0)
+            self.assertEqual(payload["error"]["code"], "csv_mapping_unrecognized")
+
     def test_07ae_transactions_export(self):
         xlsx_path = Path(self._tmp.name) / "kassiber-transactions.xlsx"
         csv_path = Path(self._tmp.name) / "kassiber-transactions.csv"

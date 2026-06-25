@@ -657,6 +657,72 @@ function mockBackendRowFromArgs(
   return row;
 }
 
+// A messy, Bitcoin-only "arbitrary wallet export" fixture for the CSV mapping
+// workbench: split sent/received columns, a non-BTC row, and one bad-amount row.
+function mockCsvInspect() {
+  return {
+    delimiter: ",",
+    encoding: "utf-8-sig",
+    headers: ["Date", "Sent BTC", "Received BTC", "Fee", "Asset", "Note"],
+    sample_rows: [
+      { Date: "2026-01-15", "Sent BTC": "0.5", "Received BTC": "", Fee: "0.0001", Asset: "BTC", Note: "Paid Bob" },
+      { Date: "2026-01-20", "Sent BTC": "", "Received BTC": "1.0", Fee: "0", Asset: "BTC", Note: "Payout" },
+      { Date: "2026-02-01", "Sent BTC": "", "Received BTC": "2.0", Fee: "0", Asset: "LBTC", Note: "Not mainchain" },
+      { Date: "bad", "Sent BTC": "0.1", "Received BTC": "", Fee: "0", Asset: "BTC", Note: "Broken date" },
+    ],
+    row_count_estimate: 4,
+  };
+}
+
+function mockCsvPreview() {
+  return {
+    mapping_name: "Demo",
+    rows_read: 4,
+    mapped: 2,
+    errors: 1,
+    filtered: 1,
+    truncated: false,
+    confident: true,
+    detected: [
+      { column: "Date", field: "date" },
+      { column: "Received BTC", field: "received" },
+      { column: "Sent BTC", field: "sent" },
+      { column: "Fee", field: "fee" },
+    ],
+    mapping: {
+      version: 1,
+      asset: "BTC",
+      timestamp: { column: "Date", format: null, timezone: "UTC" },
+      amount: { mode: "split", inbound_column: "Received BTC", outbound_column: "Sent BTC", unit: "btc" },
+    },
+    headers: ["Date", "Sent BTC", "Received BTC", "Fee", "Asset", "Note"],
+    problems: [
+      { row: 3, kind: "filtered", column: "Asset", reason: "filtered_equals", detail: null },
+      { row: 4, kind: "error", column: "Date", reason: "bad_timestamp", detail: "not an ISO date: 'bad'" },
+    ],
+    preview: [
+      {
+        txid: "csvmap:demo0001",
+        occurred_at: "2026-01-15T00:00:00Z",
+        direction: "outbound",
+        asset: "BTC",
+        amount: "0.5",
+        fee: "0.0001",
+        description: "Paid Bob",
+      },
+      {
+        txid: "csvmap:demo0002",
+        occurred_at: "2026-01-20T00:00:00Z",
+        direction: "inbound",
+        asset: "BTC",
+        amount: "1",
+        fee: "0",
+        description: "Payout",
+      },
+    ],
+  };
+}
+
 export const mockDaemon: DaemonTransport = {
   async invoke<T = unknown>(
     req: DaemonRequest,
@@ -789,6 +855,59 @@ export const mockDaemon: DaemonTransport = {
           history_enabled: mockChatHistoryEnabled(),
           database_encrypted: true,
         } as T,
+      };
+    }
+
+    if (req.kind === "ui.wallets.csv_example") {
+      return {
+        kind: "ui.wallets.csv_example",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          csv: "Date,Direction,Amount,Fee,Currency,Price,Note\n2026-01-15,in,0.05,0.00001,EUR,40000,Bought\n",
+          headers: ["Date", "Direction", "Amount", "Fee", "Currency", "Price", "Note"],
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.wallets.csv_inspect") {
+      return {
+        kind: "ui.wallets.csv_inspect",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: mockCsvInspect() as T,
+      };
+    }
+
+    if (req.kind === "ui.wallets.csv_preview") {
+      return {
+        kind: "ui.wallets.csv_preview",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: mockCsvPreview() as T,
+      };
+    }
+
+    if (req.kind === "ui.wallets.import_mapped_csv") {
+      const dryRun = Boolean((req.args ?? {})["dry_run"]);
+      const preview = mockCsvPreview();
+      const data = dryRun
+        ? { ...preview, dry_run: true, input_format: "mapped_csv" }
+        : {
+            imported: preview.mapped,
+            skipped: 0,
+            mapped: preview.mapped,
+            errors: preview.errors,
+            filtered: preview.filtered,
+            problems: preview.problems,
+            dry_run: false,
+            input_format: "mapped_csv",
+          };
+      return {
+        kind: "ui.wallets.import_mapped_csv",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: data as T,
       };
     }
 

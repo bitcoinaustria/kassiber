@@ -1,3 +1,5 @@
+import csv
+import io
 import json
 import os
 import shutil
@@ -29,6 +31,8 @@ from kassiber.cli.handlers import (
     update_transaction_pair,
 )
 from kassiber.core import attachments as core_attachments
+from kassiber.core import csv_mapping
+from kassiber.core.imports import normalize_import_record
 from kassiber.core import pricing
 from kassiber.core import rates as core_rates
 from kassiber.core.engines import rp2 as rp2_engine
@@ -11332,6 +11336,320 @@ class ReviewBadgesSnapshotTest(unittest.TestCase):
         cache_swap_candidate_count(conn, "ws-b", "pf-b", 0)
         conn.commit()
         self.assertEqual(build_review_badges_snapshot(conn)["swaps"], 0)
+
+
+class CsvMappingEngineTest(unittest.TestCase):
+    """Unit coverage for the custom CSV mapping DSL engine (no DB)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="kb-csvmap-")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def _write(self, text, name="export.csv", encoding="utf-8"):
+        path = os.path.join(self.tmp, name)
+        with open(path, "w", encoding=encoding, newline="") as handle:
+            handle.write(text)
+        return path
+
+    def _spec(self, **overrides):
+        spec = {
+            "timestamp": {"column": "Date"},
+            "amount": {"mode": "signed", "column": "Amount", "unit": "btc"},
+        }
+        spec.update(overrides)
+        return csv_mapping.validate_mapping_spec(spec)
+
+    # --- amount modes ----------------------------------------------------- #
+    def test_signed_mode_sign_sets_direction(self):
+        spec = self._spec()
+        records, problems = csv_mapping.apply_mapping(
+            [{"Date": "2024-01-01", "Amount": "0.5"}, {"Date": "2024-01-02", "Amount": "-0.25"}],
+            spec,
+        )
+        self.assertEqual(problems, [])
+        self.assertEqual(records[0]["direction"], "inbound")
+        self.assertEqual(format(records[0]["amount"], "f"), "0.5")
+        self.assertEqual(records[1]["direction"], "outbound")
+        self.assertEqual(format(records[1]["amount"], "f"), "0.25")
+
+    def test_split_mode_ambiguous_and_missing(self):
+        spec = self._spec(
+            amount={"mode": "split", "inbound_column": "In", "outbound_column": "Out", "unit": "btc"}
+        )
+        records, problems = csv_mapping.apply_mapping(
+            [
+                {"Date": "2024-01-01", "In": "1.0", "Out": ""},
+                {"Date": "2024-01-02", "In": "", "Out": "0.3"},
+                {"Date": "2024-01-03", "In": "1.0", "Out": "0.3"},
+                {"Date": "2024-01-04", "In": "", "Out": ""},
+            ],
+            spec,
+        )
+        self.assertEqual([r["direction"] for r in records], ["inbound", "outbound"])
+        reasons = [p["reason"] for p in problems]
+        self.assertIn("split_ambiguous", reasons)
+        self.assertIn("amount_missing", reasons)
+
+    def test_absolute_mode_direction_resolution(self):
+        spec = self._spec(
+            amount={
+                "mode": "absolute",
+                "column": "Amount",
+                "unit": "btc",
+                "direction": {
+                    "column": "Type",
+                    "inbound_values": ["deposit"],
+                    "outbound_values": ["withdrawal"],
+                    "default": None,
+                },
+            }
+        )
+        records, problems = csv_mapping.apply_mapping(
+            [
+                {"Date": "2024-01-01", "Amount": "1", "Type": "Deposit"},
+                {"Date": "2024-01-02", "Amount": "1", "Type": "WITHDRAWAL"},
+                {"Date": "2024-01-03", "Amount": "1", "Type": "mystery"},
+            ],
+            spec,
+        )
+        self.assertEqual([r["direction"] for r in records], ["inbound", "outbound"])
+        self.assertEqual(problems[0]["reason"], "direction_unresolved")
+
+    # --- units + decimals ------------------------------------------------- #
+    def test_unit_conversion_is_decimal_exact(self):
+        sat = self._spec(amount={"mode": "signed", "column": "Amount", "unit": "sat"})
+        records, _ = csv_mapping.apply_mapping([{"Date": "2024-01-01", "Amount": "50000"}], sat)
+        self.assertEqual(records[0]["amount"], Decimal("0.0005"))
+        self.assertNotIsInstance(records[0]["amount"], float)
+
+        msat = self._spec(amount={"mode": "signed", "column": "Amount", "unit": "msat"})
+        records, _ = csv_mapping.apply_mapping([{"Date": "2024-01-01", "Amount": "1"}], msat)
+        self.assertEqual(records[0]["amount"], Decimal("0.00000000001"))
+        # P1-4: a 1 msat amount must survive the BTC->msat insert conversion.
+        self.assertEqual(btc_to_msat(records[0]["amount"]), 1)
+
+    def test_european_decimal_separator(self):
+        spec = self._spec(
+            amount={"mode": "signed", "column": "Amount", "unit": "btc", "decimal_separator": ","}
+        )
+        records, _ = csv_mapping.apply_mapping(
+            [{"Date": "2024-01-01", "Amount": "1.000,5"}, {"Date": "2024-01-02", "Amount": "0,5"}],
+            spec,
+        )
+        self.assertEqual(records[0]["amount"], Decimal("1000.5"))
+        self.assertEqual(records[1]["amount"], Decimal("0.5"))
+
+    # --- filters ---------------------------------------------------------- #
+    def test_filters_exclude_rows_as_filtered_not_error(self):
+        spec = self._spec(filters=[{"column": "Asset", "op": "equals", "value": "BTC"}])
+        records, problems = csv_mapping.apply_mapping(
+            [
+                {"Date": "2024-01-01", "Amount": "1", "Asset": "BTC"},
+                {"Date": "2024-01-02", "Amount": "1", "Asset": "xyz"},
+            ],
+            spec,
+        )
+        self.assertEqual(len(records), 1)
+        self.assertEqual(len(problems), 1)
+        self.assertEqual(problems[0]["kind"], "filtered")
+        self.assertEqual(problems[0]["reason"], "filtered_equals")
+
+    # --- timestamps ------------------------------------------------------- #
+    def test_timestamp_format_and_timezone(self):
+        spec = self._spec(
+            timestamp={"column": "Date", "format": "%d.%m.%Y %H:%M", "timezone": "Europe/Vienna"}
+        )
+        records, problems = csv_mapping.apply_mapping(
+            [
+                {"Date": "15.01.2024 12:00", "Amount": "1"},
+                {"Date": "not a date", "Amount": "1"},
+            ],
+            spec,
+        )
+        # Vienna is UTC+1 in January -> 12:00 local is 11:00Z.
+        self.assertEqual(records[0]["occurred_at"], "2024-01-15T11:00:00Z")
+        self.assertEqual(problems[0]["reason"], "bad_timestamp")
+
+    # --- validation ------------------------------------------------------- #
+    def test_validate_collects_errors(self):
+        with self.assertRaises(AppError) as ctx:
+            csv_mapping.validate_mapping_spec({"amount": {"mode": "bogus"}})
+        self.assertEqual(ctx.exception.code, "csv_mapping_invalid")
+        self.assertTrue(ctx.exception.details["errors"])
+
+    def test_validate_rejects_overlapping_direction_values(self):
+        with self.assertRaises(AppError) as ctx:
+            csv_mapping.validate_mapping_spec(
+                {
+                    "timestamp": {"column": "Date"},
+                    "amount": {
+                        "mode": "absolute",
+                        "column": "Amount",
+                        "unit": "btc",
+                        "direction": {
+                            "column": "Type",
+                            "inbound_values": ["x"],
+                            "outbound_values": ["x"],
+                        },
+                    },
+                }
+            )
+        reasons = " ".join(e["reason"] for e in ctx.exception.details["errors"])
+        self.assertIn("both inbound and outbound", reasons)
+
+    def test_validate_columns_reports_missing(self):
+        spec = self._spec()
+        with self.assertRaises(AppError) as ctx:
+            csv_mapping.validate_columns(spec, ["Date"])  # no "Amount"
+        self.assertEqual(ctx.exception.code, "csv_mapping_invalid")
+        self.assertEqual(ctx.exception.details["missing_columns"], ["Amount"])
+
+    # --- reading: dup headers, delimiter, skip_rows ----------------------- #
+    def test_duplicate_headers_suffixed_consistently(self):
+        path = self._write("Amount,Amount,Date\n1,2,2024-01-01\n")
+        headers, rows = csv_mapping.read_table(path)
+        self.assertEqual(headers, ["Amount", "Amount__2", "Date"])
+        self.assertEqual(csv_mapping.inspect_csv(path)["headers"], headers)
+        self.assertEqual(rows[0]["Amount"], "1")
+        self.assertEqual(rows[0]["Amount__2"], "2")
+
+    def test_inspect_detects_semicolon_and_skips_preamble(self):
+        path = self._write("exported by FooWallet\n\nDate;Amount\n2024-01-01;1\n")
+        info = csv_mapping.inspect_csv(path, skip_rows=2)
+        self.assertEqual(info["delimiter"], ";")
+        self.assertEqual(info["headers"], ["Date", "Amount"])
+        self.assertEqual(info["row_count_estimate"], 1)
+
+    def test_sniffer_never_raises_on_single_column(self):
+        path = self._write("Amount\n1\n2\n")
+        # Should fall back to ',' without raising.
+        self.assertEqual(csv_mapping.inspect_csv(path)["headers"], ["Amount"])
+
+    # --- P0-1 synthetic txid: distinctness + idempotency ------------------ #
+    def test_txidless_rows_get_distinct_but_stable_ids(self):
+        spec = self._spec()
+        rows = [
+            {"Date": "2024-03-03", "Amount": "0.5"},
+            {"Date": "2024-03-03", "Amount": "0.5"},
+        ]
+        records, _ = csv_mapping.apply_mapping(rows, spec)
+        ids = [r["txid"] for r in records]
+        self.assertEqual(len(set(ids)), 2)  # distinct within the file
+        self.assertTrue(all(i.startswith("csvmap:") for i in ids))
+        again, _ = csv_mapping.apply_mapping(rows, spec)
+        self.assertEqual(ids, [r["txid"] for r in again])  # stable on re-import
+
+    def test_mapped_txid_column_takes_precedence(self):
+        spec = self._spec(txid={"column": "Ref"})
+        records, _ = csv_mapping.apply_mapping(
+            [{"Date": "2024-01-01", "Amount": "1", "Ref": "abc123"}, {"Date": "2024-01-02", "Amount": "1", "Ref": ""}],
+            spec,
+        )
+        self.assertEqual(records[0]["txid"], "abc123")
+        self.assertTrue(records[1]["txid"].startswith("csvmap:"))  # blank -> synthetic
+
+    # --- template + round-trip ------------------------------------------- #
+    def test_templates_validate(self):
+        for layout in ("signed", "split", "absolute"):
+            spec = csv_mapping.mapping_template(layout)
+            self.assertEqual(spec["amount"]["mode"], layout)
+
+    def test_records_round_trip_through_normalize(self):
+        spec = self._spec(
+            fee={"column": "Fee", "unit": "btc"},
+            fields={"description": {"column": "Note"}},
+            pricing={"fiat_currency": {"const": "EUR"}, "fiat_rate": {"column": "Price"}},
+        )
+        records, problems = csv_mapping.apply_mapping(
+            [{"Date": "2024-01-01", "Amount": "0.5", "Fee": "0.0001", "Note": "hi", "Price": "40000"}],
+            spec,
+        )
+        self.assertEqual(problems, [])
+        norm = normalize_import_record(records[0], csv_mapping.SOURCE_LABEL)
+        self.assertEqual(norm["external_id"], records[0]["txid"])
+        self.assertEqual(norm["direction"], "inbound")
+        self.assertEqual(norm["fiat_currency"], "EUR")
+        self.assertEqual(norm["pricing_source_kind"], "generic_import")
+
+    def test_build_preview_shape(self):
+        spec = self._spec(filters=[{"column": "Asset", "op": "equals", "value": "BTC"}])
+        records, problems = csv_mapping.apply_mapping(
+            [
+                {"Date": "2024-01-01", "Amount": "1", "Asset": "BTC"},
+                {"Date": "2024-01-02", "Amount": "bad", "Asset": "BTC"},
+                {"Date": "2024-01-03", "Amount": "1", "Asset": "no"},
+            ],
+            spec,
+        )
+        preview = csv_mapping.build_preview(records, problems, limit=10, mapping_name="x")
+        self.assertEqual(preview["rows_read"], 3)
+        self.assertEqual(preview["mapped"], 1)
+        self.assertEqual(preview["errors"], 1)
+        self.assertEqual(preview["filtered"], 1)
+        self.assertNotIn("raw_json", preview["preview"][0])
+
+    def test_equals_filter_handles_falsy_values(self):
+        spec = self._spec(filters=[{"column": "Flag", "op": "equals", "value": 0}])
+        records, problems = csv_mapping.apply_mapping(
+            [
+                {"Date": "2024-01-01", "Amount": "1", "Flag": "0"},
+                {"Date": "2024-01-02", "Amount": "1", "Flag": "1"},
+            ],
+            spec,
+        )
+        # The "0" cell matches the falsy filter value; the "1" cell is filtered.
+        self.assertEqual(len(records), 1)
+        self.assertEqual(problems[0]["reason"], "filtered_equals")
+
+    def test_load_mapping_spec_unwraps_template_envelope(self):
+        spec = csv_mapping.mapping_template("signed")
+        envelope = {
+            "kind": "wallets.mapping-template",
+            "schema_version": 1,
+            "data": {"layout": "signed", "mapping": spec},
+        }
+        self.assertEqual(csv_mapping.load_mapping_spec(envelope)["amount"]["mode"], "signed")
+        self.assertEqual(
+            csv_mapping.load_mapping_spec({"layout": "signed", "mapping": spec})["amount"]["mode"],
+            "signed",
+        )
+        # A bare spec (no top-level "mapping") passes through unchanged.
+        self.assertEqual(csv_mapping.load_mapping_spec(spec)["amount"]["mode"], "signed")
+
+    def test_duplicate_header_collision_with_literal_suffix(self):
+        path = self._write("Amount,Amount,Amount__2\n1,2,3\n")
+        headers, rows = csv_mapping.read_table(path)
+        self.assertEqual(len(set(headers)), 3)  # every column stays addressable
+        self.assertEqual(set(rows[0].values()), {"1", "2", "3"})
+
+    def test_infer_mapping_recognizes_layouts(self):
+        example = csv_mapping.infer_mapping(csv_mapping.EXAMPLE_HEADERS)
+        self.assertTrue(example["confident"])
+        self.assertEqual(example["spec"]["amount"]["mode"], "absolute")
+        fields = {d["field"] for d in example["detected"]}
+        self.assertTrue({"date", "amount", "direction"} <= fields)
+
+        self.assertEqual(
+            csv_mapping.infer_mapping(["Date", "Sent BTC", "Received BTC"])["spec"]["amount"]["mode"],
+            "split",
+        )
+        self.assertEqual(
+            csv_mapping.infer_mapping(["timestamp", "amount"])["spec"]["amount"]["mode"],
+            "signed",
+        )
+        # Unrecognizable headers must not be silently imported.
+        self.assertFalse(csv_mapping.infer_mapping(["foo", "bar", "baz"])["confident"])
+
+    def test_example_csv_round_trips_through_inference(self):
+        rows = list(csv.DictReader(io.StringIO(csv_mapping.example_csv())))
+        inferred = csv_mapping.infer_mapping(list(rows[0].keys()))
+        spec = csv_mapping.validate_mapping_spec(inferred["spec"])
+        records, problems = csv_mapping.apply_mapping(rows, spec)
+        self.assertEqual(problems, [])
+        self.assertEqual(len(records), 2)
+        norm = normalize_import_record(records[0], csv_mapping.SOURCE_LABEL)
+        self.assertEqual(norm["direction"], "inbound")
+        self.assertEqual(norm["fiat_currency"], "EUR")
 
 
 if __name__ == "__main__":
