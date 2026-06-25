@@ -26,11 +26,20 @@
 ## 3. Row types
 
 One line per distinct provider row/type value. Every value the provider can
-emit needs a decision. `Action` is one of import / skip / quarantine.
+emit needs a decision — enumerate from the provider's **documentation**, not
+just the sample (a user's history rarely hits every type). `Action` is one of
+import / skip / quarantine. `Source` is `sample` (a real row exists) or `docs`
+(documented but unverified).
 
-| Provider type value | Meaning | Kassiber `kind` | `direction` | Action | Notes |
-|---|---|---|---|---|---|
-|  |  |  |  |  |  |
+| Provider type value | Meaning | Kassiber `kind` | `direction` | Action | Source | Notes |
+|---|---|---|---|---|---|---|
+|  |  |  |  |  |  |  |
+
+- **Fallback for unrecognized types:** sign-based `deposit` / `withdrawal` +
+  `<slug>-unmapped-type` review tag (never a guessed buy/sell). Raise `AppError`
+  only when a row cannot be safely shaped at all.
+- **Types still unverified (`docs`-only):** <!-- confirm with a real sample later -->
+- **Types whose meaning is unknown from sample + docs:** <!-- open questions; fail-safe handles them -->
 
 ## 4. Sample exports
 

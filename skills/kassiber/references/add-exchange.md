@@ -16,9 +16,11 @@ This is a two-part flow:
 The point of the split is reliability: the intake makes sure no decision is
 guessed, and the implementation checklist makes sure no touchpoint is missed.
 
-> Do not start implementation from a half-filled spec. If a required intake
-> answer or a sample export covering all row types is missing, stop and ask for
-> it. Guessing row-type semantics is the main way these importers go wrong.
+> Do not start implementation from a half-filled spec — missing *answers*
+> (custodial model, tax treatment, slug) are a hard blocker, so stop and ask.
+> A sample that does not cover every row type is **not** a blocker: it is the
+> normal case (see "Incomplete samples" below). What is non-negotiable is that
+> the importer never *guesses* the tax semantics of a row it doesn't recognize.
 
 ---
 
@@ -88,9 +90,40 @@ covers them all; ask for several or a documentation list of row/type values.
   shape. Never commit account numbers, names, or balances.
 - Fill the **row-type table** in the spec: one line per distinct
   `Transaction Type` (or equivalent) value, its meaning, the Kassiber `kind` and
-  `direction` it maps to, and whether it is imported, skipped, or quarantined.
-- An unmapped row type is a bug. Every value the provider can emit must have an
-  explicit decision — mapped, skipped (with reason), or quarantined.
+  `direction` it maps to, whether it is imported / skipped / quarantined, and
+  its **source** — `sample` (a real row exists) or `docs` (listed in the
+  provider's vocabulary but not in any sample yet).
+- **Enumerate from the documentation, not the sample.** The sample proves the
+  column layout and parsing; the provider's docs give the full set of type
+  values. A user's own history almost never exercises every row type, so the
+  sample being incomplete is expected — fill the rest of the table from the
+  docs and mark those rows `docs`.
+
+### Incomplete samples
+
+This is the normal situation, not a failure. Handle it like this:
+
+- **Cover the table from documentation** so every documented type has a
+  decision, even types the sample never hit. If neither sample nor docs pin a
+  type's meaning down, record the open question and make the parser fail-safe on
+  it (below) rather than blocking the whole importer.
+- **The parser must fail-safe on any unrecognized row type** — never assign a
+  tax-bearing kind (`buy` / `sell` / `income` / `interest` / ...) to a row whose
+  type is not in the known map. Instead:
+  - if the row carries a BTC amount, import it conservatively as `deposit` /
+    `withdrawal` by amount sign, add a `<slug>-unmapped-type` tag, and preserve
+    the raw type value in `raw_json` so it surfaces for review;
+  - if the row cannot even be safely shaped (no amount, ambiguous direction),
+    raise `AppError` with the offending type in the message so the import fails
+    loudly instead of dropping data silently.
+  This guarantees an unseen row type can never become a *wrong* taxable event —
+  the worst case is a conservative, flagged row a human resolves later.
+- **Keep one obvious place to extend the map.** The `_<slug>_kind` lookup is the
+  single source of truth for type→kind; when a new type later shows up, mapping
+  it is a one-line change plus a spec table row. Do not scatter type handling
+  across the parser.
+- Note in the spec which row types are still `docs`-only / unverified so a later
+  real sample can confirm them.
 
 ### 5. Documentation
 
@@ -189,6 +222,12 @@ end-to-end and to pass the drift test.
   on-chain hash, so swap matching still works.
 - Anything whose tax treatment the export does not pin down → leave it to
   **quarantine**, with an actionable hint. Never zero-basis-guess.
+- The type→kind fallback must be **conservative, not pass-through**. Some
+  existing importers (e.g. `_strike_kind`) fall back to passing an unknown type
+  string straight through as the `kind`; for a new importer prefer mapping
+  unknown types to a sign-based `deposit` / `withdrawal` plus a
+  `<slug>-unmapped-type` review tag, so an unrecognized row can never silently
+  acquire taxable buy/sell semantics. See "Incomplete samples" above.
 
 ---
 
