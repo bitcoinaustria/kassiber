@@ -139,6 +139,12 @@ class FreshSchemaTests(unittest.TestCase):
                 self.assertIn("idx_transaction_pairs_active_in", index_names)
                 self.assertIn("idx_transaction_pairs_profile_active", index_names)
                 self.assertIn("idx_transactions_payment_hash", index_names)
+                # The one-active-leg-per-transaction guarantee is a partial unique
+                # index; pin it so a future drop is caught (the tax pipeline relies
+                # on it for the loan-leg role lookup).
+                self.assertIn("idx_loan_legs_active_transaction", index_names)
+                self.assertIn("idx_loan_legs_profile_active", index_names)
+                self.assertIn("idx_loans_profile_active", index_names)
 
                 table_sql = conn.execute(
                     "SELECT sql FROM sqlite_master WHERE type='table' AND name='transaction_pairs'"

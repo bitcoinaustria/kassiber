@@ -60,6 +60,8 @@ run py -m unittest tests.test_transfer_matching -v
 run py -m unittest tests.test_swap_matching_cli -v
 run py -m unittest tests.test_swap_rules -v
 run py -m unittest tests.test_schema_swap_matching -v
+run py -m unittest tests.test_loans -v
+run py -m unittest tests.test_austrian_classification -v
 run py -m unittest tests.test_daemon_swap_matching -v
 run py -m unittest tests.test_sync_backends -v
 run py -m unittest tests.test_sync_backends_legs -v

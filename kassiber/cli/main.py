@@ -1444,6 +1444,7 @@ def build_parser() -> argparse.ArgumentParser:
     loans_set_p.add_argument("--workspace")
     loans_set_p.add_argument("--profile")
     loans_set_p.add_argument("--loan-id", required=True, dest="loan_id")
+    loans_set_p.add_argument("--platform")
     loans_set_p.add_argument("--custody-type", dest="custody_type", choices=list(core_loans.CUSTODY_TYPES))
     loans_set_p.add_argument("--rehypothecation", choices=list(core_loans.REHYPOTHECATION_VALUES))
     loans_set_p.add_argument("--control-mechanism", dest="control_mechanism", choices=list(core_loans.CONTROL_MECHANISMS))
@@ -3313,6 +3314,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         if args.loans_command == "set":
             fields = {}
             for attr in (
+                "platform",
                 "custody_type",
                 "rehypothecation",
                 "control_mechanism",

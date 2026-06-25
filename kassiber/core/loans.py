@@ -234,6 +234,24 @@ def validate_leg_role(role: str) -> None:
         )
 
 
+def _coerce_optional_int(value: Any, field: str) -> Optional[int]:
+    """Coerce an optional INTEGER-column value at the core boundary. The CLI
+    parses with ``type=int``, but the daemon forwards raw JSON, so a scripted
+    client could otherwise land a string in an INTEGER column (and skew later
+    arithmetic). ``None``/"" stay null; a non-integer raises a clean validation
+    error rather than being stored verbatim."""
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise AppError(
+            f"Invalid {field} '{value}': expected an integer",
+            code="validation",
+            details={"field": field, "value": value},
+        )
+
+
 # --- Row converters --------------------------------------------------------
 
 
@@ -296,6 +314,7 @@ def create_loan(
 
     rehypothecation = rehypothecation or "unknown"
     control_mechanism = control_mechanism or "live_key"
+    principal_amount = _coerce_optional_int(principal_amount, "principal_amount")
     validate_loan_fields(
         role=role,
         custody_type=custody_type,
@@ -374,6 +393,8 @@ def update_loan(
     updates = {k: v for k, v in fields.items() if k in _LOAN_MUTABLE_FIELDS and v is not None}
     if "public_offering" in updates:
         updates["public_offering"] = 1 if updates["public_offering"] else 0
+    if "principal_amount" in updates:
+        updates["principal_amount"] = _coerce_optional_int(updates["principal_amount"], "principal_amount")
     if not updates:
         return existing
     assignments = ", ".join(f"{col} = ?" for col in updates)
@@ -446,6 +467,7 @@ def create_loan_leg(
     commit: bool = True,
 ) -> dict[str, Any]:
     validate_leg_role(role)
+    escrow_vout = _coerce_optional_int(escrow_vout, "escrow_vout")
     if get_loan(conn, profile_id, loan_id) is None:
         raise AppError(f"Loan '{loan_id}' not found", code="not_found")
     if role in ONCHAIN_REQUIRED_ROLES and transaction_id is None:

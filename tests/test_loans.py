@@ -153,6 +153,16 @@ class LoanTaxClassificationTest(unittest.TestCase):
         self.assertEqual(_btc_quantity(result), Decimal("0"))
         self.assertEqual(len(result.quarantines), 0)
         self.assertTrue(_has_disposal(result))
+        # And crucially the regime survives: the disposal must stay Altvermögen.
+        # If the release minted a fresh post-cutoff lot, the sale would draw it and
+        # be reclassified Neuvermögen — so assert a disposal IS classified and that
+        # none of the classified disposals are `neu_*`.
+        categories = [e.get("at_category") for e in result.entries if e.get("at_category")]
+        self.assertTrue(categories, "expected a classified Austrian disposal")
+        self.assertFalse(
+            any(str(cat).startswith("neu") for cat in categories),
+            f"sale must remain Altvermögen, never reclassified Neu — got {categories}",
+        )
 
 
 class LoanCrudTest(unittest.TestCase):
