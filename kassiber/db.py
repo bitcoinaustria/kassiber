@@ -488,6 +488,7 @@ CREATE TABLE IF NOT EXISTS loans (
     interest_asset TEXT,
     interest_terms TEXT,
     as_of_custody_date TEXT,
+    escrow_descriptor TEXT,
     notes TEXT,
     deleted_at TEXT,
     created_at TEXT NOT NULL

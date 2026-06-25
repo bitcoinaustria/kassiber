@@ -6,6 +6,24 @@
   "actions": {
     "newLoan": "Neues Darlehen"
   },
+  "import": {
+    "button": "Importieren",
+    "title": "Darlehen importieren",
+    "subtitle": "Füge einen Anbieter-Export ein. On-Chain-Legs werden erst gebucht, wenn sie zu einer synchronisierten Transaktion passen.",
+    "format": "Format",
+    "formats": {
+      "csv": "CSV (Ledn / Nexo)",
+      "unchained": "Unchained-Descriptor",
+      "hodlhodl": "Hodl-Hodl-Escrow"
+    },
+    "placeholder": "CSV-Zeilen oder das Escrow-/Wallet-Config-JSON einfügen…",
+    "run": "Importieren",
+    "done": "Importiert. On-Chain-Legs werden gebucht, sobald ihre Transaktionen synchronisiert sind."
+  },
+  "export": {
+    "button": "Steuerberater-Export",
+    "done": "Export bereit — {{count}} Darlehen für deinen Steuerberater aufbereitet."
+  },
   "status": {
     "title": "Erfordert Aufmerksamkeit",
     "actions": {

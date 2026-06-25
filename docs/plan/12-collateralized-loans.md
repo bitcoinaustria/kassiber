@@ -281,14 +281,27 @@ preset guess.
   wallets" reconciliation assist, signal-not-reassurance status, and the Altvermögen
   round-trip test. Covers all providers correctly at the data/tax layer; satisfies the
   simple-default + advanced-expander goal.
-- **Phase 2 — import on-ramps for the verified-easy cases.** Unchained descriptor import
-  (read `addressType`, register encumbered/read-only), Hodl Hodl escrow-object pairing
-  (field-presence-gated), Ledn/Nexo CSV via sampled-not-hardcoded mapping with quarantine.
-- **Phase 3 — advanced granularity.** `loan_escrow_positions` multi-UTXO basis allocation,
-  surplus-split UI, liquidation fee/FMV modeling, per-leg interest currency, Steuerberater
-  handoff export, advisory banners, BIP329 label→role mapping, preset-library review process.
+- **Phase 2 — import on-ramps (SHIPPED).** A registry-dispatched importer
+  ([`kassiber/core/loans_import.py`](../../kassiber/core/loans_import.py)) with: tolerant
+  Ledn/Nexo **CSV** (header-flexible, role inferred by keyword), **Unchained** wallet-config
+  (reads `addressType`, recorded as an *encumbered* descriptor + escrow positions — never an
+  owned wallet), **Hodl Hodl** escrow object (field-presence-gated lock/release pairing), and
+  **BIP329** tx-label → candidate-role mapping. Quarantine-first throughout: an on-chain leg
+  only books once it resolves to a synced journal transaction; everything else is returned as
+  `unresolved`. CLI `loans import/identify`, daemon `ui.loans.import`, GUI import panel.
+- **Phase 3 — advanced granularity (SHIPPED).** Status-driven liquidation
+  (`effective_leg_role`: a lock on a liquidated/defaulted loan becomes the disposal; a
+  `liquidation_surplus_return` is a re-acquisition at FMV — see the partial-liquidation test),
+  `loan_escrow_positions` CRUD, per-leg interest currency (via `interest_asset`), the
+  **Steuerberater handoff export** (`loans export` / `ui.loans.export`) with per-leg effective
+  roles + tax effects + advisory caveats, advisory banners in the GUI, and BIP329 role mapping.
+  - *Known simplification:* a status-driven liquidation books the disposal at the **lock
+    transaction's recorded value**, not a separate liquidation-time FMV. Override the tx
+    pricing (metadata) for a precise FMV. A first-class FMV/fee override on the liquidation leg
+    is a follow-up.
 - **Deferred / out of scope:** any chain-pattern auto-detector; Coinbase cbBTC-on-Base
-  decoding (EVM, out of Bitcoin-only scope — BTC withdrawal leg + wrap-flag only).
+  decoding (EVM, out of Bitcoin-only scope — BTC withdrawal leg + wrap-flag only); the
+  defense-in-depth catch-quarantine-retry around `compute_tax_for_assets`.
 
 ## 11. Open risks — need a Steuerberater / legal ruling
 

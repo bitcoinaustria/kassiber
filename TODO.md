@@ -134,12 +134,19 @@ Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the 
     being promoted to an `at_swap_link` that bypassed the quantity gate and aborted the
     whole report. Regression: `ATSwapOverSellQuarantineTest`; contract in
     [docs/austrian-handoff.md](docs/austrian-handoff.md).
-  - [ ] Phase 1: `loans`/`loan_legs` tables, encumbrance lot-tag + lock-suppression
-    regime + guards, 3-question wizard + `/loans` route, CLI `loans add/leg/pair/status`,
-    "Find in my wallets" reconciliation assist, and the Altvermögen lock→release
-    round-trip test.
-  - [ ] Phase 2: import on-ramps (Unchained descriptor read-only, Hodl Hodl escrow-object
-    pairing, Ledn/Nexo CSV quarantine-first via sampled-not-hardcoded mapping).
+  - [x] Phase 1 (shipped, PR #238): `loans`/`loan_legs` tables, encumbrance lot-tag +
+    lock-suppression regime + guards, 3-question wizard + `/loans` route, CLI
+    `loans add/leg/pair/status`, and the Altvermögen lock→release round-trip test.
+  - [x] Phase 2 (shipped): registry-dispatched importers in `core/loans_import.py` —
+    Ledn/Nexo CSV, Unchained descriptor (encumbered, not owned), Hodl Hodl escrow-object
+    pairing (field-presence-gated), BIP329 label→role; quarantine-first (on-chain legs
+    only book once they resolve to a synced tx). CLI `loans import/identify`, daemon
+    `ui.loans.import`, GUI import panel.
+  - [x] Phase 3 (shipped): status-driven liquidation (`effective_leg_role`; surplus =
+    re-acquisition), `loan_escrow_positions`, Steuerberater export (`loans export` /
+    `ui.loans.export`) + advisory caveats + GUI banners. Known simplification: liquidation
+    books at the lock tx value, not a separate liquidation-time FMV (override via pricing
+    metadata; a first-class FMV/fee override on the liquidation leg is a follow-up).
   - [ ] Defense-in-depth: catch-quarantine-retry around `compute_tax_for_assets`
     (reuse the existing `excluded_row_ids` re-prepare path) so no residual
     negative-balance error can abort a whole report.

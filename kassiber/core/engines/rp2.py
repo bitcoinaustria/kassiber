@@ -31,6 +31,7 @@ from ..loans import (
     LOCK_SUPPRESS_ROLES as _LOAN_LOCK_SUPPRESS_ROLES,
     QUARANTINE_ROLES as _LOAN_QUARANTINE_ROLES,
     RELEASE_SUPPRESS_ROLES as _LOAN_RELEASE_SUPPRESS_ROLES,
+    effective_leg_role as _effective_loan_leg_role,
 )
 from .base import TaxEngineLedgerInputs, TaxEngineLedgerResult
 
@@ -2042,12 +2043,24 @@ class GenericRP2TaxEngine:
             # collateral lock/release is a non-event that keeps the coins in the
             # owned global pool (encumbered, NOT a separate balance-bearing
             # account); a liquidation/repay-sale falls through to the normal
-            # disposal path. Row-index access works for both sqlite3.Row and dict.
-            loan_leg_by_transaction_id = {
-                str(leg["transaction_id"]): str(leg["role"])
-                for leg in (inputs.loan_legs or ())
-                if leg["transaction_id"] is not None
-            }
+            # disposal path. `effective_leg_role` folds in the loan status so a
+            # lock on a liquidated/defaulted loan becomes the disposal. The leg
+            # rows may carry a `loan_status` column (live report path) or not
+            # (hand-built unit-test legs) — read both tolerantly for Row + dict.
+            def _leg_field(leg, key):
+                try:
+                    return leg[key]
+                except (KeyError, IndexError):
+                    return None
+
+            loan_leg_by_transaction_id = {}
+            for leg in inputs.loan_legs or ():
+                leg_txid = _leg_field(leg, "transaction_id")
+                if leg_txid is None:
+                    continue
+                loan_leg_by_transaction_id[str(leg_txid)] = _effective_loan_leg_role(
+                    str(_leg_field(leg, "role")), _leg_field(leg, "loan_status")
+                )
 
             # Phase 1: normalize + build RP2 `InputData` for every asset. No `compute_tax`
             # runs here so the country's cross-asset validator can see every asset's

@@ -28,6 +28,7 @@ from ..ai.providers import (
 )
 from ..core import chat_history as core_chat_history
 from ..core import loans as core_loans
+from ..core import loans_import as core_loans_import
 from .handlers import (
     APP_NAME,
     BACKEND_CLEAR_FIELD_ALIASES,
@@ -63,7 +64,11 @@ from .handlers import (
     loans_add_leg,
     loans_delete,
     loans_delete_leg,
+    loans_export,
+    loans_identify,
+    loans_import,
     loans_list,
+    loans_positions,
     loans_presets,
     loans_set,
     loans_show,
@@ -1485,6 +1490,31 @@ def build_parser() -> argparse.ArgumentParser:
     loans_presets_p = loans_sub.add_parser("presets")
     loans_presets_p.add_argument("--workspace")
     loans_presets_p.add_argument("--profile")
+
+    loans_import_p = loans_sub.add_parser("import")
+    loans_import_p.add_argument("--workspace")
+    loans_import_p.add_argument("--profile")
+    loans_import_p.add_argument("--format", dest="fmt", required=True, choices=list(core_loans_import.LOAN_IMPORT_FORMATS))
+    loans_import_p.add_argument("--file", required=True)
+    loans_import_p.add_argument("--platform")
+    loans_import_p.add_argument("--preset")
+    loans_import_p.add_argument("--loan-id", dest="loan_id", help="Attach to an existing loan (required for bip329)")
+
+    loans_identify_p = loans_sub.add_parser("identify")
+    loans_identify_p.add_argument("--workspace")
+    loans_identify_p.add_argument("--profile")
+    loans_identify_p.add_argument("--address", action="append", dest="addresses")
+    loans_identify_p.add_argument("--txid", action="append", dest="txids")
+
+    loans_export_p = loans_sub.add_parser("export")
+    loans_export_p.add_argument("--workspace")
+    loans_export_p.add_argument("--profile")
+    loans_export_p.add_argument("--file", help="Write the Steuerberater handoff JSON to this path")
+
+    loans_positions_p = loans_sub.add_parser("positions")
+    loans_positions_p.add_argument("--workspace")
+    loans_positions_p.add_argument("--profile")
+    loans_positions_p.add_argument("--loan-id", dest="loan_id")
 
     transfers = sub.add_parser("transfers")
     transfers_sub = transfers.add_subparsers(dest="transfers_command", required=True)
@@ -3355,6 +3385,31 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             return emit(args, loans_status(conn, args.workspace, args.profile))
         if args.loans_command == "presets":
             return emit(args, loans_presets(conn))
+        if args.loans_command == "import":
+            return emit(
+                args,
+                loans_import(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    fmt=args.fmt,
+                    file=args.file,
+                    platform=args.platform,
+                    preset=args.preset,
+                    loan_id=args.loan_id,
+                ),
+            )
+        if args.loans_command == "identify":
+            return emit(
+                args,
+                loans_identify(
+                    conn, args.workspace, args.profile, addresses=args.addresses, txids=args.txids
+                ),
+            )
+        if args.loans_command == "export":
+            return emit(args, loans_export(conn, args.workspace, args.profile, file=args.file))
+        if args.loans_command == "positions":
+            return emit(args, loans_positions(conn, args.workspace, args.profile, args.loan_id))
 
     if args.command == "views":
         if args.views_command == "list":

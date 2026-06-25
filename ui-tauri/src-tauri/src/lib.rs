@@ -238,6 +238,8 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.loans.delete",
     "ui.loans.add_leg",
     "ui.loans.delete_leg",
+    "ui.loans.import",
+    "ui.loans.export",
     "ui.wallets.create",
     "ui.wallets.import_file",
     "ui.wallets.import_samourai",
@@ -2719,6 +2721,8 @@ mod tests {
             "ui.loans.delete",
             "ui.loans.add_leg",
             "ui.loans.delete_leg",
+            "ui.loans.import",
+            "ui.loans.export",
         ];
         for kind in required {
             assert!(

@@ -4866,6 +4866,48 @@ class AccountBucketBehaviorTest(unittest.TestCase):
             self.assertEqual(payload.get("kind"), "error")
             self.assertEqual(payload["error"]["code"], "not_found")
 
+    def test_loans_csv_import_and_steuerberater_export(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state" / "kassiber"
+            root.mkdir(parents=True)
+            tx_csv = Path(tmp) / "tx.csv"
+            tx_csv.write_text(
+                "date,txid,direction,asset,amount,fee,fiat_rate,description,kind\n"
+                "2026-01-01T10:00:00Z,buy-1,inbound,BTC,1.00000000,0,60000,Buy,buy\n"
+                "2026-02-01T10:00:00Z,lock-1,outbound,BTC,1.00000000,0,65000,Lock,withdrawal\n",
+                encoding="utf-8",
+            )
+            ledn_csv = Path(tmp) / "ledn.csv"
+            ledn_csv.write_text(
+                "Date,Type,Amount,Currency,Transaction ID\n"
+                "2026-02-01,Collateral Deposit,1.0,BTC,lock-1\n",
+                encoding="utf-8",
+            )
+
+            def run(*args):
+                payload, code = _run(root, *args)
+                self.assertEqual(code, 0, f"{args} -> {json.dumps(payload)[:300]}")
+                return payload
+
+            run("init")
+            run("workspaces", "create", "Main")
+            run("profiles", "create", "--workspace", "Main", "--fiat-currency", "EUR", "--tax-country", "at", "Default")
+            run("wallets", "create", "--workspace", "Main", "--profile", "Default", "--label", "W1", "--kind", "custom")
+            run("wallets", "import-csv", "--workspace", "Main", "--profile", "Default", "--wallet", "W1", "--file", str(tx_csv))
+
+            imported = run(
+                "loans", "import", "--workspace", "Main", "--profile", "Default",
+                "--format", "csv", "--preset", "ledn", "--file", str(ledn_csv),
+            )
+            self.assertEqual(imported["kind"], "loans.import")
+            self.assertEqual([leg["role"] for leg in imported["data"]["legs"]], ["collateral_lock"])
+            self.assertEqual(imported["data"]["unresolved"], [])
+
+            exported = run("loans", "export", "--workspace", "Main", "--profile", "Default")
+            self.assertEqual(exported["kind"], "loans.export")
+            self.assertEqual(len(exported["data"]["loans"]), 1)
+            self.assertEqual(exported["data"]["loans"][0]["custody_type"], "custodial_segregated")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -6,6 +6,24 @@
   "actions": {
     "newLoan": "New loan"
   },
+  "import": {
+    "button": "Import",
+    "title": "Import a loan",
+    "subtitle": "Paste a provider export. On-chain legs only book once they match a synced transaction.",
+    "format": "Format",
+    "formats": {
+      "csv": "CSV (Ledn / Nexo)",
+      "unchained": "Unchained descriptor",
+      "hodlhodl": "Hodl Hodl escrow"
+    },
+    "placeholder": "Paste CSV rows or the escrow / wallet-config JSON…",
+    "run": "Import",
+    "done": "Imported. On-chain legs book once their transactions are synced."
+  },
+  "export": {
+    "button": "Steuerberater export",
+    "done": "Export ready — {{count}} loan(s) prepared for your Steuerberater."
+  },
   "status": {
     "title": "Needs attention",
     "actions": {

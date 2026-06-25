@@ -68,19 +68,48 @@ LEG_ROLES = (
 LOCK_SUPPRESS_ROLES = frozenset(
     {"collateral_lock", "collateral_topup", "escrow_consolidation"}
 )
-# Inbound legs whose coins return to the pool they never left: suppress the
-# acquisition so the round-trip nets to nothing.
+# Inbound legs whose coins return to the pool they never left (a repayment
+# round-trip): suppress the acquisition so the round-trip nets to nothing. NOTE:
+# liquidation_surplus_return is deliberately NOT here — on a liquidation the full
+# collateral is disposed, so any surplus that comes back is a genuine NEW
+# acquisition at its return value (booked as a normal BUY), not a suppressed
+# round-trip.
 RELEASE_SUPPRESS_ROLES = frozenset(
     {
         "collateral_release",
         "recovery_release",
         "cancellation_release",
-        "liquidation_surplus_return",
     }
 )
 # Outbound legs that ARE the disposal — they fall through to the normal SELL path
 # (listed for documentation / CLI validation; the engine needs no special case).
 DISPOSAL_ROLES = frozenset({"liquidation", "collateral_repay_sale"})
+
+# When a loan defaults or is liquidated, the collateral that was locked is gone:
+# the lock outbound (which is otherwise suppressed) becomes THE disposal. Status,
+# not a manual re-tag, drives this — the tax map applies it via effective_leg_role.
+# Only the user's actual collateral funding converts (NOT an internal escrow
+# consolidation hop, which would double-count).
+_LIQUIDATING_SOURCE_ROLES = frozenset({"collateral_lock", "collateral_topup"})
+_LIQUIDATING_STATUSES = frozenset({"liquidated", "defaulted"})
+
+
+def effective_leg_role(role: str, loan_status: Optional[str]) -> str:
+    """The role the tax engine should act on, after applying loan status.
+
+    A collateral lock/top-up on a liquidated/defaulted loan is no longer a
+    non-event: the coins were seized, so it becomes the disposal. A
+    collateral_release on such a loan is coins coming back AFTER the full
+    collateral was disposed, so it is a re-acquisition (not a suppressed
+    repayment round-trip). Every other role passes through unchanged. With
+    ``loan_status=None`` (e.g. a unit test that hand-builds legs) nothing is
+    transformed."""
+    if loan_status in _LIQUIDATING_STATUSES:
+        if role in _LIQUIDATING_SOURCE_ROLES:
+            return "liquidation"
+        if role == "collateral_release":
+            return "liquidation_surplus_return"
+    return role
 # Out-of-scope legs (e.g. BTC->cbBTC wrap): quarantine for review, never book.
 QUARANTINE_ROLES = frozenset({"wrapped_conversion_out"})
 
@@ -267,6 +296,7 @@ def create_loan(
     interest_asset: Optional[str] = None,
     interest_terms: Optional[str] = None,
     as_of_custody_date: Optional[str] = None,
+    escrow_descriptor: Optional[str] = None,
     notes: Optional[str] = None,
     commit: bool = True,
 ) -> dict[str, Any]:
@@ -311,8 +341,8 @@ def create_loan(
             id, workspace_id, profile_id, role, platform, preset_label, preset_version,
             custody_type, rehypothecation, control_mechanism, principal_asset,
             principal_amount, collateral_asset, status, public_offering, interest_asset,
-            interest_terms, as_of_custody_date, notes, deleted_at, created_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+            interest_terms, as_of_custody_date, escrow_descriptor, notes, deleted_at, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
         """,
         (
             loan_id,
@@ -333,6 +363,7 @@ def create_loan(
             interest_asset,
             interest_terms,
             as_of_custody_date,
+            escrow_descriptor,
             notes,
             now_iso(),
         ),
@@ -355,6 +386,7 @@ _LOAN_MUTABLE_FIELDS = (
     "interest_asset",
     "interest_terms",
     "as_of_custody_date",
+    "escrow_descriptor",
     "notes",
 )
 
@@ -577,6 +609,193 @@ def loan_action_items(conn, profile_id: str) -> list[dict[str, Any]]:
             items.append({**loan_ref, "action": "rehyp_review", "detail": "Rehypothecating custodial lock — possible disposal at FMV (contested; advisory)."})
         elif loan.get("custody_type") in ("custodial_segregated",) and loan.get("rehypothecation") == "unknown":
             items.append({**loan_ref, "action": "custody_review", "detail": "Custodial lock with unknown rehypothecation — confirm custody terms."})
-        if loan.get("status") in ("liquidated", "defaulted") and not (roles & DISPOSAL_ROLES):
-            items.append({**loan_ref, "action": "needs_liquidation_leg", "detail": "Loan marked liquidated/defaulted but no liquidation leg books the disposal."})
+        if loan.get("status") in ("liquidated", "defaulted") and not (
+            roles & DISPOSAL_ROLES or roles & LOCK_SUPPRESS_ROLES
+        ):
+            items.append({**loan_ref, "action": "needs_liquidation_leg", "detail": "Loan marked liquidated/defaulted but no lock or liquidation leg books the disposal."})
     return items
+
+
+# --- Escrow positions (advanced: per-UTXO collateral tracking) -------------
+
+
+def create_escrow_position(
+    conn,
+    workspace_id: str,
+    profile_id: str,
+    loan_id: str,
+    *,
+    escrow_address: Optional[str] = None,
+    output_type: str = "unknown",
+    amount: Optional[int] = None,
+    acquired_basis_ref: Optional[str] = None,
+    commit: bool = True,
+) -> dict[str, Any]:
+    if get_loan(conn, profile_id, loan_id) is None:
+        raise AppError(f"Loan '{loan_id}' not found", code="not_found")
+    position_id = str(uuid.uuid4())
+    conn.execute(
+        """
+        INSERT INTO loan_escrow_positions(
+            id, workspace_id, profile_id, loan_id, escrow_address, output_type,
+            amount, acquired_basis_ref, deleted_at, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+        """,
+        (
+            position_id,
+            workspace_id,
+            profile_id,
+            loan_id,
+            escrow_address,
+            output_type or "unknown",
+            amount,
+            acquired_basis_ref,
+            now_iso(),
+        ),
+    )
+    if commit:
+        conn.commit()
+    row = conn.execute("SELECT * FROM loan_escrow_positions WHERE id = ?", (position_id,)).fetchone()
+    return {key: row[key] for key in row.keys()}
+
+
+def list_escrow_positions(
+    conn, profile_id: str, *, loan_id: Optional[str] = None
+) -> list[dict[str, Any]]:
+    clauses = ["profile_id = ?", "deleted_at IS NULL"]
+    params: list[Any] = [profile_id]
+    if loan_id is not None:
+        clauses.append("loan_id = ?")
+        params.append(loan_id)
+    rows = conn.execute(
+        f"SELECT * FROM loan_escrow_positions WHERE {' AND '.join(clauses)} ORDER BY created_at ASC",
+        tuple(params),
+    ).fetchall()
+    return [{key: row[key] for key in row.keys()} for row in rows]
+
+
+# --- Advisory caveats + Steuerberater handoff ------------------------------
+
+_ROLE_TAX_EFFECT = {
+    "collateral_lock": "non-event (encumbered; coins stay in the owned pool)",
+    "collateral_topup": "non-event (encumbered)",
+    "escrow_consolidation": "non-event (internal hop)",
+    "collateral_release": "non-event (basis carries back)",
+    "recovery_release": "non-event (basis carries back)",
+    "cancellation_release": "non-event (basis carries back)",
+    "principal_draw": "not income (liability)",
+    "principal_repay": "non-event (liability reduction)",
+    "interest_payment": "cost; disposal of the sats if paid in BTC",
+    "liquidation": "DISPOSAL at FMV",
+    "collateral_repay_sale": "DISPOSAL at FMV",
+    "liquidation_surplus_return": "re-acquisition at FMV",
+    "wrapped_conversion_out": "out-of-scope wrap — quarantined for review",
+}
+
+
+def loan_advisory(loan: Mapping[str, Any]) -> list[str]:
+    """The tax caveats that apply to this loan, surfaced (never silently applied)
+    for the user / their Steuerberater. Empty for the clean cases."""
+    caveats: list[str] = []
+    custody = loan.get("custody_type")
+    rehyp = loan.get("rehypothecation")
+    if custody == "custodial_rehypothecated" or rehyp == "allowed":
+        caveats.append(
+            "Rehypothecating custodial collateral: posting it may be argued to be a "
+            "disposal at FMV (contested; no Austrian ruling). Treated here as a "
+            "non-disposal by default — confirm with a Steuerberater."
+        )
+    elif custody == "custodial_segregated":
+        caveats.append(
+            "Custodial (segregated) collateral: non-disposal treatment assumes beneficial "
+            "ownership is retained. Confirm the custody terms."
+        )
+    if custody == "non_custodial_presigned":
+        caveats.append(
+            "The escrow key is generated once then discarded, so at steady state no live "
+            "signing key is held; the non-disposal argument rests on pre-committed outcomes, "
+            "not key retention (advisory, not BMF-confirmed)."
+        )
+    if custody == "collaborative_multisig":
+        caveats.append(
+            "Collaborative custody / sub-trust: legal title may sit in trust while you hold "
+            "the beneficial interest — a title-transfer argument could recharacterize the lock."
+        )
+    if loan.get("role") == "lender":
+        if loan.get("public_offering"):
+            caveats.append(
+                "Lender interest at the 27.5% special rate assumes the lending was publicly "
+                "offered (§27a Abs 2). Confirm the public-offering test is met."
+            )
+        else:
+            caveats.append(
+                "Lender interest on a private/non-public loan defaults to the progressive "
+                "tariff (up to 55%), NOT 27.5% (§27a Abs 2)."
+            )
+    if loan.get("interest_asset") == "BTC":
+        caveats.append("Interest paid in BTC is itself a disposal of those sats.")
+    if loan.get("status") in ("liquidated", "defaulted"):
+        caveats.append(
+            "Liquidation/default proceeds are modelled at the collateral lock's recorded "
+            "value, not the seizure-date FMV — confirm the liquidation-date valuation with a "
+            "Steuerberater."
+        )
+    return caveats
+
+
+def build_steuerberater_report(conn, profile: Mapping[str, Any]) -> dict[str, Any]:
+    """A structured, advisory handoff of every loan: facility terms, the per-leg
+    roles and their tax effect, custody/rehypothecation, and the caveats that need
+    a Steuerberater sign-off. Kassiber does no tax math here — it lays out what was
+    modelled and why, so an advisor can check it."""
+    profile_id = profile["id"]
+    report_loans = []
+    for loan in list_loans(conn, profile_id):
+        legs = []
+        for leg in loan.get("legs", []):
+            effective = effective_leg_role(leg["role"], loan.get("status"))
+            legs.append(
+                {
+                    "role": leg["role"],
+                    "effective_role": effective,
+                    "tax_effect": _ROLE_TAX_EFFECT.get(effective, "review"),
+                    "transaction_id": leg.get("transaction_id"),
+                    "escrow_txid": leg.get("escrow_txid"),
+                    "amount": leg.get("amount"),
+                    "occurred_at": leg.get("occurred_at"),
+                    "on_chain": bool(leg.get("on_chain_present")),
+                }
+            )
+        report_loans.append(
+            {
+                "id": loan["id"],
+                "platform": loan.get("platform"),
+                "role": loan.get("role"),
+                "custody_type": loan.get("custody_type"),
+                "rehypothecation": loan.get("rehypothecation"),
+                "control_mechanism": loan.get("control_mechanism"),
+                "status": loan.get("status"),
+                "public_offering": bool(loan.get("public_offering")),
+                "principal_asset": loan.get("principal_asset"),
+                "principal_amount": loan.get("principal_amount"),
+                "collateral_asset": loan.get("collateral_asset"),
+                "interest_asset": loan.get("interest_asset"),
+                "interest_terms": loan.get("interest_terms"),
+                "as_of_custody_date": loan.get("as_of_custody_date"),
+                "legs": legs,
+                "escrow_positions": list_escrow_positions(conn, profile_id, loan_id=loan["id"]),
+                "advisory": loan_advisory(loan),
+            }
+        )
+    return {
+        "workspace": profile.get("workspace_label") or profile.get("workspace_id"),
+        "profile": profile.get("label") or profile.get("id"),
+        "jurisdiction": str(profile.get("tax_country") or "generic").lower(),
+        "fiat_currency": str(profile.get("fiat_currency") or "EUR").upper(),
+        "loans": report_loans,
+        "review_gate": (
+            "Advisory only. The tax treatment of crypto-collateralized loans has no published "
+            "BMF position; contested points are flagged per loan and must be confirmed by a "
+            "Steuerberater (a verbindliche Auskunft, §118 BAO, gives certainty)."
+        ),
+    }

@@ -36,6 +36,7 @@ from ..core import commercial as core_commercial
 from ..core import imports as core_imports
 from ..core.lightning import cln as core_lightning_cln
 from ..core import loans as core_loans
+from ..core import loans_import as core_loans_import
 from ..core import metadata as core_metadata
 from ..core import output_inventory as core_output_inventory
 from ..core import ownership as core_ownership
@@ -3227,8 +3228,11 @@ def build_ledger_state(conn, profile):
     # affect the ledger.
     loan_legs = conn.execute(
         """
-        SELECT transaction_id, role FROM loan_legs
-        WHERE profile_id = ? AND deleted_at IS NULL AND transaction_id IS NOT NULL
+        SELECT ll.transaction_id, ll.role, l.status AS loan_status
+        FROM loan_legs ll
+        JOIN loans l ON l.id = ll.loan_id
+        WHERE ll.profile_id = ? AND ll.deleted_at IS NULL
+          AND ll.transaction_id IS NOT NULL AND l.deleted_at IS NULL
         """,
         (profile["id"],),
     ).fetchall()
@@ -4486,3 +4490,56 @@ def loans_status(conn, workspace_ref, profile_ref):
 
 def loans_presets(conn):
     return core_loans.list_provider_presets()
+
+
+def loans_import(conn, workspace_ref, profile_ref, *, fmt, file, platform=None, preset=None, loan_id=None):
+    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    try:
+        with open(file, "r", encoding="utf-8") as handle:
+            file_text = handle.read()
+    except FileNotFoundError as exc:
+        raise AppError(f"Loan import file not found: {file}", code="not_found") from exc
+    result = core_loans_import.import_loan(
+        conn,
+        workspace["id"],
+        profile["id"],
+        fmt=fmt,
+        file_text=file_text,
+        platform=platform,
+        preset=preset,
+        loan_id=loan_id,
+    )
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
+    return result
+
+
+def loans_identify(conn, workspace_ref, profile_ref, *, addresses=None, txids=None, runtime_config=None):
+    # Reuse the wallet-ownership reconciler so a user can confirm a loan's
+    # collateral lock/return txs are theirs before tagging the legs.
+    return identify_wallet_owners(
+        conn,
+        workspace_ref,
+        profile_ref,
+        addresses=addresses,
+        txids=txids,
+        runtime_config=runtime_config,
+    )
+
+
+def loans_positions(conn, workspace_ref, profile_ref, loan_id):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    return core_loans.list_escrow_positions(conn, profile["id"], loan_id=loan_id)
+
+
+def loans_export(conn, workspace_ref, profile_ref, *, file=None):
+    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    report_profile = dict(profile)
+    report_profile["workspace_label"] = workspace["label"]
+    report = core_loans.build_steuerberater_report(conn, report_profile)
+    if file:
+        path = Path(file).expanduser()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+        return {"file": str(path.resolve()), "bytes": path.stat().st_size, "loans": len(report["loans"])}
+    return report

@@ -93,6 +93,7 @@ from .cli.handlers import (
 from .core import audit_package as core_audit_package
 from .core import chat_history as core_chat_history
 from .core import loans as core_loans
+from .core import loans_import as core_loans_import
 from .core import commercial as core_commercial
 from .core import attachments as core_attachments
 from .core import lightning as core_lightning
@@ -256,6 +257,8 @@ SUPPORTED_KINDS = (
     "ui.loans.delete",
     "ui.loans.add_leg",
     "ui.loans.delete_leg",
+    "ui.loans.import",
+    "ui.loans.export",
     "ui.backends.list",
     "ui.backends.options",
     "ui.backends.public_defaults",
@@ -6853,8 +6856,12 @@ def _loans_snapshot(ctx: DaemonContext) -> dict[str, Any]:
     if ctx.conn is None:
         raise AppError("database is not open", code="unavailable", retryable=True)
     _, profile = resolve_scope(ctx.conn, None, None)
+    loans = core_loans.list_loans(ctx.conn, profile["id"])
+    for loan in loans:
+        loan["advisory"] = core_loans.loan_advisory(loan)
+        loan["escrow_positions"] = core_loans.list_escrow_positions(ctx.conn, profile["id"], loan_id=loan["id"])
     return {
-        "loans": core_loans.list_loans(ctx.conn, profile["id"]),
+        "loans": loans,
         "actions": core_loans.loan_action_items(ctx.conn, profile["id"]),
         "presets": core_loans.list_provider_presets(),
         "enums": {
@@ -6951,6 +6958,35 @@ def _handle_loans_delete_leg(ctx: DaemonContext, request: dict[str, Any]) -> dic
         raise AppError("database is not open", code="unavailable", retryable=True)
     args = _coerce_args_dict(request.get("request_id"), request.get("args"))
     return loans_delete_leg(ctx.conn, None, None, _required_str_arg(args, "leg_id", "leg id"))
+
+
+def _handle_loans_import(ctx: DaemonContext, request: dict[str, Any]) -> dict[str, Any]:
+    if ctx.conn is None:
+        raise AppError("database is not open", code="unavailable", retryable=True)
+    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
+    workspace, profile = resolve_scope(ctx.conn, None, None)
+    result = core_loans_import.import_loan(
+        ctx.conn,
+        workspace["id"],
+        profile["id"],
+        fmt=_required_str_arg(args, "format", "import format"),
+        file_text=_required_str_arg(args, "file_text", "file text"),
+        platform=args.get("platform"),
+        preset=args.get("preset"),
+        loan_id=args.get("loan_id"),
+    )
+    invalidate_journals(ctx.conn, profile["id"])
+    ctx.conn.commit()
+    return result
+
+
+def _handle_loans_export(ctx: DaemonContext, request: dict[str, Any]) -> dict[str, Any]:
+    if ctx.conn is None:
+        raise AppError("database is not open", code="unavailable", retryable=True)
+    workspace, profile = resolve_scope(ctx.conn, None, None)
+    report_profile = dict(profile)
+    report_profile["workspace_label"] = workspace["label"]
+    return core_loans.build_steuerberater_report(ctx.conn, report_profile)
 
 
 def _handle_transaction_history(
@@ -8140,6 +8176,16 @@ def handle_request(
     if kind == "ui.loans.delete_leg":
         return (
             _with_request_id(build_envelope("ui.loans.delete_leg", _handle_loans_delete_leg(ctx, request)), request_id),
+            False,
+        )
+    if kind == "ui.loans.import":
+        return (
+            _with_request_id(build_envelope("ui.loans.import", _handle_loans_import(ctx, request)), request_id),
+            False,
+        )
+    if kind == "ui.loans.export":
+        return (
+            _with_request_id(build_envelope("ui.loans.export", _handle_loans_export(ctx, request)), request_id),
             False,
         )
 

@@ -11,7 +11,7 @@
  */
 
 import { useState } from "react";
-import { Banknote, HandCoins, Loader2, Plus, ShieldAlert } from "lucide-react";
+import { Banknote, FileDown, HandCoins, Info, Loader2, Plus, ShieldAlert, Upload } from "lucide-react";
 
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { useTranslation } from "react-i18next";
@@ -52,6 +53,7 @@ interface Loan {
   status: string;
   collateral_asset: string;
   legs?: LoanLeg[];
+  advisory?: string[];
 }
 
 interface LoanAction {
@@ -91,12 +93,18 @@ export function Loans() {
   const createLoan = useDaemonMutation("ui.loans.create");
   const addLeg = useDaemonMutation("ui.loans.add_leg");
   const updateLoan = useDaemonMutation("ui.loans.update");
+  const importLoan = useDaemonMutation("ui.loans.import");
+  const exportLoans = useDaemonMutation<{ loans: unknown[] }>("ui.loans.export");
 
   const [creating, setCreating] = useState(false);
   const [role, setRole] = useState("borrower");
   const [preset, setPreset] = useState<string>("");
   const [custody, setCustody] = useState("non_custodial_multisig");
   const [lockTxid, setLockTxid] = useState<Record<string, string>>({});
+  const [importing, setImporting] = useState(false);
+  const [importFmt, setImportFmt] = useState("csv");
+  const [importText, setImportText] = useState("");
+  const [banner, setBanner] = useState<string | null>(null);
 
   const data = snapshot.data?.data;
 
@@ -137,6 +145,30 @@ export function Loans() {
     updateLoan.mutate({ loan_id: loanId, status }, { onSuccess: refresh });
   };
 
+  const submitImport = () => {
+    if (!importText.trim()) return;
+    importLoan.mutate(
+      { format: importFmt, file_text: importText },
+      {
+        onSuccess: () => {
+          setImporting(false);
+          setImportText("");
+          setBanner(t("import.done"));
+          refresh();
+        },
+      },
+    );
+  };
+
+  const runExport = () => {
+    exportLoans.mutate(undefined, {
+      onSuccess: (envelope) => {
+        const count = envelope.data?.loans?.length ?? 0;
+        setBanner(t("export.done", { count }));
+      },
+    });
+  };
+
   return (
     <div className={screenShellClassName}>
       <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -151,11 +183,28 @@ export function Loans() {
             </p>
           </div>
         </div>
-        <Button onClick={() => setCreating((v) => !v)}>
-          <Plus className="size-4" />
-          {t("actions.newLoan")}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setImporting((v) => !v)}>
+            <Upload className="size-4" />
+            {t("import.button")}
+          </Button>
+          <Button variant="outline" onClick={runExport} disabled={exportLoans.isPending}>
+            <FileDown className="size-4" />
+            {t("export.button")}
+          </Button>
+          <Button onClick={() => setCreating((v) => !v)}>
+            <Plus className="size-4" />
+            {t("actions.newLoan")}
+          </Button>
+        </div>
       </header>
+
+      {banner && (
+        <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm text-muted-foreground">
+          <Info className="size-4 shrink-0" />
+          {banner}
+        </div>
+      )}
 
       {/* Signal-not-reassurance: actionable items only. A healthy loan is silent. */}
       {data.actions.length > 0 && (
@@ -251,6 +300,48 @@ export function Loans() {
         </Card>
       )}
 
+      {importing && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t("import.title")}</CardTitle>
+            <CardDescription>{t("import.subtitle")}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5 sm:max-w-xs">
+              <Label>{t("import.format")}</Label>
+              <Select value={importFmt} onValueChange={setImportFmt}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {["csv", "unchained", "hodlhodl"].map((f) => (
+                    <SelectItem key={f} value={f}>
+                      {t(`import.formats.${f}`, f)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Textarea
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+              placeholder={t("import.placeholder")}
+              rows={6}
+              className="font-mono text-xs"
+            />
+            <div className="flex gap-2">
+              <Button onClick={submitImport} disabled={importLoan.isPending || !importText.trim()}>
+                {importLoan.isPending && <Loader2 className="size-4 animate-spin" />}
+                {t("import.run")}
+              </Button>
+              <Button variant="ghost" onClick={() => setImporting(false)}>
+                {t("common:cancel", "Cancel")}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {data.loans.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-10 text-center text-muted-foreground">
@@ -295,6 +386,16 @@ export function Loans() {
                   </Select>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-3">
+                  {(loan.advisory ?? []).length > 0 && (
+                    <ul className="flex flex-col gap-1 rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-xs text-muted-foreground">
+                      {(loan.advisory ?? []).map((note, idx) => (
+                        <li key={idx} className="flex items-start gap-1.5">
+                          <Info className="mt-0.5 size-3 shrink-0 text-amber-500" />
+                          {note}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                   {(loan.legs ?? []).length > 0 && (
                     <ul className="flex flex-col gap-1 text-sm text-muted-foreground">
                       {(loan.legs ?? []).map((leg) => (

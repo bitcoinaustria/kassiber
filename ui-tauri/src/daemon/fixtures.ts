@@ -52,6 +52,10 @@ export const fixtures: Record<string, unknown> = {
             amount: 50_000_000,
           },
         ],
+        advisory: [
+          "The escrow key is generated once then discarded, so the non-disposal argument rests on pre-committed outcomes, not key retention (advisory, not BMF-confirmed).",
+        ],
+        escrow_positions: [],
       },
       {
         id: "loan:ledn-demo",
@@ -62,6 +66,10 @@ export const fixtures: Record<string, unknown> = {
         status: "open",
         collateral_asset: "BTC",
         legs: [],
+        advisory: [
+          "Rehypothecating custodial collateral: posting it may be argued to be a disposal at FMV (contested; no Austrian ruling). Treated here as a non-disposal by default — confirm with a Steuerberater.",
+        ],
+        escrow_positions: [],
       },
     ],
     actions: [
@@ -118,6 +126,8 @@ export const fixtures: Record<string, unknown> = {
   "ui.loans.delete": { deleted: "loan:firefish-demo" },
   "ui.loans.add_leg": { id: "leg:new", role: "collateral_lock" },
   "ui.loans.delete_leg": { deleted: "leg:lock-1" },
+  "ui.loans.import": { loan: { id: "loan:imported" }, legs: [], unresolved: [], warnings: [] },
+  "ui.loans.export": { loans: [{ id: "loan:firefish-demo" }, { id: "loan:ledn-demo" }], review_gate: "Advisory only." },
   status: {
     version: "0.0.0-ui-scaffold",
     data_root: "~/.kassiber",
