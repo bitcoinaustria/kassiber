@@ -13,13 +13,9 @@
       "swapsEmpty": "Keine ungepaarten Swap-Kandidaten. Sobald wahrscheinliche Asset- oder Rail-übergreifende Legs auftauchen, erscheinen sie hier.",
       "transfersEmpty": "Keine ungepaarten Übertragungs-Kandidaten. Sobald wahrscheinliche Wallet-Bewegungen mit gleichem Asset auftauchen, erscheinen sie hier."
     },
-    "view": {
-      "toggleAria": "Zwischen Prüfungs-Warteschlange und gepaarter Liste wechseln",
-      "review": "Zu prüfen",
-      "paired": "Gepaart"
-    },
     "paired": {
       "label": "Gepaart",
+      "backToReview": "Zurück zur Prüfung",
       "swapsTitle": "Gepaarte Swaps",
       "transfersTitle": "Gepaarte Übertragungen",
       "swapsDescription": "Asset- und Rail-übergreifende Legs, die du bereits als Swaps gepaart hast. Öffne eines, um Art oder Richtlinie zu ändern oder die Paarung aufzuheben.",
@@ -60,6 +56,8 @@
       "exact": "Exakt",
       "strong": "Stark",
       "conflicts": "Konflikte",
+      "history": "Verlauf",
+      "historyAria": "Gepaarten Verlauf anzeigen",
       "showAllAria": "Alle {{label}} anzeigen",
       "filterAria": "{{label}} filtern"
     },

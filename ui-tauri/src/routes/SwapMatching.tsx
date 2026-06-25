@@ -31,9 +31,11 @@ import {
 } from "react";
 import {
   AlertTriangle,
+  ArrowLeft,
   ArrowRight,
   Check,
   Eye,
+  History as HistoryIcon,
   Loader2,
   MoreHorizontal,
   Pencil,
@@ -431,10 +433,12 @@ type PairingView = "review" | "paired";
 export function SwapMatching() {
   const { t } = useTranslation("review");
   const [activeTab, setActiveTab] = useState<PairingReviewTab>("swaps");
-  // One state axis for the kind tabs (swaps/transfers) and one for the view
-  // (review/paired). The view toggle sits on the tab row and is shared across
-  // both tabs, so switching kind keeps you in whichever view you were reading.
+  // Swaps/Transfers is the only tab strip. The settled "History" list isn't a
+  // second tab — it opens from a History card in the review-queue metrics and
+  // returns via a back control. The view is shared across both tabs.
   const [view, setView] = useState<PairingView>("review");
+  const showHistory = () => setView("paired");
+  const showReview = () => setView("review");
 
   return (
     <div className={screenShellClassName}>
@@ -443,68 +447,29 @@ export function SwapMatching() {
         onValueChange={(value) => setActiveTab(value as PairingReviewTab)}
         className="space-y-3"
       >
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <TabsList className="justify-start overflow-x-auto">
-            <TabsTrigger value="swaps">{t("swap.tabs.swaps")}</TabsTrigger>
-            <TabsTrigger value="transfers">{t("swap.tabs.transfers")}</TabsTrigger>
-          </TabsList>
-          <PairingViewToggle value={view} onChange={setView} />
-        </div>
+        <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
+          <TabsTrigger value="swaps">{t("swap.tabs.swaps")}</TabsTrigger>
+          <TabsTrigger value="transfers">{t("swap.tabs.transfers")}</TabsTrigger>
+        </TabsList>
         <TabsContent value="swaps" className="mt-0">
           {activeTab === "swaps" ? (
             view === "review" ? (
-              <PairingReview mode="swaps" />
+              <PairingReview mode="swaps" onShowHistory={showHistory} />
             ) : (
-              <PairedSwaps mode="swaps" />
+              <PairedSwaps mode="swaps" onBackToReview={showReview} />
             )
           ) : null}
         </TabsContent>
         <TabsContent value="transfers" className="mt-0">
           {activeTab === "transfers" ? (
             view === "review" ? (
-              <PairingReview mode="transfers" />
+              <PairingReview mode="transfers" onShowHistory={showHistory} />
             ) : (
-              <PairedSwaps mode="transfers" />
+              <PairedSwaps mode="transfers" onBackToReview={showReview} />
             )
           ) : null}
         </TabsContent>
       </Tabs>
-    </div>
-  );
-}
-
-/** Segmented "to review / paired" switch, shown on the same row as the
- *  Swaps/Transfers tabs so the screen keeps a single level of tabs. */
-function PairingViewToggle({
-  value,
-  onChange,
-}: {
-  value: PairingView;
-  onChange: (value: PairingView) => void;
-}) {
-  const { t } = useTranslation("review");
-  return (
-    <div
-      className="inline-flex shrink-0 rounded-lg border bg-muted/40 p-0.5"
-      role="group"
-      aria-label={t("swap.view.toggleAria")}
-    >
-      {(["review", "paired"] as const).map((option) => (
-        <button
-          key={option}
-          type="button"
-          onClick={() => onChange(option)}
-          aria-pressed={value === option}
-          className={cn(
-            "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-            value === option
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {t(option === "review" ? "swap.view.review" : "swap.view.paired")}
-        </button>
-      ))}
     </div>
   );
 }
@@ -526,7 +491,13 @@ function pairFee(pair: PairedSwap) {
  * edit its kind / policy (``ui.transfers.update``) or unpaired
  * (``ui.transfers.unpair``).
  */
-function PairedSwaps({ mode }: { mode: PairingReviewMode }) {
+function PairedSwaps({
+  mode,
+  onBackToReview,
+}: {
+  mode: PairingReviewMode;
+  onBackToReview: () => void;
+}) {
   const { t } = useTranslation(["review", "common"]);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const wantSameAsset = mode === "transfers";
@@ -591,12 +562,23 @@ function PairedSwaps({ mode }: { mode: PairingReviewMode }) {
   return (
     <div className="min-w-0">
       <div className="overflow-hidden rounded-xl border bg-card">
-        <header className="flex flex-col gap-1 px-3 py-3 sm:px-4">
-          <p className="text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
-            {t("swap.paired.label")}
-          </p>
-          <h1 className="text-base font-semibold">{title}</h1>
-          <p className="max-w-3xl text-sm text-muted-foreground">{description}</p>
+        <header className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-4">
+          <div className="min-w-0 space-y-1">
+            <p className="text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
+              {t("swap.paired.label")}
+            </p>
+            <h1 className="text-base font-semibold">{title}</h1>
+            <p className="max-w-3xl text-sm text-muted-foreground">{description}</p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 shrink-0"
+            onClick={onBackToReview}
+          >
+            <ArrowLeft className="size-3.5" aria-hidden="true" />
+            <span>{t("swap.paired.backToReview")}</span>
+          </Button>
         </header>
 
         {actionError ? (
@@ -1009,7 +991,13 @@ function PairedDetailSheet({
   );
 }
 
-function PairingReview({ mode }: { mode: PairingReviewMode }) {
+function PairingReview({
+  mode,
+  onShowHistory,
+}: {
+  mode: PairingReviewMode;
+  onShowHistory: () => void;
+}) {
   const { t } = useTranslation(["review", "common"]);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const candidateType = mode === "transfers" ? "transfer" : "swap";
@@ -1075,6 +1063,17 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
 
   const { data, isLoading, isError, error, refetch, isFetching } =
     useDaemon<SuggestEnvelope>("ui.transfers.suggest", args);
+
+  // Count of already-paired pairs for this rail — powers the History card.
+  // Shares the cached query with the paired (History) view, so it's one fetch.
+  const pairedListQuery = useDaemon<PairsEnvelope>("ui.transfers.list");
+  const historyCount = useMemo(
+    () =>
+      (pairedListQuery.data?.data?.pairs ?? []).filter(
+        (pair) => pairIsSameAsset(pair) === (mode === "transfers"),
+      ).length,
+    [pairedListQuery.data, mode],
+  );
 
   const pairMutation = useDaemonMutation<unknown>("ui.transfers.pair");
   const dismissMutation = useDaemonMutation<unknown>("ui.transfers.dismiss");
@@ -1563,7 +1562,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
             </div>
           </header>
 
-          <div className="grid grid-cols-2 divide-x-0 divide-y divide-border border-t sm:grid-cols-4 sm:divide-x sm:divide-y-0">
+          <div className="grid grid-cols-2 divide-x-0 divide-y divide-border border-t sm:grid-cols-5 sm:divide-x sm:divide-y-0">
             <SwapQueueMetric
               label={t("swap.metric.candidates")}
               ariaLabel={t("swap.metric.showAllAria", { label: t("swap.metric.candidates") })}
@@ -1596,6 +1595,13 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
               label={t("swap.metric.conflicts")}
               value={counts.conflicts}
               tone={counts.conflicts ? "alert" : "neutral"}
+            />
+            <SwapQueueMetric
+              label={t("swap.metric.history")}
+              ariaLabel={t("swap.metric.historyAria")}
+              value={historyCount}
+              icon={<HistoryIcon className="size-3.5" aria-hidden="true" />}
+              onClick={onShowHistory}
             />
           </div>
 
@@ -2115,6 +2121,7 @@ function SwapQueueMetric({
   tone = "neutral",
   active = false,
   onClick,
+  icon,
 }: {
   label: string;
   ariaLabel?: string;
@@ -2122,6 +2129,7 @@ function SwapQueueMetric({
   tone?: "neutral" | "good" | "warning" | "alert";
   active?: boolean;
   onClick?: () => void;
+  icon?: ReactNode;
 }) {
   const toneClass = {
     neutral: "text-muted-foreground",
@@ -2137,7 +2145,8 @@ function SwapQueueMetric({
   );
   const content = (
     <>
-      <p className="text-xs font-medium text-muted-foreground">
+      <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        {icon}
         {label}
       </p>
       <p className={cn("text-xl font-semibold tabular-nums", active ? "text-primary" : toneClass)}>

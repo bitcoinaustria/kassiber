@@ -13,13 +13,9 @@
       "swapsEmpty": "No unpaired swap candidates. Once likely cross-asset or cross-rail legs show up, they will appear here.",
       "transfersEmpty": "No unpaired transfer candidates. Once likely same-asset wallet moves show up, they will appear here."
     },
-    "view": {
-      "toggleAria": "Switch between the review queue and the paired list",
-      "review": "To review",
-      "paired": "Paired"
-    },
     "paired": {
       "label": "Paired",
+      "backToReview": "Back to review",
       "swapsTitle": "Paired swaps",
       "transfersTitle": "Paired transfers",
       "swapsDescription": "Cross-asset and cross-rail legs you've already paired as swaps. Open one to change its kind or policy, or unpair it.",
@@ -60,6 +56,8 @@
       "exact": "Exact",
       "strong": "Strong",
       "conflicts": "Conflicts",
+      "history": "History",
+      "historyAria": "View paired history",
       "showAllAria": "Show all {{label}}",
       "filterAria": "Filter {{label}}"
     },
