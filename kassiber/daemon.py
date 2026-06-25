@@ -71,6 +71,8 @@ from .cli.handlers import (
     delete_transfer_rule,
     dismiss_transfer_candidate,
     invalidate_journals,
+    loans_mark,
+    loans_unmark,
     import_into_profile,
     import_into_wallet,
     list_saved_views_cli,
@@ -86,6 +88,7 @@ from .cli.handlers import (
 )
 from .core import audit_package as core_audit_package
 from .core import chat_history as core_chat_history
+from .core import loans as core_loans
 from .core import commercial as core_commercial
 from .core import attachments as core_attachments
 from .core import lightning as core_lightning
@@ -243,6 +246,9 @@ SUPPORTED_KINDS = (
     "ui.wallets.utxos",
     "ui.wallets.identify",
     "ui.wallets.identify_onchain",
+    "ui.loans.list",
+    "ui.loans.mark",
+    "ui.loans.unmark",
     "ui.backends.list",
     "ui.backends.options",
     "ui.backends.public_defaults",
@@ -6837,6 +6843,39 @@ def _handle_transaction_metadata_update(
     )
 
 
+def _loans_snapshot(ctx: DaemonContext) -> dict[str, Any]:
+    if ctx.conn is None:
+        raise AppError("database is not open", code="unavailable", retryable=True)
+    _, profile = resolve_scope(ctx.conn, None, None)
+    return {
+        "marks": core_loans.list_collateral_marks(ctx.conn, profile["id"]),
+        "open_locks": core_loans.open_collateral_locks(ctx.conn, profile["id"]),
+        "roles": list(core_loans.COLLATERAL_ROLES),
+        "role_labels": core_loans.ROLE_LABELS,
+    }
+
+
+def _handle_loans_mark(ctx: DaemonContext, request: dict[str, Any]) -> dict[str, Any]:
+    if ctx.conn is None:
+        raise AppError("database is not open", code="unavailable", retryable=True)
+    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
+    return loans_mark(
+        ctx.conn,
+        None,
+        None,
+        _required_str_arg(args, "txid", "transaction id"),
+        mark_as=_required_str_arg(args, "as", "mark target (collateral|returned)"),
+        note=args.get("note"),
+    )
+
+
+def _handle_loans_unmark(ctx: DaemonContext, request: dict[str, Any]) -> dict[str, Any]:
+    if ctx.conn is None:
+        raise AppError("database is not open", code="unavailable", retryable=True)
+    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
+    return loans_unmark(ctx.conn, None, None, _required_str_arg(args, "txid", "transaction id"))
+
+
 def _handle_transaction_history(
     ctx: DaemonContext,
     request: dict[str, Any],
@@ -7995,6 +8034,22 @@ def handle_request(
                 ),
                 request_id,
             ),
+            False,
+        )
+
+    if kind == "ui.loans.list":
+        return (
+            _with_request_id(build_envelope("ui.loans.list", _loans_snapshot(ctx)), request_id),
+            False,
+        )
+    if kind == "ui.loans.mark":
+        return (
+            _with_request_id(build_envelope("ui.loans.mark", _handle_loans_mark(ctx, request)), request_id),
+            False,
+        )
+    if kind == "ui.loans.unmark":
+        return (
+            _with_request_id(build_envelope("ui.loans.unmark", _handle_loans_unmark(ctx, request)), request_id),
             False,
         )
 

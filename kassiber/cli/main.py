@@ -58,6 +58,9 @@ from .handlers import (
     clear_chat_sessions_cli,
     create_saved_view_cli,
     create_transaction_pair,
+    loans_list,
+    loans_mark,
+    loans_unmark,
     create_transfer_rule,
     delete_chat_session_cli,
     delete_direct_swap_payout,
@@ -1398,6 +1401,38 @@ def build_parser() -> argparse.ArgumentParser:
     q_exclude.add_argument("--workspace")
     q_exclude.add_argument("--profile")
     q_exclude.add_argument("--transaction", required=True)
+
+    loans_p = sub.add_parser("loans", help="Mark transactions as Bitcoin-backed-loan collateral")
+    loans_sub = loans_p.add_subparsers(dest="loans_command", required=True)
+
+    loans_mark_p = loans_sub.add_parser(
+        "mark", help="Mark a transaction as loan collateral (out) or collateral returned (in)"
+    )
+    loans_mark_p.add_argument("--workspace")
+    loans_mark_p.add_argument("--profile")
+    loans_mark_p.add_argument("--txid", required=True, help="Transaction id or external_id to mark")
+    loans_mark_p.add_argument(
+        "--as",
+        dest="mark_as",
+        required=True,
+        choices=["collateral", "returned"],
+        help="'collateral' = outbound posted as collateral (not a disposal); "
+        "'returned' = collateral coming back (not an acquisition)",
+    )
+    loans_mark_p.add_argument("--note", dest="note")
+
+    loans_unmark_p = loans_sub.add_parser(
+        "unmark", help="Remove a transaction's collateral mark (reverts to a normal disposal/acquisition)"
+    )
+    loans_unmark_p.add_argument("--workspace")
+    loans_unmark_p.add_argument("--profile")
+    loans_unmark_p.add_argument("--txid", required=True, help="Transaction id or external_id to unmark")
+
+    loans_list_p = loans_sub.add_parser(
+        "list", help="List collateral marks and open locks (collateral that hasn't returned)"
+    )
+    loans_list_p.add_argument("--workspace")
+    loans_list_p.add_argument("--profile")
 
     transfers = sub.add_parser("transfers")
     transfers_sub = transfers.add_subparsers(dest="transfers_command", required=True)
@@ -3194,6 +3229,24 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                         candidate_type=getattr(args, "candidate_type", None),
                     ),
                 )
+    if args.command == "loans":
+        if args.loans_command == "mark":
+            return emit(
+                args,
+                loans_mark(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.txid,
+                    mark_as=args.mark_as,
+                    note=args.note,
+                ),
+            )
+        if args.loans_command == "unmark":
+            return emit(args, loans_unmark(conn, args.workspace, args.profile, args.txid))
+        if args.loans_command == "list":
+            return emit(args, loans_list(conn, args.workspace, args.profile))
+
     if args.command == "views":
         if args.views_command == "list":
             return emit(

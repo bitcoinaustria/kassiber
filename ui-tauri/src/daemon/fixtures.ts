@@ -33,7 +33,37 @@ const SOURCE_FUNDS_FIXTURE_EXPLORER_LINKS = [
   },
 ];
 
+// One demo collateral mark, keyed to an outbound mock transaction (`tx16`,
+// the Multisig Vault miner-fee send) so the "Collateral" badge lands on a real
+// row in mock mode. Both `marks` and `open_locks` carry it; `open_locks` is the
+// subset still locked (no matching release).
+const COLLATERAL_MARK_FIXTURE = {
+  transaction_id: "tx16",
+  role: "collateral_lock",
+  note: "Posted as collateral with Firefish.",
+  created_at: "2026-03-25T21:05:00Z",
+  direction: "outbound",
+  asset: "BTC",
+  amount: 0.0000341,
+  occurred_at: "2026-03-25T21:03:00Z",
+  description: "Miner fee · UTXO send",
+};
+
 export const fixtures: Record<string, unknown> = {
+  "ui.loans.list": {
+    marks: [COLLATERAL_MARK_FIXTURE],
+    open_locks: [COLLATERAL_MARK_FIXTURE],
+    roles: ["collateral_lock", "collateral_release"],
+    role_labels: {
+      collateral_lock: "loan collateral (out)",
+      collateral_release: "collateral returned (in)",
+    },
+  },
+  "ui.loans.mark": {
+    transaction_id: "tx16",
+    role: "collateral_lock",
+  },
+  "ui.loans.unmark": { transaction_id: "tx16" },
   status: {
     version: "0.0.0-ui-scaffold",
     data_root: "~/.kassiber",

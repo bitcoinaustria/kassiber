@@ -35,6 +35,7 @@ from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
 from ..core import imports as core_imports
 from ..core.lightning import cln as core_lightning_cln
+from ..core import loans as core_loans
 from ..core import metadata as core_metadata
 from ..core import output_inventory as core_output_inventory
 from ..core import ownership as core_ownership
@@ -3220,6 +3221,14 @@ def build_ledger_state(conn, profile):
             {"code": "ownership_index", "message": str(message)}
             for message in ownership_warnings or ()
         )
+    # Active collateral marks that classify a journal transaction by role: a
+    # collateral lock (outbound) and release (inbound) are non-events that keep
+    # the coins in the owned pool. Removing a mark reverts the transaction to its
+    # normal classification (a liquidated lock then books as the disposal it is).
+    loan_legs = conn.execute(
+        "SELECT transaction_id, role FROM loan_legs WHERE profile_id = ? AND deleted_at IS NULL",
+        (profile["id"],),
+    ).fetchall()
     engine_state = tax_engine.build_ledger_state(
         TaxEngineLedgerInputs(
             rows=rows,
@@ -3227,6 +3236,7 @@ def build_ledger_state(conn, profile):
             manual_pair_records=manual_pair_records,
             direct_payout_records=direct_payout_records,
             owned_index=owned_index,
+            loan_legs=loan_legs,
         )
     )
     return {
@@ -4328,3 +4338,66 @@ def cmd_context_set(conn, args):
     else:
         raise AppError("Provide --workspace and/or --profile")
     cmd_context_show(conn, args)
+
+
+# --- Bitcoin-backed loans --------------------------------------------------
+
+
+# `--as` value -> stored collateral role.
+_MARK_AS_TO_ROLE = {
+    "collateral": core_loans.COLLATERAL_LOCK,
+    "returned": core_loans.COLLATERAL_RELEASE,
+}
+
+
+def _resolve_loan_txid(conn, profile_id, txid):
+    row = conn.execute(
+        "SELECT id FROM transactions WHERE profile_id = ? AND (id = ? OR external_id = ?)",
+        (profile_id, txid, txid),
+    ).fetchone()
+    if row is None:
+        raise AppError(
+            f"Transaction '{txid}' not found in this book", code="not_found", details={"txid": txid}
+        )
+    return row["id"]
+
+
+def loans_mark(conn, workspace_ref, profile_ref, txid, *, mark_as, note=None):
+    """Mark a transaction as loan collateral (an outbound, not a disposal) or as
+    collateral returned (an inbound, not an acquisition)."""
+    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    role = _MARK_AS_TO_ROLE.get(mark_as)
+    if role is None:
+        raise AppError(
+            f"Invalid --as '{mark_as}'. Use one of: {', '.join(_MARK_AS_TO_ROLE)}",
+            code="validation",
+            details={"field": "as", "value": mark_as},
+        )
+    resolved = _resolve_loan_txid(conn, profile["id"], txid)
+    mark = core_loans.mark_collateral(
+        conn, workspace["id"], profile["id"], resolved, role=role, note=note, commit=False
+    )
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
+    return mark
+
+
+def loans_unmark(conn, workspace_ref, profile_ref, txid):
+    """Remove a transaction's collateral mark — it reverts to its normal tax
+    classification (a liquidated lock then books as the disposal it is)."""
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    resolved = _resolve_loan_txid(conn, profile["id"], txid)
+    result = core_loans.unmark_collateral(conn, profile["id"], resolved, commit=False)
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
+    return result
+
+
+def loans_list(conn, workspace_ref, profile_ref):
+    """All collateral marks plus the open locks (a lock with no offsetting
+    release) — the reconcile hint to confirm repaid vs. liquidated."""
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    return {
+        "marks": core_loans.list_collateral_marks(conn, profile["id"]),
+        "open_locks": core_loans.open_collateral_locks(conn, profile["id"]),
+    }

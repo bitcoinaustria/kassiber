@@ -27,6 +27,10 @@ from ..austrian import (
     kennzahl_for_disposal_category,
 )
 from ..tax_events import NormalizedTaxAssetInputs, build_tax_quarantine, normalize_tax_asset_inputs
+from ..loans import (
+    LOCK_SUPPRESS_ROLES as _LOAN_LOCK_SUPPRESS_ROLES,
+    RELEASE_SUPPRESS_ROLES as _LOAN_RELEASE_SUPPRESS_ROLES,
+)
 from .base import TaxEngineLedgerInputs, TaxEngineLedgerResult
 
 _RP2_MODULES = None
@@ -651,6 +655,12 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
 
         event = events_by_id[item_id]
         if event.direction == "inbound":
+            if getattr(event, "loan_leg_role", None) in _LOAN_RELEASE_SUPPRESS_ROLES:
+                # Collateral returning from escrow (repayment / recovery /
+                # surplus): the coins re-enter the pool they never left, so
+                # booking an acquisition would double-count. Non-event — skip
+                # emission and leave availability untouched.
+                continue
             kind = _normalized_event_kind(event)
             if (
                 kind not in _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE
@@ -698,6 +708,16 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
 
         needed = event.amount + event.fee
         if needed <= 0:
+            continue
+        loan_role = getattr(event, "loan_leg_role", None)
+        if loan_role in _LOAN_LOCK_SUPPRESS_ROLES:
+            # Outbound marked as loan collateral: the borrower still owns the
+            # coins (encumbered), so this is NOT a disposal. Skip emission and
+            # leave availability untouched — the lot stays in the global pool and
+            # a later release draws from it. No separate balance-bearing account,
+            # so the per-(exchange, holder) gate can never go negative here. If
+            # the collateral is liquidated instead of returned, the user removes
+            # the mark and this outbound books as the disposal it is.
             continue
         disposal_kind = _normalized_event_kind(event)
         if _kind_has_token(disposal_kind, _NON_SALE_DISPOSAL_KIND_TOKENS):
@@ -1208,6 +1228,7 @@ def _prepare_assets(
     *,
     at_swap_link_by_row_id: Mapping[str, str] | None = None,
     excluded_row_ids: set[str] | None = None,
+    loan_leg_by_transaction_id: Mapping[str, str] | None = None,
 ) -> list[tuple[NormalizedTaxAssetInputs, _RP2PreparedInput]]:
     prepared_by_asset: list[tuple[NormalizedTaxAssetInputs, _RP2PreparedInput]] = []
     excluded = excluded_row_ids or set()
@@ -1220,6 +1241,7 @@ def _prepare_assets(
             wallet_refs_by_id,
             pairs_by_asset.get(asset, []),
             at_swap_link_by_row_id=at_swap_link_by_row_id,
+            loan_leg_by_transaction_id=loan_leg_by_transaction_id,
         )
         prepared = _prepare_rp2_asset_input(profile, normalized_inputs, configuration)
         prepared_by_asset.append((normalized_inputs, prepared))
@@ -1339,6 +1361,22 @@ def _select_at_cross_asset_swap_links(
                     )
             else:
                 quarantines.extend(_swap_pair_quarantines(profile, pair, rows_by_id, reason_code))
+            quarantined_row_ids.update({out_id, in_id})
+            continue
+
+        # A leg Kassiber already quarantined in phase 1 (insufficient quantity,
+        # missing basis, unclassified income, …) must NOT be promoted to an
+        # at_swap_link. On the second prepare pass the marked row would bypass the
+        # single-asset quantity gate (which defers to the native cross-asset
+        # runner for at_swap rows) and carry the shortfall into compute_tax, where
+        # rp2's per-account BalanceSet raises an uncatchable "balance went
+        # negative" that aborts the WHOLE multi-asset report. Marking only the
+        # surviving leg is no better — it orphans the at_swap_link and trips the
+        # cross-asset validator instead. Quarantine the whole pair so neither leg
+        # reaches compute, preserving the original phase-1 reason for review.
+        leg_reason = quarantine_reasons.get(out_id) or quarantine_reasons.get(in_id)
+        if leg_reason is not None:
+            quarantines.extend(_swap_pair_quarantines(profile, pair, rows_by_id, leg_reason))
             quarantined_row_ids.update({out_id, in_id})
             continue
 
@@ -1982,6 +2020,16 @@ class GenericRP2TaxEngine:
             pairs_by_asset = defaultdict(list)
             for pair in all_pairs:
                 pairs_by_asset[pair["out"]["asset"]].append(pair)
+            # Active collateral marks classify their journal transaction by role:
+            # a collateral lock (outbound) and release (inbound) are non-events
+            # that keep the coins in the owned global pool (encumbered, NOT a
+            # separate balance-bearing account). Row-index access works for both
+            # sqlite3.Row and dict.
+            loan_leg_by_transaction_id = {
+                str(leg["transaction_id"]): str(leg["role"])
+                for leg in (inputs.loan_legs or ())
+                if leg["transaction_id"] is not None
+            }
 
             # Phase 1: normalize + build RP2 `InputData` for every asset. No `compute_tax`
             # runs here so the country's cross-asset validator can see every asset's
@@ -1993,6 +2041,7 @@ class GenericRP2TaxEngine:
                 pairs_by_asset,
                 configuration,
                 excluded_row_ids=blocked_payout_row_ids,
+                loan_leg_by_transaction_id=loan_leg_by_transaction_id,
             )
             swap_link_by_row_id, quarantined_row_ids, swap_quarantines = _select_at_cross_asset_swap_links(
                 self.profile,
@@ -2022,6 +2071,7 @@ class GenericRP2TaxEngine:
                     configuration,
                     at_swap_link_by_row_id=swap_link_by_row_id,
                     excluded_row_ids=excluded_row_ids,
+                    loan_leg_by_transaction_id=loan_leg_by_transaction_id,
                 )
 
             # Phase 2: cross-asset validation via the country hook. Catches invariants

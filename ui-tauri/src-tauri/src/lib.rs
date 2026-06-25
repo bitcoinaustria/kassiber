@@ -235,6 +235,9 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.secrets.change_passphrase",
     "ui.next_actions",
     "ui.wallets.utxos",
+    "ui.loans.list",
+    "ui.loans.mark",
+    "ui.loans.unmark",
     "ui.wallets.create",
     "ui.wallets.import_file",
     "ui.wallets.import_samourai",
@@ -2697,6 +2700,24 @@ mod tests {
             "ui.source_funds.recipients.create",
             "ui.source_funds.recipients.update",
             "ui.source_funds.recipients.delete",
+        ];
+        for kind in required {
+            assert!(
+                ALLOWED_DAEMON_KINDS.contains(kind),
+                "daemon kind missing from Tauri allowlist: {kind}"
+            );
+        }
+    }
+
+    #[test]
+    fn loans_daemon_kinds_are_in_allowlist() {
+        // Pin the collateral-mark daemon surface so the Transactions-screen mark
+        // actions come with an explicit allowlist update; otherwise packaged
+        // desktop mode returns kind_not_allowed and the feature breaks silently.
+        let required: &[&str] = &[
+            "ui.loans.list",
+            "ui.loans.mark",
+            "ui.loans.unmark",
         ];
         for kind in required {
             assert!(
