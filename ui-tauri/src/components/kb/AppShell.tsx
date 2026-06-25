@@ -19,6 +19,7 @@ import {
   BookOpen,
   Bug,
   Calculator,
+  ChevronDown,
   ChevronRight,
   ChevronsUpDown,
   ClipboardList,
@@ -38,6 +39,7 @@ import {
   Plane,
   Plus,
   RefreshCw,
+  RotateCcw,
   Search,
   Server,
   Settings,
@@ -1888,7 +1890,7 @@ function AppDashboardHeader({
 }: {
   meta: RouteMeta;
   onLock: () => void;
-  onRefresh: () => void;
+  onRefresh: (options?: { forceFull?: boolean }) => void;
   isRefreshing: boolean;
   daemonEnabled: boolean;
 }) {
@@ -2330,23 +2332,63 @@ function AppDashboardHeader({
           )}
       </div>
       <div className="flex min-w-0 items-center justify-end gap-2">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className={topNavIconButtonClassName}
-          aria-label={t("shell.refresh")}
-          title={t("shell.refreshTitle")}
-          onClick={() => onRefresh()}
-        >
-          <RefreshCw
-            className={cn(
-              "size-4",
-              isRefreshing && "animate-spin motion-reduce:animate-none",
-            )}
-            aria-hidden="true"
-          />
-        </Button>
+        {/* Split control: primary click runs an incremental book refresh; the
+            caret opens the other "bring the book current" actions. The book
+            refresh already chains source sync + auto-pair + journals, so this
+            is the single home for sync / refresh / reprocess. */}
+        <div className="flex items-center">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn(topNavIconButtonClassName, "rounded-r-none")}
+            aria-label={t("shell.refresh")}
+            title={t("shell.refreshTitle")}
+            onClick={() => onRefresh()}
+          >
+            <RefreshCw
+              className={cn(
+                "size-4",
+                isRefreshing && "animate-spin motion-reduce:animate-none",
+              )}
+              aria-hidden="true"
+            />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  topNavIconButtonClassName,
+                  "w-5 rounded-l-none border-l border-sidebar-border/60",
+                )}
+                aria-label={t("shell.refreshMenu.options")}
+                title={t("shell.refreshMenu.options")}
+              >
+                <ChevronDown className="size-3" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60">
+              <DropdownMenuItem onSelect={() => onRefresh()}>
+                <RefreshCw className="size-4" aria-hidden="true" />
+                {t("shell.refresh")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isProcessingJournals}
+                onSelect={() => runJournalProcessing()}
+              >
+                <ClipboardList className="size-4" aria-hidden="true" />
+                {t("shell.refreshMenu.reprocessJournals")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onRefresh({ forceFull: true })}>
+                <RotateCcw className="size-4" aria-hidden="true" />
+                {t("shell.refreshMenu.fullRescan")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
