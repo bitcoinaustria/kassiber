@@ -37,6 +37,7 @@ import {
   Moon,
   Plane,
   Plus,
+  RefreshCw,
   Search,
   Server,
   Settings,
@@ -165,6 +166,7 @@ import {
   type NativeMenuPayload,
 } from "./menuIntent";
 import { notificationTarget } from "./notificationRouting";
+import { planHeaderRefresh } from "./headerRefresh";
 
 // `labelKey` indexes the `nav` namespace (book.*); keep `href` as the stable id.
 type NavItem = {
@@ -896,6 +898,27 @@ export function AppShell() {
     ],
   );
 
+  // The header refresh button AND the Cmd/Ctrl+R / Cmd/Ctrl+Shift+R shortcuts
+  // route here, so the advertised shortcut behaves exactly like the button:
+  // surface the loader (un-minimize the sync card if it was sent to the
+  // background) and start the book refresh. `syncAll` no-ops while one is
+  // already running, so a mid-refresh trigger just re-opens the card.
+  const runHeaderRefresh = React.useCallback(
+    (options?: { forceFull?: boolean }) => {
+      const plan = planHeaderRefresh({
+        hasWorkspace: ensureWorkspaceForMenuAction(),
+        bookKey,
+      });
+      if (plan.reopenSyncCardForBook !== null) {
+        restoreSyncCardStore(plan.reopenSyncCardForBook);
+      }
+      if (plan.startRefresh) {
+        syncAll({ forceFull: Boolean(options?.forceFull) });
+      }
+    },
+    [bookKey, ensureWorkspaceForMenuAction, restoreSyncCardStore, syncAll],
+  );
+
   const openAddWalletConnection = React.useCallback(
     (reason: string) => {
       if (!ensureWorkspaceForMenuAction()) return;
@@ -922,12 +945,12 @@ export function AppShell() {
         runMenuJournalProcessing();
         return;
       }
-      runMenuWalletSync({ forceFull: action === "rescan-book" });
+      runHeaderRefresh({ forceFull: action === "rescan-book" });
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [openAddWalletConnection, runMenuJournalProcessing, runMenuWalletSync, t]);
+  }, [openAddWalletConnection, runHeaderRefresh, runMenuJournalProcessing, t]);
 
   React.useEffect(() => {
     if (identity) return;
@@ -1282,6 +1305,8 @@ export function AppShell() {
           <AppDashboardHeader
             meta={routeMeta}
             onLock={lockApp}
+            onRefresh={runHeaderRefresh}
+            isRefreshing={isSyncing}
             daemonEnabled={daemonEnabled}
           />
           <div className="flex min-h-0 flex-1">
@@ -1857,10 +1882,14 @@ function AppVersion() {
 function AppDashboardHeader({
   meta,
   onLock,
+  onRefresh,
+  isRefreshing,
   daemonEnabled,
 }: {
   meta: RouteMeta;
   onLock: () => void;
+  onRefresh: () => void;
+  isRefreshing: boolean;
   daemonEnabled: boolean;
 }) {
   const { t } = useTranslation(["chrome", "nav", "search", "settings"]);
@@ -2301,6 +2330,23 @@ function AppDashboardHeader({
           )}
       </div>
       <div className="flex min-w-0 items-center justify-end gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={topNavIconButtonClassName}
+          aria-label={t("shell.refresh")}
+          title={t("shell.refreshTitle")}
+          onClick={() => onRefresh()}
+        >
+          <RefreshCw
+            className={cn(
+              "size-4",
+              isRefreshing && "animate-spin motion-reduce:animate-none",
+            )}
+            aria-hidden="true"
+          />
+        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
