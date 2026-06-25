@@ -539,7 +539,18 @@
       "strikeCsv": "Strike CSV",
       "wasabiBundle": "Wasabi-JSON-Bundle",
       "samouraiSourceSet": "Samourai-Descriptor-Source-Set",
-      "csvOrJson": "CSV oder JSON"
+      "csvOrJson": "CSV oder JSON",
+      "genericLedger": "Excel- oder CSV-Journal"
+    },
+    "genericLedger": {
+      "templateHint": "Neu hier? Lade die Vorlage herunter, trag deine Transaktionen ein und importier die Datei.",
+      "downloadXlsx": "Excel-Vorlage herunterladen",
+      "downloadCsv": "Lieber CSV",
+      "templateWorking": "Wird vorbereitet…",
+      "saveTemplateTitle": "Journal-Vorlage speichern",
+      "templateReadyTitle": "Vorlage bereit",
+      "templateReadyBody": "Trag deine Transaktionen ein und importier die Datei hier.",
+      "templateFailedTitle": "Vorlage konnte nicht erstellt werden"
     },
     "defaultLabel": {
       "importedFile": "Importierte Datei"

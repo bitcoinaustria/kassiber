@@ -13,6 +13,7 @@ written.
 ## Supported import paths
 
 - generic JSON / CSV transaction files
+- generic ledger: a fill-in Excel (`.xlsx`) or CSV/TSV template for manual entry
 - BTCPay CSV / JSON exports
 - BTCPay Greenfield confirmed wallet history
 - Wasabi Wallet sanitized RPC/export bundles
@@ -92,6 +93,78 @@ For inbound transactions, explicit earn-like `kind` values such as `income`,
 `lending_interest`, and `routing_income` are preserved and later promoted into
 RP2 earn-like receipts during journal processing. Unlabeled inbound rows stay
 conservative and process as acquisitions.
+
+## Generic ledger import
+
+The generic ledger is a fill-in template for entering transactions by hand —
+useful when there is no provider export, or for one-off corrections. It is the
+column-mapped, Bitcoin-scoped front end over the generic import shape above, so
+you do not have to know Kassiber's internal field names.
+
+Write a blank template, then import the filled file:
+
+```
+kassiber wallets ledger-template --file ledger.xlsx   # or ledger.csv
+kassiber wallets import-ledger --workspace W --profile P --wallet WID --file ledger.xlsx
+```
+
+`ledger-template` does not need a database. The `.xlsx` template ships a
+`Transactions` sheet (with a `Type` dropdown) plus a `Legend` sheet; the `.csv`
+template is the header row with example rows. The importer reads `.xlsx` (via
+the `openpyxl` dependency) and CSV/TSV (delimiter sniffed). Legacy binary `.xls`
+is not read — save as `.xlsx` or CSV first. In the desktop UI the same flow is
+**Imports → Generic ledger**, which can download the template and import the
+file.
+
+### Columns
+
+| Column | Meaning |
+| --- | --- |
+| `Type` | What happened (see the table below). Required. |
+| `Date` | `YYYY-MM-DD`, a full timestamp, or `DD.MM.YYYY`. Required. |
+| `Received Amount` / `Received Asset` | What came in. For a Buy: the Bitcoin you bought. |
+| `Sent Amount` / `Sent Asset` | What went out. For a Buy: the fiat you paid. |
+| `Fee Amount` / `Fee Asset` | Optional. A blank `Fee Asset` means the fee is in Bitcoin (on-chain/network fee). A fiat fee must be in the same currency as the row's fiat amount. |
+| `Fiat Value` | Fair-market value in the book currency. Use it for Income/Mining/Spend/Gift rows that have no cash leg. |
+| `Counterparty` | Optional. Exchange, merchant, or person. |
+| `Note` | Optional free text, stored as the transaction description. |
+| `Tx-ID` | Optional but recommended — the dedup key. Without it, rows dedup by their economic fingerprint (date/direction/asset/amount/fee), so two genuinely identical rows need a `Tx-ID` to be kept apart. |
+
+Each row carries exactly **one Bitcoin leg** (`BTC`, `LBTC`, or `SATS`); the
+other side, when present, is the fiat/cash leg that becomes exact
+`exchange_execution` pricing. Crypto-to-crypto rows (Bitcoin on both sides) are
+rejected. Amounts are in BTC (e.g. `0.05000000`) unless the asset is `SATS`,
+in which case whole satoshis are converted. Numbers may use either a dot or a
+comma decimal separator (`0,05` and `3.000,00` are read the same as `0.05` and
+`3000.00`), so a sheet exported from a German/Austrian-locale spreadsheet
+imports correctly. Fiat columns must be in the book's currency — a EUR book
+rejects a row priced in JPY; import into a matching book or drop the fiat value
+and let Kassiber price the row.
+
+### Types
+
+The `Type` maps to a direction plus a tax `kind`. Income kinds become RP2
+earn-like receipts. The **outbound** disposals `Gift sent`/`Donation`/`Lost`/
+`Stolen` are deliberately routed to the non-sale-disposal quarantine for
+explicit review instead of being booked as ordinary market sales. `Gift
+received` is the inbound counterpart and is booked as a plain acquisition at the
+fair-market value you enter (`Fiat Value`), the same as a `Buy` without a cost.
+
+| Group | Types | Direction |
+| --- | --- | --- |
+| Acquire | Buy, Deposit, Gift received | inbound |
+| Dispose | Sell, Withdrawal, Spend | outbound |
+| Earn | Income, Mining, Staking, Interest, Airdrop, Fork | inbound |
+| Outflow (review) | Gift sent, Donation, Lost, Stolen | outbound |
+
+To record moving Bitcoin between two of your own wallets, import a `Withdrawal`
+into the source wallet and a `Deposit` into the destination wallet with the same
+`Tx-ID`; transfer matching pairs them into a non-taxable move.
+
+A row with an unrecognized `Type`, no Bitcoin leg, a missing `Date`, or a
+direction that contradicts its `Type` fails the whole import with a
+row-numbered, actionable message — fix the file and re-import (dedup makes
+re-imports safe).
 
 ## Privacy-hop evidence
 

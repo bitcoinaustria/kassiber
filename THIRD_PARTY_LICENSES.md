@@ -6,7 +6,7 @@ It is not meant to be a hand-maintained inventory of every transitive package in
 
 ## Core dependency credit
 
-Kassiber currently depends directly on the Kassiber-maintained [RP2 fork](https://github.com/bitcoinaustria/rp2) as its tax engine, [embit](https://github.com/diybitcoinhardware/embit) for descriptor derivation and Liquid support, [XlsxWriter](https://xlsxwriter.readthedocs.io/) for styled XLSX report exports, and [ReportLab](https://www.reportlab.com/) for styled PDF report exports.
+Kassiber currently depends directly on the Kassiber-maintained [RP2 fork](https://github.com/bitcoinaustria/rp2) as its tax engine, [embit](https://github.com/diybitcoinhardware/embit) for descriptor derivation and Liquid support, [XlsxWriter](https://xlsxwriter.readthedocs.io/) for styled XLSX report exports and the generic-ledger import template, [openpyxl](https://openpyxl.readthedocs.io/) for reading filled-in `.xlsx` generic-ledger imports, and [ReportLab](https://www.reportlab.com/) for styled PDF report exports.
 The in-development Tauri frontend also depends directly on TanStack Table for
 interactive local data grids.
 The descriptor connection screen uses local-only QR scanner libraries for
@@ -19,7 +19,8 @@ xpubs, blinding keys, and reveal payloads remain SQLCipher-backed.
 | --- | --- | --- | --- |
 | `rp2` | `git+https://github.com/bitcoinaustria/rp2.git@e0a88d8b3ff423cb88e3851fffcd8c08b56c683c` | Tax engine used by journal processing and tax-aware reports | Apache-2.0 |
 | `embit` | `>=0.8.0` | Bitcoin/Liquid descriptor parsing, script derivation, Liquid confidential output handling | MIT |
-| `XlsxWriter` | `>=3.2,<4` | Styled `.xlsx` workbook export for practitioner-facing reports | BSD-2-Clause |
+| `XlsxWriter` | `>=3.2,<4` | Styled `.xlsx` workbook export for practitioner-facing reports and the generic-ledger import template | BSD-2-Clause |
+| `openpyxl` | `>=3.1,<4` | Reads filled-in `.xlsx` files for the generic-ledger manual importer | MIT |
 | `reportlab` | `>=4.4,<5` | Styled PDF rendering for Austrian and source-of-funds report exports | BSD |
 | `sqlcipher3` | `>=0.6.2,<1` | Python binding around SQLCipher 4; wheels bundle a SQLCipher community build for at-rest database encryption | Zlib (binding) + BSD-style (SQLCipher community) |
 | `pyrage` | `>=1.3,<2` | In-process `age` implementation used by the `tar | age` backup format when no system `age`/`rage` binary is available | Apache-2.0 / MIT |

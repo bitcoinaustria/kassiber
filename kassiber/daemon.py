@@ -102,6 +102,7 @@ from .core import source_funds_coverage as core_source_funds_coverage
 from .core import source_funds_recipients as core_source_funds_recipients
 from .core import accounts as core_accounts
 from .core import imports as core_imports
+from . import importers as importers_module
 from .core import maintenance as core_maintenance
 from .core import metadata as core_metadata
 from .core import rates as core_rates
@@ -233,6 +234,7 @@ SUPPORTED_KINDS = (
     "ui.transactions.search",
     "ui.transactions.export_csv",
     "ui.transactions.export_xlsx",
+    "ui.transactions.ledger_template",
     "ui.transactions.metadata.update",
     "ui.transactions.history",
     "ui.transactions.history.revert",
@@ -5482,6 +5484,7 @@ _UI_WALLET_SOURCE_FORMATS = {
     "pocketbitcoin_csv",
     "strike_csv",
     "wasabi_bundle",
+    "generic_ledger",
 }
 
 
@@ -6013,6 +6016,31 @@ def _create_wallet_payload(
         config=config,
     )
     return {"wallet": wallet}
+
+
+def _ledger_template_payload(
+    ctx: DaemonContext,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    """Write the generic-ledger fill-in template to a managed export path."""
+    requested = (_optional_str_arg(args, "format") or "xlsx").strip().lower()
+    if requested in {"xlsx", "xlsm"}:
+        suffix = ".xlsx"
+        fmt = "xlsx"
+    elif requested == "csv":
+        suffix = ".csv"
+        fmt = "csv"
+    else:
+        raise AppError(
+            f"Unsupported template format '{requested}'",
+            code="validation",
+            hint="Use xlsx or csv.",
+            retryable=False,
+        )
+    path = _managed_report_export_path(ctx.data_root, "kassiber-ledger-template", suffix)
+    payload = importers_module.write_generic_ledger_template(str(path), fmt)
+    payload["filename"] = Path(payload["file"]).name
+    return payload
 
 
 def _import_wallet_file_payload(
@@ -9135,6 +9163,21 @@ def handle_request(
                     "ui.wallets.create",
                     _create_wallet_payload(
                         ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.transactions.ledger_template":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.transactions.ledger_template",
+                    _ledger_template_payload(
+                        ctx,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),
                 ),

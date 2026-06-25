@@ -195,6 +195,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.reports.export_audit_package",
     "ui.transactions.export_csv",
     "ui.transactions.export_xlsx",
+    "ui.transactions.ledger_template",
     "ui.journals.snapshot",
     "ui.journals.events.list",
     "ui.journals.quarantine",

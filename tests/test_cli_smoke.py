@@ -4871,5 +4871,227 @@ class AccountBucketBehaviorTest(unittest.TestCase):
             self.assertEqual(payload["error"]["code"], "not_found")
 
 
+_GENERIC_LEDGER_CSV = """Type,Date,Received Amount,Received Asset,Sent Amount,Sent Asset,Fee Amount,Fee Asset,Fiat Value,Counterparty,Note,Tx-ID
+Buy,2026-01-15,0.05000000,BTC,3000.00,EUR,3.50,EUR,,Coinfinity,First stack,ledger-buy-1
+Sell,2026-02-10,2200.00,EUR,0.03000000,BTC,1.00,EUR,,Kraken,Took some profit,ledger-sell-1
+Mining,2026-03-10,0.00050000,BTC,,,,,32.50,Solo pool,Block reward,ledger-mining-1
+Income,2026-03-20,250000,SATS,,,,,160.00,Freelance,Invoice in sats,ledger-income-1
+Withdrawal,2026-04-01,,,0.02000000,BTC,0.00002000,BTC,,,Moved to cold storage,ledger-withdrawal-1
+Gift sent,2026-05-01,,,0.00100000,BTC,,,,,Birthday gift,ledger-gift-1
+"""
+
+_GENERIC_LEDGER_BAD_TYPE_CSV = """Type,Date,Received Amount,Received Asset,Sent Amount,Sent Asset,Fee Amount,Fee Asset,Fiat Value,Counterparty,Note,Tx-ID
+Margin Trade,2026-01-15,0.05000000,BTC,3000.00,EUR,,,,,,bad-1
+"""
+
+
+class GenericLedgerImportTest(unittest.TestCase):
+    """Generic (manual) ledger template generation + .xlsx/CSV import."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="kassiber-generic-ledger-")
+        self.data_root = Path(self._tmp.name) / "data"
+        self._cli("init")
+        self._cli("workspaces", "create", "Manual")
+        self._cli(
+            "profiles", "create",
+            "--workspace", "Manual",
+            "--fiat-currency", "EUR",
+            "--tax-country", "generic",
+            "Book",
+        )
+        self._cli(
+            "wallets", "create",
+            "--workspace", "Manual",
+            "--profile", "Book",
+            "--label", "Manual Ledger",
+            "--kind", "custom",
+        )
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _cli(self, *args):
+        payload, code = _run(self.data_root, *args)
+        if code != 0:
+            self.fail(
+                f"CLI exited {code} for {args!r}; envelope: {json.dumps(payload)[:400]}"
+            )
+        self.assertEqual(payload.get("schema_version"), 1)
+        self.assertIn("data", payload)
+        return payload
+
+    def _import(self, file_path):
+        return self._cli(
+            "wallets", "import-ledger",
+            "--workspace", "Manual",
+            "--profile", "Book",
+            "--wallet", "Manual Ledger",
+            "--file", str(file_path),
+        )
+
+    def _records_by_external_id(self):
+        payload = self._cli(
+            "transactions", "list",
+            "--workspace", "Manual",
+            "--profile", "Book",
+            "--wallet", "Manual Ledger",
+        )
+        return {row["external_id"]: row for row in payload["data"]}
+
+    def test_template_generates_both_formats_without_a_database(self):
+        # ledger-template is a no-DB writer; it must work before any book exists.
+        for suffix in ("xlsx", "csv"):
+            target = Path(self._tmp.name) / f"template.{suffix}"
+            payload = self._cli("wallets", "ledger-template", "--file", str(target))
+            self.assertEqual(payload["kind"], "wallets.ledger-template")
+            self.assertEqual(payload["data"]["format"], suffix)
+            self.assertTrue(target.exists())
+            self.assertIn("Type", payload["data"]["columns"])
+
+    def test_xlsx_template_round_trips_through_import(self):
+        target = Path(self._tmp.name) / "round-trip.xlsx"
+        self._cli("wallets", "ledger-template", "--file", str(target))
+        payload = self._import(target)
+        # The bundled example rows all import cleanly.
+        self.assertEqual(payload["data"]["input_format"], "generic_ledger")
+        self.assertEqual(payload["data"]["imported"], 7)
+
+    def test_csv_import_maps_kinds_amounts_and_pricing(self):
+        ledger = Path(self._tmp.name) / "ledger.csv"
+        ledger.write_text(_GENERIC_LEDGER_CSV, encoding="utf-8")
+        payload = self._import(ledger)
+        self.assertEqual(payload["data"]["imported"], 6)
+        self.assertEqual(payload["data"]["skipped"], 0)
+
+        rows = self._records_by_external_id()
+        # Buy: exact exchange execution, fiat fee folded into cost basis.
+        buy = rows["ledger-buy-1"]
+        self.assertEqual(buy["direction"], "inbound")
+        self.assertEqual(buy["kind"], "buy")
+        self.assertEqual(buy["amount_msat"], 5_000_000_000)
+        self.assertEqual(buy["pricing_source_kind"], "exchange_execution")
+        self.assertEqual(buy["pricing_pair"], "BTC-EUR")
+        self.assertEqual(buy["fiat_value_exact"], "3003.50")
+        # Sell: fiat fee netted out of proceeds.
+        sell = rows["ledger-sell-1"]
+        self.assertEqual(sell["direction"], "outbound")
+        self.assertEqual(sell["kind"], "sell")
+        self.assertEqual(sell["fiat_value_exact"], "2199.00")
+        # SATS amount converts to BTC; income kept as an earn kind.
+        income = rows["ledger-income-1"]
+        self.assertEqual(income["kind"], "income")
+        self.assertEqual(income["amount_msat"], 250_000_000)
+        # Withdrawal carries the on-chain fee on the Bitcoin leg.
+        withdrawal = rows["ledger-withdrawal-1"]
+        self.assertEqual(withdrawal["kind"], "withdrawal")
+        self.assertEqual(withdrawal["fee_msat"], 2_000_000)
+        # Gift sent stays a non-sale disposal kind for review.
+        self.assertEqual(rows["ledger-gift-1"]["kind"], "gift")
+
+    def test_sats_leg_blank_fee_asset_stays_in_sats(self):
+        # Regression: a blank Fee Asset on a SATS-denominated leg must read the
+        # fee in sats (the leg's unit), not default to whole BTC. A 500-sat fee
+        # is 500_000 msat, not 500 BTC (5e13 msat).
+        ledger = Path(self._tmp.name) / "sats-fee.csv"
+        ledger.write_text(
+            "Type,Date,Sent Amount,Sent Asset,Fee Amount,Tx-ID\n"
+            "Withdrawal,2026-04-01,250000,SATS,500,sats-fee-1\n",
+            encoding="utf-8",
+        )
+        self._import(ledger)
+        row = self._records_by_external_id()["sats-fee-1"]
+        self.assertEqual(row["amount_msat"], 250_000_000)  # 250k sats = 0.0025 BTC
+        self.assertEqual(row["fee_msat"], 500_000)  # 500 sats, not 500 BTC
+
+    def test_reimport_is_idempotent(self):
+        ledger = Path(self._tmp.name) / "ledger.csv"
+        ledger.write_text(_GENERIC_LEDGER_CSV, encoding="utf-8")
+        self._import(ledger)
+        again = self._import(ledger)
+        self.assertEqual(again["data"]["imported"], 0)
+        self.assertEqual(again["data"]["skipped"], 6)
+
+    def test_unknown_type_aborts_with_a_validation_error(self):
+        ledger = Path(self._tmp.name) / "bad.csv"
+        ledger.write_text(_GENERIC_LEDGER_BAD_TYPE_CSV, encoding="utf-8")
+        payload, code = _run(
+            self.data_root,
+            "wallets", "import-ledger",
+            "--workspace", "Manual",
+            "--profile", "Book",
+            "--wallet", "Manual Ledger",
+            "--file", str(ledger),
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+        self.assertIn("unknown Type", payload["error"]["message"])
+
+    def test_european_decimal_comma_and_date_are_parsed(self):
+        # German/Austrian hand entry: comma decimals, dot thousands, DD.MM.YYYY.
+        ledger = Path(self._tmp.name) / "de-locale.csv"
+        ledger.write_text(
+            "Type;Date;Received Amount;Received Asset;Sent Amount;Sent Asset;Fee Amount;Fee Asset;Tx-ID\n"
+            "Buy;15.01.2026;0,05000000;BTC;3.000,00;EUR;3,50;EUR;de-buy-1\n",
+            encoding="utf-8",
+        )
+        self._import(ledger)
+        row = self._records_by_external_id()["de-buy-1"]
+        self.assertEqual(row["amount_msat"], 5_000_000_000)  # 0.05 BTC, not 5,000,000
+        self.assertEqual(row["occurred_at"], "2026-01-15T00:00:00Z")
+        self.assertEqual(row["fiat_value_exact"], "3003.50")  # 3000,00 + 3,50 fee
+
+    def test_header_aliases_are_accepted(self):
+        ledger = Path(self._tmp.name) / "aliases.csv"
+        ledger.write_text(
+            "Transaction Type,Timestamp,Received Amount,Received Cur.,Sent Amount,Sent Cur.,Tx-ID\n"
+            "Buy,2026-01-15,0.05,BTC,3000,EUR,alias-buy-1\n",
+            encoding="utf-8",
+        )
+        payload = self._import(ledger)
+        self.assertEqual(payload["data"]["imported"], 1)
+        self.assertEqual(self._records_by_external_id()["alias-buy-1"]["kind"], "buy")
+
+    def test_no_txid_rows_reimport_without_duplicates(self):
+        ledger = Path(self._tmp.name) / "no-txid.csv"
+        ledger.write_text(
+            "Type,Date,Received Amount,Received Asset,Sent Amount,Sent Asset,Fiat Value\n"
+            "Mining,2026-03-10,0.00050000,BTC,,,32.50\n"
+            "Spend,2026-04-15,,,0.00100000,BTC,65.00\n",
+            encoding="utf-8",
+        )
+        first = self._import(ledger)
+        self.assertEqual(first["data"]["imported"], 2)
+        # Re-importing (even with the rows reordered) must not double-book, since
+        # identity falls back to the economic fingerprint, not the row position.
+        ledger.write_text(
+            "Type,Date,Received Amount,Received Asset,Sent Amount,Sent Asset,Fiat Value\n"
+            "Spend,2026-04-15,,,0.00100000,BTC,65.00\n"
+            "Mining,2026-03-10,0.00050000,BTC,,,32.50\n",
+            encoding="utf-8",
+        )
+        again = self._import(ledger)
+        self.assertEqual(again["data"]["imported"], 0)
+        self.assertEqual(again["data"]["skipped"], 2)
+
+    def test_mismatched_fiat_fee_currency_is_rejected(self):
+        ledger = Path(self._tmp.name) / "fee-mismatch.csv"
+        ledger.write_text(
+            "Type,Date,Received Amount,Received Asset,Sent Amount,Sent Asset,Fee Amount,Fee Asset,Tx-ID\n"
+            "Buy,2026-01-15,0.05,BTC,3000,EUR,5,USD,fee-bad-1\n",
+            encoding="utf-8",
+        )
+        payload, code = _run(
+            self.data_root,
+            "wallets", "import-ledger",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+            "--file", str(ledger),
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(payload["error"]["code"], "validation")
+        self.assertIn("does not match", payload["error"]["message"])
+
+
 if __name__ == "__main__":
     unittest.main()
