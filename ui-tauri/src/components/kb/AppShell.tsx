@@ -19,6 +19,7 @@ import {
   BookOpen,
   Bug,
   Calculator,
+  ChevronDown,
   ChevronRight,
   ChevronsUpDown,
   ClipboardList,
@@ -37,6 +38,8 @@ import {
   Moon,
   Plane,
   Plus,
+  RefreshCw,
+  RotateCcw,
   Search,
   Server,
   Settings,
@@ -165,6 +168,7 @@ import {
   type NativeMenuPayload,
 } from "./menuIntent";
 import { notificationTarget } from "./notificationRouting";
+import { planHeaderRefresh } from "./headerRefresh";
 
 // `labelKey` indexes the `nav` namespace (book.*); keep `href` as the stable id.
 type NavItem = {
@@ -896,6 +900,27 @@ export function AppShell() {
     ],
   );
 
+  // The header refresh button AND the Cmd/Ctrl+R / Cmd/Ctrl+Shift+R shortcuts
+  // route here, so the advertised shortcut behaves exactly like the button:
+  // surface the loader (un-minimize the sync card if it was sent to the
+  // background) and start the book refresh. `syncAll` no-ops while one is
+  // already running, so a mid-refresh trigger just re-opens the card.
+  const runHeaderRefresh = React.useCallback(
+    (options?: { forceFull?: boolean }) => {
+      const plan = planHeaderRefresh({
+        hasWorkspace: ensureWorkspaceForMenuAction(),
+        bookKey,
+      });
+      if (plan.reopenSyncCardForBook !== null) {
+        restoreSyncCardStore(plan.reopenSyncCardForBook);
+      }
+      if (plan.startRefresh) {
+        syncAll({ forceFull: Boolean(options?.forceFull) });
+      }
+    },
+    [bookKey, ensureWorkspaceForMenuAction, restoreSyncCardStore, syncAll],
+  );
+
   const openAddWalletConnection = React.useCallback(
     (reason: string) => {
       if (!ensureWorkspaceForMenuAction()) return;
@@ -922,12 +947,12 @@ export function AppShell() {
         runMenuJournalProcessing();
         return;
       }
-      runMenuWalletSync({ forceFull: action === "rescan-book" });
+      runHeaderRefresh({ forceFull: action === "rescan-book" });
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [openAddWalletConnection, runMenuJournalProcessing, runMenuWalletSync, t]);
+  }, [openAddWalletConnection, runHeaderRefresh, runMenuJournalProcessing, t]);
 
   React.useEffect(() => {
     if (identity) return;
@@ -1282,6 +1307,8 @@ export function AppShell() {
           <AppDashboardHeader
             meta={routeMeta}
             onLock={lockApp}
+            onRefresh={runHeaderRefresh}
+            isRefreshing={isSyncing}
             daemonEnabled={daemonEnabled}
           />
           <div className="flex min-h-0 flex-1">
@@ -1857,10 +1884,14 @@ function AppVersion() {
 function AppDashboardHeader({
   meta,
   onLock,
+  onRefresh,
+  isRefreshing,
   daemonEnabled,
 }: {
   meta: RouteMeta;
   onLock: () => void;
+  onRefresh: (options?: { forceFull?: boolean }) => void;
+  isRefreshing: boolean;
   daemonEnabled: boolean;
 }) {
   const { t } = useTranslation(["chrome", "nav", "search", "settings"]);
@@ -2301,6 +2332,63 @@ function AppDashboardHeader({
           )}
       </div>
       <div className="flex min-w-0 items-center justify-end gap-2">
+        {/* Split control: primary click runs an incremental book refresh; the
+            caret opens the other "bring the book current" actions. The book
+            refresh already chains source sync + auto-pair + journals, so this
+            is the single home for sync / refresh / reprocess. */}
+        <div className="flex items-center">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn(topNavIconButtonClassName, "rounded-r-none")}
+            aria-label={t("shell.refresh")}
+            title={t("shell.refreshTitle")}
+            onClick={() => onRefresh()}
+          >
+            <RefreshCw
+              className={cn(
+                "size-4",
+                isRefreshing && "animate-spin motion-reduce:animate-none",
+              )}
+              aria-hidden="true"
+            />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  topNavIconButtonClassName,
+                  "w-5 rounded-l-none border-l border-sidebar-border/60",
+                )}
+                aria-label={t("shell.refreshMenu.options")}
+                title={t("shell.refreshMenu.options")}
+              >
+                <ChevronDown className="size-3" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60">
+              <DropdownMenuItem onSelect={() => onRefresh()}>
+                <RefreshCw className="size-4" aria-hidden="true" />
+                {t("shell.refresh")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isProcessingJournals}
+                onSelect={() => runJournalProcessing()}
+              >
+                <ClipboardList className="size-4" aria-hidden="true" />
+                {t("shell.refreshMenu.reprocessJournals")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onRefresh({ forceFull: true })}>
+                <RotateCcw className="size-4" aria-hidden="true" />
+                {t("shell.refreshMenu.fullRescan")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button

@@ -10,6 +10,13 @@
     "overviewLink": "Kassiber-Übersicht",
     "back": "Zurück",
     "forward": "Vorwärts",
+    "refresh": "Bücher-Set aktualisieren",
+    "refreshTitle": "Bücher-Set aktualisieren (Cmd/Ctrl+R)",
+    "refreshMenu": {
+      "options": "Aktualisierungsoptionen",
+      "reprocessJournals": "Journale neu verarbeiten",
+      "fullRescan": "Vollständiger Rescan"
+    },
     "switchBooksLabel": "Bücher wechseln. Aktuelle Bücher: {{book}}",
     "booksFallback": "Lokale Bücher",
     "fallbackTitle": "Kassiber",

@@ -2,8 +2,6 @@
   "dashboard": {
     "eyebrow": "Wallets and sources",
     "title": "Wallets",
-    "refreshBook": "Refresh book",
-    "refreshing": "Refreshing",
     "addWallet": "Add wallet"
   },
   "metrics": {
