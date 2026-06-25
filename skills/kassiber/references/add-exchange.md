@@ -31,12 +31,17 @@ Ask these in order. Record answers straight into the spec template
 `docs/exchanges/<slug>.md` first. Keep secrets (API keys, account numbers) out
 of the spec and out of chat.
 
-### 1. Name
+### 1. Name and logo
 
 - Display name (e.g. "Coinfinity") and a lowercase **slug** (e.g. `coinfinity`).
 - The slug is load-bearing — it becomes the `<slug>_csv` source format, the
   `<slug>` wallet kind, the `import-<slug>` CLI command, and the
   `pricing_provider` string. Pick it once; it is hard to change later.
+- **Logo:** find the provider's official brand mark, preferring a **vector
+  (SVG)** so the connection tile stays crisp at any size (see implementation
+  step 5). Look it up from their press/brand kit or site; record the source URL
+  in the spec. If no clean logo is available, the catalog falls back to a
+  generated monogram. Respect the provider's trademark usage terms.
 
 ### 2. Custodial or non-custodial?
 
@@ -174,27 +179,59 @@ end-to-end and to pass the drift test.
    matching the other CSV-source kinds).
 
 3. **`kassiber/daemon.py`** — add `<slug>_csv` to `_UI_WALLET_SOURCE_FORMATS`,
-   and add the import dispatch branch (mirror the `strike_csv` / `21bitcoin_csv`
-   block, choosing `full` vs `relevant` default per the custodial decision).
+   and add the daemon import dispatch branch (mirror the `strike_csv` /
+   `21bitcoin_csv` block, choosing `full` vs `relevant` default per the
+   custodial decision).
 
-4. **`kassiber/cli/main.py`** — add the `wallets import-<slug>` subparser
-   (`--workspace`, `--profile`, `--wallet`, `--file` required; add `--mode` if
-   the provider uses relevant/full).
+4. **`kassiber/cli/main.py`** — two edits in this one file. Add the
+   `wallets import-<slug>` **subparser** (`--workspace`, `--profile`,
+   `--wallet`; `--file` required; add `--mode` if the provider uses
+   relevant/full), and add the matching **dispatch branch** in the wallets
+   command handler that calls `import_into_wallet(conn, args.workspace,
+   args.profile, args.wallet, args.file, "<slug>_csv", <mode>)`. Mirror the
+   existing `import-strike` / `import-21bitcoin` blocks — both the parser and
+   the dispatch live in `main.py`; there is no separate `handlers.py` branch for
+   imports.
 
-5. **`kassiber/cli/handlers.py`** — add the `import-<slug>` handler branch that
-   dispatches to the import coordinator.
+5. **`ui-tauri/src/assets/integrations/<slug>.svg`** — the connection logo.
+   Prefer a **vector** (`.svg`): it stays crisp at every size and the existing
+   assets are almost all tiny SVGs (~0.3–3 KB). Source the official brand mark
+   from the provider's press/brand kit or site, optimize it (e.g. SVGO; strip
+   width/height so `viewBox` drives scaling), and commit it under this name.
+   Only fall back to a trimmed, transparent `.png`/`.jpg` (like `strike.jpg` /
+   `21bitcoin.png`) when no usable vector exists. If you cannot get a clean logo
+   at all, use the generated `sourceIcon("XX", "#bg", "#fg")` monogram in the
+   catalog entry instead of shipping a blurry raster. Keep it square-ish so it
+   fits the 32 px tile; respect the provider's trademark usage terms.
 
-6. **`ui-tauri/src/lib/connectionCatalog.tsx`** — add a catalog entry. A
-   `status: "ready"` entry must reference the real `walletKind` and
-   `sourceFormat`, or `tests/test_connection_catalog_drift.py` fails. Add the
-   `ConnectionSourceFormat` union member and an icon. Also add the English +
-   German connection strings (the catalog is user-facing UI — follow
-   [docs/reference/i18n.md](../../../docs/reference/i18n.md); en/de in lockstep).
+6. **`ui-tauri/src/lib/connectionCatalog.tsx`** — add the catalog entry so it
+   shows in the desktop Add Connection modal. Steps:
+   - `import <slug>Icon from "@/assets/integrations/<slug>.svg";` at the top.
+   - Add the `<slug>_csv` member to the `ConnectionSourceFormat` union.
+   - Add a `CONNECTION_SOURCES` entry mirroring `strike`: `id`, `title`,
+     `description`, `category: "exchanges"`, `image: <slug>Icon`,
+     `imageClassName: "size-8 rounded-lg"`, `status: "ready"`, `pathLabel`,
+     `formatLabel: "<slug>_csv"`, `docsHref`, `setupKind: "file-wallet"`,
+     `walletKind: "<slug>"`, `sourceFormat: "<slug>_csv"`, and a `details: []`
+     bullet list.
+   - **Sizing/fit:** `imageClassName` controls the tile render. If the logo
+     needs a light backing in dark mode (dark marks on transparency), add
+     `imageFrameClassName: lightLogoFrame` like the other dark-on-light logos so
+     it doesn't disappear. Check it renders cleanly in both themes.
+   - A `status: "ready"` entry **must** reference the real `walletKind` and
+     `sourceFormat` or `tests/test_connection_catalog_drift.py` fails.
+   - Catalog `title` / `description` / `details` are inline English literals
+     here (not `t()` keys). Only if you add keys to `connections.json` (e.g. a
+     format label or import-mode helper) must you add them to **both** `en` and
+     `de`, or the i18n key-parity test fails — see
+     [docs/reference/i18n.md](../../../docs/reference/i18n.md).
 
 7. **`tests/test_cli_smoke.py`** — extend the behavior pin: a small fixture CSV
-   covering the main row types, an import, and assertions on inserted counts,
-   `kind`, msat amounts, and pricing. Prefer extending this suite over new test
-   files (see AGENTS.md).
+   covering the main row types (and at least one unrecognized type to prove the
+   fail-safe fallback), an import, and assertions on inserted counts, `kind`,
+   msat amounts, and pricing. Prefer extending this suite over new test files
+   (see AGENTS.md). Also add a `wallets import-<slug> --help` line to the smoke
+   block in `scripts/quality-gate.sh` and the verification list in `AGENTS.md`.
 
 8. **Docs, in the same change:**
    - `docs/reference/imports.md` — a "## <DisplayName>" section (supported-paths

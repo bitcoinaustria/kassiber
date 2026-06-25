@@ -7,6 +7,7 @@
 
 - **Display name:**
 - **Slug:** <!-- lowercase; becomes <slug>_csv source format, <slug> wallet kind, import-<slug> CLI command, pricing_provider -->
+- **Logo:** <!-- URL to an official vector (SVG) brand mark for the connection tile; raster only if no vector exists; note trademark usage terms -->
 - **Spec status:** draft <!-- draft | ready-for-implementation | implemented -->
 - **Date / author:**
 
