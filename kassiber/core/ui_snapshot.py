@@ -583,6 +583,33 @@ def _journal_freshness(
     }
 
 
+def build_review_badges_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
+    """Cheap unresolved-item counts for the active book's side-nav hints.
+
+    Quarantine count and journal freshness come from a single freshness pass;
+    the swap/transfer count is read from the column cached when the matcher runs
+    (see ``cache_swap_candidate_count``), so this never triggers the heavy matcher
+    itself. ``swaps`` is ``None`` until the matcher has run at least once, which
+    the UI renders as "no badge yet" rather than a misleading zero. Takes no
+    args — the side nav only ever reflects the active book.
+    """
+    _context, profile = _active_context_and_profile(conn)
+    freshness = _journal_freshness(conn, profile)
+    swaps: int | None = None
+    if profile is not None:
+        try:
+            if "swap_candidate_count" in profile.keys():
+                raw = profile["swap_candidate_count"]
+                swaps = int(raw) if raw is not None else None
+        except (IndexError, KeyError, ValueError, TypeError):
+            swaps = None
+    return {
+        "quarantine": int(freshness["quarantine_count"]),
+        "journals_needs_processing": bool(freshness["needs_processing"]),
+        "swaps": swaps,
+    }
+
+
 def _map_wallet_kind(kind: str) -> str:
     normalized = (kind or "").lower().replace("_", "-")
     aliases = {

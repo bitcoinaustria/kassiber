@@ -126,6 +126,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.secrets.init",
   "ui.secrets.change_passphrase",
   "ui.next_actions",
+  "ui.review.badges",
   "ui.wallets.utxos",
   "ui.loans.list",
   "ui.loans.mark",
