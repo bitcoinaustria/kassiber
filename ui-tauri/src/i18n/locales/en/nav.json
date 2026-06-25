@@ -19,6 +19,11 @@
     "main": "Main",
     "review": "Review"
   },
+  "badge": {
+    "quarantine": "Quarantine: {{count}} awaiting review",
+    "swaps": "Swaps & transfers: {{count}} to review",
+    "journals": "Ledger needs processing"
+  },
   "openBook": {
     "title": "Active book changed",
     "body": "{{book}} is now active. Opening {{page}}.",

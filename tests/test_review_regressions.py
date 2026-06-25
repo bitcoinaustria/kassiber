@@ -20,6 +20,7 @@ from kassiber.cli.handlers import (
     _attachment_hooks,
     _audit_transaction_refs,
     _report_hooks,
+    cache_swap_candidate_count,
     create_direct_swap_payout,
     create_transaction_pair,
     latest_rates_for_profile,
@@ -51,6 +52,7 @@ from kassiber.core.ui_snapshot import (
     build_rates_coverage_snapshot,
     build_next_actions_snapshot,
     build_report_blockers_snapshot,
+    build_review_badges_snapshot,
     build_transactions_search_snapshot,
     build_transactions_resolve_snapshot,
     build_transactions_snapshot,
@@ -11054,6 +11056,140 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(payload["kind"], "error")
         self.assertEqual(payload["error"]["code"], "validation")
+
+
+class ReviewBadgesSnapshotTest(unittest.TestCase):
+    """ui.review.badges feeds the side-nav unresolved-item hints."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="kassiber-review-badges-")
+        self.addCleanup(self._tmp.cleanup)
+        self.data_root = Path(self._tmp.name) / "data"
+
+    def _seed_book(self, conn, *, with_transactions, processed):
+        now = "2026-01-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-b", "Badges WS", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, last_processed_at,
+                last_processed_tx_count, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-b", "ws-b", "Badges PF", "EUR", "generic", 365, "FIFO",
+                "2026-02-02T00:00:00Z" if processed else None,
+                1 if processed else 0,
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("wal-b", "ws-b", "pf-b", "Cold", "address", "{}", now),
+        )
+        if with_transactions:
+            conn.execute(
+                """
+                INSERT INTO transactions(
+                    id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                    occurred_at, confirmed_at, direction, asset, amount, fee,
+                    fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                    description, counterparty, note, excluded, raw_json, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "tx-b", "ws-b", "pf-b", "wal-b", "x" * 64, "fp-b",
+                    "2026-01-10T10:00:00Z", "2026-01-10T10:10:00Z", "inbound",
+                    "BTC", btc_to_msat("1.0"), 0, "EUR", 50_000, 50_000, "import",
+                    "transfer", "Funding", "Exchange", None, 0, "{}",
+                    "2026-01-10T10:00:00Z",
+                ),
+            )
+        set_setting(conn, "context_workspace", "ws-b")
+        set_setting(conn, "context_profile", "pf-b")
+        conn.commit()
+
+    def test_no_active_profile_shows_no_hints(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        snapshot = build_review_badges_snapshot(conn)
+        self.assertEqual(snapshot["quarantine"], 0)
+        self.assertFalse(snapshot["journals_needs_processing"])
+        self.assertIsNone(snapshot["swaps"])
+
+    def test_quarantine_count_and_needs_processing(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        self._seed_book(conn, with_transactions=True, processed=False)
+        now = "2026-01-01T00:00:00Z"
+        # A second transaction so the count exercises >1 (journal_quarantines is
+        # UNIQUE per transaction_id).
+        conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "tx-b2", "ws-b", "pf-b", "wal-b", "y" * 64, "fp-b2",
+                "2026-01-11T10:00:00Z", "2026-01-11T10:10:00Z", "inbound",
+                "BTC", btc_to_msat("0.5"), 0, "EUR", 50_000, 25_000, "import",
+                "transfer", "Funding 2", "Exchange", None, 0, "{}",
+                "2026-01-11T10:00:00Z",
+            ),
+        )
+        conn.executemany(
+            """
+            INSERT INTO journal_quarantines(
+                transaction_id, workspace_id, profile_id, reason, detail_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?)
+            """,
+            [
+                ("tx-b", "ws-b", "pf-b", "missing_spot_price", "{}", now),
+                ("tx-b2", "ws-b", "pf-b", "missing_fee_price", "{}", now),
+            ],
+        )
+        conn.commit()
+        snapshot = build_review_badges_snapshot(conn)
+        self.assertEqual(snapshot["quarantine"], 2)
+        # Transactions exist but were never processed -> the Ledger hint fires.
+        self.assertTrue(snapshot["journals_needs_processing"])
+        # Matcher has not run yet -> no swaps badge (None, not a misleading 0).
+        self.assertIsNone(snapshot["swaps"])
+
+    def test_empty_book_is_quiet(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        self._seed_book(conn, with_transactions=False, processed=False)
+        snapshot = build_review_badges_snapshot(conn)
+        self.assertEqual(snapshot["quarantine"], 0)
+        # No active transactions -> nothing to process, no nag.
+        self.assertFalse(snapshot["journals_needs_processing"])
+        self.assertIsNone(snapshot["swaps"])
+
+    def test_cached_swap_count_round_trips(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        self._seed_book(conn, with_transactions=True, processed=True)
+        cache_swap_candidate_count(conn, "ws-b", "pf-b", 4)
+        conn.commit()
+        self.assertEqual(build_review_badges_snapshot(conn)["swaps"], 4)
+        # A matched count of 0 reports 0 (UI hides it), distinct from the
+        # never-computed None on a fresh book.
+        cache_swap_candidate_count(conn, "ws-b", "pf-b", 0)
+        conn.commit()
+        self.assertEqual(build_review_badges_snapshot(conn)["swaps"], 0)
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ from .backends import merge_db_backends
 from .cli.handlers import (
     apply_transfer_rules,
     bulk_pair_transfers,
+    cache_swap_candidate_count,
     enrich_wallet_from_btcpay_provenance,
     process_journals,
     suggest_transfer_candidates,
@@ -341,6 +342,14 @@ def _auto_pair_before_journals(
     remaining = _transfer_candidate_counts(
         suggest_transfer_candidates(conn, workspace_ref, profile_ref)
     )
+    # Cache the post-pairing candidate count so the side-nav swaps hint can be
+    # served cheaply (build_review_badges_snapshot reads it without re-running the
+    # heavy matcher). This is the only writer, so the badge reflects the last
+    # journal run: after a manual pair/dismiss the count can briefly over-state
+    # until the next refresh reprocesses journals. Part of the atomic auto-pair +
+    # journal step: committed on success, rolled back with the pairings if journal
+    # processing fails.
+    cache_swap_candidate_count(conn, workspace_ref, profile_ref, remaining["total"])
     rules_summary = (
         rules.get("summary") if isinstance(rules.get("summary"), AbcMapping) else {}
     )

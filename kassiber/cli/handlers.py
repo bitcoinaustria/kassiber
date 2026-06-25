@@ -220,6 +220,20 @@ def resolve_scope(conn, workspace_ref=None, profile_ref=None):
     return workspace, profile
 
 
+def cache_swap_candidate_count(conn, workspace_ref, profile_ref, total):
+    """Persist the unresolved swap/transfer candidate count for the side-nav hint.
+
+    Recorded after the matcher runs during journal processing so the badge is
+    served from a cheap column read rather than re-running the heavy matcher on
+    every poll. The caller owns the commit (see ``_auto_pair_before_journals``).
+    """
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    conn.execute(
+        "UPDATE profiles SET swap_candidate_count = ? WHERE id = ?",
+        (int(total), profile["id"]),
+    )
+
+
 def resolve_wallet(conn, profile_id, ref):
     row = conn.execute(
         """
