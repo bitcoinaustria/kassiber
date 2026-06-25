@@ -539,7 +539,18 @@
       "strikeCsv": "Strike CSV",
       "wasabiBundle": "Wasabi JSON bundle",
       "samouraiSourceSet": "Samourai descriptor source set",
-      "csvOrJson": "CSV or JSON"
+      "csvOrJson": "CSV or JSON",
+      "genericLedger": "Excel or CSV ledger"
+    },
+    "genericLedger": {
+      "templateHint": "New here? Download the template, fill in your transactions, then import the file.",
+      "downloadXlsx": "Download Excel template",
+      "downloadCsv": "CSV instead",
+      "templateWorking": "Preparing…",
+      "saveTemplateTitle": "Save ledger template",
+      "templateReadyTitle": "Template ready",
+      "templateReadyBody": "Fill in your transactions and import the file here.",
+      "templateFailedTitle": "Could not create the template"
     },
     "defaultLabel": {
       "importedFile": "Imported file"

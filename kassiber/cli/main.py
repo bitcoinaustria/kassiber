@@ -79,6 +79,7 @@ from .handlers import (
     get_journal_event,
     identify_wallet_owners,
     import_into_wallet,
+    write_generic_ledger_template,
     inspect_transfer_audit,
     list_direct_swap_payouts,
     list_journal_entries,
@@ -984,6 +985,21 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_import_strike.add_argument("--profile")
     wallets_import_strike.add_argument("--wallet")
     wallets_import_strike.add_argument("--file", required=True)
+    wallets_import_ledger = wallets_sub.add_parser(
+        "import-ledger",
+        help="Import a filled-in generic ledger (.xlsx or CSV/TSV) into a wallet",
+    )
+    wallets_import_ledger.add_argument("--workspace")
+    wallets_import_ledger.add_argument("--profile")
+    wallets_import_ledger.add_argument("--wallet", required=True)
+    wallets_import_ledger.add_argument("--file", required=True)
+    wallets_ledger_template = wallets_sub.add_parser(
+        "ledger-template",
+        help="Write a blank generic-ledger import template (.xlsx, or .csv by extension)",
+    )
+    wallets_ledger_template.add_argument(
+        "--file", required=True, help="Destination path; .csv writes a CSV template, otherwise .xlsx"
+    )
     wallets_import_samourai = wallets_sub.add_parser("import-samourai")
     wallets_import_samourai.add_argument("--workspace")
     wallets_import_samourai.add_argument("--profile")
@@ -2508,6 +2524,20 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     "full",
                 ),
             )
+        if args.wallets_command == "import-ledger":
+            return emit(
+                args,
+                import_into_wallet(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.wallet,
+                    args.file,
+                    "generic_ledger",
+                ),
+            )
+        if args.wallets_command == "ledger-template":
+            return emit(args, write_generic_ledger_template(args.file))
         if args.wallets_command == "import-samourai":
             return emit(
                 args,
@@ -4012,6 +4042,8 @@ def command_needs_db(args: argparse.Namespace) -> bool:
     if args.command == "backends" and getattr(args, "backends_command", None) == "kinds":
         return False
     if args.command == "wallets" and getattr(args, "wallets_command", None) == "kinds":
+        return False
+    if args.command == "wallets" and getattr(args, "wallets_command", None) == "ledger-template":
         return False
     if args.command == "secrets":
         return False

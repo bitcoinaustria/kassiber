@@ -34,6 +34,7 @@ import {
   type ConnectionSource,
   type ConnectionSourceFormat,
 } from "@/lib/connectionCatalog";
+import { saveDaemonExport } from "@/lib/exportFile";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 import {
   buildSamouraiSourceSet,
@@ -377,6 +378,14 @@ function sourceFileFilters(
       { name: t("add.fileFilter.samouraiSourceSet"), extensions: ["json"] },
     ];
   }
+  if (source.sourceFormat === "generic_ledger") {
+    return [
+      {
+        name: t("add.fileFilter.genericLedger"),
+        extensions: ["xlsx", "csv", "tsv"],
+      },
+    ];
+  }
   if (source.id === "csv") {
     return [{ name: t("add.fileFilter.csvOrJson"), extensions: ["csv", "json"] }];
   }
@@ -531,6 +540,11 @@ export function AddConnectionDialog({
     useDaemonMutation<{ wallet: { label: string } }>("ui.wallets.create");
   const importFile =
     useDaemonMutation<ImportFileResult>("ui.wallets.import_file");
+  const ledgerTemplate = useDaemonMutation<{
+    file: string;
+    filename: string;
+    format: string;
+  }>("ui.transactions.ledger_template");
   const importSamourai =
     useDaemonMutation<SamouraiImportResult>("ui.wallets.import_samourai");
   const createBtcpay = useDaemonMutation<{
@@ -1654,6 +1668,37 @@ export function AddConnectionDialog({
     );
   };
 
+  const downloadLedgerTemplate = async (format: "xlsx" | "csv") => {
+    try {
+      const envelope = await ledgerTemplate.mutateAsync({ format });
+      const file = envelope.data?.file;
+      if (!file) return;
+      const extension = format === "csv" ? "csv" : "xlsx";
+      await saveDaemonExport({
+        exportPath: file,
+        title: t("add.genericLedger.saveTemplateTitle"),
+        defaultName: `kassiber-ledger-template.${extension}`,
+        filters: [
+          {
+            name: t("add.fileFilter.genericLedger"),
+            extensions: [extension],
+          },
+        ],
+      });
+      addNotification({
+        title: t("add.genericLedger.templateReadyTitle"),
+        body: t("add.genericLedger.templateReadyBody"),
+        tone: "success",
+      });
+    } catch (error) {
+      addNotification({
+        title: t("add.genericLedger.templateFailedTitle"),
+        body: error instanceof Error ? error.message : String(error),
+        tone: "error",
+      });
+    }
+  };
+
   const renderSetupFields = () => {
     const sourceFileField = fileWalletSourceField(selected, t);
     const renderSourceFileSetup = (syncLabel?: string) => (
@@ -1690,6 +1735,35 @@ export function AddConnectionDialog({
             ) : null}
           </div>
         </SetupField>
+        {selected.sourceFormat === "generic_ledger" ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed border-border/70 px-3 py-2">
+            <p className="text-xs text-muted-foreground">
+              {t("add.genericLedger.templateHint")}
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={ledgerTemplate.isPending}
+                onClick={() => downloadLedgerTemplate("xlsx")}
+              >
+                {ledgerTemplate.isPending
+                  ? t("add.genericLedger.templateWorking")
+                  : t("add.genericLedger.downloadXlsx")}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={ledgerTemplate.isPending}
+                onClick={() => downloadLedgerTemplate("csv")}
+              >
+                {t("add.genericLedger.downloadCsv")}
+              </Button>
+            </div>
+          </div>
+        ) : null}
         {syncLabel ? renderSyncAfterCreate(syncLabel) : null}
       </>
     );

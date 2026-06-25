@@ -1,5 +1,13 @@
 import type * as React from "react";
-import { Database, FileInput, Server, Tags, Wallet, Zap } from "lucide-react";
+import {
+  Database,
+  FileInput,
+  FileSpreadsheet,
+  Server,
+  Tags,
+  Wallet,
+  Zap,
+} from "lucide-react";
 
 import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
 import bitpandaIcon from "@/assets/integrations/bitpanda.svg";
@@ -57,7 +65,8 @@ export type ConnectionSourceFormat =
   | "coinfinity_csv"
   | "21bitcoin_csv"
   | "strike_csv"
-  | "wasabi_bundle";
+  | "wasabi_bundle"
+  | "generic_ledger";
 
 export interface ConnectionSource {
   id: string;
@@ -658,6 +667,25 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     status: "planned",
     pathLabel: "CSV/API import",
     details: ["Dedicated BTC parser is not wired yet"],
+  },
+  {
+    id: "generic-ledger",
+    title: "Generic ledger",
+    description: "Fill-in spreadsheet import for manual transactions.",
+    category: "files",
+    image: sourceIcon("XLS", "#f2a900", "#1a1a1a"),
+    icon: FileSpreadsheet,
+    status: "ready",
+    pathLabel: "Spreadsheet import",
+    formatLabel: "Excel (.xlsx) or CSV",
+    setupKind: "file-wallet",
+    walletKind: "custom",
+    sourceFormat: "generic_ledger",
+    details: [
+      "Download the template, fill in your transactions, import the file",
+      "One Bitcoin leg per row; Buy/Sell/Income/Mining/Gift and more",
+      "Amounts in BTC (or SATS); fiat columns in your book's currency",
+    ],
   },
   {
     id: "csv",

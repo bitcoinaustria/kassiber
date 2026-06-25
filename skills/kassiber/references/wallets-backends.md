@@ -313,6 +313,20 @@ kassiber wallets import-json --wallet wallet-name --file /path/to/data.json
 kassiber wallets import-csv --wallet wallet-name --file /path/to/data.csv
 ```
 
+Manual entry (no provider export, or one-off corrections): the generic ledger
+is a fill-in Excel/CSV template whose `Type` column (Buy/Sell/Deposit/
+Withdrawal/Spend/Income/Mining/Gift/…) maps onto real `(direction, kind)`
+pairs. One Bitcoin leg per row; the fiat side becomes exact execution pricing.
+
+```bash
+kassiber wallets ledger-template --file ledger.xlsx      # blank template (.xlsx or .csv)
+kassiber wallets import-ledger --wallet wallet-name --file ledger.xlsx
+```
+
+Amounts are in BTC (or whole sats when the asset is `SATS`); fiat columns must
+match the book currency; gift/donation/lost/stolen rows are quarantined for
+review. Full column + Type reference: [imports.md](../../../docs/reference/imports.md#generic-ledger-import).
+
 Adding a provider Kassiber does not support yet (a dedicated `import-<slug>`
 instead of generic CSV) is a separate workflow: see
 [add-exchange.md](add-exchange.md) for the intake interview and importer

@@ -69,7 +69,8 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
   chain-backed wallet sources.
 - **Imports** — BTCPay CSV/JSON, Phoenix, River, Bull Bitcoin, Coinfinity,
   21bitcoin, Pocket Bitcoin, Strike, Samourai/Whirlpool public descriptor/xpub,
-  generic CSV/JSON, BIP329 labels.
+  generic CSV/JSON, a fill-in Excel/CSV ledger template for manual entry,
+  BIP329 labels.
 - **Review workflows** — notes, tags, exclusions, attachments; append-only
   transaction edit history with Activity review and safe revert; reviewed
   transfer/swap pairing for Lightning, Liquid peg-in/peg-out, and submarine
