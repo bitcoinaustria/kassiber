@@ -403,9 +403,14 @@ const RAIL_DETAILS: Record<
   },
 };
 
-function railForLeg(asset: string, walletKind: string): SwapRail {
-  const assetKey = asset.toUpperCase();
-  const kindKey = walletKind.toLowerCase();
+function railForLeg(
+  asset: string | null | undefined,
+  walletKind: string | null | undefined,
+): SwapRail {
+  // Tolerate a daemon that predates the enriched pair payload (no wallet_kind):
+  // fall through to the on-chain default instead of throwing on .toLowerCase().
+  const assetKey = (asset ?? "").toUpperCase();
+  const kindKey = (walletKind ?? "").toLowerCase();
   if (assetKey === "LBTC" || kindKey.includes("liquid")) return "liquid";
   if (
     kindKey.includes("phoenix") ||
@@ -932,12 +937,21 @@ function PairedDetailSheet({
                     </SelectTrigger>
                     <SelectContent>
                       {PAIR_POLICY_OPTIONS.map((option) => (
-                        <SelectItem key={option} value={option}>
+                        <SelectItem
+                          key={option}
+                          value={option}
+                          disabled={sameAsset && option === "taxable"}
+                        >
                           {option}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {sameAsset ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      {t("swap.paired.sameAssetTaxableHint")}
+                    </p>
+                  ) : null}
                 </div>
               </div>
 

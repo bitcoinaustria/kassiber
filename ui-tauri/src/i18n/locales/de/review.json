@@ -40,6 +40,7 @@
       "notes": "Notizen",
       "noNotes": "—",
       "edit": "Paarung bearbeiten",
+      "sameAssetTaxableHint": "Übertragungen mit gleichem Asset bleiben carrying-value — taxable ist nicht verfügbar.",
       "unpair": "Paarung aufheben",
       "rowMenuAria": "Aktionen für Paar {{id}} öffnen",
       "save": "Änderungen speichern",

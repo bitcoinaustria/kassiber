@@ -1355,6 +1355,9 @@ def _ui_swap_matching_payload_from_conn(
             update_kwargs["kind"] = str(args.get("kind"))
         if args.get("policy") is not None:
             update_kwargs["policy"] = str(args.get("policy"))
+        # Only touch notes when the caller sent the field; an explicit empty
+        # string coalesces to None, which clears the note ("" and None both mean
+        # "no note"). `notes` wins over the legacy `note` alias when both appear.
         if "notes" in args or "note" in args:
             update_kwargs["notes"] = args.get("notes") or args.get("note")
         return update_transaction_pair(
