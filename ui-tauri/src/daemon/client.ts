@@ -316,6 +316,7 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.transactions.resolve",
     "ui.wallets.list",
     "ui.wallets.utxos",
+    "ui.review.badges",
     "ui.workspace.health",
   ],
   "ui.wallets.sync": [
@@ -341,6 +342,7 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.transactions.resolve",
     "ui.wallets.list",
     "ui.wallets.utxos",
+    "ui.review.badges",
     "ui.workspace.health",
   ],
   "ui.journals.process": [
@@ -362,6 +364,7 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.transactions.extremes",
     "ui.transactions.list",
     "ui.transactions.resolve",
+    "ui.review.badges",
     "ui.workspace.health",
   ],
   "ui.attachments.add": [

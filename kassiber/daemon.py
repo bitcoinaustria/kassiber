@@ -85,6 +85,7 @@ from .cli.handlers import (
     set_transfer_rule_enabled,
     suggest_transfer_candidates,
     sync_btcpay_commercial_provenance,
+    update_transaction_pair,
 )
 from .core import audit_package as core_audit_package
 from .core import chat_history as core_chat_history
@@ -122,6 +123,7 @@ from .core.ui_snapshot import (
     build_rates_coverage_snapshot,
     build_rates_summary_snapshot,
     build_report_blockers_snapshot,
+    build_review_badges_snapshot,
     build_transactions_extremes_snapshot,
     build_transactions_resolve_snapshot,
     build_transactions_search_snapshot,
@@ -320,6 +322,7 @@ SUPPORTED_KINDS = (
     "ui.transfers.payouts.delete",
     "ui.transfers.pair",
     "ui.transfers.unpair",
+    "ui.transfers.update",
     "ui.transfers.bulk_pair",
     "ui.transfers.dismiss",
     "ui.transfers.rules.list",
@@ -362,6 +365,7 @@ SUPPORTED_KINDS = (
     "ui.secrets.init",
     "ui.secrets.change_passphrase",
     "ui.next_actions",
+    "ui.review.badges",
     "ui.wallets.create",
     "ui.wallets.import_file",
     "ui.wallets.import_samourai",
@@ -1346,6 +1350,23 @@ def _ui_swap_matching_payload_from_conn(
         if not pair_id:
             raise AppError("ui.transfers.unpair requires pair_id", code="validation")
         return delete_transaction_pair(conn, workspace, profile, str(pair_id))
+    if kind == "ui.transfers.update":
+        pair_id = args.get("pair_id")
+        if not pair_id:
+            raise AppError("ui.transfers.update requires pair_id", code="validation")
+        update_kwargs: dict[str, Any] = {}
+        if args.get("kind") is not None:
+            update_kwargs["kind"] = str(args.get("kind"))
+        if args.get("policy") is not None:
+            update_kwargs["policy"] = str(args.get("policy"))
+        # Only touch notes when the caller sent the field; an explicit empty
+        # string coalesces to None, which clears the note ("" and None both mean
+        # "no note"). `notes` wins over the legacy `note` alias when both appear.
+        if "notes" in args or "note" in args:
+            update_kwargs["notes"] = args.get("notes") or args.get("note")
+        return update_transaction_pair(
+            conn, workspace, profile, str(pair_id), **update_kwargs
+        )
     if kind == "ui.transfers.bulk_pair":
         return bulk_pair_transfers(
             conn,
@@ -8582,6 +8603,18 @@ def handle_request(
                 build_envelope(
                     "ui.journals.transfers.list",
                     build_journals_transfers_list_snapshot(ctx.conn, request.get("args")),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.review.badges":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.review.badges",
+                    build_review_badges_snapshot(ctx.conn),
                 ),
                 request_id,
             ),

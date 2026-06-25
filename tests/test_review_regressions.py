@@ -20,10 +20,13 @@ from kassiber.cli.handlers import (
     _attachment_hooks,
     _audit_transaction_refs,
     _report_hooks,
+    cache_swap_candidate_count,
     create_direct_swap_payout,
     create_transaction_pair,
     latest_rates_for_profile,
+    list_transaction_pairs,
     process_journals,
+    update_transaction_pair,
 )
 from kassiber.core import attachments as core_attachments
 from kassiber.core import pricing
@@ -51,6 +54,7 @@ from kassiber.core.ui_snapshot import (
     build_rates_coverage_snapshot,
     build_next_actions_snapshot,
     build_report_blockers_snapshot,
+    build_review_badges_snapshot,
     build_transactions_search_snapshot,
     build_transactions_resolve_snapshot,
     build_transactions_snapshot,
@@ -9337,6 +9341,146 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(ctx.exception.code, "conflict")
         self.assertIn("direct swap payout", str(ctx.exception))
 
+    def _create_second_wallet(self, label, kind="custom"):
+        payload, result = self._run_json(
+            "wallets", "create",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--label", label,
+            "--kind", kind,
+        )
+        self._assert_ok(payload, result, "wallets.create")
+
+    def test_paired_list_exposes_wallet_kind_and_occurred_at(self):
+        self._bootstrap_wallet(label="HotLN", kind="phoenix")
+        self._create_second_wallet("ColdBTC", kind="custom")
+        self._insert_transaction(
+            wallet_label="HotLN", tx_id="ln-out",
+            occurred_at="2025-04-01T10:00:00Z",
+            amount_msat=100_000_000, direction="outbound",
+        )
+        self._insert_transaction(
+            wallet_label="ColdBTC", tx_id="btc-in",
+            occurred_at="2025-04-01T10:05:00Z",
+            amount_msat=99_500_000, direction="inbound",
+        )
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        create_transaction_pair(
+            conn, "Main", "Default", "ln-out", "btc-in",
+            kind="manual", policy="carrying-value",
+        )
+        pairs = list_transaction_pairs(conn, "Main", "Default")
+        self.assertEqual(len(pairs), 1)
+        entry = pairs[0]
+        # The paired view renders rail badges off wallet_kind and shows the
+        # leg occurred-at timestamps — both must survive the list query.
+        self.assertEqual(entry["out"]["wallet_kind"], "phoenix")
+        self.assertEqual(entry["in"]["wallet_kind"], "custom")
+        self.assertEqual(entry["out"]["occurred_at"], "2025-04-01T10:00:00Z")
+        self.assertEqual(entry["in"]["occurred_at"], "2025-04-01T10:05:00Z")
+
+    def test_update_transaction_pair_changes_kind_and_policy(self):
+        self._bootstrap_wallet(label="HotLN", kind="phoenix")
+        self._create_second_wallet("LiquidVault", kind="custom")
+        self._insert_transaction(
+            wallet_label="HotLN", tx_id="ln-out", asset="BTC",
+            occurred_at="2025-04-02T10:00:00Z",
+            amount_msat=100_000_000, direction="outbound",
+        )
+        self._insert_transaction(
+            wallet_label="LiquidVault", tx_id="lbtc-in", asset="LBTC",
+            occurred_at="2025-04-02T10:05:00Z",
+            amount_msat=99_500_000, direction="inbound",
+        )
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        # Cross-asset taxable is valid on a generic profile.
+        pair = create_transaction_pair(
+            conn, "Main", "Default", "ln-out", "lbtc-in",
+            kind="manual", policy="taxable",
+        )
+        updated = update_transaction_pair(
+            conn, "Main", "Default", pair["id"], kind="submarine-swap",
+        )
+        self.assertEqual(updated["kind"], "submarine-swap")
+        # Policy was not passed, so it stays untouched.
+        self.assertEqual(updated["policy"], "taxable")
+        pairs = list_transaction_pairs(conn, "Main", "Default")
+        self.assertEqual(pairs[0]["kind"], "submarine-swap")
+
+    def test_update_transaction_pair_validates_inputs(self):
+        self._bootstrap_wallet(label="HotBTC", kind="phoenix")
+        self._create_second_wallet("ColdBTC", kind="custom")
+        self._insert_transaction(
+            wallet_label="HotBTC", tx_id="btc-out",
+            occurred_at="2025-04-03T10:00:00Z",
+            amount_msat=100_000_000, direction="outbound",
+        )
+        self._insert_transaction(
+            wallet_label="ColdBTC", tx_id="btc-in",
+            occurred_at="2025-04-03T10:05:00Z",
+            amount_msat=99_900_000, direction="inbound",
+        )
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        pair = create_transaction_pair(
+            conn, "Main", "Default", "btc-out", "btc-in",
+            kind="manual", policy="carrying-value",
+        )
+        with self.assertRaises(AppError) as bad_kind:
+            update_transaction_pair(conn, "Main", "Default", pair["id"], kind="bogus")
+        self.assertEqual(bad_kind.exception.code, "validation")
+        # Same-asset taxable is rejected just like at creation time.
+        with self.assertRaises(AppError) as bad_policy:
+            update_transaction_pair(
+                conn, "Main", "Default", pair["id"], policy="taxable",
+            )
+        self.assertEqual(bad_policy.exception.code, "validation")
+        with self.assertRaises(AppError) as missing:
+            update_transaction_pair(
+                conn, "Main", "Default", "no-such-pair", kind="manual",
+            )
+        self.assertEqual(missing.exception.code, "not_found")
+        # The rejected edits left the stored values untouched.
+        pairs = list_transaction_pairs(conn, "Main", "Default")
+        self.assertEqual(pairs[0]["kind"], "manual")
+        self.assertEqual(pairs[0]["policy"], "carrying-value")
+
+    def test_update_cross_asset_carrying_value_gated_by_tax_country(self):
+        self._bootstrap_wallet(label="HotLN", kind="phoenix")
+        self._create_second_wallet("LiquidVault", kind="custom")
+        self._insert_transaction(
+            wallet_label="HotLN", tx_id="ln-out", asset="BTC",
+            occurred_at="2025-04-04T10:00:00Z",
+            amount_msat=100_000_000, direction="outbound",
+        )
+        self._insert_transaction(
+            wallet_label="LiquidVault", tx_id="lbtc-in", asset="LBTC",
+            occurred_at="2025-04-04T10:05:00Z",
+            amount_msat=99_500_000, direction="inbound",
+        )
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        pair = create_transaction_pair(
+            conn, "Main", "Default", "ln-out", "lbtc-in",
+            kind="manual", policy="taxable",
+        )
+        # Generic profile: cross-asset carrying-value is not allowed.
+        with self.assertRaises(AppError) as ctx:
+            update_transaction_pair(
+                conn, "Main", "Default", pair["id"], policy="carrying-value",
+            )
+        self.assertEqual(ctx.exception.code, "validation")
+        # Flip the profile to Austrian and the same edit succeeds.
+        self._set_profile_tax_country("Default", "at")
+        conn_at = open_db(self.data_root)
+        self.addCleanup(conn_at.close)
+        updated = update_transaction_pair(
+            conn_at, "Main", "Default", pair["id"], policy="carrying-value",
+        )
+        self.assertEqual(updated["policy"], "carrying-value")
+
     def test_austrian_same_timestamp_swap_chain_reaches_rp2(self):
         profile, inputs = self._direct_austrian_same_timestamp_swap_chain_inputs()
         actual = self._direct_engine_snapshot(profile, inputs)
@@ -11054,6 +11198,140 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(payload["kind"], "error")
         self.assertEqual(payload["error"]["code"], "validation")
+
+
+class ReviewBadgesSnapshotTest(unittest.TestCase):
+    """ui.review.badges feeds the side-nav unresolved-item hints."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="kassiber-review-badges-")
+        self.addCleanup(self._tmp.cleanup)
+        self.data_root = Path(self._tmp.name) / "data"
+
+    def _seed_book(self, conn, *, with_transactions, processed):
+        now = "2026-01-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-b", "Badges WS", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, last_processed_at,
+                last_processed_tx_count, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-b", "ws-b", "Badges PF", "EUR", "generic", 365, "FIFO",
+                "2026-02-02T00:00:00Z" if processed else None,
+                1 if processed else 0,
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("wal-b", "ws-b", "pf-b", "Cold", "address", "{}", now),
+        )
+        if with_transactions:
+            conn.execute(
+                """
+                INSERT INTO transactions(
+                    id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                    occurred_at, confirmed_at, direction, asset, amount, fee,
+                    fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                    description, counterparty, note, excluded, raw_json, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "tx-b", "ws-b", "pf-b", "wal-b", "x" * 64, "fp-b",
+                    "2026-01-10T10:00:00Z", "2026-01-10T10:10:00Z", "inbound",
+                    "BTC", btc_to_msat("1.0"), 0, "EUR", 50_000, 50_000, "import",
+                    "transfer", "Funding", "Exchange", None, 0, "{}",
+                    "2026-01-10T10:00:00Z",
+                ),
+            )
+        set_setting(conn, "context_workspace", "ws-b")
+        set_setting(conn, "context_profile", "pf-b")
+        conn.commit()
+
+    def test_no_active_profile_shows_no_hints(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        snapshot = build_review_badges_snapshot(conn)
+        self.assertEqual(snapshot["quarantine"], 0)
+        self.assertFalse(snapshot["journals_needs_processing"])
+        self.assertIsNone(snapshot["swaps"])
+
+    def test_quarantine_count_and_needs_processing(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        self._seed_book(conn, with_transactions=True, processed=False)
+        now = "2026-01-01T00:00:00Z"
+        # A second transaction so the count exercises >1 (journal_quarantines is
+        # UNIQUE per transaction_id).
+        conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "tx-b2", "ws-b", "pf-b", "wal-b", "y" * 64, "fp-b2",
+                "2026-01-11T10:00:00Z", "2026-01-11T10:10:00Z", "inbound",
+                "BTC", btc_to_msat("0.5"), 0, "EUR", 50_000, 25_000, "import",
+                "transfer", "Funding 2", "Exchange", None, 0, "{}",
+                "2026-01-11T10:00:00Z",
+            ),
+        )
+        conn.executemany(
+            """
+            INSERT INTO journal_quarantines(
+                transaction_id, workspace_id, profile_id, reason, detail_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?)
+            """,
+            [
+                ("tx-b", "ws-b", "pf-b", "missing_spot_price", "{}", now),
+                ("tx-b2", "ws-b", "pf-b", "missing_fee_price", "{}", now),
+            ],
+        )
+        conn.commit()
+        snapshot = build_review_badges_snapshot(conn)
+        self.assertEqual(snapshot["quarantine"], 2)
+        # Transactions exist but were never processed -> the Ledger hint fires.
+        self.assertTrue(snapshot["journals_needs_processing"])
+        # Matcher has not run yet -> no swaps badge (None, not a misleading 0).
+        self.assertIsNone(snapshot["swaps"])
+
+    def test_empty_book_is_quiet(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        self._seed_book(conn, with_transactions=False, processed=False)
+        snapshot = build_review_badges_snapshot(conn)
+        self.assertEqual(snapshot["quarantine"], 0)
+        # No active transactions -> nothing to process, no nag.
+        self.assertFalse(snapshot["journals_needs_processing"])
+        self.assertIsNone(snapshot["swaps"])
+
+    def test_cached_swap_count_round_trips(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        self._seed_book(conn, with_transactions=True, processed=True)
+        cache_swap_candidate_count(conn, "ws-b", "pf-b", 4)
+        conn.commit()
+        self.assertEqual(build_review_badges_snapshot(conn)["swaps"], 4)
+        # A matched count of 0 reports 0 (UI hides it), distinct from the
+        # never-computed None on a fresh book.
+        cache_swap_candidate_count(conn, "ws-b", "pf-b", 0)
+        conn.commit()
+        self.assertEqual(build_review_badges_snapshot(conn)["swaps"], 0)
 
 
 if __name__ == "__main__":

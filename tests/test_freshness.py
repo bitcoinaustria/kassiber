@@ -984,6 +984,12 @@ class FreshnessTest(unittest.TestCase):
         self.assertEqual(summary["total_swap_fee_msat"], 2000)
         self.assertEqual(summary["before"]["total"], 4)
         self.assertEqual(summary["remaining"]["total"], 1)
+        # The post-pairing total is cached on the profile for the side-nav badge.
+        cached = conn.execute(
+            "SELECT swap_candidate_count FROM profiles WHERE id = ?",
+            (profile_id,),
+        ).fetchone()[0]
+        self.assertEqual(cached, 1)
 
     def test_workspace_freshness_run_honors_each_book_market_rate_policy(self):
         conn = self._db()
