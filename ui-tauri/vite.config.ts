@@ -99,6 +99,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.transfers.payouts.delete",
   "ui.transfers.pair",
   "ui.transfers.unpair",
+  "ui.transfers.update",
   "ui.transfers.bulk_pair",
   "ui.transfers.dismiss",
   "ui.transfers.rules.list",

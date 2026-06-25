@@ -768,11 +768,15 @@ def list_transaction_pairs(conn, workspace_ref, profile_ref, *, include_deleted=
             -- out amount must match it. Same-asset / whole pairs keep tout.amount.
             COALESCE(p.out_amount, tout.amount) AS out_amount_msat,
             tout.amount AS out_full_amount_msat,
+            tout.occurred_at AS out_occurred_at,
             wout.label AS out_wallet,
+            wout.kind AS out_wallet_kind,
             tin.external_id AS in_external_id,
             tin.asset AS in_asset,
             tin.amount AS in_amount_msat,
-            win.label AS in_wallet
+            tin.occurred_at AS in_occurred_at,
+            win.label AS in_wallet,
+            win.kind AS in_wallet_kind
         FROM transaction_pairs p
         JOIN transactions tout ON tout.id = p.out_transaction_id
         JOIN transactions tin ON tin.id = p.in_transaction_id
@@ -790,7 +794,9 @@ def list_transaction_pairs(conn, workspace_ref, profile_ref, *, include_deleted=
             "transaction_id": row["out_transaction_id"],
             "external_id": row["out_external_id"] or "",
             "wallet": row["out_wallet"],
+            "wallet_kind": row["out_wallet_kind"],
             "asset": row["out_asset"],
+            "occurred_at": row["out_occurred_at"],
             # `amount` is the swapped portion on a split pair; `full_amount`
             # carries the underlying transaction's total for transparency.
             "amount": float(msat_to_btc(row["out_amount_msat"])),
@@ -802,7 +808,9 @@ def list_transaction_pairs(conn, workspace_ref, profile_ref, *, include_deleted=
             "transaction_id": row["in_transaction_id"],
             "external_id": row["in_external_id"] or "",
             "wallet": row["in_wallet"],
+            "wallet_kind": row["in_wallet_kind"],
             "asset": row["in_asset"],
+            "occurred_at": row["in_occurred_at"],
             "amount": float(msat_to_btc(row["in_amount_msat"])),
             "amount_msat": int(row["in_amount_msat"]),
         }
@@ -1494,6 +1502,96 @@ def delete_transaction_pair(conn, workspace_ref, profile_ref, pair_id):
         invalidate_journals(conn, profile["id"])
         conn.commit()
     return {"deleted": pair_id}
+
+
+_UNSET = object()
+
+
+def update_transaction_pair(
+    conn,
+    workspace_ref,
+    profile_ref,
+    pair_id,
+    *,
+    kind=None,
+    policy=None,
+    notes=_UNSET,
+    commit=True,
+):
+    """Edit the kind / policy / notes of an existing (active) pair in place.
+
+    Pairs are the source of truth for transfer/swap accounting; journals are
+    re-derived from them. Changing kind/policy therefore only needs a row
+    update plus a journal invalidation — the legs, amounts, and swap fee are
+    untouched. ``kind`` / ``policy`` default to the stored value when omitted;
+    ``notes`` is only rewritten when explicitly passed. The same-asset /
+    cross-asset policy guards from :func:`create_transaction_pair` are
+    re-applied so an edit can't reach an unsupported combination.
+    """
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    row = conn.execute(
+        """
+        SELECT p.*, tout.asset AS out_asset, tin.asset AS in_asset
+        FROM transaction_pairs p
+        JOIN transactions tout ON tout.id = p.out_transaction_id
+        JOIN transactions tin ON tin.id = p.in_transaction_id
+        WHERE p.id = ? AND p.profile_id = ? AND p.deleted_at IS NULL
+        """,
+        (pair_id, profile["id"]),
+    ).fetchone()
+    if not row:
+        raise AppError(f"Pair '{pair_id}' not found", code="not_found")
+    new_kind = row["kind"] if kind is None else kind
+    new_policy = row["policy"] if policy is None else policy
+    if new_kind not in TRANSFER_PAIR_KINDS:
+        raise AppError(
+            f"Unsupported pair kind '{new_kind}'. Supported: {', '.join(TRANSFER_PAIR_KINDS)}",
+            code="validation",
+        )
+    if new_policy not in TRANSFER_PAIR_POLICIES:
+        raise AppError(
+            f"Unsupported pair policy '{new_policy}'. Supported: {', '.join(TRANSFER_PAIR_POLICIES)}",
+            code="validation",
+        )
+    same_asset = str(row["out_asset"]).upper() == str(row["in_asset"]).upper()
+    if same_asset and new_policy == "taxable":
+        raise AppError(
+            f"Same-asset taxable pairs are not supported yet "
+            f"(asset={row['out_asset']}). Use --policy carrying-value for a "
+            f"self-transfer, or unpair the legs to keep SELL + BUY treatment.",
+            code="validation",
+            hint="Re-run with --policy carrying-value, or unpair to preserve taxable SELL + BUY behavior.",
+        )
+    if not same_asset and new_policy == "carrying-value":
+        tax_country = str(profile["tax_country"] or "").strip().lower()
+        if tax_country != "at":
+            raise AppError(
+                f"Cross-asset carrying-value pairs are only supported for Austrian profiles right now "
+                f"(out={row['out_asset']}, in={row['in_asset']}). "
+                f"Use --policy taxable for other tax countries.",
+                code="validation",
+                hint="Re-run with --policy taxable, or use an Austrian profile for cross-asset carrying-value swaps.",
+            )
+    new_notes = row["notes"] if notes is _UNSET else notes
+    unchanged = (
+        new_kind == row["kind"]
+        and new_policy == row["policy"]
+        and new_notes == row["notes"]
+    )
+    if not unchanged:
+        conn.execute(
+            "UPDATE transaction_pairs SET kind = ?, policy = ?, notes = ? "
+            "WHERE id = ? AND profile_id = ?",
+            (new_kind, new_policy, new_notes, pair_id, profile["id"]),
+        )
+        invalidate_journals(conn, profile["id"])
+        if commit:
+            conn.commit()
+    return _pair_to_dict(
+        conn.execute(
+            "SELECT * FROM transaction_pairs WHERE id = ?", (pair_id,)
+        ).fetchone()
+    )
 
 
 def init_app(conn):
