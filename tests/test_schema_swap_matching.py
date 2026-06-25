@@ -91,16 +91,17 @@ class FreshSchemaTests(unittest.TestCase):
                 self.assertIn("transaction_pair_dismissals", tables)
                 self.assertIn("swap_matching_rules", tables)
                 self.assertIn("saved_views", tables)
-                self.assertIn("loans", tables)
+                # loan_legs is the minimal collateral-mark store; the facility
+                # tables were removed when loans collapsed to a per-tx mark.
                 self.assertIn("loan_legs", tables)
-                self.assertIn("loan_escrow_positions", tables)
+                self.assertNotIn("loans", tables)
+                self.assertNotIn("loan_escrow_positions", tables)
 
-                loan_cols = {row["name"] for row in conn.execute("PRAGMA table_info(loans)").fetchall()}
-                for name in ("custody_type", "rehypothecation", "control_mechanism", "public_offering"):
-                    self.assertIn(name, loan_cols)
                 leg_cols = {row["name"] for row in conn.execute("PRAGMA table_info(loan_legs)").fetchall()}
-                for name in ("loan_id", "role", "transaction_id", "on_chain_present"):
+                for name in ("transaction_id", "role"):
                     self.assertIn(name, leg_cols)
+                for gone in ("loan_id", "on_chain_present", "escrow_address", "amount", "policy"):
+                    self.assertNotIn(gone, leg_cols)
 
                 tx_cols = {row["name"] for row in conn.execute("PRAGMA table_info(transactions)").fetchall()}
                 self.assertIn("payment_hash", tx_cols)
@@ -139,12 +140,11 @@ class FreshSchemaTests(unittest.TestCase):
                 self.assertIn("idx_transaction_pairs_active_in", index_names)
                 self.assertIn("idx_transaction_pairs_profile_active", index_names)
                 self.assertIn("idx_transactions_payment_hash", index_names)
-                # The one-active-leg-per-transaction guarantee is a partial unique
+                # One active collateral mark per transaction is a partial unique
                 # index; pin it so a future drop is caught (the tax pipeline relies
-                # on it for the loan-leg role lookup).
+                # on it for the collateral-role lookup).
                 self.assertIn("idx_loan_legs_active_transaction", index_names)
                 self.assertIn("idx_loan_legs_profile_active", index_names)
-                self.assertIn("idx_loans_profile_active", index_names)
 
                 table_sql = conn.execute(
                     "SELECT sql FROM sqlite_master WHERE type='table' AND name='transaction_pairs'"

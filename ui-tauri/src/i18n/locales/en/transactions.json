@@ -361,7 +361,14 @@
       "classify": "Classify",
       "copyId": "Copy ID",
       "exclude": "Exclude Transaction",
-      "voidConfirm": "Void this transaction? This cannot be undone."
+      "voidConfirm": "Void this transaction? This cannot be undone.",
+      "collateral": {
+        "collateralBadge": "Collateral",
+        "returnedBadge": "Returned",
+        "markCollateral": "Mark as loan collateral",
+        "markReturned": "Mark as collateral returned",
+        "unmark": "Remove collateral mark"
+      }
     },
     "pagination": {
       "rowsPerPage": "Rows per page:",

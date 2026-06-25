@@ -71,12 +71,8 @@ from .cli.handlers import (
     delete_transfer_rule,
     dismiss_transfer_candidate,
     invalidate_journals,
-    loans_add,
-    loans_add_leg,
-    loans_delete,
-    loans_delete_leg,
-    loans_list,
-    loans_set,
+    loans_mark,
+    loans_unmark,
     import_into_profile,
     import_into_wallet,
     list_saved_views_cli,
@@ -251,11 +247,8 @@ SUPPORTED_KINDS = (
     "ui.wallets.identify",
     "ui.wallets.identify_onchain",
     "ui.loans.list",
-    "ui.loans.create",
-    "ui.loans.update",
-    "ui.loans.delete",
-    "ui.loans.add_leg",
-    "ui.loans.delete_leg",
+    "ui.loans.mark",
+    "ui.loans.unmark",
     "ui.backends.list",
     "ui.backends.options",
     "ui.backends.public_defaults",
@@ -6854,103 +6847,32 @@ def _loans_snapshot(ctx: DaemonContext) -> dict[str, Any]:
         raise AppError("database is not open", code="unavailable", retryable=True)
     _, profile = resolve_scope(ctx.conn, None, None)
     return {
-        "loans": core_loans.list_loans(ctx.conn, profile["id"]),
-        "actions": core_loans.loan_action_items(ctx.conn, profile["id"]),
-        "presets": core_loans.list_provider_presets(),
-        "enums": {
-            "roles": list(core_loans.LOAN_ROLES),
-            "custody_types": list(core_loans.CUSTODY_TYPES),
-            "rehypothecation": list(core_loans.REHYPOTHECATION_VALUES),
-            "control_mechanisms": list(core_loans.CONTROL_MECHANISMS),
-            "statuses": list(core_loans.LOAN_STATUSES),
-            "leg_roles": list(core_loans.LEG_ROLES),
-        },
+        "marks": core_loans.list_collateral_marks(ctx.conn, profile["id"]),
+        "open_locks": core_loans.open_collateral_locks(ctx.conn, profile["id"]),
+        "roles": list(core_loans.COLLATERAL_ROLES),
+        "role_labels": core_loans.ROLE_LABELS,
     }
 
 
-def _handle_loans_create(ctx: DaemonContext, request: dict[str, Any]) -> dict[str, Any]:
+def _handle_loans_mark(ctx: DaemonContext, request: dict[str, Any]) -> dict[str, Any]:
     if ctx.conn is None:
         raise AppError("database is not open", code="unavailable", retryable=True)
     args = _coerce_args_dict(request.get("request_id"), request.get("args"))
-    return loans_add(
+    return loans_mark(
         ctx.conn,
         None,
         None,
-        role=args.get("role") or "borrower",
-        platform=args.get("platform"),
-        preset=args.get("preset"),
-        custody_type=args.get("custody_type"),
-        rehypothecation=args.get("rehypothecation"),
-        control_mechanism=args.get("control_mechanism"),
-        principal_asset=args.get("principal_asset"),
-        principal_amount=args.get("principal_amount"),
-        collateral_asset=args.get("collateral_asset") or "BTC",
-        status=args.get("status") or "open",
-        public_offering=bool(args.get("public_offering")),
-        interest_asset=args.get("interest_asset"),
-        interest_terms=args.get("interest_terms"),
-        as_of=args.get("as_of"),
+        _required_str_arg(args, "txid", "transaction id"),
+        mark_as=_required_str_arg(args, "as", "mark target (collateral|returned)"),
         note=args.get("note"),
     )
 
 
-_LOAN_UPDATE_FIELDS = (
-    "platform",
-    "custody_type",
-    "rehypothecation",
-    "control_mechanism",
-    "status",
-    "interest_asset",
-    "interest_terms",
-    "as_of_custody_date",
-    "notes",
-)
-
-
-def _handle_loans_update(ctx: DaemonContext, request: dict[str, Any]) -> dict[str, Any]:
+def _handle_loans_unmark(ctx: DaemonContext, request: dict[str, Any]) -> dict[str, Any]:
     if ctx.conn is None:
         raise AppError("database is not open", code="unavailable", retryable=True)
     args = _coerce_args_dict(request.get("request_id"), request.get("args"))
-    loan_id = _required_str_arg(args, "loan_id", "loan id")
-    fields = {field: args[field] for field in _LOAN_UPDATE_FIELDS if field in args}
-    if "public_offering" in args:
-        fields["public_offering"] = bool(args["public_offering"])
-    return loans_set(ctx.conn, None, None, loan_id, **fields)
-
-
-def _handle_loans_delete(ctx: DaemonContext, request: dict[str, Any]) -> dict[str, Any]:
-    if ctx.conn is None:
-        raise AppError("database is not open", code="unavailable", retryable=True)
-    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
-    return loans_delete(ctx.conn, None, None, _required_str_arg(args, "loan_id", "loan id"))
-
-
-def _handle_loans_add_leg(ctx: DaemonContext, request: dict[str, Any]) -> dict[str, Any]:
-    if ctx.conn is None:
-        raise AppError("database is not open", code="unavailable", retryable=True)
-    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
-    return loans_add_leg(
-        ctx.conn,
-        None,
-        None,
-        _required_str_arg(args, "loan_id", "loan id"),
-        role=_required_str_arg(args, "role", "leg role"),
-        txid=args.get("txid"),
-        escrow_address=args.get("escrow_address"),
-        escrow_txid=args.get("escrow_txid"),
-        escrow_vout=args.get("escrow_vout"),
-        amount=args.get("amount"),
-        occurred_at=args.get("occurred_at"),
-        off_chain=bool(args.get("off_chain")),
-        note=args.get("note"),
-    )
-
-
-def _handle_loans_delete_leg(ctx: DaemonContext, request: dict[str, Any]) -> dict[str, Any]:
-    if ctx.conn is None:
-        raise AppError("database is not open", code="unavailable", retryable=True)
-    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
-    return loans_delete_leg(ctx.conn, None, None, _required_str_arg(args, "leg_id", "leg id"))
+    return loans_unmark(ctx.conn, None, None, _required_str_arg(args, "txid", "transaction id"))
 
 
 def _handle_transaction_history(
@@ -8117,29 +8039,14 @@ def handle_request(
             _with_request_id(build_envelope("ui.loans.list", _loans_snapshot(ctx)), request_id),
             False,
         )
-    if kind == "ui.loans.create":
+    if kind == "ui.loans.mark":
         return (
-            _with_request_id(build_envelope("ui.loans.create", _handle_loans_create(ctx, request)), request_id),
+            _with_request_id(build_envelope("ui.loans.mark", _handle_loans_mark(ctx, request)), request_id),
             False,
         )
-    if kind == "ui.loans.update":
+    if kind == "ui.loans.unmark":
         return (
-            _with_request_id(build_envelope("ui.loans.update", _handle_loans_update(ctx, request)), request_id),
-            False,
-        )
-    if kind == "ui.loans.delete":
-        return (
-            _with_request_id(build_envelope("ui.loans.delete", _handle_loans_delete(ctx, request)), request_id),
-            False,
-        )
-    if kind == "ui.loans.add_leg":
-        return (
-            _with_request_id(build_envelope("ui.loans.add_leg", _handle_loans_add_leg(ctx, request)), request_id),
-            False,
-        )
-    if kind == "ui.loans.delete_leg":
-        return (
-            _with_request_id(build_envelope("ui.loans.delete_leg", _handle_loans_delete_leg(ctx, request)), request_id),
+            _with_request_id(build_envelope("ui.loans.unmark", _handle_loans_unmark(ctx, request)), request_id),
             False,
         )
 

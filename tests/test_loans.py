@@ -119,15 +119,21 @@ class LoanTaxClassificationTest(unittest.TestCase):
         self.assertEqual(_btc_quantity(result), Decimal("1"))
         self.assertFalse(_has_disposal(result))
 
-    def test_liquidation_books_a_disposal(self):
+    def test_liquidated_collateral_is_a_disposal_once_unmarked(self):
+        # Liquidation is not modelled. While marked as a lock the outbound is
+        # suppressed (still owned, encumbered); once the user removes the mark
+        # (collateral seized, never returned) the same outbound books as the
+        # disposal it always was — no separate liquidation role needed.
         rows = [
             _row("buy", "inbound", ONE_BTC, "2025-05-01T00:00:00Z", fiat_rate=50_000),
             _row("seize", "outbound", ONE_BTC, "2025-06-01T00:00:00Z", fiat_rate=60_000),
         ]
-        # A liquidation falls through to the normal disposal path (NOT suppressed).
-        result = _run(rows, [{"transaction_id": "seize", "role": "liquidation"}])
-        self.assertEqual(_btc_quantity(result), Decimal("0"))
-        self.assertTrue(_has_disposal(result))
+        marked = _run(rows, [{"transaction_id": "seize", "role": "collateral_lock"}])
+        self.assertEqual(_btc_quantity(marked), Decimal("1"))
+        self.assertFalse(_has_disposal(marked))
+        unmarked = _run(rows, [])  # mark removed after liquidation
+        self.assertEqual(_btc_quantity(unmarked), Decimal("0"))
+        self.assertTrue(_has_disposal(unmarked))
 
     def test_altvermoegen_survives_lock_release_round_trip(self):
         # Pre-2021 Altvermögen coin, round-tripped through a loan escrow, then sold
@@ -165,7 +171,7 @@ class LoanTaxClassificationTest(unittest.TestCase):
         )
 
 
-class LoanCrudTest(unittest.TestCase):
+class CollateralMarkTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.conn = open_db(self._tmp.name)
@@ -183,82 +189,60 @@ class LoanCrudTest(unittest.TestCase):
             "VALUES('wal1', 'w1', 'p1', 'onchain', 'descriptor', ?)",
             (now_iso(),),
         )
-        self.conn.execute(
-            "INSERT INTO transactions(id, workspace_id, profile_id, wallet_id, fingerprint, asset, "
-            "direction, amount, fee, occurred_at, kind, created_at) "
-            "VALUES('tx1', 'w1', 'p1', 'wal1', 'fp1', 'BTC', 'outbound', 100000000000, 0, ?, 'withdrawal', ?)",
-            (now_iso(), now_iso()),
-        )
+        for tid, direction, when in (
+            ("tx1", "outbound", "2025-06-01T00:00:00Z"),
+            ("tx2", "inbound", "2025-09-01T00:00:00Z"),
+        ):
+            self.conn.execute(
+                "INSERT INTO transactions(id, workspace_id, profile_id, wallet_id, fingerprint, asset, "
+                "direction, amount, fee, occurred_at, kind, created_at) "
+                "VALUES(?, 'w1', 'p1', 'wal1', ?, 'BTC', ?, 100000000000, 0, ?, ?, ?)",
+                (tid, "fp-" + tid, direction, when, "withdrawal" if direction == "outbound" else "deposit", now_iso()),
+            )
         self.conn.commit()
 
     def tearDown(self):
         self.conn.close()
         self._tmp.cleanup()
 
-    def test_create_loan_with_preset_seeds_custody(self):
-        loan = core_loans.create_loan(self.conn, "w1", "p1", preset_id="firefish")
-        self.assertEqual(loan["custody_type"], "non_custodial_presigned")
-        self.assertEqual(loan["control_mechanism"], "presigned_only")
-        self.assertEqual(loan["preset_label"], "Firefish")
-        self.assertEqual(loan["status"], "open")
+    def test_mark_drives_the_role_map(self):
+        core_loans.mark_collateral(self.conn, "w1", "p1", "tx1", role="collateral_lock")
+        self.assertEqual(core_loans.load_collateral_role_map(self.conn, "p1"), {"tx1": "collateral_lock"})
 
-    def test_explicit_kwargs_override_preset(self):
-        loan = core_loans.create_loan(
-            self.conn, "w1", "p1", preset_id="firefish", custody_type="custodial_segregated"
-        )
-        self.assertEqual(loan["custody_type"], "custodial_segregated")
-
-    def test_invalid_custody_type_rejected(self):
+    def test_invalid_role_rejected(self):
         with self.assertRaises(AppError) as ctx:
-            core_loans.create_loan(self.conn, "w1", "p1", custody_type="nonsense")
+            core_loans.mark_collateral(self.conn, "w1", "p1", "tx1", role="liquidation")
         self.assertEqual(ctx.exception.code, "validation")
 
-    def test_invalid_leg_role_rejected(self):
-        loan = core_loans.create_loan(self.conn, "w1", "p1")
+    def test_mark_unknown_transaction_rejected(self):
         with self.assertRaises(AppError) as ctx:
-            core_loans.create_loan_leg(self.conn, "w1", "p1", loan["id"], role="bogus", transaction_id="tx1")
-        self.assertEqual(ctx.exception.code, "validation")
+            core_loans.mark_collateral(self.conn, "w1", "p1", "nope", role="collateral_lock")
+        self.assertEqual(ctx.exception.code, "not_found")
 
-    def test_onchain_role_requires_transaction_id(self):
-        loan = core_loans.create_loan(self.conn, "w1", "p1")
+    def test_remark_replaces_role_one_active_mark(self):
+        core_loans.mark_collateral(self.conn, "w1", "p1", "tx1", role="collateral_lock")
+        core_loans.mark_collateral(self.conn, "w1", "p1", "tx1", role="collateral_release")
+        # The unique index allows the re-mark (old one retired), and the map
+        # reflects only the latest role.
+        self.assertEqual(core_loans.load_collateral_role_map(self.conn, "p1"), {"tx1": "collateral_release"})
+        self.assertEqual(len(core_loans.list_collateral_marks(self.conn, "p1")), 1)
+
+    def test_unmark_reverts_to_normal_classification(self):
+        core_loans.mark_collateral(self.conn, "w1", "p1", "tx1", role="collateral_lock")
+        core_loans.unmark_collateral(self.conn, "p1", "tx1")
+        self.assertEqual(core_loans.load_collateral_role_map(self.conn, "p1"), {})
         with self.assertRaises(AppError) as ctx:
-            core_loans.create_loan_leg(self.conn, "w1", "p1", loan["id"], role="collateral_lock")
-        self.assertEqual(ctx.exception.code, "validation")
+            core_loans.unmark_collateral(self.conn, "p1", "tx1")
+        self.assertEqual(ctx.exception.code, "not_found")
 
-    def test_offchain_role_allows_null_transaction_id(self):
-        loan = core_loans.create_loan(self.conn, "w1", "p1")
-        leg = core_loans.create_loan_leg(
-            self.conn, "w1", "p1", loan["id"], role="principal_draw", on_chain_present=False
-        )
-        self.assertEqual(leg["role"], "principal_draw")
-        self.assertIsNone(leg["transaction_id"])
-
-    def test_duplicate_transaction_leg_conflicts(self):
-        loan = core_loans.create_loan(self.conn, "w1", "p1")
-        core_loans.create_loan_leg(self.conn, "w1", "p1", loan["id"], role="collateral_lock", transaction_id="tx1")
-        with self.assertRaises(AppError) as ctx:
-            core_loans.create_loan_leg(self.conn, "w1", "p1", loan["id"], role="liquidation", transaction_id="tx1")
-        self.assertEqual(ctx.exception.code, "conflict")
-
-    def test_role_map_only_includes_active_onchain_legs(self):
-        loan = core_loans.create_loan(self.conn, "w1", "p1")
-        core_loans.create_loan_leg(self.conn, "w1", "p1", loan["id"], role="collateral_lock", transaction_id="tx1")
-        core_loans.create_loan_leg(self.conn, "w1", "p1", loan["id"], role="principal_draw")
-        role_map = core_loans.load_loan_leg_role_map(self.conn, "p1")
-        self.assertEqual(role_map, {"tx1": "collateral_lock"})
-
-    def test_action_items_flag_missing_lock_and_rehyp(self):
-        core_loans.create_loan(self.conn, "w1", "p1", custody_type="custodial_rehypothecated", rehypothecation="allowed")
-        actions = {item["action"] for item in core_loans.loan_action_items(self.conn, "p1")}
-        self.assertIn("needs_lock", actions)
-        self.assertIn("rehyp_review", actions)
-
-    def test_healthy_paired_loan_has_no_standing_status(self):
-        # signal-not-reassurance: a lock + close-out leaves no action chip.
-        loan = core_loans.create_loan(self.conn, "w1", "p1", custody_type="non_custodial_multisig", status="repaid")
-        core_loans.create_loan_leg(self.conn, "w1", "p1", loan["id"], role="collateral_lock", transaction_id="tx1")
-        actions = core_loans.loan_action_items(self.conn, "p1")
-        self.assertEqual(actions, [])
+    def test_open_locks_flag_a_lock_without_a_release(self):
+        core_loans.mark_collateral(self.conn, "w1", "p1", "tx1", role="collateral_lock")
+        # A lock with no offsetting release is "open" — the reconcile hint.
+        open_locks = core_loans.open_collateral_locks(self.conn, "p1")
+        self.assertEqual([m["transaction_id"] for m in open_locks], ["tx1"])
+        # Once the collateral returns (a release of the same asset), nothing is open.
+        core_loans.mark_collateral(self.conn, "w1", "p1", "tx2", role="collateral_release")
+        self.assertEqual(core_loans.open_collateral_locks(self.conn, "p1"), [])
 
 
 if __name__ == "__main__":

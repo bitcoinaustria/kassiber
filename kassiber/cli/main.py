@@ -27,7 +27,6 @@ from ..ai.providers import (
     list_with_default as list_ai_providers_with_default,
 )
 from ..core import chat_history as core_chat_history
-from ..core import loans as core_loans
 from .handlers import (
     APP_NAME,
     BACKEND_CLEAR_FIELD_ALIASES,
@@ -59,15 +58,9 @@ from .handlers import (
     clear_chat_sessions_cli,
     create_saved_view_cli,
     create_transaction_pair,
-    loans_add,
-    loans_add_leg,
-    loans_delete,
-    loans_delete_leg,
     loans_list,
-    loans_presets,
-    loans_set,
-    loans_show,
-    loans_status,
+    loans_mark,
+    loans_unmark,
     create_transfer_rule,
     delete_chat_session_cli,
     delete_direct_swap_payout,
@@ -1409,83 +1402,37 @@ def build_parser() -> argparse.ArgumentParser:
     q_exclude.add_argument("--profile")
     q_exclude.add_argument("--transaction", required=True)
 
-    loans_p = sub.add_parser("loans")
+    loans_p = sub.add_parser("loans", help="Mark transactions as Bitcoin-backed-loan collateral")
     loans_sub = loans_p.add_subparsers(dest="loans_command", required=True)
 
-    loans_add_p = loans_sub.add_parser("add")
-    loans_add_p.add_argument("--workspace")
-    loans_add_p.add_argument("--profile")
-    loans_add_p.add_argument("--role", choices=list(core_loans.LOAN_ROLES), default="borrower")
-    loans_add_p.add_argument("--platform")
-    loans_add_p.add_argument("--preset", help="Provider preset id (firefish, hodlhodl, unchained, ledn, ...)")
-    loans_add_p.add_argument("--custody-type", dest="custody_type", choices=list(core_loans.CUSTODY_TYPES))
-    loans_add_p.add_argument("--rehypothecation", choices=list(core_loans.REHYPOTHECATION_VALUES))
-    loans_add_p.add_argument("--control-mechanism", dest="control_mechanism", choices=list(core_loans.CONTROL_MECHANISMS))
-    loans_add_p.add_argument("--principal-asset", dest="principal_asset")
-    loans_add_p.add_argument("--principal-amount", dest="principal_amount", type=int, help="Principal in minor units (cents for fiat, msat for BTC)")
-    loans_add_p.add_argument("--collateral-asset", dest="collateral_asset", default="BTC")
-    loans_add_p.add_argument("--status", choices=list(core_loans.LOAN_STATUSES), default="open")
-    loans_add_p.add_argument("--public-offering", dest="public_offering", action="store_true")
-    loans_add_p.add_argument("--interest-asset", dest="interest_asset")
-    loans_add_p.add_argument("--interest-terms", dest="interest_terms")
-    loans_add_p.add_argument("--as-of", dest="as_of", help="Date custody/rehypothecation was assessed (ISO)")
-    loans_add_p.add_argument("--note", dest="note")
+    loans_mark_p = loans_sub.add_parser(
+        "mark", help="Mark a transaction as loan collateral (out) or collateral returned (in)"
+    )
+    loans_mark_p.add_argument("--workspace")
+    loans_mark_p.add_argument("--profile")
+    loans_mark_p.add_argument("--txid", required=True, help="Transaction id or external_id to mark")
+    loans_mark_p.add_argument(
+        "--as",
+        dest="mark_as",
+        required=True,
+        choices=["collateral", "returned"],
+        help="'collateral' = outbound posted as collateral (not a disposal); "
+        "'returned' = collateral coming back (not an acquisition)",
+    )
+    loans_mark_p.add_argument("--note", dest="note")
 
-    loans_list_p = loans_sub.add_parser("list")
+    loans_unmark_p = loans_sub.add_parser(
+        "unmark", help="Remove a transaction's collateral mark (reverts to a normal disposal/acquisition)"
+    )
+    loans_unmark_p.add_argument("--workspace")
+    loans_unmark_p.add_argument("--profile")
+    loans_unmark_p.add_argument("--txid", required=True, help="Transaction id or external_id to unmark")
+
+    loans_list_p = loans_sub.add_parser(
+        "list", help="List collateral marks and open locks (collateral that hasn't returned)"
+    )
     loans_list_p.add_argument("--workspace")
     loans_list_p.add_argument("--profile")
-
-    loans_show_p = loans_sub.add_parser("show")
-    loans_show_p.add_argument("--workspace")
-    loans_show_p.add_argument("--profile")
-    loans_show_p.add_argument("--loan-id", required=True, dest="loan_id")
-
-    loans_set_p = loans_sub.add_parser("set")
-    loans_set_p.add_argument("--workspace")
-    loans_set_p.add_argument("--profile")
-    loans_set_p.add_argument("--loan-id", required=True, dest="loan_id")
-    loans_set_p.add_argument("--platform")
-    loans_set_p.add_argument("--custody-type", dest="custody_type", choices=list(core_loans.CUSTODY_TYPES))
-    loans_set_p.add_argument("--rehypothecation", choices=list(core_loans.REHYPOTHECATION_VALUES))
-    loans_set_p.add_argument("--control-mechanism", dest="control_mechanism", choices=list(core_loans.CONTROL_MECHANISMS))
-    loans_set_p.add_argument("--status", choices=list(core_loans.LOAN_STATUSES))
-    loans_set_p.add_argument("--public-offering", dest="public_offering", action="store_true", default=None)
-    loans_set_p.add_argument("--interest-asset", dest="interest_asset")
-    loans_set_p.add_argument("--interest-terms", dest="interest_terms")
-    loans_set_p.add_argument("--as-of", dest="as_of_custody_date")
-    loans_set_p.add_argument("--note", dest="notes")
-
-    loans_delete_p = loans_sub.add_parser("delete")
-    loans_delete_p.add_argument("--workspace")
-    loans_delete_p.add_argument("--profile")
-    loans_delete_p.add_argument("--loan-id", required=True, dest="loan_id")
-
-    loans_leg_p = loans_sub.add_parser("leg")
-    loans_leg_p.add_argument("--workspace")
-    loans_leg_p.add_argument("--profile")
-    loans_leg_p.add_argument("--loan-id", required=True, dest="loan_id")
-    loans_leg_p.add_argument("--role", required=True, choices=list(core_loans.LEG_ROLES))
-    loans_leg_p.add_argument("--txid", dest="txid", help="Journal transaction id or external_id this leg books against")
-    loans_leg_p.add_argument("--escrow-address", dest="escrow_address")
-    loans_leg_p.add_argument("--escrow-txid", dest="escrow_txid")
-    loans_leg_p.add_argument("--escrow-vout", dest="escrow_vout", type=int)
-    loans_leg_p.add_argument("--amount", dest="amount", help="Leg amount in BTC")
-    loans_leg_p.add_argument("--occurred-at", dest="occurred_at")
-    loans_leg_p.add_argument("--off-chain", dest="off_chain", action="store_true")
-    loans_leg_p.add_argument("--note", dest="note")
-
-    loans_unleg_p = loans_sub.add_parser("unleg")
-    loans_unleg_p.add_argument("--workspace")
-    loans_unleg_p.add_argument("--profile")
-    loans_unleg_p.add_argument("--leg-id", required=True, dest="leg_id")
-
-    loans_status_p = loans_sub.add_parser("status")
-    loans_status_p.add_argument("--workspace")
-    loans_status_p.add_argument("--profile")
-
-    loans_presets_p = loans_sub.add_parser("presets")
-    loans_presets_p.add_argument("--workspace")
-    loans_presets_p.add_argument("--profile")
 
     transfers = sub.add_parser("transfers")
     transfers_sub = transfers.add_subparsers(dest="transfers_command", required=True)
@@ -3283,80 +3230,22 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     ),
                 )
     if args.command == "loans":
-        if args.loans_command == "add":
+        if args.loans_command == "mark":
             return emit(
                 args,
-                loans_add(
+                loans_mark(
                     conn,
                     args.workspace,
                     args.profile,
-                    role=args.role,
-                    platform=args.platform,
-                    preset=args.preset,
-                    custody_type=args.custody_type,
-                    rehypothecation=args.rehypothecation,
-                    control_mechanism=args.control_mechanism,
-                    principal_asset=args.principal_asset,
-                    principal_amount=args.principal_amount,
-                    collateral_asset=args.collateral_asset,
-                    status=args.status,
-                    public_offering=args.public_offering,
-                    interest_asset=args.interest_asset,
-                    interest_terms=args.interest_terms,
-                    as_of=args.as_of,
+                    args.txid,
+                    mark_as=args.mark_as,
                     note=args.note,
                 ),
             )
+        if args.loans_command == "unmark":
+            return emit(args, loans_unmark(conn, args.workspace, args.profile, args.txid))
         if args.loans_command == "list":
             return emit(args, loans_list(conn, args.workspace, args.profile))
-        if args.loans_command == "show":
-            return emit(args, loans_show(conn, args.workspace, args.profile, args.loan_id))
-        if args.loans_command == "set":
-            fields = {}
-            for attr in (
-                "platform",
-                "custody_type",
-                "rehypothecation",
-                "control_mechanism",
-                "status",
-                "interest_asset",
-                "interest_terms",
-                "as_of_custody_date",
-                "notes",
-            ):
-                value = getattr(args, attr, None)
-                if value is not None:
-                    fields[attr] = value
-            if getattr(args, "public_offering", None):
-                fields["public_offering"] = True
-            return emit(args, loans_set(conn, args.workspace, args.profile, args.loan_id, **fields))
-        if args.loans_command == "delete":
-            return emit(args, loans_delete(conn, args.workspace, args.profile, args.loan_id))
-        if args.loans_command == "leg":
-            return emit(
-                args,
-                loans_add_leg(
-                    conn,
-                    args.workspace,
-                    args.profile,
-                    args.loan_id,
-                    role=args.role,
-                    txid=args.txid,
-                    escrow_address=args.escrow_address,
-                    escrow_txid=args.escrow_txid,
-                    escrow_vout=args.escrow_vout,
-                    amount=args.amount,
-                    occurred_at=args.occurred_at,
-                    off_chain=args.off_chain,
-                    note=args.note,
-                ),
-            )
-        if args.loans_command == "unleg":
-            return emit(args, loans_delete_leg(conn, args.workspace, args.profile, args.leg_id))
-        if args.loans_command == "status":
-            return emit(args, loans_status(conn, args.workspace, args.profile))
-        if args.loans_command == "presets":
-            return emit(args, loans_presets(conn))
 
     if args.command == "views":
         if args.views_command == "list":

@@ -29,7 +29,6 @@ from ..austrian import (
 from ..tax_events import NormalizedTaxAssetInputs, build_tax_quarantine, normalize_tax_asset_inputs
 from ..loans import (
     LOCK_SUPPRESS_ROLES as _LOAN_LOCK_SUPPRESS_ROLES,
-    QUARANTINE_ROLES as _LOAN_QUARANTINE_ROLES,
     RELEASE_SUPPRESS_ROLES as _LOAN_RELEASE_SUPPRESS_ROLES,
 )
 from .base import TaxEngineLedgerInputs, TaxEngineLedgerResult
@@ -712,30 +711,13 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
             continue
         loan_role = getattr(event, "loan_leg_role", None)
         if loan_role in _LOAN_LOCK_SUPPRESS_ROLES:
-            # Collateral posted to escrow (lock / top-up / internal
-            # consolidation): the borrower still owns the coins (encumbered), so
-            # this is NOT a disposal. Skip emission and leave availability
-            # untouched — the lot stays in the global pool and a later release or
-            # liquidation draws from it. No separate balance-bearing account, so
-            # the per-(exchange, holder) gate can never go negative here.
-            continue
-        if loan_role in _LOAN_QUARANTINE_ROLES:
-            # Out-of-scope wrap (e.g. BTC->cbBTC on Base): quarantine for review
-            # rather than book a disposal the base-layer footprint can't
-            # substantiate.
-            quarantines.append(
-                build_tax_quarantine(
-                    profile,
-                    event.raw_row,
-                    "loan_leg_out_of_scope",
-                    {
-                        "wallet": event.wallet_label,
-                        "asset": asset,
-                        "direction": "outbound",
-                        "loan_leg_role": loan_role,
-                    },
-                )
-            )
+            # Outbound marked as loan collateral: the borrower still owns the
+            # coins (encumbered), so this is NOT a disposal. Skip emission and
+            # leave availability untouched — the lot stays in the global pool and
+            # a later release draws from it. No separate balance-bearing account,
+            # so the per-(exchange, holder) gate can never go negative here. If
+            # the collateral is liquidated instead of returned, the user removes
+            # the mark and this outbound books as the disposal it is.
             continue
         disposal_kind = _normalized_event_kind(event)
         if _kind_has_token(disposal_kind, _NON_SALE_DISPOSAL_KIND_TOKENS):
@@ -2038,11 +2020,11 @@ class GenericRP2TaxEngine:
             pairs_by_asset = defaultdict(list)
             for pair in all_pairs:
                 pairs_by_asset[pair["out"]["asset"]].append(pair)
-            # Active loan legs classify their journal transaction by role: a
-            # collateral lock/release is a non-event that keeps the coins in the
-            # owned global pool (encumbered, NOT a separate balance-bearing
-            # account); a liquidation/repay-sale falls through to the normal
-            # disposal path. Row-index access works for both sqlite3.Row and dict.
+            # Active collateral marks classify their journal transaction by role:
+            # a collateral lock (outbound) and release (inbound) are non-events
+            # that keep the coins in the owned global pool (encumbered, NOT a
+            # separate balance-bearing account). Row-index access works for both
+            # sqlite3.Row and dict.
             loan_leg_by_transaction_id = {
                 str(leg["transaction_id"]): str(leg["role"])
                 for leg in (inputs.loan_legs or ())

@@ -4841,26 +4841,30 @@ class AccountBucketBehaviorTest(unittest.TestCase):
             # Baseline: the outbound is booked as a disposal, so no BTC remains.
             self.assertAlmostEqual(btc_held(), 0.0, places=8)
 
-            loan = run("loans", "add", "--workspace", "Main", "--profile", "Default", "--preset", "firefish")["data"]
-            self.assertEqual(loan["custody_type"], "non_custodial_presigned")
-            leg = run(
-                "loans", "leg", "--workspace", "Main", "--profile", "Default",
-                "--loan-id", loan["id"], "--role", "collateral_lock", "--txid", "lock-1",
+            mark = run(
+                "loans", "mark", "--workspace", "Main", "--profile", "Default",
+                "--txid", "lock-1", "--as", "collateral",
             )["data"]
-            self.assertEqual(leg["role"], "collateral_lock")
+            self.assertEqual(mark["role"], "collateral_lock")
 
-            # With the lock recorded, the disposal is suppressed: the BTC is still
-            # held (encumbered), not sold.
+            # With the mark, the disposal is suppressed: the BTC is still held
+            # (encumbered), not sold.
             self.assertAlmostEqual(btc_held(), 1.0, places=8)
 
-            # An open loan with a lock but no release/liquidation is surfaced.
-            status = run("loans", "status", "--workspace", "Main", "--profile", "Default")["data"]
-            self.assertIn("needs_close_out", {item["action"] for item in status})
+            # The lock has no offsetting release, so it surfaces as an open lock.
+            listing = run("loans", "list", "--workspace", "Main", "--profile", "Default")["data"]
+            self.assertEqual(len(listing["open_locks"]), 1)
+            self.assertEqual(listing["open_locks"][0]["role"], "collateral_lock")
 
-            # Handler-level error: a leg pointing at a missing transaction.
+            # Liquidation path: removing the mark reverts the outbound to the
+            # disposal it really was, so the BTC leaves the book again.
+            run("loans", "unmark", "--workspace", "Main", "--profile", "Default", "--txid", "lock-1")
+            self.assertAlmostEqual(btc_held(), 0.0, places=8)
+
+            # Handler-level error: marking a missing transaction.
             payload, code = _run(
-                root, "loans", "leg", "--workspace", "Main", "--profile", "Default",
-                "--loan-id", loan["id"], "--role", "liquidation", "--txid", "does-not-exist",
+                root, "loans", "mark", "--workspace", "Main", "--profile", "Default",
+                "--txid", "does-not-exist", "--as", "collateral",
             )
             self.assertNotEqual(code, 0)
             self.assertEqual(payload.get("kind"), "error")

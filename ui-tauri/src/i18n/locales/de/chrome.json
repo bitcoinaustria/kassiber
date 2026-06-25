@@ -89,10 +89,6 @@
       "label": "Wegzugsbesteuerung durchsuchen",
       "placeholder": "Wegzugsdatum, Zielort suchen…"
     },
-    "loans": {
-      "label": "Darlehen durchsuchen",
-      "placeholder": "Anbieter, Verwahrung suchen…"
-    },
     "sourceOfFunds": {
       "title": "Mittelherkunft",
       "label": "Mittelherkunft durchsuchen",
