@@ -1282,6 +1282,10 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "profiles", "require_coarse_review", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "profiles", "journal_input_version", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "profiles", "last_processed_input_version", "INTEGER NOT NULL DEFAULT 0")
+    # Cached count of unresolved swap/transfer candidates after the last
+    # journal run, surfaced as a side-nav hint. NULL = never computed (no badge).
+    ensure_column(conn, "profiles", "swap_candidate_count", "INTEGER")
+    ensure_column(conn, "profiles", "swap_candidate_count_at", "TEXT")
     ensure_column(conn, "backends", "batch_size", "INTEGER")
     ensure_column(conn, "backends", "config_json", "TEXT NOT NULL DEFAULT '{}'")
     ensure_column(conn, "journal_entries", "at_category", "TEXT")

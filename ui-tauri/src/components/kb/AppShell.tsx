@@ -180,6 +180,43 @@ type NavGroup = {
   items: NavItem[];
 };
 
+// Cheap unresolved-item counts for the active book, surfaced as side-nav hints
+// (ui.review.badges). `swaps` is null until the transfer matcher has run once.
+type ReviewBadgesSnapshot = {
+  quarantine: number;
+  journals_needs_processing: boolean;
+  swaps: number | null;
+};
+
+type NavBadgeTone = "blocker" | "review";
+
+// A resolved hint for one nav item. `count: null` renders a presence-only dot
+// (e.g. "journals need processing"); a number renders a count pill.
+type NavBadge = {
+  count: number | null;
+  tone: NavBadgeTone;
+  labelKey: string;
+};
+
+// Mirror the notification bell's existing severity language (see
+// notificationAlertClassName) so the same concept reads the same everywhere:
+// red = blocks a correct report (quarantine), amber = needs review/processing
+// (swaps, journals). Soft-tint pills tuned per theme so the count clears WCAG AA
+// on both the near-white (light) and near-black (dark) sidebar.
+const NAV_BADGE_PILL_TONE: Record<NavBadgeTone, string> = {
+  blocker: "bg-red-500/15 text-red-700 dark:bg-red-400/15 dark:text-red-300",
+  review:
+    "bg-amber-500/15 text-amber-800 dark:bg-amber-400/15 dark:text-amber-300",
+};
+
+// Dots reuse each tone's pill-text shade: solid fills need a darker tint in
+// light mode to stay visible on the near-white sidebar (amber-500 was only
+// ~2:1), and these shades are already AA-verified for the pills.
+const NAV_BADGE_DOT_TONE: Record<NavBadgeTone, string> = {
+  blocker: "bg-red-700 dark:bg-red-300",
+  review: "bg-amber-800 dark:bg-amber-300",
+};
+
 // `titleKey` indexes `nav:book.*` for the breadcrumb title; the search keys
 // index `chrome:routeMeta.*`. Keep the literal route prefixes as stable lookups.
 type RouteMeta = {
@@ -1472,6 +1509,41 @@ function AppSidebar({
       })).filter((group) => group.items.length > 0),
     [aiFeaturesEnabled],
   );
+  const { data: reviewBadgesData } = useDaemon<ReviewBadgesSnapshot>(
+    "ui.review.badges",
+    undefined,
+    { enabled: daemonEnabled },
+  );
+  const badges = reviewBadgesData?.data;
+  const navBadges = React.useMemo<Record<string, NavBadge>>(() => {
+    const map: Record<string, NavBadge> = {};
+    if (!badges) return map;
+    // Signal, not reassurance: only surface a hint when there is something to
+    // act on — never a "0" or an all-clear marker.
+    if (badges.quarantine > 0) {
+      // Quarantine blocks correct reports — same red as the bell's quarantine alert.
+      map["/quarantine"] = {
+        count: badges.quarantine,
+        tone: "blocker",
+        labelKey: "badge.quarantine",
+      };
+    }
+    if (typeof badges.swaps === "number" && badges.swaps > 0) {
+      map["/swaps"] = {
+        count: badges.swaps,
+        tone: "review",
+        labelKey: "badge.swaps",
+      };
+    }
+    if (badges.journals_needs_processing) {
+      map["/journals"] = {
+        count: null,
+        tone: "review",
+        labelKey: "badge.journals",
+      };
+    }
+    return map;
+  }, [badges]);
 
   return (
     <Sidebar
@@ -1486,7 +1558,12 @@ function AppSidebar({
             <SidebarGroupContent>
               <SidebarMenu>
                 {group.items.map((item) => (
-                  <NavMenuItem key={item.labelKey} item={item} pathname={pathname} />
+                  <NavMenuItem
+                    key={item.labelKey}
+                    item={item}
+                    pathname={pathname}
+                    badge={navBadges[item.href]}
+                  />
                 ))}
               </SidebarMenu>
             </SidebarGroupContent>
@@ -1655,12 +1732,55 @@ function SidebarActions({
   );
 }
 
+// Renders a hint next to a nav item. Only mounted when there is something to
+// act on, so the count/dot itself is the signal — there is no empty/all-clear
+// state. Shows a count pill when the sidebar is expanded and a corner dot once
+// it collapses to icons (where the pill is hidden).
+function NavItemBadge({ badge }: { badge: NavBadge }) {
+  const { t } = useTranslation("nav");
+  const label = t(badge.labelKey as never, { count: badge.count ?? 0 });
+  const display =
+    badge.count === null ? null : badge.count > 99 ? "99+" : String(badge.count);
+  return (
+    <>
+      {display === null ? (
+        <span
+          aria-label={label}
+          className={cn(
+            "pointer-events-none absolute top-1/2 right-2.5 size-2 -translate-y-1/2 rounded-full select-none group-data-[collapsible=icon]:hidden",
+            NAV_BADGE_DOT_TONE[badge.tone],
+          )}
+        />
+      ) : (
+        <span
+          aria-label={label}
+          className={cn(
+            "pointer-events-none absolute top-1.5 right-1 flex h-5 min-w-5 items-center justify-center rounded-md px-1 text-xs font-medium tabular-nums select-none group-data-[collapsible=icon]:hidden",
+            NAV_BADGE_PILL_TONE[badge.tone],
+          )}
+        >
+          {display}
+        </span>
+      )}
+      <span
+        aria-hidden="true"
+        className={cn(
+          "pointer-events-none absolute top-1.5 right-1.5 hidden size-2 rounded-full ring-2 ring-sidebar group-data-[collapsible=icon]:block",
+          NAV_BADGE_DOT_TONE[badge.tone],
+        )}
+      />
+    </>
+  );
+}
+
 function NavMenuItem({
   item,
   pathname,
+  badge,
 }: {
   item: NavItem;
   pathname: string;
+  badge?: NavBadge;
 }) {
   const { t } = useTranslation("nav");
   const Icon = item.icon;
@@ -1686,6 +1806,7 @@ function NavMenuItem({
             <span>{t(item.labelKey as never) /* dynamic key */}</span>
           </Link>
         </SidebarMenuButton>
+        {badge ? <NavItemBadge badge={badge} /> : null}
       </SidebarMenuItem>
     );
   }

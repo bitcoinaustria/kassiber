@@ -19,6 +19,11 @@
     "main": "Allgemein",
     "review": "Prüfung"
   },
+  "badge": {
+    "quarantine": "Quarantäne: {{count}} zu prüfen",
+    "swaps": "Swaps & Übertragungen: {{count}} zu prüfen",
+    "journals": "Hauptbuch muss verarbeitet werden"
+  },
   "openBook": {
     "title": "Aktives Buch geändert",
     "body": "{{book}} ist jetzt aktiv. {{page}} wird geöffnet.",

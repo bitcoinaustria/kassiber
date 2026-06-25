@@ -50,6 +50,11 @@ export const fixtures: Record<string, unknown> = {
   },
   "ui.overview.snapshot": MOCK_OVERVIEW,
   "ui.workspace.overview.snapshot": MOCK_WORKSPACE_OVERVIEW,
+  "ui.review.badges": {
+    quarantine: 2,
+    journals_needs_processing: true,
+    swaps: 3,
+  },
   "ui.connections.node.snapshot": {
     error: "Pass `connection` to ui.connections.node.snapshot (handled in mock.ts).",
   },
