@@ -215,9 +215,6 @@
     "flowChart": "{{bucket}} · {{segment}} · {{mode}}"
   },
   "dashboard": {
-    "refreshBook": "Buch aktualisieren",
-    "refreshing": "Wird aktualisiert…",
-    "refresh": "Aktualisieren",
     "export": {
       "label": "Exportieren",
       "xlsx": "Excel-Arbeitsmappe (.xlsx)",

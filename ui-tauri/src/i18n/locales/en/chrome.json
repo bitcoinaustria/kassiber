@@ -10,6 +10,13 @@
     "overviewLink": "Kassiber overview",
     "back": "Back",
     "forward": "Forward",
+    "refresh": "Refresh book set",
+    "refreshTitle": "Refresh book set (Cmd/Ctrl+R)",
+    "refreshMenu": {
+      "options": "Refresh options",
+      "reprocessJournals": "Reprocess journals",
+      "fullRescan": "Full rescan"
+    },
     "switchBooksLabel": "Switch books. Current books: {{book}}",
     "booksFallback": "Local books",
     "fallbackTitle": "Kassiber",
