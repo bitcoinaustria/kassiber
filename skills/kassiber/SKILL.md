@@ -121,6 +121,7 @@ Related notes:
 - For fragile CLI command shapes and safe invocation patterns, read [references/command-templates.md](references/command-templates.md).
 - For first-run setup, roots, context, and books creation, read [references/onboarding.md](references/onboarding.md).
 - For wallet kinds, descriptor setup, backend selection, and imports, read [references/wallets-backends.md](references/wallets-backends.md).
+- For onboarding a brand-new exchange / broker / custodial platform Kassiber does not support yet (the structured intake interview plus the importer implementation checklist), read [references/add-exchange.md](references/add-exchange.md). The user-facing entry point is the `/add-exchange` command.
 - For journal processing, quarantine handling, and transfer pairing, read [references/journal-processing.md](references/journal-processing.md).
 - For swap-candidate matching (Lightning ↔ Liquid, BTC ↔ LBTC peg, Boltz submarine swaps), the auto-pair rules engine, and saved review-queue views, read [references/swap-matching.md](references/swap-matching.md).
 - For notes, tags, exclusions, BIP329 labels, and attachments, read [references/metadata.md](references/metadata.md).
