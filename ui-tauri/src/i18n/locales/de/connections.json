@@ -2,8 +2,6 @@
   "dashboard": {
     "eyebrow": "Wallets und Quellen",
     "title": "Wallets",
-    "refreshBook": "Buch aktualisieren",
-    "refreshing": "Wird aktualisiert",
     "addWallet": "Wallet hinzufügen"
   },
   "metrics": {
@@ -420,7 +418,7 @@
   "scanner": {
     "title": "Wallet-Export scannen",
     "scanTitle": "{{title}} scannen",
-    "description": "Scanne einen Descriptor, einen xpub-Familien-Export, einen Liquid-Descriptor oder eine BBQR-Sequenz von einem Wallet-Display.",
+    "description": "Scanne einen Output-Descriptor, einen xpub-Familien-Export oder eine BBQR-Sequenz von einem Wallet-Display.",
     "mode": {
       "auto": "Auto",
       "single": "Einzel-QR",
@@ -499,7 +497,7 @@
     },
     "descriptor": {
       "walletExport": "Wallet-Export",
-      "scanHint": "Füge einen Descriptor, einen xpub-Familien-Export, einen Liquid-Descriptor oder eine BBQR-Sequenz ein oder scanne sie.",
+      "scanHint": "Füge einen Output-Descriptor, einen xpub-Familien-Export oder eine BBQR-Sequenz ein oder scanne sie.",
       "scan": "Scannen",
       "gapLimit": "Gap Limit",
       "gapLimitHelper": "Standard sind 40 ungenutzte Adressen pro Branch. Erhöhe es für ältere oder stark genutzte Wallets, bis 5.000; lange Scans laufen weiter, bis der Daemon fertig ist.",
@@ -514,7 +512,17 @@
       "copy": "Kopieren",
       "detected": "Erkannt: {{label}}",
       "detectedWithHint": "Erkannt: {{label}} — {{hint}}",
-      "couldNotDerive": "Adressen konnten nicht abgeleitet werden."
+      "couldNotDerive": "Adressen konnten nicht abgeleitet werden.",
+      "scriptTypeLabel": "Script-Typ",
+      "scriptTypeHelper": "Ein bloßer xpub verrät nicht, welcher Adresstyp abgeleitet werden soll. Wähle den, den deine Wallet verwendet.",
+      "scriptTypeChoose": "Script-Typ wählen",
+      "scriptType": {
+        "p2wpkh": "Native SegWit · P2WPKH (bc1q…)",
+        "p2shp2wpkh": "Nested SegWit · P2SH-P2WPKH (3…)",
+        "p2pkh": "Legacy · P2PKH (1…)",
+        "p2tr": "Taproot · P2TR (bc1p…)"
+      },
+      "bareXpubResolved": "{{label}} wird als {{scriptType}} abgeleitet."
     },
     "exportFile": {
       "label": "Pfad zur Exportdatei",
@@ -714,6 +722,7 @@
     "validation": {
       "labelRequired": "Das Verbindungslabel ist erforderlich.",
       "pasteWalletMaterial": "Füge einen Wallet-Export, einen Descriptor oder einen Extended Public Key ein.",
+      "selectScriptType": "Ein bloßer xpub ist mehrdeutig — wähle einen Script-Typ, damit wir den Descriptor erstellen können.",
       "gapPositive": "Das Gap Limit muss eine positive Ganzzahl sein.",
       "gapMax": "Das Gap Limit muss {{max}} oder niedriger sein.",
       "chooseBackend": "Wähle ein Backend."

@@ -9,6 +9,7 @@ from ..msat import msat_to_btc
 from ..transfers import normalize_group_txid
 from . import pricing
 from .austrian import infer_outbound_regimes, infer_regime_from_timestamp, resolve_pool_id
+from .loans import LOCK_SUPPRESS_ROLES, RELEASE_SUPPRESS_ROLES
 from .privacy_hops import privacy_hop_evidence_from_row
 from .transfer_matching import (
     DEFAULT_FEE_PCT_MAX,
@@ -56,6 +57,12 @@ class NormalizedTaxEvent:
     # normalization layer must synthesize a stable non-empty id when
     # tagging swap legs.
     at_swap_link: Optional[str] = None
+    # Bitcoin-backed-loan leg role (kassiber.core.loans.LEG_ROLES) when this
+    # transaction is a leg of a loan. Drives engine classification: a
+    # collateral lock/release is suppressed (coins stay in the owned pool,
+    # encumbered), a liquidation/repay-sale falls through to the normal
+    # disposal path. None when the transaction is not a loan leg.
+    loan_leg_role: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -597,6 +604,7 @@ def normalize_tax_asset_inputs(
     intra_pairs: Sequence[Mapping[str, Any]],
     at_regime_by_row_id: Optional[Mapping[str, AtRegime]] = None,
     at_swap_link_by_row_id: Optional[Mapping[str, str]] = None,
+    loan_leg_by_transaction_id: Optional[Mapping[str, str]] = None,
 ) -> NormalizedTaxAssetInputs:
     tax_country = ""
     if hasattr(profile, "keys") and "tax_country" in profile.keys():
@@ -604,7 +612,23 @@ def normalize_tax_asset_inputs(
     is_at = tax_country == "at"
     regime_map = at_regime_by_row_id or {}
     swap_link_map = at_swap_link_by_row_id or {}
-    outbound_regimes = infer_outbound_regimes(rows, intra_pairs) if is_at else {}
+    loan_leg_map = loan_leg_by_transaction_id or {}
+    # Suppressed loan legs (collateral lock/release and friends) are non-events:
+    # the coins never leave the owned pool. Exclude them from regime/inventory
+    # inference so a lock does not "consume" Alt inventory and a release does not
+    # add phantom Neu inventory — otherwise a later real sale is assigned a regime
+    # whose pool is empty and rp2 aborts with "in < taxable".
+    suppressed_loan_ids = {
+        str(tx_id)
+        for tx_id, role in loan_leg_map.items()
+        if role in LOCK_SUPPRESS_ROLES or role in RELEASE_SUPPRESS_ROLES
+    }
+    regime_rows = (
+        [row for row in rows if str(row["id"]) not in suppressed_loan_ids]
+        if suppressed_loan_ids
+        else rows
+    )
+    outbound_regimes = infer_outbound_regimes(regime_rows, intra_pairs) if is_at else {}
     events: list[NormalizedTaxEvent] = []
     transfers: list[NormalizedTaxTransfer] = []
     ordered_items: list[tuple[str, str]] = []
@@ -957,6 +981,8 @@ def normalize_tax_asset_inputs(
             linked = swap_link_map.get(row["id"])
             if linked:
                 at_swap_link = linked
+        # Loan-leg role is country-agnostic (loans apply to generic + AT profiles).
+        loan_leg_role = loan_leg_map.get(row["id"])
         events.append(
             NormalizedTaxEvent(
                 transaction_id=row["id"],
@@ -974,6 +1000,7 @@ def normalize_tax_asset_inputs(
                 at_regime=at_regime,
                 at_pool=at_pool,
                 at_swap_link=at_swap_link,
+                loan_leg_role=loan_leg_role,
             )
         )
         ordered_items.append(("event", row["id"]))

@@ -313,6 +313,11 @@ kassiber wallets import-json --wallet wallet-name --file /path/to/data.json
 kassiber wallets import-csv --wallet wallet-name --file /path/to/data.csv
 ```
 
+Adding a provider Kassiber does not support yet (a dedicated `import-<slug>`
+instead of generic CSV) is a separate workflow: see
+[add-exchange.md](add-exchange.md) for the intake interview and importer
+implementation checklist.
+
 Do not create a second wallet for a BTCPay or Phoenix export when it belongs to a wallet already tracked in Kassiber.
 Do not create one Kassiber wallet per BTCPay store if multiple stores share the same underlying wallet balance.
 

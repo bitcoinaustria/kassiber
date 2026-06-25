@@ -22,8 +22,18 @@ _XPUB_VERSION_BYTES = {
     "tpub": bytes.fromhex("043587cf"),
 }
 
+# Descriptor templates used to disambiguate a bare xpub/tpub once the caller
+# supplies the script type. {branch} is 0 for receive and 1 for change, matching
+# the shape produced by _descriptors_from_slip132.
+_BARE_XPUB_TEMPLATES = {
+    "p2pkh": "pkh({key}/{branch}/*)",
+    "p2sh-p2wpkh": "sh(wpkh({key}/{branch}/*))",
+    "p2wpkh": "wpkh({key}/{branch}/*)",
+    "p2tr": "tr({key}/{branch}/*)",
+}
 
-def normalize_wallet_material(value: str) -> dict[str, str]:
+
+def normalize_wallet_material(value: str, *, script_type: str | None = None) -> dict[str, str]:
     material = value.strip()
     if not material:
         raise AppError(
@@ -44,6 +54,8 @@ def normalize_wallet_material(value: str) -> dict[str, str]:
         return parsed
     prefix = material[:4]
     if prefix in {"xpub", "tpub"}:
+        if script_type:
+            return _descriptors_from_bare_xpub(material, script_type)
         raise AppError(
             "Bare xpub/tpub is ambiguous",
             code="validation",
@@ -165,6 +177,22 @@ def _looks_like_descriptor(value: str) -> bool:
             "ct(",
         )
     )
+
+
+def _descriptors_from_bare_xpub(material: str, script_type: str) -> dict[str, str]:
+    template = _BARE_XPUB_TEMPLATES.get(script_type)
+    if template is None:
+        raise AppError(
+            f"Unsupported script type '{script_type}'",
+            code="validation",
+            hint="Supported script types are p2pkh, p2sh-p2wpkh, p2wpkh, and p2tr.",
+        )
+    # Reject a malformed key before we wrap it in a descriptor.
+    _base58check_decode(material)
+    return {
+        "descriptor": template.format(key=material, branch=0),
+        "change_descriptor": template.format(key=material, branch=1),
+    }
 
 
 def _descriptors_from_slip132(material: str) -> dict[str, str] | None:

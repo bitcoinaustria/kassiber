@@ -63,6 +63,7 @@ import type { ProfilesSnapshot, Profile, Workspace } from "@/mocks/profiles";
 
 const ACCOUNTING_METHOD_LABEL_KEYS = {
   MOVING_AVERAGE_AT: "books.method.MOVING_AVERAGE_AT",
+  MOVING_AVERAGE: "books.method.MOVING_AVERAGE",
   FIFO: "books.method.FIFO",
   LIFO: "books.method.LIFO",
   HIFO: "books.method.HIFO",
@@ -502,6 +503,9 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
           if (profileError) setProfileError(null);
         }}
         onMethodChange={(value) => {
+          // See RenameProfileDialog: ignore radix's spurious empty fire on a
+          // region switch so the region default survives.
+          if (!value) return;
           setProfileMethod(value);
           if (profileError) setProfileError(null);
         }}
@@ -556,6 +560,11 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
           if (renameProfileError) setRenameProfileError(null);
         }}
         onMethodChange={(value) => {
+          // A region switch changes the method value AND the option set in the
+          // same render; radix Select then fires a spurious onValueChange("")
+          // because the freshly-set value isn't in its (old) collection yet.
+          // Ignore that empty so the region default isn't clobbered to blank.
+          if (!value) return;
           setRenameProfileMethod(value);
           if (renameProfileError) setRenameProfileError(null);
         }}

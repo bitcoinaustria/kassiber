@@ -103,7 +103,11 @@ import {
   syncProgressNotification,
   type WalletSyncProgress,
 } from "@/lib/syncProgress";
-import { detectWalletMaterial } from "@/lib/walletMaterialFormat";
+import {
+  BARE_XPUB_SCRIPT_TYPES,
+  type BareXpubScriptType,
+  detectWalletMaterial,
+} from "@/lib/walletMaterialFormat";
 import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import { useConnectionRefreshState } from "@/hooks/useConnectionRefreshState";
@@ -628,6 +632,7 @@ function ConnectionDetailView({
   const [editPassphrase, setEditPassphrase] = useState("");
   const [editPlaintextAck, setEditPlaintextAck] = useState("");
   const [editWalletMaterial, setEditWalletMaterial] = useState("");
+  const [editDescriptorScriptType, setEditDescriptorScriptType] = useState("");
   const [editGapLimit, setEditGapLimit] = useState("");
   const [editStoreId, setEditStoreId] = useState("");
   const [editPaymentMethodId, setEditPaymentMethodId] = useState("");
@@ -792,6 +797,7 @@ function ConnectionDetailView({
     setEditPassphrase("");
     setEditPlaintextAck("");
     setEditWalletMaterial("");
+    setEditDescriptorScriptType("");
     setEditGapLimit(connection.gap != null ? String(connection.gap) : "");
     setEditStoreId("");
     setEditPaymentMethodId("");
@@ -801,6 +807,19 @@ function ConnectionDetailView({
     setEditError(null);
     setEditOpen(true);
   };
+
+  // Static literal keys so the typed `t()` resolves them (it rejects
+  // template-literal keys). Shares the add-flow strings since the labels are
+  // network- and context-neutral.
+  const scriptTypeLabelKeys = {
+    p2wpkh: "add.descriptor.scriptType.p2wpkh",
+    "p2sh-p2wpkh": "add.descriptor.scriptType.p2shp2wpkh",
+    p2pkh: "add.descriptor.scriptType.p2pkh",
+    p2tr: "add.descriptor.scriptType.p2tr",
+  } as const satisfies Record<BareXpubScriptType, string>;
+
+  const scriptTypeLabel = (value: BareXpubScriptType) =>
+    t(scriptTypeLabelKeys[value]);
 
   const allBackendOptions = backendOptionsQuery.data?.data?.backends ?? [];
   const btcpayBackendOptions = allBackendOptions.filter(
@@ -866,11 +885,18 @@ function ConnectionDetailView({
     const clearFields: string[] = [];
     if (editConfigKind === "descriptor" && walletMaterial) {
       const detection = detectWalletMaterial(walletMaterial);
-      if (detection.kind === "bare-xpub" || detection.kind === "unknown") {
+      if (detection.kind === "unknown") {
         setEditError(detection.hint ?? detection.label);
         return;
       }
+      if (detection.kind === "bare-xpub" && !editDescriptorScriptType) {
+        setEditError(t("add.validation.selectScriptType"));
+        return;
+      }
       configChanges.wallet_material = walletMaterial;
+      if (detection.kind === "bare-xpub") {
+        configChanges.script_type = editDescriptorScriptType;
+      }
     }
     if (editConfigKind === "descriptor" && gapLimitText) {
       const gapLimit = Number.parseInt(gapLimitText, 10);
@@ -1787,14 +1813,31 @@ function ConnectionDetailView({
                   id="connection-edit-material"
                   className="min-h-24 font-mono text-xs"
                   value={editWalletMaterial}
-                  onChange={(event) =>
-                    setEditWalletMaterial(event.target.value)
-                  }
+                  onChange={(event) => {
+                    setEditWalletMaterial(event.target.value);
+                    setEditDescriptorScriptType("");
+                  }}
                   placeholder={t("detail.edit.materialPlaceholder")}
                 />
                 {editWalletMaterial.trim()
                   ? (() => {
                       const detection = detectWalletMaterial(editWalletMaterial);
+                      // A bare xpub stops being ambiguous once a type is picked.
+                      if (
+                        detection.kind === "bare-xpub" &&
+                        editDescriptorScriptType
+                      ) {
+                        return (
+                          <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                            {t("add.descriptor.bareXpubResolved", {
+                              label: detection.label,
+                              scriptType: scriptTypeLabel(
+                                editDescriptorScriptType as BareXpubScriptType,
+                              ),
+                            })}
+                          </p>
+                        );
+                      }
                       const tone =
                         detection.kind === "bare-xpub" ||
                         detection.kind === "unknown"
@@ -1818,6 +1861,34 @@ function ConnectionDetailView({
                         {t("detail.edit.materialHelper")}
                       </p>
                     )}
+                {detectWalletMaterial(editWalletMaterial).kind ===
+                "bare-xpub" ? (
+                  <div className="space-y-1">
+                    <Label htmlFor="connection-edit-script-type">
+                      {t("add.descriptor.scriptTypeLabel")}
+                    </Label>
+                    <select
+                      id="connection-edit-script-type"
+                      className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      value={editDescriptorScriptType}
+                      onChange={(event) =>
+                        setEditDescriptorScriptType(event.target.value)
+                      }
+                    >
+                      <option value="" disabled>
+                        {t("add.descriptor.scriptTypeChoose")}
+                      </option>
+                      {BARE_XPUB_SCRIPT_TYPES.map((value) => (
+                        <option key={value} value={value}>
+                          {scriptTypeLabel(value)}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-muted-foreground">
+                      {t("add.descriptor.scriptTypeHelper")}
+                    </p>
+                  </div>
+                ) : null}
               </div>
             ) : null}
             {editConfigKind === "descriptor" ? (

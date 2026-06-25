@@ -19,6 +19,7 @@ import {
   BookOpen,
   Bug,
   Calculator,
+  ChevronDown,
   ChevronRight,
   ChevronsUpDown,
   ClipboardList,
@@ -37,6 +38,8 @@ import {
   Moon,
   Plane,
   Plus,
+  RefreshCw,
+  RotateCcw,
   Search,
   Server,
   Settings,
@@ -165,6 +168,7 @@ import {
   type NativeMenuPayload,
 } from "./menuIntent";
 import { notificationTarget } from "./notificationRouting";
+import { planHeaderRefresh } from "./headerRefresh";
 
 // `labelKey` indexes the `nav` namespace (book.*); keep `href` as the stable id.
 type NavItem = {
@@ -541,40 +545,37 @@ export function AppShell() {
   const bookRefreshActive =
     activeMaintenanceProgress?.id === BOOK_REFRESH_PROGRESS_ID &&
     Boolean(activeMaintenanceProgress?.active);
-  const firstSyncEligible =
-    bookRefreshActive && bookKey !== null && !firstSyncDone[bookKey];
-  // Dismissed state lives in the store (keyed by book) so the book-refresh
-  // notification in the header can re-open the card via reopenFirstSyncCard.
-  const firstSyncCardDismissedMap = useUiStore((s) => s.firstSyncCardDismissed);
-  const dismissFirstSyncCardStore = useUiStore((s) => s.dismissFirstSyncCard);
-  const reopenFirstSyncCardStore = useUiStore((s) => s.reopenFirstSyncCard);
-  const firstSyncCardDismissed =
-    bookKey !== null && Boolean(firstSyncCardDismissedMap[bookKey]);
+  // Show the full-screen sync card for ANY active book refresh (the first sync
+  // OR a later incremental refresh), not only the very first one.
+  const syncCardEligible = bookRefreshActive && bookKey !== null;
+  // Whether this is the book's very first sync — only switches the card's copy
+  // ("setting up / building your history" vs a plain refresh).
+  const isFirstSync = bookKey !== null && !firstSyncDone[bookKey];
+  // Minimized state lives in the store (keyed by book) so the book-refresh
+  // notification in the header can re-open the card. (The store field is still
+  // named `firstSyncCardDismissed` for historical reasons; it now tracks the
+  // minimized state of the sync card for any refresh.)
+  const syncCardMinimizedMap = useUiStore((s) => s.firstSyncCardDismissed);
+  const minimizeSyncCardStore = useUiStore((s) => s.dismissFirstSyncCard);
+  const restoreSyncCardStore = useUiStore((s) => s.reopenFirstSyncCard);
+  const syncCardMinimized =
+    bookKey !== null && Boolean(syncCardMinimizedMap[bookKey]);
   React.useEffect(() => {
-    // Once a book is no longer mid-first-sync, drop any "continue in
-    // background" choice so its next first-sync run starts expanded again.
-    if (
-      !firstSyncEligible &&
-      bookKey !== null &&
-      firstSyncCardDismissedMap[bookKey]
-    ) {
-      reopenFirstSyncCardStore(bookKey);
+    // Once a book is no longer syncing, drop any "continue in background" choice
+    // so its next refresh starts expanded again.
+    if (!syncCardEligible && bookKey !== null && syncCardMinimizedMap[bookKey]) {
+      restoreSyncCardStore(bookKey);
     }
-  }, [
-    firstSyncEligible,
-    bookKey,
-    firstSyncCardDismissedMap,
-    reopenFirstSyncCardStore,
-  ]);
-  const isFirstSync = firstSyncEligible && !firstSyncCardDismissed;
-  const dismissFirstSyncCard = React.useCallback(() => {
-    if (bookKey !== null) dismissFirstSyncCardStore(bookKey);
-  }, [bookKey, dismissFirstSyncCardStore]);
+  }, [syncCardEligible, bookKey, syncCardMinimizedMap, restoreSyncCardStore]);
+  const showSyncCard = syncCardEligible && !syncCardMinimized;
+  const minimizeSyncCard = React.useCallback(() => {
+    if (bookKey !== null) minimizeSyncCardStore(bookKey);
+  }, [bookKey, minimizeSyncCardStore]);
   // The card already shows the title in its header, so feed it the raw phase
   // label rather than the route-composed "Title: detail" string. Gated on
   // `active` to match `shellProgress`, so a stale maintenance record can't leak
   // a value in.
-  const firstSyncCardProgress: RouteProgressState | null =
+  const syncCardProgress: RouteProgressState | null =
     activeMaintenanceProgress?.active
       ? {
           indeterminate: Boolean(
@@ -899,6 +900,27 @@ export function AppShell() {
     ],
   );
 
+  // The header refresh button AND the Cmd/Ctrl+R / Cmd/Ctrl+Shift+R shortcuts
+  // route here, so the advertised shortcut behaves exactly like the button:
+  // surface the loader (un-minimize the sync card if it was sent to the
+  // background) and start the book refresh. `syncAll` no-ops while one is
+  // already running, so a mid-refresh trigger just re-opens the card.
+  const runHeaderRefresh = React.useCallback(
+    (options?: { forceFull?: boolean }) => {
+      const plan = planHeaderRefresh({
+        hasWorkspace: ensureWorkspaceForMenuAction(),
+        bookKey,
+      });
+      if (plan.reopenSyncCardForBook !== null) {
+        restoreSyncCardStore(plan.reopenSyncCardForBook);
+      }
+      if (plan.startRefresh) {
+        syncAll({ forceFull: Boolean(options?.forceFull) });
+      }
+    },
+    [bookKey, ensureWorkspaceForMenuAction, restoreSyncCardStore, syncAll],
+  );
+
   const openAddWalletConnection = React.useCallback(
     (reason: string) => {
       if (!ensureWorkspaceForMenuAction()) return;
@@ -925,12 +947,12 @@ export function AppShell() {
         runMenuJournalProcessing();
         return;
       }
-      runMenuWalletSync({ forceFull: action === "rescan-book" });
+      runHeaderRefresh({ forceFull: action === "rescan-book" });
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [openAddWalletConnection, runMenuJournalProcessing, runMenuWalletSync, t]);
+  }, [openAddWalletConnection, runHeaderRefresh, runMenuJournalProcessing, t]);
 
   React.useEffect(() => {
     if (identity) return;
@@ -1285,6 +1307,8 @@ export function AppShell() {
           <AppDashboardHeader
             meta={routeMeta}
             onLock={lockApp}
+            onRefresh={runHeaderRefresh}
+            isRefreshing={isSyncing}
             daemonEnabled={daemonEnabled}
           />
           <div className="flex min-h-0 flex-1">
@@ -1368,19 +1392,20 @@ export function AppShell() {
                 {!locked && !importRootBlocked ? (
                   <>
                     <RouteTopProgressLine
-                      // While the full-screen first-sync card is up it already
-                      // shows this progress (plus the blur scrim), so suppress
-                      // the hairline here — it returns once "Continue in
-                      // background" demotes the card.
-                      active={shellBusy && !isFirstSync}
+                      // While the full-screen sync card is up it already shows
+                      // this progress (plus the blur scrim), so suppress the
+                      // hairline here — it returns once "Continue in background"
+                      // minimizes the card.
+                      active={shellBusy && !showSyncCard}
                       progress={shellProgress}
-                      announce={!isFirstSync}
+                      announce={!showSyncCard}
                     />
-                    {isFirstSync ? (
+                    {showSyncCard ? (
                       <FirstSyncCard
-                        progress={firstSyncCardProgress}
+                        progress={syncCardProgress}
                         title={activeMaintenanceProgress?.title}
-                        onDismiss={dismissFirstSyncCard}
+                        isFirstSync={isFirstSync}
+                        onDismiss={minimizeSyncCard}
                       />
                     ) : null}
                   </>
@@ -1859,10 +1884,14 @@ function AppVersion() {
 function AppDashboardHeader({
   meta,
   onLock,
+  onRefresh,
+  isRefreshing,
   daemonEnabled,
 }: {
   meta: RouteMeta;
   onLock: () => void;
+  onRefresh: (options?: { forceFull?: boolean }) => void;
+  isRefreshing: boolean;
   daemonEnabled: boolean;
 }) {
   const { t } = useTranslation(["chrome", "nav", "search", "settings"]);
@@ -1875,7 +1904,6 @@ function AppDashboardHeader({
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const identity = useUiStore((s) => s.identity);
-  const firstSyncDone = useUiStore((s) => s.firstSyncDone);
   const reopenFirstSyncCard = useUiStore((s) => s.reopenFirstSyncCard);
   const headerBookKey = bookIdentityKey(identity);
   const setDeferredConnectionSetup = useUiStore(
@@ -2304,6 +2332,63 @@ function AppDashboardHeader({
           )}
       </div>
       <div className="flex min-w-0 items-center justify-end gap-2">
+        {/* Split control: primary click runs an incremental book refresh; the
+            caret opens the other "bring the book current" actions. The book
+            refresh already chains source sync + auto-pair + journals, so this
+            is the single home for sync / refresh / reprocess. */}
+        <div className="flex items-center">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn(topNavIconButtonClassName, "rounded-r-none")}
+            aria-label={t("shell.refresh")}
+            title={t("shell.refreshTitle")}
+            onClick={() => onRefresh()}
+          >
+            <RefreshCw
+              className={cn(
+                "size-4",
+                isRefreshing && "animate-spin motion-reduce:animate-none",
+              )}
+              aria-hidden="true"
+            />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  topNavIconButtonClassName,
+                  "w-5 rounded-l-none border-l border-sidebar-border/60",
+                )}
+                aria-label={t("shell.refreshMenu.options")}
+                title={t("shell.refreshMenu.options")}
+              >
+                <ChevronDown className="size-3" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60">
+              <DropdownMenuItem onSelect={() => onRefresh()}>
+                <RefreshCw className="size-4" aria-hidden="true" />
+                {t("shell.refresh")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isProcessingJournals}
+                onSelect={() => runJournalProcessing()}
+              >
+                <ClipboardList className="size-4" aria-hidden="true" />
+                {t("shell.refreshMenu.reprocessJournals")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onRefresh({ forceFull: true })}>
+                <RotateCcw className="size-4" aria-hidden="true" />
+                {t("shell.refreshMenu.fullRescan")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -2350,14 +2435,15 @@ function AppDashboardHeader({
                 <DropdownMenuItem
                   className="flex cursor-pointer items-start justify-between gap-3 whitespace-normal rounded-md"
                   onSelect={(event) => {
-                    // An in-progress book refresh collapsed via "Continue in
-                    // background" re-opens the first-sync card (rather than
+                    // An in-progress book refresh minimized via "Continue in
+                    // background" re-opens the full-screen sync card (rather than
                     // navigating); letting the menu close on select reveals it.
+                    // A live `progress` means a refresh is active, so this covers
+                    // first sync AND later incremental refreshes.
                     if (
                       item.dedupeKey === "book-refresh" &&
                       item.progress &&
-                      headerBookKey !== null &&
-                      !firstSyncDone[headerBookKey]
+                      headerBookKey !== null
                     ) {
                       reopenFirstSyncCard(headerBookKey);
                       return;

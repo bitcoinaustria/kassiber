@@ -10,6 +10,13 @@
     "overviewLink": "Kassiber overview",
     "back": "Back",
     "forward": "Forward",
+    "refresh": "Refresh book set",
+    "refreshTitle": "Refresh book set (Cmd/Ctrl+R)",
+    "refreshMenu": {
+      "options": "Refresh options",
+      "reprocessJournals": "Reprocess journals",
+      "fullRescan": "Full rescan"
+    },
     "switchBooksLabel": "Switch books. Current books: {{book}}",
     "booksFallback": "Local books",
     "fallbackTitle": "Kassiber",
@@ -290,7 +297,9 @@
   },
   "firstSync": {
     "defaultTitle": "Setting up your book",
+    "defaultTitleRefresh": "Refreshing your book",
     "body": "First sync — building your history from your configured sources. This runs once and can take a few minutes.",
+    "bodyRefresh": "Refreshing from your configured sources.",
     "preparing": "Preparing source refresh",
     "working": "Working…",
     "keepUsing": "You can keep using Kassiber while this finishes.",

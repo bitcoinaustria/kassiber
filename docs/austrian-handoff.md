@@ -139,7 +139,16 @@ The implementation works as follows:
 
 1. Kassiber normalizes and prepares all assets once without swap markers,
    so rows with missing pricing, missing inventory, or other readiness
-   blockers are quarantined before they can create orphan markers.
+   blockers are quarantined before they can create orphan markers. The
+   marker-selection step then consults those phase-1 quarantine reasons: if
+   either leg of a carrying-value pair was blocked (e.g. `insufficient_lots`
+   on an over-sold outgoing leg), Kassiber quarantines the whole pair and
+   skips promotion rather than marking only the surviving leg. Marking it
+   would both orphan the `at_swap_link` (tripping the cross-asset validator)
+   and — because at_swap rows are exempt from the single-asset quantity gate
+   so the native runner can resolve cross-asset basis — carry the shortfall
+   into `compute_tax`, where rp2's per-account BalanceSet aborts the entire
+   multi-asset report with an uncatchable "balance went negative".
 2. For each reviewed Neu carrying-value pair whose two legs survived
    preparation, Kassiber emits the same non-empty `at_swap_link` on both
    legs.
@@ -196,6 +205,11 @@ failure mode:
   inbound/outbound tax event.
 - `swap_leg_unavailable`: a reviewed pair points at rows that normalized
   away before a more specific readiness reason was available.
+- Any pre-flight ledger-gate reason (`insufficient_lots`,
+  `missing_cost_basis`, `basis_provenance_incomplete`,
+  `unclassified_income_kind`): a leg survived normalization but was blocked
+  by the phase-1 gate, so the pair is quarantined as a unit instead of being
+  promoted to a swap marker that would carry the block into `compute_tax`.
 
 Those quarantines are no longer the default Austrian swap path; they are
 only the safety net when the swap cannot be annotated correctly.

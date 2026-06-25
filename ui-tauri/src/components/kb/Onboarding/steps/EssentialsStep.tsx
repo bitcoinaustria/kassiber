@@ -1,7 +1,6 @@
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { formatFiatAmount } from "@/lib/currency";
 
 import {
@@ -28,6 +27,14 @@ export const EssentialsStep = ({
 }: StepComponentProps) => {
   const { t } = useTranslation(["onboarding", "common"]);
   const isAustrian = form.taxCountry === "at";
+  const methodLabels = {
+    MOVING_AVERAGE_AT: t("books.method.MOVING_AVERAGE_AT"),
+    MOVING_AVERAGE: t("books.method.MOVING_AVERAGE"),
+    FIFO: t("books.method.FIFO"),
+    LIFO: t("books.method.LIFO"),
+    HIFO: t("books.method.HIFO"),
+    LOFO: t("books.method.LOFO"),
+  };
 
   return (
     <OnboardingSingleColumnFrame
@@ -90,20 +97,20 @@ export const EssentialsStep = ({
               onChange={(value) => update("fiatCurrency", value)}
             />
             {isAustrian ? (
-              <div className="space-y-2">
-                <Label>{t("essentials.accountingMethod")}</Label>
-                <div className="flex h-9 items-center rounded-md border border-line bg-paper-2 px-3 text-sm text-ink">
-                  {t("essentials.movingAverage")}
-                </div>
-                <p className="m-0 text-xs leading-5 text-ink-2">
-                  {t("essentials.movingAverageNote")}
-                </p>
-              </div>
+              <SelectField
+                label={t("essentials.accountingMethod")}
+                value={form.gainsAlgorithm}
+                options={gainsAlgorithmsFor(form.taxCountry)}
+                optionLabels={methodLabels}
+                description={t("essentials.movingAverageNote")}
+                onChange={(value) => update("gainsAlgorithm", value)}
+              />
             ) : (
               <SelectField
                 label={t("essentials.lotSelection")}
                 value={form.gainsAlgorithm}
                 options={gainsAlgorithmsFor(form.taxCountry)}
+                optionLabels={methodLabels}
                 onChange={(value) => update("gainsAlgorithm", value)}
               />
             )}

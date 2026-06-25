@@ -2,6 +2,14 @@
 
 Kassiber can ingest transactions and metadata from several sources. Imported data lands in the local SQLite store and then participates in the normal journal and report workflow.
 
+To add a provider that is **not** in this list, run the intake interview and
+implementation playbook in
+[skills/kassiber/references/add-exchange.md](../../skills/kassiber/references/add-exchange.md)
+(user entry point: the `/add-exchange` command). It captures the provider's
+custodial model, Austrian tax treatment, row types, and export format into a
+spec under [docs/exchanges/](../exchanges/README.md) before any importer is
+written.
+
 ## Supported import paths
 
 - generic JSON / CSV transaction files

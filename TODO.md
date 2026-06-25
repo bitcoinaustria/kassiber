@@ -112,6 +112,28 @@ Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the 
   Veräußerung, gleitender Durchschnittspreis, Wegzugsbesteuerung, Kennzahl,
   Beilage E 1kv, KESt…), Austrian month/“heuer”. Verified via typecheck, the
   en/de parity test, build, and live browser screenshots.
+- [x] **Bitcoin-backed loan collateral (per-transaction mark)** — mark an outbound
+  as *loan collateral* (not a disposal — coins stay owned, encumbered) and the
+  return as *collateral returned* (not an acquisition); a lock/release round-trip
+  nets to zero and keeps its original Altvermögen basis + acquisition date. The
+  mark suppresses the lock/release branches at
+  [`tax_events.py`](kassiber/core/tax_events.py) / [`rp2.py`](kassiber/core/engines/rp2.py);
+  storage is one minimal `loan_legs` row (`transaction_id` + role). Deliberately
+  **not** a facility: no custody / rehypothecation / interest / liquidation
+  modelling. Liquidation is handled by **un-marking** (the outbound reverts to the
+  disposal it really was); `open_collateral_locks` surfaces locks that haven't
+  returned as a reconcile hint. UI is a Transactions row action + badge (no `/loans`
+  screen); CLI `loans mark|unmark|list`.
+  - [x] Resilience precursor: a carrying-value swap whose leg was blocked in
+    phase 1 (e.g. `insufficient_lots` on a self-custody round-trip paired as a BTC↔L-BTC
+    swap) is quarantined as a pair in `_select_at_cross_asset_swap_links` instead of
+    being promoted to an `at_swap_link` that bypassed the quantity gate and aborted the
+    whole report. Regression: `ATSwapOverSellQuarantineTest`; contract in
+    [docs/austrian-handoff.md](docs/austrian-handoff.md).
+  - The facility design (provider presets, custody/rehypothecation matrix, import
+    on-ramps, Steuerberater export) was explored in
+    [docs/plan/12-collateralized-loans.md](docs/plan/12-collateralized-loans.md) and
+    deliberately dropped as over-built — the per-tx mark covers the actual tax fact.
 - [ ] **Finish the i18n long tail:**
   - Reporting surfaces deferred by product call: `routes/Reports.tsx`,
     `routes/ExitTax.tsx`, `LightningProfitabilityPanel.tsx`, and report-output

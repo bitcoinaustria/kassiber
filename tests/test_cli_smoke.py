@@ -4808,6 +4808,68 @@ class AccountBucketBehaviorTest(unittest.TestCase):
         self.assertEqual(real_buy["pricing_provider"], "Pocket Bitcoin")
         self.assertFalse(real_buy["excluded"])
 
+    def test_loans_collateral_lock_is_not_a_disposal_end_to_end(self):
+        # Drives the whole stack via the CLI: a collateral lock leg must suppress
+        # the outbound disposal so the encumbered BTC still shows in the report.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state" / "kassiber"
+            root.mkdir(parents=True)
+            csv_path = Path(tmp) / "wallet.csv"
+            csv_path.write_text(
+                "date,txid,direction,asset,amount,fee,fiat_rate,description,kind\n"
+                "2026-01-01T10:00:00Z,buy-1,inbound,BTC,1.00000000,0,60000,Buy,buy\n"
+                "2026-02-01T10:00:00Z,lock-1,outbound,BTC,1.00000000,0,65000,Lock to escrow,withdrawal\n",
+                encoding="utf-8",
+            )
+
+            def run(*args):
+                payload, code = _run(root, *args)
+                self.assertEqual(code, 0, f"{args} -> {json.dumps(payload)[:300]}")
+                return payload
+
+            run("init")
+            run("workspaces", "create", "Main")
+            run("profiles", "create", "--workspace", "Main", "--fiat-currency", "USD", "--tax-country", "generic", "Default")
+            run("wallets", "create", "--workspace", "Main", "--profile", "Default", "--label", "W1", "--kind", "custom")
+            run("wallets", "import-csv", "--workspace", "Main", "--profile", "Default", "--wallet", "W1", "--file", str(csv_path))
+
+            def btc_held():
+                run("journals", "process", "--workspace", "Main", "--profile", "Default")
+                rows = run("reports", "portfolio-summary", "--workspace", "Main", "--profile", "Default")["data"]
+                return sum(float(r["quantity"]) for r in rows if r["asset"] == "BTC")
+
+            # Baseline: the outbound is booked as a disposal, so no BTC remains.
+            self.assertAlmostEqual(btc_held(), 0.0, places=8)
+
+            mark = run(
+                "loans", "mark", "--workspace", "Main", "--profile", "Default",
+                "--txid", "lock-1", "--as", "collateral",
+            )["data"]
+            self.assertEqual(mark["role"], "collateral_lock")
+
+            # With the mark, the disposal is suppressed: the BTC is still held
+            # (encumbered), not sold.
+            self.assertAlmostEqual(btc_held(), 1.0, places=8)
+
+            # The lock has no offsetting release, so it surfaces as an open lock.
+            listing = run("loans", "list", "--workspace", "Main", "--profile", "Default")["data"]
+            self.assertEqual(len(listing["open_locks"]), 1)
+            self.assertEqual(listing["open_locks"][0]["role"], "collateral_lock")
+
+            # Liquidation path: removing the mark reverts the outbound to the
+            # disposal it really was, so the BTC leaves the book again.
+            run("loans", "unmark", "--workspace", "Main", "--profile", "Default", "--txid", "lock-1")
+            self.assertAlmostEqual(btc_held(), 0.0, places=8)
+
+            # Handler-level error: marking a missing transaction.
+            payload, code = _run(
+                root, "loans", "mark", "--workspace", "Main", "--profile", "Default",
+                "--txid", "does-not-exist", "--as", "collateral",
+            )
+            self.assertNotEqual(code, 0)
+            self.assertEqual(payload.get("kind"), "error")
+            self.assertEqual(payload["error"]["code"], "not_found")
+
 
 if __name__ == "__main__":
     unittest.main()

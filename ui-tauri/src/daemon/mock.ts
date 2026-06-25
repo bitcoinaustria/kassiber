@@ -25,6 +25,21 @@ import { mockWorkspaceOverviewSnapshot } from "@/mocks/workspaceOverview";
 import { buildExitTaxFixture, type ExitTaxDestination } from "@/mocks/exitTax";
 import { MOCK_AI_CHAT_STREAM, fixtures } from "./fixtures";
 
+// Mirror the daemon's `_tax_policy_label` / `_human_tax_method`: an Austrian
+// book reflects its ACTUAL stored method, so an AT book on FIFO reads as
+// "Austria - FIFO", not the moving-average label "ATM".
+function mockTaxPolicyLabel(
+  country: ProfileTaxCountry,
+  algorithm: ProfileGainsAlgorithm,
+  fiat: string,
+): string {
+  if (country === "at") {
+    const method = algorithm === "MOVING_AVERAGE_AT" ? "ATM" : algorithm;
+    return `Austria - ${method} - ${fiat}`;
+  }
+  return `Generic - ${algorithm} - ${fiat}`;
+}
+
 interface MockChatSession {
   id: string;
   title: string;
@@ -1405,9 +1420,11 @@ export const mockDaemon: DaemonTransport = {
       const rawGainsAlgorithm =
         typeof args.gains_algorithm === "string" ? args.gains_algorithm : "";
       const gainsAlgorithm: ProfileGainsAlgorithm =
+        rawGainsAlgorithm === "FIFO" ||
         rawGainsAlgorithm === "LIFO" ||
         rawGainsAlgorithm === "HIFO" ||
         rawGainsAlgorithm === "LOFO" ||
+        rawGainsAlgorithm === "MOVING_AVERAGE" ||
         rawGainsAlgorithm === "MOVING_AVERAGE_AT"
           ? rawGainsAlgorithm
           : taxCountry === "at"
@@ -1424,7 +1441,9 @@ export const mockDaemon: DaemonTransport = {
             id: `mock-profile-${Date.now()}`,
             name: profileName,
             taxPolicy:
-              taxCountry === "at" ? "Austria - ATM - EUR" : "Generic defaults",
+              taxCountry === "at"
+                ? mockTaxPolicyLabel("at", gainsAlgorithm, fiatCurrency)
+                : "Generic defaults",
             fiatCurrency,
             taxCountry,
             taxLongTermDays,
@@ -1546,13 +1565,12 @@ export const mockDaemon: DaemonTransport = {
         sourceProfile?.gainsAlgorithm ??
         firstProfile?.gainsAlgorithm ??
         (baseCountry === "at" ? "MOVING_AVERAGE_AT" : "FIFO");
-      // Mirror the daemon's per-country enforcement (Austrian -> moving-average).
-      const nextAlgorithm: ProfileGainsAlgorithm =
-        nextCountry === "at"
-          ? "MOVING_AVERAGE_AT"
-          : sourceProfile
-            ? baseAlgorithm
-            : (requestedAlgorithm ?? baseAlgorithm);
+      // Austrian books default to moving-average but accept any requested
+      // method (no coercion); copy-from-source inherits the source's method.
+      const nextAlgorithm: ProfileGainsAlgorithm = sourceProfile
+        ? baseAlgorithm
+        : (requestedAlgorithm ??
+          (nextCountry === "at" ? "MOVING_AVERAGE_AT" : baseAlgorithm));
       const nextFiat =
         nextCountry === "at"
           ? "EUR"
@@ -1570,10 +1588,7 @@ export const mockDaemon: DaemonTransport = {
       const profile = {
         id: `mock-profile-${Date.now()}`,
         name: label,
-        taxPolicy:
-          nextCountry === "at"
-            ? `Austria - ATM - ${nextFiat}`
-            : `Generic - ${nextAlgorithm} - ${nextFiat}`,
+        taxPolicy: mockTaxPolicyLabel(nextCountry, nextAlgorithm, nextFiat),
         fiatCurrency: nextFiat,
         taxCountry: nextCountry,
         taxLongTermDays: nextLongTermDays,
@@ -1745,16 +1760,10 @@ export const mockDaemon: DaemonTransport = {
           : args.tax_country === "generic"
             ? "generic"
             : (profile.taxCountry ?? "generic");
-      // Mirror the daemon's per-country enforcement: Austrian books are always
-      // coerced to moving-average regardless of the requested method.
-      const nextAlgorithm: ProfileGainsAlgorithm =
-        nextCountry === "at"
-          ? "MOVING_AVERAGE_AT"
-          : (requested as ProfileGainsAlgorithm);
-      const nextTaxPolicy =
-        nextCountry === "at"
-          ? "Austria - ATM - EUR"
-          : `Generic - ${nextAlgorithm} - EUR`;
+      // No per-country coercion: Austrian books accept any requested method
+      // (moving-average remains the default the dialog offers).
+      const nextAlgorithm = requested as ProfileGainsAlgorithm;
+      const nextTaxPolicy = mockTaxPolicyLabel(nextCountry, nextAlgorithm, "EUR");
       mockProfilesSnapshot = {
         ...mockProfilesSnapshot,
         workspaces: mockProfilesSnapshot.workspaces.map((candidate) => ({

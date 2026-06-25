@@ -184,6 +184,43 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - Transaction attachments are stored in a managed `attachments/` state sibling; file attachments are copied locally and URL attachments remain literal strings with no fetching or indexing.
 - Profile-level tax defaults are stored on `profiles` as `fiat_currency`, `tax_country`, `tax_long_term_days`, and `gains_algorithm`.
 
+## Desktop daemon kinds (allowlist lockstep)
+
+The Tauri shell is deny-by-default: it forwards a daemon `kind` to the Python
+daemon only when that `kind` is in a hand-maintained allowlist. A new `ui.*`
+kind the desktop UI invokes must be added to every layer below, or it works in
+mock dev mode and then fails in the packaged app with `kind_not_allowed` (and
+in `pnpm dev:bridge` with HTTP 403). `pnpm dev:browser` (`VITE_DAEMON=mock`)
+never consults an allowlist, so the mock dev server does **not** prove a kind
+is wired correctly — reproduce against `dev:bridge` or the packaged shell.
+
+When you wire a new desktop-invoked `ui.*` kind, update all of:
+
+| Layer | List | Location |
+| --- | --- | --- |
+| Python daemon (must handle the kind) | `SUPPORTED_KINDS` | [kassiber/daemon.py](kassiber/daemon.py) |
+| Compiled Tauri shell (forwards to daemon) | `ALLOWED_DAEMON_KINDS` | [ui-tauri/src-tauri/src/lib.rs](ui-tauri/src-tauri/src/lib.rs) |
+| Browser dev bridge (`pnpm dev:bridge`) | `ALLOWED_BRIDGE_KINDS` | [ui-tauri/vite.config.ts](ui-tauri/vite.config.ts) |
+| If the kind streams progress records | `STREAMING_DAEMON_KINDS` + `STREAM_CAPABLE_BRIDGE_KINDS` | same two files |
+
+The allowlist is a privilege boundary, not just routing config:
+
+- The webview can invoke only what is listed. AI runtime kinds stay gated
+  separately (`AI_RUNTIME_KINDS` in `lib.rs`); never expose raw shell,
+  filesystem, descriptors, xpubs, secrets, env files, wallet config, or
+  `reveal-*` kinds to the webview invoke path.
+- AI-only read tools (e.g. `ui.transactions.search`, `ui.report.blockers`,
+  `ui.audit.changes_since_last_answer`) and unsolicited daemon→UI event kinds
+  (e.g. `ui.freshness.background`, `ui.freshness.worker`) are intentionally
+  **not** in the desktop allowlist. Do not add a kind just to silence a test —
+  confirm the desktop UI actually invokes it first.
+
+Enforced in the quality gate by
+[tests/test_connection_catalog_drift.py](tests/test_connection_catalog_drift.py):
+`ALLOWED_DAEMON_KINDS` and `ALLOWED_BRIDGE_KINDS` must stay equal and remain a
+subset of `SUPPORTED_KINDS`, and every `ui.*` kind the React app invokes through
+the real transport must be present in `ALLOWED_DAEMON_KINDS`.
+
 ## Command surface
 
 - `init`, `status`, `daemon`, `chat`, `context {show,current,set}`

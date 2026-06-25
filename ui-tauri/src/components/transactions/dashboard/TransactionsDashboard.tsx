@@ -1,4 +1,4 @@
-import { Download, RefreshCw } from "lucide-react";
+import { Download } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 
@@ -109,7 +109,7 @@ const TransactionsDashboard = ({
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const explorerSettings = useUiStore((s) => s.explorerSettings);
   const currency = useCurrency();
-  const { syncAll, isSyncing } = useWalletSyncAction();
+  const { isSyncing } = useWalletSyncAction();
   const showRefreshSkeleton = isSyncing || isDataRefreshing;
   const addNotification = useUiStore((s) => s.addNotification);
   const exportTransactionsXlsx = useDaemonMutation<TransactionsExportResult>(
@@ -323,22 +323,6 @@ const TransactionsDashboard = ({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <PeriodTabs activePeriod={period} onPeriodChange={handlePeriodChange} />
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-2 sm:h-9"
-            aria-label={t("dashboard.refreshBook")}
-            onClick={() => syncAll()}
-            disabled={isSyncing}
-          >
-            <RefreshCw
-              className={cn("size-4", isSyncing && "animate-spin")}
-              aria-hidden="true"
-            />
-            <span className="hidden sm:inline">
-              {isSyncing ? t("dashboard.refreshing") : t("dashboard.refresh")}
-            </span>
-          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button

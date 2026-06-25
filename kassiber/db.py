@@ -469,6 +469,31 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_direct_swap_payouts_active_out
 CREATE INDEX IF NOT EXISTS idx_direct_swap_payouts_profile_active
     ON direct_swap_payouts(profile_id) WHERE deleted_at IS NULL;
 
+-- A collateral mark on a single transaction. Posting an outbound as loan
+-- collateral (role `collateral_lock`) is not a disposal, and the matching
+-- inbound when it returns (`collateral_release`) is not an acquisition — the
+-- coins never left the owned pool, so a lock/release round-trip nets to zero.
+-- The tax engine reads (transaction_id, role) to suppress those events.
+-- Removing the mark reverts the transaction to its normal classification, so a
+-- liquidated lock that never returns becomes the disposal it really was.
+CREATE TABLE IF NOT EXISTS loan_legs (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,
+    note TEXT,
+    deleted_at TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_loan_legs_profile_active
+    ON loan_legs(profile_id) WHERE deleted_at IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_loan_legs_active_transaction
+    ON loan_legs(profile_id, transaction_id)
+    WHERE deleted_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS swap_matching_rules (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

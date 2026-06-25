@@ -13,6 +13,7 @@ export type ProfileGainsAlgorithm =
   | "LIFO"
   | "HIFO"
   | "LOFO"
+  | "MOVING_AVERAGE"
   | "MOVING_AVERAGE_AT";
 
 export interface Profile {

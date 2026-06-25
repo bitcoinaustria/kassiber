@@ -71,6 +71,8 @@ from .cli.handlers import (
     delete_transfer_rule,
     dismiss_transfer_candidate,
     invalidate_journals,
+    loans_mark,
+    loans_unmark,
     import_into_profile,
     import_into_wallet,
     list_saved_views_cli,
@@ -87,6 +89,7 @@ from .cli.handlers import (
 )
 from .core import audit_package as core_audit_package
 from .core import chat_history as core_chat_history
+from .core import loans as core_loans
 from .core import commercial as core_commercial
 from .core import attachments as core_attachments
 from .core import lightning as core_lightning
@@ -244,6 +247,9 @@ SUPPORTED_KINDS = (
     "ui.wallets.utxos",
     "ui.wallets.identify",
     "ui.wallets.identify_onchain",
+    "ui.loans.list",
+    "ui.loans.mark",
+    "ui.loans.unmark",
     "ui.backends.list",
     "ui.backends.options",
     "ui.backends.public_defaults",
@@ -5947,7 +5953,8 @@ def _create_wallet_payload(
         config["change_descriptor"] = change_descriptor
     wallet_material = _optional_str_arg(args, "wallet_material")
     if wallet_material is not None:
-        material_config = normalize_wallet_material(wallet_material)
+        script_type = _optional_str_arg(args, "script_type")
+        material_config = normalize_wallet_material(wallet_material, script_type=script_type)
         config.setdefault("descriptor", material_config["descriptor"])
         if "change_descriptor" in material_config:
             config.setdefault("change_descriptor", material_config["change_descriptor"])
@@ -6852,6 +6859,39 @@ def _handle_transaction_metadata_update(
     )
 
 
+def _loans_snapshot(ctx: DaemonContext) -> dict[str, Any]:
+    if ctx.conn is None:
+        raise AppError("database is not open", code="unavailable", retryable=True)
+    _, profile = resolve_scope(ctx.conn, None, None)
+    return {
+        "marks": core_loans.list_collateral_marks(ctx.conn, profile["id"]),
+        "open_locks": core_loans.open_collateral_locks(ctx.conn, profile["id"]),
+        "roles": list(core_loans.COLLATERAL_ROLES),
+        "role_labels": core_loans.ROLE_LABELS,
+    }
+
+
+def _handle_loans_mark(ctx: DaemonContext, request: dict[str, Any]) -> dict[str, Any]:
+    if ctx.conn is None:
+        raise AppError("database is not open", code="unavailable", retryable=True)
+    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
+    return loans_mark(
+        ctx.conn,
+        None,
+        None,
+        _required_str_arg(args, "txid", "transaction id"),
+        mark_as=_required_str_arg(args, "as", "mark target (collateral|returned)"),
+        note=args.get("note"),
+    )
+
+
+def _handle_loans_unmark(ctx: DaemonContext, request: dict[str, Any]) -> dict[str, Any]:
+    if ctx.conn is None:
+        raise AppError("database is not open", code="unavailable", retryable=True)
+    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
+    return loans_unmark(ctx.conn, None, None, _required_str_arg(args, "txid", "transaction id"))
+
+
 def _handle_transaction_history(
     ctx: DaemonContext,
     request: dict[str, Any],
@@ -7251,7 +7291,8 @@ def _preview_descriptor_payload(args: dict[str, Any]) -> dict[str, Any]:
     change_descriptor_text = _optional_str_arg(args, "change_descriptor")
     wallet_material = _optional_str_arg(args, "wallet_material")
     if wallet_material is not None:
-        material = normalize_wallet_material(wallet_material)
+        script_type = _optional_str_arg(args, "script_type")
+        material = normalize_wallet_material(wallet_material, script_type=script_type)
         descriptor_text = descriptor_text or material["descriptor"]
         change_descriptor_text = change_descriptor_text or material.get("change_descriptor")
     if not descriptor_text:
@@ -7401,7 +7442,8 @@ def _update_wallet_payload(
         config_updates["source_file"] = source_file
     wallet_material = _optional_str_arg(args, "wallet_material")
     if wallet_material is not None:
-        material_config = normalize_wallet_material(wallet_material)
+        script_type = _optional_str_arg(args, "script_type")
+        material_config = normalize_wallet_material(wallet_material, script_type=script_type)
         config_updates["descriptor"] = material_config["descriptor"]
         if "change_descriptor" in material_config:
             config_updates["change_descriptor"] = material_config["change_descriptor"]
@@ -8008,6 +8050,22 @@ def handle_request(
                 ),
                 request_id,
             ),
+            False,
+        )
+
+    if kind == "ui.loans.list":
+        return (
+            _with_request_id(build_envelope("ui.loans.list", _loans_snapshot(ctx)), request_id),
+            False,
+        )
+    if kind == "ui.loans.mark":
+        return (
+            _with_request_id(build_envelope("ui.loans.mark", _handle_loans_mark(ctx, request)), request_id),
+            False,
+        )
+    if kind == "ui.loans.unmark":
+        return (
+            _with_request_id(build_envelope("ui.loans.unmark", _handle_loans_unmark(ctx, request)), request_id),
             False,
         )
 

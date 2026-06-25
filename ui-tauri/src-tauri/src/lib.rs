@@ -149,6 +149,8 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.transactions.resolve",
     "ui.transactions.history",
     "ui.transactions.history.revert",
+    "ui.activity.history",
+    "ui.activity.stale",
     "ui.attachments.list",
     "ui.attachments.add",
     "ui.attachments.copy",
@@ -163,6 +165,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.backends.create",
     "ui.backends.update",
     "ui.backends.delete",
+    "ui.backends.set_default",
     "ui.backends.electrum.test",
     "ui.backends.http.test",
     "ui.profiles.snapshot",
@@ -233,10 +236,15 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.secrets.change_passphrase",
     "ui.next_actions",
     "ui.wallets.utxos",
+    "ui.loans.list",
+    "ui.loans.mark",
+    "ui.loans.unmark",
     "ui.wallets.create",
     "ui.wallets.import_file",
     "ui.wallets.import_samourai",
     "ui.wallets.preview_descriptor",
+    "ui.wallets.identify",
+    "ui.wallets.identify_onchain",
     "ui.connections.sources",
     "ui.connections.btcpay.create",
     "ui.connections.btcpay.discover",
@@ -2693,6 +2701,24 @@ mod tests {
             "ui.source_funds.recipients.create",
             "ui.source_funds.recipients.update",
             "ui.source_funds.recipients.delete",
+        ];
+        for kind in required {
+            assert!(
+                ALLOWED_DAEMON_KINDS.contains(kind),
+                "daemon kind missing from Tauri allowlist: {kind}"
+            );
+        }
+    }
+
+    #[test]
+    fn loans_daemon_kinds_are_in_allowlist() {
+        // Pin the collateral-mark daemon surface so the Transactions-screen mark
+        // actions come with an explicit allowlist update; otherwise packaged
+        // desktop mode returns kind_not_allowed and the feature breaks silently.
+        let required: &[&str] = &[
+            "ui.loans.list",
+            "ui.loans.mark",
+            "ui.loans.unmark",
         ];
         for kind in required {
             assert!(

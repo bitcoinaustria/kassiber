@@ -26,7 +26,7 @@ import type { ConnectionStatus, OverviewSnapshot } from "@/mocks/seed";
 
 export function Connections() {
   const { data, isLoading } = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
-  const { syncAll, isSyncing } = useWalletSyncAction();
+  const { isSyncing } = useWalletSyncAction();
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const currency = useCurrency();
   const navigate = useNavigate();
@@ -76,9 +76,7 @@ export function Connections() {
   return (
     <div className={screenShellClassName}>
       <WalletsDashboardHeader
-        isSyncing={isSyncing}
         onAddWallet={() => setAddConnectionOpen(true)}
-        onRefreshAll={syncAll}
       />
       <AddConnectionDialog
         open={addConnectionOpen}

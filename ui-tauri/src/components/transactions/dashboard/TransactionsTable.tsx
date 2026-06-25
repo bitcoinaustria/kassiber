@@ -7,10 +7,12 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Coins,
   Copy,
   Eye,
   ExternalLink,
   Filter,
+  Link2Off,
   MoreHorizontal,
   Pencil,
   Wallet,
@@ -131,6 +133,19 @@ import {
   type TableQuickFilter,
 } from "./model";
 
+// Subset of the `ui.loans.list` envelope the table consumes — the marked
+// transactions and the role labels for the badge. The role strings come from
+// the daemon (`collateral_lock` = outbound posted as collateral, not a
+// disposal; `collateral_release` = collateral returned, not an acquisition).
+type CollateralMark = {
+  transaction_id: string;
+  role: string;
+};
+
+type LoansList = {
+  marks: CollateralMark[];
+};
+
 const TransactionsTable = ({
   records,
   hideSensitive,
@@ -216,6 +231,21 @@ const TransactionsTable = ({
     useDaemonMutation<AttachmentOpenData>("ui.attachments.open");
   const unpairTransfer = useDaemonMutation("ui.transfers.unpair");
   const revertHistory = useDaemonMutation("ui.transactions.history.revert");
+  // Per-transaction collateral mark (replaces the old facility "Loans" screen).
+  // `ui.loans.list` returns the marked transactions; `mark`/`unmark` flip a tx
+  // between a normal disposal/acquisition and a collateral lock/return. Both
+  // mutations fall through to the default broad daemon-query invalidation, so
+  // the transactions list and this loans query both refresh after a change.
+  const loansQuery = useDaemon<LoansList>("ui.loans.list");
+  const markCollateral = useDaemonMutation("ui.loans.mark");
+  const unmarkCollateral = useDaemonMutation("ui.loans.unmark");
+  const collateralRoleByTransaction = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const mark of loansQuery.data?.data?.marks ?? []) {
+      map.set(mark.transaction_id, mark.role);
+    }
+    return map;
+  }, [loansQuery.data?.data?.marks]);
   const { runJournalProcessing, isProcessingJournals } =
     useJournalProcessingAction({
       notifyStart: true,
@@ -513,6 +543,19 @@ const TransactionsTable = ({
       });
     },
     [detailTransaction, revertHistory, t],
+  );
+
+  const markTransactionCollateral = React.useCallback(
+    async (txn: Transaction, as: "collateral" | "returned") => {
+      await markCollateral.mutateAsync({ txid: txn.id, as });
+    },
+    [markCollateral],
+  );
+  const unmarkTransactionCollateral = React.useCallback(
+    async (txn: Transaction) => {
+      await unmarkCollateral.mutateAsync({ txid: txn.id });
+    },
+    [unmarkCollateral],
   );
 
   const hasActiveFilters =
@@ -1261,6 +1304,7 @@ const TransactionsTable = ({
                 const StatusIcon = transactionStatusIcons[draft.reviewStatus];
                 const explorer = explorerForTransaction(txn, explorerSettings);
                 const flow = displayFlow(txn);
+                const collateralRole = collateralRoleByTransaction.get(txn.id);
                 const showPrimaryLabel = !isRedundantTransactionLabel(
                   draft.label,
                   flow,
@@ -1338,6 +1382,17 @@ const TransactionsTable = ({
                                       classificationOptionLabelKeys[draft.label],
                                     )
                                   : draft.label}
+                              </Badge>
+                            ) : null}
+                            {collateralRole ? (
+                              <Badge
+                                variant="outline"
+                                className="gap-1 rounded-md border-amber-500/40 text-amber-700 dark:text-amber-400"
+                              >
+                                <Coins className="size-3" aria-hidden="true" />
+                                {collateralRole === "collateral_release"
+                                  ? t("table.row.collateral.returnedBadge")
+                                  : t("table.row.collateral.collateralBadge")}
                               </Badge>
                             ) : null}
                           </div>
@@ -1547,6 +1602,55 @@ const TransactionsTable = ({
                             <Copy className="mr-2 size-4" aria-hidden="true" />
                             {t("table.row.copyId")}
                           </DropdownMenuItem>
+                          {collateralRole ? (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  void unmarkTransactionCollateral(txn);
+                                }}
+                              >
+                                <Link2Off
+                                  className="mr-2 size-4"
+                                  aria-hidden="true"
+                                />
+                                {t("table.row.collateral.unmark")}
+                              </DropdownMenuItem>
+                            </>
+                          ) : flow === "outgoing" ? (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  void markTransactionCollateral(
+                                    txn,
+                                    "collateral",
+                                  );
+                                }}
+                              >
+                                <Coins
+                                  className="mr-2 size-4"
+                                  aria-hidden="true"
+                                />
+                                {t("table.row.collateral.markCollateral")}
+                              </DropdownMenuItem>
+                            </>
+                          ) : flow === "incoming" ? (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  void markTransactionCollateral(txn, "returned");
+                                }}
+                              >
+                                <Coins
+                                  className="mr-2 size-4"
+                                  aria-hidden="true"
+                                />
+                                {t("table.row.collateral.markReturned")}
+                              </DropdownMenuItem>
+                            </>
+                          ) : null}
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-destructive"

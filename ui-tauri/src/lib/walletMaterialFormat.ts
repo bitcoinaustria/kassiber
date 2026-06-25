@@ -21,6 +21,19 @@ export interface WalletMaterialDetection {
   hint?: string;
 }
 
+/**
+ * Script types we can wrap a bare xpub/tpub into when the user disambiguates it.
+ * Ordered modern-first. Mirrors `_BARE_XPUB_TEMPLATES` in kassiber/wallet_setup.py.
+ */
+export type BareXpubScriptType = "p2wpkh" | "p2sh-p2wpkh" | "p2pkh" | "p2tr";
+
+export const BARE_XPUB_SCRIPT_TYPES: BareXpubScriptType[] = [
+  "p2wpkh",
+  "p2sh-p2wpkh",
+  "p2pkh",
+  "p2tr",
+];
+
 const DESCRIPTOR_PREFIXES = [
   "pkh(",
   "wpkh(",

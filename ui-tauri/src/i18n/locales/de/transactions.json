@@ -215,9 +215,6 @@
     "flowChart": "{{bucket}} · {{segment}} · {{mode}}"
   },
   "dashboard": {
-    "refreshBook": "Buch aktualisieren",
-    "refreshing": "Wird aktualisiert…",
-    "refresh": "Aktualisieren",
     "export": {
       "label": "Exportieren",
       "xlsx": "Excel-Arbeitsmappe (.xlsx)",
@@ -361,7 +358,14 @@
       "classify": "Klassifizieren",
       "copyId": "ID kopieren",
       "exclude": "Transaktion ausnehmen",
-      "voidConfirm": "Diese Transaktion stornieren? Das kann nicht rückgängig gemacht werden."
+      "voidConfirm": "Diese Transaktion stornieren? Das kann nicht rückgängig gemacht werden.",
+      "collateral": {
+        "collateralBadge": "Kreditsicherheit",
+        "returnedBadge": "Zurückgegeben",
+        "markCollateral": "Als Kreditsicherheit markieren",
+        "markReturned": "Als zurückgegebene Sicherheit markieren",
+        "unmark": "Sicherheitsmarkierung entfernen"
+      }
     },
     "pagination": {
       "rowsPerPage": "Zeilen pro Seite:",

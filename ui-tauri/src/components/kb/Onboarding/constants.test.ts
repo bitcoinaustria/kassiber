@@ -5,6 +5,7 @@ import {
   backendEndpointHint,
   databasePassphraseHint,
   electrumEndpointUrl,
+  GAINS_ALGORITHM_DEFAULTS,
   gainsAlgorithmsFor,
   parseTaxLongTermDays,
   taxLongTermDaysHint,
@@ -89,8 +90,31 @@ describe("onboarding endpoint validation", () => {
 });
 
 describe("onboarding Austrian tax defaults", () => {
-  it("does not offer legacy lot or holding-period choices for new AT wallets", () => {
-    expect(gainsAlgorithmsFor("at")).toEqual(["MOVING_AVERAGE_AT"]);
+  it("offers every method for AT with the moving-average default listed first", () => {
+    // Austrian books default to the moving-average method (gleitender
+    // Durchschnittspreis) but may also use the generic methods, so the AT list
+    // is the union with the moving-average default at index 0.
+    expect(gainsAlgorithmsFor("at")).toEqual([
+      "MOVING_AVERAGE_AT",
+      "FIFO",
+      "LIFO",
+      "HIFO",
+      "LOFO",
+    ]);
+    expect(gainsAlgorithmsFor("at")[0]).toBe(GAINS_ALGORITHM_DEFAULTS.at);
+  });
+
+  it("offers the lot methods plus plain moving-average for the generic region", () => {
+    expect(gainsAlgorithmsFor("generic")).toEqual([
+      "FIFO",
+      "LIFO",
+      "HIFO",
+      "LOFO",
+      "MOVING_AVERAGE",
+    ]);
+    // The Austrian list keeps the AT moving-average variant and the lot methods,
+    // but NOT the plain generic moving-average.
+    expect(gainsAlgorithmsFor("at")).not.toContain("MOVING_AVERAGE");
   });
 });
 

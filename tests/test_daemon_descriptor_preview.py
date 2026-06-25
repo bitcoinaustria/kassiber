@@ -94,6 +94,35 @@ class PreviewDescriptorTests(unittest.TestCase):
         receive = [addr for addr in result["addresses"] if addr["branch"] == "receive"]
         self.assertEqual(len(receive), 20)
 
+    def test_bare_xpub_with_script_type_derives_addresses(self):
+        # A bare xpub is ambiguous on its own; once the setup form supplies a
+        # script type the preview must derive the matching address kind. This
+        # also confirms taproot (tr), which the SLIP132 path never produced.
+        xpub = _xpub_from_seed()
+        prefixes = {
+            "p2wpkh": "bc1q",
+            "p2sh-p2wpkh": "3",
+            "p2pkh": "1",
+            "p2tr": "bc1p",
+        }
+        for script_type, prefix in prefixes.items():
+            with self.subTest(script_type=script_type):
+                result = _preview_descriptor_payload(
+                    {"wallet_material": xpub, "script_type": script_type, "count": 2}
+                )
+                self.assertTrue(result["has_change_branch"])
+                for entry in result["addresses"]:
+                    self.assertTrue(
+                        entry["address"].startswith(prefix),
+                        f"{script_type}: {entry['address']} !~ {prefix}",
+                    )
+
+    def test_bare_xpub_without_script_type_is_rejected(self):
+        with self.assertRaises(AppError) as ctx:
+            _preview_descriptor_payload({"wallet_material": _xpub_from_seed()})
+        self.assertEqual(ctx.exception.code, "validation")
+        self.assertIn("ambiguous", str(ctx.exception).lower())
+
     def test_missing_descriptor_is_rejected(self):
         with self.assertRaises(AppError) as ctx:
             _preview_descriptor_payload({})

@@ -1,14 +1,16 @@
 /**
- * First-sync setup card.
+ * Sync progress card.
  *
- * Shown once per book while its initial sync runs. It floats centered over the
- * (still-empty) content area using the same frosted dock language as the
- * shell assistant, so a brand-new book has a reassuring "we're building your
- * history" home instead of a thin top bar that shoves content around.
+ * Shown while a book's sync runs — both the initial first sync and later
+ * incremental refreshes (`isFirstSync` only switches the headline/body copy). It
+ * floats centered over the content area using the same frosted dock language as
+ * the shell assistant, so a sync has a clear home instead of a thin top bar that
+ * shoves content around.
  *
  * It is a non-blocking overlay: the container is `pointer-events-none` so the
  * rest of the shell stays clickable, and "Continue in background" demotes it to
- * the top progress line (see `RouteTopProgressLine` in AppShell).
+ * the top progress line (see `RouteTopProgressLine` in AppShell), from where the
+ * book-refresh notification can re-open it.
  */
 import { Check, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -24,6 +26,8 @@ import { cn } from "@/lib/utils";
 interface FirstSyncCardProps {
   progress: RouteProgressState | null;
   title?: string;
+  /** First sync vs a later incremental refresh — only changes the copy. */
+  isFirstSync?: boolean;
   onDismiss: () => void;
 }
 
@@ -35,6 +39,7 @@ function clampPercent(value: number) {
 export function FirstSyncCard({
   progress,
   title,
+  isFirstSync = true,
   onDismiss,
 }: FirstSyncCardProps) {
   const { t } = useTranslation("chrome");
@@ -74,10 +79,13 @@ export function FirstSyncCard({
           </span>
           <div className="min-w-0 flex-1">
             <h2 className="text-sm font-semibold text-foreground">
-              {title ?? t("firstSync.defaultTitle")}
+              {title ??
+                (isFirstSync
+                  ? t("firstSync.defaultTitle")
+                  : t("firstSync.defaultTitleRefresh"))}
             </h2>
             <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-              {t("firstSync.body")}
+              {isFirstSync ? t("firstSync.body") : t("firstSync.bodyRefresh")}
             </p>
           </div>
         </div>

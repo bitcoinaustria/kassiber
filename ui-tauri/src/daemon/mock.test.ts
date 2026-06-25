@@ -340,7 +340,7 @@ describe("mock daemon profile method update", () => {
     return (snap.data?.workspaces ?? []).flatMap((w) => w.profiles);
   };
 
-  it("coerces an Austrian book to moving-average regardless of requested method", async () => {
+  it("applies the requested method for an Austrian book (no coercion)", async () => {
     const at = (await profiles()).find((p) => p.taxCountry === "at");
     expect(at).toBeDefined();
     const res = await mockDaemon.invoke<{ id: string }>({
@@ -350,7 +350,7 @@ describe("mock daemon profile method update", () => {
     expect(res.error).toBeUndefined();
     expect(res.data?.id).toBe(at!.id);
     const after = (await profiles()).find((p) => p.id === at!.id);
-    expect(after?.gainsAlgorithm).toBe("MOVING_AVERAGE_AT");
+    expect(after?.gainsAlgorithm).toBe("FIFO");
   });
 
   it("applies the requested method for a generic book", async () => {

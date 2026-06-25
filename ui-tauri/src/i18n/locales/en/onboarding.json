@@ -57,7 +57,7 @@
       "namePlaceholder": "Book name",
       "regionLabel": "Region",
       "methodLabel": "Accounting method",
-      "austrianMethodNote": "Austrian books use the moving-average method (gleitender Durchschnittspreis); other methods aren't valid for Austria.",
+      "austrianMethodNote": "Austrian books use the moving-average method (gleitender Durchschnittspreis) by default. Other methods are available but not standard for Austria.",
       "submit": "Create book",
       "errorEmptyName": "Enter a book name.",
       "errorGeneric": "Could not create book."
@@ -68,7 +68,7 @@
       "nameLabel": "Book name",
       "regionLabel": "Region",
       "methodLabel": "Accounting method",
-      "austrianMethodNote": "Austrian books use the moving-average method (gleitender Durchschnittspreis); other methods aren't valid for Austria.",
+      "austrianMethodNote": "Austrian books use the moving-average method (gleitender Durchschnittspreis) by default. Other methods are available but not standard for Austria.",
       "switchRegion": {
         "title": "Switch region?",
         "body": "Change this book from {{from}} to {{to}}, resetting the accounting method to {{method}}.",
@@ -86,6 +86,7 @@
     },
     "method": {
       "MOVING_AVERAGE_AT": "Moving average (Austrian)",
+      "MOVING_AVERAGE": "Moving average (average cost)",
       "FIFO": "FIFO (first in, first out)",
       "LIFO": "LIFO (last in, first out)",
       "HIFO": "HIFO (highest in, first out)",
@@ -313,7 +314,6 @@
     "fiatCurrency": "Fiat currency",
     "fiatSample": "Sample: {{sample}}",
     "accountingMethod": "Accounting method",
-    "movingAverage": "Moving average",
     "movingAverageNote": "Older holdings can be marked later per wallet.",
     "lotSelection": "Lot selection",
     "longTermDays": "Long-term holding days",
