@@ -2722,6 +2722,65 @@ def load_generic_ledger_records(file_path):
     return normalized
 
 
+def _generic_ledger_preview_row(record):
+    """A JSON-safe subset of a normalized ledger record for preview display."""
+    def _safe(value):
+        return format(value, "f") if isinstance(value, Decimal) else value
+
+    return {
+        "occurred_at": record.get("occurred_at"),
+        "direction": record.get("direction"),
+        "asset": record.get("asset"),
+        "amount": _safe(record.get("amount")),
+        "fee": _safe(record.get("fee")),
+        "kind": record.get("kind"),
+        "fiat_currency": record.get("fiat_currency"),
+        "fiat_value": _safe(record.get("fiat_value")),
+        "description": record.get("description"),
+    }
+
+
+def preview_generic_ledger_records(file_path, *, limit=200):
+    """Report what a generic-ledger file would import, without persisting.
+
+    Reuses the same reader + per-row normalizer as the real import, but catches
+    each row's validation error individually so the whole file previews at once
+    (the importer itself stops at the first bad row). Returns counts, a bounded
+    sample of the normalized rows, and a row-numbered problem per rejected row.
+    """
+    if not os.path.exists(file_path):
+        raise AppError(
+            f"Import file not found: {file_path}",
+            code="not_found",
+            hint="Check the file path.",
+        )
+    extension = os.path.splitext(file_path)[1].lower()
+    if extension in {".xlsx", ".xlsm"}:
+        rows = _read_generic_ledger_xlsx(file_path)
+    else:
+        rows = _read_generic_ledger_csv(file_path)
+    records = _generic_ledger_rows_to_records(rows)
+    normalized = []
+    problems = []
+    for index, record in enumerate(records, start=1):
+        try:
+            normalized.append(normalize_generic_ledger_record(record, index=index))
+        except AppError as exc:
+            problems.append({"row": index, "message": str(exc)})
+    try:
+        bound = max(0, int(limit))
+    except (TypeError, ValueError):
+        bound = 200
+    return {
+        "rows_read": len(records),
+        "mapped": len(normalized),
+        "errors": len(problems),
+        "problems": problems[:bound] if bound else problems,
+        "preview": [_generic_ledger_preview_row(record) for record in normalized[:bound]],
+        "truncated": bound > 0 and len(normalized) > bound,
+    }
+
+
 def is_generic_ledger_format(input_format):
     return input_format == GENERIC_LEDGER_FORMAT
 

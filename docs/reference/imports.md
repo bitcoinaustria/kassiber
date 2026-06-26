@@ -105,16 +105,23 @@ Write a blank template, then import the filled file:
 
 ```
 kassiber wallets ledger-template --file ledger.xlsx   # or ledger.csv
-kassiber wallets import-ledger --workspace W --profile P --wallet WID --file ledger.xlsx
+kassiber wallets import-ledger --workspace W --profile P --wallet WID --file ledger.xlsx --dry-run  # preview
+kassiber wallets import-ledger --workspace W --profile P --wallet WID --file ledger.xlsx            # import
 ```
 
 `ledger-template` does not need a database. The `.xlsx` template ships a
 `Transactions` sheet (with a `Type` dropdown) plus a `Legend` sheet; the `.csv`
 template is the header row with example rows. The importer reads `.xlsx` (via
 the `openpyxl` dependency) and CSV/TSV (delimiter sniffed). Legacy binary `.xls`
-is not read — save as `.xlsx` or CSV first. In the desktop UI the same flow is
-**Imports → Generic ledger**, which can download the template and import the
-file.
+is not read — save as `.xlsx` or CSV first.
+
+`--dry-run` previews what would import (also a no-DB read): it returns
+`{rows_read, mapped, errors, problems[], preview[]}` and persists nothing,
+collecting a row-numbered problem for every rejected row at once (the real
+import stops at the first bad row). In the desktop UI the same flow is **Add
+connection → Files → Generic ledger**: after you choose the filled file, a
+preview (backed by the `ui.wallets.ledger_preview` daemon kind) shows the
+detected rows + any problems so you can confirm before importing.
 
 ### Columns
 

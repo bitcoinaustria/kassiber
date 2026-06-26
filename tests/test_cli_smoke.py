@@ -4957,6 +4957,39 @@ class GenericLedgerImportTest(unittest.TestCase):
         self.assertEqual(payload["data"]["input_format"], "generic_ledger")
         self.assertEqual(payload["data"]["imported"], 7)
 
+    def test_dry_run_previews_without_importing(self):
+        template = Path(self._tmp.name) / "preview.csv"
+        self._cli("wallets", "ledger-template", "--file", str(template))
+        payload = self._cli(
+            "wallets", "import-ledger",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+            "--file", str(template), "--dry-run",
+        )
+        self.assertEqual(payload["kind"], "wallets.import-ledger")
+        self.assertGreater(payload["data"]["mapped"], 0)
+        self.assertEqual(payload["data"]["errors"], 0)
+        self.assertTrue(payload["data"]["preview"])
+        self.assertEqual(self._records_by_external_id(), {})  # nothing persisted
+
+        # A bad row is collected as a row-numbered problem, not aborted, and the
+        # whole file still previews (the real importer stops at the first error).
+        bad = Path(self._tmp.name) / "bad.csv"
+        bad.write_text(
+            "Date,Type,Received Asset,Received Amount,Sent Asset,Sent Amount,Fee Amount\n"
+            "2026-01-15,Buy,BTC,0.5,EUR,20000,0\n"
+            "2026-02-01,Frobnicate,BTC,0.1,,,0\n",
+            encoding="utf-8",
+        )
+        bad_payload = self._cli(
+            "wallets", "import-ledger",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+            "--file", str(bad), "--dry-run",
+        )
+        self.assertEqual(bad_payload["data"]["mapped"], 1)
+        self.assertEqual(bad_payload["data"]["errors"], 1)
+        self.assertEqual(bad_payload["data"]["problems"][0]["row"], 2)
+        self.assertEqual(self._records_by_external_id(), {})
+
     def test_csv_import_maps_kinds_amounts_and_pricing(self):
         ledger = Path(self._tmp.name) / "ledger.csv"
         ledger.write_text(_GENERIC_LEDGER_CSV, encoding="utf-8")

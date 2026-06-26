@@ -34,6 +34,7 @@ import {
   type ConnectionSource,
   type ConnectionSourceFormat,
 } from "@/lib/connectionCatalog";
+import { GenericLedgerPreview } from "@/components/kb/GenericLedgerPreview";
 import { saveDaemonExport } from "@/lib/exportFile";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 import {
@@ -1763,6 +1764,9 @@ export function AddConnectionDialog({
               </Button>
             </div>
           </div>
+        ) : null}
+        {selected.sourceFormat === "generic_ledger" && form.sourceFile.trim() ? (
+          <GenericLedgerPreview file={form.sourceFile.trim()} />
         ) : null}
         {syncLabel ? renderSyncAfterCreate(syncLabel) : null}
       </>
