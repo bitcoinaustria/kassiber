@@ -807,6 +807,7 @@ fn timeout_is_safe_to_retry(kind: &str) -> bool {
             | "ui.workspace.health"
             | "ui.workspace.overview.snapshot"
             | "ui.wallets.preview_descriptor"
+            | "ui.wallets.detect_script_types"
             | "ui.wallets.utxos"
     ) || kind.ends_with(".list")
         || kind.ends_with(".snapshot")

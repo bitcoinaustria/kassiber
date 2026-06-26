@@ -117,6 +117,29 @@ class PreviewDescriptorTests(unittest.TestCase):
                         f"{script_type}: {entry['address']} !~ {prefix}",
                     )
 
+    def test_bare_xpub_with_script_types_previews_each_type(self):
+        # Auto-detect / multi-script: the preview derives a labeled receive set
+        # per enabled type plus one change sample each.
+        xpub = _xpub_from_seed()
+
+        result = _preview_descriptor_payload(
+            {"wallet_material": xpub, "script_types": ["p2wpkh", "p2tr"], "count": 2}
+        )
+
+        self.assertTrue(result["has_change_branch"])
+        self.assertEqual(
+            {addr["branch"] for addr in result["addresses"]},
+            {"p2wpkh receive", "p2wpkh change", "p2tr receive", "p2tr change"},
+        )
+        p2wpkh_receive = [a for a in result["addresses"] if a["branch"] == "p2wpkh receive"]
+        p2tr_receive = [a for a in result["addresses"] if a["branch"] == "p2tr receive"]
+        self.assertEqual(len(p2wpkh_receive), 2)
+        self.assertEqual(len(p2tr_receive), 2)
+        self.assertTrue(all(a["address"].startswith("bc1q") for a in p2wpkh_receive))
+        self.assertTrue(all(a["address"].startswith("bc1p") for a in p2tr_receive))
+        change = [a for a in result["addresses"] if a["branch"].endswith("change")]
+        self.assertEqual(len(change), 2)
+
     def test_bare_xpub_without_script_type_is_rejected(self):
         with self.assertRaises(AppError) as ctx:
             _preview_descriptor_payload({"wallet_material": _xpub_from_seed()})

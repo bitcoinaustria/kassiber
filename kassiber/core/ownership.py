@@ -39,7 +39,11 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from ..errors import AppError
 from ..wallet_descriptors import derive_descriptor_targets
 from .sync_backends import address_to_scriptpubkey
-from .wallets import load_wallet_descriptor_plan_from_config, normalize_addresses
+from .wallets import (
+    has_descriptor_sync_material,
+    load_wallet_descriptor_plan_from_config,
+    normalize_addresses,
+)
 
 # Default per-branch derivation ceiling for an interactive reconciliation run.
 # Owned candidates at low indices resolve instantly via the cheap tiers; only
@@ -495,7 +499,7 @@ def build_owned_index(
                 )
                 index.add_address(address, match)
                 index.add_script(_script_hex_for_address(address), match)
-        if not derive or not config.get("descriptor"):
+        if not derive or not has_descriptor_sync_material(config):
             continue
         try:
             _derive_wallet_into_index(

@@ -8,6 +8,7 @@ from hashlib import sha256
 from importlib import import_module
 
 from .errors import AppError
+from .wallet_setup import BARE_XPUB_TEMPLATES
 
 
 DEFAULT_DESCRIPTOR_GAP_LIMIT = 40
@@ -51,6 +52,17 @@ CHAIN_ALIASES = {
     "elements": "liquid",
 }
 _EMBIT_MODULES = None
+
+# Fixed receive/change branch indices per script type. Stable bases keep a
+# type's derived addresses and its sync checkpoint (highest_used is keyed by
+# branch index) coherent when other types are enabled or disabled later: a
+# type always owns the same two indices, so adding p2tr never renumbers p2wpkh.
+SCRIPT_TYPE_BRANCH_BASE = {
+    "p2pkh": 0,
+    "p2sh-p2wpkh": 2,
+    "p2wpkh": 4,
+    "p2tr": 6,
+}
 
 
 @dataclass(frozen=True)
@@ -227,9 +239,40 @@ def _promote_receive_only_to_multipath(descriptor_class, normalized_text, primar
     return promoted
 
 
+def ordered_script_types(script_types):
+    """Return the valid, deduped enabled script types in canonical branch order."""
+    requested = {str(value or "").strip().lower() for value in (script_types or [])}
+    return [stype for stype in SCRIPT_TYPE_BRANCH_BASE if stype in requested]
+
+
+def enabled_script_branches(xpub, script_types, descriptor_class):
+    """Build receive/change branches for each enabled script type of a bare xpub.
+
+    Each type owns a fixed two-index block (receive=base, change=base+1) and is
+    wrapped as a ``<0;1>`` multipath descriptor, with a fallback to explicit
+    per-branch descriptors if multipath does not parse into two branches.
+    """
+    branches = []
+    for script_type in ordered_script_types(script_types):
+        base = SCRIPT_TYPE_BRANCH_BASE[script_type]
+        template = BARE_XPUB_TEMPLATES[script_type]
+        multipath = descriptor_class.from_string(template.format(key=xpub, branch="<0;1>"))
+        if getattr(multipath, "num_branches", 1) >= 2:
+            branches.append(DescriptorBranch(base, f"{script_type} receive", multipath, 0))
+            branches.append(DescriptorBranch(base + 1, f"{script_type} change", multipath, 1))
+        else:
+            receive = descriptor_class.from_string(template.format(key=xpub, branch=0))
+            change = descriptor_class.from_string(template.format(key=xpub, branch=1))
+            branches.append(DescriptorBranch(base, f"{script_type} receive", receive, None))
+            branches.append(DescriptorBranch(base + 1, f"{script_type} change", change, None))
+    return branches
+
+
 def load_descriptor_plan(config):
     descriptor_text = str(config.get("descriptor") or "").strip()
-    if not descriptor_text:
+    xpub = str(config.get("xpub") or "").strip()
+    script_types = ordered_script_types(config.get("script_types"))
+    if not descriptor_text and not (xpub and script_types):
         return None
     chain = normalize_chain(config.get("chain"))
     network = normalize_network(chain, config.get("network"))
@@ -242,6 +285,29 @@ def load_descriptor_plan(config):
         )
     modules = get_embit_modules()
     descriptor_class = modules["Descriptor"] if chain == "bitcoin" else modules["LDescriptor"]
+    if not descriptor_text:
+        # Multi-script xpub wallet: one receive/change branch pair per enabled
+        # script type, each at that type's fixed branch indices.
+        branches = enabled_script_branches(xpub, script_types, descriptor_class)
+        fingerprint = sha256(
+            json.dumps(
+                {
+                    "chain": chain,
+                    "network": network,
+                    "xpub": xpub,
+                    "script_types": script_types,
+                    "gap_limit": gap_limit,
+                },
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest()
+        return DescriptorPlan(
+            chain=chain,
+            network=network,
+            gap_limit=gap_limit,
+            descriptor_fingerprint=fingerprint,
+            branches=tuple(branches),
+        )
     normalized_primary_text = normalize_descriptor_text(chain, descriptor_text)
     primary = descriptor_class.from_string(normalized_primary_text)
     change_text = str(config.get("change_descriptor") or "").strip()

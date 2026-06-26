@@ -14,7 +14,7 @@ import unittest
 from embit import bip32
 
 from kassiber.errors import AppError
-from kassiber.wallet_setup import normalize_wallet_material
+from kassiber.wallet_setup import normalize_script_types, normalize_wallet_material
 
 
 _SLIP132_MAINNET_VERSIONS = {
@@ -163,6 +163,80 @@ class NormalizeWalletMaterialBareXpubScriptTypeTests(unittest.TestCase):
             normalize_wallet_material(broken, script_type="p2wpkh")
 
         self.assertIn("checksum", str(ctx.exception).lower())
+
+
+class NormalizeScriptTypesTests(unittest.TestCase):
+    def test_validates_dedupes_and_sorts(self):
+        self.assertEqual(
+            normalize_script_types(["p2tr", "p2wpkh", "p2wpkh", "P2TR"]),
+            ["p2tr", "p2wpkh"],
+        )
+
+    def test_none_and_empty_yield_empty_list(self):
+        self.assertEqual(normalize_script_types(None), [])
+        self.assertEqual(normalize_script_types([]), [])
+        self.assertEqual(normalize_script_types([""]), [])
+
+    def test_single_string_is_accepted(self):
+        self.assertEqual(normalize_script_types("p2wpkh"), ["p2wpkh"])
+
+    def test_unknown_type_is_rejected(self):
+        with self.assertRaises(AppError) as ctx:
+            normalize_script_types(["p2wpkh", "p2wsh"])
+        self.assertIn("script type", str(ctx.exception).lower())
+
+
+class NormalizeWalletMaterialMultiScriptTests(unittest.TestCase):
+    def test_bare_xpub_with_script_types_returns_xpub_and_sorted_set(self):
+        _, xpub = _account_xpub()
+
+        result = normalize_wallet_material(xpub, script_types=["p2tr", "p2wpkh"])
+
+        self.assertEqual(result, {"xpub": xpub, "script_types": ["p2tr", "p2wpkh"]})
+        self.assertNotIn("descriptor", result)
+
+    def test_bare_xpub_with_single_script_type_in_list(self):
+        _, xpub = _account_xpub()
+
+        result = normalize_wallet_material(xpub, script_types=["p2wpkh"])
+
+        self.assertEqual(result, {"xpub": xpub, "script_types": ["p2wpkh"]})
+
+    def test_empty_script_types_falls_back_to_ambiguous(self):
+        _, xpub = _account_xpub()
+
+        with self.assertRaises(AppError) as ctx:
+            normalize_wallet_material(xpub, script_types=[])
+
+        self.assertIn("ambiguous", str(ctx.exception).lower())
+
+    def test_unknown_script_type_in_list_is_rejected(self):
+        _, xpub = _account_xpub()
+
+        with self.assertRaises(AppError) as ctx:
+            normalize_wallet_material(xpub, script_types=["p2wpkh", "nope"])
+
+        self.assertIn("script type", str(ctx.exception).lower())
+
+    def test_corrupted_bare_xpub_with_script_types_is_rejected(self):
+        _, xpub = _account_xpub()
+        flipped = "A" if xpub[-1] != "A" else "B"
+        broken = xpub[:-1] + flipped
+
+        with self.assertRaises(AppError) as ctx:
+            normalize_wallet_material(broken, script_types=["p2wpkh"])
+
+        self.assertIn("checksum", str(ctx.exception).lower())
+
+    def test_slip132_key_ignores_script_types(self):
+        account, xpub = _account_xpub()
+        ypub = account.to_base58(version=_SLIP132_MAINNET_VERSIONS["ypub"])
+
+        # A ypub already encodes its script type; multi-script hints are ignored.
+        result = normalize_wallet_material(ypub, script_types=["p2wpkh", "p2tr"])
+
+        self.assertEqual(result["descriptor"], f"sh(wpkh({xpub}/0/*))")
+        self.assertNotIn("xpub", result)
 
 
 class NormalizeWalletMaterialOtherShapesTests(unittest.TestCase):

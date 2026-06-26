@@ -23,7 +23,7 @@ export interface WalletMaterialDetection {
 
 /**
  * Script types we can wrap a bare xpub/tpub into when the user disambiguates it.
- * Ordered modern-first. Mirrors `_BARE_XPUB_TEMPLATES` in kassiber/wallet_setup.py.
+ * Ordered modern-first. Mirrors `BARE_XPUB_TEMPLATES` in kassiber/wallet_setup.py.
  */
 export type BareXpubScriptType = "p2wpkh" | "p2sh-p2wpkh" | "p2pkh" | "p2tr";
 
@@ -87,7 +87,7 @@ export function detectWalletMaterial(value: string): WalletMaterialDetection {
     return {
       kind: "bare-xpub",
       label: `Bare ${head}`,
-      hint: "Bare xpub/tpub is ambiguous; paste a descriptor or a ypub/zpub/upub/vpub instead.",
+      hint: "Kassiber auto-detects which address types this key uses; pick one to pin it.",
     };
   }
   return {

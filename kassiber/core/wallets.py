@@ -17,6 +17,7 @@ from ..wallet_descriptors import (
     liquid_plan_can_unblind,
     normalize_asset_code,
 )
+from ..wallet_setup import normalize_script_types, normalize_wallet_material
 from . import output_inventory as core_output_inventory
 from .repo import (
     fetch_wallet_with_account,
@@ -70,8 +71,12 @@ WALLET_SAFE_CONFIG_FIELDS = (
     "altbestand",
     "wasabi_metadata",
     "samourai",
+    "script_types",
 )
-WALLET_REDACTED_CONFIG_FIELDS = ("descriptor", "change_descriptor")
+# The xpub is as sensitive as the descriptor it expands into (it reveals every
+# address), so it is redacted; its presence still tells the UI the wallet is
+# xpub-derived, and script_types (the watched set) is surfaced for editing.
+WALLET_REDACTED_CONFIG_FIELDS = ("descriptor", "change_descriptor", "xpub")
 
 
 def normalize_wallet_kind(value):
@@ -129,6 +134,7 @@ def wallet_live_chain_config(config):
         [
             config.get("descriptor"),
             config.get("change_descriptor"),
+            config.get("xpub"),
             config.get("addresses"),
             config.get("chain"),
             config.get("network"),
@@ -138,6 +144,21 @@ def wallet_live_chain_config(config):
     chain = normalize_chain_value(config.get("chain"))
     network = normalize_network_value(chain, config.get("network"))
     return chain, network
+
+
+def has_descriptor_sync_material(config):
+    """True when a wallet config carries on-chain derivation material.
+
+    Either an explicit output ``descriptor`` or a bare ``xpub`` with at least one
+    enabled ``script_types`` entry (the multi-script wallet shape). Sync,
+    freshness, and snapshot classification all key off this rather than the raw
+    ``descriptor`` field so xpub-derived wallets are treated as syncable.
+    """
+    if not isinstance(config, dict):
+        return False
+    if str_or_none(config.get("descriptor")):
+        return True
+    return bool(str_or_none(config.get("xpub")) and config.get("script_types"))
 
 
 def load_wallet_descriptor_plan_from_config(config):
@@ -348,6 +369,22 @@ def parse_wallet_config(args):
     )
     if change_descriptor_text:
         config["change_descriptor"] = change_descriptor_text
+    script_types = normalize_script_types(getattr(args, "script_type", None))
+    if script_types:
+        if not descriptor_text:
+            raise AppError(
+                "--script-type requires a bare xpub via "
+                "--descriptor/--descriptor-file/--descriptor-stdin",
+                code="validation",
+            )
+        material_config = normalize_wallet_material(descriptor_text, script_types=script_types)
+        if "xpub" in material_config:
+            # A bare xpub + script types becomes a multi-script wallet: store the
+            # key and the watched set, not a single rendered descriptor.
+            config.pop("descriptor", None)
+            config.pop("change_descriptor", None)
+            config["xpub"] = material_config["xpub"]
+            config["script_types"] = material_config["script_types"]
     addresses = normalize_addresses(getattr(args, "address", None))
     existing_addresses = normalize_addresses(config.get("addresses"))
     if addresses or existing_addresses:
@@ -437,7 +474,8 @@ def create_wallet(conn, workspace_ref, profile_ref, label, kind, account_ref=Non
 
 def _validated_wallet_config(normalized_kind, config):
     config = dict(config or {})
-    descriptor_plan = load_wallet_descriptor_plan_from_config(config) if config.get("descriptor") else None
+    has_live_material = bool(config.get("descriptor") or config.get("xpub"))
+    descriptor_plan = load_wallet_descriptor_plan_from_config(config) if has_live_material else None
     chain, network = wallet_live_chain_config(config)
     if normalized_kind == "address" and not config.get("addresses") and not config.get("source_file"):
         raise AppError(
@@ -446,7 +484,7 @@ def _validated_wallet_config(normalized_kind, config):
         )
     if normalized_kind == "descriptor" and descriptor_plan is None and not config.get("source_file"):
         raise AppError(
-            "Descriptor wallets require --descriptor/--descriptor-file or a file-based source",
+            "Descriptor wallets require a descriptor, an xpub with script types, or a file-based source",
             code="validation",
         )
     if normalized_kind == "coreln" and not config.get("backend"):
@@ -494,7 +532,7 @@ def _validated_wallet_config(normalized_kind, config):
 def _wallet_descriptor_state(config):
     descriptor_state = ""
     chain, network = wallet_live_chain_config(config)
-    if config.get("descriptor"):
+    if config.get("descriptor") or config.get("xpub"):
         try:
             descriptor_plan = load_descriptor_plan(config)
             descriptor_state = f"{descriptor_plan.chain}:{descriptor_plan.network}"
@@ -560,9 +598,9 @@ WALLET_KIND_CATALOG = {
         "requires": ["descriptor"],
     },
     "xpub": {
-        "summary": "Extended-public-key wallet derived to address set; supports on-chain sync via mempool/esplora.",
-        "config_fields": ["descriptor", "gap_limit", "backend", "chain", "network"],
-        "requires": ["descriptor"],
+        "summary": "Extended-public-key wallet: derives one or more script types (pinned with --script-type) to an address set; on-chain sync via mempool/esplora.",
+        "config_fields": ["descriptor", "xpub", "script_types", "gap_limit", "backend", "chain", "network"],
+        "requires": ["descriptor|script_types"],
     },
     "address": {
         "summary": "Bare-address list wallet; useful for receive-only tracking or imports.",

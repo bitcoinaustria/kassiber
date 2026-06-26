@@ -879,6 +879,16 @@ def build_parser() -> argparse.ArgumentParser:
     add_secret_stdin_options(
         wallets_create, "change-descriptor", label="change descriptor"
     )
+    wallets_create.add_argument(
+        "--script-type",
+        action="append",
+        choices=["p2pkh", "p2sh-p2wpkh", "p2wpkh", "p2tr"],
+        help=(
+            "Script type(s) to derive from a bare xpub passed via --descriptor* "
+            "(repeatable, e.g. --script-type p2wpkh --script-type p2tr). "
+            "Omit for a full output descriptor."
+        ),
+    )
     wallets_create.add_argument("--gap-limit", type=int)
     wallets_create.add_argument("--policy-asset")
     wallets_create.add_argument("--store-id")

@@ -226,5 +226,99 @@ class ChangeBranchSynthesisTests(unittest.TestCase):
         self.assertEqual(len(secret), 32)
 
 
+class MultiScriptXpubPlanTests(unittest.TestCase):
+    """A bare xpub watching several script types builds one receive/change pair
+    per type at fixed branch indices, so enabling a type later never renumbers
+    or rescans the others."""
+
+    def _xpub84(self) -> str:
+        root = bip32.HDKey.from_seed(bip39.mnemonic_to_seed(_MNEMONIC))
+        return root.derive("m/84h/0h/0h").to_public().to_base58()
+
+    def test_two_script_types_build_fixed_indexed_branches(self):
+        plan = load_descriptor_plan(
+            {"xpub": self._xpub84(), "script_types": ["p2wpkh", "p2tr"], "chain": "bitcoin"}
+        )
+
+        labels = {branch.branch_index: branch.branch_label for branch in plan.branches}
+        self.assertEqual(
+            labels,
+            {
+                4: "p2wpkh receive",
+                5: "p2wpkh change",
+                6: "p2tr receive",
+                7: "p2tr change",
+            },
+        )
+        # p2wpkh receive index 0 matches the canonical BIP84 vector for this seed.
+        self.assertEqual(_branch_address(plan, 4), BIP84_RECEIVE_0)
+        # The Taproot branch derives a Taproot (bc1p) address; change differs.
+        self.assertTrue(_branch_address(plan, 6).startswith("bc1p"))
+        self.assertNotEqual(_branch_address(plan, 6), _branch_address(plan, 7))
+
+    def test_enabling_a_type_keeps_existing_indices_and_addresses(self):
+        xpub = self._xpub84()
+        single = load_descriptor_plan(
+            {"xpub": xpub, "script_types": ["p2wpkh"], "chain": "bitcoin"}
+        )
+        both = load_descriptor_plan(
+            {"xpub": xpub, "script_types": ["p2wpkh", "p2tr"], "chain": "bitcoin"}
+        )
+
+        self.assertEqual({branch.branch_index for branch in single.branches}, {4, 5})
+        # Adding p2tr must not move p2wpkh's branches or derived addresses.
+        self.assertEqual(_branch_address(single, 4), _branch_address(both, 4))
+        self.assertEqual(_branch_address(single, 5), _branch_address(both, 5))
+
+    def test_multi_script_branch_matches_explicit_single_descriptor(self):
+        xpub = self._xpub84()
+        multi = load_descriptor_plan(
+            {"xpub": xpub, "script_types": ["p2wpkh"], "chain": "bitcoin"}
+        )
+        explicit = load_descriptor_plan(
+            {"descriptor": f"wpkh({xpub}/0/*)", "chain": "bitcoin"}
+        )
+
+        multi_receive = [
+            target.address
+            for target in derive_descriptor_targets(multi, branch_index=4, start=0, end=5)
+        ]
+        explicit_receive = [
+            target.address
+            for target in derive_descriptor_targets(explicit, branch_index=0, start=0, end=5)
+        ]
+        self.assertEqual(multi_receive, explicit_receive)
+
+    def test_script_type_order_and_dupes_do_not_change_plan(self):
+        xpub = self._xpub84()
+        plan_a = load_descriptor_plan(
+            {"xpub": xpub, "script_types": ["p2tr", "p2wpkh"], "chain": "bitcoin"}
+        )
+        plan_b = load_descriptor_plan(
+            {"xpub": xpub, "script_types": ["p2wpkh", "p2tr", "p2wpkh"], "chain": "bitcoin"}
+        )
+
+        self.assertEqual(
+            [(b.branch_index, b.branch_label) for b in plan_a.branches],
+            [(b.branch_index, b.branch_label) for b in plan_b.branches],
+        )
+        self.assertEqual(plan_a.descriptor_fingerprint, plan_b.descriptor_fingerprint)
+
+    def test_fingerprint_changes_when_script_types_change(self):
+        xpub = self._xpub84()
+        one = load_descriptor_plan(
+            {"xpub": xpub, "script_types": ["p2wpkh"], "chain": "bitcoin"}
+        )
+        two = load_descriptor_plan(
+            {"xpub": xpub, "script_types": ["p2wpkh", "p2tr"], "chain": "bitcoin"}
+        )
+        self.assertNotEqual(one.descriptor_fingerprint, two.descriptor_fingerprint)
+
+    def test_xpub_without_script_types_is_not_a_plan(self):
+        self.assertIsNone(
+            load_descriptor_plan({"xpub": self._xpub84(), "chain": "bitcoin"})
+        )
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

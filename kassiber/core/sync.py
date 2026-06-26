@@ -14,6 +14,7 @@ from typing import Any, Callable, Mapping, MutableMapping, Sequence
 from ..errors import AppError
 from ..util import str_or_none
 from .wallets import (
+    has_descriptor_sync_material,
     wallet_btcpay_provenance_config,
     wallet_btcpay_sync_config,
     wallet_bullbitcoin_wallet_export_config,
@@ -442,7 +443,7 @@ def classify_wallet_sync(wallet: WalletRow, normalize_addresses: NormalizeAddres
     if config.get("source_file") and config.get("source_format"):
         return "file"
     addresses = normalize_addresses(config.get("addresses"))
-    if addresses or bool(str_or_none(config.get("descriptor"))):
+    if addresses or has_descriptor_sync_material(config):
         return "backend"
     return "none"
 
@@ -516,7 +517,7 @@ def sync_wallets(
         source_file = config.get("source_file")
         source_format = config.get("source_format")
         addresses = hooks.normalize_addresses(config.get("addresses"))
-        has_descriptor = bool(str_or_none(config.get("descriptor")))
+        has_descriptor = has_descriptor_sync_material(config)
         if btcpay_config:
             if hooks.sync_btcpay_wallet is None:
                 raise AppError("BTCPay source refresh is not configured for this runtime")

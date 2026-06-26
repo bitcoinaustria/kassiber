@@ -245,6 +245,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.wallets.import_file",
     "ui.wallets.import_samourai",
     "ui.wallets.preview_descriptor",
+    "ui.wallets.detect_script_types",
     "ui.wallets.identify",
     "ui.wallets.identify_onchain",
     "ui.connections.sources",
@@ -2703,6 +2704,23 @@ mod tests {
             "ui.source_funds.recipients.create",
             "ui.source_funds.recipients.update",
             "ui.source_funds.recipients.delete",
+        ];
+        for kind in required {
+            assert!(
+                ALLOWED_DAEMON_KINDS.contains(kind),
+                "daemon kind missing from Tauri allowlist: {kind}"
+            );
+        }
+    }
+
+    #[test]
+    fn xpub_script_type_daemon_kinds_are_in_allowlist() {
+        // The add-wallet auto-detect flow probes script types through this kind;
+        // the packaged desktop shell blocks any kind not in ALLOWED_DAEMON_KINDS,
+        // so a missing entry would silently break detection in production.
+        let required: &[&str] = &[
+            "ui.wallets.detect_script_types",
+            "ui.wallets.preview_descriptor",
         ];
         for kind in required {
             assert!(
