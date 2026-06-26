@@ -116,12 +116,27 @@ the `openpyxl` dependency) and CSV/TSV (delimiter sniffed). Legacy binary `.xls`
 is not read — save as `.xlsx` or CSV first.
 
 `--dry-run` previews what would import (also a no-DB read): it returns
-`{rows_read, mapped, errors, problems[], preview[]}` and persists nothing,
-collecting a row-numbered problem for every rejected row at once (the real
-import stops at the first bad row). In the desktop UI the same flow is **Add
-connection → Files → Generic ledger**: after you choose the filled file, a
-preview (backed by the `ui.wallets.ledger_preview` daemon kind) shows the
+`{rows_read, mapped, errors, problems[], preview[], confident, detected[]}` and
+persists nothing, collecting a row-numbered problem for every rejected row at
+once (the real import stops at the first bad row). In the desktop UI the same
+flow is **Add connection → Files → Generic ledger**: after you choose the filled
+file, a preview (backed by the `ui.wallets.ledger_preview` daemon kind) shows the
 detected rows + any problems so you can confirm before importing.
+
+### Bring your own file (auto-detected columns)
+
+You do not have to use the template. A file that isn't in the template shape (no
+`Type` + Received/Sent columns) is **auto-detected**: `infer_ledger_columns`
+matches common header aliases — date; a `Type`/`Side` column, or a
+direction/sign, or separate sent/received columns; fee; fiat currency/price/value;
+note; transaction id — and remaps each row onto the ledger shape, so it imports
+through the *same* normalizer and its `Type`→tax-kind taxonomy + exact pricing.
+Rows without an explicit type become `Deposit`/`Withdrawal` by direction; a fiat
+price or value becomes exact `exchange_execution` pricing. When the columns can't
+be recognized the import returns a `ledger_unrecognized` error (the desktop
+preview shows it and points you back at the template); the dry-run/preview
+returns `confident: false` with the detected columns instead of raising. Template
+files are unaffected — they still take the native path.
 
 ### Columns
 

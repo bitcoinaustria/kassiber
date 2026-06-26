@@ -561,7 +561,10 @@
         "colKind": "Art",
         "colAmount": "Betrag",
         "colValue": "Wert",
-        "problemRow": "Zeile {{row}}: {{message}}"
+        "problemRow": "Zeile {{row}}: {{message}}",
+        "detected": "Erkannt: {{columns}}",
+        "notRecognized": "Diese Spalten wurden nicht erkannt.",
+        "notRecognizedHint": "Lade die Vorlage herunter, fülle sie aus und importiere stattdessen diese."
       }
     },
     "defaultLabel": {

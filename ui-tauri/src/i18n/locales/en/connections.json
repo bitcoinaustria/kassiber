@@ -561,7 +561,10 @@
         "colKind": "Type",
         "colAmount": "Amount",
         "colValue": "Value",
-        "problemRow": "Row {{row}}: {{message}}"
+        "problemRow": "Row {{row}}: {{message}}",
+        "detected": "Recognized: {{columns}}",
+        "notRecognized": "Couldn't recognize these columns.",
+        "notRecognizedHint": "Download the template, fill it in, and import that instead."
       }
     },
     "defaultLabel": {

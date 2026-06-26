@@ -4990,6 +4990,54 @@ class GenericLedgerImportTest(unittest.TestCase):
         self.assertEqual(bad_payload["data"]["problems"][0]["row"], 2)
         self.assertEqual(self._records_by_external_id(), {})
 
+    def test_byo_columns_are_auto_detected(self):
+        # An arbitrary export (no Type column; sent/received BTC + a fiat price)
+        # imports by auto-detecting the columns onto the ledger shape.
+        byo = Path(self._tmp.name) / "byo.csv"
+        byo.write_text(
+            "Date,Received BTC,Sent BTC,Currency,Price,Note\n"
+            "2026-01-15,0.5,,EUR,40000,Bought\n"
+            "2026-01-20,,0.1,EUR,42000,Sold\n",
+            encoding="utf-8",
+        )
+        preview = self._cli(
+            "wallets", "import-ledger",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+            "--file", str(byo), "--dry-run",
+        )
+        self.assertTrue(preview["data"]["confident"])
+        self.assertEqual(preview["data"]["mapped"], 2)
+        fields = {d["field"] for d in preview["data"]["detected"]}
+        self.assertIn("received", fields)
+        self.assertIn("sent", fields)
+
+        imported = self._import(byo)
+        self.assertEqual(imported["data"]["imported"], 2)
+        listed = self._cli(
+            "transactions", "list",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+        )["data"]
+        self.assertEqual(len(listed), 2)
+        # The fiat price became exact execution pricing through #244's normalizer.
+        self.assertTrue(all(row.get("fiat_value") for row in listed))
+
+    def test_byo_unrecognized_columns_are_steered_not_imported(self):
+        junk = Path(self._tmp.name) / "junk.csv"
+        junk.write_text("alpha,beta,gamma\n1,2,3\n", encoding="utf-8")
+        preview = self._cli(
+            "wallets", "import-ledger",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+            "--file", str(junk), "--dry-run",
+        )
+        self.assertFalse(preview["data"]["confident"])
+        payload, code = _run(
+            self.data_root, "wallets", "import-ledger",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+            "--file", str(junk),
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(payload["error"]["code"], "ledger_unrecognized")
+
     def test_csv_import_maps_kinds_amounts_and_pricing(self):
         ledger = Path(self._tmp.name) / "ledger.csv"
         ledger.write_text(_GENERIC_LEDGER_CSV, encoding="utf-8")

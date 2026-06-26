@@ -802,6 +802,13 @@ export const mockDaemon: DaemonTransport = {
           mapped: 2,
           errors: 1,
           truncated: false,
+          confident: true,
+          detected: [
+            { column: "Date", field: "date" },
+            { column: "Received BTC", field: "received" },
+            { column: "Sent BTC", field: "sent" },
+            { column: "Price", field: "fiat_rate" },
+          ],
           problems: [{ row: 3, message: "Ledger row 3: unknown Type 'Frobnicate'" }],
           preview: [
             {

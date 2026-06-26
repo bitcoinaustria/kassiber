@@ -40,6 +40,8 @@ interface LedgerPreviewResult {
   problems: { row: number; message: string }[];
   preview: LedgerPreviewRow[];
   truncated: boolean;
+  confident?: boolean;
+  detected?: { column: string; field: string }[] | null;
 }
 
 function localeFor(lang: string): string {
@@ -94,7 +96,21 @@ export function GenericLedgerPreview({ file }: { file: string }) {
   }
   if (!data) return null;
 
+  // Columns couldn't be auto-detected — steer to the template, don't import.
+  if (data.confident === false) {
+    return (
+      <div className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+        <p className="flex items-center gap-2 font-medium">
+          <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
+          {t("add.genericLedger.preview.notRecognized")}
+        </p>
+        <p>{t("add.genericLedger.preview.notRecognizedHint")}</p>
+      </div>
+    );
+  }
+
   const rows = data.preview.slice(0, 5);
+  const detectedColumns = (data.detected ?? []).map((entry) => entry.column);
   return (
     <div className="space-y-2 rounded-md border px-3 py-2">
       <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -107,6 +123,12 @@ export function GenericLedgerPreview({ file }: { file: string }) {
           </Badge>
         ) : null}
       </div>
+
+      {detectedColumns.length > 0 ? (
+        <p className="text-[11px] text-muted-foreground">
+          {t("add.genericLedger.preview.detected", { columns: detectedColumns.join(", ") })}
+        </p>
+      ) : null}
 
       {rows.length > 0 ? (
         <ScrollArea className="max-h-44">

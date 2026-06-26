@@ -2359,6 +2359,22 @@ def _generic_ledger_has_header(cells):
     )
 
 
+# Native template = Type + Date AND a Received/Sent leg column. A file with
+# Type + Date but a single "Amount" column is NOT native — it takes the
+# auto-detect (bring-your-own-file) path instead.
+_GENERIC_LEDGER_NATIVE_AMOUNT_HEADERS = {
+    _normalized_column_key(name)
+    for name in ("Received Amount", "Buy Amount", "Sent Amount", "Sell Amount")
+}
+
+
+def _is_native_ledger(cells):
+    seen = {_normalized_column_key(cell) for cell in cells if str_or_none(cell)}
+    return _generic_ledger_has_header(cells) and bool(
+        seen & _GENERIC_LEDGER_NATIVE_AMOUNT_HEADERS
+    )
+
+
 def _generic_ledger_decimal_cell(value, field, row_label):
     """Parse a hand-typed number, accepting both ``1,234.56`` and European
     ``1.234,56`` / ``0,05`` decimal-comma formats. Raises a row-numbered
@@ -2701,14 +2717,266 @@ def _generic_ledger_rows_to_records(rows):
     return records
 
 
-def load_generic_ledger_records(file_path):
-    """Load a generic-ledger .xlsx or CSV/TSV file into common import records."""
+# --------------------------------------------------------------------------- #
+# Bring-your-own-file: auto-detect arbitrary column layouts onto the ledger
+# shape so a non-template export still imports through the same normalizer (and
+# its Type -> (direction, kind) taxonomy + exact fiat pricing) untouched. Only
+# files WITHOUT a native Type+Date header take this path; template files are
+# unchanged.
+# --------------------------------------------------------------------------- #
+_BYO_DATE = {_normalized_column_key(n) for n in ("Date", "Time", "Timestamp", "Datetime", "Date Time", "Datum", "Zeitpunkt", "Executed At", "Trade Date")}
+_BYO_TYPE = {_normalized_column_key(n) for n in ("Type", "Transaction Type", "Tx Type", "Side", "Category", "Action", "Art")}
+_BYO_DIRECTION = {_normalized_column_key(n) for n in ("Direction", "In/Out", "Flow", "Richtung")}
+_BYO_RECEIVED = {_normalized_column_key(n) for n in ("Received Amount", "Received", "Received BTC", "Buy Amount", "Incoming", "Amount Received", "Deposit Amount", "Credit", "Eingang", "Erhalten")}
+_BYO_SENT = {_normalized_column_key(n) for n in ("Sent Amount", "Sent", "Sent BTC", "Sell Amount", "Outgoing", "Amount Sent", "Withdrawal Amount", "Debit", "Ausgang", "Gesendet")}
+_BYO_AMOUNT = {_normalized_column_key(n) for n in ("Amount", "BTC", "Amount BTC", "BTC Amount", "Quantity", "Qty", "Net Amount", "Betrag", "Menge")}
+# "Currency" is fiat far more often than a crypto-asset column, so it belongs
+# to fiat detection; the crypto asset is only taken from explicit asset columns.
+_BYO_ASSET = {_normalized_column_key(n) for n in ("Asset", "Coin", "Symbol", "Crypto", "Crypto Asset")}
+_BYO_FEE = {_normalized_column_key(n) for n in ("Fee", "Fees", "Fee Amount", "Miner Fee", "Network Fee", "Tx Fee", "Gebühr", "Gebuehr")}
+_BYO_FIAT_CURRENCY = {_normalized_column_key(n) for n in ("Fiat Currency", "Fiat", "Currency", "Quote Currency", "Cash Currency", "Währung", "Waehrung")}
+_BYO_FIAT_VALUE = {_normalized_column_key(n) for n in ("Fiat Value", "Total", "Total Value", "Value", "Proceeds", "Cost", "Gesamt", "Wert")}
+_BYO_FIAT_RATE = {_normalized_column_key(n) for n in ("Price", "Rate", "Unit Price", "Price Per BTC", "BTC Price", "Spot", "Kurs", "Preis")}
+_BYO_NOTE = {_normalized_column_key(n) for n in ("Note", "Notes", "Description", "Memo", "Label", "Comment", "Notiz", "Beschreibung")}
+_BYO_TXID = {_normalized_column_key(n) for n in ("Tx-ID", "TxID", "Txid", "Transaction ID", "Tx Hash", "Hash", "Reference", "Ref")}
+_BYO_COUNTERPARTY = {_normalized_column_key(n) for n in ("Counterparty", "Exchange", "Platform", "Payee", "Gegenpartei")}
+
+_BYO_TYPE_VALUE_MAP = {
+    "in": "Deposit", "incoming": "Deposit", "received": "Deposit", "receive": "Deposit",
+    "credit": "Deposit", "out": "Withdrawal", "outgoing": "Withdrawal", "sent": "Withdrawal",
+    "send": "Withdrawal", "debit": "Withdrawal",
+}
+_BYO_INBOUND_VALUES = {"in", "inbound", "received", "receive", "incoming", "credit", "deposit", "buy"}
+_BYO_OUTBOUND_VALUES = {"out", "outbound", "sent", "send", "outgoing", "debit", "withdrawal", "sell"}
+
+
+def _byo_number(cell):
+    """Lenient numeric parse (honors locale decimals); None on blank/junk."""
+    try:
+        return _generic_ledger_decimal_cell(cell, "x", "")
+    except AppError:
+        return None
+
+
+def _byo_type_value(type_value, direction):
+    if type_value:
+        return _BYO_TYPE_VALUE_MAP.get(_normalized_column_key(type_value), type_value)
+    return "Deposit" if direction == "inbound" else "Withdrawal"
+
+
+def _byo_type_direction(type_value):
+    mapped = _byo_type_value(type_value, None)
+    entry = _GENERIC_LEDGER_TYPES.get(" ".join(str(mapped).strip().lower().split()))
+    return entry[0] if entry else None
+
+
+def _byo_direction_value(value):
+    key = _normalized_column_key(value or "")
+    if key in _BYO_INBOUND_VALUES:
+        return "inbound"
+    if key in _BYO_OUTBOUND_VALUES:
+        return "outbound"
+    return None
+
+
+def infer_ledger_columns(header):
+    """Guess a column plan mapping an arbitrary header onto the ledger shape.
+
+    Returns ``{"plan", "detected", "confident"}``. ``confident`` requires a date
+    column and a usable amount layout (received/sent, or a single amount with a
+    type/direction column, or a signed amount). Used only for non-template files.
+    """
+    norm = {h: _normalized_column_key(h) for h in header if str_or_none(h)}
+    used = set()
+    detected = []
+
+    def take(aliases, field):
+        for original in header:
+            if original in used or original not in norm:
+                continue
+            if norm[original] in aliases:
+                used.add(original)
+                detected.append({"column": original, "field": field})
+                return original
+        return None
+
+    date = take(_BYO_DATE, "date")
+    received = take(_BYO_RECEIVED, "received")
+    sent = take(_BYO_SENT, "sent")
+    amount = None if (received and sent) else take(_BYO_AMOUNT, "amount")
+    type_col = take(_BYO_TYPE, "type")
+    direction = take(_BYO_DIRECTION, "direction") if not type_col else None
+    asset = take(_BYO_ASSET, "asset")
+    fee = take(_BYO_FEE, "fee")
+    fiat_currency = take(_BYO_FIAT_CURRENCY, "fiat_currency")
+    fiat_value = take(_BYO_FIAT_VALUE, "fiat_value")
+    fiat_rate = take(_BYO_FIAT_RATE, "fiat_rate")
+    note = take(_BYO_NOTE, "description")
+    txid = take(_BYO_TXID, "txid")
+    counterparty = take(_BYO_COUNTERPARTY, "counterparty")
+
+    plan = {
+        "date": date, "type": type_col, "direction": direction,
+        "received": received, "sent": sent, "amount": amount, "asset": asset,
+        "fee": fee, "fiat_currency": fiat_currency, "fiat_value": fiat_value,
+        "fiat_rate": fiat_rate, "note": note, "txid": txid, "counterparty": counterparty,
+    }
+    confident = bool(date) and bool(received or sent or amount)
+    return {"plan": plan, "detected": detected, "confident": confident}
+
+
+def _ledger_plan_usable(plan):
+    return bool(plan) and bool(plan.get("date")) and bool(
+        plan.get("received") or plan.get("sent") or plan.get("amount")
+    )
+
+
+def _remap_byo_row_to_ledger(row, plan):
+    """Remap one arbitrary row into a #244-shaped ledger record (string cells).
+
+    Only routes raw cell values into the right ledger columns; all parsing and
+    validation stays in ``normalize_generic_ledger_record``.
+    """
+    def cell(col):
+        return str_or_none(row.get(col)) if col else None
+
+    out = {"Date": cell(plan.get("date")) or ""}
+    asset = cell(plan.get("asset")) or "BTC"
+    type_value = cell(plan.get("type"))
+
+    direction = None
+    btc_cell = None
+    both_sides = False
+    if plan.get("received") or plan.get("sent"):
+        received_num = _byo_number(row.get(plan.get("received"))) if plan.get("received") else None
+        sent_num = _byo_number(row.get(plan.get("sent"))) if plan.get("sent") else None
+        received_present = received_num is not None and received_num != 0
+        sent_present = sent_num is not None and sent_num != 0
+        if received_present and not sent_present:
+            direction, btc_cell = "inbound", cell(plan["received"])
+        elif sent_present and not received_present:
+            direction, btc_cell = "outbound", cell(plan["sent"])
+        elif received_present and sent_present:
+            both_sides = True  # let the normalizer flag crypto-to-crypto
+    elif plan.get("amount"):
+        raw = cell(plan["amount"])
+        number = _byo_number(row.get(plan["amount"]))
+        if type_value:
+            direction = _byo_type_direction(type_value)
+            btc_cell = format(abs(number), "f") if (number is not None and direction) else raw
+        elif plan.get("direction"):
+            direction = _byo_direction_value(cell(plan["direction"]))
+            btc_cell = format(abs(number), "f") if number is not None else raw
+        elif number is not None:
+            direction = "outbound" if number < 0 else "inbound"
+            btc_cell = format(abs(number), "f")
+        else:
+            direction, btc_cell = "inbound", raw
+
+    if both_sides:
+        out["Type"] = _byo_type_value(type_value, "inbound")
+        out["Received Asset"], out["Received Amount"] = asset, cell(plan["received"])
+        out["Sent Asset"], out["Sent Amount"] = asset, cell(plan["sent"])
+        _byo_passthrough(out, row, plan)
+        return out
+
+    out["Type"] = _byo_type_value(type_value, direction)
+
+    fiat_currency = cell(plan.get("fiat_currency"))
+    fiat_value = cell(plan.get("fiat_value"))
+    if fiat_value is None and plan.get("fiat_rate") and btc_cell is not None:
+        rate = _byo_number(row.get(plan["fiat_rate"]))
+        magnitude = _byo_number(btc_cell)
+        if rate is not None and magnitude is not None:
+            fiat_value = format(rate * magnitude, "f")
+
+    if direction == "outbound":
+        out["Sent Asset"], out["Sent Amount"] = asset, btc_cell
+        if fiat_value is not None:
+            if fiat_currency:
+                out["Received Asset"], out["Received Amount"] = fiat_currency, fiat_value
+            else:
+                out["Fiat Value"] = fiat_value
+    else:
+        out["Received Asset"], out["Received Amount"] = asset, btc_cell
+        if fiat_value is not None:
+            if fiat_currency:
+                out["Sent Asset"], out["Sent Amount"] = fiat_currency, fiat_value
+            else:
+                out["Fiat Value"] = fiat_value
+
+    fee_cell = cell(plan.get("fee"))
+    if fee_cell is not None:
+        out["Fee Amount"] = fee_cell
+    _byo_passthrough(out, row, plan)
+    return out
+
+
+def _byo_passthrough(out, row, plan):
+    if plan.get("txid"):
+        out["Tx-ID"] = str_or_none(row.get(plan["txid"]))
+    if plan.get("note"):
+        out["Note"] = str_or_none(row.get(plan["note"]))
+    if plan.get("counterparty"):
+        out["Counterparty"] = str_or_none(row.get(plan["counterparty"]))
+
+
+def _read_ledger_rows(file_path):
+    if not os.path.exists(file_path):
+        raise AppError(
+            f"Import file not found: {file_path}",
+            code="not_found",
+            hint="Check the file path.",
+        )
     extension = os.path.splitext(file_path)[1].lower()
     if extension in {".xlsx", ".xlsm"}:
-        rows = _read_generic_ledger_xlsx(file_path)
+        return _read_generic_ledger_xlsx(file_path)
+    return _read_generic_ledger_csv(file_path)
+
+
+def _ledger_source_records(rows, column_map=None):
+    """Return #244-shaped record dicts from raw rows.
+
+    Native template files (Type+Date header) use the existing path unchanged.
+    Other files are auto-detected (or use an explicit ``column_map`` plan) and
+    remapped onto the ledger shape, raising ``ledger_unrecognized`` when the
+    columns can't be recognized.
+    """
+    header_row = next((row for row in rows if any(str_or_none(cell) for cell in row)), None)
+    if column_map is None and header_row is not None and _is_native_ledger(header_row):
+        return _generic_ledger_rows_to_records(rows), None
+
+    header = [str(cell).strip() if cell is not None else "" for cell in (header_row or [])]
+    if column_map is not None:
+        plan, detected = column_map, None
     else:
-        rows = _read_generic_ledger_csv(file_path)
-    records = _generic_ledger_rows_to_records(rows)
+        inferred = infer_ledger_columns(header)
+        plan, detected = inferred["plan"], inferred["detected"]
+    if not _ledger_plan_usable(plan):
+        raise AppError(
+            "Could not recognize the columns in this file.",
+            code="ledger_unrecognized",
+            hint="Download the import template (it already has the right columns), fill it in, and import that — or map the columns yourself.",
+            details={"headers": header},
+        )
+    header_index = rows.index(header_row)
+    records = []
+    for raw in rows[header_index + 1 :]:
+        if not any(str_or_none(cell) for cell in raw):
+            continue
+        row = {name: (raw[i] if i < len(raw) else "") for i, name in enumerate(header) if name}
+        records.append(_remap_byo_row_to_ledger(row, plan))
+    return records, detected
+
+
+def load_generic_ledger_records(file_path, column_map=None):
+    """Load a generic-ledger .xlsx or CSV/TSV file into common import records.
+
+    Template files import as before; arbitrary files are auto-detected and
+    remapped onto the ledger shape (``column_map`` overrides the guess).
+    """
+    rows = _read_ledger_rows(file_path)
+    records, _ = _ledger_source_records(rows, column_map)
     normalized = [
         normalize_generic_ledger_record(record, index=index)
         for index, record in enumerate(records, start=1)
@@ -2740,26 +3008,48 @@ def _generic_ledger_preview_row(record):
     }
 
 
-def preview_generic_ledger_records(file_path, *, limit=200):
+def preview_generic_ledger_records(file_path, *, limit=200, column_map=None):
     """Report what a generic-ledger file would import, without persisting.
 
     Reuses the same reader + per-row normalizer as the real import, but catches
     each row's validation error individually so the whole file previews at once
-    (the importer itself stops at the first bad row). Returns counts, a bounded
-    sample of the normalized rows, and a row-numbered problem per rejected row.
+    (the importer itself stops at the first bad row). Auto-detects arbitrary
+    (non-template) layouts; when the columns can't be recognized, returns
+    ``confident: False`` with the detected columns instead of raising, so the UI
+    can steer the user to the template or a manual mapping.
     """
-    if not os.path.exists(file_path):
-        raise AppError(
-            f"Import file not found: {file_path}",
-            code="not_found",
-            hint="Check the file path.",
-        )
-    extension = os.path.splitext(file_path)[1].lower()
-    if extension in {".xlsx", ".xlsm"}:
-        rows = _read_generic_ledger_xlsx(file_path)
-    else:
-        rows = _read_generic_ledger_csv(file_path)
-    records = _generic_ledger_rows_to_records(rows)
+    try:
+        bound = max(0, int(limit))
+    except (TypeError, ValueError):
+        bound = 200
+    rows = _read_ledger_rows(file_path)
+    header_row = next((row for row in rows if any(str_or_none(cell) for cell in row)), None)
+    detected = None
+    native = column_map is None and header_row is not None and _is_native_ledger(header_row)
+    if not native:
+        header = [str(cell).strip() if cell is not None else "" for cell in (header_row or [])]
+        if column_map is not None:
+            plan, detected = column_map, None
+        else:
+            inferred = infer_ledger_columns(header)
+            plan, detected = inferred["plan"], inferred["detected"]
+        if not _ledger_plan_usable(plan):
+            data_rows = [
+                raw for raw in rows[(rows.index(header_row) + 1 if header_row is not None else 0):]
+                if any(str_or_none(cell) for cell in raw)
+            ]
+            return {
+                "confident": False,
+                "detected": detected,
+                "headers": header,
+                "rows_read": len(data_rows),
+                "mapped": 0,
+                "errors": 0,
+                "problems": [],
+                "preview": [],
+                "truncated": False,
+            }
+    records, _ = _ledger_source_records(rows, column_map)
     normalized = []
     problems = []
     for index, record in enumerate(records, start=1):
@@ -2767,10 +3057,6 @@ def preview_generic_ledger_records(file_path, *, limit=200):
             normalized.append(normalize_generic_ledger_record(record, index=index))
         except AppError as exc:
             problems.append({"row": index, "message": str(exc)})
-    try:
-        bound = max(0, int(limit))
-    except (TypeError, ValueError):
-        bound = 200
     return {
         "rows_read": len(records),
         "mapped": len(normalized),
@@ -2778,6 +3064,8 @@ def preview_generic_ledger_records(file_path, *, limit=200):
         "problems": problems[:bound] if bound else problems,
         "preview": [_generic_ledger_preview_row(record) for record in normalized[:bound]],
         "truncated": bound > 0 and len(normalized) > bound,
+        "confident": True,
+        "detected": detected,
     }
 
 
