@@ -2752,10 +2752,10 @@ def _rates_latest_payload(
             retryable=False,
         )
     if isinstance(pair_arg, str) and pair_arg.strip():
-        pair = core_rates.require_supported_pair(pair_arg)
+        pair = core_rates.require_spot_pair(pair_arg)
     else:
         _, profile = resolve_scope(conn, None, None)
-        pair = core_rates.transaction_rate_pair("BTC", profile["fiat_currency"])
+        pair = core_rates.spot_rate_pair("BTC", profile["fiat_currency"], source)
         if pair is None:
             raise AppError(
                 f"BTC market rates are not supported for {profile['fiat_currency']}",
@@ -2770,7 +2770,9 @@ def _rates_latest_payload(
         commit=True,
     )
     try:
-        rate = core_rates.get_latest_rate(conn, pair)
+        # Scope to the requested provider so the live converter never shows a
+        # manual override or a stale row from a different provider.
+        rate = core_rates.get_latest_rate(conn, pair, source=source)
     except AppError as exc:
         if exc.code != "not_found":
             raise

@@ -847,10 +847,12 @@ def _market_rate_provider_settings(
     conn: sqlite3.Connection,
     profile: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    provider = core_rates.get_market_rate_provider(conn)
     return {
-        "market_rate_provider": core_rates.get_market_rate_provider(conn),
+        "market_rate_provider": provider,
         "market_rate_providers": list(core_rates.LIVE_MARKET_RATE_SOURCES),
         "active_rate_pair": _active_market_rate_pair(profile),
+        "market_rate_fiats": core_rates.spot_fiats_for_provider(provider),
     }
 
 

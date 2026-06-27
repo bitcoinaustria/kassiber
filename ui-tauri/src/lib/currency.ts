@@ -24,6 +24,9 @@ const FIAT_LOCALES: Record<string, string> = {
   USD: "en-US",
   CHF: "de-CH",
   GBP: "en-GB",
+  AUD: "en-AU",
+  CAD: "en-CA",
+  JPY: "ja-JP",
 };
 
 /** Resolve the formatting locale for a fiat code; falls back to de-AT (EUR). */
