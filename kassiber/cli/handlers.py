@@ -25,7 +25,9 @@ from ..backends import (
     get_db_backend,
     list_backends,
     list_db_backends,
+    redact_backend_text,
     redact_backend_url,
+    redact_backend_value,
     resolve_backend,
     set_default_backend,
     update_db_backend,
@@ -2227,9 +2229,9 @@ def sync_wallet(
                         "wallet": wallet["label"],
                         "status": "error",
                         "code": exc.code,
-                        "message": str(exc),
-                        "hint": exc.hint or "",
-                        "details": exc.details,
+                        "message": redact_backend_text(str(exc)),
+                        "hint": redact_backend_text(exc.hint) if exc.hint else "",
+                        "details": redact_backend_value(exc.details),
                         "retryable": bool(exc.retryable),
                     }
                 )
