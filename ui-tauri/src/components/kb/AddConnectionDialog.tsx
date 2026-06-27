@@ -35,6 +35,7 @@ import {
   type ConnectionSourceFormat,
 } from "@/lib/connectionCatalog";
 import { saveDaemonExport } from "@/lib/exportFile";
+import { parseAddressList, stripKeyMaterial } from "@/lib/addressList";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 import {
   buildSamouraiSourceSet,
@@ -75,6 +76,7 @@ interface SetupFormState {
   btcpayApiKey: string;
   walletMaterial: string;
   descriptorScriptType: string;
+  addressList: string;
   gapLimit: string;
   targetWallet: string;
   sourceFile: string;
@@ -232,6 +234,11 @@ interface SamouraiImportResult {
 
 type DialogStep = "source" | "setup";
 const DESCRIPTOR_BACKEND_KINDS = new Set(["esplora", "electrum"]);
+const ADDRESS_BACKEND_KINDS = new Set([
+  "esplora",
+  "electrum",
+  "bitcoinrpc",
+]);
 const DEFAULT_BTCPAY_PAYMENT_METHOD_ID = "BTC-CHAIN";
 const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
 type BullBitcoinWalletNetwork = "bitcoin" | "liquid" | "lightning";
@@ -301,6 +308,10 @@ const SAMOURAI_SOURCE_FIELDS: Array<{
 
 function supportsDescriptorSync(backend: BackendOption) {
   return DESCRIPTOR_BACKEND_KINDS.has(backend.kind);
+}
+
+function supportsAddressListSync(backend: BackendOption) {
+  return ADDRESS_BACKEND_KINDS.has(backend.kind);
 }
 
 function isExchangeEvidenceFormat(sourceFormat?: string) {
@@ -419,6 +430,7 @@ const formDefaultsFor = (
     btcpayApiKey: "",
     walletMaterial: "",
     descriptorScriptType: "",
+    addressList: "",
     gapLimit: "40",
     targetWallet: "",
     sourceFile: "",
@@ -441,7 +453,8 @@ const formDefaultsFor = (
     bip329File: "",
     syncAfterCreate:
       source.setupKind === "file-wallet" ||
-      source.setupKind === "bullbitcoin-wallet",
+      source.setupKind === "bullbitcoin-wallet" ||
+      source.setupKind === "address-list",
   };
 };
 
@@ -619,6 +632,17 @@ export function AddConnectionDialog({
   const [form, setForm] = React.useState(() =>
     formDefaultsFor(CONNECTION_SOURCES[0], t),
   );
+  const [purgedKeys, setPurgedKeys] = React.useState<{
+    privateKeys: number;
+    publicKeys: number;
+  } | null>(null);
+  // Parse once per input change, not once per render — an address-list paste can
+  // hold thousands of entries and this drives the live summary, validation, and
+  // submit.
+  const parsedAddressList = React.useMemo(
+    () => parseAddressList(form.addressList),
+    [form.addressList],
+  );
   const [setupError, setSetupError] = React.useState<string | null>(null);
   const [lastImportResult, setLastImportResult] =
     React.useState<ImportFileResult | null>(null);
@@ -674,6 +698,11 @@ export function AddConnectionDialog({
       supportsDescriptorSync(backend) &&
       (!backend.chain || backend.chain === "bitcoin"),
   );
+  const bitcoinAddressBackends = allBackends.filter(
+    (backend) =>
+      supportsAddressListSync(backend) &&
+      (!backend.chain || backend.chain === "bitcoin"),
+  );
   const liquidBackends = allBackends.filter(
     (backend) =>
       supportsDescriptorSync(backend) &&
@@ -684,7 +713,10 @@ export function AddConnectionDialog({
   );
   const descriptorBackendOptions =
     selected.chain === "liquid" ? liquidBackends : bitcoinBackends;
-  const selectedBackendOptions = descriptorBackendOptions;
+  const addressBackendOptions =
+    selected.chain === "bitcoin" ? bitcoinAddressBackends : descriptorBackendOptions;
+  const selectedBackendOptions =
+    setupKind === "address-list" ? addressBackendOptions : descriptorBackendOptions;
   const defaultBackendName =
     selectedBackendOptions.find((backend) => backend.is_default)?.name ??
     selectedBackendOptions[0]?.name ??
@@ -776,7 +808,10 @@ export function AddConnectionDialog({
     discoverBtcpay.isPending ||
     importBip329.isPending ||
     syncWallet.isPending;
-  const requiresBackend = setupKind === "descriptor" || setupKind === "samourai";
+  const requiresBackend =
+    setupKind === "descriptor" ||
+    setupKind === "samourai" ||
+    setupKind === "address-list";
   const missingBackend = requiresBackend && selectedBackendOptions.length === 0;
   const submitLabel =
     setupKind === "backend-settings"
@@ -818,6 +853,7 @@ export function AddConnectionDialog({
     setBtcpayTestStatus(null);
     setBtcpayDiscovery(null);
     setSyncProgress(null);
+    setPurgedKeys(null);
   }, [selected, t]);
 
   React.useEffect(() => {
@@ -842,11 +878,17 @@ export function AddConnectionDialog({
     setLastImportResult(null);
     setPreviewAddresses(null);
     setPreviewError(null);
+    setPurgedKeys(null);
   }, [open, selected, t]);
 
   React.useEffect(() => {
     if (!defaultBackendName) return;
-    if (setupKind !== "descriptor" && setupKind !== "samourai") return;
+    if (
+      setupKind !== "descriptor" &&
+      setupKind !== "samourai" &&
+      setupKind !== "address-list"
+    )
+      return;
     setForm((current) =>
       current.backend ? current : { ...current, backend: defaultBackendName },
     );
@@ -913,6 +955,55 @@ export function AddConnectionDialog({
     });
   };
 
+  const applyAddressInput = (rawText: string) => {
+    const stripped = stripKeyMaterial(rawText);
+    const removed = stripped.privateKeys + stripped.publicKeys > 0;
+    // Only reflow to the scrubbed text when key material was actually removed,
+    // so normal typing/formatting of addresses is left undisturbed.
+    setForm((current) => ({
+      ...current,
+      addressList: removed ? stripped.text : rawText,
+    }));
+    if (removed) {
+      setPurgedKeys((prev) => ({
+        privateKeys: (prev?.privateKeys ?? 0) + stripped.privateKeys,
+        publicKeys: (prev?.publicKeys ?? 0) + stripped.publicKeys,
+      }));
+    } else if (!rawText.trim()) {
+      setPurgedKeys(null);
+    }
+    setFieldErrors((current) => {
+      if (!("addressList" in current)) return current;
+      const next = { ...current };
+      delete next.addressList;
+      return next;
+    });
+  };
+
+  const addressFileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const handleAddressFile = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const input = event.target;
+    const files = Array.from(input.files ?? []);
+    input.value = ""; // allow re-picking the same file
+    if (files.length === 0) return;
+    try {
+      const texts = await Promise.all(files.map((file) => file.text()));
+      const loaded = texts.join("\n").trim();
+      if (!loaded) return;
+      const existing = form.addressList.trim();
+      applyAddressInput(existing ? `${existing}\n${loaded}` : loaded);
+    } catch (error) {
+      setSetupError(
+        error instanceof Error
+          ? error.message
+          : t("add.addressList.fileReadFailed"),
+      );
+    }
+  };
+
   const openBackendSettings = () => {
     const intent: DeferredConnectionSetup = {
       sourceId: selected.id,
@@ -939,6 +1030,7 @@ export function AddConnectionDialog({
     const errors: Partial<Record<keyof SetupFormState, string>> = {};
     if (
       setupKind === "descriptor" ||
+      setupKind === "address-list" ||
       setupKind === "file-wallet" ||
       setupKind === "samourai" ||
       setupKind === "btcpay" ||
@@ -946,6 +1038,14 @@ export function AddConnectionDialog({
     ) {
       if (!form.label.trim()) {
         errors.label = t("add.validation.labelRequired");
+      }
+    }
+    if (setupKind === "address-list") {
+      if (parsedAddressList.valid.length === 0) {
+        errors.addressList = t("add.addressList.errorNeedAddress");
+      }
+      if (addressBackendOptions.length > 0 && !form.backend.trim()) {
+        errors.backend = t("add.validation.chooseBackend");
       }
     }
     if (setupKind === "descriptor") {
@@ -1145,6 +1245,32 @@ export function AddConnectionDialog({
         addNotification({
           title: t("add.added.title"),
           body: t("add.added.body", { label }),
+          tone: "success",
+        });
+      } else if (setupKind === "address-list") {
+        const parsed = parsedAddressList;
+        await createWallet.mutateAsync({
+          label,
+          kind: selected.walletKind ?? "address",
+          backend: form.backend.trim() || undefined,
+          chain: selected.chain,
+          network: selected.network,
+          addresses: parsed.valid,
+        });
+        if (form.syncAfterCreate) {
+          startSyncNotice(t("add.addressList.stillScanning", { label }));
+          try {
+            await syncWallet.mutateAsync({ wallet: label });
+          } finally {
+            clearSyncNotice();
+          }
+        }
+        addNotification({
+          title: t("add.added.title"),
+          body: t("add.addressList.addedBody", {
+            label,
+            count: parsed.valid.length,
+          }),
           tone: "success",
         });
       } else if (setupKind === "samourai") {
@@ -1775,7 +1901,7 @@ export function AddConnectionDialog({
           {renderBackendSelect(
             "connection-backend",
             t("add.field.backend"),
-            descriptorBackendOptions,
+            addressBackendOptions,
           )}
           <SetupField
             id="connection-wallet-material"
@@ -1870,6 +1996,93 @@ export function AddConnectionDialog({
             </span>
           </div>
           {renderDescriptorPreview()}
+        </>
+      );
+    }
+
+    if (setupKind === "address-list") {
+      const parsed = parsedAddressList;
+      const invalidSamples = parsed.invalid.slice(0, 3).join(", ");
+      return (
+        <>
+          {renderConnectionLabelField()}
+          {renderBackendSelect(
+            "connection-backend",
+            t("add.field.backend"),
+            descriptorBackendOptions,
+          )}
+          <SetupField
+            id="connection-address-list"
+            label={t("add.addressList.addresses")}
+            error={fieldErrors.addressList}
+            helper={t("add.addressList.helper")}
+          >
+            <Textarea
+              id="connection-address-list"
+              className="min-h-32 font-mono text-xs"
+              value={form.addressList}
+              onChange={(event) => applyAddressInput(event.target.value)}
+              placeholder={t("add.addressList.placeholder")}
+            />
+            <input
+              ref={addressFileInputRef}
+              type="file"
+              accept=".txt,.csv,text/plain,text/csv"
+              multiple
+              className="hidden"
+              onChange={handleAddressFile}
+            />
+            {purgedKeys ? (
+              <p className="text-xs font-medium text-destructive" role="alert">
+                {purgedKeys.privateKeys > 0
+                  ? t("add.addressList.privateKeysPurged", {
+                      count: purgedKeys.privateKeys,
+                    })
+                  : ""}
+                {purgedKeys.privateKeys > 0 && purgedKeys.publicKeys > 0
+                  ? " "
+                  : ""}
+                {purgedKeys.publicKeys > 0
+                  ? t("add.addressList.publicKeysPurged", {
+                      count: purgedKeys.publicKeys,
+                    })
+                  : ""}
+              </p>
+            ) : null}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => addressFileInputRef.current?.click()}
+              >
+                {t("add.addressList.loadFile")}
+              </Button>
+              {parsed.entries.length > 0 ? (
+                <span className="text-xs text-muted-foreground">
+                  {t("add.addressList.summary", {
+                    count: parsed.valid.length,
+                  })}
+                  {parsed.duplicates > 0
+                    ? ` · ${t("add.addressList.summaryDuplicates", {
+                        count: parsed.duplicates,
+                      })}`
+                    : ""}
+                  {parsed.invalid.length > 0
+                    ? ` · ${t("add.addressList.summaryInvalid", {
+                        count: parsed.invalid.length,
+                      })}`
+                    : ""}
+                </span>
+              ) : null}
+            </div>
+            {parsed.invalid.length > 0 ? (
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                {t("add.addressList.invalidHint", { samples: invalidSamples })}
+              </p>
+            ) : null}
+          </SetupField>
+          {renderSyncAfterCreate(t("add.addressList.scanAfter"))}
         </>
       );
     }

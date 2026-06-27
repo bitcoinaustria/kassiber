@@ -20,6 +20,7 @@ describe("connection catalog", () => {
   it("keeps ready integrations on implemented setup paths", () => {
     const implementedSetupKinds = new Set([
       "descriptor",
+      "address-list",
       "file-wallet",
       "file-enrichment",
       "btcpay",
@@ -39,6 +40,7 @@ describe("connection catalog", () => {
   it("includes the Bitcoin-native connection families Kassiber can already use", () => {
     expect(CONNECTION_SOURCES.map((source) => source.id)).toEqual(
       expect.arrayContaining([
+        "address-list",
         "bitcoin-core",
         "electrum",
         "esplora",

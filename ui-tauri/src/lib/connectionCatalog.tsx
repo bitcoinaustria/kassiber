@@ -46,6 +46,7 @@ export type ConnectionCategory =
 
 export type SetupKind =
   | "descriptor"
+  | "address-list"
   | "file-wallet"
   | "file-enrichment"
   | "samourai"
@@ -154,6 +155,27 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     details: [
       "Paste one common wallet export or descriptor",
       "Kassiber stores receive/change branches when present",
+    ],
+  },
+  {
+    id: "address-list",
+    title: "Address list",
+    description:
+      "Watch a flat list of individual addresses — e.g. a pre-HD Bitcoin Core keypool.",
+    category: "wallets",
+    image: bitcoinIcon,
+    imageClassName: "size-7",
+    status: "ready",
+    pathLabel: "Watch-only wallet",
+    formatLabel: "address list",
+    setupKind: "address-list",
+    walletKind: "address",
+    chain: "bitcoin",
+    network: "main",
+    details: [
+      "Paste addresses or load a .txt/.csv file, one address per line",
+      "No derivation: every address is scanned, so there is no gap limit",
+      "Use Electrum/Fulcrum or Bitcoin Core RPC for large lists — Esplora is one lookup per address",
     ],
   },
   {
