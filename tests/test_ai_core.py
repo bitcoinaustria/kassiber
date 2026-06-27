@@ -43,6 +43,7 @@ from kassiber.ai.client import (
     _http_error_app_error,
     _network_error_app_error,
     _resolve_cli_executable,
+    _cli_subprocess_env,
 )
 from kassiber.ai.prompt import (
     DEFAULT_KASSIBER_SYSTEM_PROMPT,
@@ -626,6 +627,40 @@ class CliAIClientTest(unittest.TestCase):
         self.assertIn('model_reasoning_effort="medium"', args)
         self.assertEqual(args[-1], "-")
         self.assertNotIn("--ask-for-approval", args)
+
+    def test_cli_chat_rejects_kassiber_tools(self):
+        client = CliAIClient(locator="claude-cli://default")
+        with self.assertRaises(AppError) as raised:
+            client.chat(
+                messages=[{"role": "user", "content": "hi"}],
+                model=CLI_DEFAULT_MODEL,
+                tools=[{"type": "function", "function": {"name": "status"}}],
+                tool_choice="auto",
+            )
+        self.assertEqual(raised.exception.code, "ai_cli_tools_disabled")
+
+    def test_cli_subprocess_env_drops_unrelated_secrets(self):
+        with patch.dict(
+            "os.environ",
+            {
+                "PATH": "/usr/bin",
+                "KASSIBER_POC_TOKEN": "secret",
+                "BTCPAY_API_KEY": "secret",
+                "ANTHROPIC_API_KEY": "anthropic",
+                "OPENAI_API_KEY": "openai",
+            },
+            clear=True,
+        ):
+            claude_env = _cli_subprocess_env("claude")
+            codex_env = _cli_subprocess_env("codex")
+        self.assertEqual(claude_env["ANTHROPIC_API_KEY"], "anthropic")
+        self.assertNotIn("OPENAI_API_KEY", claude_env)
+        self.assertEqual(codex_env["OPENAI_API_KEY"], "openai")
+        self.assertNotIn("ANTHROPIC_API_KEY", codex_env)
+        for env in (claude_env, codex_env):
+            self.assertNotIn("KASSIBER_POC_TOKEN", env)
+            self.assertNotIn("BTCPAY_API_KEY", env)
+            self.assertEqual(env["NO_COLOR"], "1")
 
 
 class ListModelsStrictModeTest(unittest.TestCase):

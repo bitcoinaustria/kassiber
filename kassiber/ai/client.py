@@ -638,6 +638,36 @@ class OpenAICompatClient:
             raise _network_error_app_error(exc) from exc
 
 
+def _cli_subprocess_env(command: str) -> dict[str, str]:
+    """Return a minimal environment for external AI CLI subprocesses.
+
+    Do not pass Kassiber's full process environment to agent CLIs: desktop and
+    daemon processes may carry backend tokens, passphrase plumbing, or other
+    app secrets that are unrelated to the selected AI provider.  Keep only
+    basic process settings plus the provider auth variables those CLIs commonly
+    use for non-interactive operation.
+    """
+    allowed = {
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "PATH",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "TERM",
+        "TMPDIR",
+        "USER",
+        "USERNAME",
+    }
+    if command == "claude":
+        allowed.update({"ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"})
+    elif command == "codex":
+        allowed.update({"OPENAI_API_KEY", "OPENAI_BASE_URL", "CODEX_HOME"})
+    env = {key: value for key, value in os.environ.items() if key in allowed}
+    env.setdefault("NO_COLOR", "1")
+    return env
+
+
 @dataclass
 class CliAIClient:
     """Fixed adapter for Claude Code and Codex CLI providers.
@@ -739,8 +769,7 @@ class CliAIClient:
         executable = _resolve_cli_executable(command)
         if not executable:
             raise _cli_unavailable(command)
-        env = dict(os.environ)
-        env.setdefault("NO_COLOR", "1")
+        env = _cli_subprocess_env(command)
         effort = _reasoning_effort(options)
         with tempfile.TemporaryDirectory(prefix="kassiber-ai-cli-") as cwd:
             if command == "claude":
@@ -809,7 +838,17 @@ class CliAIClient:
         tools: list[dict[str, Any]] | None = None,
         tool_choice: str | dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        del tools, tool_choice
+        if tools or tool_choice not in (None, "none"):
+            raise AppError(
+                "CLI AI providers cannot be used with Kassiber tools enabled",
+                code="ai_cli_tools_disabled",
+                hint=(
+                    "Turn off assistant tools for Claude/Codex CLI providers, "
+                    "or use an OpenAI-compatible provider so Kassiber can enforce "
+                    "the typed tool allowlist and consent gates."
+                ),
+                retryable=False,
+            )
         content = self._run(prompt=_messages_to_prompt(messages), model=model, options=options)
         return {
             "role": "assistant",
