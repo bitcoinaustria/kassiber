@@ -44,6 +44,7 @@ from .ai.prompt import (
 from .ai.providers import (
     AI_PROVIDER_SECRET_STORE_SQLCIPHER,
     acknowledge_remote_use,
+    ai_provider_secret_ref_namespace,
     get_default_ai_provider_name,
     list_db_ai_providers,
     list_with_default as list_ai_providers_with_default,
@@ -915,18 +916,31 @@ def _validate_ai_provider_secret_store_id(store_id: str) -> str:
     return store_id
 
 
-def _provider_secret_ref_for_bridge(provider: dict[str, Any]) -> dict[str, Any]:
+def _provider_secret_ref_for_bridge(ctx: DaemonContext, provider: dict[str, Any]) -> dict[str, Any]:
+    provider_name = str(provider.get("name") or "")
+    expected_service, expected_account = ai_provider_secret_ref_namespace(ctx.conn, provider_name)
     ref = dict(provider.get("secret_ref") or {})
-    ref.setdefault("provider_name", provider.get("name"))
-    ref.setdefault("account", provider.get("name"))
-    if not ref.get("service"):
+    store_id = str(ref.get("store_id") or "sqlcipher_inline")
+    state = str(ref.get("state") or "missing")
+    if (
+        store_id == "sqlcipher_inline"
+        or state != "ok"
+        or str(ref.get("service") or "") != expected_service
+        or str(ref.get("account") or provider_name) != expected_account
+    ):
         raise AppError(
-            "AI provider secret ref is missing its service identifier",
+            "AI provider secret ref is outside this project's native secret namespace",
             code="secret_ref_unavailable",
-            details={"refs": [{"provider_name": provider.get("name"), "state": "unavailable"}]},
+            details={"refs": [{"provider_name": provider_name, "store_id": store_id, "state": "unavailable"}]},
             retryable=True,
         )
-    return ref
+    return {
+        "provider_name": provider_name,
+        "store_id": store_id,
+        "service": expected_service,
+        "account": expected_account,
+        "state": state,
+    }
 
 
 def _secret_store_bridge_request(
@@ -1054,9 +1068,8 @@ def _ai_provider_has_stored_api_key(provider: dict[str, Any]) -> bool:
     return ref.get("state") == "ok"
 
 
-def _ai_provider_secret_service_account(provider: dict[str, Any]) -> tuple[str, str]:
-    ref = _provider_secret_ref_for_bridge(provider)
-    return str(ref["service"]), str(ref.get("account") or provider["name"])
+def _ai_provider_secret_service_account(ctx: DaemonContext, provider: dict[str, Any]) -> tuple[str, str]:
+    return ai_provider_secret_ref_namespace(ctx.conn, str(provider["name"]))
 
 
 def _set_ai_provider_key_with_selected_store(
@@ -1082,7 +1095,7 @@ def _set_ai_provider_key_with_selected_store(
             retryable=True,
         )
     provider = get_db_ai_provider(ctx.conn, name)
-    service, account = _ai_provider_secret_service_account(provider)
+    service, account = _ai_provider_secret_service_account(ctx, provider)
     if api_key is None:
         _secret_store_bridge_request(
             ctx,
@@ -1141,14 +1154,14 @@ def _move_ai_provider_key(
             "AI provider key must be re-entered before it can be moved",
             code="secret_ref_unavailable",
             hint="Re-enter the provider API key in Settings, then retry the storage move.",
-            details={"refs": [_provider_secret_ref_for_bridge(provider)]},
+            details={"refs": [_provider_secret_ref_for_bridge(ctx, provider)]},
             retryable=True,
         )
 
     if target_store_id == "sqlcipher_inline":
         updated = set_db_ai_provider_api_key(ctx.conn, name, key_to_move)
         if current_store_id != "sqlcipher_inline" and _desktop_secret_store_bridge_enabled(args):
-            service, account = _ai_provider_secret_service_account(provider)
+            service, account = _ai_provider_secret_service_account(ctx, provider)
             _secret_store_bridge_request(
                 ctx,
                 op="delete",
@@ -1159,7 +1172,7 @@ def _move_ai_provider_key(
             )
         return updated
 
-    service, account = _ai_provider_secret_service_account(provider)
+    service, account = _ai_provider_secret_service_account(ctx, provider)
     _secret_store_bridge_request(
         ctx,
         op="set",
@@ -1188,7 +1201,7 @@ def _delete_native_ai_provider_secret(
     store_id = ref.get("store_id") or "sqlcipher_inline"
     if store_id == "sqlcipher_inline" or not _desktop_secret_store_bridge_enabled(args):
         return
-    service, account = _ai_provider_secret_service_account(dict(provider))
+    service, account = _ai_provider_secret_service_account(ctx, dict(provider))
     try:
         _secret_store_bridge_request(
             ctx,
@@ -1214,7 +1227,7 @@ def _refresh_ai_provider_native_secret_states(
         if not store_id or store_id == "sqlcipher_inline" or ref.get("state") != "ok":
             continue
         try:
-            bridge_ref = _provider_secret_ref_for_bridge(provider)
+            bridge_ref = _provider_secret_ref_for_bridge(ctx, provider)
             data = _secret_store_bridge_request(
                 ctx,
                 op="exists",

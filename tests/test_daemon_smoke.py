@@ -27,6 +27,7 @@ from kassiber.daemon import (
     _reports_tax_summary_payload,
 )
 from kassiber import daemon as daemon_module
+from kassiber.ai.providers import ai_provider_secret_service_id
 from kassiber.log_ring import get_log_ring
 from kassiber.core import freshness as core_freshness
 from kassiber.db import open_db
@@ -1263,7 +1264,7 @@ class DaemonSmokeTest(unittest.TestCase):
                         (
                             "native-list",
                             "macos_keychain",
-                            "service-hash",
+                            ai_provider_secret_service_id(str(data_root.resolve())),
                             "native-list",
                             "ok",
                             "2026-05-13T00:00:00Z",
@@ -1311,6 +1312,94 @@ class DaemonSmokeTest(unittest.TestCase):
                 code, stderr = _close_daemon(proc)
                 self.assertEqual(code, 0, stderr)
 
+    def test_ai_provider_native_ref_outside_namespace_is_not_resolved(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-ai-native-foreign-") as tmp:
+            data_root = Path(tmp) / "data"
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+            try:
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {
+                            "name": "native-foreign",
+                            "base_url": "https://example.test/v1",
+                            "kind": "remote",
+                            "acknowledged": True,
+                        },
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+                conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+                try:
+                    conn.execute(
+                        """
+                        INSERT INTO ai_provider_secret_refs(
+                            provider_name, store_id, service, account, state,
+                            created_at, rotated_at
+                        ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            "native-foreign",
+                            "macos_keychain",
+                            "com.example.unrelated-password-manager",
+                            "victim@example.test",
+                            "ok",
+                            "2026-05-13T00:00:00Z",
+                            "2026-05-13T00:00:00Z",
+                        ),
+                    )
+                    conn.commit()
+                finally:
+                    conn.close()
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "models-1",
+                        "kind": "ai.list_models",
+                        "args": {
+                            "provider": "native-foreign",
+                            "_desktop_secret_store_bridge": True,
+                        },
+                    },
+                )
+                response = _read_payload_timeout(proc)
+                self.assertEqual(response["kind"], "error")
+                self.assertEqual(response["error"]["code"], "secret_ref_unavailable")
+                self.assertNotEqual(
+                    response["kind"],
+                    "supervisor.ai_secret_store.request",
+                    "foreign native refs must not be sent to the desktop bridge",
+                )
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "list-1",
+                        "kind": "ai.providers.list",
+                        "args": {"_desktop_secret_store_bridge": True},
+                    },
+                )
+                listed = _read_payload_timeout(proc)
+                self.assertEqual(listed["kind"], "ai.providers.list")
+                provider = next(
+                    row
+                    for row in listed["data"]["providers"]
+                    if row["name"] == "native-foreign"
+                )
+                self.assertEqual(
+                    provider["secret_ref"],
+                    {"store_id": "macos_keychain", "state": "unavailable"},
+                )
+            finally:
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+
     def test_ai_provider_list_keeps_ok_state_on_native_ref_bridge_error(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-ai-native-transient-") as tmp:
             data_root = Path(tmp) / "data"
@@ -1342,7 +1431,7 @@ class DaemonSmokeTest(unittest.TestCase):
                         (
                             "native-transient",
                             "macos_keychain",
-                            "service-hash",
+                            ai_provider_secret_service_id(str(data_root.resolve())),
                             "native-transient",
                             "ok",
                             "2026-05-13T00:00:00Z",
@@ -1434,7 +1523,7 @@ class DaemonSmokeTest(unittest.TestCase):
                         (
                             "native-delete",
                             "macos_keychain",
-                            "service-hash",
+                            ai_provider_secret_service_id(str(data_root.resolve())),
                             "native-delete",
                             "ok",
                             "2026-05-13T00:00:00Z",
