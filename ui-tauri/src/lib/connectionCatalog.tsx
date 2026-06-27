@@ -175,7 +175,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     details: [
       "Paste addresses or load a .txt/.csv file, one address per line",
       "No derivation: every address is scanned, so there is no gap limit",
-      "Use an Electrum/Fulcrum backend for large lists — Esplora is one lookup per address",
+      "Use Electrum/Fulcrum or Bitcoin Core RPC for large lists — Esplora is one lookup per address",
     ],
   },
   {

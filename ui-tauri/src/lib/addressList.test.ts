@@ -11,10 +11,13 @@ import {
 const P2PKH = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa";
 const P2SH = "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy";
 const BECH32 = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4";
+const BAD_BASE58_CHECKSUM = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNb";
+const BAD_BECH32_CHECKSUM = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080";
 
 // Key material that must never be accepted (BIP32 test vectors + a test WIF +
 // the secp256k1 generator point as a compressed pubkey).
 const WIF = "5HueCGU8rMjxEXxiPuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ";
+const TESTNET_WIF = "cMahea7zqjxrtgAbB7LSGbcQUr1uX1ojuat9jZodMN87JcbXMTcA";
 const XPRV =
   "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi";
 const XPUB =
@@ -30,8 +33,10 @@ describe("looksLikeMainnetAddress", () => {
     expect(looksLikeMainnetAddress(BECH32.toUpperCase())).toBe(true);
   });
 
-  it("rejects testnet, junk, mixed-case bech32, and key material", () => {
+  it("rejects testnet, bad checksums, junk, mixed-case bech32, and key material", () => {
     expect(looksLikeMainnetAddress("tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx")).toBe(false);
+    expect(looksLikeMainnetAddress(BAD_BASE58_CHECKSUM)).toBe(false);
+    expect(looksLikeMainnetAddress(BAD_BECH32_CHECKSUM)).toBe(false);
     expect(looksLikeMainnetAddress("not-an-address")).toBe(false);
     expect(looksLikeMainnetAddress("")).toBe(false);
     expect(looksLikeMainnetAddress("Bc1QW508D6")).toBe(false);
@@ -43,6 +48,7 @@ describe("looksLikeMainnetAddress", () => {
 describe("classifyKeyMaterial", () => {
   it("flags private keys (WIF, xprv)", () => {
     expect(classifyKeyMaterial(WIF)).toBe("private");
+    expect(classifyKeyMaterial(TESTNET_WIF)).toBe("private");
     expect(classifyKeyMaterial(XPRV)).toBe("private");
   });
 
@@ -93,6 +99,14 @@ describe("parseAddressList", () => {
     expect(surfaced).not.toContain(XPRV);
     expect(surfaced).not.toContain(XPUB);
     expect(surfaced).not.toContain(HEX_PUBKEY);
+  });
+
+  it("does not surface testnet WIF private keys as invalid samples", () => {
+    const result = parseAddressList(`${P2PKH}\n${TESTNET_WIF}\nlabel`);
+    expect(result.valid).toEqual([P2PKH]);
+    expect(result.privateKeys).toBe(1);
+    expect(result.invalid).toEqual(["label"]);
+    expect([...result.invalid, ...result.entries]).not.toContain(TESTNET_WIF);
   });
 
   it("returns empty sets for blank input", () => {

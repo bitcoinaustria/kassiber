@@ -234,6 +234,11 @@ interface SamouraiImportResult {
 
 type DialogStep = "source" | "setup";
 const DESCRIPTOR_BACKEND_KINDS = new Set(["esplora", "electrum"]);
+const ADDRESS_BACKEND_KINDS = new Set([
+  "esplora",
+  "electrum",
+  "bitcoinrpc",
+]);
 const DEFAULT_BTCPAY_PAYMENT_METHOD_ID = "BTC-CHAIN";
 const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
 type BullBitcoinWalletNetwork = "bitcoin" | "liquid" | "lightning";
@@ -303,6 +308,10 @@ const SAMOURAI_SOURCE_FIELDS: Array<{
 
 function supportsDescriptorSync(backend: BackendOption) {
   return DESCRIPTOR_BACKEND_KINDS.has(backend.kind);
+}
+
+function supportsAddressListSync(backend: BackendOption) {
+  return ADDRESS_BACKEND_KINDS.has(backend.kind);
 }
 
 function isExchangeEvidenceFormat(sourceFormat?: string) {
@@ -689,6 +698,11 @@ export function AddConnectionDialog({
       supportsDescriptorSync(backend) &&
       (!backend.chain || backend.chain === "bitcoin"),
   );
+  const bitcoinAddressBackends = allBackends.filter(
+    (backend) =>
+      supportsAddressListSync(backend) &&
+      (!backend.chain || backend.chain === "bitcoin"),
+  );
   const liquidBackends = allBackends.filter(
     (backend) =>
       supportsDescriptorSync(backend) &&
@@ -699,7 +713,10 @@ export function AddConnectionDialog({
   );
   const descriptorBackendOptions =
     selected.chain === "liquid" ? liquidBackends : bitcoinBackends;
-  const selectedBackendOptions = descriptorBackendOptions;
+  const addressBackendOptions =
+    selected.chain === "bitcoin" ? bitcoinAddressBackends : descriptorBackendOptions;
+  const selectedBackendOptions =
+    setupKind === "address-list" ? addressBackendOptions : descriptorBackendOptions;
   const defaultBackendName =
     selectedBackendOptions.find((backend) => backend.is_default)?.name ??
     selectedBackendOptions[0]?.name ??
@@ -1027,7 +1044,7 @@ export function AddConnectionDialog({
       if (parsedAddressList.valid.length === 0) {
         errors.addressList = t("add.addressList.errorNeedAddress");
       }
-      if (descriptorBackendOptions.length > 0 && !form.backend.trim()) {
+      if (addressBackendOptions.length > 0 && !form.backend.trim()) {
         errors.backend = t("add.validation.chooseBackend");
       }
     }
@@ -1884,7 +1901,7 @@ export function AddConnectionDialog({
           {renderBackendSelect(
             "connection-backend",
             t("add.field.backend"),
-            descriptorBackendOptions,
+            addressBackendOptions,
           )}
           <SetupField
             id="connection-wallet-material"
