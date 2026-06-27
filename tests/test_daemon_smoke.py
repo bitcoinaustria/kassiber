@@ -1770,6 +1770,78 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertEqual(code, 0, stderr)
                 self.assertEqual(stderr, "")
 
+    def test_ai_test_connection_rejects_stored_key_reuse_for_different_url(self):
+        captured: queue.Queue[str] = queue.Queue()
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                captured.put(self.headers.get("authorization", ""))
+                body = b'{"data":[]}'
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-daemon-ai-key-origin-") as tmp:
+                proc = _start_daemon(Path(tmp) / "data")
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {
+                            "name": "victim",
+                            "base_url": "https://api.example.test/v1",
+                            "kind": "remote",
+                        },
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "set-key-1",
+                        "kind": "ai.providers.set_api_key",
+                        "args": {"name": "victim", "api_key": "sk-origin-secret"},
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.set_api_key")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "test-origin-1",
+                        "kind": "ai.test_connection",
+                        "args": {
+                            "provider": "victim",
+                            "base_url": f"http://127.0.0.1:{server.server_port}/v1",
+                        },
+                    },
+                )
+                response = _read_payload_timeout(proc)
+                self.assertEqual(response["kind"], "error")
+                self.assertEqual(response["error"]["code"], "validation")
+                self.assertIn("different base_url", response["error"]["message"])
+                self.assertTrue(captured.empty())
+
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertNotIn("sk-origin-secret", stderr)
+        finally:
+            server.shutdown()
+            server.server_close()
+
     def test_ai_test_connection_redacts_provider_echoed_secret_body(self):
         secret_marker = "sk-provider-echo-secret"
         json_marker = "sk-provider-json-echo"

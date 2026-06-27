@@ -9648,12 +9648,10 @@ def handle_request(
         )
 
     if kind == "ai.test_connection":
-        # Transient connection test against caller-supplied credentials —
-        # nothing is persisted. The Settings form uses this to validate the
-        # *entered* base_url + api_key before saving. If `provider` names a
-        # stored row and `api_key` is blank, the saved key is reused so the
-        # form's "leave blank to keep current key" affordance still tests
-        # with credentials.
+        # Transient connection test against caller-supplied provider metadata —
+        # nothing is persisted. Stored credentials may only be reused for the
+        # stored provider URL; otherwise a compromised renderer could redirect
+        # a saved bearer token to an attacker-controlled OpenAI-compatible URL.
         args = _coerce_args_dict(request_id, request.get("args"))
         base_url_raw = args.get("base_url")
         if not isinstance(base_url_raw, str) or not base_url_raw.strip():
@@ -9683,6 +9681,16 @@ def handle_request(
                 except AppError:
                     stored = None
                 if stored:
+                    stored_url = normalize_base_url(stored.get("base_url"))
+                    if canonical_url != stored_url:
+                        raise AppError(
+                            "ai.test_connection cannot reuse a stored API key for a different base_url",
+                            code="validation",
+                            hint=(
+                                "Save the provider URL first, then test it, so stored credentials are "
+                                "only sent to their configured origin."
+                            ),
+                        )
                     api_key_text = _resolve_ai_provider_api_key(ctx, stored, args) or ""
         # Use a tight timeout so a dead URL surfaces a clean error before
         # the Tauri supervisor's `DAEMON_INVOKE_TIMEOUT` (15s) kills the
