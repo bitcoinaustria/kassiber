@@ -410,12 +410,6 @@ struct MenuActionPayload {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct TouchIdPassphraseUnlock {
-    passphrase_secret: String,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
 struct TerminalCommandStatus {
     platform: &'static str,
     available: bool,
@@ -848,39 +842,67 @@ fn clear_import_project(state: State<'_, Arc<DaemonSupervisor>>) -> Result<(), S
 #[tauri::command]
 fn touch_id_passphrase_status_command(
     state: State<'_, Arc<DaemonSupervisor>>,
-    data_root: Option<String>,
+    _data_root: Option<String>,
 ) -> Result<TouchIdPassphraseStatus, String> {
-    let account = touch_id_account_for_data_root(&state, data_root)?;
+    let account = touch_id_account_for_active_data_root(&state)?;
     Ok(touch_id_passphrase_status(&account))
 }
 
 #[tauri::command]
 fn touch_id_store_passphrase_command(
     state: State<'_, Arc<DaemonSupervisor>>,
-    data_root: Option<String>,
+    _data_root: Option<String>,
     passphrase_secret: String,
 ) -> Result<TouchIdPassphraseStatus, String> {
-    let account = touch_id_account_for_data_root(&state, data_root)?;
+    let account = touch_id_account_for_active_data_root(&state)?;
     touch_id_store_passphrase(&account, &passphrase_secret)?;
     Ok(touch_id_passphrase_status(&account))
 }
 
 #[tauri::command]
-fn touch_id_unlock_passphrase_command(
+async fn touch_id_unlock_passphrase_command(
+    app: tauri::AppHandle,
     state: State<'_, Arc<DaemonSupervisor>>,
-    data_root: Option<String>,
-) -> Result<Option<TouchIdPassphraseUnlock>, String> {
-    let account = touch_id_account_for_data_root(&state, data_root)?;
-    Ok(touch_id_get_passphrase(&account)?
-        .map(|passphrase_secret| TouchIdPassphraseUnlock { passphrase_secret }))
+    _data_root: Option<String>,
+    require_existing_project: Option<bool>,
+) -> Result<DaemonEnvelope, String> {
+    let account = touch_id_account_for_active_data_root(&state)?;
+    let Some(passphrase_secret) = touch_id_get_passphrase(&account)? else {
+        return Ok(error_envelope(
+            "touch_id_passphrase_not_found",
+            "No Touch ID passphrase was found for these books.",
+            Some("Unlock once with the passphrase to save it again."),
+            None,
+            None,
+            false,
+        ));
+    };
+    let args = json!({
+        "auth_response": { "passphrase_secret": passphrase_secret },
+        "require_existing_project": require_existing_project.unwrap_or(false),
+    });
+    let supervisor = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        match supervisor.invoke("daemon.unlock", Some(args), &app, false, None) {
+            Ok(mut response) => {
+                attach_secret_store_policy_status(&mut response);
+                serde_json::from_value(response).map_err(|error| {
+                    format!("Python daemon response did not match the envelope contract: {error}")
+                })
+            }
+            Err(error) => Ok(supervisor_error_envelope(error, None)),
+        }
+    })
+    .await
+    .map_err(|error| format!("Touch ID unlock task failed: {error}"))?
 }
 
 #[tauri::command]
 fn touch_id_forget_passphrase_command(
     state: State<'_, Arc<DaemonSupervisor>>,
-    data_root: Option<String>,
+    _data_root: Option<String>,
 ) -> Result<TouchIdPassphraseStatus, String> {
-    let account = touch_id_account_for_data_root(&state, data_root)?;
+    let account = touch_id_account_for_active_data_root(&state)?;
     touch_id_delete_passphrase(&account)?;
     Ok(touch_id_passphrase_status(&account))
 }
@@ -902,13 +924,8 @@ fn terminal_command_remove_command() -> Result<TerminalCommandStatus, String> {
     terminal_command_status()
 }
 
-fn touch_id_account_for_data_root(
-    state: &Arc<DaemonSupervisor>,
-    data_root: Option<String>,
-) -> Result<String, String> {
-    let selected = if let Some(data_root) = data_root.filter(|value| !value.trim().is_empty()) {
-        PathBuf::from(data_root).expanduser()
-    } else if let Some(active) = state.current_data_root().map_err(|error| error.message)? {
+fn touch_id_account_for_active_data_root(state: &Arc<DaemonSupervisor>) -> Result<String, String> {
+    let selected = if let Some(active) = state.current_data_root().map_err(|error| error.message)? {
         active
     } else {
         default_state_data_root()
@@ -2717,11 +2734,7 @@ mod tests {
         // Pin the collateral-mark daemon surface so the Transactions-screen mark
         // actions come with an explicit allowlist update; otherwise packaged
         // desktop mode returns kind_not_allowed and the feature breaks silently.
-        let required: &[&str] = &[
-            "ui.loans.list",
-            "ui.loans.mark",
-            "ui.loans.unmark",
-        ];
+        let required: &[&str] = &["ui.loans.list", "ui.loans.mark", "ui.loans.unmark"];
         for kind in required {
             assert!(
                 ALLOWED_DAEMON_KINDS.contains(kind),
@@ -2805,10 +2818,7 @@ mod tests {
     fn transactions_export_daemon_kinds_are_in_allowlist() {
         // The Transactions screen Export button invokes these directly from the
         // webview; packaged desktop mode rejects any unlisted kind.
-        let required: &[&str] = &[
-            "ui.transactions.export_csv",
-            "ui.transactions.export_xlsx",
-        ];
+        let required: &[&str] = &["ui.transactions.export_csv", "ui.transactions.export_xlsx"];
         for kind in required {
             assert!(
                 ALLOWED_DAEMON_KINDS.contains(kind),

@@ -808,22 +808,48 @@ export function AppShell() {
   );
 
   const unlockWithTouchId = React.useCallback(async () => {
-    const unlocked = await unlockTouchIdPassphrase(touchIdDataRoot);
-    if (!unlocked?.passphraseSecret) {
-      await refreshTouchIdStatus();
+    if (importRootBlocked) {
       return {
         ok: false,
-        error: t("lock.touchIdNotFound"),
+        error: importRootError ?? t("lock.importRootOpening"),
       };
     }
-    return unlockApp(unlocked.passphraseSecret, {
-      rememberWithTouchId: false,
+    bumpDaemonSession();
+    const envelope = await unlockTouchIdPassphrase(touchIdDataRoot, {
+      requireExistingProject: Boolean(identity?.importedProject),
     });
+    const unlocked = envelope.kind === "daemon.unlock";
+    if (unlocked) {
+      setDaemonAuthRequired(false);
+      setTouchIdAutoPromptPending(false);
+      setLocked(false);
+      void queryClient.invalidateQueries({
+        queryKey: ["daemon"],
+      });
+      return { ok: true, error: null };
+    }
+    if (envelope.kind === "auth_required") {
+      setDaemonAuthRequired(true);
+      clearSessionUnlockPassphrase();
+      clearDaemonQueryCache();
+      setLocked(true);
+    } else if (envelope.error?.code === "touch_id_passphrase_not_found") {
+      await refreshTouchIdStatus();
+    }
+    return {
+      ok: false,
+      error: formatDaemonEnvelopeError(envelope) ?? t("lock.touchIdNotFound"),
+    };
   }, [
+    bumpDaemonSession,
+    clearDaemonQueryCache,
+    identity?.importedProject,
+    importRootBlocked,
+    importRootError,
+    queryClient,
     refreshTouchIdStatus,
     t,
     touchIdDataRoot,
-    unlockApp,
   ]);
 
   const resetLocalUiSession = React.useCallback(() => {

@@ -123,10 +123,6 @@ export interface TouchIdPassphraseStatus {
   reason?: string | null;
 }
 
-export interface TouchIdPassphraseUnlock {
-  passphraseSecret: string;
-}
-
 export interface TerminalCommandStatus {
   platform: "macos" | "windows" | "linux" | "unsupported";
   available: boolean;
@@ -730,17 +726,23 @@ export async function storeTouchIdPassphrase(
 
 export async function unlockTouchIdPassphrase(
   dataRoot?: string | null,
-): Promise<TouchIdPassphraseUnlock | null> {
+  options?: { requireExistingProject?: boolean },
+): Promise<DaemonEnvelope> {
   if (DAEMON_MODE !== "tauri") {
-    return null;
+    return {
+      kind: "error",
+      schema_version: 1,
+      error: {
+        code: "touch_id_unavailable",
+        message: "Touch ID passphrase unlock is only available in the macOS desktop app.",
+      },
+    };
   }
   const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<TouchIdPassphraseUnlock | null>(
-    "touch_id_unlock_passphrase_command",
-    {
-      dataRoot: dataRoot ?? null,
-    },
-  );
+  return invoke<DaemonEnvelope>("touch_id_unlock_passphrase_command", {
+    dataRoot: dataRoot ?? null,
+    requireExistingProject: options?.requireExistingProject ?? false,
+  });
 }
 
 export async function forgetTouchIdPassphrase(
