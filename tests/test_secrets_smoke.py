@@ -34,6 +34,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from kassiber.ai.providers import (
+    ai_provider_secret_service_id,
     get_ai_provider_api_key_for_use,
     get_db_ai_provider,
     redact_ai_provider_for_output,
@@ -579,7 +580,7 @@ class BackupRoundTripTests(unittest.TestCase):
                 (
                     "cloud",
                     "macos_keychain",
-                    "service-hash",
+                    ai_provider_secret_service_id(str(data_root.resolve())),
                     "cloud",
                     "ok",
                     "2026-05-13T00:00:00Z",
@@ -605,7 +606,7 @@ class BackupRoundTripTests(unittest.TestCase):
                     {
                         "provider_name": "cloud",
                         "store_id": "macos_keychain",
-                        "service": "service-hash",
+                        "service": ai_provider_secret_service_id(str(data_root.resolve())),
                         "account": "cloud",
                         "state": "ok",
                     }
@@ -625,7 +626,7 @@ class BackupRoundTripTests(unittest.TestCase):
                         {
                             "provider_name": "cloud",
                             "store_id": "macos_keychain",
-                            "service": "service-hash",
+                            "service": ai_provider_secret_service_id(str(data_root.resolve())),
                             "account": "cloud",
                             "state": "unavailable",
                         }
@@ -724,7 +725,7 @@ class BackupRoundTripTests(unittest.TestCase):
                 (
                     "cloud",
                     "macos_keychain",
-                    "service-hash",
+                    ai_provider_secret_service_id(str(data_root.resolve())),
                     "cloud",
                     "ok",
                     "2026-05-13T00:00:00Z",

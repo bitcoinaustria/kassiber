@@ -168,8 +168,18 @@ def _default_secret_ref(conn, provider_name: str, *, has_secret: bool) -> dict[s
     }
 
 
+def ai_provider_secret_ref_namespace(conn, provider_name: str) -> tuple[str, str]:
+    """Return the only native secret service/account allowed for a provider."""
+
+    return ai_provider_secret_service_id(_data_root_from_connection(conn)), _normalize_name(
+        provider_name
+    )
+
+
 def _row_secret_ref(conn, row) -> dict[str, Any]:
     has_secret = bool(str_or_none(row["api_key"]))
+    provider_name = _normalize_name(row["name"])
+    expected_service, expected_account = ai_provider_secret_ref_namespace(conn, provider_name)
     ref = {
         "store_id": row["secret_store_id"],
         "service": row["secret_service"],
@@ -179,12 +189,25 @@ def _row_secret_ref(conn, row) -> dict[str, Any]:
         "rotated_at": row["secret_rotated_at"],
     }
     if not ref["store_id"]:
-        return _default_secret_ref(conn, row["name"], has_secret=has_secret)
+        return _default_secret_ref(conn, provider_name, has_secret=has_secret)
+    store_id = _normalize_secret_store_id(ref["store_id"])
+    service = str(ref["service"] or expected_service)
+    account = str(ref["account"] or expected_account)
+    state = _normalize_secret_state(ref["state"] or ("ok" if has_secret else "missing"))
+    if store_id != AI_PROVIDER_SECRET_STORE_SQLCIPHER and (
+        service != expected_service or account != expected_account
+    ):
+        # Database rows can come from restored/imported attacker-controlled
+        # projects. Never surface or use a native ref outside Kassiber's
+        # per-data-root/provider namespace; force repair by key re-entry.
+        service = expected_service
+        account = expected_account
+        state = "unavailable"
     return {
-        "store_id": _normalize_secret_store_id(ref["store_id"]),
-        "service": str(ref["service"] or ai_provider_secret_service_id(_data_root_from_connection(conn))),
-        "account": str(ref["account"] or row["name"]),
-        "state": _normalize_secret_state(ref["state"] or ("ok" if has_secret else "missing")),
+        "store_id": store_id,
+        "service": service,
+        "account": account,
+        "state": state,
         "created_at": ref["created_at"],
         "rotated_at": ref["rotated_at"],
     }
@@ -292,6 +315,9 @@ def get_ai_provider_api_key_for_use(
     if store_id == AI_PROVIDER_SECRET_STORE_SQLCIPHER:
         return str_or_none(provider.get("api_key"))
     if state != "ok":
+        if conn is not None and provider.get("name") and state == "unavailable":
+            mark_ai_provider_secret_ref_state(conn, str(provider["name"]), state)
+            conn.commit()
         secret_ref = _secret_ref_for_error(provider)
         raise AppError(
             f"AI provider '{provider.get('name')}' secret is not available",
@@ -703,6 +729,13 @@ def set_db_ai_provider_native_secret_ref(
         raise AppError(
             f"AI provider '{name}' not found",
             code="not_found",
+        )
+    expected_service, expected_account = ai_provider_secret_ref_namespace(conn, name)
+    if service != expected_service or account != expected_account:
+        raise AppError(
+            "AI provider native secret ref is outside this project's namespace",
+            code="validation",
+            hint="Re-enter the provider API key so Kassiber can create a project-scoped native secret.",
         )
     conn.execute(
         "UPDATE ai_providers SET api_key = NULL, updated_at = ? WHERE name = ?",
