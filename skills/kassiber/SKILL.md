@@ -19,7 +19,6 @@ Use these without opening extra references when the request clearly matches:
 
 | User asks for... | First command |
 |---|---|
-| Sync project/current wallets | `kassiber --machine wallets sync --all` |
 | Current balances by account, bucket, asset, or wallet | `kassiber --format plain reports balance-sheet` |
 | Exact summary totals, counts, fees, PnL | `kassiber --machine reports summary` |
 | Rebuild stale reports after imports/metadata/rates | `kassiber --machine journals process` |
@@ -36,7 +35,7 @@ If a fast-path command returns a structured error, inspect the envelope and take
 1. Prefer `kassiber` when it is on `PATH`. If it is not, fall back to `uv run kassiber` or `uv run python -m kassiber` from the Kassiber repo root.
 2. When falling back from `kassiber` to `uv run kassiber` or `uv run python -m kassiber`, keep the subcommand, flags, and operands identical. Only the launcher changes.
 3. When the chat includes pasted Kassiber output or docs, identify the live user request separately from the quoted material before running commands.
-4. Use fast paths for common workflows. Read the relevant reference file only when command shape is unclear, the action mutates durable config, secrets are involved, or the request is outside the fast-path table.
+4. Use fast paths for common read-only workflows. For wallet sync or other operations that contact configured backends, read the relevant reference first and avoid feeding raw command output into remote AI context unless it is documented as public-safe.
 5. Before concluding a reference is missing, verify that you resolved it from `<skill-dir>` rather than the repo root or the current working directory.
 6. If a Kassiber command fails with `unrecognized arguments`, stop and check `--help` or [references/command-templates.md](references/command-templates.md) before retrying. Do not keep guessing positional versus flagged forms.
 7. `--machine`, `--format`, and `--output` are global flags and must come before the subcommand tree, for example `kassiber --format plain reports balance-sheet`.

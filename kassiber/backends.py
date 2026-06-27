@@ -27,6 +27,7 @@ directly, since env-sourced and DB-sourced dicts differ slightly.
 
 import json
 import os
+import re
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
@@ -486,6 +487,39 @@ def redact_backend_url(url):
     if parts.username or parts.password:
         host = f"<redacted>@{host}"
     return urlunsplit((parts.scheme, host, parts.path, "", ""))
+
+
+_BACKEND_URL_RE = re.compile(
+    r"\b[a-zA-Z][a-zA-Z0-9+.-]*://"
+    r"(?:\[[^\]\s]+\][^\s,;)\"\']*|[^\s,;)\"\']+)"
+)
+_BACKEND_URL_TRAILING_PUNCTUATION = ":.!?"
+
+
+def redact_backend_text(value):
+    text = str_or_none(value)
+    if text is None:
+        return ""
+
+    def replace(match):
+        url = match.group(0)
+        suffix = url[len(url.rstrip(_BACKEND_URL_TRAILING_PUNCTUATION)) :]
+        core = url[: len(url) - len(suffix)] if suffix else url
+        return f"{redact_backend_url(core)}{suffix}"
+
+    return _BACKEND_URL_RE.sub(replace, text)
+
+
+def redact_backend_value(value, *, depth=0):
+    if depth > 8:
+        return value
+    if isinstance(value, dict):
+        return {key: redact_backend_value(item, depth=depth + 1) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [redact_backend_value(item, depth=depth + 1) for item in value]
+    if isinstance(value, str):
+        return redact_backend_text(value)
+    return value
 
 
 def redact_backend_for_output(backend):
