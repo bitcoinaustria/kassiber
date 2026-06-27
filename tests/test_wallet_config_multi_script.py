@@ -10,19 +10,26 @@ the descriptor kind without an explicit ``descriptor``.
 from __future__ import annotations
 
 import json
+import tempfile
 import types
 import unittest
+from pathlib import Path
 
 from embit import bip32
 
+from kassiber.core import accounts as core_accounts
+from kassiber.core import freshness as core_freshness
 from kassiber.core.sync import classify_wallet_sync
 from kassiber.core.ui_snapshot import _wallet_backend_summary
 from kassiber.core.wallets import (
     _validated_wallet_config,
+    create_wallet,
     has_descriptor_sync_material,
     normalize_addresses,
     parse_wallet_config,
+    update_wallet,
 )
+from kassiber.db import open_db
 from kassiber.errors import AppError
 
 
@@ -129,6 +136,71 @@ class XpubWalletIsSyncableTests(unittest.TestCase):
     def test_backend_summary_is_descriptor_sync_mode(self):
         summary = _wallet_backend_summary("xpub", self._config(), "mempool")
         self.assertEqual(summary["sync_mode"], "backend_descriptor")
+
+
+class WalletConfigFreshnessTests(unittest.TestCase):
+    def _db(self):
+        tmp = tempfile.TemporaryDirectory(prefix="kassiber-wallet-config-")
+        self.addCleanup(tmp.cleanup)
+        conn = open_db(Path(tmp.name) / "data")
+        self.addCleanup(conn.close)
+        return conn
+
+    def test_config_change_resets_onchain_freshness_checkpoint(self):
+        conn = self._db()
+        workspace = core_accounts.create_workspace(conn, "Main")
+        profile = core_accounts.create_profile(
+            conn,
+            workspace["id"],
+            "Book",
+            "EUR",
+            "FIFO",
+            "generic",
+            365,
+        )
+        wallet = create_wallet(
+            conn,
+            workspace["id"],
+            profile["id"],
+            "Vault",
+            "xpub",
+            config={
+                "xpub": _xpub(),
+                "script_types": ["p2wpkh", "p2tr"],
+                "chain": "bitcoin",
+                "network": "main",
+                "gap_limit": 40,
+            },
+        )
+        source_key = core_freshness.source_key(
+            core_freshness.SOURCE_ONCHAIN,
+            wallet["id"],
+        )
+        core_freshness.upsert_source_state(
+            conn,
+            profile_id=profile["id"],
+            source_key=source_key,
+            source_type=core_freshness.SOURCE_ONCHAIN,
+            source_label="Vault on-chain history",
+            status=core_freshness.STATUS_FRESH,
+            checkpoint={
+                "highest_used": {"4": 12, "6": 2},
+                "esplora_scripthashes": {"abc": {"tx_count": 1}},
+            },
+        )
+
+        update_wallet(
+            conn,
+            workspace["id"],
+            profile["id"],
+            wallet["id"],
+            {"config": {"script_types": ["p2wpkh"]}},
+        )
+
+        state = core_freshness.get_source_state(conn, profile["id"], source_key)
+        self.assertEqual(state["checkpoint"], {})
+        self.assertEqual(state["stale_reason"], "wallet_config_changed")
+        self.assertEqual(state["status"], core_freshness.STATUS_PARTIALLY_STALE)
 
 
 if __name__ == "__main__":  # pragma: no cover

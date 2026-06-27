@@ -2726,20 +2726,39 @@ def resolve_descriptor_branch_index(plan, branch):
             f"Descriptor branch '{branch}' is not in this wallet's plan; "
             f"available branches: {sorted(valid)}"
         )
-    # Legacy single-descriptor aliases, valid only when those indices exist.
-    if normalized in {"receive", "external"} and 0 in valid:
-        return 0
-    if normalized in {"change", "internal"} and 1 in valid:
-        return 1
+    # Legacy aliases should still work for xpub plans when exactly one receive
+    # or change branch is enabled, even if fixed script-type branch ids are 4/5.
+    if normalized in {"receive", "external"}:
+        receive_branches = [
+            item
+            for item in plan.branches
+            if _descriptor_branch_label_key(item.branch_label) == "receive"
+            or _descriptor_branch_label_key(item.branch_label).endswith(" receive")
+        ]
+        if len(receive_branches) == 1:
+            return receive_branches[0].branch_index
+    if normalized in {"change", "internal"}:
+        change_branches = [
+            item
+            for item in plan.branches
+            if _descriptor_branch_label_key(item.branch_label) == "change"
+            or _descriptor_branch_label_key(item.branch_label).endswith(" change")
+        ]
+        if len(change_branches) == 1:
+            return change_branches[0].branch_index
     # Script-type-qualified labels, e.g. "p2tr receive" or "p2tr-receive".
-    label = normalized.replace("-", " ")
+    label = _descriptor_branch_label_key(normalized)
     for item in plan.branches:
-        if item.branch_label.lower() == label:
+        if _descriptor_branch_label_key(item.branch_label) == label:
             return item.branch_index
     raise AppError(
         "Descriptor branch must be 'all', a branch index in "
         f"{sorted(valid)}, or a branch label like 'receive'/'p2tr receive'"
     )
+
+
+def _descriptor_branch_label_key(value):
+    return " ".join(str(value).strip().lower().replace("-", " ").split())
 
 
 def derive_wallet_targets(conn, workspace_ref, profile_ref, wallet_ref, branch=None, start=0, count=None):

@@ -48,6 +48,7 @@ import {
   BARE_XPUB_SCRIPT_TYPES,
   type BareXpubScriptType,
   detectWalletMaterial,
+  scriptTypesFromDetectionPayload,
 } from "@/lib/walletMaterialFormat";
 
 const WalletMaterialScannerDialog = React.lazy(() =>
@@ -1142,10 +1143,7 @@ export function AddConnectionDialog({
               chain: selected.chain,
               network: selected.network,
             });
-            scriptTypes =
-              detected.data?.active && detected.data.active.length > 0
-                ? detected.data.active
-                : [BARE_XPUB_SCRIPT_TYPES[0]];
+            scriptTypes = requireAutoDetectedScriptTypes(detected.data);
           }
         }
         await createWallet.mutateAsync({
@@ -1587,6 +1585,29 @@ export function AddConnectionDialog({
   const scriptTypeLabel = (value: BareXpubScriptType) =>
     t(scriptTypeLabelKeys[value]);
 
+  const requireAutoDetectedScriptTypes = (
+    payload:
+      | {
+          probed?: boolean;
+          active?: unknown;
+          reason?: string | null;
+        }
+      | null
+      | undefined,
+  ) => {
+    const selection = scriptTypesFromDetectionPayload(payload);
+    if (!selection.ok) {
+      throw new Error(
+        t("add.descriptor.autoDetectUnavailable", {
+          reason:
+            selection.reason ??
+            t("add.descriptor.autoDetectUnavailableReasonUnknown"),
+        }),
+      );
+    }
+    return selection.scriptTypes;
+  };
+
   const renderWalletMaterialFeedback = () => {
     const detection = detectWalletMaterial(form.walletMaterial);
     if (detection.kind === "empty") return null;
@@ -1888,11 +1909,9 @@ export function AddConnectionDialog({
                         chain: selected.chain,
                         network: selected.network,
                       });
-                      scriptTypes =
-                        detected.data?.active &&
-                        detected.data.active.length > 0
-                          ? detected.data.active
-                          : [BARE_XPUB_SCRIPT_TYPES[0]];
+                      scriptTypes = requireAutoDetectedScriptTypes(
+                        detected.data,
+                      );
                     }
                   }
                   const envelope = await previewDescriptor.mutateAsync({

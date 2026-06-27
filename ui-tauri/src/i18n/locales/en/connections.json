@@ -517,6 +517,8 @@
       "detected": "Detected: {{label}}",
       "detectedWithHint": "Detected: {{label}} — {{hint}}",
       "couldNotDerive": "Could not derive addresses.",
+      "autoDetectUnavailable": "Could not auto-detect script types: {{reason}}. Pick a script type manually.",
+      "autoDetectUnavailableReasonUnknown": "backend probe did not run",
       "scriptTypeLabel": "Script type",
       "scriptTypeHelperAuto": "Leave this on Detect automatically to watch every address type with on-chain history, or pin a single one.",
       "scriptTypeDetect": "Detect automatically",

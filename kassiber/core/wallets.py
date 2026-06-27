@@ -18,6 +18,7 @@ from ..wallet_descriptors import (
     normalize_asset_code,
 )
 from ..wallet_setup import normalize_script_types, normalize_wallet_material
+from . import freshness as core_freshness
 from . import output_inventory as core_output_inventory
 from .repo import (
     fetch_wallet_with_account,
@@ -159,6 +160,15 @@ def has_descriptor_sync_material(config):
     if str_or_none(config.get("descriptor")):
         return True
     return bool(str_or_none(config.get("xpub")) and config.get("script_types"))
+
+
+def _reset_onchain_freshness_checkpoint(conn, profile_id: str, wallet_id: str) -> None:
+    core_freshness.reset_source_checkpoint(
+        conn,
+        profile_id,
+        core_freshness.source_key(core_freshness.SOURCE_ONCHAIN, wallet_id),
+        stale_reason="wallet_config_changed",
+    )
 
 
 def load_wallet_descriptor_plan_from_config(config):
@@ -816,6 +826,7 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
             wallet["id"],
             commit=False,
         )
+        _reset_onchain_freshness_checkpoint(conn, profile["id"], wallet["id"])
     invalidate_journals(conn, profile["id"])
     conn.commit()
     updated = fetch_wallet_with_account(conn, wallet["id"])

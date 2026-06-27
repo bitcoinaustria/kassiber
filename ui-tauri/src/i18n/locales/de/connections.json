@@ -517,6 +517,8 @@
       "detected": "Erkannt: {{label}}",
       "detectedWithHint": "Erkannt: {{label}} — {{hint}}",
       "couldNotDerive": "Adressen konnten nicht abgeleitet werden.",
+      "autoDetectUnavailable": "Script-Typen konnten nicht automatisch erkannt werden: {{reason}}. Wähle einen Script-Typ manuell.",
+      "autoDetectUnavailableReasonUnknown": "Backend-Prüfung wurde nicht ausgeführt",
       "scriptTypeLabel": "Script-Typ",
       "scriptTypeHelperAuto": "Lass „Automatisch erkennen“ stehen, dann beobachtet Kassiber jeden Adresstyp mit On-Chain-Historie – oder leg dich auf einen fest.",
       "scriptTypeDetect": "Automatisch erkennen",

@@ -19,6 +19,8 @@ import unittest
 
 from embit import bip32, bip39
 
+from kassiber.cli.handlers import resolve_descriptor_branch_index
+from kassiber.errors import AppError
 from kassiber.wallet_descriptors import (
     derive_descriptor_targets,
     liquid_blinding_secret,
@@ -317,6 +319,30 @@ class MultiScriptXpubPlanTests(unittest.TestCase):
     def test_xpub_without_script_types_is_not_a_plan(self):
         self.assertIsNone(
             load_descriptor_plan({"xpub": self._xpub84(), "chain": "bitcoin"})
+        )
+
+    def test_single_script_xpub_keeps_receive_change_branch_aliases(self):
+        plan = load_descriptor_plan(
+            {"xpub": self._xpub84(), "script_types": ["p2wpkh"], "chain": "bitcoin"}
+        )
+
+        self.assertEqual(resolve_descriptor_branch_index(plan, "receive"), 4)
+        self.assertEqual(resolve_descriptor_branch_index(plan, "change"), 5)
+
+    def test_multi_script_xpub_requires_disambiguated_branch_alias(self):
+        plan = load_descriptor_plan(
+            {
+                "xpub": self._xpub84(),
+                "script_types": ["p2sh-p2wpkh", "p2wpkh"],
+                "chain": "bitcoin",
+            }
+        )
+
+        with self.assertRaises(AppError):
+            resolve_descriptor_branch_index(plan, "receive")
+        self.assertEqual(
+            resolve_descriptor_branch_index(plan, "p2sh-p2wpkh receive"),
+            2,
         )
 
 

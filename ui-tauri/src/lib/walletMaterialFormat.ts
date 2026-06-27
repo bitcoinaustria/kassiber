@@ -34,6 +34,37 @@ export const BARE_XPUB_SCRIPT_TYPES: BareXpubScriptType[] = [
   "p2tr",
 ];
 
+export interface BareXpubScriptTypeDetectionPayload {
+  probed?: boolean;
+  active?: unknown;
+  reason?: string | null;
+}
+
+export type BareXpubScriptTypeSelection =
+  | { ok: true; scriptTypes: BareXpubScriptType[] }
+  | { ok: false; reason: string | null };
+
+export function scriptTypesFromDetectionPayload(
+  payload: BareXpubScriptTypeDetectionPayload | null | undefined,
+): BareXpubScriptTypeSelection {
+  if (!payload?.probed) {
+    return {
+      ok: false,
+      reason:
+        typeof payload?.reason === "string" && payload.reason.trim()
+          ? payload.reason.trim()
+          : null,
+    };
+  }
+  const active = Array.isArray(payload.active)
+    ? payload.active.filter(isBareXpubScriptType)
+    : [];
+  return {
+    ok: true,
+    scriptTypes: active.length > 0 ? active : [BARE_XPUB_SCRIPT_TYPES[0]],
+  };
+}
+
 const DESCRIPTOR_PREFIXES = [
   "pkh(",
   "wpkh(",
@@ -56,6 +87,13 @@ const SLIP132_PREFIXES: Record<string, string> = {
   upub: "Testnet P2SH-wrapped SegWit",
   vpub: "Testnet Native SegWit",
 };
+
+function isBareXpubScriptType(value: unknown): value is BareXpubScriptType {
+  return (
+    typeof value === "string" &&
+    BARE_XPUB_SCRIPT_TYPES.includes(value as BareXpubScriptType)
+  );
+}
 
 export function detectWalletMaterial(value: string): WalletMaterialDetection {
   const trimmed = value.trim();

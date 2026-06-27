@@ -387,6 +387,32 @@ def get_source_state(
     return _row_payload(row) if row else None
 
 
+def reset_source_checkpoint(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    key: str,
+    *,
+    stale_reason: str,
+) -> bool:
+    state = get_source_state(conn, profile_id, key)
+    if state is None:
+        return False
+    upsert_source_state(
+        conn,
+        profile_id=profile_id,
+        source_key=key,
+        source_type=state["source_type"],
+        source_label=state["source_label"],
+        status=STATUS_PARTIALLY_STALE,
+        stale_reason=stale_reason,
+        blocking_reports=bool(state.get("blocking_reports")),
+        paused=bool(state.get("paused")),
+        progress={},
+        checkpoint={},
+    )
+    return True
+
+
 def list_source_states(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, Any]]:
     rows = conn.execute(
         """
@@ -1137,6 +1163,7 @@ __all__ = [
     "rate_source_key",
     "redact_freshness_payload",
     "recover_interrupted_jobs",
+    "reset_source_checkpoint",
     "resume_source",
     "run_due_jobs",
     "run_job",
