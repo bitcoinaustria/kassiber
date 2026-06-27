@@ -126,6 +126,7 @@
       "backend": "Backend",
       "account": "Account",
       "network": "Network",
+      "scriptTypes": "Watching",
       "created": "Created",
       "kassiberId": "Kassiber ID"
     },
@@ -168,6 +169,9 @@
       "detected": "Detected: {{label}}",
       "detectedWithHint": "Detected: {{label}} — {{hint}}",
       "materialHelper": "Leave empty unless you need to change the saved wallet material.",
+      "scriptTypesLabel": "Address types to watch",
+      "scriptTypesHelper": "Kassiber derives a receive and change chain for each selected type. Adding a type re-scans this wallet.",
+      "errorSelectScriptType": "Select at least one address type to watch.",
       "gapLimit": "Gap limit",
       "gapLimitHelper": "Raise this for wallets with long unused address runs. Large values up to 5,000 can take longer, but refreshes keep running until the daemon returns.",
       "btcpayInstance": "BTCPay instance",
@@ -513,16 +517,19 @@
       "detected": "Detected: {{label}}",
       "detectedWithHint": "Detected: {{label}} — {{hint}}",
       "couldNotDerive": "Could not derive addresses.",
+      "autoDetectUnavailable": "Could not auto-detect script types: {{reason}}. Pick a script type manually.",
+      "autoDetectUnavailableReasonUnknown": "backend probe did not run",
       "scriptTypeLabel": "Script type",
-      "scriptTypeHelper": "A bare xpub doesn't say which address type to derive. Pick the one your wallet uses.",
-      "scriptTypeChoose": "Choose a script type",
+      "scriptTypeHelperAuto": "Leave this on Detect automatically to watch every address type with on-chain history, or pin a single one.",
+      "scriptTypeDetect": "Detect automatically",
       "scriptType": {
         "p2wpkh": "Native SegWit · P2WPKH (bc1q…)",
         "p2shp2wpkh": "Nested SegWit · P2SH-P2WPKH (3…)",
         "p2pkh": "Legacy · P2PKH (1…)",
         "p2tr": "Taproot · P2TR (bc1p…)"
       },
-      "bareXpubResolved": "{{label}} will be derived as {{scriptType}}."
+      "bareXpubResolved": "{{label}} will be derived as {{scriptType}}.",
+      "bareXpubAutoDetect": "{{label}} — Kassiber will detect and watch whichever address types this key has been used with."
     },
     "exportFile": {
       "label": "Export file path",
@@ -733,7 +740,6 @@
     "validation": {
       "labelRequired": "Connection label is required.",
       "pasteWalletMaterial": "Paste a wallet export, descriptor, or extended public key.",
-      "selectScriptType": "Bare xpub is ambiguous — pick a script type so we can build the descriptor.",
       "gapPositive": "Gap limit must be a positive integer.",
       "gapMax": "Gap limit must be {{max}} or lower.",
       "chooseBackend": "Choose a backend."

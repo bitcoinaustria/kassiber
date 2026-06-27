@@ -137,12 +137,17 @@ from .core.ui_snapshot import (
     build_workspace_health_snapshot,
     build_workspace_overview_snapshot,
 )
-from .core.sync_backends import ElectrumClient
+from .core.sync_backends import (
+    ElectrumClient,
+    SCRIPT_TYPE_DETECTION_FALLBACK,
+    detect_active_script_types,
+)
 from .backends import (
     BACKEND_KINDS,
     load_runtime_config,
     merge_db_backends,
     redact_backend_url,
+    resolve_backend,
     wallet_backend_references,
 )
 from .db import (
@@ -203,7 +208,7 @@ from .wallet_descriptors import (
     derive_descriptor_targets,
     load_descriptor_plan,
 )
-from .wallet_setup import normalize_wallet_material
+from .wallet_setup import normalize_script_types, normalize_wallet_material
 
 
 MAX_REQUEST_LINE_CHARS = 1_000_000
@@ -370,6 +375,7 @@ SUPPORTED_KINDS = (
     "ui.wallets.import_file",
     "ui.wallets.import_samourai",
     "ui.wallets.preview_descriptor",
+    "ui.wallets.detect_script_types",
     "ui.connections.sources",
     "ui.connections.btcpay.create",
     "ui.connections.bullbitcoin_wallet.create",
@@ -5942,6 +5948,48 @@ def _set_default_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> 
     return payload
 
 
+def _script_types_arg(args: dict[str, Any]) -> list[str] | None:
+    """Parse and validate an optional ``script_types`` list arg.
+
+    Returns ``None`` when the key is absent (caller falls back to the single
+    ``script_type`` path), otherwise the normalized (validated/deduped/sorted)
+    list -- possibly empty if the caller passed an empty array.
+    """
+    raw = args.get("script_types")
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, list):
+        raise AppError(
+            "script_types must be an array of script type names",
+            code="validation",
+            details={"type": type(raw).__name__},
+            retryable=False,
+        )
+    return normalize_script_types(raw)
+
+
+def _apply_wallet_material_config(
+    config: dict[str, Any], material_config: dict[str, Any]
+) -> None:
+    """Merge ``normalize_wallet_material`` output into a wallet config.
+
+    Handles both shapes: a rendered ``descriptor`` (legacy/single) and the
+    multi-script ``xpub`` + ``script_types`` form. The two are mutually
+    exclusive, so the xpub shape clears any descriptor and vice versa.
+    """
+    if "xpub" in material_config:
+        config["xpub"] = material_config["xpub"]
+        config["script_types"] = material_config["script_types"]
+        config.pop("descriptor", None)
+        config.pop("change_descriptor", None)
+        return
+    config.setdefault("descriptor", material_config["descriptor"])
+    if "change_descriptor" in material_config:
+        config.setdefault("change_descriptor", material_config["change_descriptor"])
+
+
 def _create_wallet_payload(
     conn: sqlite3.Connection,
     args: dict[str, Any],
@@ -5962,10 +6010,12 @@ def _create_wallet_payload(
     wallet_material = _optional_str_arg(args, "wallet_material")
     if wallet_material is not None:
         script_type = _optional_str_arg(args, "script_type")
-        material_config = normalize_wallet_material(wallet_material, script_type=script_type)
-        config.setdefault("descriptor", material_config["descriptor"])
-        if "change_descriptor" in material_config:
-            config.setdefault("change_descriptor", material_config["change_descriptor"])
+        material_config = normalize_wallet_material(
+            wallet_material,
+            script_type=script_type,
+            script_types=_script_types_arg(args),
+        )
+        _apply_wallet_material_config(config, material_config)
     source_file = _source_file_arg(args)
     if source_file is not None:
         config["source_file"] = source_file
@@ -7323,30 +7373,38 @@ def _preview_descriptor_payload(args: dict[str, Any]) -> dict[str, Any]:
     descriptor_text = _optional_str_arg(args, "descriptor")
     change_descriptor_text = _optional_str_arg(args, "change_descriptor")
     wallet_material = _optional_str_arg(args, "wallet_material")
+    config: dict[str, Any] = {}
     if wallet_material is not None:
         script_type = _optional_str_arg(args, "script_type")
-        material = normalize_wallet_material(wallet_material, script_type=script_type)
-        descriptor_text = descriptor_text or material["descriptor"]
-        change_descriptor_text = change_descriptor_text or material.get("change_descriptor")
-    if not descriptor_text:
-        raise AppError(
-            "Descriptor or wallet material is required",
-            code="validation",
-            hint="Paste a wallet export, descriptor, or supported extended public key.",
-            retryable=False,
+        material = normalize_wallet_material(
+            wallet_material,
+            script_type=script_type,
+            script_types=_script_types_arg(args),
         )
+        if "xpub" in material:
+            config["xpub"] = material["xpub"]
+            config["script_types"] = material["script_types"]
+        else:
+            descriptor_text = descriptor_text or material["descriptor"]
+            change_descriptor_text = change_descriptor_text or material.get("change_descriptor")
     chain = _optional_str_arg(args, "chain") or "bitcoin"
     network = _optional_str_arg(args, "network")
     raw_count = args.get("count")
     count = 5
     if isinstance(raw_count, int) and raw_count > 0:
         count = min(raw_count, 20)
-    config: dict[str, Any] = {
-        "descriptor": descriptor_text,
-        "chain": chain,
-    }
-    if change_descriptor_text:
-        config["change_descriptor"] = change_descriptor_text
+    if "xpub" not in config:
+        if not descriptor_text:
+            raise AppError(
+                "Descriptor or wallet material is required",
+                code="validation",
+                hint="Paste a wallet export, descriptor, or supported extended public key.",
+                retryable=False,
+            )
+        config["descriptor"] = descriptor_text
+        if change_descriptor_text:
+            config["change_descriptor"] = change_descriptor_text
+    config["chain"] = chain
     if network:
         config["network"] = network
     try:
@@ -7363,33 +7421,87 @@ def _preview_descriptor_payload(args: dict[str, Any]) -> dict[str, Any]:
             code="validation",
             retryable=False,
         )
-    receive_targets = derive_descriptor_targets(plan, branch_index=0, start=0, end=count)
-    change_target = derive_descriptor_targets(plan, branch_index=1, start=0, end=1)
-    addresses = [
-        {
-            "branch": "receive",
-            "index": target.address_index,
-            "address": target.address,
-            "derivation_path": target.derivation_path,
-        }
-        for target in receive_targets
-    ]
-    if change_target:
-        addresses.append(
-            {
-                "branch": "change",
-                "index": change_target[0].address_index,
-                "address": change_target[0].address,
-                "derivation_path": change_target[0].derivation_path,
-            }
-        )
+    # Branch-driven so a multi-script xpub previews each enabled type's
+    # receive addresses (labeled "<type> receive"), with one change sample each.
+    addresses = []
+    for branch in plan.branches:
+        is_change = branch.branch_label.endswith("change")
+        end = 1 if is_change else count
+        for target in derive_descriptor_targets(
+            plan, branch_index=branch.branch_index, start=0, end=end
+        ):
+            addresses.append(
+                {
+                    "branch": branch.branch_label,
+                    "index": target.address_index,
+                    "address": target.address,
+                    "derivation_path": target.derivation_path,
+                }
+            )
     return {
         "chain": plan.chain,
         "network": plan.network,
         "addresses": addresses,
         "has_change_branch": any(
-            branch.branch_label == "change" for branch in plan.branches
+            branch.branch_label.endswith("change") for branch in plan.branches
         ),
+    }
+
+
+def _detect_script_types_payload(
+    ctx: "DaemonContext",
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    """Probe which script types a bare xpub uses, for the auto-detect add flow.
+
+    Best-effort: a missing/unreachable/unsupported backend returns the
+    Native SegWit fallback with ``probed: false`` so the user can still create
+    the wallet and pick manually. A malformed key is a real validation error.
+    """
+    wallet_material = _required_str_arg(args, "wallet_material", "Wallet export")
+    material = wallet_material.strip()
+    if material[:4] not in {"xpub", "tpub"}:
+        raise AppError(
+            "Script-type detection only applies to a bare xpub/tpub",
+            code="validation",
+            hint="A descriptor or ypub/zpub key already carries its script type.",
+            retryable=False,
+        )
+    # Reject a malformed key up front rather than silently falling back.
+    normalize_wallet_material(material, script_types=[SCRIPT_TYPE_DETECTION_FALLBACK])
+    chain = _optional_str_arg(args, "chain") or "bitcoin"
+    network = _optional_str_arg(args, "network")
+    backend_name = _optional_str_arg(args, "backend")
+
+    def _fallback(reason: str | None) -> dict[str, Any]:
+        return {
+            "probed": False,
+            "detected": [],
+            "active": [SCRIPT_TYPE_DETECTION_FALLBACK],
+            "fallback_used": True,
+            "reason": reason,
+        }
+
+    try:
+        backend = resolve_backend(ctx.runtime_config, backend_name)
+    except AppError as exc:
+        return _fallback(str(exc))
+    try:
+        detected = detect_active_script_types(
+            backend, material, chain=chain, network=network
+        )
+    except AppError as exc:
+        return _fallback(str(exc))
+    active = [entry["script_type"] for entry in detected if entry["has_history"]]
+    fallback_used = not active
+    if fallback_used:
+        active = [SCRIPT_TYPE_DETECTION_FALLBACK]
+    return {
+        "probed": True,
+        "detected": detected,
+        "active": active,
+        "fallback_used": fallback_used,
+        "reason": None,
     }
 
 
@@ -7474,14 +7586,38 @@ def _update_wallet_payload(
     if source_file is not None:
         config_updates["source_file"] = source_file
     wallet_material = _optional_str_arg(args, "wallet_material")
+    script_types = _script_types_arg(args)
     if wallet_material is not None:
         script_type = _optional_str_arg(args, "script_type")
-        material_config = normalize_wallet_material(wallet_material, script_type=script_type)
-        config_updates["descriptor"] = material_config["descriptor"]
-        if "change_descriptor" in material_config:
-            config_updates["change_descriptor"] = material_config["change_descriptor"]
-        elif "change_descriptor" not in config_updates:
+        material_config = normalize_wallet_material(
+            wallet_material, script_type=script_type, script_types=script_types
+        )
+        if "xpub" in material_config:
+            config_updates["xpub"] = material_config["xpub"]
+            config_updates["script_types"] = material_config["script_types"]
+            # A multi-script xpub and a rendered descriptor are mutually
+            # exclusive; clear any descriptor left over from a prior shape.
+            config_updates["descriptor"] = None
             config_updates["change_descriptor"] = None
+        else:
+            config_updates["descriptor"] = material_config["descriptor"]
+            if "change_descriptor" in material_config:
+                config_updates["change_descriptor"] = material_config["change_descriptor"]
+            elif "change_descriptor" not in config_updates:
+                config_updates["change_descriptor"] = None
+            # A freshly pasted descriptor supersedes any stored xpub set.
+            config_updates["xpub"] = None
+            config_updates["script_types"] = None
+    elif script_types is not None:
+        # "Enable more types later": adjust the watched set on an existing
+        # xpub-derived wallet without re-pasting the key.
+        if not script_types:
+            raise AppError(
+                "Select at least one script type",
+                code="validation",
+                retryable=False,
+            )
+        config_updates["script_types"] = script_types
     gap_limit = args.get("gap_limit")
     if gap_limit not in (None, ""):
         if not isinstance(gap_limit, int):
@@ -9222,6 +9358,21 @@ def handle_request(
                 build_envelope(
                     "ui.wallets.preview_descriptor",
                     _preview_descriptor_payload(
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.wallets.detect_script_types":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.wallets.detect_script_types",
+                    _detect_script_types_payload(
+                        ctx,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),
                 ),

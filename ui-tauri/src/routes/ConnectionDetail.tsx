@@ -45,6 +45,7 @@ import { useOverviewTransactionDetail } from "@/components/overview-dashboard/us
 import { NodeConnectionDetail } from "./NodeConnectionDetail";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
@@ -210,6 +211,7 @@ type WalletListItem = {
     payment_method_id: string;
   }>;
   samourai?: SamouraiWalletMetadata | null;
+  script_types?: string[];
 };
 
 type BackendOption = {
@@ -297,6 +299,12 @@ function samouraiSourceLabel(
 function backendOptionLabel(backend: { name: string; display_name?: string }) {
   const label = backend.display_name?.trim() || backend.name;
   return label === backend.name ? label : `${label} (${backend.name})`;
+}
+
+function arraysEqualUnordered(a: string[], b: string[]) {
+  if (a.length !== b.length) return false;
+  const set = new Set(a);
+  return b.every((item) => set.has(item));
 }
 
 function backendOptionChain(backend: Pick<BackendOption, "name" | "chain">) {
@@ -632,7 +640,7 @@ function ConnectionDetailView({
   const [editPassphrase, setEditPassphrase] = useState("");
   const [editPlaintextAck, setEditPlaintextAck] = useState("");
   const [editWalletMaterial, setEditWalletMaterial] = useState("");
-  const [editDescriptorScriptType, setEditDescriptorScriptType] = useState("");
+  const [editScriptTypes, setEditScriptTypes] = useState<string[]>([]);
   const [editGapLimit, setEditGapLimit] = useState("");
   const [editStoreId, setEditStoreId] = useState("");
   const [editPaymentMethodId, setEditPaymentMethodId] = useState("");
@@ -797,7 +805,7 @@ function ConnectionDetailView({
     setEditPassphrase("");
     setEditPlaintextAck("");
     setEditWalletMaterial("");
-    setEditDescriptorScriptType("");
+    setEditScriptTypes(walletDetail?.script_types ?? []);
     setEditGapLimit(connection.gap != null ? String(connection.gap) : "");
     setEditStoreId("");
     setEditPaymentMethodId("");
@@ -820,6 +828,20 @@ function ConnectionDetailView({
 
   const scriptTypeLabel = (value: BareXpubScriptType) =>
     t(scriptTypeLabelKeys[value]);
+
+  // Script types this wallet currently watches, in canonical (modern-first)
+  // order. Non-empty only for an auto-detected / pinned xpub wallet.
+  const walletScriptTypes = BARE_XPUB_SCRIPT_TYPES.filter((value) =>
+    (walletDetail?.script_types ?? []).includes(value),
+  );
+  const isXpubDerivedWallet = walletScriptTypes.length > 0;
+  const toggleEditScriptType = (value: string) => {
+    setEditScriptTypes((current) =>
+      current.includes(value)
+        ? current.filter((item) => item !== value)
+        : [...current, value],
+    );
+  };
 
   const allBackendOptions = backendOptionsQuery.data?.data?.backends ?? [];
   const btcpayBackendOptions = allBackendOptions.filter(
@@ -889,14 +911,26 @@ function ConnectionDetailView({
         setEditError(detection.hint ?? detection.label);
         return;
       }
-      if (detection.kind === "bare-xpub" && !editDescriptorScriptType) {
-        setEditError(t("add.validation.selectScriptType"));
+      if (detection.kind === "bare-xpub" && editScriptTypes.length === 0) {
+        setEditError(t("detail.edit.errorSelectScriptType"));
         return;
       }
       configChanges.wallet_material = walletMaterial;
       if (detection.kind === "bare-xpub") {
-        configChanges.script_type = editDescriptorScriptType;
+        configChanges.script_types = editScriptTypes;
       }
+    } else if (
+      editConfigKind === "descriptor" &&
+      isXpubDerivedWallet &&
+      !arraysEqualUnordered(editScriptTypes, walletScriptTypes)
+    ) {
+      // "Enable more types later": change the watched set on an existing
+      // xpub-derived wallet without re-pasting the key.
+      if (editScriptTypes.length === 0) {
+        setEditError(t("detail.edit.errorSelectScriptType"));
+        return;
+      }
+      configChanges.script_types = editScriptTypes;
     }
     if (editConfigKind === "descriptor" && gapLimitText) {
       const gapLimit = Number.parseInt(gapLimitText, 10);
@@ -1641,6 +1675,14 @@ function ConnectionDetailView({
                     .join(" · ")}
                 />
               ) : null}
+              {isXpubDerivedWallet ? (
+                <DetailRow
+                  label={t("detail.connectionDetails.scriptTypes")}
+                  value={walletScriptTypes
+                    .map((value) => scriptTypeLabel(value))
+                    .join(" · ")}
+                />
+              ) : null}
               <DetailRow
                 label={t("detail.connectionDetails.created")}
                 value={formatShortDate(walletDetail?.created_at)}
@@ -1813,33 +1855,15 @@ function ConnectionDetailView({
                   id="connection-edit-material"
                   className="min-h-24 font-mono text-xs"
                   value={editWalletMaterial}
-                  onChange={(event) => {
-                    setEditWalletMaterial(event.target.value);
-                    setEditDescriptorScriptType("");
-                  }}
+                  onChange={(event) =>
+                    setEditWalletMaterial(event.target.value)
+                  }
                   placeholder={t("detail.edit.materialPlaceholder")}
                 />
                 {editWalletMaterial.trim()
                   ? (() => {
                       const detection = detectWalletMaterial(editWalletMaterial);
-                      // A bare xpub stops being ambiguous once a type is picked.
-                      if (
-                        detection.kind === "bare-xpub" &&
-                        editDescriptorScriptType
-                      ) {
-                        return (
-                          <p className="text-xs text-emerald-700 dark:text-emerald-300">
-                            {t("add.descriptor.bareXpubResolved", {
-                              label: detection.label,
-                              scriptType: scriptTypeLabel(
-                                editDescriptorScriptType as BareXpubScriptType,
-                              ),
-                            })}
-                          </p>
-                        );
-                      }
                       const tone =
-                        detection.kind === "bare-xpub" ||
                         detection.kind === "unknown"
                           ? "text-amber-700 dark:text-amber-300"
                           : "text-emerald-700 dark:text-emerald-300";
@@ -1861,31 +1885,26 @@ function ConnectionDetailView({
                         {t("detail.edit.materialHelper")}
                       </p>
                     )}
-                {detectWalletMaterial(editWalletMaterial).kind ===
-                "bare-xpub" ? (
-                  <div className="space-y-1">
-                    <Label htmlFor="connection-edit-script-type">
-                      {t("add.descriptor.scriptTypeLabel")}
-                    </Label>
-                    <select
-                      id="connection-edit-script-type"
-                      className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                      value={editDescriptorScriptType}
-                      onChange={(event) =>
-                        setEditDescriptorScriptType(event.target.value)
-                      }
-                    >
-                      <option value="" disabled>
-                        {t("add.descriptor.scriptTypeChoose")}
-                      </option>
+                {detectWalletMaterial(editWalletMaterial).kind === "bare-xpub" ||
+                isXpubDerivedWallet ? (
+                  <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+                    <Label>{t("detail.edit.scriptTypesLabel")}</Label>
+                    <div className="space-y-1.5">
                       {BARE_XPUB_SCRIPT_TYPES.map((value) => (
-                        <option key={value} value={value}>
+                        <label
+                          key={value}
+                          className="flex items-center gap-2 text-sm"
+                        >
+                          <Checkbox
+                            checked={editScriptTypes.includes(value)}
+                            onCheckedChange={() => toggleEditScriptType(value)}
+                          />
                           {scriptTypeLabel(value)}
-                        </option>
+                        </label>
                       ))}
-                    </select>
+                    </div>
                     <p className="text-xs text-muted-foreground">
-                      {t("add.descriptor.scriptTypeHelper")}
+                      {t("detail.edit.scriptTypesHelper")}
                     </p>
                   </div>
                 ) : null}

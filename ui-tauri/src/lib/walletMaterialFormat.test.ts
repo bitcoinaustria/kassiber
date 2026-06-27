@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { detectWalletMaterial } from "./walletMaterialFormat";
+import {
+  detectWalletMaterial,
+  scriptTypesFromDetectionPayload,
+} from "./walletMaterialFormat";
 
 describe("detectWalletMaterial", () => {
   it("recognizes empty input", () => {
@@ -39,5 +42,35 @@ describe("detectWalletMaterial", () => {
 
   it("returns unknown for unrelated text", () => {
     expect(detectWalletMaterial("hello world").kind).toBe("unknown");
+  });
+});
+
+describe("scriptTypesFromDetectionPayload", () => {
+  it("blocks failed auto-detection instead of silently defaulting", () => {
+    expect(
+      scriptTypesFromDetectionPayload({
+        probed: false,
+        active: ["p2wpkh"],
+        reason: "backend unavailable",
+      }),
+    ).toEqual({ ok: false, reason: "backend unavailable" });
+  });
+
+  it("falls back to native segwit only after a real empty probe", () => {
+    expect(
+      scriptTypesFromDetectionPayload({
+        probed: true,
+        active: [],
+      }),
+    ).toEqual({ ok: true, scriptTypes: ["p2wpkh"] });
+  });
+
+  it("keeps only supported script type names from daemon payloads", () => {
+    expect(
+      scriptTypesFromDetectionPayload({
+        probed: true,
+        active: ["p2tr", "p2wsh", 1, "p2wpkh"],
+      }),
+    ).toEqual({ ok: true, scriptTypes: ["p2tr", "p2wpkh"] });
   });
 });

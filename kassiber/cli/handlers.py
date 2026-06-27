@@ -1702,9 +1702,9 @@ WALLET_KIND_CATALOG = {
         "requires": ["descriptor"],
     },
     "xpub": {
-        "summary": "Extended-public-key wallet derived to address set; supports on-chain sync via mempool/esplora.",
-        "config_fields": ["descriptor", "gap_limit", "backend", "chain", "network"],
-        "requires": ["descriptor"],
+        "summary": "Extended-public-key wallet: derives one or more script types (pinned with --script-type) to an address set; on-chain sync via mempool/esplora.",
+        "config_fields": ["descriptor", "xpub", "script_types", "gap_limit", "backend", "chain", "network"],
+        "requires": ["descriptor|script_types"],
     },
     "address": {
         "summary": "Bare-address list wallet; useful for receive-only tracking or imports.",
@@ -2715,18 +2715,61 @@ def resolve_descriptor_branch_index(plan, branch):
     if branch in (None, "", "all"):
         return None
     normalized = str(branch).strip().lower()
-    if normalized in {"0", "receive", "external"}:
-        return 0
-    if normalized in {"1", "change", "internal"}:
-        return 1
-    raise AppError("Descriptor branch must be one of: all, receive, change, 0, 1")
+    valid = {item.branch_index for item in plan.branches}
+    # A concrete branch index the plan actually has (multi-script xpub wallets
+    # use 4/5 for p2wpkh, 6/7 for p2tr, and so on).
+    if normalized.isdigit():
+        index = int(normalized)
+        if index in valid:
+            return index
+        raise AppError(
+            f"Descriptor branch '{branch}' is not in this wallet's plan; "
+            f"available branches: {sorted(valid)}"
+        )
+    # Legacy aliases should still work for xpub plans when exactly one receive
+    # or change branch is enabled, even if fixed script-type branch ids are 4/5.
+    if normalized in {"receive", "external"}:
+        receive_branches = [
+            item
+            for item in plan.branches
+            if _descriptor_branch_label_key(item.branch_label) == "receive"
+            or _descriptor_branch_label_key(item.branch_label).endswith(" receive")
+        ]
+        if len(receive_branches) == 1:
+            return receive_branches[0].branch_index
+    if normalized in {"change", "internal"}:
+        change_branches = [
+            item
+            for item in plan.branches
+            if _descriptor_branch_label_key(item.branch_label) == "change"
+            or _descriptor_branch_label_key(item.branch_label).endswith(" change")
+        ]
+        if len(change_branches) == 1:
+            return change_branches[0].branch_index
+    # Script-type-qualified labels, e.g. "p2tr receive" or "p2tr-receive".
+    label = _descriptor_branch_label_key(normalized)
+    for item in plan.branches:
+        if _descriptor_branch_label_key(item.branch_label) == label:
+            return item.branch_index
+    raise AppError(
+        "Descriptor branch must be 'all', a branch index in "
+        f"{sorted(valid)}, or a branch label like 'receive'/'p2tr receive'"
+    )
+
+
+def _descriptor_branch_label_key(value):
+    return " ".join(str(value).strip().lower().replace("-", " ").split())
 
 
 def derive_wallet_targets(conn, workspace_ref, profile_ref, wallet_ref, branch=None, start=0, count=None):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     wallet = resolve_wallet(conn, profile["id"], wallet_ref)
     config = json.loads(wallet["config_json"] or "{}")
-    plan = load_wallet_descriptor_plan_from_config(config) if config.get("descriptor") else None
+    plan = (
+        load_wallet_descriptor_plan_from_config(config)
+        if (config.get("descriptor") or config.get("xpub"))
+        else None
+    )
     if plan is None:
         raise AppError(f"Wallet '{wallet['label']}' does not have a descriptor configured")
     if start < 0:

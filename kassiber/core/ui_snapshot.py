@@ -31,6 +31,7 @@ from . import transaction_history
 from .repo import current_context_snapshot
 from .sync import normalize_backend_kind
 from .wallets import (
+    has_descriptor_sync_material,
     load_wallet_descriptor_plan_from_config,
     wallet_btcpay_provenance_config,
 )
@@ -375,7 +376,7 @@ def _wallet_backend_summary(
     source_file = _string_or_empty(config.get("source_file"))
     source_format = _string_or_empty(config.get("source_format"))
     sync_source = _string_or_empty(config.get("sync_source"))
-    has_descriptor = bool(config.get("descriptor"))
+    has_descriptor = has_descriptor_sync_material(config)
     has_addresses = bool(config.get("addresses"))
     backend_name = explicit_backend
     backend_source = "explicit" if explicit_backend else "none"
@@ -848,7 +849,7 @@ def _connections(
         source_format = _string_or_empty(config.get("source_format"))
         sync_source = _string_or_empty(config.get("sync_source") or source_format)
         gap_limit = config.get("gap_limit")
-        has_descriptor = bool(config.get("descriptor"))
+        has_descriptor = has_descriptor_sync_material(config)
         connection = {
             "id": row["id"],
             "kind": _map_wallet_kind(row["kind"]),
@@ -3447,6 +3448,14 @@ def build_wallets_list_snapshot(
                 "journals_stale": freshness["needs_processing"] and tx_count > 0,
                 "btcpay_provenance": provenance_routes,
                 "samourai": samourai_metadata,
+                # Watched script types for an auto-detected xpub wallet (empty
+                # for explicit-descriptor / non-xpub wallets); lets the detail
+                # screen show and edit the set without revealing the key itself.
+                "script_types": [
+                    str(value)
+                    for value in (config.get("script_types") or [])
+                    if isinstance(value, str)
+                ],
                 "created_at": row["created_at"],
             }
         )
@@ -3520,7 +3529,7 @@ def _wallet_utxo_support(
     backend: Any,
 ) -> dict[str, Any]:
     sync_mode = backend_summary["sync_mode"]
-    has_descriptor = bool(config.get("descriptor"))
+    has_descriptor = has_descriptor_sync_material(config)
     has_addresses = bool(config.get("addresses"))
     if _string_or_empty(config.get("source_format")) == "wasabi_bundle":
         return {

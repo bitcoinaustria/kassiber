@@ -608,6 +608,16 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 
 ## Later backlog
 
+- [ ] **CLI `--detect-script-types` probe for bare-xpub wallets.** The desktop
+  add-wallet flow auto-detects which script types an xpub has on-chain history
+  for (daemon `ui.wallets.detect_script_types`, core
+  `sync_backends.detect_active_script_types`). The CLI can already create a
+  multi-script xpub wallet by *pinning* types (`wallet create --kind xpub
+  --descriptor xpub… --script-type p2wpkh --script-type p2tr`), but has no
+  auto-detect flag. Add `--detect-script-types` to `wallet create` that resolves
+  the chosen/default backend and calls the shared `detect_active_script_types`
+  helper to fill `config["script_types"]` (fallback to `p2wpkh` when none/no
+  backend), for full GUI/CLI parity.
 - [x] Split `TransactionDetailSheet.tsx` tab bodies into siblings —
   the detail sheet now delegates display helpers, header chrome, the
   right rail, attachments/commercial panels, and each tab body to focused
