@@ -56,7 +56,7 @@ from kassiber.ai.tools import (
     redact_tool_arguments,
     summarize_tool_call,
 )
-from kassiber.ai.providers import list_with_default
+from kassiber.ai.providers import ai_provider_secret_service_id, list_with_default
 from kassiber.db import open_db
 from kassiber.errors import AppError
 from kassiber.redaction import redact_secret_text, redact_secret_value
@@ -1082,7 +1082,7 @@ class ProvidersCrudTest(unittest.TestCase):
                     conn,
                     "openrouter",
                     store_id="macos_keychain",
-                    service="service-hash",
+                    service=ai_provider_secret_service_id(str((Path(tmp) / "data").resolve())),
                     account="openrouter",
                 )
                 self.assertIsNone(updated["api_key"])
@@ -1119,7 +1119,7 @@ class ProvidersCrudTest(unittest.TestCase):
                     (
                         "cloud",
                         "macos_keychain",
-                        "service-hash",
+                        ai_provider_secret_service_id(str((Path(tmp) / "data").resolve())),
                         "cloud",
                         "missing",
                         "2026-05-13T00:00:00Z",
@@ -1156,7 +1156,7 @@ class ProvidersCrudTest(unittest.TestCase):
                     (
                         "cloud",
                         "macos_keychain",
-                        "service-hash",
+                        ai_provider_secret_service_id(str((Path(tmp) / "data").resolve())),
                         "cloud",
                         "ok",
                         "2026-05-13T00:00:00Z",
@@ -1203,7 +1203,7 @@ class ProvidersCrudTest(unittest.TestCase):
                     (
                         "cloud",
                         "macos_keychain",
-                        "service-hash",
+                        ai_provider_secret_service_id(str((Path(tmp) / "data").resolve())),
                         "cloud",
                         "ok",
                         "2026-05-13T00:00:00Z",

@@ -2717,11 +2717,7 @@ mod tests {
         // Pin the collateral-mark daemon surface so the Transactions-screen mark
         // actions come with an explicit allowlist update; otherwise packaged
         // desktop mode returns kind_not_allowed and the feature breaks silently.
-        let required: &[&str] = &[
-            "ui.loans.list",
-            "ui.loans.mark",
-            "ui.loans.unmark",
-        ];
+        let required: &[&str] = &["ui.loans.list", "ui.loans.mark", "ui.loans.unmark"];
         for kind in required {
             assert!(
                 ALLOWED_DAEMON_KINDS.contains(kind),
@@ -2805,10 +2801,7 @@ mod tests {
     fn transactions_export_daemon_kinds_are_in_allowlist() {
         // The Transactions screen Export button invokes these directly from the
         // webview; packaged desktop mode rejects any unlisted kind.
-        let required: &[&str] = &[
-            "ui.transactions.export_csv",
-            "ui.transactions.export_xlsx",
-        ];
+        let required: &[&str] = &["ui.transactions.export_csv", "ui.transactions.export_xlsx"];
         for kind in required {
             assert!(
                 ALLOWED_DAEMON_KINDS.contains(kind),
