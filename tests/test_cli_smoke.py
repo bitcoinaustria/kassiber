@@ -4957,6 +4957,149 @@ class GenericLedgerImportTest(unittest.TestCase):
         self.assertEqual(payload["data"]["input_format"], "generic_ledger")
         self.assertEqual(payload["data"]["imported"], 7)
 
+    def test_dry_run_previews_without_importing(self):
+        template = Path(self._tmp.name) / "preview.csv"
+        self._cli("wallets", "ledger-template", "--file", str(template))
+        payload = self._cli(
+            "wallets", "import-ledger",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+            "--file", str(template), "--dry-run",
+        )
+        self.assertEqual(payload["kind"], "wallets.import-ledger")
+        self.assertGreater(payload["data"]["mapped"], 0)
+        self.assertEqual(payload["data"]["errors"], 0)
+        self.assertTrue(payload["data"]["preview"])
+        self.assertEqual(self._records_by_external_id(), {})  # nothing persisted
+
+        # A bad row is collected as a row-numbered problem, not aborted, and the
+        # whole file still previews (the real importer stops at the first error).
+        bad = Path(self._tmp.name) / "bad.csv"
+        bad.write_text(
+            "Date,Type,Received Asset,Received Amount,Sent Asset,Sent Amount,Fee Amount\n"
+            "2026-01-15,Buy,BTC,0.5,EUR,20000,0\n"
+            "2026-02-01,Frobnicate,BTC,0.1,,,0\n",
+            encoding="utf-8",
+        )
+        bad_payload = self._cli(
+            "wallets", "import-ledger",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+            "--file", str(bad), "--dry-run",
+        )
+        self.assertEqual(bad_payload["data"]["mapped"], 1)
+        self.assertEqual(bad_payload["data"]["errors"], 1)
+        self.assertEqual(bad_payload["data"]["problems"][0]["row"], 2)
+        self.assertEqual(self._records_by_external_id(), {})
+
+    def test_byo_columns_are_auto_detected(self):
+        # An arbitrary export (no Type column; sent/received BTC + a fiat price)
+        # imports by auto-detecting the columns onto the ledger shape.
+        byo = Path(self._tmp.name) / "byo.csv"
+        byo.write_text(
+            "Date,Received BTC,Sent BTC,Currency,Price,Note\n"
+            "2026-01-15,0.5,,EUR,40000,Bought\n"
+            "2026-01-20,,0.1,EUR,42000,Sold\n",
+            encoding="utf-8",
+        )
+        preview = self._cli(
+            "wallets", "import-ledger",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+            "--file", str(byo), "--dry-run",
+        )
+        self.assertTrue(preview["data"]["confident"])
+        self.assertEqual(preview["data"]["mapped"], 2)
+        fields = {d["field"] for d in preview["data"]["detected"]}
+        self.assertIn("received", fields)
+        self.assertIn("sent", fields)
+
+        imported = self._import(byo)
+        self.assertEqual(imported["data"]["imported"], 2)
+        listed = self._cli(
+            "transactions", "list",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+        )["data"]
+        self.assertEqual(len(listed), 2)
+        # The fiat price became exact execution pricing through #244's normalizer.
+        self.assertTrue(all(row.get("fiat_value") for row in listed))
+
+    def test_byo_asset_suffixed_cash_legs_keep_trade_kind_and_pricing(self):
+        buy_file = Path(self._tmp.name) / "byo-cash-leg-buy.csv"
+        buy_file.write_text(
+            "Date,Received BTC,Sent EUR,Note,Tx-ID\n"
+            "2026-01-15,0.5,20000,Bought,byo-buy-1\n",
+            encoding="utf-8",
+        )
+        sell_file = Path(self._tmp.name) / "byo-cash-leg-sell.csv"
+        sell_file.write_text(
+            "Date,Received EUR,Sent BTC,Note,Tx-ID\n"
+            "2026-01-20,4200,0.1,Sold,byo-sell-1\n",
+            encoding="utf-8",
+        )
+        preview = self._cli(
+            "wallets", "import-ledger",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+            "--file", str(buy_file), "--dry-run",
+        )
+        self.assertTrue(preview["data"]["confident"])
+        self.assertEqual(preview["data"]["mapped"], 1)
+        detected = {d["column"] for d in preview["data"]["detected"]}
+        self.assertIn("Received BTC", detected)
+        self.assertIn("Sent EUR", detected)
+
+        self._import(buy_file)
+        self._import(sell_file)
+        rows = self._records_by_external_id()
+        buy = rows["byo-buy-1"]
+        self.assertEqual(buy["kind"], "buy")
+        self.assertEqual(buy["direction"], "inbound")
+        self.assertEqual(buy["fiat_value_exact"], "20000")
+        self.assertEqual(buy["pricing_source_kind"], "exchange_execution")
+        self.assertEqual(buy["pricing_pair"], "BTC-EUR")
+        sell = rows["byo-sell-1"]
+        self.assertEqual(sell["kind"], "sell")
+        self.assertEqual(sell["direction"], "outbound")
+        self.assertEqual(sell["fiat_value_exact"], "4200")
+        self.assertEqual(sell["pricing_source_kind"], "exchange_execution")
+        self.assertEqual(sell["pricing_pair"], "BTC-EUR")
+
+    def test_byo_amount_asset_columns_are_not_forced_to_crypto_to_crypto(self):
+        byo = Path(self._tmp.name) / "byo-amount-assets.csv"
+        byo.write_text(
+            "Date,Received Amount,Received Asset,Sent Amount,Sent Asset,Note,Tx-ID\n"
+            "2026-01-15,0.5,BTC,20000,EUR,Bought,byo-asset-buy-1\n",
+            encoding="utf-8",
+        )
+        preview = self._cli(
+            "wallets", "import-ledger",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+            "--file", str(byo), "--dry-run",
+        )
+        self.assertTrue(preview["data"]["confident"])
+        self.assertEqual(preview["data"]["mapped"], 1)
+        self.assertEqual(preview["data"]["errors"], 0)
+
+        self._import(byo)
+        row = self._records_by_external_id()["byo-asset-buy-1"]
+        self.assertEqual(row["kind"], "buy")
+        self.assertEqual(row["fiat_value_exact"], "20000")
+        self.assertEqual(row["pricing_pair"], "BTC-EUR")
+
+    def test_byo_unrecognized_columns_are_steered_not_imported(self):
+        junk = Path(self._tmp.name) / "junk.csv"
+        junk.write_text("alpha,beta,gamma\n1,2,3\n", encoding="utf-8")
+        preview = self._cli(
+            "wallets", "import-ledger",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+            "--file", str(junk), "--dry-run",
+        )
+        self.assertFalse(preview["data"]["confident"])
+        payload, code = _run(
+            self.data_root, "wallets", "import-ledger",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+            "--file", str(junk),
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(payload["error"]["code"], "ledger_unrecognized")
+
     def test_csv_import_maps_kinds_amounts_and_pricing(self):
         ledger = Path(self._tmp.name) / "ledger.csv"
         ledger.write_text(_GENERIC_LEDGER_CSV, encoding="utf-8")

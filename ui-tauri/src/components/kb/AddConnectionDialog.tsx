@@ -34,6 +34,7 @@ import {
   type ConnectionSource,
   type ConnectionSourceFormat,
 } from "@/lib/connectionCatalog";
+import { GenericLedgerPreview } from "@/components/kb/GenericLedgerPreview";
 import { saveDaemonExport } from "@/lib/exportFile";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 import {
@@ -622,6 +623,8 @@ export function AddConnectionDialog({
   const [setupError, setSetupError] = React.useState<string | null>(null);
   const [lastImportResult, setLastImportResult] =
     React.useState<ImportFileResult | null>(null);
+  const [genericLedgerPreviewBlocksSubmit, setGenericLedgerPreviewBlocksSubmit] =
+    React.useState(false);
   const [fieldErrors, setFieldErrors] = React.useState<
     Partial<Record<keyof SetupFormState, string>>
   >({});
@@ -813,6 +816,7 @@ export function AddConnectionDialog({
     setSetupError(null);
     setFieldErrors({});
     setLastImportResult(null);
+    setGenericLedgerPreviewBlocksSubmit(false);
     setPreviewAddresses(null);
     setPreviewError(null);
     setBtcpayTestStatus(null);
@@ -830,6 +834,7 @@ export function AddConnectionDialog({
     setStep(initialSourceId && source.status === "ready" ? "setup" : "source");
     setSetupError(null);
     setLastImportResult(null);
+    setGenericLedgerPreviewBlocksSubmit(false);
     setSourceQuery("");
   }, [initialSourceId, open]);
 
@@ -840,6 +845,7 @@ export function AddConnectionDialog({
     setFieldErrors({});
     setSetupError(null);
     setLastImportResult(null);
+    setGenericLedgerPreviewBlocksSubmit(false);
     setPreviewAddresses(null);
     setPreviewError(null);
   }, [open, selected, t]);
@@ -886,6 +892,9 @@ export function AddConnectionDialog({
     value: SetupFormState[Key],
   ) => {
     setForm((current) => ({ ...current, [key]: value }));
+    if (key === "sourceFile" && selected.sourceFormat === "generic_ledger") {
+      setGenericLedgerPreviewBlocksSubmit(String(value ?? "").trim().length > 0);
+    }
     if (
       key === "sourceFile" ||
       key === "samouraiDeposit" ||
@@ -1025,6 +1034,11 @@ export function AddConnectionDialog({
         }
       } else if (!form.sourceFile.trim()) {
         errors.sourceFile = t("add.enrichment.errorPickExportFile");
+      } else if (
+        selected.sourceFormat === "generic_ledger" &&
+        genericLedgerPreviewBlocksSubmit
+      ) {
+        errors.sourceFile = t("add.genericLedger.preview.submitBlocked");
       }
     }
     if (setupKind === "file-enrichment") {
@@ -1763,6 +1777,12 @@ export function AddConnectionDialog({
               </Button>
             </div>
           </div>
+        ) : null}
+        {selected.sourceFormat === "generic_ledger" && form.sourceFile.trim() ? (
+          <GenericLedgerPreview
+            file={form.sourceFile.trim()}
+            onBlockSubmitChange={setGenericLedgerPreviewBlocksSubmit}
+          />
         ) : null}
         {syncLabel ? renderSyncAfterCreate(syncLabel) : null}
       </>
@@ -3455,7 +3475,9 @@ export function AddConnectionDialog({
                     isSubmitting ||
                     setupKind === "planned" ||
                     missingBackend ||
-                    missingBtcpayMappingDiscovery
+                    missingBtcpayMappingDiscovery ||
+                    (selected.sourceFormat === "generic_ledger" &&
+                      genericLedgerPreviewBlocksSubmit)
                   }
                 >
                   {submitLabel}

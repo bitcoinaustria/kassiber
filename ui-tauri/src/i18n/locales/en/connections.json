@@ -550,7 +550,23 @@
       "saveTemplateTitle": "Save ledger template",
       "templateReadyTitle": "Template ready",
       "templateReadyBody": "Fill in your transactions and import the file here.",
-      "templateFailedTitle": "Could not create the template"
+      "templateFailedTitle": "Could not create the template",
+      "preview": {
+        "loading": "Reading your file…",
+        "failed": "Couldn't read that file.",
+        "ready": "{{mapped}} of {{rows}} rows ready",
+        "errorCount": "{{count}} need attention",
+        "more": "+{{count}} more",
+        "colDate": "Date",
+        "colKind": "Type",
+        "colAmount": "Amount",
+        "colValue": "Value",
+        "problemRow": "Row {{row}}: {{message}}",
+        "detected": "Recognized: {{columns}}",
+        "notRecognized": "Couldn't recognize these columns.",
+        "notRecognizedHint": "Download the template, fill it in, and import that instead.",
+        "submitBlocked": "Resolve the preview issues before importing this ledger."
+      }
     },
     "defaultLabel": {
       "importedFile": "Imported file"

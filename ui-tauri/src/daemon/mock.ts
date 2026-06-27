@@ -792,6 +792,52 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.wallets.ledger_preview") {
+      return {
+        kind: "ui.wallets.ledger_preview",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          rows_read: 3,
+          mapped: 2,
+          errors: 1,
+          truncated: false,
+          confident: true,
+          detected: [
+            { column: "Date", field: "date" },
+            { column: "Received BTC", field: "received" },
+            { column: "Sent BTC", field: "sent" },
+            { column: "Price", field: "fiat_rate" },
+          ],
+          problems: [{ row: 3, message: "Ledger row 3: unknown Type 'Frobnicate'" }],
+          preview: [
+            {
+              occurred_at: "2026-01-15",
+              direction: "inbound",
+              asset: "BTC",
+              amount: "0.05000000",
+              fee: "0",
+              kind: "buy",
+              fiat_currency: "EUR",
+              fiat_value: "3000.00",
+              description: "Bought",
+            },
+            {
+              occurred_at: "2026-02-10",
+              direction: "outbound",
+              asset: "BTC",
+              amount: "0.01000000",
+              fee: "0.00001000",
+              kind: "sell",
+              fiat_currency: "EUR",
+              fiat_value: "720.00",
+              description: "Sold",
+            },
+          ],
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.wallets.list") {
       const overview = mockOverviewSnapshot();
       return {
