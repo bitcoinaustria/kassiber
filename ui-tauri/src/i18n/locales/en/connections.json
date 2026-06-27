@@ -564,7 +564,8 @@
         "problemRow": "Row {{row}}: {{message}}",
         "detected": "Recognized: {{columns}}",
         "notRecognized": "Couldn't recognize these columns.",
-        "notRecognizedHint": "Download the template, fill it in, and import that instead."
+        "notRecognizedHint": "Download the template, fill it in, and import that instead.",
+        "submitBlocked": "Resolve the preview issues before importing this ledger."
       }
     },
     "defaultLabel": {

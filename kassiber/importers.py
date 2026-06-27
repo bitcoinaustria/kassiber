@@ -2730,6 +2730,9 @@ _BYO_DIRECTION = {_normalized_column_key(n) for n in ("Direction", "In/Out", "Fl
 _BYO_RECEIVED = {_normalized_column_key(n) for n in ("Received Amount", "Received", "Received BTC", "Buy Amount", "Incoming", "Amount Received", "Deposit Amount", "Credit", "Eingang", "Erhalten")}
 _BYO_SENT = {_normalized_column_key(n) for n in ("Sent Amount", "Sent", "Sent BTC", "Sell Amount", "Outgoing", "Amount Sent", "Withdrawal Amount", "Debit", "Ausgang", "Gesendet")}
 _BYO_AMOUNT = {_normalized_column_key(n) for n in ("Amount", "BTC", "Amount BTC", "BTC Amount", "Quantity", "Qty", "Net Amount", "Betrag", "Menge")}
+_BYO_RECEIVED_ASSET = {_normalized_column_key(n) for n in ("Received Asset", "Received Currency", "Buy Asset", "Buy Currency", "Incoming Asset", "Credit Asset")}
+_BYO_SENT_ASSET = {_normalized_column_key(n) for n in ("Sent Asset", "Sent Currency", "Sell Asset", "Sell Currency", "Outgoing Asset", "Debit Asset")}
+_BYO_FEE_ASSET = {_normalized_column_key(n) for n in ("Fee Asset", "Fee Currency", "Fee Cur.", "Fee Coin")}
 # "Currency" is fiat far more often than a crypto-asset column, so it belongs
 # to fiat detection; the crypto asset is only taken from explicit asset columns.
 _BYO_ASSET = {_normalized_column_key(n) for n in ("Asset", "Coin", "Symbol", "Crypto", "Crypto Asset")}
@@ -2748,6 +2751,33 @@ _BYO_TYPE_VALUE_MAP = {
 }
 _BYO_INBOUND_VALUES = {"in", "inbound", "received", "receive", "incoming", "credit", "deposit", "buy"}
 _BYO_OUTBOUND_VALUES = {"out", "outbound", "sent", "send", "outgoing", "debit", "withdrawal", "sell"}
+_BYO_RECEIVED_HEADER_TOKENS = {"received", "receive", "incoming", "credit", "deposit", "buy", "bought", "erhalten", "eingang"}
+_BYO_SENT_HEADER_TOKENS = {"sent", "send", "outgoing", "debit", "withdrawal", "withdraw", "sell", "sold", "ausgang", "gesendet"}
+_BYO_HEADER_ASSET_ALIASES = {
+    "btc": "BTC",
+    "bitcoin": "BTC",
+    "xbt": "BTC",
+    "lbtc": "LBTC",
+    "liquidbtc": "LBTC",
+    "liquid": "LBTC",
+    "sats": "SATS",
+    "sat": "SATS",
+    "eur": "EUR",
+    "euro": "EUR",
+    "usd": "USD",
+    "dollar": "USD",
+    "chf": "CHF",
+    "gbp": "GBP",
+    "aud": "AUD",
+    "cad": "CAD",
+    "jpy": "JPY",
+    "nok": "NOK",
+    "sek": "SEK",
+    "dkk": "DKK",
+    "pln": "PLN",
+    "czk": "CZK",
+    "huf": "HUF",
+}
 
 
 def _byo_number(cell):
@@ -2758,9 +2788,38 @@ def _byo_number(cell):
         return None
 
 
-def _byo_type_value(type_value, direction):
+def _byo_header_tokens(value):
+    return [token for token in re.split(r"[^a-z0-9]+", str(value or "").casefold()) if token]
+
+
+def _byo_asset_from_header(value):
+    tokens = _byo_header_tokens(value)
+    if not tokens:
+        return None
+    joined = " ".join(tokens)
+    if "liquid bitcoin" in joined:
+        return "LBTC"
+    for token in reversed(tokens):
+        mapped = _BYO_HEADER_ASSET_ALIASES.get(token)
+        if mapped:
+            return mapped
+    return None
+
+
+def _byo_leg_role_from_header(value):
+    tokens = set(_byo_header_tokens(value))
+    if tokens & _BYO_RECEIVED_HEADER_TOKENS:
+        return "received"
+    if tokens & _BYO_SENT_HEADER_TOKENS:
+        return "sent"
+    return None
+
+
+def _byo_type_value(type_value, direction, *, has_cash_counterleg=False):
     if type_value:
         return _BYO_TYPE_VALUE_MAP.get(_normalized_column_key(type_value), type_value)
+    if has_cash_counterleg:
+        return "Buy" if direction == "inbound" else "Sell"
     return "Deposit" if direction == "inbound" else "Withdrawal"
 
 
@@ -2800,14 +2859,27 @@ def infer_ledger_columns(header):
                 return original
         return None
 
+    def take_asset_suffixed_leg(field):
+        for original in header:
+            if original in used or original not in norm:
+                continue
+            if _byo_leg_role_from_header(original) == field and _byo_asset_from_header(original):
+                used.add(original)
+                detected.append({"column": original, "field": field})
+                return original
+        return None
+
     date = take(_BYO_DATE, "date")
-    received = take(_BYO_RECEIVED, "received")
-    sent = take(_BYO_SENT, "sent")
+    received = take(_BYO_RECEIVED, "received") or take_asset_suffixed_leg("received")
+    sent = take(_BYO_SENT, "sent") or take_asset_suffixed_leg("sent")
     amount = None if (received and sent) else take(_BYO_AMOUNT, "amount")
     type_col = take(_BYO_TYPE, "type")
     direction = take(_BYO_DIRECTION, "direction") if not type_col else None
+    received_asset = take(_BYO_RECEIVED_ASSET, "received_asset")
+    sent_asset = take(_BYO_SENT_ASSET, "sent_asset")
     asset = take(_BYO_ASSET, "asset")
     fee = take(_BYO_FEE, "fee")
+    fee_asset = take(_BYO_FEE_ASSET, "fee_asset")
     fiat_currency = take(_BYO_FIAT_CURRENCY, "fiat_currency")
     fiat_value = take(_BYO_FIAT_VALUE, "fiat_value")
     fiat_rate = take(_BYO_FIAT_RATE, "fiat_rate")
@@ -2817,9 +2889,15 @@ def infer_ledger_columns(header):
 
     plan = {
         "date": date, "type": type_col, "direction": direction,
-        "received": received, "sent": sent, "amount": amount, "asset": asset,
-        "fee": fee, "fiat_currency": fiat_currency, "fiat_value": fiat_value,
+        "received": received, "sent": sent, "amount": amount,
+        "received_asset": received_asset, "sent_asset": sent_asset,
+        "asset": asset, "fee": fee, "fee_asset": fee_asset,
+        "fiat_currency": fiat_currency, "fiat_value": fiat_value,
         "fiat_rate": fiat_rate, "note": note, "txid": txid, "counterparty": counterparty,
+        "received_header_asset": _byo_asset_from_header(received),
+        "sent_header_asset": _byo_asset_from_header(sent),
+        "amount_header_asset": _byo_asset_from_header(amount),
+        "fee_header_asset": _byo_asset_from_header(fee),
     }
     confident = bool(date) and bool(received or sent or amount)
     return {"plan": plan, "detected": detected, "confident": confident}
@@ -2840,13 +2918,27 @@ def _remap_byo_row_to_ledger(row, plan):
     def cell(col):
         return str_or_none(row.get(col)) if col else None
 
+    def crypto(asset_code):
+        return _generic_ledger_is_crypto(_generic_ledger_asset(asset_code))
+
     out = {"Date": cell(plan.get("date")) or ""}
-    asset = cell(plan.get("asset")) or "BTC"
+    asset = cell(plan.get("asset")) or plan.get("amount_header_asset") or "BTC"
+    received_asset = (
+        cell(plan.get("received_asset"))
+        or plan.get("received_header_asset")
+        or asset
+    )
+    sent_asset = (
+        cell(plan.get("sent_asset"))
+        or plan.get("sent_header_asset")
+        or asset
+    )
     type_value = cell(plan.get("type"))
 
     direction = None
     btc_cell = None
-    both_sides = False
+    has_cash_counterleg = False
+    both_amounts_present = False
     if plan.get("received") or plan.get("sent"):
         received_num = _byo_number(row.get(plan.get("received"))) if plan.get("received") else None
         sent_num = _byo_number(row.get(plan.get("sent"))) if plan.get("sent") else None
@@ -2857,7 +2949,15 @@ def _remap_byo_row_to_ledger(row, plan):
         elif sent_present and not received_present:
             direction, btc_cell = "outbound", cell(plan["sent"])
         elif received_present and sent_present:
-            both_sides = True  # let the normalizer flag crypto-to-crypto
+            both_amounts_present = True
+            received_is_crypto = crypto(received_asset)
+            sent_is_crypto = crypto(sent_asset)
+            if received_is_crypto and not sent_is_crypto:
+                direction, btc_cell = "inbound", cell(plan["received"])
+                has_cash_counterleg = True
+            elif sent_is_crypto and not received_is_crypto:
+                direction, btc_cell = "outbound", cell(plan["sent"])
+                has_cash_counterleg = True
     elif plan.get("amount"):
         raw = cell(plan["amount"])
         number = _byo_number(row.get(plan["amount"]))
@@ -2873,12 +2973,29 @@ def _remap_byo_row_to_ledger(row, plan):
         else:
             direction, btc_cell = "inbound", raw
 
-    if both_sides:
-        out["Type"] = _byo_type_value(type_value, "inbound")
-        out["Received Asset"], out["Received Amount"] = asset, cell(plan["received"])
-        out["Sent Asset"], out["Sent Amount"] = asset, cell(plan["sent"])
+    if both_amounts_present:
+        out["Type"] = _byo_type_value(
+            type_value,
+            direction,
+            has_cash_counterleg=has_cash_counterleg,
+        )
+        if plan.get("received"):
+            out["Received Asset"], out["Received Amount"] = received_asset, cell(plan["received"])
+        if plan.get("sent"):
+            out["Sent Asset"], out["Sent Amount"] = sent_asset, cell(plan["sent"])
         _byo_passthrough(out, row, plan)
+        fee_cell = cell(plan.get("fee"))
+        if fee_cell is not None:
+            out["Fee Amount"] = fee_cell
+            fee_asset = cell(plan.get("fee_asset")) or plan.get("fee_header_asset")
+            if fee_asset:
+                out["Fee Asset"] = fee_asset
         return out
+
+    if plan.get("received") and direction == "inbound":
+        asset = received_asset
+    elif plan.get("sent") and direction == "outbound":
+        asset = sent_asset
 
     out["Type"] = _byo_type_value(type_value, direction)
 
@@ -2908,6 +3025,9 @@ def _remap_byo_row_to_ledger(row, plan):
     fee_cell = cell(plan.get("fee"))
     if fee_cell is not None:
         out["Fee Amount"] = fee_cell
+        fee_asset = cell(plan.get("fee_asset")) or plan.get("fee_header_asset")
+        if fee_asset:
+            out["Fee Asset"] = fee_asset
     _byo_passthrough(out, row, plan)
     return out
 

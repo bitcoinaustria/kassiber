@@ -131,8 +131,9 @@ matches common header aliases — date; a `Type`/`Side` column, or a
 direction/sign, or separate sent/received columns; fee; fiat currency/price/value;
 note; transaction id — and remaps each row onto the ledger shape, so it imports
 through the *same* normalizer and its `Type`→tax-kind taxonomy + exact pricing.
-Rows without an explicit type become `Deposit`/`Withdrawal` by direction; a fiat
-price or value becomes exact `exchange_execution` pricing. When the columns can't
+Rows without an explicit type become `Buy`/`Sell` when a cash counterleg is
+present, or `Deposit`/`Withdrawal` by direction when only a valuation price/value
+is present. When the columns can't
 be recognized the import returns a `ledger_unrecognized` error (the desktop
 preview shows it and points you back at the template); the dry-run/preview
 returns `confident: false` with the detected columns instead of raising. Template

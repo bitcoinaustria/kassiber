@@ -5,6 +5,7 @@
  * what would import — counts, a few normalized rows, and row-numbered problems —
  * so the user can confirm before clicking import. Nothing is persisted.
  */
+import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, Loader2 } from "lucide-react";
 
@@ -48,11 +49,17 @@ function localeFor(lang: string): string {
   return lang.startsWith("de") ? "de-AT" : "en-US";
 }
 
-function formatBtc(value: string | undefined, lang: string): string {
+function formatAssetAmount(
+  value: string | undefined,
+  asset: string | undefined,
+  lang: string,
+): string {
   if (!value) return "";
   const num = Number(value);
   return Number.isFinite(num)
-    ? `${num.toLocaleString(localeFor(lang), { maximumFractionDigits: 8 })} BTC`
+    ? `${num.toLocaleString(localeFor(lang), {
+        maximumFractionDigits: 8,
+      })} ${asset ?? "BTC"}`
     : value;
 }
 
@@ -61,10 +68,20 @@ function formatDate(iso: string | undefined, lang: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime())
     ? iso
-    : date.toLocaleDateString(localeFor(lang), { year: "numeric", month: "short", day: "numeric" });
+    : date.toLocaleDateString(localeFor(lang), {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
 }
 
-export function GenericLedgerPreview({ file }: { file: string }) {
+export function GenericLedgerPreview({
+  file,
+  onBlockSubmitChange,
+}: {
+  file: string;
+  onBlockSubmitChange?: (blocked: boolean) => void;
+}) {
   const { t } = useTranslation("connections");
   const lang = useUiStore((state) => state.lang);
   const query = useDaemon<LedgerPreviewResult>(
@@ -73,6 +90,17 @@ export function GenericLedgerPreview({ file }: { file: string }) {
     { retry: false },
   );
   const data = query.data?.data;
+  const blocksSubmit =
+    query.isFetching ||
+    Boolean(query.error) ||
+    !data ||
+    data.confident === false ||
+    data.errors > 0 ||
+    data.mapped <= 0;
+
+  React.useEffect(() => {
+    onBlockSubmitChange?.(blocksSubmit);
+  }, [blocksSubmit, onBlockSubmitChange]);
 
   if (query.isFetching && !data) {
     return (
@@ -115,7 +143,10 @@ export function GenericLedgerPreview({ file }: { file: string }) {
     <div className="space-y-2 rounded-md border px-3 py-2">
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <Badge variant="secondary">
-          {t("add.genericLedger.preview.ready", { mapped: data.mapped, rows: data.rows_read })}
+          {t("add.genericLedger.preview.ready", {
+            mapped: data.mapped,
+            rows: data.rows_read,
+          })}
         </Badge>
         {data.errors > 0 ? (
           <Badge variant="destructive">
@@ -126,7 +157,9 @@ export function GenericLedgerPreview({ file }: { file: string }) {
 
       {detectedColumns.length > 0 ? (
         <p className="text-[11px] text-muted-foreground">
-          {t("add.genericLedger.preview.detected", { columns: detectedColumns.join(", ") })}
+          {t("add.genericLedger.preview.detected", {
+            columns: detectedColumns.join(", "),
+          })}
         </p>
       ) : null}
 
@@ -135,8 +168,12 @@ export function GenericLedgerPreview({ file }: { file: string }) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="text-xs">{t("add.genericLedger.preview.colDate")}</TableHead>
-                <TableHead className="text-xs">{t("add.genericLedger.preview.colKind")}</TableHead>
+                <TableHead className="text-xs">
+                  {t("add.genericLedger.preview.colDate")}
+                </TableHead>
+                <TableHead className="text-xs">
+                  {t("add.genericLedger.preview.colKind")}
+                </TableHead>
                 <TableHead className="text-right text-xs">
                   {t("add.genericLedger.preview.colAmount")}
                 </TableHead>
@@ -153,7 +190,7 @@ export function GenericLedgerPreview({ file }: { file: string }) {
                     {row.kind ?? row.direction ?? ""}
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs">
-                    {formatBtc(row.amount, lang)}
+                    {formatAssetAmount(row.amount, row.asset, lang)}
                   </TableCell>
                   <TableCell className="text-right text-xs text-muted-foreground">
                     {row.fiat_value
@@ -179,7 +216,9 @@ export function GenericLedgerPreview({ file }: { file: string }) {
           ))}
           {data.problems.length > 3 ? (
             <li className="text-xs text-muted-foreground">
-              {t("add.genericLedger.preview.more", { count: data.problems.length - 3 })}
+              {t("add.genericLedger.preview.more", {
+                count: data.problems.length - 3,
+              })}
             </li>
           ) : null}
         </ul>
