@@ -4175,6 +4175,39 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertTrue(payload["results"][0]["has_backend_url"])
             self.assertFalse(state["auto_sync"]["ok"])  # type: ignore[index]
 
+    def test_auto_sync_app_error_message_redacts_backend_url(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-state-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(data_root, tmp)
+            conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+            conn.row_factory = sqlite3.Row
+            self.addCleanup(conn.close)
+            profile = conn.execute("SELECT * FROM profiles WHERE label = 'Main'").fetchone()
+            conn.execute(
+                """
+                INSERT INTO settings(key, value)
+                VALUES(?, 'true')
+                """,
+                (f"ai.auto_sync_before_report_reads.profile.{profile['id']}",),
+            )
+            conn.commit()
+            raw_url = "http://user:pass@private-node.local/rpc?token=SECRET_TOKEN"
+
+            with mock.patch(
+                "kassiber.daemon_freshness._wallets_sync_payload",
+                side_effect=AppError(f"Failed to reach backend {raw_url}: offline"),
+            ):
+                payload = _auto_sync_wallets_if_enabled(conn, {}, state={})
+
+            encoded = json.dumps(payload, sort_keys=True)
+            self.assertFalse(payload["ok"])
+            self.assertEqual(payload["reason"], "app_error")
+            self.assertNotIn("private-node.local", encoded)
+            self.assertNotIn("user:pass", encoded)
+            self.assertNotIn("SECRET_TOKEN", encoded)
+            self.assertNotIn("/rpc", encoded)
+            self.assertIn("<backend-url>", payload["message"])
+
     def test_auto_sync_rate_limits_repeated_profile_attempts(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-state-") as tmp:
             data_root = Path(tmp) / "data"

@@ -1781,7 +1781,7 @@ def _auto_sync_wallets_if_enabled(
         payload = {
             "ok": False,
             "reason": exc.code or "sync_failed",
-            "message": str(exc),
+            "message": _redact_sync_text_for_ui(str(exc)),
         }
         state["auto_sync"] = payload
         if not force:
