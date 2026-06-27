@@ -595,9 +595,11 @@ jobs:
       - name: Render Homebrew cask
         if: steps.homebrew-tap.outputs.enabled == 'true'
         shell: bash
+        env:
+          RELEASE_TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
         run: |
           set -euo pipefail
-          tag_name="${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}"
+          tag_name="${RELEASE_TAG_NAME}"
           version="${tag_name#v}"
           dmg_name="kassiber-macos-universal.dmg"
           dmg_path="release/${dmg_name}"
@@ -616,9 +618,11 @@ jobs:
         if: steps.homebrew-tap.outputs.enabled == 'true'
         shell: bash
         working-directory: homebrew-tap
+        env:
+          RELEASE_TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
         run: |
           set -euo pipefail
-          tag_name="${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}"
+          tag_name="${RELEASE_TAG_NAME}"
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
