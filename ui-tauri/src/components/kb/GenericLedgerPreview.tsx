@@ -76,17 +76,19 @@ function formatDate(iso: string | undefined, lang: string): string {
 }
 
 export function GenericLedgerPreview({
-  file,
+  filename,
+  sourceBytesBase64,
   onBlockSubmitChange,
 }: {
-  file: string;
+  filename: string;
+  sourceBytesBase64: string;
   onBlockSubmitChange?: (blocked: boolean) => void;
 }) {
   const { t } = useTranslation("connections");
   const lang = useUiStore((state) => state.lang);
   const query = useDaemon<LedgerPreviewResult>(
     "ui.wallets.ledger_preview",
-    { source_file: file },
+    { filename, source_bytes_base64: sourceBytesBase64 },
     { retry: false },
   );
   const data = query.data?.data;

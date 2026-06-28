@@ -53,6 +53,18 @@ import {
   scriptTypesFromDetectionPayload,
 } from "@/lib/walletMaterialFormat";
 
+
+async function fileToBase64(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return window.btoa(binary);
+}
+
 const WalletMaterialScannerDialog = React.lazy(() =>
   import("./WalletMaterialScannerDialog").then((module) => ({
     default: module.WalletMaterialScannerDialog,
@@ -659,6 +671,10 @@ export function AddConnectionDialog({
     React.useState<ImportFileResult | null>(null);
   const [genericLedgerPreviewBlocksSubmit, setGenericLedgerPreviewBlocksSubmit] =
     React.useState(false);
+  const [genericLedgerPreviewUpload, setGenericLedgerPreviewUpload] = React.useState<{
+    filename: string;
+    sourceBytesBase64: string;
+  } | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<
     Partial<Record<keyof SetupFormState, string>>
   >({});
@@ -1907,8 +1923,26 @@ export function AddConnectionDialog({
               id="connection-source-file"
               value={form.sourceFile}
               onChange={(event) => updateForm("sourceFile", event.target.value)}
+              readOnly={selected.sourceFormat === "generic_ledger"}
               required
             />
+            {selected.sourceFormat === "generic_ledger" ? (
+              <Input
+                aria-label={sourceFileField.label}
+                type="file"
+                accept=".csv,.xlsx,.xlsm,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12"
+                onChange={async (event) => {
+                  const file = event.currentTarget.files?.[0];
+                  if (!file) return;
+                  updateForm("sourceFile", file.name);
+                  setGenericLedgerPreviewBlocksSubmit(true);
+                  setGenericLedgerPreviewUpload({
+                    filename: file.name,
+                    sourceBytesBase64: await fileToBase64(file),
+                  });
+                }}
+              />
+            ) : null}
             {isFilePickerAvailable ? (
               <Button
                 type="button"
@@ -1920,7 +1954,9 @@ export function AddConnectionDialog({
                     }),
                     filters: sourceFileFilters(selected, t),
                   });
-                  if (picked) updateForm("sourceFile", picked);
+                  if (picked) {
+                    updateForm("sourceFile", picked);
+                  }
                 }}
               >
                 {t("add.field.browse")}
@@ -1957,9 +1993,10 @@ export function AddConnectionDialog({
             </div>
           </div>
         ) : null}
-        {selected.sourceFormat === "generic_ledger" && form.sourceFile.trim() ? (
+        {selected.sourceFormat === "generic_ledger" && genericLedgerPreviewUpload ? (
           <GenericLedgerPreview
-            file={form.sourceFile.trim()}
+            filename={genericLedgerPreviewUpload.filename}
+            sourceBytesBase64={genericLedgerPreviewUpload.sourceBytesBase64}
             onBlockSubmitChange={setGenericLedgerPreviewBlocksSubmit}
           />
         ) : null}
