@@ -1490,6 +1490,11 @@ fn handle_secret_store_operation(
 }
 
 fn secret_ref_service_account(data: &Map<String, Value>) -> Result<(&str, &str), String> {
+    let provider_name = data
+        .get("provider_name")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "secret-store bridge request missing provider_name".to_string())?;
     let service = data
         .get("service")
         .and_then(Value::as_str)
@@ -1500,6 +1505,12 @@ fn secret_ref_service_account(data: &Map<String, Value>) -> Result<(&str, &str),
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| "secret-store bridge request missing account".to_string())?;
+    if account != provider_name {
+        return Err("secret-store account must match the AI provider name".to_string());
+    }
+    if service.len() != 64 || !service.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err("secret-store service is outside the Kassiber namespace".to_string());
+    }
     Ok((service, account))
 }
 
@@ -1977,7 +1988,7 @@ for line in sys.stdin:
         emit({"kind":"ui.freshness.background","schema_version":1,"event":True,"data":{"enqueued":[],"completed":[]}})
         emit({"kind":"emit-event","schema_version":1,"request_id":request_id,"data":{"ok":True}})
     elif kind == "secret-get":
-        emit({"kind":"supervisor.ai_secret_store.request","schema_version":1,"request_id":"secret-control-1","data":{"op":"get","provider_name":"remote","store_id":"__TEST_STORE_ID__","service":"service-hash","account":"remote"}})
+        emit({"kind":"supervisor.ai_secret_store.request","schema_version":1,"request_id":"secret-control-1","data":{"op":"get","provider_name":"remote","store_id":"__TEST_STORE_ID__","service":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","account":"remote"}})
         control = json.loads(sys.stdin.readline())
         emit({"kind":"secret-get","schema_version":1,"request_id":request_id,"data":{"control_kind":control.get("kind"),"state":control.get("data",{}).get("state"),"secret":control.get("data",{}).get("secret")}})
     elif kind == "daemon.shutdown":
@@ -2385,7 +2396,11 @@ for line in sys.stdin:
             },
         );
         mock_store
-            .set("service-hash", "remote", b"bridge-secret")
+            .set(
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "remote",
+                b"bridge-secret",
+            )
             .expect("seed mock store");
         let secret_store = Arc::new(mock_store);
         let process = DaemonProcess::spawn_command_with_secret_store(
