@@ -369,6 +369,7 @@ SUPPORTED_KINDS = (
     "ui.wallets.create",
     "ui.wallets.import_file",
     "ui.wallets.import_samourai",
+    "ui.wallets.ledger_preview",
     "ui.wallets.preview_descriptor",
     "ui.connections.sources",
     "ui.connections.btcpay.create",
@@ -6043,6 +6044,22 @@ def _ledger_template_payload(
     return payload
 
 
+def _ledger_preview_payload(args: dict[str, Any]) -> dict[str, Any]:
+    """Read-only: preview what a generic-ledger file would import (no persist)."""
+    source_file = _source_file_arg(args)
+    if not source_file:
+        raise AppError(
+            "source_file is required",
+            code="validation",
+            hint="Choose the ledger file to preview.",
+            retryable=False,
+        )
+    limit = args.get("limit")
+    return importers_module.preview_generic_ledger_records(
+        source_file, limit=200 if limit is None else limit
+    )
+
+
 def _import_wallet_file_payload(
     conn: sqlite3.Connection,
     args: dict[str, Any],
@@ -9180,6 +9197,18 @@ def handle_request(
                         ctx,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.wallets.ledger_preview":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.wallets.ledger_preview",
+                    _ledger_preview_payload(_coerce_args_dict(request_id, request.get("args"))),
                 ),
                 request_id,
             ),

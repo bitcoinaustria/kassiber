@@ -573,7 +573,23 @@
       "saveTemplateTitle": "Journal-Vorlage speichern",
       "templateReadyTitle": "Vorlage bereit",
       "templateReadyBody": "Trag deine Transaktionen ein und importier die Datei hier.",
-      "templateFailedTitle": "Vorlage konnte nicht erstellt werden"
+      "templateFailedTitle": "Vorlage konnte nicht erstellt werden",
+      "preview": {
+        "loading": "Datei wird gelesen…",
+        "failed": "Diese Datei konnte nicht gelesen werden.",
+        "ready": "{{mapped}} von {{rows}} Zeilen bereit",
+        "errorCount": "{{count}} brauchen Aufmerksamkeit",
+        "more": "+{{count}} weitere",
+        "colDate": "Datum",
+        "colKind": "Art",
+        "colAmount": "Betrag",
+        "colValue": "Wert",
+        "problemRow": "Zeile {{row}}: {{message}}",
+        "detected": "Erkannt: {{columns}}",
+        "notRecognized": "Diese Spalten wurden nicht erkannt.",
+        "notRecognizedHint": "Lade die Vorlage herunter, fülle sie aus und importiere stattdessen diese.",
+        "submitBlocked": "Behebe die Probleme in der Vorschau, bevor du dieses Journal importierst."
+      }
     },
     "defaultLabel": {
       "importedFile": "Importierte Datei"

@@ -244,6 +244,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.wallets.create",
     "ui.wallets.import_file",
     "ui.wallets.import_samourai",
+    "ui.wallets.ledger_preview",
     "ui.wallets.preview_descriptor",
     "ui.wallets.identify",
     "ui.wallets.identify_onchain",

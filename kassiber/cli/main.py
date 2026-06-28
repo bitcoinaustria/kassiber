@@ -27,6 +27,10 @@ from ..ai.providers import (
     list_with_default as list_ai_providers_with_default,
 )
 from ..core import chat_history as core_chat_history
+from ..importers import (
+    preview_generic_ledger_records,
+    write_generic_ledger_template,
+)
 from .handlers import (
     APP_NAME,
     BACKEND_CLEAR_FIELD_ALIASES,
@@ -79,7 +83,6 @@ from .handlers import (
     get_journal_event,
     identify_wallet_owners,
     import_into_wallet,
-    write_generic_ledger_template,
     inspect_transfer_audit,
     list_direct_swap_payouts,
     list_journal_entries,
@@ -994,6 +997,16 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_import_ledger.add_argument("--profile")
     wallets_import_ledger.add_argument("--wallet", required=True)
     wallets_import_ledger.add_argument("--file", required=True)
+    wallets_import_ledger.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview what would import (rows + problems) without persisting",
+    )
+    wallets_import_ledger.add_argument(
+        "--limit",
+        type=int,
+        help="Limit the number of preview rows returned with --dry-run",
+    )
     wallets_ledger_template = wallets_sub.add_parser(
         "ledger-template",
         help="Write a blank generic-ledger import template (.xlsx, or .csv by extension)",
@@ -2536,6 +2549,13 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 ),
             )
         if args.wallets_command == "import-ledger":
+            if args.dry_run:
+                return emit(
+                    args,
+                    preview_generic_ledger_records(
+                        args.file, limit=args.limit if args.limit is not None else 200
+                    ),
+                )
             return emit(
                 args,
                 import_into_wallet(
@@ -4069,6 +4089,12 @@ def command_needs_db(args: argparse.Namespace) -> bool:
     if args.command == "wallets" and getattr(args, "wallets_command", None) == "kinds":
         return False
     if args.command == "wallets" and getattr(args, "wallets_command", None) == "ledger-template":
+        return False
+    if (
+        args.command == "wallets"
+        and getattr(args, "wallets_command", None) == "import-ledger"
+        and getattr(args, "dry_run", False)
+    ):
         return False
     if args.command == "secrets":
         return False
