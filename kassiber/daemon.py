@@ -1095,21 +1095,22 @@ def _set_ai_provider_key_with_selected_store(
             retryable=True,
         )
     provider = get_db_ai_provider(ctx.conn, name)
+    provider_name = str(provider["name"])
     service, account = _ai_provider_secret_service_account(ctx, provider)
     if api_key is None:
         _secret_store_bridge_request(
             ctx,
             op="delete",
-            provider_name=name,
+            provider_name=provider_name,
             store_id=target_store_id,
             service=service,
             account=account,
         )
-        return set_db_ai_provider_api_key(ctx.conn, name, None)
+        return set_db_ai_provider_api_key(ctx.conn, provider_name, None)
     _secret_store_bridge_request(
         ctx,
         op="set",
-        provider_name=name,
+        provider_name=provider_name,
         store_id=target_store_id,
         service=service,
         account=account,
@@ -1117,7 +1118,7 @@ def _set_ai_provider_key_with_selected_store(
     )
     return set_db_ai_provider_native_secret_ref(
         ctx.conn,
-        name,
+        provider_name,
         store_id=target_store_id,
         service=service,
         account=account,
@@ -1134,6 +1135,7 @@ def _move_ai_provider_key(
     api_key: str | None,
 ) -> dict[str, Any]:
     provider = get_db_ai_provider(ctx.conn, name)
+    provider_name = str(provider["name"])
     current_ref = provider.get("secret_ref") or {}
     current_store_id = current_ref.get("store_id") or "sqlcipher_inline"
     target_store_id = _validate_ai_provider_secret_store_id(target_store_id)
@@ -1159,13 +1161,13 @@ def _move_ai_provider_key(
         )
 
     if target_store_id == "sqlcipher_inline":
-        updated = set_db_ai_provider_api_key(ctx.conn, name, key_to_move)
+        updated = set_db_ai_provider_api_key(ctx.conn, provider_name, key_to_move)
         if current_store_id != "sqlcipher_inline" and _desktop_secret_store_bridge_enabled(args):
             service, account = _ai_provider_secret_service_account(ctx, provider)
             _secret_store_bridge_request(
                 ctx,
                 op="delete",
-                provider_name=name,
+                provider_name=provider_name,
                 store_id=current_store_id,
                 service=service,
                 account=account,
@@ -1176,7 +1178,7 @@ def _move_ai_provider_key(
     _secret_store_bridge_request(
         ctx,
         op="set",
-        provider_name=name,
+        provider_name=provider_name,
         store_id=target_store_id,
         service=service,
         account=account,
@@ -1184,7 +1186,7 @@ def _move_ai_provider_key(
     )
     return set_db_ai_provider_native_secret_ref(
         ctx.conn,
-        name,
+        provider_name,
         store_id=target_store_id,
         service=service,
         account=account,

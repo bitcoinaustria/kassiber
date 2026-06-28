@@ -1066,6 +1066,67 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(code, 0, stderr)
             self.assertNotIn(secret_marker, stderr)
 
+    def test_ai_provider_set_api_key_to_native_store_uses_normalized_provider_name(self):
+        secret_marker = "sk-native-set-normalized"
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-ai-set-native-") as tmp:
+            data_root = Path(tmp) / "data"
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+            try:
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {
+                            "name": "native-direct",
+                            "base_url": "https://example.test/v1",
+                            "kind": "remote",
+                        },
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "set-1",
+                        "kind": "ai.providers.set_api_key",
+                        "args": {
+                            "name": "Native-Direct",
+                            "api_key": secret_marker,
+                            "store_id": "macos_keychain",
+                            "_desktop_secret_store_bridge": True,
+                        },
+                    },
+                )
+                control = _read_payload_timeout(proc)
+                self.assertEqual(control["kind"], "supervisor.ai_secret_store.request")
+                self.assertEqual(control["data"]["op"], "set")
+                self.assertEqual(control["data"]["provider_name"], "native-direct")
+                self.assertEqual(control["data"]["account"], "native-direct")
+                self.assertEqual(control["data"]["secret"], secret_marker)
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": control["request_id"],
+                        "kind": "supervisor.ai_secret_store.response",
+                        "data": {"provider_name": "native-direct", "state": "ok"},
+                    },
+                )
+                updated = _read_payload_timeout(proc)
+                self.assertEqual(updated["kind"], "ai.providers.set_api_key")
+                self.assertEqual(updated["data"]["name"], "native-direct")
+                self.assertEqual(
+                    updated["data"]["secret_ref"],
+                    {"store_id": "macos_keychain", "state": "ok"},
+                )
+                self.assertNotIn(secret_marker, json.dumps(updated, sort_keys=True))
+            finally:
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+
     def test_ai_provider_move_to_native_store_rolls_back_on_bridge_failure(self):
         secret_marker = "sk-native-move-rollback"
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-ai-move-") as tmp:
@@ -1185,7 +1246,7 @@ class DaemonSmokeTest(unittest.TestCase):
                         "request_id": "move-1",
                         "kind": "ai.providers.move_api_key",
                         "args": {
-                            "name": "native-ok",
+                            "name": "Native-OK",
                             "store_id": "macos_keychain",
                             "_desktop_secret_store_bridge": True,
                         },
@@ -1193,6 +1254,8 @@ class DaemonSmokeTest(unittest.TestCase):
                 )
                 control = _read_payload_timeout(proc)
                 self.assertEqual(control["kind"], "supervisor.ai_secret_store.request")
+                self.assertEqual(control["data"]["provider_name"], "native-ok")
+                self.assertEqual(control["data"]["account"], "native-ok")
                 self.assertEqual(control["data"]["secret"], secret_marker)
                 _write_payload(
                     proc,
