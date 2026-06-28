@@ -139,7 +139,6 @@ from .core.ui_snapshot import (
 )
 from .core.sync_backends import (
     ElectrumClient,
-    SCRIPT_TYPE_DETECTION_FALLBACK,
     detect_active_script_types,
 )
 from .backends import (
@@ -7454,10 +7453,11 @@ def _detect_script_types_payload(
 ) -> dict[str, Any]:
     """Probe which script types a bare xpub uses, for the auto-detect add flow.
 
-    Best-effort: a missing/unreachable/unsupported backend returns the
-    Native SegWit fallback with ``probed: false`` so the user can still create
-    the wallet and pick manually. A malformed key is a real validation error.
+    Best-effort: a missing/unreachable/unsupported backend is marked with
+    ``probed: false`` so the UI can force an explicit manual script-type
+    selection. A malformed key is a real validation error.
     """
+    fallback_script_type = "p2wpkh"
     wallet_material = _required_str_arg(args, "wallet_material", "Wallet export")
     material = wallet_material.strip()
     if material[:4] not in {"xpub", "tpub"}:
@@ -7468,7 +7468,7 @@ def _detect_script_types_payload(
             retryable=False,
         )
     # Reject a malformed key up front rather than silently falling back.
-    normalize_wallet_material(material, script_types=[SCRIPT_TYPE_DETECTION_FALLBACK])
+    normalize_wallet_material(material, script_types=[fallback_script_type])
     chain = _optional_str_arg(args, "chain") or "bitcoin"
     network = _optional_str_arg(args, "network")
     backend_name = _optional_str_arg(args, "backend")
@@ -7477,7 +7477,7 @@ def _detect_script_types_payload(
         return {
             "probed": False,
             "detected": [],
-            "active": [SCRIPT_TYPE_DETECTION_FALLBACK],
+            "active": [fallback_script_type],
             "fallback_used": True,
             "reason": reason,
         }
@@ -7495,7 +7495,7 @@ def _detect_script_types_payload(
     active = [entry["script_type"] for entry in detected if entry["has_history"]]
     fallback_used = not active
     if fallback_used:
-        active = [SCRIPT_TYPE_DETECTION_FALLBACK]
+        active = [fallback_script_type]
     return {
         "probed": True,
         "detected": detected,

@@ -770,11 +770,6 @@ def esplora_scripthash_has_history(base_url, script_pubkey_hex, timeout=30):
     return int(chain_stats.get("tx_count") or 0) + int(mempool_stats.get("tx_count") or 0) > 0
 
 
-# Script type defaulted to when a bare xpub shows no on-chain history anywhere
-# (e.g. a freshly created wallet) -- the modern receive standard.
-SCRIPT_TYPE_DETECTION_FALLBACK = "p2wpkh"
-
-
 def _probe_scripts_have_history(backend, kind, script_pubkeys, *, timeout):
     if kind == "esplora":
         workers = _bounded_http_workers(backend)
