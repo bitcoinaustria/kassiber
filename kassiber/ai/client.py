@@ -51,6 +51,55 @@ CLI_FALLBACK_DIRS = (
     "/opt/local/bin",
 )
 CLI_MODEL_LIST_TIMEOUT_SECONDS = 10
+_CLI_BASE_ENV_NAMES = {
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "PATH",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "TERM",
+    "TMPDIR",
+    "USER",
+    "USERNAME",
+}
+_CLI_PROXY_ENV_NAMES = {
+    "ALL_PROXY",
+    "HTTPS_PROXY",
+    "HTTP_PROXY",
+    "NO_PROXY",
+    "all_proxy",
+    "https_proxy",
+    "http_proxy",
+    "no_proxy",
+}
+_CLAUDE_ENV_NAMES = {
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_VERTEX_PROJECT_ID",
+    "ANTHROPIC_VERTEX_REGION",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "CLAUDE_CODE_USE_BEDROCK",
+    "CLAUDE_CODE_USE_VERTEX",
+    "CLOUD_ML_REGION",
+    "CLOUDSDK_CORE_PROJECT",
+    "GCLOUD_PROJECT",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "GOOGLE_CLOUD_PROJECT",
+    "GOOGLE_CLOUD_QUOTA_PROJECT",
+}
+_CLAUDE_ENV_PREFIXES = ("AWS_",)
+_CODEX_ENV_NAMES = {
+    "CODEX_ACCESS_TOKEN",
+    "CODEX_API_KEY",
+    "CODEX_HOME",
+    "OPENAI_API_KEY",
+    "OPENAI_BASE_URL",
+    "OPENAI_ORG_ID",
+    "OPENAI_ORGANIZATION",
+    "OPENAI_PROJECT",
+}
 CLAUDE_CLI_MODEL_ROWS = (
     {"id": CLI_DEFAULT_MODEL, "check_kind": CLI_MODEL_CHECK_KIND},
     {"id": "sonnet", "check_kind": "claude_cli_alias"},
@@ -638,6 +687,32 @@ class OpenAICompatClient:
             raise _network_error_app_error(exc) from exc
 
 
+def _cli_subprocess_env(command: str) -> dict[str, str]:
+    """Return a minimal environment for external AI CLI subprocesses.
+
+    Do not pass Kassiber's full process environment to agent CLIs: desktop and
+    daemon processes may carry backend tokens, passphrase plumbing, or other
+    app secrets that are unrelated to the selected AI provider.  Keep only
+    basic process settings plus the provider auth variables those CLIs commonly
+    use for non-interactive operation.
+    """
+    allowed = set(_CLI_BASE_ENV_NAMES)
+    allowed.update(_CLI_PROXY_ENV_NAMES)
+    allowed_prefixes: tuple[str, ...] = ()
+    if command == "claude":
+        allowed.update(_CLAUDE_ENV_NAMES)
+        allowed_prefixes = _CLAUDE_ENV_PREFIXES
+    elif command == "codex":
+        allowed.update(_CODEX_ENV_NAMES)
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key in allowed or any(key.startswith(prefix) for prefix in allowed_prefixes)
+    }
+    env.setdefault("NO_COLOR", "1")
+    return env
+
+
 @dataclass
 class CliAIClient:
     """Fixed adapter for Claude Code and Codex CLI providers.
@@ -739,8 +814,7 @@ class CliAIClient:
         executable = _resolve_cli_executable(command)
         if not executable:
             raise _cli_unavailable(command)
-        env = dict(os.environ)
-        env.setdefault("NO_COLOR", "1")
+        env = _cli_subprocess_env(command)
         effort = _reasoning_effort(options)
         with tempfile.TemporaryDirectory(prefix="kassiber-ai-cli-") as cwd:
             if command == "claude":
@@ -809,7 +883,17 @@ class CliAIClient:
         tools: list[dict[str, Any]] | None = None,
         tool_choice: str | dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        del tools, tool_choice
+        if tools or tool_choice not in (None, "none"):
+            raise AppError(
+                "CLI AI providers cannot be used with Kassiber tools enabled",
+                code="ai_cli_tools_disabled",
+                hint=(
+                    "Turn off assistant tools for Claude/Codex CLI providers, "
+                    "or use an OpenAI-compatible provider so Kassiber can enforce "
+                    "the typed tool allowlist and consent gates."
+                ),
+                retryable=False,
+            )
         content = self._run(prompt=_messages_to_prompt(messages), model=model, options=options)
         return {
             "role": "assistant",

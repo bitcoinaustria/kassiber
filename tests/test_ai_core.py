@@ -43,6 +43,7 @@ from kassiber.ai.client import (
     _http_error_app_error,
     _network_error_app_error,
     _resolve_cli_executable,
+    _cli_subprocess_env,
 )
 from kassiber.ai.prompt import (
     DEFAULT_KASSIBER_SYSTEM_PROMPT,
@@ -626,6 +627,58 @@ class CliAIClientTest(unittest.TestCase):
         self.assertIn('model_reasoning_effort="medium"', args)
         self.assertEqual(args[-1], "-")
         self.assertNotIn("--ask-for-approval", args)
+
+    def test_cli_chat_rejects_kassiber_tools(self):
+        client = CliAIClient(locator="claude-cli://default")
+        with self.assertRaises(AppError) as raised:
+            client.chat(
+                messages=[{"role": "user", "content": "hi"}],
+                model=CLI_DEFAULT_MODEL,
+                tools=[{"type": "function", "function": {"name": "status"}}],
+                tool_choice="auto",
+            )
+        self.assertEqual(raised.exception.code, "ai_cli_tools_disabled")
+
+    def test_cli_subprocess_env_drops_unrelated_secrets(self):
+        with patch.dict(
+            "os.environ",
+            {
+                "PATH": "/usr/bin",
+                "KASSIBER_POC_TOKEN": "secret",
+                "BTCPAY_API_KEY": "secret",
+                "ANTHROPIC_API_KEY": "anthropic",
+                "ANTHROPIC_AUTH_TOKEN": "anthropic-token",
+                "ANTHROPIC_BASE_URL": "https://anthropic.example",
+                "CLAUDE_CODE_USE_BEDROCK": "1",
+                "AWS_ACCESS_KEY_ID": "aws-key",
+                "AWS_SECRET_ACCESS_KEY": "aws-secret",
+                "OPENAI_API_KEY": "openai",
+                "CODEX_API_KEY": "codex-key",
+                "CODEX_ACCESS_TOKEN": "codex-token",
+                "HTTPS_PROXY": "http://proxy.example",
+                "NO_PROXY": "localhost,127.0.0.1",
+            },
+            clear=True,
+        ):
+            claude_env = _cli_subprocess_env("claude")
+            codex_env = _cli_subprocess_env("codex")
+        self.assertEqual(claude_env["ANTHROPIC_API_KEY"], "anthropic")
+        self.assertEqual(claude_env["ANTHROPIC_AUTH_TOKEN"], "anthropic-token")
+        self.assertEqual(claude_env["ANTHROPIC_BASE_URL"], "https://anthropic.example")
+        self.assertEqual(claude_env["CLAUDE_CODE_USE_BEDROCK"], "1")
+        self.assertEqual(claude_env["AWS_ACCESS_KEY_ID"], "aws-key")
+        self.assertEqual(claude_env["AWS_SECRET_ACCESS_KEY"], "aws-secret")
+        self.assertNotIn("OPENAI_API_KEY", claude_env)
+        self.assertEqual(codex_env["OPENAI_API_KEY"], "openai")
+        self.assertEqual(codex_env["CODEX_API_KEY"], "codex-key")
+        self.assertEqual(codex_env["CODEX_ACCESS_TOKEN"], "codex-token")
+        self.assertNotIn("ANTHROPIC_API_KEY", codex_env)
+        for env in (claude_env, codex_env):
+            self.assertEqual(env["HTTPS_PROXY"], "http://proxy.example")
+            self.assertEqual(env["NO_PROXY"], "localhost,127.0.0.1")
+            self.assertNotIn("KASSIBER_POC_TOKEN", env)
+            self.assertNotIn("BTCPAY_API_KEY", env)
+            self.assertEqual(env["NO_COLOR"], "1")
 
 
 class ListModelsStrictModeTest(unittest.TestCase):

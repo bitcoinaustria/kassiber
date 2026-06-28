@@ -23,6 +23,8 @@ from kassiber.daemon import (
     _auto_tool_context_for_model,
     _execute_mutating_ai_tool,
     _execute_read_only_ai_tool,
+    _effective_ai_chat_system_prompt_kind,
+    _effective_ai_chat_tools_enabled,
     _planned_auto_read_tools,
     _reports_tax_summary_payload,
 )
@@ -6643,6 +6645,41 @@ class DaemonSmokeTest(unittest.TestCase):
             code, stderr = _close_daemon(proc)
             self.assertEqual(code, 0, stderr)
             self.assertEqual(stderr, "")
+
+    def test_ai_chat_cli_provider_auto_disables_tool_loop(self):
+        validated = {
+            "tools_enabled": True,
+            "system_prompt_kind": "kassiber",
+        }
+        provider_snapshot = {"base_url": "codex-cli://default"}
+
+        effective_tools = _effective_ai_chat_tools_enabled(provider_snapshot, validated)
+
+        self.assertFalse(effective_tools)
+        self.assertIsNone(
+            _effective_ai_chat_system_prompt_kind(
+                validated,
+                tools_enabled=effective_tools,
+            )
+        )
+
+    def test_ai_chat_http_provider_keeps_tool_loop(self):
+        validated = {
+            "tools_enabled": True,
+            "system_prompt_kind": "kassiber",
+        }
+        provider_snapshot = {"base_url": "http://127.0.0.1:11434/v1"}
+
+        effective_tools = _effective_ai_chat_tools_enabled(provider_snapshot, validated)
+
+        self.assertTrue(effective_tools)
+        self.assertEqual(
+            _effective_ai_chat_system_prompt_kind(
+                validated,
+                tools_enabled=effective_tools,
+            ),
+            "kassiber",
+        )
 
     def test_ai_chat_cancel_cooperatively_finishes_cancelled(self):
         server = ThreadingHTTPServer(("127.0.0.1", 0), _SlowChatHandler)
