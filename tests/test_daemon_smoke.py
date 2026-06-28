@@ -6253,6 +6253,12 @@ class DaemonSmokeTest(unittest.TestCase):
                 wallets_by_label["DescriptorLive"]["backend"]["source"],
                 "explicit",
             )
+            self.assertTrue(wallets_by_label["DescriptorLive"]["descriptor"])
+            self.assertFalse(
+                wallets_by_label["DescriptorLive"]["change_descriptor"]
+            )
+            self.assertFalse(wallets_by_label["FileOnly"]["descriptor"])
+            self.assertFalse(wallets_by_label["FileOnly"]["change_descriptor"])
             self.assertEqual(
                 wallets_by_label["DefaultAddress"]["backend"]["source"],
                 "default",

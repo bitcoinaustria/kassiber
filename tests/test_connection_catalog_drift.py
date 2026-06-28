@@ -66,6 +66,7 @@ _DESKTOP_MUTATION_KINDS = (
     "ui.rates.rebuild",
     "ui.wallets.update",
     "ui.wallets.delete",
+    "wallets.reveal_descriptor",
     "ai.providers.set_api_key",
     "ai.providers.move_api_key",
 )
@@ -279,7 +280,7 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
         would surface as runtime ``unknown kind`` errors against whatever
         shell forwarded a kind the daemon dropped. The reverse direction
         (daemon-only kinds) is intentional — AI read tools, daemon
-        lifecycle commands, and reveal kinds stay off the desktop surface.
+        lifecycle commands, and most reveal kinds stay off the desktop surface.
         """
 
         daemon_kinds = set(SUPPORTED_KINDS)

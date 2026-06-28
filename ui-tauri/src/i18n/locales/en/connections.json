@@ -127,8 +127,25 @@
       "account": "Account",
       "network": "Network",
       "scriptTypes": "Watching",
+      "descriptorMaterial": "Descriptor",
       "created": "Created",
       "kassiberId": "Kassiber ID"
+    },
+    "reveal": {
+      "menuItem": "Copy descriptor",
+      "title": "Copy wallet descriptor",
+      "description": "Re-enter the database passphrase to copy the stored descriptor material for {{label}}.",
+      "descriptorWithChange": "Descriptor + change",
+      "descriptorOnly": "Descriptor",
+      "includesChange": "The clipboard payload includes the stored change descriptor on the next line.",
+      "passphrase": "Database passphrase",
+      "helper": "Kassiber copies the raw stored descriptor material, without field labels or table formatting.",
+      "copy": "Copy",
+      "copying": "Copying...",
+      "copiedTitle": "Descriptor copied",
+      "copiedBody": "Copied the descriptor material for {{label}}.",
+      "errorMissingDescriptor": "This wallet does not have that descriptor saved.",
+      "couldNotCopy": "Could not copy descriptor."
     },
     "relatedViews": {
       "title": "Related views",

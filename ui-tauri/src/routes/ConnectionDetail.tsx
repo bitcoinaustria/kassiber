@@ -18,6 +18,7 @@ import {
   ArrowUpRight,
   AlertTriangle,
   CircleDollarSign,
+  Copy,
   Database,
   ListChecks,
   MoreHorizontal,
@@ -99,6 +100,7 @@ import { describeWalletSyncResult, type SyncResult } from "@/lib/syncResults";
 import { transactionBelongsToConnection } from "@/lib/connectionTransactions";
 import { buildBalanceReconciliation } from "@/lib/walletBalanceReconcile";
 import { MISSING_FIAT_LABEL } from "@/lib/currency";
+import { copyTextWithPolicy } from "@/lib/clipboard";
 import {
   startingSyncProgress,
   syncProgressNotification,
@@ -166,6 +168,7 @@ const relatedViewArrowClass =
 const PLAINTEXT_CHANGE_ACK = "CHANGE LOCAL DATA";
 const PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA";
 const CLEAR_BACKEND_SELECTION = "__kassiber_clear_backend__";
+const DESCRIPTOR_REVEAL_KIND = "wallets.reveal_descriptor";
 
 interface UpdateWalletResult {
   wallet: {
@@ -183,6 +186,25 @@ interface DeleteWalletResult {
   };
 }
 
+interface RevealDescriptorResult {
+  id: string;
+  label: string;
+  kind: string;
+  wallet_material?: string | null;
+  descriptor?: string | null;
+  change_descriptor?: string | null;
+}
+
+function walletDescriptorMaterialFromReveal(
+  data: RevealDescriptorResult | undefined,
+) {
+  const material = data?.wallet_material?.trim();
+  if (material) return material;
+  const descriptor = data?.descriptor?.trim();
+  const changeDescriptor = data?.change_descriptor?.trim();
+  return [descriptor, changeDescriptor].filter(Boolean).join("\n");
+}
+
 type WalletListItem = {
   id?: string;
   label: string;
@@ -198,6 +220,8 @@ type WalletListItem = {
   };
   chain?: string;
   network?: string;
+  descriptor?: boolean;
+  change_descriptor?: boolean;
   sync_mode?: string;
   sync_source?: string;
   transaction_count?: number;
@@ -583,6 +607,9 @@ function ConnectionDetailView({
     useDaemonMutation<UpdateWalletResult>("ui.wallets.update");
   const deleteWallet =
     useDaemonMutation<DeleteWalletResult>("ui.wallets.delete");
+  const revealDescriptor = useDaemonMutation<RevealDescriptorResult>(
+    DESCRIPTOR_REVEAL_KIND,
+  );
   const backendOptionsQuery = useDaemon<{
     backends: BackendOption[];
   }>("ui.backends.options");
@@ -653,6 +680,9 @@ function ConnectionDetailView({
   const [deletePlaintextAck, setDeletePlaintextAck] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [revealOpen, setRevealOpen] = useState(false);
+  const [revealPassphrase, setRevealPassphrase] = useState("");
+  const [revealError, setRevealError] = useState<string | null>(null);
   const encryptedWorkspace =
     Boolean(identity?.encrypted) || identity?.databaseMode === "sqlcipher";
   const sourceValue =
@@ -858,8 +888,18 @@ function ConnectionDetailView({
     canEditLiveBackend &&
     walletChain !== "liquid" &&
     walletDetail?.backend?.source === "explicit";
+  const hasStoredDescriptor = Boolean(walletDetail?.descriptor);
+  const hasStoredChangeDescriptor = Boolean(walletDetail?.change_descriptor);
+  const canRevealDescriptor =
+    encryptedWorkspace && hasStoredDescriptor;
 
   const editConfigKind = editConfigKindForConnection(connection);
+
+  const openRevealDialog = () => {
+    setRevealPassphrase("");
+    setRevealError(null);
+    setRevealOpen(true);
+  };
 
   const openDeleteDialog = () => {
     setDeletePassphrase("");
@@ -1051,6 +1091,41 @@ function ConnectionDetailView({
     }
   };
 
+  const onRevealSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setRevealError(null);
+    if (!revealPassphrase) {
+      setRevealError(t("detail.auth.enterPassphrase"));
+      return;
+    }
+
+    try {
+      const envelope = await revealDescriptor.mutateAsync({
+        wallet: connection.id,
+        auth_response: { passphrase_secret: revealPassphrase },
+      });
+      const walletMaterial = walletDescriptorMaterialFromReveal(envelope.data);
+      if (!walletMaterial) {
+        setRevealError(t("detail.reveal.errorMissingDescriptor"));
+        return;
+      }
+      await copyTextWithPolicy(walletMaterial);
+      addNotification({
+        title: t("detail.reveal.copiedTitle"),
+        body: t("detail.reveal.copiedBody", { label: connection.label }),
+        tone: "success",
+      });
+      setRevealOpen(false);
+      setRevealPassphrase("");
+    } catch (error) {
+      setRevealError(
+        error instanceof Error
+          ? error.message
+          : t("detail.reveal.couldNotCopy"),
+      );
+    }
+  };
+
   return (
     <div className={screenShellClassName}>
       <Card className="rounded-xl py-3">
@@ -1150,6 +1225,12 @@ function ConnectionDetailView({
                   <Pencil className="size-4" aria-hidden="true" />
                   {t("common:actions.edit")}
                 </DropdownMenuItem>
+                {canRevealDescriptor ? (
+                  <DropdownMenuItem onClick={openRevealDialog}>
+                    <Copy className="size-4" aria-hidden="true" />
+                    {t("detail.reveal.menuItem")}
+                  </DropdownMenuItem>
+                ) : null}
                 <DropdownMenuItem
                   disabled={isWalletSyncRunning}
                   onClick={() => onSync({ forceFull: true })}
@@ -1683,6 +1764,27 @@ function ConnectionDetailView({
                     .join(" · ")}
                 />
               ) : null}
+              {canRevealDescriptor ? (
+                <div className="flex min-w-0 items-center gap-3 text-sm">
+                  <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                    {t("detail.connectionDetails.descriptorMaterial")}
+                  </span>
+                  <span className="ml-auto min-w-0 flex-1 truncate text-right text-muted-foreground">
+                    {hasStoredChangeDescriptor
+                      ? t("detail.reveal.descriptorWithChange")
+                      : t("detail.reveal.descriptorOnly")}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-xs"
+                    aria-label={t("detail.reveal.menuItem")}
+                    onClick={openRevealDialog}
+                  >
+                    <Copy className="size-3" aria-hidden="true" />
+                  </Button>
+                </div>
+              ) : null}
               <DetailRow
                 label={t("detail.connectionDetails.created")}
                 value={formatShortDate(walletDetail?.created_at)}
@@ -2072,6 +2174,57 @@ function ConnectionDetailView({
                 {updateWallet.isPending
                   ? t("detail.edit.saving")
                   : t("common:actions.save")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={revealOpen} onOpenChange={setRevealOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("detail.reveal.title")}</DialogTitle>
+            <DialogDescription>
+              {t("detail.reveal.description", { label: connection.label })}
+            </DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={onRevealSubmit}>
+            {hasStoredChangeDescriptor ? (
+              <p className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                {t("detail.reveal.includesChange")}
+              </p>
+            ) : null}
+            <div className="space-y-2">
+              <Label htmlFor="connection-reveal-passphrase">
+                {t("detail.reveal.passphrase")}
+              </Label>
+              <Input
+                id="connection-reveal-passphrase"
+                type="password"
+                autoComplete="current-password"
+                value={revealPassphrase}
+                onChange={(event) => setRevealPassphrase(event.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("detail.reveal.helper")}
+              </p>
+            </div>
+            {revealError && (
+              <p className="m-0 text-sm text-destructive">{revealError}</p>
+            )}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRevealOpen(false)}
+              >
+                {t("common:actions.cancel")}
+              </Button>
+              <Button type="submit" disabled={revealDescriptor.isPending}>
+                <Copy className="size-4" aria-hidden="true" />
+                {revealDescriptor.isPending
+                  ? t("detail.reveal.copying")
+                  : t("detail.reveal.copy")}
               </Button>
             </DialogFooter>
           </form>

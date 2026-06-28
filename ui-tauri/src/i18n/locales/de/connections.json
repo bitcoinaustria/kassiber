@@ -127,8 +127,25 @@
       "account": "Konto",
       "network": "Netzwerk",
       "scriptTypes": "Beobachtet",
+      "descriptorMaterial": "Descriptor",
       "created": "Erstellt",
       "kassiberId": "Kassiber-ID"
+    },
+    "reveal": {
+      "menuItem": "Descriptor kopieren",
+      "title": "Wallet-Descriptor kopieren",
+      "description": "Gib die Datenbank-Passphrase erneut ein, um das für {{label}} gespeicherte Descriptor-Material zu kopieren.",
+      "descriptorWithChange": "Descriptor + Wechsel",
+      "descriptorOnly": "Descriptor",
+      "includesChange": "Die Zwischenablage enthält den gespeicherten Wechsel-Descriptor in der nächsten Zeile.",
+      "passphrase": "Datenbank-Passphrase",
+      "helper": "Kassiber kopiert das rohe gespeicherte Descriptor-Material, ohne Feldnamen oder Tabellenformatierung.",
+      "copy": "Kopieren",
+      "copying": "Wird kopiert...",
+      "copiedTitle": "Descriptor kopiert",
+      "copiedBody": "Descriptor-Material für {{label}} kopiert.",
+      "errorMissingDescriptor": "Diese Wallet hat diesen Descriptor nicht gespeichert.",
+      "couldNotCopy": "Descriptor konnte nicht kopiert werden."
     },
     "relatedViews": {
       "title": "Verwandte Ansichten",

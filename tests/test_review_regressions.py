@@ -4202,6 +4202,8 @@ class ReviewRegressionTest(unittest.TestCase):
     def test_wallet_outputs_redact_descriptor_material_but_keep_state_flags(self):
         self._bootstrap_profile()
         descriptor, change_descriptor = _sample_descriptor_pair()
+        stored_descriptor = f"{descriptor}#receivechk"
+        stored_change_descriptor = f"{change_descriptor}#changechk"
 
         payload, result = self._run_json(
             "wallets",
@@ -4217,9 +4219,9 @@ class ReviewRegressionTest(unittest.TestCase):
             "--config",
             json.dumps({"mnemonic": "seed words", "api_key": "leak-me"}),
             "--descriptor",
-            descriptor,
+            stored_descriptor,
             "--change-descriptor",
-            change_descriptor,
+            stored_change_descriptor,
             "--gap-limit",
             "5",
         )
@@ -4258,8 +4260,40 @@ class ReviewRegressionTest(unittest.TestCase):
         ).fetchone()[0]
         conn.close()
         stored_config = json.loads(stored)
-        self.assertEqual(stored_config["descriptor"], descriptor)
-        self.assertEqual(stored_config["change_descriptor"], change_descriptor)
+        self.assertEqual(stored_config["descriptor"], stored_descriptor)
+        self.assertEqual(stored_config["change_descriptor"], stored_change_descriptor)
+
+        payload, result = self._run_json(
+            "wallets",
+            "reveal-descriptor",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--wallet",
+            "Vault",
+        )
+        self._assert_ok(payload, result, "wallets.reveal-descriptor")
+        expected_material = f"{stored_descriptor}\n{stored_change_descriptor}"
+        self.assertEqual(payload["data"]["wallet_material"], expected_material)
+        self.assertEqual(payload["data"]["descriptor"], stored_descriptor)
+        self.assertEqual(
+            payload["data"]["change_descriptor"], stored_change_descriptor
+        )
+
+        result = self._run_cli(
+            "wallets",
+            "reveal-descriptor",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--wallet",
+            "Vault",
+            "--material-only",
+        )
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertEqual(result.stdout, expected_material + "\n")
 
     def test_wallet_descriptor_state_degrades_when_embit_missing(self):
         from kassiber.core import wallets as core_wallets

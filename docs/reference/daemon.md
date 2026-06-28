@@ -595,6 +595,13 @@ structured `local_auth_denied` error envelope. This is a UX gate, not
 cryptographic separation — once the daemon is running with an unlocked DB it
 can read every credential. The auth round-trip exists so a compromised UI
 process cannot silently siphon secrets without surfacing a re-prompt.
+The desktop wallet detail screen allowlists only `wallets.reveal_descriptor`
+from this owner-reveal surface. It uses the same passphrase round-trip and
+copies the stored descriptor material as one clipboard payload. When the wallet
+stores separate receive and change descriptors, both raw descriptor strings are
+included on separate lines; when the wallet stores a combined multipath
+descriptor, that single string is copied unchanged. The webview still cannot
+invoke arbitrary backend-token or raw-config reveals.
 
 The supervisor and any client must redact `passphrase_secret`, `token`,
 `descriptor`, `change_descriptor`, `blinding_key`, `auth_header`, `password`,

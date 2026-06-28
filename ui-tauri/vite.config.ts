@@ -156,6 +156,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.freshness.cancel",
   "ui.freshness.pause",
   "ui.freshness.resume",
+  "wallets.reveal_descriptor",
   "daemon.lock",
   "daemon.unlock",
   // AI provider config and chat kinds. The bridge keeps one daemon process so

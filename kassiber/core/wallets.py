@@ -735,6 +735,15 @@ def get_wallet_details(conn, workspace_ref, profile_ref, wallet_ref):
     return wallet_row_to_dict(wallet)
 
 
+def wallet_descriptor_material(config):
+    """Return the pasteable stored descriptor material for a wallet config."""
+    descriptor = str_or_none(config.get("descriptor"))
+    change_descriptor = str_or_none(config.get("change_descriptor"))
+    return "\n".join(
+        value for value in (descriptor, change_descriptor) if value
+    )
+
+
 def reveal_wallet_secrets(conn, workspace_ref, profile_ref, wallet_ref):
     """Return the raw descriptor / blinding-key material of a wallet.
 
@@ -750,6 +759,7 @@ def reveal_wallet_secrets(conn, workspace_ref, profile_ref, wallet_ref):
         "id": wallet["id"],
         "label": wallet["label"],
         "kind": wallet["kind"],
+        "wallet_material": wallet_descriptor_material(config),
         "descriptor": config.get("descriptor"),
         "change_descriptor": config.get("change_descriptor"),
         "blinding_key": config.get("blinding_key"),
@@ -876,6 +886,7 @@ __all__ = [
     "update_wallet",
     "wallet_btcpay_provenance_config",
     "wallet_btcpay_sync_config",
+    "wallet_descriptor_material",
     "wallet_live_chain_config",
     "wallet_policy_asset_id",
     "wallet_row_to_dict",
