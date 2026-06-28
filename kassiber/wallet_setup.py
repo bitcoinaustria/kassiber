@@ -24,8 +24,9 @@ _XPUB_VERSION_BYTES = {
 
 # Descriptor templates used to disambiguate a bare xpub/tpub once the caller
 # supplies the script type. {branch} is 0 for receive and 1 for change, matching
-# the shape produced by _descriptors_from_slip132.
-_BARE_XPUB_TEMPLATES = {
+# the shape produced by _descriptors_from_slip132. wallet_descriptors reuses the
+# same templates (with branch="<0;1>") to build multipath plans per script type.
+BARE_XPUB_TEMPLATES = {
     "p2pkh": "pkh({key}/{branch}/*)",
     "p2sh-p2wpkh": "sh(wpkh({key}/{branch}/*))",
     "p2wpkh": "wpkh({key}/{branch}/*)",
@@ -33,7 +34,39 @@ _BARE_XPUB_TEMPLATES = {
 }
 
 
-def normalize_wallet_material(value: str, *, script_type: str | None = None) -> dict[str, str]:
+def normalize_script_types(values: Any) -> list[str]:
+    """Validate, dedupe, and sort a set of bare-xpub script types.
+
+    Accepts a single string or an iterable of strings. Unknown types raise a
+    validation error; the result is sorted for deterministic storage so the
+    config_json comparison that drives re-derivation stays stable.
+    """
+    if values is None:
+        return []
+    if isinstance(values, str):
+        values = [values]
+    normalized: list[str] = []
+    for value in values:
+        script_type = str(value or "").strip().lower()
+        if not script_type:
+            continue
+        if script_type not in BARE_XPUB_TEMPLATES:
+            raise AppError(
+                f"Unsupported script type '{script_type}'",
+                code="validation",
+                hint="Supported script types are p2pkh, p2sh-p2wpkh, p2wpkh, and p2tr.",
+            )
+        if script_type not in normalized:
+            normalized.append(script_type)
+    return sorted(normalized)
+
+
+def normalize_wallet_material(
+    value: str,
+    *,
+    script_type: str | None = None,
+    script_types: Any = None,
+) -> dict[str, Any]:
     material = value.strip()
     if not material:
         raise AppError(
@@ -54,6 +87,12 @@ def normalize_wallet_material(value: str, *, script_type: str | None = None) -> 
         return parsed
     prefix = material[:4]
     if prefix in {"xpub", "tpub"}:
+        resolved_types = normalize_script_types(script_types)
+        if resolved_types:
+            # Reject a malformed key before we record it; descriptor rendering
+            # is deferred to load_descriptor_plan (single source of truth).
+            _base58check_decode(material)
+            return {"xpub": material, "script_types": resolved_types}
         if script_type:
             return _descriptors_from_bare_xpub(material, script_type)
         raise AppError(
@@ -180,7 +219,7 @@ def _looks_like_descriptor(value: str) -> bool:
 
 
 def _descriptors_from_bare_xpub(material: str, script_type: str) -> dict[str, str]:
-    template = _BARE_XPUB_TEMPLATES.get(script_type)
+    template = BARE_XPUB_TEMPLATES.get(script_type)
     if template is None:
         raise AppError(
             f"Unsupported script type '{script_type}'",
@@ -249,4 +288,8 @@ def _checksum(payload: bytes) -> bytes:
     return hashlib.sha256(hashlib.sha256(payload).digest()).digest()[:4]
 
 
-__all__ = ["normalize_wallet_material"]
+__all__ = [
+    "BARE_XPUB_TEMPLATES",
+    "normalize_script_types",
+    "normalize_wallet_material",
+]

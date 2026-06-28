@@ -30,6 +30,7 @@ from ..retry import retry_after_seconds_from_http_error
 from ..time_utils import UNKNOWN_OCCURRED_AT, parse_iso_datetime_or_none, timestamp_to_iso
 from ..util import normalize_chain_value, normalize_network_value, parse_bool, parse_int
 from ..wallet_descriptors import (
+    SCRIPT_TYPE_BRANCH_BASE,
     branch_limits,
     decode_liquid_transaction,
     derive_descriptor_target,
@@ -769,6 +770,59 @@ def esplora_scripthash_has_history(base_url, script_pubkey_hex, timeout=30):
     return int(chain_stats.get("tx_count") or 0) + int(mempool_stats.get("tx_count") or 0) > 0
 
 
+def _probe_scripts_have_history(backend, kind, script_pubkeys, *, timeout):
+    if kind == "esplora":
+        workers = _bounded_http_workers(backend)
+
+        def probe(script_pubkey):
+            return esplora_scripthash_has_history(backend["url"], script_pubkey, timeout=timeout)
+
+        return _map_bounded(script_pubkeys, probe, workers)
+    if kind == "electrum":
+        scripthashes = [scriptpubkey_scripthash(spk) for spk in script_pubkeys]
+        with ElectrumClient(backend) as client:
+            statuses = electrum_call_many(
+                client,
+                [("blockchain.scripthash.subscribe", [scripthash]) for scripthash in scripthashes],
+                batch_size=backend_batch_size(backend),
+            )
+        return [status is not None for status in statuses]
+    raise AppError(f"Script-type detection is not implemented for backend kind '{kind}'")
+
+
+def detect_active_script_types(backend, xpub, *, chain="bitcoin", network=None, timeout=None):
+    """Report which candidate script types a bare xpub has on-chain history for.
+
+    Probes only receive index 0 of each of the four script types -- four history
+    checks against one host, bounded by the backend worker cap. There is
+    deliberately no gap-window scan here: detection must stay rate-limit-safe.
+    """
+    chain = normalize_chain_value(chain)
+    network = normalize_network_value(chain, network)
+    kind = validate_backend_for_wallet(backend, chain, network, has_descriptor=True)
+    if timeout is None:
+        timeout = backend_timeout(backend)
+    candidates = list(SCRIPT_TYPE_BRANCH_BASE)
+    script_pubkeys = []
+    for script_type in candidates:
+        plan = load_wallet_descriptor_plan_from_config(
+            {
+                "xpub": xpub,
+                "script_types": [script_type],
+                "chain": chain,
+                "network": network,
+                "gap_limit": 1,
+            }
+        )
+        base = SCRIPT_TYPE_BRANCH_BASE[script_type]
+        script_pubkeys.append(derive_descriptor_target(plan, base, 0).script_pubkey)
+    history = _probe_scripts_have_history(backend, kind, script_pubkeys, timeout=timeout)
+    return [
+        {"script_type": script_type, "has_history": bool(used)}
+        for script_type, used in zip(candidates, history)
+    ]
+
+
 def discover_descriptor_targets(backend, plan, kind, checkpoint=None):
     timeout = backend_timeout(backend)
     checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
@@ -842,7 +896,11 @@ def discover_descriptor_targets(backend, plan, kind, checkpoint=None):
 def resolve_wallet_sync_targets(backend, wallet):
     config = json.loads(wallet["config_json"] or "{}")
     checkpoint = _mapping_get(wallet, "_freshness_checkpoint", {}) or {}
-    descriptor_plan = load_wallet_descriptor_plan_from_config(config) if config.get("descriptor") else None
+    descriptor_plan = (
+        load_wallet_descriptor_plan_from_config(config)
+        if (config.get("descriptor") or config.get("xpub"))
+        else None
+    )
     history_cache = {}
     if descriptor_plan:
         chain = descriptor_plan.chain

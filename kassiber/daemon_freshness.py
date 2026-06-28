@@ -444,7 +444,7 @@ def _wallet_has_onchain_source(wallet: Mapping[str, Any], config: Mapping[str, A
         return False
     if config.get("source_file") and config.get("source_format"):
         return False
-    if str_or_none(config.get("descriptor")):
+    if core_wallets.has_descriptor_sync_material(config):
         return True
     addresses = core_wallets.normalize_addresses(config.get("addresses"))
     return bool(addresses)

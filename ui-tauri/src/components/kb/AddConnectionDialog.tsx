@@ -50,6 +50,7 @@ import {
   BARE_XPUB_SCRIPT_TYPES,
   type BareXpubScriptType,
   detectWalletMaterial,
+  scriptTypesFromDetectionPayload,
 } from "@/lib/walletMaterialFormat";
 
 const WalletMaterialScannerDialog = React.lazy(() =>
@@ -583,13 +584,22 @@ export function AddConnectionDialog({
     chain: string;
     network: string;
     addresses: {
-      branch: "receive" | "change";
+      // "receive"/"change" for a single descriptor, or a script-type-qualified
+      // label like "p2tr receive" when an xpub watches several script types.
+      branch: string;
       index: number;
       address: string;
       derivation_path?: string | null;
     }[];
     has_change_branch: boolean;
   }>("ui.wallets.preview_descriptor");
+  const detectScriptTypes = useDaemonMutation<{
+    probed: boolean;
+    detected: { script_type: string; has_history: boolean }[];
+    active: string[];
+    fallback_used: boolean;
+    reason?: string | null;
+  }>("ui.wallets.detect_script_types");
   const testBtcpay = useDaemonMutation<{
     backend: string;
     store_id: string;
@@ -653,7 +663,7 @@ export function AddConnectionDialog({
     Partial<Record<keyof SetupFormState, string>>
   >({});
   const [previewAddresses, setPreviewAddresses] = React.useState<
-    { branch: "receive" | "change"; index: number; address: string }[] | null
+    { branch: string; index: number; address: string }[] | null
   >(null);
   const [previewError, setPreviewError] = React.useState<string | null>(null);
   const [scannerOpen, setScannerOpen] = React.useState(false);
@@ -1064,12 +1074,9 @@ export function AddConnectionDialog({
         const detection = detectWalletMaterial(form.walletMaterial);
         if (detection.kind === "unknown") {
           errors.walletMaterial = detection.hint ?? detection.label;
-        } else if (
-          detection.kind === "bare-xpub" &&
-          !form.descriptorScriptType
-        ) {
-          errors.walletMaterial = t("add.validation.selectScriptType");
         }
+        // A bare xpub no longer needs a manual pick: an empty script-type
+        // selection means "detect automatically" at submit time.
       }
       const gapLimit = Number.parseInt(form.gapLimit, 10);
       if (!Number.isFinite(gapLimit) || gapLimit <= 0) {
@@ -1236,6 +1243,23 @@ export function AddConnectionDialog({
         const gapLimit = Number.parseInt(form.gapLimit, 10);
         const isBareXpub =
           detectWalletMaterial(form.walletMaterial).kind === "bare-xpub";
+        // A bare xpub watches the manually pinned type, or — when left on
+        // "Detect automatically" — whichever types the backend shows history
+        // for (the daemon falls back to Native SegWit if none / unreachable).
+        let scriptTypes: string[] | undefined;
+        if (isBareXpub) {
+          if (form.descriptorScriptType) {
+            scriptTypes = [form.descriptorScriptType];
+          } else {
+            const detected = await detectScriptTypes.mutateAsync({
+              wallet_material: form.walletMaterial.trim(),
+              backend: form.backend.trim() || undefined,
+              chain: selected.chain,
+              network: selected.network,
+            });
+            scriptTypes = requireAutoDetectedScriptTypes(detected.data);
+          }
+        }
         await createWallet.mutateAsync({
           label,
           kind: selected.walletKind ?? "descriptor",
@@ -1243,7 +1267,7 @@ export function AddConnectionDialog({
           chain: selected.chain,
           network: selected.network,
           wallet_material: form.walletMaterial.trim(),
-          script_type: isBareXpub ? form.descriptorScriptType : undefined,
+          script_types: scriptTypes,
           gap_limit: Number.isFinite(gapLimit) ? gapLimit : undefined,
         });
         if (form.syncAfterCreate) {
@@ -1701,24 +1725,52 @@ export function AddConnectionDialog({
   const scriptTypeLabel = (value: BareXpubScriptType) =>
     t(scriptTypeLabelKeys[value]);
 
+  const requireAutoDetectedScriptTypes = (
+    payload:
+      | {
+          probed?: boolean;
+          active?: unknown;
+          reason?: string | null;
+        }
+      | null
+      | undefined,
+  ) => {
+    const selection = scriptTypesFromDetectionPayload(payload);
+    if (!selection.ok) {
+      throw new Error(
+        t("add.descriptor.autoDetectUnavailable", {
+          reason:
+            selection.reason ??
+            t("add.descriptor.autoDetectUnavailableReasonUnknown"),
+        }),
+      );
+    }
+    return selection.scriptTypes;
+  };
+
   const renderWalletMaterialFeedback = () => {
     const detection = detectWalletMaterial(form.walletMaterial);
     if (detection.kind === "empty") return null;
-    // A bare xpub stops being ambiguous once the user picks a script type.
-    if (detection.kind === "bare-xpub" && form.descriptorScriptType) {
+    // A bare xpub is no longer a dead end: pinning a script type resolves it,
+    // and leaving the picker on "Detect automatically" auto-detects at submit.
+    if (detection.kind === "bare-xpub") {
       return (
         <p className="text-xs text-emerald-700 dark:text-emerald-300">
-          {t("add.descriptor.bareXpubResolved", {
-            label: detection.label,
-            scriptType: scriptTypeLabel(
-              form.descriptorScriptType as BareXpubScriptType,
-            ),
-          })}
+          {form.descriptorScriptType
+            ? t("add.descriptor.bareXpubResolved", {
+                label: detection.label,
+                scriptType: scriptTypeLabel(
+                  form.descriptorScriptType as BareXpubScriptType,
+                ),
+              })
+            : t("add.descriptor.bareXpubAutoDetect", {
+                label: detection.label,
+              })}
         </p>
       );
     }
     const tone =
-      detection.kind === "bare-xpub" || detection.kind === "unknown"
+      detection.kind === "unknown"
         ? "text-amber-700 dark:text-amber-300"
         : "text-emerald-700 dark:text-emerald-300";
     return (
@@ -1741,7 +1793,7 @@ export function AddConnectionDialog({
       <SetupField
         id="connection-script-type"
         label={t("add.descriptor.scriptTypeLabel")}
-        helper={t("add.descriptor.scriptTypeHelper")}
+        helper={t("add.descriptor.scriptTypeHelperAuto")}
       >
         <select
           id="connection-script-type"
@@ -1750,11 +1802,8 @@ export function AddConnectionDialog({
           onChange={(event) =>
             updateForm("descriptorScriptType", event.target.value)
           }
-          required
         >
-          <option value="" disabled>
-            {t("add.descriptor.scriptTypeChoose")}
-          </option>
+          <option value="">{t("add.descriptor.scriptTypeDetect")}</option>
           {BARE_XPUB_SCRIPT_TYPES.map((value) => (
             <option key={value} value={value}>
               {scriptTypeLabel(value)}
@@ -1785,10 +1834,14 @@ export function AddConnectionDialog({
               key={`${entry.branch}-${entry.index}`}
               className="flex items-center gap-2"
             >
-              <span className="w-16 shrink-0 text-muted-foreground">
+              <span className="w-32 shrink-0 text-muted-foreground">
                 {entry.branch === "change"
                   ? t("add.descriptor.branchChange")
-                  : t("add.descriptor.branchReceive", { index: entry.index })}
+                  : entry.branch === "receive"
+                    ? t("add.descriptor.branchReceive", { index: entry.index })
+                    : entry.branch.endsWith("change")
+                      ? entry.branch
+                      : `${entry.branch} ${entry.index}`}
               </span>
               <span className="min-w-0 flex-1 truncate">{entry.address}</span>
               <button
@@ -1979,7 +2032,9 @@ export function AddConnectionDialog({
               variant="outline"
               size="sm"
               disabled={
-                previewDescriptor.isPending || !form.walletMaterial.trim()
+                previewDescriptor.isPending ||
+                detectScriptTypes.isPending ||
+                !form.walletMaterial.trim()
               }
               onClick={async () => {
                 setPreviewError(null);
@@ -1987,11 +2042,27 @@ export function AddConnectionDialog({
                   const isBareXpub =
                     detectWalletMaterial(form.walletMaterial).kind ===
                     "bare-xpub";
+                  // Auto mode previews whatever the backend has history for, so
+                  // the preview matches what creating the wallet would watch.
+                  let scriptTypes: string[] | undefined;
+                  if (isBareXpub) {
+                    if (form.descriptorScriptType) {
+                      scriptTypes = [form.descriptorScriptType];
+                    } else {
+                      const detected = await detectScriptTypes.mutateAsync({
+                        wallet_material: form.walletMaterial.trim(),
+                        backend: form.backend.trim() || undefined,
+                        chain: selected.chain,
+                        network: selected.network,
+                      });
+                      scriptTypes = requireAutoDetectedScriptTypes(
+                        detected.data,
+                      );
+                    }
+                  }
                   const envelope = await previewDescriptor.mutateAsync({
                     wallet_material: form.walletMaterial.trim(),
-                    script_type: isBareXpub
-                      ? form.descriptorScriptType
-                      : undefined,
+                    script_types: scriptTypes,
                     chain: selected.chain,
                     network: selected.network,
                     count: 5,
@@ -2007,7 +2078,7 @@ export function AddConnectionDialog({
                 }
               }}
             >
-              {previewDescriptor.isPending
+              {previewDescriptor.isPending || detectScriptTypes.isPending
                 ? t("add.descriptor.deriving")
                 : t("add.descriptor.previewAddresses")}
             </Button>

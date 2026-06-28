@@ -2058,18 +2058,32 @@ export const mockDaemon: DaemonTransport = {
         };
       }
       const overview = mockOverviewSnapshot();
+      // A descriptor / xpub wallet (incl. multi-script xpub) is a backend-synced
+      // wallet: surface its gap limit + descriptor sync mode, and start at zero
+      // transactions so the empty recent-tx state and the count badge agree.
+      const isDescriptorKind = kind === "descriptor" || kind === "xpub";
       const connection = {
         id: `mock-wallet-${Date.now()}`,
         label,
         kind,
-        ...(typeof args.gap_limit === "number" ? { gap: args.gap_limit } : {}),
+        last: "just now",
+        balance: 0,
+        status: "idle",
+        transactionCount: 0,
+        ...(typeof args.gap_limit === "number"
+          ? { gap: args.gap_limit }
+          : isDescriptorKind
+            ? { gap: 40 }
+            : {}),
         ...(sourceFormat
           ? {
               syncMode: "file_import",
               syncSource: sourceFormat,
               sourceFormat,
             }
-          : {}),
+          : isDescriptorKind
+            ? { syncMode: "backend_descriptor" }
+            : {}),
       };
       overview.connections = [...overview.connections, connection];
       return {
@@ -3125,6 +3139,46 @@ export const mockDaemon: DaemonTransport = {
           network: "main",
           addresses: sampleAddresses,
           has_change_branch: true,
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.wallets.detect_script_types") {
+      const args = (req.args ?? {}) as { wallet_material?: unknown };
+      const material =
+        typeof args.wallet_material === "string"
+          ? args.wallet_material.trim()
+          : "";
+      if (!material.startsWith("xpub") && !material.startsWith("tpub")) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "Script-type detection only applies to a bare xpub/tpub",
+            retryable: false,
+          },
+        };
+      }
+      // Mock a mixed wallet: history on Native SegWit + Taproot, none on the
+      // legacy/nested chains. Lets the add flow exercise the multi-active path.
+      const detected = [
+        { script_type: "p2pkh", has_history: false },
+        { script_type: "p2sh-p2wpkh", has_history: false },
+        { script_type: "p2wpkh", has_history: true },
+        { script_type: "p2tr", has_history: true },
+      ];
+      return {
+        kind: "ui.wallets.detect_script_types",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          probed: true,
+          detected,
+          active: ["p2wpkh", "p2tr"],
+          fallback_used: false,
+          reason: null,
         } as T,
       };
     }

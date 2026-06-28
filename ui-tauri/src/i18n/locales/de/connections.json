@@ -126,6 +126,7 @@
       "backend": "Backend",
       "account": "Konto",
       "network": "Netzwerk",
+      "scriptTypes": "Beobachtet",
       "created": "Erstellt",
       "kassiberId": "Kassiber-ID"
     },
@@ -168,6 +169,9 @@
       "detected": "Erkannt: {{label}}",
       "detectedWithHint": "Erkannt: {{label}} — {{hint}}",
       "materialHelper": "Lass das Feld leer, außer du musst das gespeicherte Wallet-Material ändern.",
+      "scriptTypesLabel": "Zu beobachtende Adresstypen",
+      "scriptTypesHelper": "Kassiber leitet pro gewähltem Typ eine Empfangs- und eine Wechsel-Kette ab. Einen Typ hinzuzufügen, scannt diese Wallet neu.",
+      "errorSelectScriptType": "Wähle mindestens einen Adresstyp zum Beobachten.",
       "gapLimit": "Gap Limit",
       "gapLimitHelper": "Erhöhe das für Wallets mit langen Folgen ungenutzter Adressen. Große Werte bis 5.000 können länger dauern, aber Aktualisierungen laufen weiter, bis der Daemon antwortet.",
       "btcpayInstance": "BTCPay-Instanz",
@@ -513,16 +517,19 @@
       "detected": "Erkannt: {{label}}",
       "detectedWithHint": "Erkannt: {{label}} — {{hint}}",
       "couldNotDerive": "Adressen konnten nicht abgeleitet werden.",
+      "autoDetectUnavailable": "Script-Typen konnten nicht automatisch erkannt werden: {{reason}}. Wähle einen Script-Typ manuell.",
+      "autoDetectUnavailableReasonUnknown": "Backend-Prüfung wurde nicht ausgeführt",
       "scriptTypeLabel": "Script-Typ",
-      "scriptTypeHelper": "Ein bloßer xpub verrät nicht, welcher Adresstyp abgeleitet werden soll. Wähle den, den deine Wallet verwendet.",
-      "scriptTypeChoose": "Script-Typ wählen",
+      "scriptTypeHelperAuto": "Lass „Automatisch erkennen“ stehen, dann beobachtet Kassiber jeden Adresstyp mit On-Chain-Historie – oder leg dich auf einen fest.",
+      "scriptTypeDetect": "Automatisch erkennen",
       "scriptType": {
         "p2wpkh": "Native SegWit · P2WPKH (bc1q…)",
         "p2shp2wpkh": "Nested SegWit · P2SH-P2WPKH (3…)",
         "p2pkh": "Legacy · P2PKH (1…)",
         "p2tr": "Taproot · P2TR (bc1p…)"
       },
-      "bareXpubResolved": "{{label}} wird als {{scriptType}} abgeleitet."
+      "bareXpubResolved": "{{label}} wird als {{scriptType}} abgeleitet.",
+      "bareXpubAutoDetect": "{{label}} — Kassiber erkennt automatisch, mit welchen Adresstypen dieser Schlüssel genutzt wurde, und beobachtet sie."
     },
     "addressList": {
       "addresses": "Adressen",
@@ -772,7 +779,6 @@
     "validation": {
       "labelRequired": "Das Verbindungslabel ist erforderlich.",
       "pasteWalletMaterial": "Füge einen Wallet-Export, einen Descriptor oder einen Extended Public Key ein.",
-      "selectScriptType": "Ein bloßer xpub ist mehrdeutig — wähle einen Script-Typ, damit wir den Descriptor erstellen können.",
       "gapPositive": "Das Gap Limit muss eine positive Ganzzahl sein.",
       "gapMax": "Das Gap Limit muss {{max}} oder niedriger sein.",
       "chooseBackend": "Wähle ein Backend."

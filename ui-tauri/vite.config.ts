@@ -137,6 +137,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.wallets.import_samourai",
   "ui.wallets.ledger_preview",
   "ui.wallets.preview_descriptor",
+  "ui.wallets.detect_script_types",
   "ui.wallets.identify",
   "ui.wallets.identify_onchain",
   "ui.connections.sources",
