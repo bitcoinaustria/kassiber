@@ -112,7 +112,8 @@ def _safe_path_component(value: str | None, *, fallback: str) -> str:
 
 def _safe_evidence_relpath(attachment_id: str, safe_name: str) -> Path:
     safe_attachment_id = _safe_path_component(attachment_id, fallback="attachment")
-    return Path("evidence") / f"{safe_attachment_id}-{safe_name}"
+    attachment_digest = hashlib.sha256(attachment_id.encode("utf-8")).hexdigest()[:12]
+    return Path("evidence") / f"{safe_attachment_id}-{attachment_digest}-{safe_name}"
 
 
 def _attachments_root(data_root: str) -> Path:
