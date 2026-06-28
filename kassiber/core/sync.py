@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from typing import Any, Callable, Mapping, MutableMapping, Sequence
 
+from ..backends import redact_backend_text, redact_backend_url
 from ..errors import AppError
 from ..util import str_or_none
 from .wallets import (
@@ -171,7 +172,7 @@ def _backend_sync_failure_error(
         )
     return AppError(
         f"Source refresh failed for {_wallet_label(wallet)} during {phase}: "
-        f"{str(exc) or exc.__class__.__name__}",
+        f"{redact_backend_text(str(exc) or exc.__class__.__name__)}",
         code="backend_sync_failed",
         hint=(
             "Test the selected sync backend in Settings, then retry refresh. "
@@ -400,7 +401,7 @@ def sync_wallet_from_backend(
         )
     outcome["backend"] = backend["name"]
     outcome["backend_kind"] = kind
-    outcome["backend_url"] = backend["url"]
+    outcome["backend_url"] = redact_backend_url(backend["url"])
     outcome["chain"] = sync_state.chain
     outcome["network"] = sync_state.network
     outcome["sync_mode"] = "descriptor" if sync_state.descriptor_plan else "addresses"

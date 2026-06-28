@@ -15,6 +15,7 @@ from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
+from kassiber.backends import redact_backend_text, redact_backend_value
 from kassiber.cli.main import command_needs_db
 from kassiber.cli.handlers import (
     _attachment_hooks,
@@ -4968,6 +4969,21 @@ class ReviewRegressionTest(unittest.TestCase):
             )
         finally:
             conn.close()
+
+    def test_backend_text_redaction_scrubs_urls_in_sync_error_payloads(self):
+        message = (
+            "HTTP 403 from backend for "
+            "http://rpcuser:rpcpass@127.0.0.1:8332/wallet/review?session=topsecret: Forbidden"
+        )
+        redacted = redact_backend_text(message)
+        self.assertIn("http://<redacted>@127.0.0.1:8332/wallet/review", redacted)
+        self.assertNotIn("rpcuser", redacted)
+        self.assertNotIn("rpcpass", redacted)
+        self.assertNotIn("session=topsecret", redacted)
+        self.assertEqual(
+            redact_backend_value({"nested": [message]})["nested"][0],
+            redacted,
+        )
 
     def test_backend_outputs_redact_secret_values_but_keep_presence_flags(self):
         payload, result = self._run_json("init")
