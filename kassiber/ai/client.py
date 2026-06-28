@@ -51,6 +51,55 @@ CLI_FALLBACK_DIRS = (
     "/opt/local/bin",
 )
 CLI_MODEL_LIST_TIMEOUT_SECONDS = 10
+_CLI_BASE_ENV_NAMES = {
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "PATH",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "TERM",
+    "TMPDIR",
+    "USER",
+    "USERNAME",
+}
+_CLI_PROXY_ENV_NAMES = {
+    "ALL_PROXY",
+    "HTTPS_PROXY",
+    "HTTP_PROXY",
+    "NO_PROXY",
+    "all_proxy",
+    "https_proxy",
+    "http_proxy",
+    "no_proxy",
+}
+_CLAUDE_ENV_NAMES = {
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_VERTEX_PROJECT_ID",
+    "ANTHROPIC_VERTEX_REGION",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "CLAUDE_CODE_USE_BEDROCK",
+    "CLAUDE_CODE_USE_VERTEX",
+    "CLOUD_ML_REGION",
+    "CLOUDSDK_CORE_PROJECT",
+    "GCLOUD_PROJECT",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "GOOGLE_CLOUD_PROJECT",
+    "GOOGLE_CLOUD_QUOTA_PROJECT",
+}
+_CLAUDE_ENV_PREFIXES = ("AWS_",)
+_CODEX_ENV_NAMES = {
+    "CODEX_ACCESS_TOKEN",
+    "CODEX_API_KEY",
+    "CODEX_HOME",
+    "OPENAI_API_KEY",
+    "OPENAI_BASE_URL",
+    "OPENAI_ORG_ID",
+    "OPENAI_ORGANIZATION",
+    "OPENAI_PROJECT",
+}
 CLAUDE_CLI_MODEL_ROWS = (
     {"id": CLI_DEFAULT_MODEL, "check_kind": CLI_MODEL_CHECK_KIND},
     {"id": "sonnet", "check_kind": "claude_cli_alias"},
@@ -647,23 +696,19 @@ def _cli_subprocess_env(command: str) -> dict[str, str]:
     basic process settings plus the provider auth variables those CLIs commonly
     use for non-interactive operation.
     """
-    allowed = {
-        "HOME",
-        "LANG",
-        "LC_ALL",
-        "PATH",
-        "SSL_CERT_FILE",
-        "SSL_CERT_DIR",
-        "TERM",
-        "TMPDIR",
-        "USER",
-        "USERNAME",
-    }
+    allowed = set(_CLI_BASE_ENV_NAMES)
+    allowed.update(_CLI_PROXY_ENV_NAMES)
+    allowed_prefixes: tuple[str, ...] = ()
     if command == "claude":
-        allowed.update({"ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"})
+        allowed.update(_CLAUDE_ENV_NAMES)
+        allowed_prefixes = _CLAUDE_ENV_PREFIXES
     elif command == "codex":
-        allowed.update({"OPENAI_API_KEY", "OPENAI_BASE_URL", "CODEX_HOME"})
-    env = {key: value for key, value in os.environ.items() if key in allowed}
+        allowed.update(_CODEX_ENV_NAMES)
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key in allowed or any(key.startswith(prefix) for prefix in allowed_prefixes)
+    }
     env.setdefault("NO_COLOR", "1")
     return env
 

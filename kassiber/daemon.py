@@ -44,6 +44,7 @@ from .ai.prompt import (
 from .ai.providers import (
     acknowledge_remote_use,
     get_default_ai_provider_name,
+    is_cli_provider_locator,
     list_db_ai_providers,
     list_with_default as list_ai_providers_with_default,
     normalize_base_url,
@@ -4249,6 +4250,26 @@ def _write_ai_chat_status(
     )
 
 
+def _effective_ai_chat_tools_enabled(
+    provider_snapshot: dict[str, Any],
+    validated: dict[str, Any],
+) -> bool:
+    if not validated["tools_enabled"]:
+        return False
+    return not is_cli_provider_locator(provider_snapshot.get("base_url"))
+
+
+def _effective_ai_chat_system_prompt_kind(
+    validated: dict[str, Any],
+    *,
+    tools_enabled: bool,
+) -> str | None:
+    system_prompt_kind = validated["system_prompt_kind"]
+    if not tools_enabled and system_prompt_kind == "kassiber":
+        return None
+    return system_prompt_kind
+
+
 def _stream_ai_chat_tool_turn(
     request_id: object,
     client,
@@ -4678,7 +4699,15 @@ def _run_ai_chat_stream(
                 phase="connecting",
                 label="Connecting",
             )
-            if validated["tools_enabled"]:
+            effective_tools_enabled = _effective_ai_chat_tools_enabled(
+                provider_snapshot,
+                validated,
+            )
+            effective_system_prompt_kind = _effective_ai_chat_system_prompt_kind(
+                validated,
+                tools_enabled=effective_tools_enabled,
+            )
+            if effective_tools_enabled:
                 _run_ai_chat_tool_loop(
                     request_id,
                     client,
@@ -4691,7 +4720,7 @@ def _run_ai_chat_stream(
                 return
             stream_messages = build_chat_messages(
                 validated["messages"],
-                system_prompt_kind=validated["system_prompt_kind"],
+                system_prompt_kind=effective_system_prompt_kind,
                 system_prompt=validated["system_prompt"],
             )
             _write_ai_chat_status(
