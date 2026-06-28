@@ -42,6 +42,7 @@ from .ai.prompt import (
     normalize_system_prompt_kind,
 )
 from .ai.providers import (
+    AI_PROVIDER_SECRET_STORE_SQLCIPHER,
     acknowledge_remote_use,
     get_default_ai_provider_name,
     list_db_ai_providers,
@@ -1043,6 +1044,14 @@ def _resolve_ai_provider_api_key(
         conn=ctx.conn,
         secret_resolver=_secret_resolver_from_args(ctx, args),
     )
+
+
+def _ai_provider_has_stored_api_key(provider: dict[str, Any]) -> bool:
+    ref = provider.get("secret_ref") or {}
+    store_id = ref.get("store_id") or AI_PROVIDER_SECRET_STORE_SQLCIPHER
+    if store_id == AI_PROVIDER_SECRET_STORE_SQLCIPHER:
+        return bool(str_or_none(provider.get("api_key")))
+    return ref.get("state") == "ok"
 
 
 def _ai_provider_secret_service_account(provider: dict[str, Any]) -> tuple[str, str]:
@@ -9828,12 +9837,10 @@ def handle_request(
         )
 
     if kind == "ai.test_connection":
-        # Transient connection test against caller-supplied credentials —
-        # nothing is persisted. The Settings form uses this to validate the
-        # *entered* base_url + api_key before saving. If `provider` names a
-        # stored row and `api_key` is blank, the saved key is reused so the
-        # form's "leave blank to keep current key" affordance still tests
-        # with credentials.
+        # Transient connection test against caller-supplied provider metadata —
+        # nothing is persisted. Stored credentials may only be reused for the
+        # stored provider URL; otherwise a compromised renderer could redirect
+        # a saved bearer token to an attacker-controlled OpenAI-compatible URL.
         args = _coerce_args_dict(request_id, request.get("args"))
         base_url_raw = args.get("base_url")
         if not isinstance(base_url_raw, str) or not base_url_raw.strip():
@@ -9863,7 +9870,19 @@ def handle_request(
                 except AppError:
                     stored = None
                 if stored:
-                    api_key_text = _resolve_ai_provider_api_key(ctx, stored, args) or ""
+                    stored_url = normalize_base_url(stored.get("base_url"))
+                    has_stored_api_key = _ai_provider_has_stored_api_key(stored)
+                    if has_stored_api_key and canonical_url != stored_url:
+                        raise AppError(
+                            "ai.test_connection cannot reuse a stored API key for a different base_url",
+                            code="validation",
+                            hint=(
+                                "Save the provider URL first, then test it, so stored credentials are "
+                                "only sent to their configured origin."
+                            ),
+                        )
+                    if has_stored_api_key or canonical_url == stored_url:
+                        api_key_text = _resolve_ai_provider_api_key(ctx, stored, args) or ""
         # Use a tight timeout so a dead URL surfaces a clean error before
         # the Tauri supervisor's `DAEMON_INVOKE_TIMEOUT` (15s) kills the
         # daemon process. Test connection is interactive — a 10s ceiling
