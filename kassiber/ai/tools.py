@@ -80,6 +80,38 @@ _EMPTY_OBJECT_SCHEMA: dict[str, Any] = {
     "properties": {},
 }
 
+_SOURCE_FUNDS_SOURCE_TYPES = (
+    "fiat_purchase",
+    "exchange_withdrawal",
+    "mining",
+    "income",
+    "gift",
+    "opening_balance_attestation",
+    "missing_history",
+    "unknown",
+)
+_SOURCE_FUNDS_LINK_TYPES = (
+    "self_transfer",
+    "exchange_transfer",
+    "trade",
+    "swap",
+    "peg_in",
+    "peg_out",
+    "lightning_funding",
+    "lightning_close",
+    "lightning_routed",
+    "lightning_swap",
+    "coinjoin",
+    "payjoin",
+    "manual_source",
+    "missing_history",
+)
+_SOURCE_FUNDS_LINK_STATES = ("suggested", "reviewed", "rejected")
+_SOURCE_FUNDS_CONFIDENCE_LEVELS = ("exact", "strong", "weak", "unknown")
+_SOURCE_FUNDS_ALLOCATION_POLICIES = ("explicit", "heuristic", "unknown")
+_SOURCE_FUNDS_REVEAL_MODES = ("labels_only", "minimal", "standard", "full")
+_SOURCE_FUNDS_REPORT_PURPOSES = ("existing_transaction", "planned_exchange_sale")
+
 
 TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
@@ -809,6 +841,86 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         summary_template="Read next actions",
     ),
     ToolEntry(
+        name="ui.source_funds.sources.list",
+        description=(
+            "Read reviewed source-funds root sources for the active profile. "
+            "No descriptors, wallet files, raw evidence URLs, stored attachment "
+            "paths, or secrets are returned."
+        ),
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="read_only",
+        wire_name="ui_source_funds_sources_list",
+        daemon_kind="ui.source_funds.sources.list",
+        summary_template="Read source-funds sources",
+    ),
+    ToolEntry(
+        name="ui.source_funds.links.list",
+        description=(
+            "Read reviewed/suggested source-funds links, optionally scoped to one "
+            "target transaction. Raw evidence URLs and stored attachment paths are "
+            "redacted. Use this before adding or reviewing provenance."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "target_transaction": {
+                    "type": "string",
+                    "description": "Optional transaction id or txid to scope the link list.",
+                },
+                "state": {
+                    "type": "string",
+                    "enum": list(_SOURCE_FUNDS_LINK_STATES),
+                    "description": "Optional link review-state filter.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_source_funds_links_list",
+        daemon_kind="ui.source_funds.links.list",
+        summary_template="Read source-funds links",
+    ),
+    ToolEntry(
+        name="ui.source_funds.preview",
+        description=(
+            "Preview a source-funds path and export gates for one target transaction. "
+            "This is read-only and surfaces blockers such as missing history, "
+            "heuristic allocations, privacy-hop ambiguity, or missing pricing."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["target_transaction"],
+            "properties": {
+                "target_transaction": {
+                    "type": "string",
+                    "description": "Target transaction id or txid.",
+                },
+                "target_amount": {
+                    "type": "string",
+                    "description": "Optional BTC amount of the target to trace.",
+                },
+                "report_purpose": {
+                    "type": "string",
+                    "enum": list(_SOURCE_FUNDS_REPORT_PURPOSES),
+                    "description": "Purpose of the source-funds preview.",
+                },
+                "planned_destination": {"type": "string"},
+                "planned_note": {"type": "string"},
+                "reveal_mode": {
+                    "type": "string",
+                    "enum": list(_SOURCE_FUNDS_REVEAL_MODES),
+                },
+                "max_depth": {"type": "integer", "minimum": 1, "maximum": 32},
+                "recipient": {"type": "string"},
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_source_funds_preview",
+        daemon_kind="ui.source_funds.preview",
+        summary_template="Preview source-funds path",
+    ),
+    ToolEntry(
         name="read_skill_reference",
         description=(
             "Read one compact Kassiber skill reference by allowlisted name when more "
@@ -926,6 +1038,179 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         wire_name="ui_maintenance_run",
         daemon_kind="ui.maintenance.run",
         summary_template="Run AI maintenance",
+    ),
+    ToolEntry(
+        name="ui.source_funds.sources.create",
+        description=(
+            "Create a reviewed source-funds root source after explicit consent. "
+            "Use for user-attested acquisitions, exchange withdrawals, income, "
+            "opening-balance attestations, or known missing-history stops."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["source_type", "label"],
+            "properties": {
+                "source_type": {
+                    "type": "string",
+                    "enum": list(_SOURCE_FUNDS_SOURCE_TYPES),
+                },
+                "label": {"type": "string"},
+                "asset": {"type": "string", "description": "Asset code, defaults to BTC."},
+                "amount": {"type": "string", "description": "Optional BTC amount."},
+                "fiat_currency": {"type": "string"},
+                "fiat_value": {"type": "string"},
+                "acquired_at": {"type": "string", "description": "Optional RFC3339 timestamp."},
+                "description": {"type": "string"},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_source_funds_sources_create",
+        daemon_kind="ui.source_funds.sources.create",
+        summary_template="Create source-funds source",
+    ),
+    ToolEntry(
+        name="ui.source_funds.links.create",
+        description=(
+            "Create a reviewed or suggested source-funds link after explicit consent. "
+            "Provide exactly one of from_transaction or from_source. Supports "
+            "self-transfers, exchange transfers, trades, swaps, pegs, Lightning "
+            "hops, CoinJoin/PayJoin privacy hops, manual roots, and missing-history "
+            "edges; never claim exact provenance for heuristic privacy links."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["to_transaction", "link_type", "allocation_amount", "explanation"],
+            "properties": {
+                "from_transaction": {
+                    "type": "string",
+                    "description": "Parent transaction id or txid. Mutually exclusive with from_source.",
+                },
+                "from_source": {
+                    "type": "string",
+                    "description": "Source-funds source id or label. Mutually exclusive with from_transaction.",
+                },
+                "to_transaction": {"type": "string", "description": "Target transaction id or txid."},
+                "link_type": {
+                    "type": "string",
+                    "enum": list(_SOURCE_FUNDS_LINK_TYPES),
+                },
+                "state": {
+                    "type": "string",
+                    "enum": list(_SOURCE_FUNDS_LINK_STATES),
+                    "description": "Defaults to reviewed.",
+                },
+                "confidence": {
+                    "type": "string",
+                    "enum": list(_SOURCE_FUNDS_CONFIDENCE_LEVELS),
+                    "description": "Use weak/unknown for heuristic or privacy-boundary links.",
+                },
+                "method": {"type": "string", "description": "Evidence method label, default manual."},
+                "asset": {"type": "string"},
+                "allocation_amount": {"type": "string", "description": "BTC amount allocated to the target."},
+                "from_asset": {"type": "string"},
+                "from_allocation_amount": {
+                    "type": "string",
+                    "description": "Optional BTC amount consumed from the parent/source.",
+                },
+                "allocation_policy": {
+                    "type": "string",
+                    "enum": list(_SOURCE_FUNDS_ALLOCATION_POLICIES),
+                    "description": "Use heuristic unless the allocation is explicitly reviewed.",
+                },
+                "explanation": {"type": "string"},
+                "uses_chain_observation": {"type": "boolean"},
+                "chain_data_confirmed": {"type": "boolean"},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_source_funds_links_create",
+        daemon_kind="ui.source_funds.links.create",
+        summary_template="Create source-funds link",
+    ),
+    ToolEntry(
+        name="ui.source_funds.links.review",
+        description=(
+            "Update review state, confidence, allocation, or explanation for an "
+            "existing source-funds link after explicit consent. Use this to accept, "
+            "reject, or downgrade suggested provenance without changing tax pairs."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["link"],
+            "properties": {
+                "link": {"type": "string", "description": "Source-funds link id."},
+                "state": {"type": "string", "enum": list(_SOURCE_FUNDS_LINK_STATES)},
+                "link_type": {"type": "string", "enum": list(_SOURCE_FUNDS_LINK_TYPES)},
+                "confidence": {"type": "string", "enum": list(_SOURCE_FUNDS_CONFIDENCE_LEVELS)},
+                "allocation_amount": {"type": "string"},
+                "from_allocation_amount": {"type": "string"},
+                "allocation_policy": {
+                    "type": "string",
+                    "enum": list(_SOURCE_FUNDS_ALLOCATION_POLICIES),
+                },
+                "explanation": {"type": "string"},
+                "uses_chain_observation": {"type": "boolean"},
+                "chain_data_confirmed": {"type": "boolean"},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_source_funds_links_review",
+        daemon_kind="ui.source_funds.links.review",
+        summary_template="Review source-funds link",
+    ),
+    ToolEntry(
+        name="ui.source_funds.suggest",
+        description=(
+            "Seed source-funds link suggestions after explicit consent. Deterministic "
+            "same-txid, reviewed transaction-pair, provider-id, and Samourai "
+            "Whirlpool boundary suggestions can cover non-CoinJoin and CoinJoin-like "
+            "flows; broad time/amount hints are disabled unless explicitly requested."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "target_transaction": {
+                    "type": "string",
+                    "description": "Optional target transaction id or txid to keep suggestions scoped.",
+                },
+                "include_broad_hints": {
+                    "type": "boolean",
+                    "description": "Include weak same-day time/amount hints. Defaults to false.",
+                },
+                "max_suggestions": {"type": "integer", "minimum": 1, "maximum": 500},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_source_funds_suggest",
+        daemon_kind="ui.source_funds.suggest",
+        summary_template="Seed source-funds suggestions",
+    ),
+    ToolEntry(
+        name="ui.source_funds.links.bulk_review",
+        description=(
+            "Accept only deterministic source-funds suggestions for one target after "
+            "explicit consent. Weak time/amount hints, broad provider ids, and chain "
+            "observations remain manual review items."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["target_transaction"],
+            "properties": {
+                "target_transaction": {
+                    "type": "string",
+                    "description": "Target transaction id or txid whose deterministic suggestions should be reviewed.",
+                },
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_source_funds_links_bulk_review",
+        daemon_kind="ui.source_funds.links.bulk_review",
+        summary_template="Review deterministic source-funds links",
     ),
     ToolEntry(
         name="ui.transfers.suggest",
@@ -1357,6 +1642,36 @@ def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
         if sync_mode == "never":
             return "Process journals without source refresh"
         return "Run maintenance using current settings"
+    if tool.name == "ui.source_funds.sources.create":
+        label = arguments.get("label")
+        if isinstance(label, str) and label.strip():
+            return f"Create source-funds source {label.strip()}"
+        return "Create source-funds source"
+    if tool.name == "ui.source_funds.links.create":
+        target = arguments.get("to_transaction")
+        link_type = arguments.get("link_type")
+        if isinstance(target, str) and target.strip():
+            label = link_type.strip() if isinstance(link_type, str) and link_type.strip() else "link"
+            return f"Create {label} source-funds link to {target.strip()}"
+        return "Create source-funds link"
+    if tool.name == "ui.source_funds.links.review":
+        link = arguments.get("link")
+        state = arguments.get("state")
+        if isinstance(link, str) and link.strip():
+            if isinstance(state, str) and state.strip():
+                return f"Mark source-funds link {link.strip()} as {state.strip()}"
+            return f"Review source-funds link {link.strip()}"
+        return "Review source-funds link"
+    if tool.name == "ui.source_funds.suggest":
+        target = arguments.get("target_transaction")
+        if isinstance(target, str) and target.strip():
+            return f"Seed source-funds suggestions for {target.strip()}"
+        return "Seed source-funds suggestions"
+    if tool.name == "ui.source_funds.links.bulk_review":
+        target = arguments.get("target_transaction")
+        if isinstance(target, str) and target.strip():
+            return f"Review deterministic source-funds suggestions for {target.strip()}"
+        return "Review deterministic source-funds suggestions"
     return tool.summary_template or tool.name
 
 
@@ -1380,7 +1695,8 @@ ui.journals.transfers.list, ui.transfers.review_context, ui.rates.summary,
 ui.rates.coverage, ui.report.blockers, ui.audit.changes_since_last_answer,
 ui.maintenance.settings, ui.reports.summary, ui.reports.balance_sheet,
 ui.reports.portfolio_summary, ui.reports.tax_summary, ui.reports.balance_history,
-and report snapshots. Use
+ui.source_funds.sources.list, ui.source_funds.links.list,
+ui.source_funds.preview, and report snapshots. Use
 ui.reports.summary for exact all-time inflow/outflow rollups,
 including reviewed transfer_pairs that explain swaps or pegs inside raw flows,
 ui.reports.balance_sheet for current bucket holdings,
@@ -1394,6 +1710,11 @@ Kassiber can read program-derived output.
 For swap/peg/layer-transition questions, read ui.transfers.review_context first;
 use ui.transfers.suggest/list for focused candidate or pair follow-ups. Read
 swap-matching when review policy, confidence bands, or pairing workflow matters.
+For source-of-funds/provenance questions, read source-funds links and preview
+before proposing writes. Source-funds AI write tools require user consent,
+support non-CoinJoin link types, and write evidence records only; they do not
+mutate tax/journal transaction_pairs. Keep CoinJoin/PayJoin links explicit about
+privacy-boundary ambiguity unless the user has reviewed stronger evidence.
 
 Stale local journals are maintenance, not a question for the user; read/report
 tools may refresh them before answering. Watch-only source refresh contacts

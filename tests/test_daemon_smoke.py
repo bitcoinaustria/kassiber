@@ -29,7 +29,10 @@ from kassiber.daemon import (
     _reports_tax_summary_payload,
 )
 from kassiber import daemon as daemon_module
+from kassiber.ai import tools as ai_tools
 from kassiber.ai.providers import ai_provider_secret_service_id
+from kassiber.core import attachments as core_attachments
+from kassiber.core import source_funds as core_source_funds
 from kassiber.log_ring import get_log_ring
 from kassiber.core import freshness as core_freshness
 from kassiber.db import open_db
@@ -389,6 +392,23 @@ def _seed_workspace_with_transaction(
     )
     _run_cli(data_root, "wallets", "import-csv", "--wallet", "Cold", "--file", str(csv_path))
     _run_cli(data_root, "rates", "set", "BTC-EUR", "2026-01-01T00:00:00Z", "50000")
+
+
+def _execute_ai_tool_on_conn(executor, call, runtime, conn):
+    results = []
+    thread = threading.Thread(target=lambda: results.append(executor(call, runtime)))
+    thread.start()
+    task = runtime.main_thread_tasks.get(timeout=1)
+    try:
+        payload = task.callback(conn)
+    except BaseException as exc:
+        task.response.put((False, exc))
+    else:
+        task.response.put((True, payload))
+    thread.join(timeout=1)
+    if thread.is_alive():
+        raise AssertionError("AI tool executor did not finish")
+    return results[0]
 
 
 def _seed_austrian_hodl_disposal(data_root, tmp_root):
@@ -4204,6 +4224,260 @@ class DaemonSmokeTest(unittest.TestCase):
         )
         self.assertTrue(results[0]["ok"])
         self.assertEqual(results[0]["envelope"]["kind"], "ui.transfers.pair")
+
+    def test_source_funds_ai_tool_schemas_track_core_enums(self):
+        self.assertEqual(
+            set(ai_tools._SOURCE_FUNDS_SOURCE_TYPES),
+            set(core_source_funds.SOURCE_TYPES),
+        )
+        self.assertEqual(
+            set(ai_tools._SOURCE_FUNDS_LINK_TYPES),
+            set(core_source_funds.LINK_TYPES),
+        )
+        self.assertEqual(
+            set(ai_tools._SOURCE_FUNDS_LINK_STATES),
+            set(core_source_funds.LINK_STATES),
+        )
+        self.assertEqual(
+            set(ai_tools._SOURCE_FUNDS_CONFIDENCE_LEVELS),
+            set(core_source_funds.CONFIDENCE_LEVELS),
+        )
+        self.assertEqual(
+            set(ai_tools._SOURCE_FUNDS_ALLOCATION_POLICIES),
+            set(core_source_funds.ALLOCATION_POLICIES),
+        )
+        tool_names = {
+            tool["function"]["name"]
+            for tool in ai_tools.openai_tool_definitions(include_mutating=True)
+        }
+        self.assertIn("ui_source_funds_preview", tool_names)
+        self.assertIn("ui_source_funds_sources_create", tool_names)
+        self.assertIn("ui_source_funds_links_create", tool_names)
+        self.assertIn("ui_source_funds_links_review", tool_names)
+        self.assertIn("ui_source_funds_suggest", tool_names)
+        self.assertIn("ui_source_funds_links_bulk_review", tool_names)
+
+    def test_source_funds_ai_tools_create_and_preview_reviewed_non_coinjoin_link(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-source-funds-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(data_root, tmp)
+            conn = open_db(data_root)
+            try:
+                runtime = AiToolRuntime(
+                    data_root=str(data_root),
+                    runtime_config={},
+                    main_thread_tasks=queue.Queue(),
+                    maintenance_state={},
+                )
+                source_result = _execute_ai_tool_on_conn(
+                    _execute_mutating_ai_tool,
+                    ParsedAiToolCall(
+                        call_id="call_source",
+                        name="ui_source_funds_sources_create",
+                        arguments={
+                            "source_type": "fiat_purchase",
+                            "label": "AI reviewed fiat purchase",
+                            "asset": "BTC",
+                            "amount": "0.10000000",
+                            "description": "User-approved source-funds root created through chat.",
+                        },
+                    ),
+                    runtime,
+                    conn,
+                )
+                self.assertTrue(source_result["ok"])
+                self.assertEqual(
+                    source_result["envelope"]["kind"],
+                    "ui.source_funds.sources.create",
+                )
+                source_id = source_result["envelope"]["data"]["id"]
+
+                link_result = _execute_ai_tool_on_conn(
+                    _execute_mutating_ai_tool,
+                    ParsedAiToolCall(
+                        call_id="call_link",
+                        name="ui_source_funds_links_create",
+                        arguments={
+                            "from_source": source_id,
+                            "to_transaction": "seed-inbound-1",
+                            "link_type": "manual_source",
+                            "confidence": "strong",
+                            "allocation_amount": "0.10000000",
+                            "allocation_policy": "explicit",
+                            "explanation": "User approved a non-CoinJoin root-source link from chat.",
+                        },
+                    ),
+                    runtime,
+                    conn,
+                )
+                self.assertTrue(link_result["ok"])
+                self.assertEqual(
+                    link_result["envelope"]["kind"],
+                    "ui.source_funds.links.create",
+                )
+                self.assertEqual(link_result["envelope"]["data"]["link_type"], "manual_source")
+
+                preview_result = _execute_ai_tool_on_conn(
+                    _execute_read_only_ai_tool,
+                    ParsedAiToolCall(
+                        call_id="call_preview",
+                        name="ui_source_funds_preview",
+                        arguments={"target_transaction": "seed-inbound-1"},
+                    ),
+                    runtime,
+                    conn,
+                )
+                self.assertTrue(preview_result["ok"])
+                self.assertTrue(
+                    preview_result["envelope"]["data"]["explain_gates"]["exportable"]
+                )
+            finally:
+                conn.close()
+
+    def test_source_funds_ai_read_tools_redact_attachment_paths_and_urls(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-source-funds-redact-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(data_root, tmp)
+            conn = open_db(data_root)
+            try:
+                evidence_file = Path(tmp) / "private-bank-statement.txt"
+                evidence_file.write_text("bank statement bytes", encoding="utf-8")
+                file_attachment = core_attachments.add_attachment(
+                    conn,
+                    str(data_root),
+                    None,
+                    None,
+                    "seed-inbound-1",
+                    daemon_module._attachment_hooks(),
+                    file_path=str(evidence_file),
+                    label="Bank statement file",
+                )
+                url_attachment = core_attachments.add_attachment(
+                    conn,
+                    str(data_root),
+                    None,
+                    None,
+                    "seed-inbound-1",
+                    daemon_module._attachment_hooks(),
+                    url="https://bank.example/private/statement?token=secret",
+                    label="Bank portal record",
+                )
+                source = core_source_funds.create_source(
+                    conn,
+                    None,
+                    None,
+                    daemon_module._source_funds_hooks(),
+                    source_type="fiat_purchase",
+                    label="Reviewed source with evidence",
+                    asset="BTC",
+                    amount="0.10000000",
+                    attachment_ids=[file_attachment["id"], url_attachment["id"]],
+                )
+                core_source_funds.create_link(
+                    conn,
+                    None,
+                    None,
+                    daemon_module._source_funds_hooks(),
+                    from_source_ref=source["id"],
+                    to_transaction_ref="seed-inbound-1",
+                    link_type="manual_source",
+                    confidence="strong",
+                    allocation_amount="0.10000000",
+                    allocation_policy="explicit",
+                    explanation="User reviewed source evidence.",
+                    attachment_ids=[file_attachment["id"], url_attachment["id"]],
+                )
+
+                runtime = AiToolRuntime(
+                    data_root=str(data_root),
+                    runtime_config={},
+                    main_thread_tasks=queue.Queue(),
+                    maintenance_state={},
+                )
+                source_list = _execute_ai_tool_on_conn(
+                    _execute_read_only_ai_tool,
+                    ParsedAiToolCall(
+                        call_id="call_sources",
+                        name="ui_source_funds_sources_list",
+                        arguments={},
+                    ),
+                    runtime,
+                    conn,
+                )
+                link_list = _execute_ai_tool_on_conn(
+                    _execute_read_only_ai_tool,
+                    ParsedAiToolCall(
+                        call_id="call_links",
+                        name="ui_source_funds_links_list",
+                        arguments={"target_transaction": "seed-inbound-1"},
+                    ),
+                    runtime,
+                    conn,
+                )
+                for result in (source_list, link_list):
+                    self.assertTrue(result["ok"])
+                    payload_text = json.dumps(result["envelope"]["data"], sort_keys=True)
+                    self.assertIn("Bank statement file", payload_text)
+                    self.assertIn("Bank portal record", payload_text)
+                    self.assertNotIn("source_url", payload_text)
+                    self.assertNotIn("stored_relpath", payload_text)
+                    self.assertNotIn("bank.example", payload_text)
+                    self.assertNotIn("private-bank-statement.txt", payload_text)
+            finally:
+                conn.close()
+
+    def test_source_funds_ai_link_create_surfaces_validation_errors(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-source-funds-invalid-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(data_root, tmp)
+            conn = open_db(data_root)
+            try:
+                runtime = AiToolRuntime(
+                    data_root=str(data_root),
+                    runtime_config={},
+                    main_thread_tasks=queue.Queue(),
+                    maintenance_state={},
+                )
+                source_result = _execute_ai_tool_on_conn(
+                    _execute_mutating_ai_tool,
+                    ParsedAiToolCall(
+                        call_id="call_source",
+                        name="ui.source_funds.sources.create",
+                        arguments={
+                            "source_type": "fiat_purchase",
+                            "label": "Validation source",
+                            "asset": "BTC",
+                            "amount": "0.10000000",
+                        },
+                    ),
+                    runtime,
+                    conn,
+                )
+                self.assertTrue(source_result["ok"])
+
+                bad_result = _execute_ai_tool_on_conn(
+                    _execute_mutating_ai_tool,
+                    ParsedAiToolCall(
+                        call_id="call_bad_link",
+                        name="ui.source_funds.links.create",
+                        arguments={
+                            "from_source": source_result["envelope"]["data"]["id"],
+                            "from_transaction": "seed-inbound-1",
+                            "to_transaction": "seed-inbound-1",
+                            "link_type": "manual_source",
+                            "allocation_amount": "0.10000000",
+                            "allocation_policy": "explicit",
+                            "explanation": "Invalid because two parents are supplied.",
+                        },
+                    ),
+                    runtime,
+                    conn,
+                )
+                self.assertFalse(bad_result["ok"])
+                self.assertEqual(bad_result["reason"], "validation")
+                self.assertIn("exactly one", bad_result["message"])
+            finally:
+                conn.close()
 
     def test_auto_tool_context_marks_imported_text_as_untrusted_user_data(self):
         context = _auto_tool_context_for_model(

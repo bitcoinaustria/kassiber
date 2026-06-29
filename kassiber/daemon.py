@@ -449,6 +449,19 @@ _DIRECT_AUTO_JOURNAL_REFRESH_KINDS = {
     "ui.report.blockers",
 }
 _SWAP_MATCHING_DAEMON_KIND_PREFIXES = ("ui.transfers.", "ui.saved_views.")
+_SOURCE_FUNDS_READ_AI_DAEMON_KINDS = {
+    "ui.source_funds.preview",
+    "ui.source_funds.sources.list",
+    "ui.source_funds.links.list",
+}
+_SOURCE_FUNDS_MUTATING_AI_DAEMON_KINDS = {
+    "ui.source_funds.sources.create",
+    "ui.source_funds.links.create",
+    "ui.source_funds.links.review",
+    "ui.source_funds.suggest",
+    "ui.source_funds.links.bulk_review",
+}
+_SOURCE_FUNDS_AI_REDACTED_KEYS = {"source_url", "stored_relpath"}
 PENDING_AI_CANCEL_TTL_SECONDS = 30.0
 MAX_PENDING_AI_CANCELS = 128
 # Hard caps for source-funds daemon kinds that drive build_report. The
@@ -1540,6 +1553,18 @@ def _source_funds_hooks() -> core_source_funds.SourceFundsHooks:
     )
 
 
+def _redact_source_funds_payload_for_ai(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _redact_source_funds_payload_for_ai(item)
+            for key, item in value.items()
+            if key not in _SOURCE_FUNDS_AI_REDACTED_KEYS
+        }
+    if isinstance(value, list):
+        return [_redact_source_funds_payload_for_ai(item) for item in value]
+    return value
+
+
 def _audit_package_hooks() -> core_audit_package.AuditPackageHooks:
     report_hooks = _report_hooks()
     return core_audit_package.AuditPackageHooks(
@@ -1694,12 +1719,13 @@ def _ui_commercial_payload(
     raise AppError(f"Unsupported commercial daemon kind '{kind}'", code="validation")
 
 
-def _ui_source_funds_payload(
-    ctx: DaemonContext,
+def _ui_source_funds_payload_from_conn(
+    conn: sqlite3.Connection,
     kind: str,
     args: dict[str, Any],
+    *,
+    data_root: str | Path | None = None,
 ) -> dict[str, Any]:
-    conn = _require_conn(ctx)
     hooks = _source_funds_hooks()
     if kind == "ui.source_funds.sources.list":
         return {
@@ -2034,6 +2060,8 @@ def _ui_source_funds_payload(
         return core_source_funds_recipients.delete_recipient(conn, profile["id"], recipient["id"])
 
     if kind == "ui.source_funds.export_pdf":
+        if data_root is None:
+            raise AppError("source-funds PDF export requires a data root", code="validation")
         case_ref = args.get("case")
         target = args.get("target_transaction")
         if case_ref is not None and not isinstance(case_ref, str):
@@ -2041,7 +2069,7 @@ def _ui_source_funds_payload(
         if target is not None and not isinstance(target, str):
             raise AppError("ui.source_funds.export_pdf target_transaction must be a string", code="validation")
         explicit_export_reveal = args.get("reveal_mode")
-        path = _managed_report_export_path(ctx.data_root, "kassiber-source-funds", ".pdf")
+        path = _managed_report_export_path(data_root, "kassiber-source-funds", ".pdf")
         payload = dict(
             core_source_funds.export_pdf(
                 conn,
@@ -2068,6 +2096,19 @@ def _ui_source_funds_payload(
         return payload
 
     raise AppError(f"unsupported source-funds daemon export kind: {kind}", code="validation")
+
+
+def _ui_source_funds_payload(
+    ctx: DaemonContext,
+    kind: str,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    return _ui_source_funds_payload_from_conn(
+        _require_conn(ctx),
+        kind,
+        args,
+        data_root=ctx.data_root,
+    )
 
 
 def _optional_bool_arg(args: dict[str, Any], key: str, default: bool) -> bool:
@@ -3338,6 +3379,15 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                 payload = build_workspace_health_snapshot(conn)
             elif entry.daemon_kind == "ui.next_actions":
                 payload = build_next_actions_snapshot(conn)
+            elif entry.daemon_kind in _SOURCE_FUNDS_READ_AI_DAEMON_KINDS:
+                payload = _redact_source_funds_payload_for_ai(
+                    _ui_source_funds_payload_from_conn(
+                        conn,
+                        entry.daemon_kind,
+                        call.arguments,
+                        data_root=runtime.data_root,
+                    )
+                )
             elif entry.daemon_kind.startswith(_SWAP_MATCHING_DAEMON_KIND_PREFIXES):
                 payload = _ui_swap_matching_payload_from_conn(
                     conn,
@@ -3440,6 +3490,19 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
                     runtime.runtime_config,
                     call.arguments,
                     state=runtime.maintenance_state,
+                )
+                return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+
+            return _run_on_daemon_main_thread(runtime, _execute)
+        if entry.daemon_kind in _SOURCE_FUNDS_MUTATING_AI_DAEMON_KINDS:
+            def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
+                payload = _redact_source_funds_payload_for_ai(
+                    _ui_source_funds_payload_from_conn(
+                        conn,
+                        entry.daemon_kind,
+                        call.arguments,
+                        data_root=runtime.data_root,
+                    )
                 )
                 return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
 

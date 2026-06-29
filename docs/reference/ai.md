@@ -459,6 +459,17 @@ surfaces:
   reads the active profile's AI maintenance settings
 - `ui_workspace_health` maps to daemon kind `ui.workspace.health`
 - `ui_next_actions` maps to daemon kind `ui.next_actions`
+- `ui_source_funds_sources_list` maps to daemon kind
+  `ui.source_funds.sources.list`; attachment labels may be shown, but raw
+  evidence URLs and stored attachment paths are redacted
+- `ui_source_funds_links_list` maps to daemon kind
+  `ui.source_funds.links.list`; pass `target_transaction` to inspect the
+  reviewed/suggested provenance attached to one transaction without exposing
+  raw evidence URLs or stored attachment paths
+- `ui_source_funds_preview` maps to daemon kind `ui.source_funds.preview`; it
+  returns a read-only path graph plus export gates for missing history,
+  heuristic allocations, privacy-hop ambiguity, missing pricing, and other
+  blockers before any PDF/export decision
 - `ui_transfers_suggest` maps to daemon kind `ui.transfers.suggest`; it returns
   same-asset transfer candidates and cross-asset swap/peg candidates with
   confidence, method, computed fee, and conflict-cluster context without writing
@@ -505,7 +516,16 @@ covers review-queue actions exposed to chat: `ui_transfers_pair`,
 `ui_transfers_unpair`, `ui_transfers_bulk_pair`, `ui_transfers_dismiss`,
 `ui_transfers_rules_create`, `ui_transfers_rules_delete`,
 `ui_transfers_rules_set_enabled`, `ui_transfers_rules_apply`,
-`ui_saved_views_create`, and `ui_saved_views_delete`. Stale journals may also be
+`ui_saved_views_create`, and `ui_saved_views_delete`. Source-funds evidence
+writes are also consent-gated: `ui_source_funds_sources_create`,
+`ui_source_funds_links_create`, `ui_source_funds_links_review`,
+`ui_source_funds_suggest`, and `ui_source_funds_links_bulk_review`. These tools
+create/review provenance evidence only; they do not mutate tax/journal
+`transaction_pairs` and they support non-CoinJoin link types such as
+self-transfer, exchange transfer, trade, swap, peg-in/peg-out, Lightning hops,
+manual source, and missing-history edges. CoinJoin/PayJoin links should stay
+explicit about privacy-hop ambiguity unless the user has reviewed stronger
+evidence. Stale journals may also be
 refreshed automatically before read/report tools as local maintenance. Wallet
 sync before report reads is disabled by default; it runs automatically only
 after `ui_maintenance_configure` enables that active-profile setting, or when
