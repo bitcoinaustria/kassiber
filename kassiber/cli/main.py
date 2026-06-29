@@ -1550,7 +1550,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--candidate-type",
         choices=("transfer", "swap"),
         dest="candidate_type",
-        help="Restrict candidates to transfers/layer transitions or true cross-asset swaps",
+        help="Restrict candidates to Bitcoin movements or other cross-asset swaps",
     )
     transfers_suggest.add_argument(
         "--time-window-seconds",
@@ -1581,7 +1581,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--candidate-type",
         choices=("transfer", "swap"),
         dest="candidate_type",
-        help="Restrict candidates to transfers/layer transitions or true cross-asset swaps",
+        help="Restrict candidates to Bitcoin movements or other cross-asset swaps",
     )
     transfers_bulk_pair.add_argument(
         "--time-window-seconds",
@@ -1659,7 +1659,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--candidate-type",
         choices=("transfer", "swap"),
         dest="candidate_type",
-        help="Restrict candidates to transfers/layer transitions or true cross-asset swaps",
+        help="Restrict candidates to Bitcoin movements or other cross-asset swaps",
     )
     tr_rules_apply.add_argument(
         "--time-window-seconds",

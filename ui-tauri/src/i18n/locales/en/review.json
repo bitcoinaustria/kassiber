@@ -2,24 +2,24 @@
   "swap": {
     "tabs": {
       "swaps": "Swaps",
-      "transfers": "Transfers"
+      "transfers": "Bitcoin moves"
     },
     "queueLabel": "Review queue",
     "page": {
       "swapsTitle": "Swap candidates",
       "transfersTitle": "Transfer candidates",
-      "swapsDescription": "Review likely non-Bitcoin asset exchanges before pairing them as swaps.",
-      "transfersDescription": "Review likely wallet-to-wallet moves and Bitcoin layer transitions before pairing them as transfers.",
-      "swapsEmpty": "No unpaired swap candidates. Once likely non-Bitcoin asset exchanges show up, they will appear here.",
-      "transfersEmpty": "No unpaired transfer candidates. Once likely same-asset wallet moves or Bitcoin layer transitions show up, they will appear here."
+      "swapsDescription": "Review likely non-Bitcoin asset swaps before pairing them as taxable swaps.",
+      "transfersDescription": "Review wallet-to-wallet transfers and Bitcoin swaps across Lightning, Liquid, and on-chain rails.",
+      "swapsEmpty": "No unpaired asset-swap candidates. If non-Bitcoin swaps show up later, they will appear here.",
+      "transfersEmpty": "No unpaired Bitcoin movement candidates. Wallet transfers, Boltz swaps, pegs, and refunds show up here."
     },
     "paired": {
       "label": "Paired",
       "backToReview": "Back to review",
       "swapsTitle": "Paired swaps",
       "transfersTitle": "Paired transfers",
-      "swapsDescription": "Non-Bitcoin asset exchanges you've already paired as swaps. Open one to change its kind or policy, or unpair it.",
-      "transfersDescription": "Wallet moves and Bitcoin layer transitions you've already paired as transfers. Open one to change its kind or policy, or unpair it.",
+      "swapsDescription": "Non-Bitcoin asset swaps you've already paired. Open one to change its kind or policy, or unpair it.",
+      "transfersDescription": "Wallet moves and Bitcoin swaps you've already paired with carrying-value treatment. Open one to change its kind or policy, or unpair it.",
       "swapsEmpty": "No paired swaps yet. Swaps you confirm from the review queue show up here.",
       "transfersEmpty": "No paired transfers yet. Transfers you confirm from the review queue show up here.",
       "loading": "Loading paired pairs…",
@@ -146,7 +146,7 @@
     },
     "detail": {
       "candidateLabelTransfer": "Transfer candidate",
-      "candidateLabelLayerTransition": "Layer transition candidate",
+      "candidateLabelLayerTransition": "Bitcoin swap candidate",
       "candidateLabelSwap": "Swap candidate",
       "matchedByPaymentHash": "Matched by payment hash.",
       "matchedByTimeAmount": "Matched by time and amount.",
@@ -167,10 +167,10 @@
       "pairKind": "Pair kind",
       "feeLine": "{{fee}} · {{percent}}%",
       "transferFee": "Transfer fee",
-      "layerTransitionFee": "Layer transition fee",
+      "layerTransitionFee": "Bitcoin swap fee",
       "swapFee": "Swap fee",
       "deltasNote": "Journal and tax deltas are computed on the next journal reprocess.",
-      "layerTransitionOwnershipHint": "Pair as a layer transition only when both legs are yours. If the swap paid someone else or received from someone else, leave it unpaired as a payment or receipt.",
+      "layerTransitionOwnershipHint": "Pair a Bitcoin swap only when both legs are yours. If it paid someone else or received from someone else, leave it unpaired as a payment or receipt.",
       "wallet": "Wallet",
       "amount": "Amount",
       "occurred": "Occurred",

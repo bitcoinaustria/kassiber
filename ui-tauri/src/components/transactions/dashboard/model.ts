@@ -245,7 +245,7 @@ const flowLabelStableEnglish: Record<TransactionFlow, string> = {
   outgoing: "outgoing",
   transfer: "internal transfer",
   swap: "swap",
-  "layer-transition": "layer transition",
+  "layer-transition": "Bitcoin swap",
 };
 
 function isRedundantTransactionLabel(label: string, flow: TransactionFlow) {

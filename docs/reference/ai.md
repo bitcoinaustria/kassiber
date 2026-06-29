@@ -460,12 +460,13 @@ surfaces:
 - `ui_workspace_health` maps to daemon kind `ui.workspace.health`
 - `ui_next_actions` maps to daemon kind `ui.next_actions`
 - `ui_transfers_suggest` maps to daemon kind `ui.transfers.suggest`; it returns
-  transfer candidates, Bitcoin layer-transition candidates, and true swap
-  candidates with confidence, method, computed fee, and conflict-cluster context
-  without writing review decisions. Pass `candidate_type=transfer` or
-  `candidate_type=swap` to keep those queues separate. Layer-transition review
-  still requires ownership intent: if a swap route paid or received from an
-  external counterparty, it should remain an ordinary payment or receipt.
+  wallet-transfer candidates, Bitcoin swap/peg candidates, and other cross-asset
+  swap candidates with confidence, method, computed fee, and conflict-cluster
+  context without writing review decisions. Pass `candidate_type=transfer` for
+  carrying-value Bitcoin movements (including Boltz/submarine swaps) or
+  `candidate_type=swap` for other cross-asset swaps. Bitcoin swap review still
+  requires ownership intent: if the swap route paid or received from an external
+  counterparty, it should remain an ordinary payment or receipt.
 - `ui_transfers_review_context` maps to daemon kind
   `ui.transfers.review_context`; it returns a bounded deterministic pair-review
   packet with candidate leg summaries, confidence reasons, fee assessment,

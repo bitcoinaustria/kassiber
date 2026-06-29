@@ -2,24 +2,24 @@
   "swap": {
     "tabs": {
       "swaps": "Swaps",
-      "transfers": "Übertragungen"
+      "transfers": "Bitcoin-Bewegungen"
     },
     "queueLabel": "Prüfungs-Warteschlange",
     "page": {
       "swapsTitle": "Swap-Kandidaten",
       "transfersTitle": "Übertragungs-Kandidaten",
-      "swapsDescription": "Prüfe wahrscheinliche Nicht-Bitcoin-Asset-Tausche, bevor du sie als Swaps paarst.",
-      "transfersDescription": "Prüfe wahrscheinliche Wallet-zu-Wallet-Bewegungen und Bitcoin-Layer-Übergänge, bevor du sie als Übertragungen paarst.",
-      "swapsEmpty": "Keine ungepaarten Swap-Kandidaten. Sobald wahrscheinliche Nicht-Bitcoin-Asset-Tausche auftauchen, erscheinen sie hier.",
-      "transfersEmpty": "Keine ungepaarten Übertragungs-Kandidaten. Sobald wahrscheinliche Wallet-Bewegungen mit gleichem Asset oder Bitcoin-Layer-Übergänge auftauchen, erscheinen sie hier."
+      "swapsDescription": "Prüfe wahrscheinliche Nicht-Bitcoin-Asset-Swaps, bevor du sie als steuerbare Swaps paarst.",
+      "transfersDescription": "Prüfe Wallet-zu-Wallet-Übertragungen und Bitcoin-Swaps über Lightning, Liquid und On-chain-Rails.",
+      "swapsEmpty": "Keine ungepaarten Asset-Swap-Kandidaten. Falls später Nicht-Bitcoin-Swaps auftauchen, erscheinen sie hier.",
+      "transfersEmpty": "Keine ungepaarten Bitcoin-Bewegungs-Kandidaten. Wallet-Übertragungen, Boltz-Swaps, Pegs und Refunds erscheinen hier."
     },
     "paired": {
       "label": "Gepaart",
       "backToReview": "Zurück zur Prüfung",
       "swapsTitle": "Gepaarte Swaps",
       "transfersTitle": "Gepaarte Übertragungen",
-      "swapsDescription": "Nicht-Bitcoin-Asset-Tausche, die du bereits als Swaps gepaart hast. Öffne einen, um Art oder Richtlinie zu ändern oder die Paarung aufzuheben.",
-      "transfersDescription": "Wallet-Bewegungen und Bitcoin-Layer-Übergänge, die du bereits als Übertragungen gepaart hast. Öffne eine, um Art oder Richtlinie zu ändern oder die Paarung aufzuheben.",
+      "swapsDescription": "Nicht-Bitcoin-Asset-Swaps, die du bereits gepaart hast. Öffne einen, um Art oder Richtlinie zu ändern oder die Paarung aufzuheben.",
+      "transfersDescription": "Wallet-Bewegungen und Bitcoin-Swaps, die du bereits mit Carrying-Value-Behandlung gepaart hast. Öffne eine, um Art oder Richtlinie zu ändern oder die Paarung aufzuheben.",
       "swapsEmpty": "Noch keine gepaarten Swaps. Swaps, die du aus der Prüfungs-Warteschlange bestätigst, erscheinen hier.",
       "transfersEmpty": "Noch keine gepaarten Übertragungen. Übertragungen, die du aus der Prüfungs-Warteschlange bestätigst, erscheinen hier.",
       "loading": "Gepaarte Paare werden geladen…",
@@ -146,7 +146,7 @@
     },
     "detail": {
       "candidateLabelTransfer": "Übertragungs-Kandidat",
-      "candidateLabelLayerTransition": "Layer-Übergangs-Kandidat",
+      "candidateLabelLayerTransition": "Bitcoin-Swap-Kandidat",
       "candidateLabelSwap": "Swap-Kandidat",
       "matchedByPaymentHash": "Über Payment Hash zugeordnet.",
       "matchedByTimeAmount": "Über Zeit und Betrag zugeordnet.",
@@ -167,10 +167,10 @@
       "pairKind": "Paar-Art",
       "feeLine": "{{fee}} · {{percent}} %",
       "transferFee": "Übertragungsgebühr",
-      "layerTransitionFee": "Layer-Übergangsgebühr",
+      "layerTransitionFee": "Bitcoin-Swap-Gebühr",
       "swapFee": "Swap-Gebühr",
       "deltasNote": "Journal- und Steuerdifferenzen werden bei der nächsten Journal-Verarbeitung berechnet.",
-      "layerTransitionOwnershipHint": "Als Layer-Übergang nur paaren, wenn beide Legs dir gehören. Wenn der Swap an jemand anderen gezahlt hat oder von jemand anderem kam, ungepaart als Zahlung oder Eingang lassen.",
+      "layerTransitionOwnershipHint": "Einen Bitcoin-Swap nur paaren, wenn beide Legs dir gehören. Wenn er an jemand anderen gezahlt hat oder von jemand anderem kam, ungepaart als Zahlung oder Eingang lassen.",
       "wallet": "Wallet",
       "amount": "Betrag",
       "occurred": "Erfolgt am",

@@ -77,9 +77,9 @@ tagged `ownership_derived` in the transfer audit (its journal entry reads
 **Scope.** Graph-based ownership derivation is **Bitcoin base layer only** —
 Liquid amounts are confidential, so a Liquid spend can prove a self-transfer
 only when every destination is also recorded (pass 2). A Liquid move with an
-unsynced destination stays on the review path. BTC↔L-BTC pegs are Bitcoin layer
-transitions, but the ledger still stores `BTC` and `LBTC` separately for layer
-visibility; pair those with `transfers pair`.
+unsynced destination stays on the review path. BTC↔L-BTC pegs, Boltz swaps, and
+submarine swaps are still Bitcoin movements for accounting, but the ledger keeps
+`BTC` and `LBTC` separate for rail visibility; pair those with `transfers pair`.
 
 Both passes are only as complete as the ownership index and the recorded rows. A
 fan-out that is *partially* resolvable — pass 1 proves some legs from the graph
@@ -94,12 +94,12 @@ wallets in one profile sharing a label merge their balances, and a derived move
 routed by label can be attributed to the wrong one (totals stay correct).
 `journals process` surfaces a `duplicate_wallet_label` warning; rename them.
 
-Reports do not auto-detect or auto-pair layer transitions or cross-asset swaps.
-If you have BTC ↔ LBTC peg-ins / peg-outs or submarine swaps where both legs are
-yours, pair those legs before trusting `journals process` and downstream
-reports. Swap rails can also route ordinary payments or receipts; leave those
-one-sided or counterparty-owned flows unpaired so they keep their normal
-payment/receipt treatment.
+Reports do not auto-detect or auto-pair reviewed Bitcoin swaps or other
+cross-asset swaps. If you have BTC ↔ LBTC peg-ins / peg-outs, Boltz swaps, or
+submarine swaps where both legs are yours, pair those legs before trusting
+`journals process` and downstream reports. Swap rails can also route ordinary
+payments or receipts; leave those one-sided or counterparty-owned flows unpaired
+so they keep their normal payment/receipt treatment.
 
 When that signal is missing, you can pair them manually:
 

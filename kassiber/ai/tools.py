@@ -956,7 +956,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 "candidate_type": {
                     "type": "string",
                     "enum": ["transfer", "swap"],
-                    "description": "Optional filter for transfers/layer transitions or true swaps.",
+                    "description": "Optional filter for Bitcoin movements or other cross-asset swaps.",
                 },
             },
         },
@@ -1004,7 +1004,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 "candidate_type": {
                     "type": "string",
                     "enum": ["transfer", "swap"],
-                    "description": "Optional filter for transfers/layer transitions or true swaps.",
+                    "description": "Optional filter for Bitcoin movements or other cross-asset swaps.",
                 },
             },
         },
@@ -1134,7 +1134,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 "candidate_type": {
                     "type": "string",
                     "enum": ["transfer", "swap"],
-                    "description": "Optional filter for transfers/layer transitions or true swaps.",
+                    "description": "Optional filter for Bitcoin movements or other cross-asset swaps.",
                 },
             },
         },
@@ -1391,11 +1391,12 @@ Use ui.report.blockers before saying reports are ready, ui.rates.coverage for
 missing-price questions, and ui.audit.changes_since_last_answer when checking
 whether a previous answer is still current. Do not invent calculations when
 Kassiber can read program-derived output.
-For swap/peg/layer-transition questions, read ui.transfers.review_context first;
-use ui.transfers.suggest/list for focused candidate or pair follow-ups. Treat
-layer transitions as carrying-value candidates only when both legs are known
-owned-wallet legs; swap-routed payments or receipts should remain unpaired. Read
-swap-matching when review policy, confidence bands, or pairing workflow matters.
+For Boltz/submarine swap, peg, and Bitcoin rail questions, read
+ui.transfers.review_context first; use ui.transfers.suggest/list for focused
+candidate or pair follow-ups. Treat Bitcoin swaps as carrying-value candidates
+only when both legs are known owned-wallet legs; swap-routed payments or
+receipts should remain unpaired. Read swap-matching when review policy,
+confidence bands, or pairing workflow matters.
 
 Stale local journals are maintenance, not a question for the user; read/report
 tools may refresh them before answering. Watch-only source refresh contacts

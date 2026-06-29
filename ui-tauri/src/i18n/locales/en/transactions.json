@@ -16,7 +16,7 @@
     "outgoing": "Outgoing",
     "transfer": "Internal transfer",
     "swap": "Swap",
-    "layerTransition": "Layer transition"
+    "layerTransition": "Bitcoin swap"
   },
   "detailHeader": {
     "confirmationsTitle": "{{count}} on-chain confirmations",
@@ -49,7 +49,7 @@
     "outgoing": "Send",
     "transfer": "Internal transfer",
     "swap": "Swap",
-    "layerTransition": "Layer transition"
+    "layerTransition": "Bitcoin swap"
   },
   "classification": {
     "unlabeled": "Unlabeled",
@@ -120,7 +120,7 @@
       "short": "Own-wallet transfer"
     },
     "neuSwap": {
-      "label": "§27b carrying-value swap / layer transition",
+      "label": "§27b carrying-value Bitcoin swap",
       "short": "Neu swap"
     },
     "altSpekulation": {

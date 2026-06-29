@@ -2,10 +2,10 @@
  * Swap-matching review queue.
  *
  * Drives the ``ui.transfers.suggest`` daemon kind to surface candidate
- * pairings the matcher believes form one reviewed movement. Bitcoin rail
- * hops (Lightning ↔ Liquid, Liquid ↔ on-chain BTC, etc.) live with transfers;
- * true non-Bitcoin asset exchanges live with swaps. Each row exposes inline
- * kind / policy
+ * pairings the matcher believes form one reviewed movement. Bitcoin rail swaps
+ * (Lightning ↔ Liquid, Liquid ↔ on-chain BTC, etc.) live with the
+ * carrying-value Bitcoin-movement queue; other cross-asset swaps live with
+ * swaps. Each row exposes inline kind / policy
  * controls + per-row Pair / Dismiss actions wired to
  * ``ui.transfers.pair`` and ``ui.transfers.dismiss``.
  *
@@ -386,8 +386,8 @@ const UNDO_WINDOW_MS = 20_000;
 type PairingReviewMode = "swaps" | "transfers";
 
 /** Same-asset pairs are pure transfers; known peg/submarine/refund kinds are
- *  Bitcoin layer transitions, so they stay in the Transfers tab even when the
- *  ledger asset codes differ (BTC vs LBTC). */
+ *  Bitcoin swaps with carrying-value treatment, so they stay in the Bitcoin
+ *  movement tab even when the ledger asset codes differ (BTC vs LBTC). */
 function pairIsSameAsset(pair: PairedSwap) {
   return pair.out.asset.toUpperCase() === pair.in.asset.toUpperCase();
 }
