@@ -4,7 +4,11 @@ import i18n from "@/i18n";
 
 import {
   attachmentRecordToItem,
+  buildFlowChartRows,
+  buildSwapCandidates,
+  buildTransferCandidates,
   bucketTransactionDate,
+  candidateReferenceReviewType,
   dashboardRecordsFromTxs,
   flowChartSelectionLabel,
   isAttachmentListQueryKeyForTransaction,
@@ -147,6 +151,49 @@ describe("transaction dashboard chart selection", () => {
         (txn) => txn.flow as TransactionFlow,
       ),
     ).toBe(false);
+  });
+
+  it("treats BTC to Liquid BTC candidates as transfer-like layer transitions", () => {
+    const out = transaction({
+      id: "tx-out",
+      direction: "Send",
+      flow: "outgoing",
+      asset: "BTC",
+      amountBtc: 0.1,
+      amount: 6000,
+    });
+    const input = transaction({
+      id: "tx-in",
+      direction: "Receive",
+      flow: "incoming",
+      asset: "LBTC",
+      amountBtc: 0.0999,
+      amount: 5994,
+    });
+    const candidate = {
+      out_id: "tx-out",
+      in_id: "tx-in",
+      out_asset: "BTC",
+      in_asset: "LBTC",
+      default_kind: "peg-in",
+      candidate_type: "transfer" as const,
+    };
+
+    expect(candidateReferenceReviewType(candidate)).toBe("transfer");
+    expect(buildSwapCandidates([out, input], [candidate])).toEqual([]);
+    expect(buildTransferCandidates([out, input], [candidate])).toHaveLength(1);
+
+    const rows = buildFlowChartRows(
+      [out, input],
+      "1year",
+      "btc",
+      new Map<string, TransactionFlow>([
+        ["tx-out", "layer-transition"],
+        ["tx-in", "layer-transition"],
+      ]),
+      "count",
+    );
+    expect(rows.find((row) => row.transfers === 2)?.swaps).toBe(0);
   });
 });
 

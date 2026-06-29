@@ -290,6 +290,7 @@
       "missingExplorerLink": "Fehlender Explorer-Link",
       "missingPrice": "Fehlender Preis",
       "failedImport": "Fehlgeschlagener Import",
+      "pairingCandidates": "Paarungskandidaten",
       "swapCandidates": "Swap-Kandidaten",
       "none": "Keine Datenqualitätsprobleme"
     }

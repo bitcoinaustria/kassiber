@@ -41,6 +41,7 @@ import {
   buildBreakdown,
   buildFlowChartRows,
   buildSwapCandidates,
+  buildTransferCandidates,
   flowAxisDomain,
   flowBucketLabel,
   flowChartConfig,
@@ -203,18 +204,56 @@ const TransactionWorkbench = ({
   const [chartMetric, setChartMetric] =
     React.useState<FlowChartMetric>("amount");
   const [chartMode, setChartMode] = React.useState<FlowChartMode>("all");
-  const swapCandidates = buildSwapCandidates(records, swapCandidateRefs);
-  const swapCandidateIds = new Set(
-    swapCandidates.flatMap((candidate) => [
-      candidate.in.id,
-      candidate.out.id,
-    ]),
+  const swapCandidates = React.useMemo(
+    () => buildSwapCandidates(records, swapCandidateRefs),
+    [records, swapCandidateRefs],
   );
-  const externalRecords = records.filter((txn) => !swapCandidateIds.has(txn.id));
+  const transferCandidates = React.useMemo(
+    () => buildTransferCandidates(records, swapCandidateRefs),
+    [records, swapCandidateRefs],
+  );
+  const swapCandidateIds = React.useMemo(
+    () =>
+      new Set(
+        swapCandidates.flatMap((candidate) => [
+          candidate.in.id,
+          candidate.out.id,
+        ]),
+      ),
+    [swapCandidates],
+  );
+  const transferCandidateIds = React.useMemo(
+    () =>
+      new Set(
+        transferCandidates.flatMap((candidate) => [
+          candidate.in.id,
+          candidate.out.id,
+        ]),
+      ),
+    [transferCandidates],
+  );
+  const pairingCandidateIds = React.useMemo(
+    () => new Set([...swapCandidateIds, ...transferCandidateIds]),
+    [swapCandidateIds, transferCandidateIds],
+  );
+  const externalRecords = records.filter((txn) => !pairingCandidateIds.has(txn.id));
   const incoming = sumByFlow(externalRecords, "incoming");
   const outgoing = sumByFlow(externalRecords, "outgoing");
-  const transfers = sumByFlow(externalRecords, "transfer");
+  const baseTransfers = sumByFlow(externalRecords, "transfer");
   const markedSwaps = sumByFlow(records, "swap");
+  const transferCandidateTotals = transferCandidates.reduce(
+    (sum, candidate) => ({
+      count: sum.count + 1,
+      eur: sum.eur + (candidate.eur ?? 0),
+      btc: sum.btc + candidate.btc,
+    }),
+    { count: 0, eur: 0, btc: 0 },
+  );
+  const transfers = {
+    count: baseTransfers.count + transferCandidateTotals.count,
+    eur: baseTransfers.eur + transferCandidateTotals.eur,
+    btc: baseTransfers.btc + transferCandidateTotals.btc,
+  };
   const swapCandidateTotals = swapCandidates.reduce(
     (sum, candidate) => ({
       count: sum.count + 1,
@@ -228,6 +267,8 @@ const TransactionWorkbench = ({
       ? swapCandidateTotals.count
       : swapCandidateTotal;
   const swapCandidateCountForTotal = knownSwapCandidateCount ?? 0;
+  const pairingCandidateTotal =
+    swapCandidateTotals.count + transferCandidateTotals.count;
   const swaps = {
     count: markedSwaps.count + swapCandidateCountForTotal,
     eur: markedSwaps.eur + swapCandidateTotals.eur,
@@ -244,15 +285,21 @@ const TransactionWorkbench = ({
     chartMode === "external"
       ? externalRecords.filter(
           (txn) =>
-            !swapCandidateIds.has(txn.id) &&
+            !pairingCandidateIds.has(txn.id) &&
             ["incoming", "outgoing"].includes(transactionFlow(txn)),
         )
       : records;
+  const candidateFlowOverrides = React.useMemo(() => {
+    const next = new Map<string, TransactionFlow>();
+    for (const id of swapCandidateIds) next.set(id, "swap");
+    for (const id of transferCandidateIds) next.set(id, "layer-transition");
+    return next;
+  }, [swapCandidateIds, transferCandidateIds]);
   const chartRows = buildFlowChartRows(
     chartRecords,
     period,
     currency,
-    swapCandidateIds,
+    candidateFlowOverrides,
     chartMetric,
   );
   const activeChartRows = chartRows.filter((row) => flowPointTotal(row) > 0);
@@ -979,17 +1026,17 @@ const TransactionWorkbench = ({
                     onClick={() => handleQualityFilterClick("failed_import")}
                   />
                 ) : null}
-                {swapCandidateTotals.count > 0 ? (
+                {pairingCandidateTotal > 0 ? (
                   <QualityRow
-                    label={t("workbench.quality.swapCandidates")}
-                    value={swapCandidateTotals.count}
+                    label={t("workbench.quality.pairingCandidates")}
+                    value={pairingCandidateTotal}
                     onClick={openSwapWorkflow}
                   />
                 ) : null}
                 {withoutExplorer === 0 &&
                 missingPriceCount === 0 &&
                 failedCount === 0 &&
-                swapCandidateTotals.count === 0 ? (
+                pairingCandidateTotal === 0 ? (
                   <div className="-mx-1 grid min-h-8 w-[calc(100%+0.5rem)] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md px-1 py-1.5 text-left">
                     <span className="min-w-0 truncate text-muted-foreground">
                       {t("workbench.quality.none")}

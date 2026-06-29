@@ -343,6 +343,12 @@ def _journals_current_for_profile(conn, profile):
 
 
 TRANSFER_PAIR_KINDS = ("manual", "peg-in", "peg-out", "submarine-swap", "swap-refund")
+BITCOIN_LAYER_TRANSITION_PAIR_KINDS = (
+    "peg-in",
+    "peg-out",
+    "submarine-swap",
+    "swap-refund",
+)
 TRANSFER_PAIR_POLICIES = ("carrying-value", "taxable")
 DIRECT_SWAP_PAYOUT_KINDS = ("direct-swap-payout",)
 
@@ -845,6 +851,7 @@ def _candidate_to_dict(candidate):
         "swap_fee_kind": candidate.swap_fee_kind,
         "default_kind": candidate.default_kind,
         "default_policy": candidate.default_policy,
+        "candidate_type": _candidate_review_type(candidate),
         "conflict_set_id": candidate.conflict_set_id,
         "conflict_size": candidate.conflict_size,
     }
@@ -917,6 +924,17 @@ def _candidate_same_asset(candidate):
     return str(candidate.out_asset or "").upper() == str(candidate.in_asset or "").upper()
 
 
+def _candidate_transfer_like(candidate):
+    return (
+        _candidate_same_asset(candidate)
+        or candidate.default_kind in BITCOIN_LAYER_TRANSITION_PAIR_KINDS
+    )
+
+
+def _candidate_review_type(candidate):
+    return "transfer" if _candidate_transfer_like(candidate) else "swap"
+
+
 def _filter_transfer_candidates(
     candidates,
     *,
@@ -932,11 +950,10 @@ def _filter_transfer_candidates(
                 f"Invalid candidate_type '{candidate_type}', expected 'transfer' or 'swap'",
                 code="validation",
             )
-        same_asset = candidate_type == "transfer"
         candidates = [
             c
             for c in candidates
-            if _candidate_same_asset(c) == same_asset
+            if _candidate_review_type(c) == candidate_type
         ]
     if confidence:
         candidates = [c for c in candidates if c.confidence == confidence]
@@ -1005,8 +1022,9 @@ def suggest_transfer_candidates(
     Honours optional filters used by the review queue: ``confidence``
     pins to exact / strong; ``asset_pair`` matches the legacy asset-only
     ``OUT-IN`` shape (e.g. ``"LBTC-BTC"``); ``route_pair`` matches the
-    rail-aware route shape (e.g. ``"LNBTC-BTC"``); ``method`` pins to
-    ``payment_hash`` or ``heuristic``.
+    rail-aware route shape (e.g. ``"LNBTC-BTC"``); ``candidate_type`` splits
+    transfer-like Bitcoin layer transitions from true cross-asset swaps; and
+    ``method`` pins to ``payment_hash`` or ``heuristic``.
     """
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     rows = _load_matcher_rows(conn, profile["id"])

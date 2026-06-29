@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { TransactionsDashboard } from "@/components/transactions/dashboard/TransactionsDashboard";
 import {
+  candidateReferenceReviewType,
   readTransactionDetailParams,
   readTransactionScopeParams,
   type SwapCandidateReference,
@@ -32,23 +33,18 @@ const TRANSACTIONS_PAGE_LIMIT = 100;
 const TRANSACTIONS_WORKBENCH_LIMIT = 500;
 const TRANSACTIONS_AUTO_PREFETCH_LIMIT = 5000;
 
-function isCrossAssetCandidate(candidate: SwapCandidateReference) {
-  if (!candidate.in_asset || !candidate.out_asset) return true;
-  return candidate.in_asset.toUpperCase() !== candidate.out_asset.toUpperCase();
-}
-
 export function Transactions() {
   const { t } = useTranslation("transactions");
   const dataMode = useUiStore((state) => state.dataMode);
   const routeSearch = useRouterState({ select: (state) => state.location.search });
-  const detailParams = React.useMemo(
-    () => readTransactionDetailParams(),
-    [routeSearch],
-  );
-  const scopeParams = React.useMemo(
-    () => readTransactionScopeParams(),
-    [routeSearch],
-  );
+  const detailParams = React.useMemo(() => {
+    void routeSearch;
+    return readTransactionDetailParams();
+  }, [routeSearch]);
+  const scopeParams = React.useMemo(() => {
+    void routeSearch;
+    return readTransactionScopeParams();
+  }, [routeSearch]);
   // When a wallet deep link is active (Wallet Detail "Show all" / related
   // links), scope the daemon queries to that wallet instead of filtering the
   // fetched page client-side. Otherwise a wallet whose transactions are older
@@ -82,6 +78,9 @@ export function Transactions() {
     transactionArgs,
     (lastPage) => lastPage.data?.nextCursor ?? undefined,
   );
+  const hasNextTransactionsPage = transactionsQuery.hasNextPage;
+  const isFetchingNextTransactionsPage = transactionsQuery.isFetchingNextPage;
+  const fetchNextTransactionsPage = transactionsQuery.fetchNextPage;
   const workbenchQuery = useDaemon<TransactionsList>("ui.transactions.list", {
     limit: TRANSACTIONS_WORKBENCH_LIMIT,
     ...(walletScope ? { wallet: walletScope } : {}),
@@ -122,18 +121,18 @@ export function Transactions() {
   }, [liveTransactions, workbenchData]);
   React.useEffect(() => {
     if (dataMode !== "real") return;
-    if (!transactionsQuery.hasNextPage) return;
-    if (transactionsQuery.isFetchingNextPage) return;
+    if (!hasNextTransactionsPage) return;
+    if (isFetchingNextTransactionsPage) return;
     if ((liveTransactions?.txs.length ?? 0) >= TRANSACTIONS_AUTO_PREFETCH_LIMIT) {
       return;
     }
-    void transactionsQuery.fetchNextPage();
+    void fetchNextTransactionsPage();
   }, [
     dataMode,
+    fetchNextTransactionsPage,
+    hasNextTransactionsPage,
+    isFetchingNextTransactionsPage,
     liveTransactions?.txs.length,
-    transactionsQuery.hasNextPage,
-    transactionsQuery.isFetchingNextPage,
-    transactionsQuery.fetchNextPage,
   ]);
   const transactions: TransactionsList =
     hasLiveTransactions && loadedTransactions
@@ -145,7 +144,7 @@ export function Transactions() {
     loadedTransactions ??
     (hasLiveTableTransactions ? firstPage?.data : null) ??
     transactions;
-  const hasMoreTransactions = Boolean(transactionsQuery.hasNextPage);
+  const hasMoreTransactions = Boolean(hasNextTransactionsPage);
   const shouldShowLiveSkeleton =
     dataMode === "real" &&
     workbenchQuery.isLoading &&
@@ -190,7 +189,9 @@ export function Transactions() {
       : undefined;
   const swapCandidateTotal =
     hasLiveSwapSuggestions && swapQuery.data?.data
-      ? swapQuery.data.data.candidates.filter(isCrossAssetCandidate).length
+      ? swapQuery.data.data.candidates.filter(
+          (candidate) => candidateReferenceReviewType(candidate) === "swap",
+        ).length
       : hasLiveTransactions
         ? null
         : undefined;
@@ -210,13 +211,13 @@ export function Transactions() {
       isDataRefreshing={
         hasLiveTransactions &&
         workbenchQuery.isFetching &&
-        !transactionsQuery.isFetchingNextPage
+        !isFetchingNextTransactionsPage
       }
       hasMoreTransactions={hasMoreTransactions}
-      isLoadingMoreTransactions={transactionsQuery.isFetchingNextPage}
+      isLoadingMoreTransactions={isFetchingNextTransactionsPage}
       onLoadMoreTransactions={
         hasMoreTransactions
-          ? () => void transactionsQuery.fetchNextPage()
+          ? () => void fetchNextTransactionsPage()
           : undefined
       }
       focusedTransaction={focusedTransaction.data?.data?.transaction ?? null}

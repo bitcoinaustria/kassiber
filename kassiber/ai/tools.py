@@ -956,7 +956,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 "candidate_type": {
                     "type": "string",
                     "enum": ["transfer", "swap"],
-                    "description": "Optional filter for same-asset transfers or cross-asset swaps.",
+                    "description": "Optional filter for transfers/layer transitions or true swaps.",
                 },
             },
         },
@@ -968,7 +968,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.transfers.review_context",
         description=(
-            "Read a deterministic swap-review packet for the active profile: "
+            "Read a deterministic pair-review packet for the active profile: "
             "candidate legs, confidence reasons, fee assessment, conflict "
             "status, metadata clues, journal impact if left unpaired, active "
             "pairs, rules, and saved review views. No DB writes."
@@ -1004,7 +1004,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 "candidate_type": {
                     "type": "string",
                     "enum": ["transfer", "swap"],
-                    "description": "Optional filter for same-asset transfers or cross-asset swaps.",
+                    "description": "Optional filter for transfers/layer transitions or true swaps.",
                 },
             },
         },
@@ -1016,7 +1016,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.transfers.list",
         description=(
-            "Read active swap pairs (soft-deleted excluded) with their "
+            "Read active reviewed transfer/swap pairs (soft-deleted excluded) with their "
             "computed swap_fee_msat, kind, policy, pair_source, and confidence."
         ),
         parameters=_EMPTY_OBJECT_SCHEMA,
@@ -1134,7 +1134,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 "candidate_type": {
                     "type": "string",
                     "enum": ["transfer", "swap"],
-                    "description": "Optional filter for same-asset transfers or cross-asset swaps.",
+                    "description": "Optional filter for transfers/layer transitions or true swaps.",
                 },
             },
         },
@@ -1392,7 +1392,9 @@ missing-price questions, and ui.audit.changes_since_last_answer when checking
 whether a previous answer is still current. Do not invent calculations when
 Kassiber can read program-derived output.
 For swap/peg/layer-transition questions, read ui.transfers.review_context first;
-use ui.transfers.suggest/list for focused candidate or pair follow-ups. Read
+use ui.transfers.suggest/list for focused candidate or pair follow-ups. Treat
+layer transitions as carrying-value candidates only when both legs are known
+owned-wallet legs; swap-routed payments or receipts should remain unpaired. Read
 swap-matching when review policy, confidence bands, or pairing workflow matters.
 
 Stale local journals are maintenance, not a question for the user; read/report

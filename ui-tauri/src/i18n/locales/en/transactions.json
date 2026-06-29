@@ -290,6 +290,7 @@
       "missingExplorerLink": "Missing explorer link",
       "missingPrice": "Missing price",
       "failedImport": "Failed import",
+      "pairingCandidates": "Pairing candidates",
       "swapCandidates": "Swap candidates",
       "none": "No data quality issues"
     }

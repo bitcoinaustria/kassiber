@@ -2,8 +2,10 @@
  * Swap-matching review queue.
  *
  * Drives the ``ui.transfers.suggest`` daemon kind to surface candidate
- * pairings the matcher believes form one swap (Lightning ↔ Liquid,
- * Liquid ↔ on-chain BTC, etc.). Each row exposes inline kind / policy
+ * pairings the matcher believes form one reviewed movement. Bitcoin rail
+ * hops (Lightning ↔ Liquid, Liquid ↔ on-chain BTC, etc.) live with transfers;
+ * true non-Bitcoin asset exchanges live with swaps. Each row exposes inline
+ * kind / policy
  * controls + per-row Pair / Dismiss actions wired to
  * ``ui.transfers.pair`` and ``ui.transfers.dismiss``.
  *
@@ -160,6 +162,12 @@ const ROUTE_PAIR_VALUES = new Set<string>(ROUTE_PAIR_OPTIONS.map((option) => opt
 type PairKind = (typeof PAIR_KIND_OPTIONS)[number];
 type PairPolicy = (typeof PAIR_POLICY_OPTIONS)[number];
 type SwapRail = "onchain" | "lightning" | "liquid";
+const BITCOIN_LAYER_TRANSITION_KINDS = new Set<PairKind>([
+  "peg-in",
+  "peg-out",
+  "submarine-swap",
+  "swap-refund",
+]);
 
 interface SwapCandidate {
   out_id: string;
@@ -185,6 +193,7 @@ interface SwapCandidate {
   swap_fee_kind: string;
   default_kind: PairKind;
   default_policy: PairPolicy;
+  candidate_type?: "transfer" | "swap";
   conflict_set_id: string;
   /** Cluster cardinality over the full unfiltered candidate set; > 1 means
    * this candidate shares a leg with others (possibly hidden by filters). */
@@ -249,21 +258,30 @@ function feePercent(fee: { swap_fee_msat: number; out_amount_msat: number }) {
 }
 
 function candidatePairType(candidate: SwapCandidate) {
-  return candidate.out_asset.toUpperCase() === candidate.in_asset.toUpperCase()
-    ? "transfer"
-    : "swap";
+  if (candidate.out_asset.toUpperCase() === candidate.in_asset.toUpperCase()) {
+    return "transfer";
+  }
+  if (
+    candidate.candidate_type === "transfer" ||
+    isBitcoinLayerTransitionKind(candidate.default_kind)
+  ) {
+    return "layer-transition";
+  }
+  return "swap";
 }
 
 function candidateLabelKey(candidate: SwapCandidate) {
-  return candidatePairType(candidate) === "transfer"
-    ? "swap.detail.candidateLabelTransfer"
-    : "swap.detail.candidateLabelSwap";
+  const type = candidatePairType(candidate);
+  if (type === "transfer") return "swap.detail.candidateLabelTransfer";
+  if (type === "layer-transition") return "swap.detail.candidateLabelLayerTransition";
+  return "swap.detail.candidateLabelSwap";
 }
 
 function candidateFeeLabelKey(candidate: SwapCandidate) {
-  return candidatePairType(candidate) === "transfer"
-    ? "swap.detail.transferFee"
-    : "swap.detail.swapFee";
+  const type = candidatePairType(candidate);
+  if (type === "swap") return "swap.detail.swapFee";
+  if (type === "layer-transition") return "swap.detail.layerTransitionFee";
+  return "swap.detail.transferFee";
 }
 
 interface BulkPairResult {
@@ -367,10 +385,25 @@ const UNDO_WINDOW_MS = 20_000;
 
 type PairingReviewMode = "swaps" | "transfers";
 
-/** Same-asset pairs are transfers; cross-asset pairs are swaps — the same
- *  split the candidate queue uses (handlers.py `_candidate_same_asset`). */
+/** Same-asset pairs are pure transfers; known peg/submarine/refund kinds are
+ *  Bitcoin layer transitions, so they stay in the Transfers tab even when the
+ *  ledger asset codes differ (BTC vs LBTC). */
 function pairIsSameAsset(pair: PairedSwap) {
   return pair.out.asset.toUpperCase() === pair.in.asset.toUpperCase();
+}
+
+function isBitcoinLayerTransitionKind(kind: PairKind | string | null | undefined) {
+  return BITCOIN_LAYER_TRANSITION_KINDS.has(kind as PairKind);
+}
+
+function pairPresentationType(pair: PairedSwap) {
+  if (pairIsSameAsset(pair)) return "transfer";
+  if (isBitcoinLayerTransitionKind(pair.kind)) return "layer-transition";
+  return "swap";
+}
+
+function pairReviewMode(pair: PairedSwap): PairingReviewMode {
+  return pairPresentationType(pair) === "swap" ? "swaps" : "transfers";
 }
 
 const RAIL_DETAILS: Record<
@@ -398,7 +431,7 @@ const RAIL_DETAILS: Record<
   },
   liquid: {
     label: "Liquid",
-    shortLabel: "LBTC",
+    shortLabel: "Liquid",
     icon: liquidIcon,
     className:
       "border-cyan-200 bg-cyan-50 text-cyan-800 dark:border-cyan-400/30 dark:bg-cyan-950/40 dark:text-cyan-100",
@@ -432,7 +465,7 @@ type PairingView = "review" | "paired";
 
 export function SwapMatching() {
   const { t } = useTranslation("review");
-  const [activeTab, setActiveTab] = useState<PairingReviewTab>("swaps");
+  const [activeTab, setActiveTab] = useState<PairingReviewTab>("transfers");
   // Swaps/Transfers is the only tab strip. The settled "History" list isn't a
   // second tab — it opens from a History card in the review-queue metrics and
   // returns via a back control. The view is shared across both tabs.
@@ -448,24 +481,24 @@ export function SwapMatching() {
         className="space-y-3"
       >
         <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
-          <TabsTrigger value="swaps">{t("swap.tabs.swaps")}</TabsTrigger>
           <TabsTrigger value="transfers">{t("swap.tabs.transfers")}</TabsTrigger>
+          <TabsTrigger value="swaps">{t("swap.tabs.swaps")}</TabsTrigger>
         </TabsList>
-        <TabsContent value="swaps" className="mt-0">
-          {activeTab === "swaps" ? (
-            view === "review" ? (
-              <PairingReview mode="swaps" onShowHistory={showHistory} />
-            ) : (
-              <PairedSwaps mode="swaps" onBackToReview={showReview} />
-            )
-          ) : null}
-        </TabsContent>
         <TabsContent value="transfers" className="mt-0">
           {activeTab === "transfers" ? (
             view === "review" ? (
               <PairingReview mode="transfers" onShowHistory={showHistory} />
             ) : (
               <PairedSwaps mode="transfers" onBackToReview={showReview} />
+            )
+          ) : null}
+        </TabsContent>
+        <TabsContent value="swaps" className="mt-0">
+          {activeTab === "swaps" ? (
+            view === "review" ? (
+              <PairingReview mode="swaps" onShowHistory={showHistory} />
+            ) : (
+              <PairedSwaps mode="swaps" onBackToReview={showReview} />
             )
           ) : null}
         </TabsContent>
@@ -500,8 +533,6 @@ function PairedSwaps({
 }) {
   const { t } = useTranslation(["review", "common"]);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
-  const wantSameAsset = mode === "transfers";
-
   const { data, isLoading, isError, error } =
     useDaemon<PairsEnvelope>("ui.transfers.list");
   const unpairMutation = useDaemonMutation<unknown>("ui.transfers.unpair");
@@ -514,9 +545,9 @@ function PairedSwaps({
   const pairs = useMemo(
     () =>
       (data?.data?.pairs ?? []).filter(
-        (pair) => pairIsSameAsset(pair) === wantSameAsset,
+        (pair) => pairReviewMode(pair) === mode,
       ),
-    [data, wantSameAsset],
+    [data, mode],
   );
 
   const title =
@@ -843,6 +874,7 @@ function PairedDetailSheet({
   }, [pair]);
   const dirty = pair ? kind !== pair.kind || policy !== pair.policy : false;
   const sameAsset = pair ? pairIsSameAsset(pair) : false;
+  const presentationType = pair ? pairPresentationType(pair) : "transfer";
   const sourceKey = pairSourceLabelKey(pair?.pair_source ?? null);
   return (
     <Sheet open={Boolean(pair)} onOpenChange={onOpenChange}>
@@ -852,9 +884,11 @@ function PairedDetailSheet({
             <SheetHeader className="border-b p-4 sm:p-6">
               <SheetTitle>
                 {t(
-                  sameAsset
+                  presentationType === "transfer"
                     ? "swap.detail.candidateLabelTransfer"
-                    : "swap.detail.candidateLabelSwap",
+                    : presentationType === "layer-transition"
+                      ? "swap.detail.candidateLabelLayerTransition"
+                      : "swap.detail.candidateLabelSwap",
                 )}
               </SheetTitle>
               <SheetDescription>
@@ -948,7 +982,13 @@ function PairedDetailSheet({
                     value={formatTimestamp(pair.created_at)}
                   />
                   <DetailRow
-                    label={t(sameAsset ? "swap.detail.transferFee" : "swap.detail.swapFee")}
+                    label={t(
+                      presentationType === "swap"
+                        ? "swap.detail.swapFee"
+                        : presentationType === "layer-transition"
+                          ? "swap.detail.layerTransitionFee"
+                          : "swap.detail.transferFee",
+                    )}
                     value={
                       <span className={blurClass(hideSensitive)}>
                         {t("swap.detail.feeLine", {
@@ -972,6 +1012,11 @@ function PairedDetailSheet({
                 <p className="mt-2 text-xs text-muted-foreground">
                   {t("swap.detail.deltasNote")}
                 </p>
+                {presentationType === "layer-transition" ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {t("swap.detail.layerTransitionOwnershipHint")}
+                  </p>
+                ) : null}
               </div>
             </div>
             <SheetFooter className="border-t p-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
@@ -1003,7 +1048,7 @@ function PairingReview({
   const candidateType = mode === "transfers" ? "transfer" : "swap";
   const savedViewSurface =
     mode === "transfers" ? "transfer_candidates" : "swap_candidates";
-  const routeFilterEnabled = mode === "swaps";
+  const routeFilterEnabled = true;
   const pageTitle =
     mode === "transfers" ? t("swap.page.transfersTitle") : t("swap.page.swapsTitle");
   const pageDescription =
@@ -1070,7 +1115,7 @@ function PairingReview({
   const historyCount = useMemo(
     () =>
       (pairedListQuery.data?.data?.pairs ?? []).filter(
-        (pair) => pairIsSameAsset(pair) === (mode === "transfers"),
+        (pair) => pairReviewMode(pair) === mode,
       ).length,
     [pairedListQuery.data, mode],
   );
@@ -2011,8 +2056,8 @@ function PairingReview({
                   className="grid gap-1 border-b border-border/40 p-2.5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
                 >
                   <span className={cn("min-w-0 truncate text-xs", blurClass(hideSensitive))}>
-                    {candidate.out_asset} {formatBtc(candidate.out_amount)} →{" "}
-                    {candidate.in_asset} {formatBtc(candidate.in_amount)}
+                    {displayAssetLabel(candidate.out_asset)} {formatBtc(candidate.out_amount)} →{" "}
+                    {displayAssetLabel(candidate.in_asset)} {formatBtc(candidate.in_amount)}
                   </span>
                   <span className={cn("text-xs text-muted-foreground", blurClass(hideSensitive))}>
                     {t("swap.preview.feeLine", { fee: formatSats(candidate.swap_fee_msat) })}
@@ -2334,6 +2379,7 @@ function SwapCandidateDetailSheet({
   const { t } = useTranslation("review");
   const kind = candidate ? override.kind ?? candidate.default_kind : "manual";
   const policy = candidate ? override.policy ?? candidate.default_policy : "carrying-value";
+  const presentationType = candidate ? candidatePairType(candidate) : "transfer";
   return (
     <Sheet open={Boolean(candidate)} onOpenChange={onOpenChange}>
       <SheetContent className="w-full overflow-y-auto p-0 sm:max-w-2xl">
@@ -2459,6 +2505,11 @@ function SwapCandidateDetailSheet({
                   <p className="mt-2 text-xs text-muted-foreground">
                     {t("swap.detail.deltasNote")}
                   </p>
+                  {presentationType === "layer-transition" ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {t("swap.detail.layerTransitionOwnershipHint")}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -2749,7 +2800,7 @@ function RulePredicateAssetField({ label, value, onChange }: RuleFieldProps) {
         <SelectContent>
           <SelectItem value="any">{t("swap.createRule.any")}</SelectItem>
           <SelectItem value="BTC">BTC</SelectItem>
-          <SelectItem value="LBTC">LBTC</SelectItem>
+          <SelectItem value="LBTC">BTC on Liquid (LBTC)</SelectItem>
         </SelectContent>
       </Select>
     </div>
@@ -2978,7 +3029,7 @@ interface RailBadgeProps {
 function RailBadge({ rail, asset }: RailBadgeProps) {
   const details = RAIL_DETAILS[rail];
   const railLabel = details.shortLabel.toUpperCase();
-  const assetLabel = asset.toUpperCase();
+  const assetLabel = displayAssetLabel(asset).toUpperCase();
   const labelParts = railLabel === assetLabel ? [assetLabel] : [railLabel, assetLabel];
   return (
     <span
@@ -2986,7 +3037,7 @@ function RailBadge({ rail, asset }: RailBadgeProps) {
         "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase",
         details.className,
       )}
-      title={`${details.label} ${asset}`}
+      title={`${details.label} ${displayAssetLabel(asset)}`}
     >
       {labelParts.map((part, index) => (
         <Fragment key={part}>
@@ -2996,6 +3047,11 @@ function RailBadge({ rail, asset }: RailBadgeProps) {
       ))}
     </span>
   );
+}
+
+function displayAssetLabel(asset: string) {
+  const normalized = asset.toUpperCase();
+  return normalized === "LBTC" || normalized === "L-BTC" ? "BTC" : normalized;
 }
 
 interface SwapStatusCellProps {

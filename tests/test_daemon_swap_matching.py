@@ -155,7 +155,7 @@ class DaemonSwapMatchingTest(unittest.TestCase):
                 },
             )
             self.assertEqual(envelope["kind"], "ui.transfers.suggest")
-            self.assertGreaterEqual(envelope["data"]["counts"]["total"], 1)
+            self.assertEqual(envelope["data"]["counts"]["total"], 0)
 
             envelope = _request_response(
                 proc,
@@ -170,7 +170,13 @@ class DaemonSwapMatchingTest(unittest.TestCase):
                 },
             )
             self.assertEqual(envelope["kind"], "ui.transfers.suggest")
-            self.assertEqual(envelope["data"]["counts"]["total"], 0)
+            self.assertGreaterEqual(envelope["data"]["counts"]["total"], 1)
+            self.assertTrue(
+                all(
+                    candidate["candidate_type"] == "transfer"
+                    for candidate in envelope["data"]["candidates"]
+                )
+            )
 
             envelope = _request_response(
                 proc,
@@ -234,7 +240,7 @@ class DaemonSwapMatchingTest(unittest.TestCase):
                 },
             )
             self.assertEqual(envelope["kind"], "ui.transfers.review_context")
-            self.assertEqual(envelope["data"]["summary"]["candidate_count"], 0)
+            self.assertGreaterEqual(envelope["data"]["summary"]["candidate_count"], 1)
 
         self._with_daemon(call)
 

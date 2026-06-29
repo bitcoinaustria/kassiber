@@ -77,8 +77,9 @@ tagged `ownership_derived` in the transfer audit (its journal entry reads
 **Scope.** Graph-based ownership derivation is **Bitcoin base layer only** —
 Liquid amounts are confidential, so a Liquid spend can prove a self-transfer
 only when every destination is also recorded (pass 2). A Liquid move with an
-unsynced destination stays on the review path. Cross-asset BTC↔L-BTC pegs are
-never treated as same-asset self-transfers; pair those with `transfers pair`.
+unsynced destination stays on the review path. BTC↔L-BTC pegs are Bitcoin layer
+transitions, but the ledger still stores `BTC` and `LBTC` separately for layer
+visibility; pair those with `transfers pair`.
 
 Both passes are only as complete as the ownership index and the recorded rows. A
 fan-out that is *partially* resolvable — pass 1 proves some legs from the graph
@@ -93,9 +94,12 @@ wallets in one profile sharing a label merge their balances, and a derived move
 routed by label can be attributed to the wrong one (totals stay correct).
 `journals process` surfaces a `duplicate_wallet_label` warning; rename them.
 
-Reports do not auto-detect or auto-pair cross-asset swaps. If you have
-BTC ↔ LBTC peg-ins / peg-outs or submarine swaps, pair those legs before
-trusting `journals process` and downstream reports.
+Reports do not auto-detect or auto-pair layer transitions or cross-asset swaps.
+If you have BTC ↔ LBTC peg-ins / peg-outs or submarine swaps where both legs are
+yours, pair those legs before trusting `journals process` and downstream
+reports. Swap rails can also route ordinary payments or receipts; leave those
+one-sided or counterparty-owned flows unpaired so they keep their normal
+payment/receipt treatment.
 
 When that signal is missing, you can pair them manually:
 
@@ -121,6 +125,7 @@ Current rules:
 - cross-asset `--policy taxable` keeps the normal SELL + BUY treatment
 - non-Austrian books still reject cross-asset `--policy carrying-value`
 - cross-asset swaps are never auto-paired from time / amount heuristics during report generation; use `transfers pair` when those links matter for tax treatment
+- swap-routed payments or receipts should stay unpaired unless both legs are known owned-wallet legs of the same user
 
 Manual pairs override auto-detection.
 
