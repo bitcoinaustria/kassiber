@@ -105,7 +105,8 @@ export const sourceIcon = (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="10" fill="${background}"/><text x="20" y="24" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="10" font-weight="700" fill="${foreground}">${label}</text></svg>`,
   )}`;
 
-const lightLogoFrame = "bg-white shadow-sm shadow-zinc-950/5 dark:bg-white dark:shadow-black/30";
+const lightLogoFrame =
+  "bg-muted/60 shadow-sm shadow-zinc-950/5 dark:bg-muted/55 dark:shadow-black/20";
 
 export const CONNECTION_CATEGORIES: ConnectionCategoryItem[] = [
   { id: "wallets", label: "Wallets", icon: Wallet },
@@ -126,7 +127,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     description: "Single-sig descriptor, xpub-family, or wallet export import.",
     category: "wallets",
     image: bitcoinIcon,
-    imageClassName: "size-7",
+    imageClassName: "size-9",
     status: "ready",
     pathLabel: "Watch-only wallet",
     formatLabel: "descriptor/xpub-family",
@@ -145,7 +146,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     description: "Multisig or descriptor wallet discovery.",
     category: "wallets",
     image: bitcoinIcon,
-    imageClassName: "size-7",
+    imageClassName: "size-9",
     status: "ready",
     pathLabel: "Watch-only wallet",
     formatLabel: "output descriptor",
@@ -184,7 +185,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     description: "Liquid watch-only wallet or Elements descriptor.",
     category: "wallets",
     image: liquidIcon,
-    imageClassName: "size-8",
+    imageClassName: "size-10",
     status: "ready",
     pathLabel: "Watch-only wallet",
     formatLabel: "Liquid descriptor",
@@ -246,7 +247,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     description: "Your own full node over JSON-RPC. Address-based sync only; no transaction links.",
     category: "nodes",
     image: bitcoinIcon,
-    imageClassName: "size-7",
+    imageClassName: "size-9",
     status: "ready",
     pathLabel: "Node backend",
     formatLabel: "bitcoinrpc",
