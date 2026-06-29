@@ -538,7 +538,7 @@ function SourceArtwork({
   return (
     <span
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-lg border bg-background p-1.5",
+        "flex shrink-0 items-center justify-center rounded-lg border border-border/70 bg-muted/60 p-1 shadow-sm shadow-zinc-950/5 dark:border-border/80 dark:bg-muted/55 dark:shadow-black/20",
         className ?? "size-12",
         source.imageFrameClassName,
       )}

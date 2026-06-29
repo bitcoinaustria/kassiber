@@ -100,7 +100,7 @@ describe("connection catalog", () => {
     expect(bullWallet?.imageClassName).toContain("size-9");
   });
 
-  it("marks transparent dark logos with a light frame for dark mode", () => {
+  it("marks transparent dark logos with a theme-aware frame", () => {
     for (const id of [
       "bitbox",
       "trezor",
@@ -112,7 +112,7 @@ describe("connection catalog", () => {
       expect(
         CONNECTION_SOURCES.find((source) => source.id === id)
           ?.imageFrameClassName,
-      ).toContain("bg-white");
+      ).toContain("bg-muted");
     }
   });
 });

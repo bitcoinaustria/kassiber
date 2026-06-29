@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
+import { ConnectionAssetBadge } from "@/components/kb/ConnectionAssetBadge";
 import { ConnectionStatusPill } from "@/components/kb/ConnectionStatusPill";
 import { CountBadge } from "@/components/kb/CountBadge";
 import { DetailRow } from "@/components/kb/DetailRow";
@@ -86,10 +87,7 @@ import {
   useDaemonStreamMutation,
   retryRetryableDaemonError,
 } from "@/daemon/client";
-import {
-  connectionKindLabels,
-  connectionKindTone,
-} from "@/lib/connectionDisplay";
+import { connectionKindLabels } from "@/lib/connectionDisplay";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { formatShortDate } from "@/lib/date";
@@ -1070,15 +1068,11 @@ function ConnectionDetailView({
                 <ArrowLeft className="size-4" aria-hidden="true" />
               </Link>
             </Button>
-            <span
-              className={cn(
-                "hidden size-9 shrink-0 items-center justify-center rounded-md border sm:flex",
-                connectionKindTone(connection.kind),
-              )}
-              aria-hidden="true"
-            >
-              <Wallet className="size-4" />
-            </span>
+            <ConnectionAssetBadge
+              connection={connection}
+              size="md"
+              className="hidden sm:flex"
+            />
             <div className="min-w-0">
               <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">
                 {connection.label}
