@@ -1111,6 +1111,24 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(record["occurred_at"], timestamp_to_iso(1_700_000_000))
         self.assertIsNone(record["confirmed_at"])
 
+    def test_bitcoinrpc_multi_output_send_does_not_double_count_fee(self):
+        # Bitcoin Core stamps the SAME whole-tx fee on every `send`-category
+        # detail of one transaction. Summing per detail would double-count it for
+        # a multi-output send; the fee must be booked exactly once.
+        record = record_from_bitcoinrpc_details(
+            "66" * 32,
+            [
+                {"category": "send", "amount": -0.5, "fee": -0.0001, "blocktime": 1_700_000_000},
+                {"category": "send", "amount": -0.3, "fee": -0.0001, "blocktime": 1_700_000_000},
+            ],
+            "core",
+        )
+        self.assertEqual(record["direction"], "outbound")
+        # fee booked once (0.0001), not summed to 0.0002.
+        self.assertAlmostEqual(float(record["fee"]), 0.0001, places=8)
+        # amount = gross_out (0.8) - fee (0.0001), not - 0.0002.
+        self.assertAlmostEqual(float(record["amount"]), 0.7999, places=8)
+
 
 class _FakeSocket:
     """In-memory socket double for SOCKS5 protocol tests."""

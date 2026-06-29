@@ -83,12 +83,23 @@ class NormalizedTaxTransfer:
     external_id: str | None
     out_row: Mapping[str, Any]
     in_row: Mapping[str, Any]
-    # Pool partition id to preserve across an intra-wallet move. Intra transfers
-    # don't have a regime or swap-link concept; only the pool marker applies.
+    # Pool partition id to preserve across an intra-wallet move.
     at_pool: Optional[str] = None
+    # Austrian regime (alt/neu) for the MOVE's taxable miner-fee disposal. The
+    # move itself is non-taxable, but the fee is a disposal; without a regime
+    # rp2's moving-average aborts the whole asset on "Ambiguous Austrian
+    # disposal" when the wallet holds both Alt and Neu lots. None outside AT.
+    at_regime: Optional[AtRegime] = None
     # Optional stable id for one logical movement split out of a multi-output
     # wallet transaction. Journal rows still point at the real out/in rows.
     transfer_id: Optional[str] = None
+    # Optional logical group for derived multi-leg self-transfers. If any leg in
+    # the group cannot be booked, the whole group must be deferred so synthetic
+    # MOVE legs cannot partially replace one recorded transaction.
+    group_id: Optional[str] = None
+    # Real rows removed/replaced by this derived group. These must also be
+    # surfaced if the synthetic MOVE group is blocked downstream.
+    group_block_rows: tuple[Mapping[str, Any], ...] = ()
     # How this self-transfer was paired, for audit provenance:
     # "ownership_derived" when proven from the on-chain address graph; None for a
     # same-txid auto match or a user's manual pair.
@@ -133,6 +144,123 @@ def build_tax_quarantine(
         "reason": reason,
         "detail_json": json.dumps(detail, sort_keys=True),
     }
+
+
+def _quarantine_partner_leg(
+    quarantines: list[dict[str, Any]],
+    profile: Mapping[str, Any],
+    primary_row: Mapping[str, Any],
+    out_row: Mapping[str, Any],
+    in_row: Mapping[str, Any],
+    reason: str,
+    from_wallet: Mapping[str, Any],
+    to_wallet: Mapping[str, Any],
+    asset: str,
+    group_id: str | None = None,
+) -> None:
+    """Quarantine the OTHER leg of a self-transfer pair that was not booked.
+
+    The pair branch of ``normalize_tax_asset_inputs`` processes only the out row
+    and skips the in row (``handled_pairs``), so quarantining a single leg would
+    leave the partner (typically the recorded inbound receipt) neither booked nor
+    flagged — a silent loss that later trips a spurious ``insufficient_lots`` on a
+    genuine spend from the destination. Mirror the privacy-hop branch: when the
+    pair is not booked as a transfer, surface BOTH legs for review.
+    """
+    partner = in_row if str(primary_row["id"]) == str(out_row["id"]) else out_row
+    if str(partner["id"]) == str(primary_row["id"]):
+        return
+    detail = {
+        "from_wallet": from_wallet["label"],
+        "to_wallet": to_wallet["label"],
+        "asset": asset,
+        "direction": "transfer",
+        "paired_leg": True,
+    }
+    if group_id:
+        detail["transfer_group_id"] = group_id
+    quarantines.append(
+        build_tax_quarantine(
+            profile,
+            partner,
+            reason,
+            detail,
+        )
+    )
+
+
+def _pair_group_id(pair: Mapping[str, Any]) -> str | None:
+    raw = pair.get("group_id") if hasattr(pair, "get") else None
+    if raw in (None, ""):
+        return None
+    return str(raw)
+
+
+def _pair_group_block_rows(pair: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
+    raw = pair.get("group_block_rows") if hasattr(pair, "get") else None
+    if not raw:
+        return ()
+    return tuple(row for row in raw if isinstance(row, Mapping))
+
+
+def _transfer_item_id(transfer: NormalizedTaxTransfer) -> str:
+    return str(transfer.transfer_id or transfer.out_transaction_id)
+
+
+def _with_transfer_group(
+    detail: Mapping[str, Any], group_id: str | None
+) -> dict[str, Any]:
+    out = dict(detail)
+    if group_id:
+        out["transfer_group_id"] = group_id
+    return out
+
+
+def _append_group_block_quarantines(
+    quarantines: list[dict[str, Any]],
+    profile: Mapping[str, Any],
+    pairs: Sequence[Mapping[str, Any]],
+    *,
+    group_id: str,
+    blocked_by_reason: str,
+    asset: str,
+    wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
+) -> None:
+    """Flag every real row touched by a derived transfer group.
+
+    A grouped fan-out/consolidation replaces one recorded transaction with
+    several synthetic MOVE pairs. If one pair is not bookable, keeping sibling
+    MOVEs would silently make a partial replacement. Existing quarantines for
+    the triggering pair are preserved; this helper adds review rows for any
+    unflagged sibling source/destination rows.
+    """
+    seen = {str(q["transaction_id"]) for q in quarantines}
+    for pair in pairs:
+        rows_to_flag = [pair["out"], pair["in"], *_pair_group_block_rows(pair)]
+        for row in rows_to_flag:
+            transaction_id = str(_row_get(row, "journal_transaction_id") or row["id"])
+            if transaction_id in seen:
+                continue
+            seen.add(transaction_id)
+            wallet = wallet_refs_by_id.get(str(_row_get(row, "wallet_id")))
+            quarantines.append(
+                build_tax_quarantine(
+                    profile,
+                    row,
+                    "derived_transfer_group_blocked",
+                    {
+                        "asset": asset,
+                        "wallet": (
+                            wallet["label"]
+                            if wallet is not None and wallet.get("label")
+                            else str(_row_get(row, "wallet_id"))
+                        ),
+                        "direction": "transfer",
+                        "transfer_group_id": group_id,
+                        "blocked_by_reason": blocked_by_reason,
+                    },
+                )
+            )
 
 
 def dedupe_quarantines(quarantines: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -365,9 +493,22 @@ def _collect_samourai_internal_transfers(
     wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
     is_at: bool,
     quarantines: list[dict[str, Any]],
+    outbound_regimes: Optional[Mapping[str, AtRegime]] = None,
 ) -> tuple[dict[str, list[NormalizedTaxTransfer]], dict[str, NormalizedTaxEvent]]:
     collected: dict[str, list[NormalizedTaxTransfer]] = {}
     fee_events: dict[str, NormalizedTaxEvent] = {}
+    regime_by_row = outbound_regimes or {}
+
+    def _samourai_fee_regime(out_row: Mapping[str, Any]) -> Optional[AtRegime]:
+        # The Whirlpool privacy MOVE's miner fee is a taxable disposal; under AT
+        # moving-average it needs a regime tag or rp2 aborts the whole asset on an
+        # ambiguous disposal when both Alt and Neu lots exist. These transfers are
+        # built here, bypassing the pair path, so stamp the regime directly.
+        if not is_at:
+            return None
+        return regime_by_row.get(
+            str(out_row["id"]), infer_regime_from_timestamp(out_row["occurred_at"])
+        )
     for entries in groups:
         out_rows = [
             row
@@ -490,6 +631,7 @@ def _collect_samourai_internal_transfers(
                     out_row=first_out,
                     in_row=in_row,
                     at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
+                    at_regime=_samourai_fee_regime(first_out),
                     transfer_id=f"{first_out['id']}::{in_row['id']}",
                 )
                 for in_row in in_rows
@@ -514,6 +656,7 @@ def _collect_samourai_internal_transfers(
                     ),
                     raw_row=first_out,
                     at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
+                    at_regime=_samourai_fee_regime(first_out),
                 )
             continue
 
@@ -541,6 +684,7 @@ def _collect_samourai_internal_transfers(
                 out_row=first_out,
                 in_row=first_in,
                 at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
+                at_regime=_samourai_fee_regime(first_out),
             )
         ]
     return collected, fee_events
@@ -626,8 +770,25 @@ def normalize_tax_asset_inputs(
     regime_rows = (
         [row for row in rows if str(row["id"]) not in suppressed_loan_ids]
         if suppressed_loan_ids
-        else rows
+        else list(rows)
     )
+    # Austrian regime inference walks rows in order and depletes the Alt/Neu
+    # pools positionally, so feed it a CHRONOLOGICAL, economically-meaningful
+    # order — acquisitions before disposals at an equal timestamp — instead of
+    # inheriting the DB tiebreak (occurred_at, created_at, id). Otherwise a Neu
+    # acquisition sharing a timestamp with a disposal/move could be processed
+    # AFTER it purely by transaction id, flipping the disposal's regime (and an
+    # Austrian self-transfer fee) between neu_gain (KZ 174, 27.5%) and
+    # alt_taxfree. Mirrors the engine gate's inbound-before-outbound ordering.
+    if is_at:
+        regime_rows = sorted(
+            regime_rows,
+            key=lambda r: (
+                str(_row_get(r, "occurred_at") or ""),
+                0 if str(_row_get(r, "direction") or "") == "inbound" else 1,
+                str(_row_get(r, "id")),
+            ),
+        )
     outbound_regimes = infer_outbound_regimes(regime_rows, intra_pairs) if is_at else {}
     events: list[NormalizedTaxEvent] = []
     transfers: list[NormalizedTaxTransfer] = []
@@ -645,14 +806,20 @@ def normalize_tax_asset_inputs(
             wallet_refs_by_id,
             is_at,
             quarantines,
+            outbound_regimes,
         )
     )
 
     pair_by_row: dict[str, tuple[str, Mapping[str, Any]]] = {}
+    pairs_by_transfer_group: dict[str, list[Mapping[str, Any]]] = {}
     for pair in intra_pairs:
         pair_by_row[pair["out"]["id"]] = ("out", pair)
         pair_by_row[pair["in"]["id"]] = ("in", pair)
+        group_id = _pair_group_id(pair)
+        if group_id:
+            pairs_by_transfer_group.setdefault(group_id, []).append(pair)
     handled_pairs: set[tuple[str, str]] = set()
+    blocked_transfer_group_reasons: dict[str, str] = {}
     fanout_row_ids = _owned_fanout_row_ids(rows, pair_by_row, samourai_internal_row_ids)
 
     for row in rows:
@@ -695,11 +862,16 @@ def normalize_tax_asset_inputs(
 
             out_row = pair["out"]
             in_row = pair["in"]
+            group_id = _pair_group_id(pair)
             from_wallet = wallet_refs_by_id[out_row["wallet_id"]]
             to_wallet = wallet_refs_by_id[in_row["wallet_id"]]
             out_privacy_hop = _privacy_hop_evidence(out_row)
             in_privacy_hop = _privacy_hop_evidence(in_row)
             if out_privacy_hop or in_privacy_hop:
+                if group_id:
+                    blocked_transfer_group_reasons.setdefault(
+                        group_id, "privacy_hop_unresolved"
+                    )
                 if out_privacy_hop:
                     _append_privacy_hop_quarantine(
                         quarantines,
@@ -724,18 +896,29 @@ def normalize_tax_asset_inputs(
             sent = msat_to_btc(out_row["amount"]) + msat_to_btc(out_row["fee"])
             received = msat_to_btc(in_row["amount"])
             if sent < received:
+                if group_id:
+                    blocked_transfer_group_reasons.setdefault(
+                        group_id, "transfer_mismatch"
+                    )
                 quarantines.append(
                     build_tax_quarantine(
                         profile,
                         out_row,
                         "transfer_mismatch",
-                        {
-                            "from_wallet": from_wallet["label"],
-                            "to_wallet": to_wallet["label"],
-                            "sent": float(sent),
-                            "received": float(received),
-                        },
+                        _with_transfer_group(
+                            {
+                                "from_wallet": from_wallet["label"],
+                                "to_wallet": to_wallet["label"],
+                                "sent": float(sent),
+                                "received": float(received),
+                            },
+                            group_id,
+                        ),
                     )
+                )
+                _quarantine_partner_leg(
+                    quarantines, profile, out_row, out_row, in_row,
+                    "transfer_mismatch", from_wallet, to_wallet, asset, group_id,
                 )
                 continue
 
@@ -761,7 +944,9 @@ def normalize_tax_asset_inputs(
             if _row_get(out_row, "amount_includes_fee"):
                 unrecognized_outflow = Decimal("0")
             else:
-                unrecognized_outflow = msat_to_btc(out_row["amount"]) - msat_to_btc(in_row["amount"])
+                unrecognized_outflow = msat_to_btc(out_row["amount"]) - msat_to_btc(
+                    in_row["amount"]
+                )
             fee_ceiling = msat_to_btc(
                 fee_threshold_msat(
                     int(out_row["amount"] or 0),
@@ -770,23 +955,34 @@ def normalize_tax_asset_inputs(
                 )
             )
             if unrecognized_outflow > fee_ceiling:
+                if group_id:
+                    blocked_transfer_group_reasons.setdefault(
+                        group_id, "transfer_fee_implausible"
+                    )
                 quarantines.append(
                     build_tax_quarantine(
                         profile,
                         out_row,
                         "transfer_fee_implausible",
-                        {
-                            "from_wallet": from_wallet["label"],
-                            "to_wallet": to_wallet["label"],
-                            "asset": asset,
-                            "sent": float(sent),
-                            "received": float(received),
-                            "implied_fee": float(fee),
-                            "unrecognized_outflow": float(unrecognized_outflow),
-                            "fee_ceiling": float(fee_ceiling),
-                            "required_for": "transfer_fee_review",
-                        },
+                        _with_transfer_group(
+                            {
+                                "from_wallet": from_wallet["label"],
+                                "to_wallet": to_wallet["label"],
+                                "asset": asset,
+                                "sent": float(sent),
+                                "received": float(received),
+                                "implied_fee": float(fee),
+                                "unrecognized_outflow": float(unrecognized_outflow),
+                                "fee_ceiling": float(fee_ceiling),
+                                "required_for": "transfer_fee_review",
+                            },
+                            group_id,
+                        ),
                     )
+                )
+                _quarantine_partner_leg(
+                    quarantines, profile, out_row, out_row, in_row,
+                    "transfer_fee_implausible", from_wallet, to_wallet, asset, group_id,
                 )
                 continue
             spot_price_row = out_row
@@ -808,34 +1004,56 @@ def normalize_tax_asset_inputs(
                 and _pricing_needs_review(spot_price_row)
                 and _profile_requires_coarse_review(profile)
             ):
+                if group_id:
+                    blocked_transfer_group_reasons.setdefault(
+                        group_id, "pricing_review_required"
+                    )
                 quarantines.append(
                     build_tax_quarantine(
                         profile,
                         spot_price_row,
                         "pricing_review_required",
-                        _pricing_review_detail(
-                            spot_price_row,
-                            spot_price_wallet_label,
-                            asset,
-                            "transfer",
+                        _with_transfer_group(
+                            _pricing_review_detail(
+                                spot_price_row,
+                                spot_price_wallet_label,
+                                asset,
+                                "transfer",
+                            ),
+                            group_id,
                         ),
                     )
                 )
+                _quarantine_partner_leg(
+                    quarantines, profile, spot_price_row, out_row, in_row,
+                    "pricing_review_required", from_wallet, to_wallet, asset, group_id,
+                )
                 continue
             if spot_price is None and fee > 0:
+                if group_id:
+                    blocked_transfer_group_reasons.setdefault(
+                        group_id, "missing_spot_price"
+                    )
                 quarantines.append(
                     build_tax_quarantine(
                         profile,
                         out_row,
                         "missing_spot_price",
-                        {
-                            "from_wallet": from_wallet["label"],
-                            "to_wallet": to_wallet["label"],
-                            "asset": asset,
-                            "direction": "transfer",
-                            "required_for": "transfer_fee",
-                        },
+                        _with_transfer_group(
+                            {
+                                "from_wallet": from_wallet["label"],
+                                "to_wallet": to_wallet["label"],
+                                "asset": asset,
+                                "direction": "transfer",
+                                "required_for": "transfer_fee",
+                            },
+                            group_id,
+                        ),
                     )
+                )
+                _quarantine_partner_leg(
+                    quarantines, profile, out_row, out_row, in_row,
+                    "missing_spot_price", from_wallet, to_wallet, asset, group_id,
                 )
                 continue
 
@@ -864,6 +1082,9 @@ def normalize_tax_asset_inputs(
                     out_row=out_row,
                     in_row=in_row,
                     at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
+                    at_regime=outbound_regimes.get(str(out_row["id"])) if is_at else None,
+                    group_id=group_id,
+                    group_block_rows=_pair_group_block_rows(pair),
                     pairing_source=(
                         pair.get("source") if hasattr(pair, "get") else None
                     ),
@@ -1004,6 +1225,35 @@ def normalize_tax_asset_inputs(
             )
         )
         ordered_items.append(("event", row["id"]))
+
+    if blocked_transfer_group_reasons:
+        blocked_group_ids = set(blocked_transfer_group_reasons)
+        removed_transfer_item_ids = {
+            _transfer_item_id(transfer)
+            for transfer in transfers
+            if transfer.group_id in blocked_group_ids
+        }
+        if removed_transfer_item_ids:
+            transfers = [
+                transfer
+                for transfer in transfers
+                if transfer.group_id not in blocked_group_ids
+            ]
+            ordered_items = [
+                item
+                for item in ordered_items
+                if not (item[0] == "transfer" and item[1] in removed_transfer_item_ids)
+            ]
+        for group_id, reason in blocked_transfer_group_reasons.items():
+            _append_group_block_quarantines(
+                quarantines,
+                profile,
+                pairs_by_transfer_group.get(group_id, ()),
+                group_id=group_id,
+                blocked_by_reason=reason,
+                asset=asset,
+                wallet_refs_by_id=wallet_refs_by_id,
+            )
 
     # Any quarantined acquisition / disposal / transfer leg leaves the lot pool
     # inconsistent from its occurred_at on. Derive the earliest such instant
