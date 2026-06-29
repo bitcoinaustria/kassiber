@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import copy
 import csv
 import json
@@ -8,6 +9,7 @@ import queue
 import re
 import sqlite3
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -6146,20 +6148,61 @@ def _ledger_template_payload(
     return payload
 
 
-def _ledger_preview_payload(args: dict[str, Any]) -> dict[str, Any]:
-    """Read-only: preview what a generic-ledger file would import (no persist)."""
-    source_file = _source_file_arg(args)
-    if not source_file:
+_LEDGER_PREVIEW_EXTENSIONS = {".csv", ".tsv", ".xlsx", ".xlsm"}
+
+
+def _ledger_preview_extension(filename: str) -> str:
+    extension = Path(filename).suffix.lower()
+    if extension not in _LEDGER_PREVIEW_EXTENSIONS:
         raise AppError(
-            "source_file is required",
+            "Unsupported ledger preview file type.",
             code="validation",
-            hint="Choose the ledger file to preview.",
+            hint="Choose a CSV, TSV, XLSX, or XLSM ledger file.",
+            details={"extension": extension or None},
             retryable=False,
         )
+    return extension
+
+
+def _ledger_preview_upload_arg(args: dict[str, Any]) -> tuple[bytes, str]:
+    encoded = _optional_str_arg(args, "source_bytes_base64")
+    filename = _optional_str_arg(args, "filename") or "ledger.csv"
+    if not encoded:
+        raise AppError(
+            "source_bytes_base64 is required",
+            code="validation",
+            hint="Choose the ledger file with the desktop file picker before previewing it.",
+            retryable=False,
+        )
+    extension = _ledger_preview_extension(filename)
+    try:
+        payload = base64.b64decode(encoded, validate=True)
+    except Exception as exc:  # noqa: BLE001 - convert parser detail into stable envelope
+        raise AppError(
+            "Could not decode selected ledger file.",
+            code="validation",
+            hint="Choose the file again and retry the preview.",
+            retryable=False,
+        ) from exc
+    return payload, extension
+
+
+def _ledger_preview_payload(args: dict[str, Any]) -> dict[str, Any]:
+    """Read-only: preview an uploaded generic-ledger file (no persist)."""
     limit = args.get("limit")
-    return importers_module.preview_generic_ledger_records(
-        source_file, limit=200 if limit is None else limit
-    )
+    # Browser file inputs cannot provide an importable path, so those previews
+    # upload bytes instead of persisting the basename as a future source_file.
+    payload, extension = _ledger_preview_upload_arg(args)
+    with tempfile.NamedTemporaryFile(suffix=extension, delete=False) as handle:
+        temp_path = Path(handle.name)
+        handle.write(payload)
+        handle.flush()
+    try:
+        return importers_module.preview_generic_ledger_records(
+            str(temp_path), limit=200 if limit is None else limit
+        )
+    finally:
+        temp_path.unlink(missing_ok=True)
 
 
 def _import_wallet_file_payload(

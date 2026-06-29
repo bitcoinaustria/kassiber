@@ -7,6 +7,7 @@ import {
 import {
   existsSync,
   readFileSync,
+  statSync,
   realpathSync,
 } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -23,6 +24,7 @@ const DAEMON_BRIDGE_PATH = "/__kassiber__/daemon";
 const DAEMON_BRIDGE_STREAM_PATH = "/__kassiber__/daemon/stream";
 const FILE_PICKER_BRIDGE_PATH = "/__kassiber__/pick-file";
 const IMPORT_PROJECT_BRIDGE_PATH = "/__kassiber__/import-project";
+const LEDGER_PREVIEW_EXTENSIONS = new Set([".csv", ".tsv", ".xlsx", ".xlsm"]);
 const BRIDGE_REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
 const UI_ROOT = __dirname;
 const NODE_MODULES_REALPATH = (() => {
@@ -584,6 +586,18 @@ function normalizeFilePickerFilters(filters: unknown) {
     .filter((extension, index, all) => all.indexOf(extension) === index);
 }
 
+function readLedgerPreviewFileBase64(filePath: string): string {
+  const extension = path.extname(filePath).toLowerCase();
+  if (!LEDGER_PREVIEW_EXTENSIONS.has(extension)) {
+    throw new Error("Ledger preview files must use .csv, .tsv, .xlsx, or .xlsm.");
+  }
+  const metadata = statSync(filePath);
+  if (!metadata.isFile()) {
+    throw new Error("Ledger preview selection must be a file.");
+  }
+  return readFileSync(filePath).toString("base64");
+}
+
 async function pickFileViaNativeBridge(
   request: Record<string, unknown>,
 ): Promise<string[]> {
@@ -683,6 +697,11 @@ async function handleBridgeFilePicker(req: IncomingMessage, res: ServerResponse)
     const paths = await pickFileViaNativeBridge(request);
     if (request.multiple === true) {
       writeJson(res, 200, { paths });
+    } else if (request.includeContentsBase64 === true && paths[0]) {
+      writeJson(res, 200, {
+        path: paths[0],
+        contentsBase64: readLedgerPreviewFileBase64(paths[0]),
+      });
     } else {
       writeJson(res, 200, { path: paths[0] ?? null });
     }
