@@ -152,6 +152,7 @@
       "btcpay": "BTCPay-Anreicherung",
       "notConfigured": "Manuell / nicht konfiguriert"
     },
+    "deprecatedBadge": "Veraltet",
     "edit": {
       "title": "Verbindung bearbeiten",
       "descriptionEncrypted": "Bestätige diese Änderung mit der lokalen Datenbank-Passphrase.",
@@ -186,6 +187,8 @@
       "selectExportFileTitle": "Exportdatei von {{label}} auswählen",
       "clearProvenance": "BTCPay-Herkunftsrouten leeren",
       "clearProvenanceHelper": "Entfernt alle {{count}} gespeicherten Route(n). Descriptor-/Datei-Sync bleibt die Guthaben-Quelle. Füge Routen über Wallet hinzufügen erneut hinzu.",
+      "deprecated": "Veraltete Wallet",
+      "deprecatedHelper": "Importierte Historie behalten, aber diese Wallet von Alle aktualisieren und Hintergrund-Aktualisierung ausschließen. Manuelle Aktualisierung funktioniert weiter.",
       "passphrase": "Passphrase",
       "plaintextChallenge": "Challenge für Klartext-Änderung",
       "saving": "Wird gespeichert...",

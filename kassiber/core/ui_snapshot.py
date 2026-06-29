@@ -34,6 +34,7 @@ from .wallets import (
     has_descriptor_sync_material,
     load_wallet_descriptor_plan_from_config,
     wallet_btcpay_provenance_config,
+    wallet_is_deprecated,
 )
 
 
@@ -865,6 +866,7 @@ def _connections(
             "syncMode": backend_summary["sync_mode"],
             "syncSource": sync_source,
             "sourceFormat": source_format,
+            "deprecated": wallet_is_deprecated(config),
         }
         if has_descriptor:
             connection["gap"] = (
@@ -3445,6 +3447,7 @@ def build_wallets_list_snapshot(
                 "last_transaction_at": row["last_tx_at"],
                 "last_synced_at": last_synced_at or None,
                 "sync_status": "has_transactions" if tx_count else "empty",
+                "deprecated": wallet_is_deprecated(config),
                 "journals_stale": freshness["needs_processing"] and tx_count > 0,
                 "btcpay_provenance": provenance_routes,
                 "samourai": samourai_metadata,

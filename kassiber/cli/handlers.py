@@ -2183,7 +2183,17 @@ def sync_wallet(
     if sync_all and wallet_ref:
         raise AppError("--wallet and --all are mutually exclusive", code="validation")
     if sync_all:
-        wallets = conn.execute("SELECT * FROM wallets WHERE profile_id = ? ORDER BY label ASC", (profile["id"],)).fetchall()
+        wallet_rows = conn.execute(
+            "SELECT * FROM wallets WHERE profile_id = ? ORDER BY label ASC",
+            (profile["id"],),
+        ).fetchall()
+        wallets = [
+            wallet
+            for wallet in wallet_rows
+            if not core_wallets.wallet_is_deprecated(
+                json.loads(wallet["config_json"] or "{}")
+            )
+        ]
         hooks = _wallet_sync_hooks(commit=False)
         # Run the network-only fetch for backend-synced wallets concurrently
         # before the serial write loop. DB writes and the per-wallet savepoint

@@ -666,6 +666,18 @@ def scan_descriptor_targets(
 ):
     limits = branch_limits(plan)
     targets = []
+    targets_checked = 0
+
+    def emit_discovery_progress(branch_index, branch_gap_limit, consecutive_unused):
+        _emit_backend_progress(
+            "discovery",
+            targets_checked=targets_checked,
+            retained_targets=len(targets),
+            branch_index=branch_index,
+            gap_limit=branch_gap_limit,
+            unused_streak=consecutive_unused,
+        )
+
     for branch in plan.branches:
         branch_gap_limit = limits.get(branch.branch_index, plan.gap_limit)
         if branch_gap_limit <= 1:
@@ -701,6 +713,7 @@ def scan_descriptor_targets(
                 used_batch = list(target_used_batch(batch_targets))
                 if len(used_batch) != len(batch_targets):
                     raise AppError("Descriptor discovery returned an unexpected number of usage checks")
+                targets_checked += len(batch_targets)
                 for target, is_used in zip(batch_targets, used_batch):
                     targets.append(target)
                     if is_used:
@@ -710,25 +723,31 @@ def scan_descriptor_targets(
                     address_index += 1
                     if consecutive_unused >= branch_gap_limit:
                         break
-                _emit_backend_progress(
-                    "discovery",
-                    target_count=len(targets),
-                    branch_index=branch.branch_index,
+                emit_discovery_progress(
+                    branch.branch_index,
+                    branch_gap_limit,
+                    consecutive_unused,
                 )
                 continue
             target = sync_target_from_derived(derive_descriptor_target(plan, branch.branch_index, address_index))
             targets.append(target)
+            targets_checked += 1
             if target_used and target_used(target):
                 consecutive_unused = 0
             else:
                 consecutive_unused += 1
             address_index += 1
             if address_index % 50 == 0:
-                _emit_backend_progress(
-                    "discovery",
-                    target_count=len(targets),
-                    branch_index=branch.branch_index,
+                emit_discovery_progress(
+                    branch.branch_index,
+                    branch_gap_limit,
+                    consecutive_unused,
                 )
+        emit_discovery_progress(
+            branch.branch_index,
+            branch_gap_limit,
+            consecutive_unused,
+        )
     return targets
 
 
@@ -2656,19 +2675,47 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
             batch_size=batch_size,
         )
         history_scripthashes = []
-        for scripthash, status in zip(scripthashes, statuses):
+        total_scripts = len(scripthashes)
+        for status_index, (scripthash, status) in enumerate(
+            zip(scripthashes, statuses),
+            start=1,
+        ):
             next_statuses[scripthash] = status
             target = target_by_scripthash[scripthash]
             highest_used = _merge_highest_used(highest_used, target, status is not None)
             if status is None and previous_statuses.get(scripthash) is None:
                 next_known_txids[scripthash] = []
                 unchanged_scripts += 1
+                if status_index % max(1, batch_size) == 0 or status_index == total_scripts:
+                    _emit_backend_progress(
+                        "backend_fetch",
+                        target_count=total_scripts,
+                        targets_checked=status_index,
+                        scripts_changed=len(history_scripthashes),
+                        scripts_unchanged=unchanged_scripts,
+                    )
                 continue
             if status == previous_statuses.get(scripthash) and scripthash not in previous_dirty:
                 next_known_txids[scripthash] = sorted(previous_known_txids.get(scripthash) or [])
                 unchanged_scripts += 1
+                if status_index % max(1, batch_size) == 0 or status_index == total_scripts:
+                    _emit_backend_progress(
+                        "backend_fetch",
+                        target_count=total_scripts,
+                        targets_checked=status_index,
+                        scripts_changed=len(history_scripthashes),
+                        scripts_unchanged=unchanged_scripts,
+                    )
                 continue
             history_scripthashes.append(scripthash)
+            if status_index % max(1, batch_size) == 0 or status_index == total_scripts:
+                _emit_backend_progress(
+                    "backend_fetch",
+                    target_count=total_scripts,
+                    targets_checked=status_index,
+                    scripts_changed=len(history_scripthashes),
+                    scripts_unchanged=unchanged_scripts,
+                )
         if history_scripthashes:
             changed_scripts = len(history_scripthashes)
             fetched_histories = electrum_call_many(
@@ -2679,7 +2726,10 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
                 ],
                 batch_size=batch_size,
             )
-            for scripthash, history in zip(history_scripthashes, fetched_histories):
+            for history_index, (scripthash, history) in enumerate(
+                zip(history_scripthashes, fetched_histories),
+                start=1,
+            ):
                 normalized_history = history or []
                 histories.extend(normalized_history)
                 next_known_txids[scripthash] = sorted(
@@ -2691,6 +2741,19 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
                 )
                 if any(_history_needs_recheck(item) for item in normalized_history):
                     dirty_scripthashes.add(scripthash)
+                if history_index % max(1, batch_size) == 0 or history_index == changed_scripts:
+                    _emit_backend_progress(
+                        "backend_fetch",
+                        target_count=changed_scripts,
+                        targets_checked=history_index,
+                        known_txids=len(
+                            {
+                                item.get("tx_hash")
+                                for item in histories
+                                if isinstance(item, dict) and item.get("tx_hash")
+                            }
+                        ),
+                    )
 
         def lookup(txid):
             if txid not in transactions:
@@ -2779,7 +2842,7 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
                 )
                 for height, header_hex in zip(missing_heights, header_hexes):
                     header_timestamps[height] = block_header_timestamp(header_hex)
-        for txid, history in ordered_histories:
+        for tx_index, (txid, history) in enumerate(ordered_histories, start=1):
             occurred_at = _history_occurred_at(history, height_to_timestamp)
             if sync_state.chain == "liquid":
                 current_tx = lookup(txid)
@@ -2797,18 +2860,25 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
                         confirmed_at=None if occurred_at == UNKNOWN_OCCURRED_AT else occurred_at,
                     )
                 )
-                continue
-            tx = lookup(txid)
-            normalized = record_from_electrum_tx(
-                txid,
-                tx,
-                occurred_at,
-                tracked_scripts,
-                backend["name"],
-                lookup,
-            )
-            if normalized:
-                records.append(normalized)
+            else:
+                tx = lookup(txid)
+                normalized = record_from_electrum_tx(
+                    txid,
+                    tx,
+                    occurred_at,
+                    tracked_scripts,
+                    backend["name"],
+                    lookup,
+                )
+                if normalized:
+                    records.append(normalized)
+            if tx_index % 100 == 0 or tx_index == len(ordered_histories):
+                _emit_backend_progress(
+                    "decode_enrich",
+                    transactions_seen=tx_index,
+                    transactions_total=len(ordered_histories),
+                    records=len(records),
+                )
     checkpoint.update(
         {
             "backend": _backend_identity(backend, sync_state),

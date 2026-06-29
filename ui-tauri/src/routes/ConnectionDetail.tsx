@@ -200,6 +200,7 @@ type WalletListItem = {
   network?: string;
   sync_mode?: string;
   sync_source?: string;
+  deprecated?: boolean;
   transaction_count?: number;
   last_transaction_at?: string | null;
   last_synced_at?: string | null;
@@ -594,6 +595,9 @@ function ConnectionDetailView({
       (wallet.id && wallet.id === connection.id) ||
       wallet.label === connection.label,
   );
+  const isDeprecatedWallet = Boolean(
+    walletDetail?.deprecated ?? connection.deprecated,
+  );
   const coinsInventoryQuery = useDaemon<WalletUtxosData>(
     "ui.wallets.utxos",
     { wallet: connection.id },
@@ -646,6 +650,7 @@ function ConnectionDetailView({
   const [editPaymentMethodId, setEditPaymentMethodId] = useState("");
   const [editBackend, setEditBackend] = useState("");
   const [editSourceFile, setEditSourceFile] = useState("");
+  const [editDeprecated, setEditDeprecated] = useState(false);
   const [editClearProvenance, setEditClearProvenance] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -811,6 +816,7 @@ function ConnectionDetailView({
     setEditPaymentMethodId("");
     setEditBackend("");
     setEditSourceFile("");
+    setEditDeprecated(isDeprecatedWallet);
     setEditClearProvenance(false);
     setEditError(null);
     setEditOpen(true);
@@ -972,6 +978,9 @@ function ConnectionDetailView({
     if (editClearProvenance && walletProvenanceRoutes.length > 0) {
       clearFields.push("btcpay_provenance");
     }
+    if (editDeprecated !== isDeprecatedWallet) {
+      configChanges.deprecated = editDeprecated;
+    }
     if (
       !labelChanged &&
       Object.keys(configChanges).length === 0 &&
@@ -1082,6 +1091,14 @@ function ConnectionDetailView({
                   <>
                     <span aria-hidden="true">·</span>
                     <ConnectionStatusPill status={connection.status} />
+                  </>
+                ) : null}
+                {isDeprecatedWallet ? (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <Badge variant="secondary" className="rounded-md">
+                      {t("detail.deprecatedBadge")}
+                    </Badge>
                   </>
                 ) : null}
               </div>
@@ -2031,6 +2048,23 @@ function ConnectionDetailView({
                 </label>
               </div>
             ) : null}
+            <div className="space-y-2 rounded-md border border-border/70 p-3">
+              <label className="flex items-start gap-3 text-sm">
+                <Checkbox
+                  className="mt-0.5"
+                  checked={editDeprecated}
+                  onCheckedChange={(checked) =>
+                    setEditDeprecated(checked === true)
+                  }
+                />
+                <span className="grid gap-0.5">
+                  <span>{t("detail.edit.deprecated")}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {t("detail.edit.deprecatedHelper")}
+                  </span>
+                </span>
+              </label>
+            </div>
             {encryptedWorkspace ? (
               <div className="space-y-2">
                 <Label htmlFor="connection-edit-passphrase">

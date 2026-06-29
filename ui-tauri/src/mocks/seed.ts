@@ -46,6 +46,7 @@ export interface Connection {
   syncMode?: string;
   syncSource?: string;
   sourceFormat?: string;
+  deprecated?: boolean;
   transactionCount?: number;
   addresses?: number;
   gap?: number;

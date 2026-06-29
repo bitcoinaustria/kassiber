@@ -186,6 +186,18 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(progress[1]["processed"], 40)
         self.assertEqual(progress[1]["total"], 100)
 
+    def test_backend_progress_allows_scanned_count_before_total_is_known(self):
+        progress = []
+        token = sync_progress_emitter.set(lambda payload: progress.append(dict(payload)))
+        try:
+            _emit_backend_progress("discovery", targets_checked=150)
+        finally:
+            sync_progress_emitter.reset(token)
+
+        self.assertEqual(progress[0]["phase"], "discovery")
+        self.assertEqual(progress[0]["processed"], 150)
+        self.assertNotIn("total", progress[0])
+
     def test_sync_wallet_from_backend_keeps_inventory_when_utxos_skipped(self):
         wallet = {
             "id": "wallet-1",
@@ -801,6 +813,7 @@ class SyncBackendsTest(unittest.TestCase):
             branches=(DescriptorBranch(0, "receive", FakeDescriptor()),),
         )
         checked = []
+        progress = []
 
         def fake_derive(plan, branch_index=None, start=0, end=0):
             del plan
@@ -829,15 +842,24 @@ class SyncBackendsTest(unittest.TestCase):
             "kassiber.core.sync_backends.derive_descriptor_targets",
             side_effect=fake_derive,
         ):
-            targets = scan_descriptor_targets(
-                plan,
-                target_used_batch=target_used_batch,
-                scan_batch_size=1,
-                highest_used={"0": 2},
-            )
+            token = sync_progress_emitter.set(lambda payload: progress.append(dict(payload)))
+            try:
+                targets = scan_descriptor_targets(
+                    plan,
+                    target_used_batch=target_used_batch,
+                    scan_batch_size=1,
+                    highest_used={"0": 2},
+                )
+            finally:
+                sync_progress_emitter.reset(token)
 
         self.assertEqual([target["address_index"] for target in targets], [0, 1, 2, 3, 4])
         self.assertEqual(checked, [3, 4])
+        self.assertEqual(progress[-1]["processed"], 2)
+        self.assertNotIn("total", progress[-1])
+        self.assertEqual(progress[-1]["retained_targets"], 5)
+        self.assertEqual(progress[-1]["unused_streak"], 2)
+        self.assertEqual(progress[-1]["gap_limit"], 2)
 
     def test_first_sync_scans_full_gap_depth_following_used_addresses(self):
         # A first sync (no stored checkpoint, highest_used=None) must walk the

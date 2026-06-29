@@ -120,6 +120,7 @@ function WalletRow({
     connection.addresses != null ? `${connection.addresses} addresses` : null,
     connection.channels != null ? `${connection.channels} channels` : null,
     connection.gap != null ? `gap limit ${connection.gap}` : null,
+    connection.deprecated ? "deprecated" : null,
   ].filter(Boolean);
   const compositionTitle = hideSensitive
     ? "Wallet share hidden"

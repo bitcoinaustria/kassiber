@@ -86,6 +86,42 @@ class FreshnessTest(unittest.TestCase):
             "SQLite-backed source freshness and daemon job orchestration helpers.",
         )
 
+    def test_deprecated_wallets_skip_automatic_freshness_but_allow_explicit_refresh(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        for wallet_id, label, config in [
+            ("active", "Active", {"addresses": ["bc1qactive"]}),
+            ("old", "Old", {"addresses": ["bc1qold"], "deprecated": True}),
+        ]:
+            conn.execute(
+                """
+                INSERT INTO wallets(
+                    id, workspace_id, profile_id, account_id, label, kind,
+                    config_json, created_at
+                )
+                VALUES(?, 'ws', ?, NULL, ?, 'address', ?, '2026-06-04T00:00:00Z')
+                """,
+                (wallet_id, profile_id, label, json.dumps(config, sort_keys=True)),
+            )
+        conn.commit()
+
+        automatic = daemon_freshness._freshness_wallet_source_specs(
+            conn,
+            profile_id,
+            include_rates=False,
+            include_journals=False,
+        )
+        self.assertEqual([spec["payload"]["wallet_label"] for spec in automatic], ["Active"])
+
+        explicit = daemon_freshness._freshness_wallet_source_specs(
+            conn,
+            profile_id,
+            wallet_ref="Old",
+            include_rates=False,
+            include_journals=False,
+        )
+        self.assertEqual([spec["payload"]["wallet_label"] for spec in explicit], ["Old"])
+
     def test_rate_limited_source_keeps_other_jobs_moving_and_redacts(self):
         conn = self._db()
         profile_id = _seed_profile(conn)

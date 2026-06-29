@@ -7688,6 +7688,16 @@ def _update_wallet_payload(
         value = _optional_str_arg(args, key)
         if value is not None:
             config_updates[key] = value
+    deprecated = args.get("deprecated")
+    if deprecated is not None:
+        if not isinstance(deprecated, bool):
+            raise AppError(
+                "deprecated must be a boolean",
+                code="validation",
+                details={"type": type(deprecated).__name__},
+                retryable=False,
+            )
+        config_updates["deprecated"] = deprecated
     if "source_format" in config_updates and config_updates["source_format"] not in _UI_WALLET_SOURCE_FORMATS:
         raise AppError(
             f"Unsupported source format '{config_updates['source_format']}'",
