@@ -17,6 +17,7 @@ import {
   ArrowRight,
   ArrowUpRight,
   AlertTriangle,
+  CheckCircle2,
   CircleDollarSign,
   Copy,
   Database,
@@ -695,6 +696,10 @@ function ConnectionDetailView({
   const [revealPassphrase, setRevealPassphrase] = useState("");
   const [revealPlaintextAck, setRevealPlaintextAck] = useState("");
   const [revealError, setRevealError] = useState<string | null>(null);
+  const [revealCopyStatus, setRevealCopyStatus] = useState<
+    "idle" | "success" | "error"
+  >("idle");
+  const revealCloseTimerRef = useRef<number | null>(null);
   const statusDatabaseEncrypted =
     statusQuery.data?.kind === "status"
       ? Boolean(statusQuery.data.data?.database_encrypted)
@@ -922,10 +927,27 @@ function ConnectionDetailView({
   const editConfigKind = editConfigKindForConnection(connection);
 
   const openRevealDialog = () => {
+    if (revealCloseTimerRef.current !== null) {
+      window.clearTimeout(revealCloseTimerRef.current);
+      revealCloseTimerRef.current = null;
+    }
     setRevealPassphrase("");
     setRevealPlaintextAck("");
     setRevealError(null);
+    setRevealCopyStatus("idle");
     setRevealOpen(true);
+  };
+
+  const handleRevealOpenChange = (open: boolean) => {
+    if (!open && revealCloseTimerRef.current !== null) {
+      window.clearTimeout(revealCloseTimerRef.current);
+      revealCloseTimerRef.current = null;
+    }
+    setRevealOpen(open);
+    if (!open) {
+      setRevealError(null);
+      setRevealCopyStatus("idle");
+    }
   };
 
   const openDeleteDialog = () => {
@@ -1121,8 +1143,10 @@ function ConnectionDetailView({
   const onRevealSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setRevealError(null);
+    setRevealCopyStatus("idle");
     if (encryptedWorkspace && !revealPassphrase) {
       setRevealError(t("detail.auth.enterPassphrase"));
+      setRevealCopyStatus("error");
       return;
     }
     if (
@@ -1132,6 +1156,7 @@ function ConnectionDetailView({
       setRevealError(
         t("detail.reveal.errorPlaintextAck", { ack: PLAINTEXT_REVEAL_ACK }),
       );
+      setRevealCopyStatus("error");
       return;
     }
 
@@ -1145,23 +1170,40 @@ function ConnectionDetailView({
       const walletMaterial = walletDescriptorMaterialFromReveal(envelope.data);
       if (!walletMaterial) {
         setRevealError(t("detail.reveal.errorMissingDescriptor"));
+        setRevealCopyStatus("error");
+        addNotification({
+          title: t("detail.reveal.failedTitle"),
+          body: t("detail.reveal.errorMissingDescriptor"),
+          tone: "error",
+        });
         return;
       }
       await copyTextWithPolicy(walletMaterial);
+      setRevealCopyStatus("success");
       addNotification({
         title: t("detail.reveal.copiedTitle"),
         body: t("detail.reveal.copiedBody", { label: connection.label }),
         tone: "success",
       });
-      setRevealOpen(false);
-      setRevealPassphrase("");
-      setRevealPlaintextAck("");
+      revealCloseTimerRef.current = window.setTimeout(() => {
+        revealCloseTimerRef.current = null;
+        setRevealOpen(false);
+        setRevealPassphrase("");
+        setRevealPlaintextAck("");
+        setRevealCopyStatus("idle");
+      }, 900);
     } catch (error) {
-      setRevealError(
+      const message =
         error instanceof Error
           ? error.message
-          : t("detail.reveal.couldNotCopy"),
-      );
+          : t("detail.reveal.couldNotCopy");
+      setRevealError(message);
+      setRevealCopyStatus("error");
+      addNotification({
+        title: t("detail.reveal.failedTitle"),
+        body: message,
+        tone: "error",
+      });
     }
   };
 
@@ -2238,7 +2280,7 @@ function ConnectionDetailView({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={revealOpen} onOpenChange={setRevealOpen}>
+      <Dialog open={revealOpen} onOpenChange={handleRevealOpenChange}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{t("detail.reveal.title")}</DialogTitle>
@@ -2295,17 +2337,34 @@ function ConnectionDetailView({
             {revealError && (
               <p className="m-0 text-sm text-destructive">{revealError}</p>
             )}
+            {revealCopyStatus === "success" ? (
+              <p className="m-0 flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" />
+                {t("detail.reveal.copiedInline")}
+              </p>
+            ) : null}
             <DialogFooter>
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setRevealOpen(false)}
+                onClick={() => handleRevealOpenChange(false)}
               >
                 {t("common:actions.cancel")}
               </Button>
-              <Button type="submit" disabled={revealDescriptor.isPending}>
-                <Copy className="size-4" aria-hidden="true" />
-                {revealDescriptor.isPending
+              <Button
+                type="submit"
+                disabled={
+                  revealDescriptor.isPending || revealCopyStatus === "success"
+                }
+              >
+                {revealCopyStatus === "success" ? (
+                  <CheckCircle2 className="size-4" aria-hidden="true" />
+                ) : (
+                  <Copy className="size-4" aria-hidden="true" />
+                )}
+                {revealCopyStatus === "success"
+                  ? t("detail.reveal.copied")
+                  : revealDescriptor.isPending
                   ? t("detail.reveal.copying")
                   : t("detail.reveal.copy")}
               </Button>

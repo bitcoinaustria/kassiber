@@ -146,8 +146,11 @@
       "plaintextHelper": "Plaintext books do not have a database passphrase. This extra step prevents accidental clipboard exposure.",
       "copy": "Copy",
       "copying": "Copying...",
+      "copied": "Copied",
+      "copiedInline": "Copied to clipboard.",
       "copiedTitle": "Descriptor copied",
       "copiedBody": "Copied the descriptor material for {{label}}.",
+      "failedTitle": "Descriptor copy failed",
       "errorMissingDescriptor": "This wallet does not have that descriptor saved.",
       "errorPlaintextAck": "Type {{ack}} to copy this local secret.",
       "couldNotCopy": "Could not copy descriptor."

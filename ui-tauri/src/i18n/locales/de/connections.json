@@ -146,8 +146,11 @@
       "plaintextHelper": "Unverschlüsselte Bücher haben keine Datenbank-Passphrase. Dieser Schritt verhindert versehentliches Kopieren in die Zwischenablage.",
       "copy": "Kopieren",
       "copying": "Wird kopiert...",
+      "copied": "Kopiert",
+      "copiedInline": "In die Zwischenablage kopiert.",
       "copiedTitle": "Descriptor kopiert",
       "copiedBody": "Descriptor-Material für {{label}} kopiert.",
+      "failedTitle": "Descriptor konnte nicht kopiert werden",
       "errorMissingDescriptor": "Diese Wallet hat diesen Descriptor nicht gespeichert.",
       "errorPlaintextAck": "Tippe {{ack}}, um dieses lokale Secret zu kopieren.",
       "couldNotCopy": "Descriptor konnte nicht kopiert werden."
