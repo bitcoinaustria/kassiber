@@ -13,8 +13,9 @@ import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
 import bitpandaIcon from "@/assets/integrations/bitpanda.svg";
 import bitboxIcon from "@/assets/integrations/bitbox.svg";
 import bluewalletIcon from "@/assets/integrations/bluewallet.png";
+import blockstreamGreenIcon from "@/assets/integrations/blockstream-green.svg";
 import btcpayIcon from "@/assets/integrations/btcpay.svg";
-import bullBitcoinIcon from "@/assets/integrations/bullbitcoin.jpg";
+import bullBitcoinIcon from "@/assets/integrations/bullbitcoin-mark.png";
 import coldcardIcon from "@/assets/integrations/coldcard.svg";
 import coinfinityIcon from "@/assets/integrations/coinfinity-mark.svg";
 import coinbaseIcon from "@/assets/integrations/coinbase.svg";
@@ -107,6 +108,7 @@ export const sourceIcon = (
 
 const lightLogoFrame =
   "bg-muted/60 shadow-sm shadow-zinc-950/5 dark:bg-muted/55 dark:shadow-black/20";
+const hardwareWalletIconClassName = "size-9 brightness-0 dark:invert";
 
 export const CONNECTION_CATEGORIES: ConnectionCategoryItem[] = [
   { id: "wallets", label: "Wallets", icon: Wallet },
@@ -328,7 +330,8 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     title: "Blockstream Green",
     description: "Bitcoin and Liquid wallet export.",
     category: "wallets",
-    image: sourceIcon("GR", "#00b45a", "#052e16"),
+    image: blockstreamGreenIcon,
+    imageClassName: "size-9",
     status: "planned",
     pathLabel: "Wallet export",
     formatLabel: "descriptor/xpub",
@@ -366,7 +369,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     category: "wallets",
     image: bitboxIcon,
     imageFrameClassName: lightLogoFrame,
-    imageClassName: "size-9",
+    imageClassName: hardwareWalletIconClassName,
     status: "planned",
     pathLabel: "Wallet export",
     details: ["Use the Descriptor connection for exported descriptors today"],
@@ -378,7 +381,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     category: "wallets",
     image: trezorIcon,
     imageFrameClassName: lightLogoFrame,
-    imageClassName: "size-9",
+    imageClassName: hardwareWalletIconClassName,
     status: "planned",
     pathLabel: "Wallet export",
     details: ["Use the Descriptor connection for exported descriptors today"],
@@ -390,7 +393,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     category: "wallets",
     image: coldcardIcon,
     imageFrameClassName: lightLogoFrame,
-    imageClassName: "size-9",
+    imageClassName: hardwareWalletIconClassName,
     status: "planned",
     pathLabel: "Wallet export",
     formatLabel: "skeleton/descriptor",
@@ -403,7 +406,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     category: "wallets",
     image: ledgerIcon,
     imageFrameClassName: lightLogoFrame,
-    imageClassName: "size-9",
+    imageClassName: hardwareWalletIconClassName,
     status: "planned",
     pathLabel: "Wallet export",
     details: ["Use generic CSV until a dedicated Ledger Live parser lands"],
@@ -415,7 +418,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     category: "wallets",
     image: foundationPassportIcon,
     imageFrameClassName: lightLogoFrame,
-    imageClassName: "size-9",
+    imageClassName: hardwareWalletIconClassName,
     status: "planned",
     pathLabel: "Wallet export",
     details: ["Use the Descriptor connection for exported descriptors today"],
@@ -491,7 +494,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     description: "Unified wallet transaction CSV import.",
     category: "wallets",
     image: bullBitcoinIcon,
-    imageClassName: "size-9 rounded-md",
+    imageClassName: "size-9",
     status: "ready",
     pathLabel: "Wallet CSV import",
     formatLabel: "bullbitcoin_wallet_csv",
@@ -547,7 +550,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     description: "Order CSV import for exact buy/sell execution pricing.",
     category: "exchanges",
     image: bullBitcoinIcon,
-    imageClassName: "size-9 rounded-md",
+    imageClassName: "size-9",
     status: "ready",
     pathLabel: "CSV import",
     formatLabel: "bullbitcoin_csv",
