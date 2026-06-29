@@ -54,23 +54,24 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Mapping, Optional, Sequence
 
 from ..msat import msat_to_btc
+from ..transfers import normalize_group_txid
 from ..wallet_descriptors import normalize_chain, normalize_network
 
 
 SATS_TO_MSAT = 1000
-# Reuse a destination's existing inbound row for a leg only when it sits within
-# this window of the spend (and is otherwise unambiguous) — mirrors the swap
-# matcher's default time tolerance.
-REUSE_WINDOW_SECONDS = 24 * 60 * 60
 # Synthetic outbound rows minted by earlier engine stages (direct-payout splits,
 # cross-asset splits) keep the real txid in raw_json but are NOT fresh spends to
 # re-decompose; skip them by id prefix.
-_SYNTHETIC_ID_PREFIXES = ("owned-derive:", "cross-split:", "direct-payout:")
+_SYNTHETIC_ID_PREFIXES = (
+    "owned-derive:",
+    "cross-split:",
+    "direct-payout:",
+    "multi-consol:",
+)
 
 
 @dataclass(frozen=True)
@@ -86,12 +87,17 @@ class OwnershipDeriveResult:
       paid a real external recipient (the residual stays a disposal).
     * ``dropped_out_ids`` — sources fully consumed by owned legs (pure internal
       move); removed from the row set so they are not double-booked.
+    * ``dropped_in_ids`` — recorded inbound rows replaced by synthesized MOVE
+      in-legs (a multi-source consolidation splits one recorded destination
+      receipt into one leg per contributing wallet); removed from the row set so
+      the receipt is not also booked as a standalone acquisition.
     """
 
     derived_pairs: list[dict[str, Any]] = field(default_factory=list)
     synthetic_rows: list[dict[str, Any]] = field(default_factory=list)
     out_row_overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
     dropped_out_ids: set[str] = field(default_factory=set)
+    dropped_in_ids: set[str] = field(default_factory=set)
     blocked_sources: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -246,6 +252,7 @@ def derive_ownership_transfers(
             continue
 
         txid = str(parsed.get("txid") or _get(row, "external_id") or source_id)
+        transfer_group_id = f"owned-derive:{txid}" if len(by_dest) > 1 else None
         source_fee_msat = int(_get(row, "fee") or 0)
         legs = sorted(by_dest.items(), key=lambda item: (item[1]["min_n"], item[0]))
         leg_pairs: list[dict[str, Any]] = []
@@ -272,7 +279,6 @@ def derive_ownership_transfers(
                 inbound_by_wallet.get(dest_wallet_id, ()),
                 leg_msat,
                 txid,
-                _get(row, "occurred_at"),
                 consumed_in_ids,
                 already_paired_ids,
                 asset=_get(row, "asset"),
@@ -325,7 +331,10 @@ def derive_ownership_transfers(
                     wallet_ref=dest_ref,
                 )
                 leg_synthetic_rows.append(in_row)
-            leg_pairs.append({"out": out_leg, "in": in_row, "source": "ownership_derived"})
+            pair = {"out": out_leg, "in": in_row, "source": "ownership_derived"}
+            if transfer_group_id:
+                pair["group_id"] = transfer_group_id
+            leg_pairs.append(pair)
             leg_synthetic_rows.append(out_leg)
         if not ok or not leg_pairs:
             # Roll back any inbound rows we tentatively consumed for this tx.
@@ -395,7 +404,14 @@ def derive_recorded_fanout_transfers(
             continue
         if str(_get(row, "id")).startswith(_SYNTHETIC_ID_PREFIXES):
             continue
-        groups.setdefault((str(external_id), _get(row, "asset")), []).append(row)
+        # Normalize txid casing so a source synced lowercase and a destination
+        # imported uppercase (CSV) land in the same group — matching every other
+        # self-transfer path (detect_intra_transfers, _owned_fanout_row_ids,
+        # derive_multi_source_consolidations). Without this a mixed-case fan-out
+        # the decomposer should split is instead stuck in the fan-out quarantine.
+        groups.setdefault(
+            (normalize_group_txid(str(external_id)), _get(row, "asset")), []
+        ).append(row)
 
     for (external_id, asset), group in groups.items():
         # Count the group's TRUE source rows first — every positive outbound,
@@ -437,6 +453,7 @@ def derive_recorded_fanout_transfers(
             continue  # a destination was not synced — amounts don't conserve
 
         out_fee = int(_get(out_row, "fee") or 0)
+        transfer_group_id = f"recorded-fanout:{external_id}"
         legs = sorted(
             dest_ins,
             key=lambda row: (int(_get(row, "amount") or 0), str(_get(row, "id"))),
@@ -458,7 +475,14 @@ def derive_recorded_fanout_transfers(
                 kind="self_transfer_out",
                 journal_transaction_id=str(_get(out_row, "id")),
             )
-            leg_pairs.append({"out": out_leg, "in": in_row, "source": "recorded_fanout"})
+            leg_pairs.append(
+                {
+                    "out": out_leg,
+                    "in": in_row,
+                    "source": "recorded_fanout",
+                    "group_id": transfer_group_id,
+                }
+            )
             leg_rows.append(out_leg)
         if not ok or not leg_pairs:
             continue
@@ -469,7 +493,364 @@ def derive_recorded_fanout_transfers(
     return result
 
 
+def derive_multi_source_consolidations(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    index: Any,
+    wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
+    already_paired_ids: set[str],
+) -> OwnershipDeriveResult:
+    """Decompose an N->1 cross-wallet consolidation into per-source MOVE legs.
+
+    A spend funded by inputs from two or more owned wallets (a consolidation,
+    e.g. sweeping Cold + Hot into Savings) is the one case both
+    :func:`derive_ownership_transfers` and :func:`derive_recorded_fanout_transfers`
+    deliberately decline: each contributing wallet syncs the transaction
+    independently and stamps the *whole* network fee onto its own outbound row
+    (``record_from_bitcoin_esplora_tx``), so naively summing the per-wallet rows
+    double-counts the fee. Left undisambiguated it lands in the
+    ``owned_fanout_unresolved`` quarantine.
+
+    But the readable on-chain graph plus the per-wallet rows are jointly enough
+    to book it correctly without trusting any single row's fee twice:
+
+    * the miner fee is the *same* value on every contributor's row (it is the
+      whole-tx fee), so it is read once, not summed;
+    * each contributor's recorded ``amount`` is ``its inputs - its change - fee``
+      (the esplora amount model), so its true net outflow is ``amount + fee``;
+    * the destination's received value is taken from the graph outputs.
+
+    With ``a_S`` = contributor ``S``'s recorded amount, ``F`` = the shared fee,
+    ``n`` = number of contributors and ``out_C`` = the single destination's
+    graph output total, conservation is the exact identity
+    ``Σ a_S + (n-1)·F == out_C``. The whole fee is assigned to the largest
+    contributor's leg; that leg moves ``a_bearer`` and every other leg moves
+    ``a_S + F``, so the legs sum to ``out_C`` and each contributor's pool is
+    debited exactly its true net outflow (leg amount + leg fee).
+
+    Scope (conservative — anything outside is left to the existing quarantine):
+
+    * **>=2 contributing wallets, exactly one owned destination, no external
+      output.** A consolidation that also pays a non-owned recipient has
+      ambiguous fee attribution and is left for explicit review; ``N->M`` (two
+      or more destinations) likewise.
+    * **All inputs owned by the contributing wallets.** A foreign input
+      (payjoin/coinjoin, unwatched coins) makes the amount/fee math unreliable.
+    * **Readable esplora graph + a single shared fee.** Liquid (confidential
+      outputs) and graphless CSV imports parse to ``None`` and are skipped; a
+      fee that differs across contributors means at least one row is not the
+      node's whole-tx fee, so decline.
+    * **Exact conservation.** A mismatch means a sync gap or stale graph.
+
+    Runs *before* :func:`derive_ownership_transfers`; the caller must feed every
+    id this pass touches (contributors + the destination receipt) into that
+    deriver's ``already_paired_ids`` so the single-source deriver does not also
+    block-and-quarantine the same contributors.
+    """
+    result = OwnershipDeriveResult()
+    if index is None:
+        return result
+
+    groups: dict[tuple[str, Any], list[Mapping[str, Any]]] = {}
+    for row in rows:
+        external_id = _get(row, "external_id")
+        if not external_id:
+            continue
+        if str(_get(row, "id")).startswith(_SYNTHETIC_ID_PREFIXES):
+            continue
+        groups.setdefault(
+            (normalize_group_txid(str(external_id)), _get(row, "asset")), []
+        ).append(row)
+
+    for (_txid_key, asset), group in groups.items():
+        senders = [
+            row
+            for row in group
+            if _get(row, "direction") == "outbound" and int(_get(row, "amount") or 0) > 0
+        ]
+        if len(senders) < 2:
+            continue  # single-source / not a transfer — other paths handle it
+        if any(str(_get(row, "id")) in already_paired_ids for row in group):
+            continue  # a leg is already handled (manual / split / detect_intra)
+        sender_wallets = {str(_get(row, "wallet_id")) for row in senders}
+        if len(sender_wallets) != len(senders):
+            continue  # a wallet recorded two outbounds for one tx — odd, decline
+
+        parsed = None
+        for row in senders:
+            parsed = _parse_onchain_tx(_get(row, "raw_json"))
+            if parsed is not None:
+                break
+        if parsed is None:
+            continue  # Liquid / CSV — no readable graph; leave to quarantine
+
+        fees = {int(_get(row, "fee") or 0) for row in senders}
+        if len(fees) != 1:
+            continue  # contributors disagree on the fee — not all the node's
+        fee = next(iter(fees))
+
+        chain_network = _source_chain_network(
+            parsed["inputs"], index, str(_get(senders[0], "wallet_id"))
+        )
+        dest_value: dict[str, int] = {}
+        external_sats = 0
+        ambiguous = False
+        for output in parsed["outputs"]:
+            matches = index.lookup_script(output["script"])
+            if chain_network is not None:
+                matches = [
+                    match
+                    for match in matches
+                    if _norm_chain_network(match.chain, match.network) == chain_network
+                ]
+            if not matches:
+                external_sats += int(output["value_sats"])
+                continue
+            owner_ids = {str(match.wallet_id) for match in matches}
+            if owner_ids & sender_wallets:
+                continue  # change back to a contributing wallet — excluded
+            if len(owner_ids) > 1:
+                ambiguous = True  # owned by two non-contributors — cannot route
+                break
+            dest_id = next(iter(owner_ids))
+            dest_value[dest_id] = dest_value.get(dest_id, 0) + int(output["value_sats"])
+        if ambiguous:
+            continue
+        if external_sats > 0:
+            continue  # consolidation that also pays external — leave to review
+        if len(dest_value) != 1:
+            continue  # 0 destinations -> not a transfer; >=2 -> N->M, decline
+        dest_wallet_id, out_c_sats = next(iter(dest_value.items()))
+        out_c_msat = out_c_sats * SATS_TO_MSAT
+
+        input_owner_ids = set().union(
+            *(_input_owner_ids(index, entry) for entry in parsed["inputs"])
+        )
+        if not sender_wallets <= input_owner_ids:
+            continue  # every claimed sender must actually fund at least one input
+        if not _inputs_owned_by(parsed["inputs"], index, sender_wallets):
+            continue  # a foreign input makes the recorded amounts unreliable
+
+        n = len(senders)
+        sum_amounts = sum(int(_get(row, "amount") or 0) for row in senders)
+        if sum_amounts + (n - 1) * fee != out_c_msat:
+            continue  # conservation broken (sync gap / stale graph) — decline
+
+        # Destination-receipt reconciliation. The legs credit ``out_C`` to the
+        # destination, so any *existing* recorded receipt of these same coins
+        # must be removed to avoid double-counting. That is only safe when the
+        # receipt sits in this spend's own (external_id, asset) group — then it
+        # is unambiguously this transaction and we drop it below. Two cases force
+        # a decline back to the single-source deriver's conservative block:
+        #   * a same-group destination receipt whose recorded value disagrees
+        #     with the graph total (an odd / partial sync), and
+        #   * a same-asset destination receipt recorded OUTSIDE this group whose
+        #     value equals the consolidated total — almost certainly this very
+        #     receipt under a different id (CSV / separate sync), which we cannot
+        #     match to the spend without amount/time heuristics.
+        group_ids = {str(_get(r, "id")) for r in group}
+        asset_key = str(asset or "").upper()
+        dest_in_group_total = sum(
+            int(_get(r, "amount") or 0)
+            for r in group
+            if _get(r, "direction") == "inbound"
+            and str(_get(r, "wallet_id")) == dest_wallet_id
+        )
+        if dest_in_group_total and dest_in_group_total != out_c_msat:
+            continue
+        # A same-asset destination receipt recorded OUTSIDE this group is
+        # plausibly THIS consolidation's receipt under another id (CSV / separate
+        # sync) when its amount is compatible with the consolidated total (exact,
+        # or within a fee/rounding tolerance — 0.79999 vs a 0.8 graph total) AND
+        # it is not a provably different on-chain transaction. Crediting
+        # synthetic legs on top of such a receipt would double-count the
+        # destination, so decline. The signal is AMOUNT + txid-novelty, NOT a
+        # time window: a blunt 24h window false-declined a sync-gapped
+        # consolidation whenever the destination merely had an unrelated near-time
+        # deposit (booking phantom disposals), and missed a same-amount receipt
+        # recorded outside the window (double-count). An unrelated deposit of a
+        # different magnitude — at any time — must not look like this receipt.
+        has_external_receipt = any(
+            _get(r, "direction") == "inbound"
+            and str(_get(r, "wallet_id")) == dest_wallet_id
+            and str(_get(r, "asset") or "").upper() == asset_key
+            and str(_get(r, "id")) not in group_ids
+            and not _is_provably_different_onchain_tx(_get(r, "external_id"), _txid_key)
+            and _amounts_compatible(int(_get(r, "amount") or 0), out_c_msat)
+            for r in rows
+        )
+        if has_external_receipt:
+            continue
+
+        dest_ref = wallet_refs_by_id.get(dest_wallet_id)
+        if dest_ref is None:
+            continue  # cannot book the MOVE target safely
+
+        dropped_destination_rows = tuple(
+            row
+            for row in group
+            if _get(row, "direction") == "inbound"
+            and str(_get(row, "wallet_id")) == dest_wallet_id
+        )
+        if len(dropped_destination_rows) > 1:
+            continue  # ambiguous recorded destination receipt split
+
+        # Whole fee on the largest contributor; deterministic tie-break.
+        senders_sorted = sorted(
+            senders,
+            key=lambda row: (-int(_get(row, "amount") or 0), str(_get(row, "wallet_id"))),
+        )
+        bearer_id = str(_get(senders_sorted[0], "id"))
+        txid = str(parsed.get("txid") or _txid_key)
+        transfer_group_id = f"multi-consol:{txid}"
+
+        leg_pairs: list[dict[str, Any]] = []
+        leg_rows: list[dict[str, Any]] = []
+        ok = True
+        for row in senders_sorted:
+            a_s = int(_get(row, "amount") or 0)
+            is_bearer = str(_get(row, "id")) == bearer_id
+            leg_value = a_s if is_bearer else a_s + fee
+            leg_fee = fee if is_bearer else 0
+            in_journal_id = (
+                str(_get(dropped_destination_rows[0], "id"))
+                if dropped_destination_rows
+                else str(_get(row, "id"))
+            )
+            if leg_value <= 0:
+                ok = False
+                break
+            wallet = str(_get(row, "wallet_id"))
+            out_leg = _clone_row(
+                row,
+                amount=leg_value,
+                fee=leg_fee,
+                row_id=f"multi-consol:{txid}:out:{wallet}",
+                external_id=f"multi-consol:{txid}:out:{wallet}",
+                kind="self_transfer_out",
+                journal_transaction_id=str(_get(row, "id")),
+            )
+            in_leg = _clone_row(
+                row,
+                amount=leg_value,
+                fee=0,
+                    row_id=f"multi-consol:{txid}:in:{wallet}",
+                    external_id=f"multi-consol:{txid}:in:{wallet}",
+                    kind="self_transfer_in",
+                    journal_transaction_id=in_journal_id,
+                    direction="inbound",
+                    wallet_id=dest_wallet_id,
+                    wallet_ref=dest_ref,
+            )
+            leg_pairs.append(
+                {
+                    "out": out_leg,
+                    "in": in_leg,
+                    "source": "multi_source_consolidation",
+                    "group_id": transfer_group_id,
+                    "group_block_rows": dropped_destination_rows,
+                }
+            )
+            leg_rows.append(out_leg)
+            leg_rows.append(in_leg)
+        if not ok:
+            continue
+
+        result.derived_pairs.extend(leg_pairs)
+        result.synthetic_rows.extend(leg_rows)
+        result.dropped_out_ids.update(str(_get(row, "id")) for row in senders)
+        for row in group:
+            if (
+                _get(row, "direction") == "inbound"
+                and str(_get(row, "wallet_id")) == dest_wallet_id
+            ):
+                result.dropped_in_ids.add(str(_get(row, "id")))
+
+    return result
+
+
+def graph_partial_payment_out_ids(
+    pairs: Sequence[Mapping[str, Any]], index: Any
+) -> set[str]:
+    """Out-row ids of clean 1-out/1-in pairs that are graph-proven partial payments.
+
+    ``detect_intra_transfers`` pairs a same-txid 1-out/1-in self-transfer before
+    the address-ownership deriver runs. When that spend's outbound *also* paid a
+    non-owned recipient (a partial payment), the 1-out/1-in pairing absorbs the
+    external payment into the implied MOVE fee (``sent - received``) and never
+    taxes it as a disposal. Withholding such a pair lets
+    :func:`derive_ownership_transfers` re-derive it from the graph: it books the
+    owned leg as a MOVE and keeps the external residual as a real disposal.
+
+    A pair is flagged only when, from the outbound row's readable graph:
+
+    * the inputs are single-source (the contributor owns every input), and
+    * some value landed in *other* owned wallets (an owned destination exists),
+      and the recorded outbound ``amount`` (its non-change output total) exceeds
+      that owned-to-others value — i.e. the remainder left to a non-owned
+      recipient.
+
+    Graphless rows (CSV / Liquid) and pure self-transfers (no external residual)
+    are left to ``detect_intra_transfers``.
+    """
+    if index is None:
+        return set()
+    flagged: set[str] = set()
+    for pair in pairs:
+        out_row = pair.get("out") if hasattr(pair, "get") else pair["out"]
+        if out_row is None:
+            continue
+        parsed = _parse_onchain_tx(_get(out_row, "raw_json"))
+        if parsed is None:
+            continue
+        source_wallet_id = str(_get(out_row, "wallet_id"))
+        if not _inputs_are_single_source(parsed["inputs"], index, source_wallet_id):
+            continue
+        chain_network = _source_chain_network(
+            parsed["inputs"], index, source_wallet_id
+        )
+        owned_to_others_sats = 0
+        for output in parsed["outputs"]:
+            matches = index.lookup_script(output["script"])
+            if chain_network is not None:
+                matches = [
+                    match
+                    for match in matches
+                    if _norm_chain_network(match.chain, match.network) == chain_network
+                ]
+            if not matches:
+                continue  # external recipient / OP_RETURN
+            if source_wallet_id in {str(match.wallet_id) for match in matches}:
+                continue  # change back to self
+            owned_to_others_sats += int(output["value_sats"])
+        owned_to_others_msat = owned_to_others_sats * SATS_TO_MSAT
+        amount_msat = int(_get(out_row, "amount") or 0)
+        if owned_to_others_msat > 0 and amount_msat > owned_to_others_msat:
+            flagged.add(str(_get(out_row, "id")))
+    return flagged
+
+
 # -- internals --------------------------------------------------------------
+
+
+def _inputs_owned_by(
+    inputs: Sequence[Mapping[str, Any]], index: Any, owner_set: set[str]
+) -> bool:
+    """True only when every input is owned, and owned solely by ``owner_set``.
+
+    Used by the multi-source consolidation deriver to reject a spend that pulls
+    in a foreign input (payjoin/coinjoin or unwatched coins) — which would make
+    the per-wallet recorded amounts and fee unreliable for splitting. A shared
+    descriptor that maps an input to a contributor *and* an outside wallet is
+    also rejected (the input's owner set must be a subset of the contributors).
+    """
+    if not inputs:
+        return False
+    for entry in inputs:
+        owners = _input_owner_ids(index, entry)
+        if not owners or not owners <= owner_set:
+            return False
+    return True
 
 
 def _inputs_are_single_source(
@@ -608,7 +989,6 @@ def _resolve_destination_inbound(
     candidates: Sequence[Mapping[str, Any]],
     leg_msat: int,
     txid: str,
-    source_occurred_at: Any,
     consumed_in_ids: set[str],
     already_paired_ids: set[str],
     *,
@@ -641,17 +1021,9 @@ def _resolve_destination_inbound(
     5. Otherwise the destination is genuinely empty for this leg → synthesize.
     """
     asset_key = str(asset or "").upper()
-    source_seconds = _iso_seconds(source_occurred_at)
-
-    def _within_window(row: Mapping[str, Any]) -> bool:
-        if source_seconds is None:
-            return True
-        row_seconds = _iso_seconds(_get(row, "occurred_at"))
-        return row_seconds is not None and abs(row_seconds - source_seconds) <= REUSE_WINDOW_SECONDS
 
     def _different_onchain_tx(row: Mapping[str, Any]) -> bool:
-        external_id = str(_get(row, "external_id") or "")
-        return _looks_like_txid(external_id) and external_id.lower() != txid.lower()
+        return _is_provably_different_onchain_tx(_get(row, "external_id"), txid)
 
     available = [
         row
@@ -668,24 +1040,21 @@ def _resolve_destination_inbound(
     if len(same_txid) >= 2:
         return ("decline", None)
 
-    reusable = [
-        row
-        for row in exact
-        if not _different_onchain_tx(row) and _within_window(row)
-    ]
-    if reusable:
-        return ("decline", None)  # ambiguous equal-value matches — never fabricate
-
-    # No exact reuse. Synthesizing is safe only when nothing else in the
-    # destination could plausibly be this leg. A row that provably belongs to a
-    # different on-chain transaction does not block (it is a separate receipt);
-    # any other in-window same-asset inbound does.
-    nearby = [
+    # A same-asset candidate that is NOT a provably-different on-chain tx and is
+    # amount-compatible with this leg could BE this leg recorded under another id
+    # (CSV / settlement-dated / late sync) — at ANY time. Reusing it risks
+    # cannibalizing an unrelated deposit; synthesizing risks a duplicate
+    # transfer_in (silent holdings inflation). So decline for review. AMOUNT (not
+    # a time window) is the discriminator: an unrelated deposit of a different
+    # magnitude does not block, and a real same-amount receipt recorded outside
+    # any window is no longer either double-counted (synthesize) or missed.
+    blocking = [
         row
         for row in available
-        if _within_window(row) and not _different_onchain_tx(row)
+        if not _different_onchain_tx(row)
+        and _amounts_compatible(int(_get(row, "amount") or 0), leg_msat)
     ]
-    if nearby:
+    if blocking:
         return ("decline", None)
     return ("synthesize", None)
 
@@ -699,6 +1068,30 @@ def _looks_like_txid(value: Any) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _is_provably_different_onchain_tx(external_id: Any, txid: str) -> bool:
+    """True when ``external_id`` is a 64-hex txid that is NOT this spend's txid.
+
+    Such a row provably belongs to a *different* on-chain transaction, so it is a
+    separate receipt — never this self-transfer's destination leg.
+    """
+    text = str(external_id or "")
+    return _looks_like_txid(text) and text.lower() != str(txid or "").lower()
+
+
+def _amounts_compatible(a_msat: int, b_msat: int) -> bool:
+    """Whether two msat amounts are close enough to be the same receipt.
+
+    A destination may record a receipt net of a small internal/settlement fee or
+    with sat rounding, so allow the swap-fee tolerance (``max(1%, 2500 sats)``).
+    This is the AMOUNT signal that replaces the old blunt 24h time window for
+    deciding whether an off-group inbound is this self-transfer's receipt: an
+    unrelated deposit of a different magnitude must not look like a match (which
+    would either false-decline a real move or double-count a real receipt).
+    """
+    tolerance = max(abs(b_msat) // 100, 2_500_000)  # 1% or 2500 sats, in msat
+    return abs(int(a_msat) - int(b_msat)) <= tolerance
 
 
 def _block_source(
@@ -766,23 +1159,6 @@ def _clone_row(
         base["account_code"] = wallet_ref.get("account_code")
         base["account_label"] = wallet_ref.get("account_label")
     return base
-
-
-def _iso_seconds(value: Any) -> Optional[float]:
-    if not value:
-        return None
-    raw = str(value).strip()
-    if not raw:
-        return None
-    if raw.endswith("Z"):
-        raw = raw[:-1] + "+00:00"
-    try:
-        parsed = datetime.fromisoformat(raw)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.timestamp()
 
 
 def _get(row: Any, key: str, default: Any = None) -> Any:

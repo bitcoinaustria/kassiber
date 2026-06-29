@@ -2127,7 +2127,14 @@ def record_from_bitcoinrpc_details(txid, details, backend_name):
         if category in {"orphan", "immature"}:
             continue
         amount_total += dec(detail.get("amount"), "0")
-        fee_total += abs(dec(detail.get("fee"), "0"))
+        # Bitcoin Core stamps the SAME whole-tx fee on every `send`-category
+        # detail of one transaction, so summing per detail double-counts it for a
+        # multi-output send (inflating both the booked outflow and the taxable
+        # fee disposal). Take it once — the shared fee is identical across send
+        # details; receive details carry 0/none, so max() yields the real fee.
+        detail_fee = abs(dec(detail.get("fee"), "0"))
+        if detail_fee > fee_total:
+            fee_total = detail_fee
         if detail.get("blocktime") not in (None, "", 0, "0"):
             confirmed_at = timestamp_to_iso(detail.get("blocktime"), default=None)
         occurred_at = timestamp_to_iso(detail.get("blocktime") or detail.get("time"), default=occurred_at)

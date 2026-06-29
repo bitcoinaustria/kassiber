@@ -849,6 +849,10 @@ def _connections(
         backend_summary = _wallet_backend_summary(row["kind"], config, None)
         source_format = _string_or_empty(config.get("source_format"))
         sync_source = _string_or_empty(config.get("sync_source") or source_format)
+        chain = _string_or_empty(config.get("chain"))
+        network = _string_or_empty(config.get("network"))
+        policy_asset = _string_or_empty(config.get("policy_asset"))
+        payment_method_id = _string_or_empty(config.get("payment_method_id"))
         gap_limit = config.get("gap_limit")
         has_descriptor = has_descriptor_sync_material(config)
         connection = {
@@ -867,6 +871,10 @@ def _connections(
             "syncSource": sync_source,
             "sourceFormat": source_format,
             "deprecated": wallet_is_deprecated(config),
+            "chain": chain or None,
+            "network": network or None,
+            "policyAsset": policy_asset or None,
+            "paymentMethodId": payment_method_id or None,
         }
         if has_descriptor:
             connection["gap"] = (
@@ -3441,6 +3449,8 @@ def build_wallets_list_snapshot(
                 },
                 "chain": str(config.get("chain") or ""),
                 "network": str(config.get("network") or ""),
+                "descriptor": bool(config.get("descriptor")),
+                "change_descriptor": bool(config.get("change_descriptor")),
                 "sync_mode": backend_summary["sync_mode"],
                 "sync_source": str(config.get("sync_source") or config.get("source_format") or ""),
                 "transaction_count": tx_count,

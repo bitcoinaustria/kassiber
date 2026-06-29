@@ -853,17 +853,105 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     `max(1% of out, 2500 sats)`. A real fix needs out-of-band fee recovery (raw
     tx / NBXplorer) or a surfaced "fee unknown" state on the disposal; the marker
     added here is the groundwork.
-  - [ ] **Sub-ceiling external payment absorbed as a transfer fee (P2).** When
-    one tx pays an owned wallet + a small external address + change, and both
-    owned wallets synced the shared txid, `detect_intra_transfers` pairs the
-    self-transfer leg and pre-empts the on-chain ownership deriver
-    (`already_paired_ids`, `rp2.py:1850`; deriver skip at
-    `ownership_transfers.py:142`). The external payment (under
-    `max(1% of out, 2500 sats)`) then falls through to a non-taxable MOVE fee
-    instead of a taxable disposal (`tax_events.py:729->805`). Fix: let the
-    ownership deriver inspect graph-readable sources before accepting a
-    same-txid 1-out/1-in pair, keeping `detect_intra` as the fallback for
-    graph-less (CSV) rows.
+  - [x] **Sub-ceiling external payment absorbed as a transfer fee (P2).** When
+    one tx pays an owned wallet + a small external address + change, and the
+    owned destination synced the shared txid, `detect_intra_transfers` paired the
+    self-transfer leg and pre-empted the on-chain ownership deriver, so the
+    external payment (under `max(1% of out, 2500 sats)`) fell through to a
+    non-taxable MOVE fee instead of a taxable disposal. Fixed via
+    `ownership_transfers.graph_partial_payment_out_ids`: after
+    `detect_intra_transfers`, the engine withholds any 1-out/1-in pair whose
+    outbound graph is single-source and shows value leaving to a non-owned
+    recipient (recorded `amount` > owned-to-other-wallets value), so
+    `derive_ownership_transfers` re-derives it — booking the owned MOVE and
+    keeping the external residual as a real disposal. `detect_intra` stays
+    authoritative for graph-less (CSV) rows and pure self-transfers. Tests:
+    `test_ownership_transfers.GraphPartialPaymentTests`,
+    `test_rp2_ownership_transfers.PartialPaymentWithholdingEngineTest`.
+  - [x] **Cross-wallet consolidation quarantined instead of booked (was implicit
+    in the fan-out limitation).** A spend funded by inputs from two or more owned
+    wallets (consolidating e.g. Cold + Hot into Savings) was the one self-transfer
+    shape both `detect_intra_transfers` and `derive_ownership_transfers` declined
+    — each contributor syncs the tx independently and stamps the whole fee onto
+    its own row, so summing the per-wallet rows double-counts the fee — leaving it
+    in the `owned_fanout_unresolved` quarantine. Fixed via
+    `ownership_transfers.derive_multi_source_consolidations` (run before the
+    single-source deriver, feeding its touched ids forward): it reads the single
+    fee once and the destination total from the graph, books one carrying MOVE per
+    contributor (whole fee on the largest contributor), and replaces the recorded
+    destination receipt with synthetic legs. Conservative scope — `>=2` contributing
+    wallets, exactly one owned destination, no external output, all inputs owned,
+    readable esplora graph, exact conservation; anything else still quarantines.
+    Tests: `test_ownership_transfers.MultiSourceConsolidationDeriverTests`,
+    `test_rp2_ownership_transfers.MultiSourceConsolidationEngineTest`.
+  - [x] **Withheld partial-payment pair orphaned when the deriver declines (P1,
+    regression introduced with the withhold above).** `graph_partial_payment_out_ids`
+    withheld the `detect_intra` pair unconditionally; when `derive_ownership_transfers`
+    then DECLINED (ambiguous owned output shared by two wallets, ambiguous
+    destination, amount mismatch) it produced no derived pair and no override, so
+    the source booked a FULL disposal and the destination a phantom acquisition
+    with NO quarantine (the `fanout_holds` premise suppressed the block). Fixed in
+    `rp2.py`: the withheld pairs are kept and ROLLED BACK to their original
+    self-transfer when the deriver did not handle the source (not dropped, not
+    overridden); restored sources are excluded from the block quarantine. Test:
+    `test_rp2_ownership_transfers.PartialPaymentWithholdingEngineTest.test_withhold_rolls_back_when_owned_output_is_ambiguous`.
+  - [x] **Multi-source consolidation double-counts an off-group destination receipt
+    (P1, regression).** `has_external_receipt` required EXACT amount equality, so a
+    destination receipt recorded under a different id at a slightly different amount
+    (sat rounding / net-of-internal-fee, e.g. 0.79999 vs a 0.8 graph total) slipped
+    past and the synthetic legs PLUS the surviving receipt inflated the destination
+    ~2x. Fixed in `ownership_transfers.derive_multi_source_consolidations`: decline
+    when the destination has any off-group same-asset inbound that matches the total
+    OR lands within the spend's time window. Tests:
+    `test_ownership_transfers.MultiSourceConsolidationDeriverTests.test_off_group_receipt_with_nonexact_amount_declined`,
+    `test_rp2_ownership_transfers.MultiSourceConsolidationEngineTest.test_off_group_nonexact_receipt_does_not_double_count`.
+  - [x] **Austrian self-transfer MOVE-fee disposal carried no regime → whole asset
+    aborted (P1, pre-existing).** The IntraTransaction miner fee is a taxable
+    disposal; with both Alt and Neu lots present rp2's moving-average raised
+    `Ambiguous Austrian disposal` and the entire BTC report/journals process aborted
+    (no quarantine). Fixed by stamping `at_regime` on the fee disposal:
+    `austrian._move_transfer_availability` now returns the regime the fee draws from
+    using a fee-first depletion model (the remaining carried quantity moves to the
+    destination), and `infer_outbound_regimes` records it for the out row;
+    `NormalizedTaxTransfer` gained an `at_regime` field and `_compose_transfer_notes` emits `at_regime=...`
+    (matching the SELL path). Affects plain self-transfers and the derived
+    consolidation/fan-out legs. Test:
+    `test_rp2_ownership_transfers.AustrianSelfTransferEngineTest`.
+  - [x] **`derive_recorded_fanout_transfers` grouped by raw external_id (P3).** It
+    diverged from every sibling self-transfer path (which use `normalize_group_txid`),
+    so a mixed-case 64-hex txid fan-out (source synced lowercase, dest CSV-imported
+    uppercase) split into separate groups and stuck in quarantine. Fixed: wrap the
+    group key in `normalize_group_txid`. Test:
+    `test_ownership_transfers.RecordedFanoutDeriverTests.test_mixed_case_txid_fanout_decomposes`.
+  - [x] **bitcoinrpc multi-output tx double-counts the network fee (P2,
+    pre-existing).** `record_from_bitcoinrpc_details` summed `fee` per detail, but
+    Bitcoin Core stamps the SAME whole-tx fee on every `send`-category detail, so an
+    N-output send booked the fee N×: a within-wallet split debited holdings by the
+    phantom extra fee and a multi-recipient send overstated the taxable fee disposal.
+    Fixed: take the fee once (`max` across details). Test:
+    `test_sync_backends...test_bitcoinrpc_multi_output_send_does_not_double_count_fee`.
+  - [x] **Derived multi-leg self-transfer not quarantined atomically (P2).** A
+    consolidation / fan-out split into N MOVE legs could partially book if one leg
+    was quarantined downstream (e.g. a fee leg needed pricing review under
+    `require_coarse_review`), while the recorded destination receipt had already
+    been dropped. Fixed by carrying a `group_id` from every derived multi-leg
+    deriver (`derive_multi_source_consolidations`, `derive_ownership_transfers`,
+    `derive_recorded_fanout_transfers`) into `NormalizedTaxTransfer`, then
+    blocking the whole group in normalization and preflighting grouped MOVE legs
+    atomically in the RP2 gate; real destination receipts replaced by synthetic
+    group legs are carried as block rows so successful `transfer_in` journal
+    entries point at the recorded receipt and failed groups quarantine it. Tests:
+    `test_tax_events...test_derived_transfer_group_blocks_siblings_when_one_leg_needs_review`,
+    `test_rp2_ownership_transfers...test_grouped_consolidation_gate_quarantines_atomically`.
+  - [x] **Same-timestamp chained self-transfers mis-ordered → false
+    insufficient_lots (P2).** Two self-transfers in the SAME block (shared
+    `occurred_at`) where one funds a wallet and the next spends it (Cold→Hot then
+    Hot→Exch — a consolidate-then-forward / batch pattern) could be processed
+    spend-before-fund. Fixed by replacing the stream-index tie-break with
+    `_ordered_rp2_items`, which keeps inbound events before MOVEs before outbound
+    events and topologically orders same-timestamp transfers by wallet dependency;
+    the gate and `IntraTransaction` insertion now share that order. Test:
+    `test_rp2_ownership_transfers...test_same_timestamp_transfer_chain_books_funding_move_first`.
   - [ ] **Swap-review fee omits out.fee (P2).** `compute_swap_fee = out.amount -
     in.amount` (`transfer_matching.py:257`) ignores `out.fee`, so the review
     surface, the persisted `transaction_pairs.swap_fee_msat`, and the GUI
