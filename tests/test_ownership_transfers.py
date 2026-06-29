@@ -15,8 +15,10 @@ import unittest
 
 from kassiber.core.ownership import OwnedIndex, OwnedMatch
 from kassiber.core.ownership_transfers import (
+    derive_multi_source_consolidations,
     derive_ownership_transfers,
     derive_recorded_fanout_transfers,
+    graph_partial_payment_out_ids,
 )
 
 
@@ -367,6 +369,44 @@ class OwnershipDeriverTests(unittest.TestCase):
         self.assertEqual(len(result.derived_pairs), 1)
         self.assertTrue(str(result.derived_pairs[0]["in"]["id"]).startswith("owned-derive:"))
 
+    def test_late_amount_compatible_receipt_declines_not_duplicate(self):
+        # R3: B recorded the receipt under a CSV provider id LONG after the spend
+        # (settlement date). The amount matches, so it is plausibly this leg;
+        # synthesizing a fresh transfer_in would duplicate it (silent holdings
+        # inflation). Decline regardless of the time gap — the window had no lower
+        # bound, so a late same-amount receipt previously slipped through to
+        # synthesize.
+        out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=1000,
+            txid="real-txid", input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000)],
+        )
+        late = _inbound(row_id="b-late", wallet_id="B", amount_sats=50_000_000,
+                        txid="prov-xyz", occurred_at="2027-01-01T00:00:00Z")
+        result = self._run([out, late],
+                           {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")}, _refs("B"))
+        self.assertEqual(result.derived_pairs, [])
+        self.assertEqual(
+            [item["reason"] for item in result.blocked_sources],
+            ["ownership_transfer_destination_ambiguous"],
+        )
+
+    def test_unrelated_different_amount_deposit_does_not_block_synthesize(self):
+        # R2: a sync-gapped self-transfer whose destination has an unrelated
+        # deposit of a DIFFERENT amount (near or far in time) must still
+        # synthesize the leg — the amount is the discriminator, not timing.
+        out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=1000,
+            txid="real-txid", input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000)],
+        )
+        unrelated = _inbound(row_id="b-unrelated", wallet_id="B", amount_sats=1_234_000,
+                             txid="prov-other")  # near time, very different amount
+        result = self._run([out, unrelated],
+                           {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")}, _refs("B"))
+        self.assertEqual(len(result.derived_pairs), 1)
+        self.assertTrue(str(result.derived_pairs[0]["in"]["id"]).startswith("owned-derive:"))
+
     def test_inbound_asset_mismatch_not_reused(self):
         # A same-integer-amount inbound of a DIFFERENT asset must never be reused
         # for a BTC leg, even if it shares the txid.
@@ -685,6 +725,25 @@ class RecordedFanoutDeriverTests(unittest.TestCase):
         result = derive_recorded_fanout_transfers(rows, already_paired_ids=set())
         self.assertEqual(result.derived_pairs, [])
 
+    def test_mixed_case_txid_fanout_decomposes(self):
+        # Source recorded the 64-hex txid uppercase (one backend), destinations
+        # lowercase (CSV import). Every sibling self-transfer path normalizes
+        # txid casing; this decomposer must too, or the legs land in different
+        # raw groups and the fan-out is needlessly stuck in quarantine.
+        txid_up = "AB" * 32
+        txid_lo = "ab" * 32
+        rows = [
+            _plain_row(row_id="a-out", wallet_id="A", direction="outbound",
+                       amount_sats=80_000_000, fee_sats=2000, txid=txid_up),
+            _plain_row(row_id="b-in", wallet_id="B", direction="inbound",
+                       amount_sats=50_000_000, txid=txid_lo),
+            _plain_row(row_id="c-in", wallet_id="C", direction="inbound",
+                       amount_sats=30_000_000, txid=txid_lo),
+        ]
+        result = derive_recorded_fanout_transfers(rows, already_paired_ids=set())
+        self.assertEqual(len(result.derived_pairs), 2)
+        self.assertEqual(result.dropped_out_ids, {"a-out"})
+
     def test_one_to_one_left_to_detect_intra(self):
         # A clean 1-out/1-in is detect_intra_transfers' job; the decomposer only
         # handles >=2 destinations, so it declines here.
@@ -742,6 +801,329 @@ class RecordedFanoutDeriverTests(unittest.TestCase):
         ]
         result = derive_recorded_fanout_transfers(rows, already_paired_ids=set())
         self.assertEqual(result.derived_pairs, [])
+
+
+class MultiSourceConsolidationDeriverTests(unittest.TestCase):
+    """The graph-aware N->1 consolidation deriver (>=2 owned sources -> 1)."""
+
+    def _run(self, rows, owned_scripts, refs, already=None):
+        return derive_multi_source_consolidations(
+            rows,
+            index=_index(owned_scripts),
+            wallet_refs_by_id=refs,
+            already_paired_ids=already or set(),
+        )
+
+    def _consol_rows(self, *, a_sats, b_sats, c_sats, fee_sats, record_dest=True):
+        # A + B -> C. Both contributors sync the same graph and (per the esplora
+        # amount model) the same whole-tx fee; their recorded amounts are the
+        # net-of-fee outflow, so they cannot simply be summed.
+        graph_inputs = [SCRIPT["A"], SCRIPT["B"]]
+        graph_outputs = [(SCRIPT["C"], c_sats)]
+        a_out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=a_sats, fee_sats=fee_sats,
+            txid="consol", input_scripts=graph_inputs, outputs=graph_outputs,
+        )
+        b_out = _outbound(
+            row_id="b-out", wallet_id="B", amount_sats=b_sats, fee_sats=fee_sats,
+            txid="consol", input_scripts=graph_inputs, outputs=graph_outputs,
+        )
+        rows = [a_out, b_out]
+        if record_dest:
+            rows.append(_inbound(row_id="c-in", wallet_id="C", amount_sats=c_sats, txid="consol"))
+        return rows
+
+    def test_no_fee_books_one_leg_per_source(self):
+        rows = self._consol_rows(a_sats=50_000_000, b_sats=30_000_000, c_sats=80_000_000, fee_sats=0)
+        result = self._run(
+            rows,
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")},
+            _refs("A", "B", "C"),
+        )
+        self.assertEqual(len(result.derived_pairs), 2)
+        self.assertEqual(result.dropped_out_ids, {"a-out", "b-out"})
+        self.assertEqual(result.dropped_in_ids, {"c-in"})
+        for pair in result.derived_pairs:
+            self.assertEqual(pair["source"], "multi_source_consolidation")
+            self.assertEqual(pair["in"]["wallet_id"], "C")
+            self.assertEqual(pair["out"]["amount"], pair["in"]["amount"])
+            self.assertEqual(pair["in"]["journal_transaction_id"], "c-in")
+            self.assertEqual(tuple(pair["group_block_rows"])[0]["id"], "c-in")
+        # Legs sum to the destination total; no fee (fee_sats=0).
+        self.assertEqual(sum(p["out"]["amount"] for p in result.derived_pairs), 80_000_000 * SATS)
+        self.assertEqual(sorted(p["out"]["fee"] for p in result.derived_pairs), [0, 0])
+
+    def test_fee_booked_once_and_each_source_debited_its_contribution(self):
+        # in_A=0.5, in_B=0.3, fee=0.001 (whole-tx, on BOTH rows). Recorded
+        # amounts are net of the fee: a_A=0.499, a_B=0.299; out_C=0.799.
+        rows = self._consol_rows(
+            a_sats=49_900_000, b_sats=29_900_000, c_sats=79_900_000, fee_sats=100_000
+        )
+        result = self._run(
+            rows,
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")},
+            _refs("A", "B", "C"),
+        )
+        self.assertEqual(len(result.derived_pairs), 2)
+        # The whole fee lands on exactly one leg.
+        fees = sorted(p["out"]["fee"] for p in result.derived_pairs)
+        self.assertEqual(fees, [0, 100_000 * SATS])
+        # Legs (received) sum to the destination total.
+        self.assertEqual(sum(p["out"]["amount"] for p in result.derived_pairs), 79_900_000 * SATS)
+        # Each source is debited its TRUE net outflow = leg amount + leg fee:
+        # 0.5 BTC from A, 0.3 BTC from B (the whole fee is not double-counted).
+        sent_by_wallet = {
+            p["out"]["wallet_id"]: p["out"]["amount"] + p["out"]["fee"]
+            for p in result.derived_pairs
+        }
+        self.assertEqual(sent_by_wallet, {"A": 50_000_000 * SATS, "B": 30_000_000 * SATS})
+
+    def test_sync_gapped_destination_synthesizes_legs(self):
+        # C never recorded an inbound; the graph still proves it owns the output.
+        rows = self._consol_rows(
+            a_sats=50_000_000, b_sats=30_000_000, c_sats=80_000_000, fee_sats=0,
+            record_dest=False,
+        )
+        result = self._run(
+            rows,
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")},
+            _refs("A", "B", "C"),
+        )
+        self.assertEqual(len(result.derived_pairs), 2)
+        self.assertEqual(result.dropped_in_ids, set())  # nothing recorded to drop
+        # Both in-legs are synthesized at C.
+        self.assertTrue(all(p["in"]["id"].startswith("multi-consol:") for p in result.derived_pairs))
+        self.assertTrue(all(p.get("group_block_rows") == () for p in result.derived_pairs))
+        self.assertEqual(
+            {p["in"]["journal_transaction_id"] for p in result.derived_pairs},
+            {"a-out", "b-out"},
+        )
+
+    def test_external_output_declined(self):
+        # The spend also pays a non-owned recipient -> ambiguous fee attribution.
+        a_out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=0,
+            txid="consol", input_scripts=[SCRIPT["A"], SCRIPT["B"]],
+            outputs=[(SCRIPT["C"], 60_000_000), (SCRIPT["EXT"], 20_000_000)],
+        )
+        b_out = _outbound(
+            row_id="b-out", wallet_id="B", amount_sats=30_000_000, fee_sats=0,
+            txid="consol", input_scripts=[SCRIPT["A"], SCRIPT["B"]],
+            outputs=[(SCRIPT["C"], 60_000_000), (SCRIPT["EXT"], 20_000_000)],
+        )
+        result = self._run(
+            [a_out, b_out],
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")},
+            _refs("A", "B", "C"),
+        )
+        self.assertEqual(result.derived_pairs, [])
+
+    def test_foreign_input_declined(self):
+        # One input is not owned by either contributor -> amounts unreliable.
+        a_out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=0,
+            txid="consol", input_scripts=[SCRIPT["A"], SCRIPT["EXT"]],
+            outputs=[(SCRIPT["C"], 80_000_000)],
+        )
+        b_out = _outbound(
+            row_id="b-out", wallet_id="B", amount_sats=30_000_000, fee_sats=0,
+            txid="consol", input_scripts=[SCRIPT["A"], SCRIPT["EXT"]],
+            outputs=[(SCRIPT["C"], 80_000_000)],
+        )
+        result = self._run(
+            [a_out, b_out],
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")},
+            _refs("A", "B", "C"),
+        )
+        self.assertEqual(result.derived_pairs, [])
+
+    def test_sender_without_owned_input_declined(self):
+        # A stale/imported B outbound row sharing A's graph must not let the
+        # deriver synthesize a non-taxable MOVE from B when no input is owned by B.
+        a_out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=0,
+            txid="consol", input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["C"], 80_000_000)],
+        )
+        b_out = _outbound(
+            row_id="b-out", wallet_id="B", amount_sats=30_000_000, fee_sats=0,
+            txid="consol", input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["C"], 80_000_000)],
+        )
+        result = self._run(
+            [a_out, b_out],
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")},
+            _refs("A", "B", "C"),
+        )
+        self.assertEqual(result.derived_pairs, [])
+
+    def test_different_id_destination_receipt_declined(self):
+        # C recorded its receipt under its own provider id (value == the
+        # consolidated total). It cannot be matched to this spend without
+        # heuristics, so decline (left to the single-source deriver's block).
+        rows = self._consol_rows(
+            a_sats=50_000_000, b_sats=30_000_000, c_sats=80_000_000, fee_sats=0,
+            record_dest=False,
+        )
+        rows.append(_inbound(row_id="c-elsewhere", wallet_id="C", amount_sats=80_000_000, txid="exchange-77"))
+        result = self._run(
+            rows,
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")},
+            _refs("A", "B", "C"),
+        )
+        self.assertEqual(result.derived_pairs, [])
+
+    def test_off_group_receipt_with_nonexact_amount_declined(self):
+        # C recorded its receipt off-group at a slightly different amount (sat
+        # rounding / net-of-internal-fee): 0.79998 vs the 0.8 graph total. An
+        # exact-only guard would let this slip through and synthesize legs on top
+        # of the surviving receipt (double-count). The receipt lands within the
+        # spend's time window, so the deriver must decline.
+        rows = self._consol_rows(
+            a_sats=50_000_000, b_sats=30_000_000, c_sats=80_000_000, fee_sats=0,
+            record_dest=False,
+        )
+        rows.append(_inbound(row_id="c-elsewhere", wallet_id="C", amount_sats=79_998_000, txid="exchange-77"))
+        result = self._run(
+            rows,
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")},
+            _refs("A", "B", "C"),
+        )
+        self.assertEqual(result.derived_pairs, [])
+
+    def test_unrelated_near_time_deposit_does_not_false_decline(self):
+        # R1 regression: a sync-gapped consolidation (C recorded no receipt) whose
+        # destination ALSO has an unrelated deposit of a DIFFERENT amount near the
+        # spend time must still decompose. A blunt time window false-declined it,
+        # dropping carried basis and booking phantom disposals.
+        rows = self._consol_rows(
+            a_sats=50_000_000, b_sats=30_000_000, c_sats=80_000_000, fee_sats=0,
+            record_dest=False,
+        )
+        rows.append(_inbound(row_id="c-unrelated", wallet_id="C", amount_sats=12_300_000,
+                             txid="other-deposit"))  # near time (default), different amount
+        result = self._run(
+            rows,
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")},
+            _refs("A", "B", "C"),
+        )
+        self.assertEqual(len(result.derived_pairs), 2)  # decomposes, not declined
+
+    def test_off_group_amount_compatible_receipt_far_in_time_declines(self):
+        # R3: a destination receipt at the consolidated total recorded off-group
+        # LONG after the spend (settlement-dated CSV) is still this receipt —
+        # decline so synthetic legs don't double-count it (the window had no lower
+        # bound, so a late same-amount receipt previously slipped through).
+        rows = self._consol_rows(
+            a_sats=50_000_000, b_sats=30_000_000, c_sats=80_000_000, fee_sats=0,
+            record_dest=False,
+        )
+        rows.append(_inbound(row_id="c-late", wallet_id="C", amount_sats=80_000_000,
+                             txid="exch-99", occurred_at="2027-01-01T00:00:00Z"))
+        result = self._run(
+            rows,
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")},
+            _refs("A", "B", "C"),
+        )
+        self.assertEqual(result.derived_pairs, [])  # declines regardless of timing
+
+    def test_off_group_unrelated_deposit_far_in_time_does_not_block(self):
+        # An unrelated destination deposit of a DIFFERENT amount far from the
+        # spend time must NOT block a legitimate consolidation.
+        rows = self._consol_rows(
+            a_sats=50_000_000, b_sats=30_000_000, c_sats=80_000_000, fee_sats=0,
+            record_dest=True,
+        )
+        rows.append(_inbound(row_id="c-unrelated", wallet_id="C", amount_sats=12_345_000,
+                             txid="other-deposit", occurred_at="2020-01-01T00:00:00Z"))
+        result = self._run(
+            rows,
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")},
+            _refs("A", "B", "C"),
+        )
+        self.assertEqual(len(result.derived_pairs), 2)  # still decomposes
+
+    def test_conservation_mismatch_declined(self):
+        # Recorded amounts + fee do not equal the graph destination total.
+        rows = self._consol_rows(a_sats=50_000_000, b_sats=20_000_000, c_sats=80_000_000, fee_sats=0)
+        result = self._run(
+            rows,
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")},
+            _refs("A", "B", "C"),
+        )
+        self.assertEqual(result.derived_pairs, [])
+
+    def test_single_source_left_to_other_paths(self):
+        # Only one contributor recorded an outbound row -> not this pass's job.
+        rows = self._consol_rows(a_sats=50_000_000, b_sats=30_000_000, c_sats=80_000_000, fee_sats=0)
+        rows = [r for r in rows if r["id"] != "b-out"]
+        result = self._run(
+            rows,
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")},
+            _refs("A", "B", "C"),
+        )
+        self.assertEqual(result.derived_pairs, [])
+
+    def test_already_paired_leg_skips_group(self):
+        rows = self._consol_rows(a_sats=50_000_000, b_sats=30_000_000, c_sats=80_000_000, fee_sats=0)
+        result = self._run(
+            rows,
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")},
+            _refs("A", "B", "C"),
+            already={"a-out"},
+        )
+        self.assertEqual(result.derived_pairs, [])
+
+
+class GraphPartialPaymentTests(unittest.TestCase):
+    """``graph_partial_payment_out_ids`` — which detect_intra pairs to withhold."""
+
+    def _pair(self, out_row, in_row):
+        return {"out": out_row, "in": in_row}
+
+    def test_partial_payment_flagged(self):
+        # A spends to C (own) + an external recipient; C also recorded the
+        # receipt under the same txid (so detect_intra would pair A<->C). The
+        # outbound amount (0.7 = owned 0.5 + external 0.2) exceeds the owned-to-C
+        # value, so it is flagged for the graph deriver to split.
+        out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=70_000_000, fee_sats=1000,
+            txid="pp", input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["C"], 50_000_000), (SCRIPT["EXT"], 20_000_000)],
+        )
+        c_in = _inbound(row_id="c-in", wallet_id="C", amount_sats=50_000_000, txid="pp")
+        flagged = graph_partial_payment_out_ids(
+            [self._pair(out, c_in)],
+            _index({SCRIPT["A"]: ("A", "A"), SCRIPT["C"]: ("C", "C")}),
+        )
+        self.assertEqual(flagged, {"a-out"})
+
+    def test_pure_self_transfer_not_flagged(self):
+        # A -> C with only change back to self besides the owned leg; no external
+        # residual, so detect_intra's pairing is correct and is left alone.
+        out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=1000,
+            txid="st", input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["C"], 50_000_000)],
+        )
+        c_in = _inbound(row_id="c-in", wallet_id="C", amount_sats=50_000_000, txid="st")
+        flagged = graph_partial_payment_out_ids(
+            [self._pair(out, c_in)],
+            _index({SCRIPT["A"]: ("A", "A"), SCRIPT["C"]: ("C", "C")}),
+        )
+        self.assertEqual(flagged, set())
+
+    def test_graphless_pair_not_flagged(self):
+        out = {
+            "id": "a-out", "wallet_id": "A", "direction": "outbound", "asset": "BTC",
+            "amount": 50_000_000 * SATS, "fee": 0, "external_id": "csv", "raw_json": "{}",
+        }
+        c_in = _inbound(row_id="c-in", wallet_id="C", amount_sats=50_000_000, txid="csv")
+        flagged = graph_partial_payment_out_ids(
+            [self._pair(out, c_in)],
+            _index({SCRIPT["C"]: ("C", "C")}),
+        )
+        self.assertEqual(flagged, set())
 
 
 if __name__ == "__main__":

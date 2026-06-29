@@ -9709,13 +9709,24 @@ class ReviewRegressionTest(unittest.TestCase):
             inputs.wallet_refs_by_id,
             [{"out": unpriced_out_row, "in": used_coarse_in_row}],
         )
-        self.assertEqual(len(normalized.quarantines), 1)
-        quarantine = normalized.quarantines[0]
+        self.assertEqual(len(normalized.quarantines), 2)
+        quarantine = next(
+            q
+            for q in normalized.quarantines
+            if q["transaction_id"] == "coarse-source-transfer-in"
+        )
         self.assertEqual(quarantine["transaction_id"], "coarse-source-transfer-in")
         self.assertEqual(quarantine["reason"], "pricing_review_required")
         detail = json.loads(quarantine["detail_json"])
         self.assertEqual(detail["wallet"], "Hot")
         self.assertEqual(detail["pricing_quality"], pricing.QUALITY_COARSE_FALLBACK)
+        partner = next(
+            q
+            for q in normalized.quarantines
+            if q["transaction_id"] == "coarse-source-transfer-out"
+        )
+        self.assertEqual(partner["reason"], "pricing_review_required")
+        self.assertTrue(json.loads(partner["detail_json"])["paired_leg"])
 
     def test_missing_spot_price_snapshot_matches_fixture(self):
         self._bootstrap_wallet(label="MissingPrice")
