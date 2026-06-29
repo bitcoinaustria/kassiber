@@ -1023,8 +1023,8 @@ def suggest_transfer_candidates(
     pins to exact / strong; ``asset_pair`` matches the legacy asset-only
     ``OUT-IN`` shape (e.g. ``"LBTC-BTC"``); ``route_pair`` matches the
     rail-aware route shape (e.g. ``"LNBTC-BTC"``); ``candidate_type`` splits
-    transfer-like Bitcoin layer transitions from true cross-asset swaps; and
-    ``method`` pins to ``payment_hash`` or ``heuristic``.
+    carrying-value Bitcoin movements from other cross-asset swaps; and ``method``
+    pins to ``payment_hash`` or ``heuristic``.
     """
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     rows = _load_matcher_rows(conn, profile["id"])

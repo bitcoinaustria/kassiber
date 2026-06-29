@@ -24,9 +24,10 @@ for trends, extremes/search for transaction questions, report blockers
 for readiness, rate coverage for missing prices, and audit changes for freshness.
 Mention reviewed transfer_pairs separately from raw flow totals.
 
-For swap/peg/layer transitions, read ui.transfers.review_context first. It gives
-candidate legs, confidence, fees, conflicts, journal impact, and next actions.
-Read swap-matching when workflow details matter.
+For Boltz/submarine swaps, pegs, and other Bitcoin rail moves, read
+ui.transfers.review_context first. It gives candidate legs, confidence, fees,
+conflicts, journal impact, and next actions. Read swap-matching when workflow
+details matter.
 
 Never output placeholders, estimates, or your own satoshi/BTC conversions. If no
 tool result contains the requested number, say the GUI tool surface is missing it.

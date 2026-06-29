@@ -347,9 +347,9 @@ class SwapMatchingCliTest(unittest.TestCase):
         self.assertEqual(code, 0, payload)
         self.assertEqual(payload["data"]["summary"]["count"], 1)
 
-    def test_conflicted_layer_transition_stays_in_transfer_review(self):
+    def test_conflicted_bitcoin_swap_stays_in_transfer_review(self):
         # One outbound BTC leg matches both a same-asset inbound and a BTC->LBTC
-        # layer transition. Both are transfer-like now, but the matcher-stamped
+        # Bitcoin swap. Both are transfer-like now, but the matcher-stamped
         # conflict_size must still keep bulk-pair from silently choosing either
         # interpretation.
         data_root = self._fresh_root("split-conflict")

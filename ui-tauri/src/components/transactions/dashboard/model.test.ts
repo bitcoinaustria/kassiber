@@ -153,7 +153,7 @@ describe("transaction dashboard chart selection", () => {
     ).toBe(false);
   });
 
-  it("treats BTC to Liquid BTC candidates as transfer-like layer transitions", () => {
+  it("treats BTC to Liquid BTC candidates as carrying-value Bitcoin swaps", () => {
     const out = transaction({
       id: "tx-out",
       direction: "Send",
