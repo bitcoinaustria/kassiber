@@ -137,6 +137,8 @@
       "description": "Re-enter the database passphrase to copy the stored descriptor material for {{label}}.",
       "descriptorWithChange": "Descriptor + change",
       "descriptorOnly": "Descriptor",
+      "encryptedOnly": "Copy is available in encrypted books only.",
+      "encryptedOnlyShort": "Encrypted only",
       "includesChange": "The clipboard payload includes the stored change descriptor on the next line.",
       "passphrase": "Database passphrase",
       "helper": "Kassiber copies the raw stored descriptor material, without field labels or table formatting.",

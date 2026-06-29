@@ -137,6 +137,8 @@
       "description": "Gib die Datenbank-Passphrase erneut ein, um das für {{label}} gespeicherte Descriptor-Material zu kopieren.",
       "descriptorWithChange": "Descriptor + Wechsel",
       "descriptorOnly": "Descriptor",
+      "encryptedOnly": "Kopieren ist nur in verschlüsselten Büchern verfügbar.",
+      "encryptedOnlyShort": "Nur verschlüsselt",
       "includesChange": "Die Zwischenablage enthält den gespeicherten Wechsel-Descriptor in der nächsten Zeile.",
       "passphrase": "Datenbank-Passphrase",
       "helper": "Kassiber kopiert das rohe gespeicherte Descriptor-Material, ohne Feldnamen oder Tabellenformatierung.",

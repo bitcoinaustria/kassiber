@@ -890,8 +890,10 @@ function ConnectionDetailView({
     walletDetail?.backend?.source === "explicit";
   const hasStoredDescriptor = Boolean(walletDetail?.descriptor);
   const hasStoredChangeDescriptor = Boolean(walletDetail?.change_descriptor);
-  const canRevealDescriptor =
-    encryptedWorkspace && hasStoredDescriptor;
+  const canRevealDescriptor = encryptedWorkspace && hasStoredDescriptor;
+  const descriptorRevealStatus = hasStoredChangeDescriptor
+    ? t("detail.reveal.descriptorWithChange")
+    : t("detail.reveal.descriptorOnly");
 
   const editConfigKind = editConfigKindForConnection(connection);
 
@@ -1220,15 +1222,23 @@ function ConnectionDetailView({
                   <MoreHorizontal className="size-4" aria-hidden="true" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuItem onClick={openEditDialog}>
                   <Pencil className="size-4" aria-hidden="true" />
                   {t("common:actions.edit")}
                 </DropdownMenuItem>
-                {canRevealDescriptor ? (
-                  <DropdownMenuItem onClick={openRevealDialog}>
+                {hasStoredDescriptor ? (
+                  <DropdownMenuItem
+                    disabled={!canRevealDescriptor}
+                    onClick={canRevealDescriptor ? openRevealDialog : undefined}
+                  >
                     <Copy className="size-4" aria-hidden="true" />
-                    {t("detail.reveal.menuItem")}
+                    <span>{t("detail.reveal.menuItem")}</span>
+                    {!canRevealDescriptor ? (
+                      <span className="ml-auto text-xs text-muted-foreground">
+                        {t("detail.reveal.encryptedOnlyShort")}
+                      </span>
+                    ) : null}
                   </DropdownMenuItem>
                 ) : null}
                 <DropdownMenuItem
@@ -1764,21 +1774,27 @@ function ConnectionDetailView({
                     .join(" · ")}
                 />
               ) : null}
-              {canRevealDescriptor ? (
+              {hasStoredDescriptor ? (
                 <div className="flex min-w-0 items-center gap-3 text-sm">
                   <span className="shrink-0 text-xs font-medium text-muted-foreground">
                     {t("detail.connectionDetails.descriptorMaterial")}
                   </span>
-                  <span className="ml-auto min-w-0 flex-1 truncate text-right text-muted-foreground">
-                    {hasStoredChangeDescriptor
-                      ? t("detail.reveal.descriptorWithChange")
-                      : t("detail.reveal.descriptorOnly")}
+                  <span className="ml-auto min-w-0 flex-1 text-right">
+                    <span className="block truncate text-muted-foreground">
+                      {descriptorRevealStatus}
+                    </span>
+                    {!canRevealDescriptor ? (
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {t("detail.reveal.encryptedOnly")}
+                      </span>
+                    ) : null}
                   </span>
                   <Button
                     type="button"
                     variant="outline"
                     size="icon-xs"
                     aria-label={t("detail.reveal.menuItem")}
+                    disabled={!canRevealDescriptor}
                     onClick={openRevealDialog}
                   >
                     <Copy className="size-3" aria-hidden="true" />

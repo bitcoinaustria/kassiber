@@ -4653,9 +4653,11 @@ class DaemonSmokeTest(unittest.TestCase):
             _write_payload(proc, {"request_id": "wallets-1", "kind": "ui.wallets.list"})
             wallets = _read_payload_timeout(proc)
             self.assertEqual(wallets["kind"], "ui.wallets.list")
-            self.assertEqual(wallets["data"]["wallets"][0]["label"], "Cold")
+            wallet = wallets["data"]["wallets"][0]
+            self.assertEqual(wallet["label"], "Cold")
+            self.assertIs(wallet["descriptor"], False)
+            self.assertIs(wallet["change_descriptor"], False)
             wallet_payload = json.dumps(wallets["data"])
-            self.assertNotIn("descriptor", wallet_payload)
             self.assertNotIn("config_json", wallet_payload)
 
             _write_payload(proc, {"request_id": "backends-1", "kind": "ui.backends.list"})
