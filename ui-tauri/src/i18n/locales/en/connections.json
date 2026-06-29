@@ -152,6 +152,7 @@
       "btcpay": "BTCPay enrichment",
       "notConfigured": "Manual / not configured"
     },
+    "deprecatedBadge": "Deprecated",
     "edit": {
       "title": "Edit connection",
       "descriptionEncrypted": "Confirm this change with the local database passphrase.",
@@ -186,6 +187,8 @@
       "selectExportFileTitle": "Select {{label}} export file",
       "clearProvenance": "Clear BTCPay provenance routes",
       "clearProvenanceHelper": "Removes all {{count}} stored route(s). Descriptor/file sync remains the balance source. Re-add routes from Add wallet.",
+      "deprecated": "Deprecated wallet",
+      "deprecatedHelper": "Keep imported history, but exclude this wallet from refresh-all and background refresh. Manual refresh still works.",
       "passphrase": "Passphrase",
       "plaintextChallenge": "Plaintext change challenge",
       "saving": "Saving...",
