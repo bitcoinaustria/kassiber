@@ -921,6 +921,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(status["kind"], "status")
             self.assertEqual(status["schema_version"], 1)
             self.assertEqual(status["data"]["auth"]["mode"], "local")
+            self.assertFalse(status["data"]["database_encrypted"])
             self.assertEqual(status["data"]["data_root"], str(data_root))
 
             _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
@@ -2898,6 +2899,28 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertTrue(descriptor_updated["data"]["wallet"]["descriptor"])
                 self.assertFalse(
                     descriptor_updated["data"]["wallet"]["change_descriptor"]
+                )
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "reveal-descriptor-plaintext",
+                        "kind": "wallets.reveal_descriptor",
+                        "args": {
+                            "wallet": "Descriptor UI",
+                            "auth_response": {
+                                "plaintext_reveal_ack": "COPY LOCAL SECRET",
+                            },
+                        },
+                    },
+                )
+                descriptor_revealed = _read_payload_timeout(proc)
+                self.assertEqual(
+                    descriptor_revealed["kind"], "wallets.reveal_descriptor"
+                )
+                self.assertEqual(
+                    descriptor_revealed["data"]["wallet_material"],
+                    receive_descriptor,
                 )
 
                 _write_payload(

@@ -167,6 +167,7 @@ const relatedViewArrowClass =
 
 const PLAINTEXT_CHANGE_ACK = "CHANGE LOCAL DATA";
 const PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA";
+const PLAINTEXT_REVEAL_ACK = "COPY LOCAL SECRET";
 const CLEAR_BACKEND_SELECTION = "__kassiber_clear_backend__";
 const DESCRIPTOR_REVEAL_KIND = "wallets.reveal_descriptor";
 
@@ -193,6 +194,10 @@ interface RevealDescriptorResult {
   wallet_material?: string | null;
   descriptor?: string | null;
   change_descriptor?: string | null;
+}
+
+interface StatusResult {
+  database_encrypted?: boolean;
 }
 
 function walletDescriptorMaterialFromReveal(
@@ -610,6 +615,7 @@ function ConnectionDetailView({
   const revealDescriptor = useDaemonMutation<RevealDescriptorResult>(
     DESCRIPTOR_REVEAL_KIND,
   );
+  const statusQuery = useDaemon<StatusResult>("status");
   const backendOptionsQuery = useDaemon<{
     backends: BackendOption[];
   }>("ui.backends.options");
@@ -682,9 +688,16 @@ function ConnectionDetailView({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [revealOpen, setRevealOpen] = useState(false);
   const [revealPassphrase, setRevealPassphrase] = useState("");
+  const [revealPlaintextAck, setRevealPlaintextAck] = useState("");
   const [revealError, setRevealError] = useState<string | null>(null);
+  const statusDatabaseEncrypted =
+    statusQuery.data?.kind === "status"
+      ? Boolean(statusQuery.data.data?.database_encrypted)
+      : false;
   const encryptedWorkspace =
-    Boolean(identity?.encrypted) || identity?.databaseMode === "sqlcipher";
+    statusDatabaseEncrypted ||
+    Boolean(identity?.encrypted) ||
+    identity?.databaseMode === "sqlcipher";
   const sourceValue =
     walletDetail?.sync_source ||
     connection.syncSource ||
@@ -890,7 +903,6 @@ function ConnectionDetailView({
     walletDetail?.backend?.source === "explicit";
   const hasStoredDescriptor = Boolean(walletDetail?.descriptor);
   const hasStoredChangeDescriptor = Boolean(walletDetail?.change_descriptor);
-  const canRevealDescriptor = encryptedWorkspace && hasStoredDescriptor;
   const descriptorRevealStatus = hasStoredChangeDescriptor
     ? t("detail.reveal.descriptorWithChange")
     : t("detail.reveal.descriptorOnly");
@@ -899,6 +911,7 @@ function ConnectionDetailView({
 
   const openRevealDialog = () => {
     setRevealPassphrase("");
+    setRevealPlaintextAck("");
     setRevealError(null);
     setRevealOpen(true);
   };
@@ -1096,15 +1109,26 @@ function ConnectionDetailView({
   const onRevealSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setRevealError(null);
-    if (!revealPassphrase) {
+    if (encryptedWorkspace && !revealPassphrase) {
       setRevealError(t("detail.auth.enterPassphrase"));
+      return;
+    }
+    if (
+      !encryptedWorkspace &&
+      revealPlaintextAck.trim() !== PLAINTEXT_REVEAL_ACK
+    ) {
+      setRevealError(
+        t("detail.reveal.errorPlaintextAck", { ack: PLAINTEXT_REVEAL_ACK }),
+      );
       return;
     }
 
     try {
       const envelope = await revealDescriptor.mutateAsync({
         wallet: connection.id,
-        auth_response: { passphrase_secret: revealPassphrase },
+        auth_response: encryptedWorkspace
+          ? { passphrase_secret: revealPassphrase }
+          : { plaintext_reveal_ack: PLAINTEXT_REVEAL_ACK },
       });
       const walletMaterial = walletDescriptorMaterialFromReveal(envelope.data);
       if (!walletMaterial) {
@@ -1119,6 +1143,7 @@ function ConnectionDetailView({
       });
       setRevealOpen(false);
       setRevealPassphrase("");
+      setRevealPlaintextAck("");
     } catch (error) {
       setRevealError(
         error instanceof Error
@@ -1228,17 +1253,9 @@ function ConnectionDetailView({
                   {t("common:actions.edit")}
                 </DropdownMenuItem>
                 {hasStoredDescriptor ? (
-                  <DropdownMenuItem
-                    disabled={!canRevealDescriptor}
-                    onClick={canRevealDescriptor ? openRevealDialog : undefined}
-                  >
+                  <DropdownMenuItem onClick={openRevealDialog}>
                     <Copy className="size-4" aria-hidden="true" />
-                    <span>{t("detail.reveal.menuItem")}</span>
-                    {!canRevealDescriptor ? (
-                      <span className="ml-auto text-xs text-muted-foreground">
-                        {t("detail.reveal.encryptedOnlyShort")}
-                      </span>
-                    ) : null}
+                    {t("detail.reveal.menuItem")}
                   </DropdownMenuItem>
                 ) : null}
                 <DropdownMenuItem
@@ -1783,18 +1800,12 @@ function ConnectionDetailView({
                     <span className="block truncate text-muted-foreground">
                       {descriptorRevealStatus}
                     </span>
-                    {!canRevealDescriptor ? (
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {t("detail.reveal.encryptedOnly")}
-                      </span>
-                    ) : null}
                   </span>
                   <Button
                     type="button"
                     variant="outline"
                     size="icon-xs"
                     aria-label={t("detail.reveal.menuItem")}
-                    disabled={!canRevealDescriptor}
                     onClick={openRevealDialog}
                   >
                     <Copy className="size-3" aria-hidden="true" />
@@ -2201,7 +2212,13 @@ function ConnectionDetailView({
           <DialogHeader>
             <DialogTitle>{t("detail.reveal.title")}</DialogTitle>
             <DialogDescription>
-              {t("detail.reveal.description", { label: connection.label })}
+              {encryptedWorkspace
+                ? t("detail.reveal.descriptionEncrypted", {
+                    label: connection.label,
+                  })
+                : t("detail.reveal.descriptionPlaintext", {
+                    label: connection.label,
+                  })}
             </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={onRevealSubmit}>
@@ -2210,21 +2227,40 @@ function ConnectionDetailView({
                 {t("detail.reveal.includesChange")}
               </p>
             ) : null}
-            <div className="space-y-2">
-              <Label htmlFor="connection-reveal-passphrase">
-                {t("detail.reveal.passphrase")}
-              </Label>
-              <Input
-                id="connection-reveal-passphrase"
-                type="password"
-                autoComplete="current-password"
-                value={revealPassphrase}
-                onChange={(event) => setRevealPassphrase(event.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                {t("detail.reveal.helper")}
-              </p>
-            </div>
+            {encryptedWorkspace ? (
+              <div className="space-y-2">
+                <Label htmlFor="connection-reveal-passphrase">
+                  {t("detail.reveal.passphrase")}
+                </Label>
+                <Input
+                  id="connection-reveal-passphrase"
+                  type="password"
+                  autoComplete="current-password"
+                  value={revealPassphrase}
+                  onChange={(event) => setRevealPassphrase(event.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("detail.reveal.helper")}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="connection-reveal-ack">
+                  {t("detail.reveal.plaintextChallenge")}
+                </Label>
+                <Input
+                  id="connection-reveal-ack"
+                  value={revealPlaintextAck}
+                  placeholder={PLAINTEXT_REVEAL_ACK}
+                  onChange={(event) =>
+                    setRevealPlaintextAck(event.target.value)
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("detail.reveal.plaintextHelper")}
+                </p>
+              </div>
+            )}
             {revealError && (
               <p className="m-0 text-sm text-destructive">{revealError}</p>
             )}
