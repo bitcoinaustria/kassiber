@@ -95,10 +95,19 @@ export type SwapCandidateReference = {
   out_id: string;
   in_asset?: string;
   out_asset?: string;
+  default_kind?: string;
+  candidate_type?: "transfer" | "swap";
   conflict_set_id?: string;
   /** Matcher-stamped cluster size over the full candidate set. */
   conflict_size?: number;
 };
+
+const BITCOIN_LAYER_TRANSITION_PAIR_KINDS = new Set([
+  "peg-in",
+  "peg-out",
+  "submarine-swap",
+  "swap-refund",
+]);
 
 const flowColors: Record<TransactionFlow, string> = {
   incoming: "oklch(0.56 0.16 150)",
@@ -236,7 +245,7 @@ const flowLabelStableEnglish: Record<TransactionFlow, string> = {
   outgoing: "outgoing",
   transfer: "internal transfer",
   swap: "swap",
-  "layer-transition": "layer transition",
+  "layer-transition": "Bitcoin swap",
 };
 
 function isRedundantTransactionLabel(label: string, flow: TransactionFlow) {
@@ -753,10 +762,25 @@ function buildSwapCandidates(
   records: Transaction[],
   candidateRefs?: SwapCandidateReference[],
 ): SwapCandidate[] {
+  return buildPairingCandidates(records, candidateRefs, "swap");
+}
+
+function buildTransferCandidates(
+  records: Transaction[],
+  candidateRefs?: SwapCandidateReference[],
+): SwapCandidate[] {
+  return buildPairingCandidates(records, candidateRefs, "transfer");
+}
+
+function buildPairingCandidates(
+  records: Transaction[],
+  candidateRefs: SwapCandidateReference[] | undefined,
+  reviewType: "transfer" | "swap",
+): SwapCandidate[] {
   if (candidateRefs) {
     const recordsById = new Map(records.map((txn) => [txn.id, txn]));
     return nonConflictedCandidateRefs(candidateRefs)
-      .filter(isCrossAssetCandidateRef)
+      .filter((candidate) => candidateReferenceReviewType(candidate) === reviewType)
       .flatMap((candidate) => {
         const input = recordsById.get(candidate.in_id);
         const out = recordsById.get(candidate.out_id);
@@ -774,6 +798,8 @@ function buildSwapCandidates(
         ];
       });
   }
+
+  if (reviewType === "transfer") return [];
 
   const inbound = records
     .filter((txn) => transactionFlow(txn) === "incoming")
@@ -830,9 +856,24 @@ function buildSwapCandidates(
   return candidates;
 }
 
-function isCrossAssetCandidateRef(candidate: SwapCandidateReference): boolean {
-  if (!candidate.in_asset || !candidate.out_asset) return true;
-  return candidate.in_asset.toUpperCase() !== candidate.out_asset.toUpperCase();
+function candidateReferenceReviewType(
+  candidate: SwapCandidateReference,
+): "transfer" | "swap" {
+  if (candidate.candidate_type === "transfer" || candidate.candidate_type === "swap") {
+    return candidate.candidate_type;
+  }
+  if (
+    candidate.default_kind &&
+    BITCOIN_LAYER_TRANSITION_PAIR_KINDS.has(candidate.default_kind)
+  ) {
+    return "transfer";
+  }
+  if (candidate.in_asset && candidate.out_asset) {
+    return candidate.in_asset.toUpperCase() === candidate.out_asset.toUpperCase()
+      ? "transfer"
+      : "swap";
+  }
+  return "swap";
 }
 
 function nonConflictedCandidateRefs(
@@ -865,7 +906,7 @@ function buildFlowChartRows(
   records: Transaction[],
   period: PeriodKey,
   currency: Currency,
-  candidateIds = new Set<string>(),
+  candidateFlowOverrides = new Map<string, TransactionFlow>(),
   metric: FlowChartMetric = "amount",
 ): FlowChartPoint[] {
   const grouped = buildEmptyFlowBuckets(period, records);
@@ -888,7 +929,7 @@ function buildFlowChartRows(
       };
     const value =
       metric === "count" ? 1 : currency === "btc" ? transactionBtc(txn) : (txn.amount ?? 0);
-    const flow = candidateIds.has(txn.id) ? "swap" : transactionFlow(txn);
+    const flow = candidateFlowOverrides.get(txn.id) ?? transactionFlow(txn);
     const segment = flowChartSegmentForFlow(flow);
     if (flow === "incoming") row.incoming += value;
     if (flow === "outgoing") row.outgoing -= value;
@@ -1191,6 +1232,8 @@ export {
   buildBreakdown,
   buildFlowChartRows,
   buildSwapCandidates,
+  buildTransferCandidates,
+  candidateReferenceReviewType,
   dashboardRecordsFromTxs,
   dateFilterOptions,
   filterChipClassName,

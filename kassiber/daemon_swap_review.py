@@ -466,6 +466,7 @@ def build_swap_review_context_payload(
     fee_sats_min = int(
         args.get("fee_sats_min") or core_transfer_matching.DEFAULT_FEE_SATS_MIN
     )
+    candidate_type = args.get("candidate_type")
     candidate_payload = suggest_transfer_candidates(
         conn,
         workspace,
@@ -480,7 +481,7 @@ def build_swap_review_context_payload(
         asset_pair=args.get("asset_pair"),
         route_pair=args.get("route_pair"),
         method=args.get("method"),
-        candidate_type=args.get("candidate_type") or "swap",
+        candidate_type=candidate_type,
     )
     candidates = list(candidate_payload.get("candidates", []))
     limited_candidates = candidates[:limit]
@@ -537,6 +538,7 @@ def build_swap_review_context_payload(
                         "in_occurred_at",
                         "default_kind",
                         "default_policy",
+                        "candidate_type",
                     )
                 },
                 "out": out_summary,
@@ -571,11 +573,18 @@ def build_swap_review_context_payload(
 
     active_pairs_all = list_transaction_pairs(conn, workspace, profile_ref)
     rules_all = list_transfer_rules(conn, workspace, profile_ref)
+    saved_view_surface = (
+        "transfer_candidates"
+        if candidate_type == "transfer"
+        else "swap_candidates"
+        if candidate_type == "swap"
+        else None
+    )
     saved_views_all = list_saved_views_cli(
         conn,
         workspace,
         profile_ref,
-        surface="swap_candidates",
+        surface=saved_view_surface,
     )
     active_pairs = active_pairs_all[:limit]
     rules = rules_all[:limit]
@@ -613,6 +622,7 @@ def build_swap_review_context_payload(
                 "method",
                 "asset_pair",
                 "route_pair",
+                "candidate_type",
                 "time_window_seconds",
                 "fee_pct_max",
                 "fee_sats_min",

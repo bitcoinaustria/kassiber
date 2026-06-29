@@ -334,6 +334,7 @@ class SwapMatchingCliTest(unittest.TestCase):
         candidate = payload["data"]["candidates"][0]
         self.assertEqual(candidate["out_asset"], "BTC")
         self.assertEqual(candidate["in_asset"], "BTC")
+        self.assertEqual(candidate["candidate_type"], "transfer")
         self.assertEqual(candidate["default_kind"], "manual")
         self.assertEqual(candidate["default_policy"], "carrying-value")
 
@@ -346,12 +347,11 @@ class SwapMatchingCliTest(unittest.TestCase):
         self.assertEqual(code, 0, payload)
         self.assertEqual(payload["data"]["summary"]["count"], 1)
 
-    def test_conflict_split_across_candidate_type_filter_blocks_bulk_pair(self):
-        # One outbound BTC leg matches both a same-asset inbound (transfer
-        # interpretation) and a cross-asset inbound (swap interpretation).
-        # Filtering by candidate_type hides one sibling per view, but the
-        # matcher-stamped conflict_size must keep bulk-pair from silently
-        # choosing either interpretation.
+    def test_conflicted_bitcoin_swap_stays_in_transfer_review(self):
+        # One outbound BTC leg matches both a same-asset inbound and a BTC->LBTC
+        # Bitcoin swap. Both are transfer-like now, but the matcher-stamped
+        # conflict_size must still keep bulk-pair from silently choosing either
+        # interpretation.
         data_root = self._fresh_root("split-conflict")
         out_csv = Path(self._tmp.name) / "split-out.csv"
         in_btc_csv = Path(self._tmp.name) / "split-in-btc.csv"
@@ -393,31 +393,56 @@ class SwapMatchingCliTest(unittest.TestCase):
                 "--file", str(csv_path),
             )
 
-        # The swap-only view shows one candidate but still reports the
-        # conflict with the hidden transfer-interpretation sibling.
+        # The transfer view shows both transfer-like interpretations and keeps
+        # the shared conflict cluster.
+        payload, code = _run(
+            data_root, "transfers", "suggest",
+            "--workspace", "Main", "--profile", "Swap",
+            "--candidate-type", "transfer",
+        )
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload["data"]["counts"]["total"], 2)
+        self.assertEqual(payload["data"]["counts"]["conflicts"], 1)
+        candidates = payload["data"]["candidates"]
+        self.assertEqual(
+            {
+                (candidate["out_asset"], candidate["in_asset"])
+                for candidate in candidates
+            },
+            {("BTC", "BTC"), ("BTC", "LBTC")},
+        )
+        self.assertTrue(
+            all(candidate["candidate_type"] == "transfer" for candidate in candidates)
+        )
+        self.assertTrue(all(candidate["conflict_size"] == 2 for candidate in candidates))
+
         payload, code = _run(
             data_root, "transfers", "suggest",
             "--workspace", "Main", "--profile", "Swap",
             "--candidate-type", "swap",
         )
         self.assertEqual(code, 0, payload)
-        self.assertEqual(payload["data"]["counts"]["total"], 1)
-        self.assertEqual(payload["data"]["counts"]["conflicts"], 1)
-        candidate = payload["data"]["candidates"][0]
-        self.assertEqual(candidate["in_asset"], "LBTC")
-        self.assertEqual(candidate["conflict_size"], 2)
+        self.assertEqual(payload["data"]["counts"]["total"], 0)
 
-        # Bulk-pair must skip the conflicted candidate in both views.
-        for candidate_type in ("swap", "transfer"):
-            payload, code = _run(
-                data_root, "transfers", "bulk-pair",
-                "--workspace", "Main", "--profile", "Swap",
-                "--candidate-type", candidate_type,
-                "--confidence", "strong",
-            )
-            self.assertEqual(code, 0, payload)
-            self.assertEqual(payload["data"]["summary"]["count"], 0, payload)
-            self.assertEqual(payload["data"]["summary"]["skipped_conflicts"], 1, payload)
+        payload, code = _run(
+            data_root, "transfers", "bulk-pair",
+            "--workspace", "Main", "--profile", "Swap",
+            "--candidate-type", "transfer",
+            "--confidence", "strong",
+        )
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload["data"]["summary"]["count"], 0, payload)
+        self.assertEqual(payload["data"]["summary"]["skipped_conflicts"], 2, payload)
+
+        payload, code = _run(
+            data_root, "transfers", "bulk-pair",
+            "--workspace", "Main", "--profile", "Swap",
+            "--candidate-type", "swap",
+            "--confidence", "strong",
+        )
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload["data"]["summary"]["count"], 0, payload)
+        self.assertEqual(payload["data"]["summary"]["skipped_conflicts"], 0, payload)
 
     def test_dismiss_blocks_candidate_until_expiry(self):
         data_root = self._fresh_root("dismiss")

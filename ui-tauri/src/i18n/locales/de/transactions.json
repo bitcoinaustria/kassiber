@@ -16,7 +16,7 @@
     "outgoing": "Ausgehend",
     "transfer": "Interne Übertragung",
     "swap": "Swap",
-    "layerTransition": "Layer-Übergang"
+    "layerTransition": "Bitcoin-Swap"
   },
   "detailHeader": {
     "confirmationsTitle": "{{count}} on-chain-Bestätigungen",
@@ -49,7 +49,7 @@
     "outgoing": "Senden",
     "transfer": "Interne Übertragung",
     "swap": "Swap",
-    "layerTransition": "Layer-Übergang"
+    "layerTransition": "Bitcoin-Swap"
   },
   "classification": {
     "unlabeled": "Ohne Label",
@@ -120,7 +120,7 @@
       "short": "Eigene Wallet-Übertragung"
     },
     "neuSwap": {
-      "label": "§27b Tausch zum Buchwert / Layer-Übergang",
+      "label": "§27b Bitcoin-Swap zum Buchwert",
       "short": "Neu Tausch"
     },
     "altSpekulation": {
@@ -290,6 +290,7 @@
       "missingExplorerLink": "Fehlender Explorer-Link",
       "missingPrice": "Fehlender Preis",
       "failedImport": "Fehlgeschlagener Import",
+      "pairingCandidates": "Paarungskandidaten",
       "swapCandidates": "Swap-Kandidaten",
       "none": "Keine Datenqualitätsprobleme"
     }
