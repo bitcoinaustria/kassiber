@@ -221,6 +221,8 @@ def build_status_payload(conn, data_root):
         "version": __version__,
         "schema_version": SCHEMA_VERSION,
         "auth": {"mode": "local", "authenticated": True},
+        "database_encrypted": Path(paths.database).exists()
+        and not looks_like_plaintext_sqlite(paths.database),
         "state_root": paths.state_root,
         "data_root": paths.data_root,
         "database": paths.database,

@@ -263,6 +263,16 @@ privacy boundary, minimum mix count, exact mix-count confidence when known, and
 safe warning state. Descriptor and xpub material remain behind the existing
 wallet redaction boundary and can only be revealed through the explicit
 `wallets reveal-descriptor` owner command.
+That command returns structured fields (`wallet_material`, `descriptor`,
+`change_descriptor`, and any related local-only material). For
+checksum-sensitive imports into another wallet, copy only the raw descriptor
+material: the descriptor string itself, or the receive descriptor followed by
+the change descriptor on the next line when both branches are stored. Do not
+paste the `field:` label, table output, or JSON envelope. Kassiber preserves the
+stored descriptor text for reveal. Descriptor checksums are ignored only while
+parsing/deriving addresses internally.
+Use `kassiber wallets reveal-descriptor --material-only --wallet <name>` for a
+pasteable CLI payload with no labels or envelope.
 The desktop Add Connection flow asks for the four primary public account inputs
 directly: Deposit, Badbank / Toxic Change, Premix, and Postmix descriptors or
 account xpub-family keys. Internally those fields are converted into the same

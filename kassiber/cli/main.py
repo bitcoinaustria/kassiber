@@ -128,6 +128,7 @@ from ..diagnostics import (
 )
 from ..backup.cli import add_backup_parser, dispatch_backup
 from ..backends import preferred_explorer_base
+from ..envelope import write_text
 from ..errors import AppError
 from ..log_ring import sanitize_traceback_text
 from ..secrets.cli import add_secrets_parser, dispatch_secrets
@@ -938,6 +939,14 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_reveal.add_argument("--workspace")
     wallets_reveal.add_argument("--profile")
     wallets_reveal.add_argument("--wallet", required=True)
+    wallets_reveal.add_argument(
+        "--material-only",
+        action="store_true",
+        help=(
+            "Print only the pasteable stored descriptor material: the descriptor "
+            "string plus the stored change descriptor on the next line when present."
+        ),
+    )
     wallets_import_json = wallets_sub.add_parser("import-json")
     wallets_import_json.add_argument("--workspace")
     wallets_import_json.add_argument("--profile")
@@ -2435,11 +2444,21 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 ),
             )
         if args.wallets_command == "reveal-descriptor":
+            payload = core_wallets.reveal_wallet_secrets(
+                conn, args.workspace, args.profile, args.wallet
+            )
+            if args.material_only:
+                material = payload.get("wallet_material")
+                if not material:
+                    raise AppError(
+                        f"Wallet '{args.wallet}' does not have a descriptor configured",
+                        code="validation",
+                    )
+                write_text(args, material)
+                return 0
             return emit(
                 args,
-                core_wallets.reveal_wallet_secrets(
-                    conn, args.workspace, args.profile, args.wallet
-                ),
+                payload,
             )
         if args.wallets_command == "import-json":
             return emit(args, import_into_wallet(conn, args.workspace, args.profile, args.wallet, args.file, "json"))

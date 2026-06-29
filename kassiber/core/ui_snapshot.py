@@ -3449,6 +3449,8 @@ def build_wallets_list_snapshot(
                 },
                 "chain": str(config.get("chain") or ""),
                 "network": str(config.get("network") or ""),
+                "descriptor": bool(config.get("descriptor")),
+                "change_descriptor": bool(config.get("change_descriptor")),
                 "sync_mode": backend_summary["sync_mode"],
                 "sync_source": str(config.get("sync_source") or config.get("source_format") or ""),
                 "transaction_count": tx_count,

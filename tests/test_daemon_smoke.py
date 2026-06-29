@@ -921,6 +921,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(status["kind"], "status")
             self.assertEqual(status["schema_version"], 1)
             self.assertEqual(status["data"]["auth"]["mode"], "local")
+            self.assertFalse(status["data"]["database_encrypted"])
             self.assertEqual(status["data"]["data_root"], str(data_root))
 
             _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
@@ -2903,6 +2904,28 @@ class DaemonSmokeTest(unittest.TestCase):
                 _write_payload(
                     proc,
                     {
+                        "request_id": "reveal-descriptor-plaintext",
+                        "kind": "wallets.reveal_descriptor",
+                        "args": {
+                            "wallet": "Descriptor UI",
+                            "auth_response": {
+                                "plaintext_reveal_ack": "COPY LOCAL SECRET",
+                            },
+                        },
+                    },
+                )
+                descriptor_revealed = _read_payload_timeout(proc)
+                self.assertEqual(
+                    descriptor_revealed["kind"], "wallets.reveal_descriptor"
+                )
+                self.assertEqual(
+                    descriptor_revealed["data"]["wallet_material"],
+                    receive_descriptor,
+                )
+
+                _write_payload(
+                    proc,
+                    {
                         "request_id": "update-descriptor-gap-too-large",
                         "kind": "ui.wallets.update",
                         "args": {
@@ -4653,9 +4676,11 @@ class DaemonSmokeTest(unittest.TestCase):
             _write_payload(proc, {"request_id": "wallets-1", "kind": "ui.wallets.list"})
             wallets = _read_payload_timeout(proc)
             self.assertEqual(wallets["kind"], "ui.wallets.list")
-            self.assertEqual(wallets["data"]["wallets"][0]["label"], "Cold")
+            wallet = wallets["data"]["wallets"][0]
+            self.assertEqual(wallet["label"], "Cold")
+            self.assertIs(wallet["descriptor"], False)
+            self.assertIs(wallet["change_descriptor"], False)
             wallet_payload = json.dumps(wallets["data"])
-            self.assertNotIn("descriptor", wallet_payload)
             self.assertNotIn("config_json", wallet_payload)
 
             _write_payload(proc, {"request_id": "backends-1", "kind": "ui.backends.list"})
@@ -6253,6 +6278,12 @@ class DaemonSmokeTest(unittest.TestCase):
                 wallets_by_label["DescriptorLive"]["backend"]["source"],
                 "explicit",
             )
+            self.assertTrue(wallets_by_label["DescriptorLive"]["descriptor"])
+            self.assertFalse(
+                wallets_by_label["DescriptorLive"]["change_descriptor"]
+            )
+            self.assertFalse(wallets_by_label["FileOnly"]["descriptor"])
+            self.assertFalse(wallets_by_label["FileOnly"]["change_descriptor"])
             self.assertEqual(
                 wallets_by_label["DefaultAddress"]["backend"]["source"],
                 "default",

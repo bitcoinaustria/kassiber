@@ -177,7 +177,7 @@ def _open_output(args):
     return path.open("w", encoding="utf-8", newline=""), True
 
 
-def _write_text(args, text):
+def write_text(args, text):
     stream, should_close = _open_output(args)
     try:
         stream.write(text)
@@ -186,6 +186,10 @@ def _write_text(args, text):
     finally:
         if should_close:
             stream.close()
+
+
+def _write_text(args, text):
+    write_text(args, text)
 
 
 def _write_csv_rows(args, rows):
@@ -252,7 +256,7 @@ def emit(args, payload, kind=None, envelope_meta=None):
             payload,
             envelope_meta=envelope_meta,
         )
-        _write_text(args, json.dumps(envelope, indent=2, sort_keys=False))
+        write_text(args, json.dumps(envelope, indent=2, sort_keys=False))
         return
     if fmt == "csv":
         if isinstance(payload, dict):
@@ -262,20 +266,20 @@ def emit(args, payload, kind=None, envelope_meta=None):
         return
     if fmt == "plain":
         if isinstance(payload, list):
-            _write_text(args, _plain_list(payload))
+            write_text(args, _plain_list(payload))
         elif isinstance(payload, dict):
-            _write_text(args, _plain_dict(payload))
+            write_text(args, _plain_dict(payload))
         else:
-            _write_text(args, str(payload) if payload is not None else "")
+            write_text(args, str(payload) if payload is not None else "")
         return
     # Default table format
     if isinstance(payload, list):
-        _write_text(args, _table_text(payload))
+        write_text(args, _table_text(payload))
     elif isinstance(payload, dict):
         rows = [{"field": key, "value": value} for key, value in payload.items()]
-        _write_text(args, _table_text(rows))
+        write_text(args, _table_text(rows))
     else:
-        _write_text(args, str(payload) if payload is not None else "")
+        write_text(args, str(payload) if payload is not None else "")
 
 
 def print_table(rows):
