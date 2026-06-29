@@ -97,22 +97,42 @@ describe("connection catalog", () => {
 
     expect(bullWallet?.image).toBeTruthy();
     expect(bullWallet?.image).toBe(bullExchange?.image);
+    expect(bullWallet?.image).toContain("bullbitcoin-mark");
     expect(bullWallet?.imageClassName).toContain("size-9");
+    expect(bullWallet?.imageClassName).not.toContain("rounded");
+  });
+
+  it("uses bundled Blockstream Green artwork instead of a generated placeholder", () => {
+    const blockstreamGreen = CONNECTION_SOURCES.find(
+      (source) => source.id === "blockstream-green",
+    );
+
+    expect(blockstreamGreen?.image).toContain("%2300B45A");
+    expect(blockstreamGreen?.image).not.toContain("font-family");
+    expect(blockstreamGreen?.image).not.toContain("GR");
+    expect(blockstreamGreen?.imageClassName).toContain("size-9");
   });
 
   it("marks transparent dark logos with a theme-aware frame", () => {
-    for (const id of [
+    const hardwareWalletIds = [
       "bitbox",
       "trezor",
       "coldcard",
       "ledger",
       "foundation-passport",
-      "coinfinity",
-    ]) {
-      expect(
-        CONNECTION_SOURCES.find((source) => source.id === id)
-          ?.imageFrameClassName,
-      ).toContain("bg-muted");
+    ];
+
+    for (const id of [...hardwareWalletIds, "coinfinity"]) {
+      const source = CONNECTION_SOURCES.find((candidate) => candidate.id === id);
+
+      expect(source?.imageFrameClassName).toContain("bg-muted");
+    }
+
+    for (const id of hardwareWalletIds) {
+      const source = CONNECTION_SOURCES.find((candidate) => candidate.id === id);
+
+      expect(source?.imageClassName).toContain("brightness-0");
+      expect(source?.imageClassName).toContain("dark:invert");
     }
   });
 });
