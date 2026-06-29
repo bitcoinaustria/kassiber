@@ -37,6 +37,21 @@ class LedgerPreviewSecurityTests(unittest.TestCase):
         self.assertEqual(response["mapped"], 1)
         self.assertEqual(response["preview"][0]["description"], "selected file")
 
+    def test_daemon_preview_accepts_uploaded_tsv_ledger_bytes(self):
+        tsv_text = (
+            "Date\tType\tReceived Asset\tReceived Amount\tFiat Currency\tFiat Value\tNote\n"
+            "2026-01-01\tDeposit\tBTC\t0.01\tEUR\t500\tselected tsv\n"
+        )
+
+        response = _preview({
+            "filename": "ledger.tsv",
+            "source_bytes_base64": base64.b64encode(tsv_text.encode()).decode(),
+            "limit": 5,
+        })
+
+        self.assertEqual(response["mapped"], 1)
+        self.assertEqual(response["preview"][0]["description"], "selected tsv")
+
 
 if __name__ == "__main__":
     unittest.main()

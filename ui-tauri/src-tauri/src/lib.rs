@@ -2,6 +2,7 @@
 mod secret_store;
 mod supervisor;
 
+use base64::Engine;
 use secret_store::{
     secret_store_policy_status, touch_id_delete_passphrase, touch_id_get_passphrase,
     touch_id_passphrase_status, touch_id_store_passphrase, TouchIdPassphraseStatus,
@@ -26,6 +27,7 @@ const SCHEMA_VERSION: u8 = 1;
 const DEFAULT_STATE_DIR: &str = ".kassiber";
 const DEFAULT_DATA_DIR: &str = "data";
 const DB_FILENAMES: &[&str] = &["kassiber.sqlite3", "satbooks.sqlite3"];
+const LEDGER_PREVIEW_EXTENSIONS: &[&str] = &["csv", "tsv", "xlsx", "xlsm"];
 const IMPORT_PICKER_TIMEOUT: Duration = Duration::from_secs(300);
 const TERMINAL_COMMAND_NAME: &str = "kassiber";
 const TERMINAL_COMMAND_MARKER: &str =
@@ -735,6 +737,36 @@ fn save_chat_export_as(destination_path: String, contents: String) -> Result<Str
 #[tauri::command]
 fn save_logs_export_as(destination_path: String, contents: String) -> Result<String, String> {
     write_text_export(destination_path, contents, &["jsonl", "log", "md"])
+}
+
+#[tauri::command]
+fn read_ledger_preview_file_base64(path: String) -> Result<String, String> {
+    let requested = PathBuf::from(path);
+    if !requested.is_absolute() {
+        return Err("Ledger preview path must be absolute.".to_string());
+    }
+    let extension = requested
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_ascii_lowercase())
+        .ok_or_else(|| "Ledger preview file must use .csv, .tsv, .xlsx, or .xlsm.".to_string())?;
+    if !LEDGER_PREVIEW_EXTENSIONS
+        .iter()
+        .any(|allowed| *allowed == extension)
+    {
+        return Err("Ledger preview file must use .csv, .tsv, .xlsx, or .xlsm.".to_string());
+    }
+    let canonical = std::fs::canonicalize(&requested)
+        .map_err(|error| format!("Ledger preview file could not be found: {error}"))?;
+    let metadata = canonical
+        .metadata()
+        .map_err(|error| format!("Ledger preview file could not be inspected: {error}"))?;
+    if !metadata.is_file() {
+        return Err("Ledger preview selection must be a file.".to_string());
+    }
+    let bytes = std::fs::read(&canonical)
+        .map_err(|error| format!("Ledger preview file could not be read: {error}"))?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
 }
 
 fn ensure_export_destination_outside_managed_root(
@@ -1942,6 +1974,7 @@ pub fn run() {
             save_exported_file_as,
             save_chat_export_as,
             save_logs_export_as,
+            read_ledger_preview_file_base64,
             open_external_url,
             select_import_project_directory,
             activate_import_project,

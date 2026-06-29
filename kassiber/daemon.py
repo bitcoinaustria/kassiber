@@ -6095,7 +6095,20 @@ def _ledger_template_payload(
     return payload
 
 
-_LEDGER_PREVIEW_EXTENSIONS = {".csv", ".xlsx", ".xlsm"}
+_LEDGER_PREVIEW_EXTENSIONS = {".csv", ".tsv", ".xlsx", ".xlsm"}
+
+
+def _ledger_preview_extension(filename: str) -> str:
+    extension = Path(filename).suffix.lower()
+    if extension not in _LEDGER_PREVIEW_EXTENSIONS:
+        raise AppError(
+            "Unsupported ledger preview file type.",
+            code="validation",
+            hint="Choose a CSV, TSV, XLSX, or XLSM ledger file.",
+            details={"extension": extension or None},
+            retryable=False,
+        )
+    return extension
 
 
 def _ledger_preview_upload_arg(args: dict[str, Any]) -> tuple[bytes, str]:
@@ -6108,15 +6121,7 @@ def _ledger_preview_upload_arg(args: dict[str, Any]) -> tuple[bytes, str]:
             hint="Choose the ledger file with the desktop file picker before previewing it.",
             retryable=False,
         )
-    extension = Path(filename).suffix.lower()
-    if extension not in _LEDGER_PREVIEW_EXTENSIONS:
-        raise AppError(
-            "Unsupported ledger preview file type.",
-            code="validation",
-            hint="Choose a CSV, XLSX, or XLSM ledger file.",
-            details={"extension": extension or None},
-            retryable=False,
-        )
+    extension = _ledger_preview_extension(filename)
     try:
         payload = base64.b64decode(encoded, validate=True)
     except Exception as exc:  # noqa: BLE001 - convert parser detail into stable envelope
@@ -6131,17 +6136,20 @@ def _ledger_preview_upload_arg(args: dict[str, Any]) -> tuple[bytes, str]:
 
 def _ledger_preview_payload(args: dict[str, Any]) -> dict[str, Any]:
     """Read-only: preview an uploaded generic-ledger file (no persist)."""
-    # Desktop/webview callers may not name arbitrary local paths. The renderer
-    # must upload bytes obtained from a user-selected File object, keeping this
-    # allowlisted daemon kind from becoming a generic local-file reader.
-    payload, extension = _ledger_preview_upload_arg(args)
     limit = args.get("limit")
-    with tempfile.NamedTemporaryFile(suffix=extension, delete=True) as handle:
+    # Browser file inputs cannot provide an importable path, so those previews
+    # upload bytes instead of persisting the basename as a future source_file.
+    payload, extension = _ledger_preview_upload_arg(args)
+    with tempfile.NamedTemporaryFile(suffix=extension, delete=False) as handle:
+        temp_path = Path(handle.name)
         handle.write(payload)
         handle.flush()
+    try:
         return importers_module.preview_generic_ledger_records(
-            handle.name, limit=200 if limit is None else limit
+            str(temp_path), limit=200 if limit is None else limit
         )
+    finally:
+        temp_path.unlink(missing_ok=True)
 
 
 def _import_wallet_file_payload(

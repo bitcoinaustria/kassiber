@@ -45,6 +45,12 @@ interface LedgerPreviewResult {
   detected?: { column: string; field: string }[] | null;
 }
 
+type GenericLedgerPreviewSource = {
+  filename: string;
+  sourceBytesBase64: string;
+  importable: boolean;
+};
+
 function localeFor(lang: string): string {
   return lang.startsWith("de") ? "de-AT" : "en-US";
 }
@@ -76,23 +82,25 @@ function formatDate(iso: string | undefined, lang: string): string {
 }
 
 export function GenericLedgerPreview({
-  filename,
-  sourceBytesBase64,
+  source,
   onBlockSubmitChange,
 }: {
-  filename: string;
-  sourceBytesBase64: string;
+  source: GenericLedgerPreviewSource;
   onBlockSubmitChange?: (blocked: boolean) => void;
 }) {
   const { t } = useTranslation("connections");
   const lang = useUiStore((state) => state.lang);
   const query = useDaemon<LedgerPreviewResult>(
     "ui.wallets.ledger_preview",
-    { filename, source_bytes_base64: sourceBytesBase64 },
+    {
+      filename: source.filename,
+      source_bytes_base64: source.sourceBytesBase64,
+    },
     { retry: false },
   );
   const data = query.data?.data;
   const blocksSubmit =
+    !source.importable ||
     query.isFetching ||
     Boolean(query.error) ||
     !data ||
