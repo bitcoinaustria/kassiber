@@ -172,6 +172,7 @@ const PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA";
 const PLAINTEXT_REVEAL_ACK = "COPY LOCAL SECRET";
 const CLEAR_BACKEND_SELECTION = "__kassiber_clear_backend__";
 const DESCRIPTOR_REVEAL_KIND = "wallets.reveal_descriptor";
+const RECENT_TRANSACTION_PREVIEW_LIMIT = 12;
 
 interface UpdateWalletResult {
   wallet: {
@@ -626,7 +627,7 @@ function ConnectionDetailView({
   }>("ui.wallets.list");
   const walletTransactionsQuery = useDaemon<TransactionsList>(
     "ui.transactions.list",
-    { wallet: connection.id, limit: 6 },
+    { wallet: connection.id, limit: RECENT_TRANSACTION_PREVIEW_LIMIT },
   );
   const walletDetail = walletsListQuery.data?.data?.wallets?.find(
     (wallet) =>
@@ -728,7 +729,10 @@ function ConnectionDetailView({
     walletTransactionsQuery.data.data?.txs
       ? walletTransactionsQuery.data.data.txs
       : connectionTxs;
-  const txsForConnection = walletTransactions.slice(0, 6);
+  const txsForConnection = walletTransactions.slice(
+    0,
+    RECENT_TRANSACTION_PREVIEW_LIMIT,
+  );
   const walletTransactionsLoading =
     walletTransactionsQuery.isLoading && txsForConnection.length === 0;
 
@@ -1726,22 +1730,25 @@ function ConnectionDetailView({
           <CardContent className="p-0">
             {walletTransactionsLoading ? (
               <div className="divide-y">
-                {Array.from({ length: 6 }, (_, index) => (
-                  <div
-                    key={index}
-                    className="flex min-w-0 items-start gap-3 px-5 py-3"
-                  >
-                    <div className="mt-0.5 size-8 shrink-0 animate-pulse rounded-md bg-muted" />
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <div className="h-4 w-2/3 animate-pulse rounded bg-muted" />
-                      <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
+                {Array.from(
+                  { length: RECENT_TRANSACTION_PREVIEW_LIMIT },
+                  (_, index) => (
+                    <div
+                      key={index}
+                      className="flex min-w-0 items-start gap-3 px-5 py-3"
+                    >
+                      <div className="mt-0.5 size-8 shrink-0 animate-pulse rounded-md bg-muted" />
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="h-4 w-2/3 animate-pulse rounded bg-muted" />
+                        <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
+                      </div>
+                      <div className="space-y-2">
+                        <div className="h-4 w-20 animate-pulse rounded bg-muted" />
+                        <div className="ml-auto h-3 w-12 animate-pulse rounded bg-muted" />
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <div className="h-4 w-20 animate-pulse rounded bg-muted" />
-                      <div className="ml-auto h-3 w-12 animate-pulse rounded bg-muted" />
-                    </div>
-                  </div>
-                ))}
+                  ),
+                )}
               </div>
             ) : txsForConnection.length ? (
               <div className="divide-y">
