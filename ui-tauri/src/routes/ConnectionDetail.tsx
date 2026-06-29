@@ -120,6 +120,7 @@ import type {
   NodeSnapshot,
   OverviewSnapshot,
 } from "@/mocks/seed";
+import type { TransactionsList } from "@/mocks/transactions";
 
 // Lightning *node* kinds — sync against a daemon that exposes channels,
 // peers, and routing snapshots. Phoenix is also categorised as "Lightning"
@@ -622,6 +623,10 @@ function ConnectionDetailView({
   const walletsListQuery = useDaemon<{
     wallets: WalletListItem[];
   }>("ui.wallets.list");
+  const walletTransactionsQuery = useDaemon<TransactionsList>(
+    "ui.transactions.list",
+    { wallet: connection.id, limit: 6 },
+  );
   const walletDetail = walletsListQuery.data?.data?.wallets?.find(
     (wallet) =>
       (wallet.id && wallet.id === connection.id) ||
@@ -713,7 +718,14 @@ function ConnectionDetailView({
   const connectionTxs = txs.filter((tx) =>
     transactionBelongsToConnection(tx, connection),
   );
-  const txsForConnection = connectionTxs.slice(0, 6);
+  const walletTransactions =
+    walletTransactionsQuery.data?.kind === "ui.transactions.list" &&
+    walletTransactionsQuery.data.data?.txs
+      ? walletTransactionsQuery.data.data.txs
+      : connectionTxs;
+  const txsForConnection = walletTransactions.slice(0, 6);
+  const walletTransactionsLoading =
+    walletTransactionsQuery.isLoading && txsForConnection.length === 0;
 
   useEffect(() => {
     if (!pendingUtxoTransactionId || utxoTransactionQuery.isLoading) return;
@@ -754,7 +766,7 @@ function ConnectionDetailView({
     utxoTransactionQuery.isLoading,
     t,
   ]);
-  const txCount = connection.transactionCount ?? connectionTxs.length;
+  const txCount = connection.transactionCount ?? walletTransactions.length;
   const isWalletSyncRunning = syncWallet.isPending || connectionRefreshing;
   const refreshButtonLabel = isWalletSyncRunning
     ? t("detail.refreshing")
@@ -1642,14 +1654,14 @@ function ConnectionDetailView({
                   <CountBadge>{txCount.toLocaleString("en-US")}</CountBadge>
                 </CardTitle>
                 <CardDescription>
-                  {connectionTxs.length > txsForConnection.length
+                  {txCount > txsForConnection.length
                     ? t("detail.recentTransactions.showingRecent", {
                         count: txsForConnection.length,
                       })
                     : t("detail.recentTransactions.recent")}
                 </CardDescription>
               </div>
-              {connectionTxs.length > 0 ? (
+              {txCount > 0 ? (
                 <Button
                   asChild
                   type="button"
@@ -1670,7 +1682,26 @@ function ConnectionDetailView({
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            {txsForConnection.length ? (
+            {walletTransactionsLoading ? (
+              <div className="divide-y">
+                {Array.from({ length: 6 }, (_, index) => (
+                  <div
+                    key={index}
+                    className="flex min-w-0 items-start gap-3 px-5 py-3"
+                  >
+                    <div className="mt-0.5 size-8 shrink-0 animate-pulse rounded-md bg-muted" />
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <div className="h-4 w-2/3 animate-pulse rounded bg-muted" />
+                      <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="h-4 w-20 animate-pulse rounded bg-muted" />
+                      <div className="ml-auto h-3 w-12 animate-pulse rounded bg-muted" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : txsForConnection.length ? (
               <div className="divide-y">
                 {txsForConnection.map((tx) => (
                   <ConnectionTransactionRow
