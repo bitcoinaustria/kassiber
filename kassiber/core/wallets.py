@@ -20,6 +20,7 @@ from ..wallet_descriptors import (
 from ..wallet_setup import normalize_script_types, normalize_wallet_material
 from . import freshness as core_freshness
 from . import output_inventory as core_output_inventory
+from .address_scripts import scriptpubkey_for_address_or_none
 from .repo import (
     fetch_wallet_with_account,
     invalidate_journals,
@@ -98,9 +99,13 @@ def normalize_addresses(values):
     seen = set()
     for value in values:
         address = str(value).strip()
-        if not address or address in seen:
+        if not address:
             continue
-        seen.add(address)
+        script_pubkey = scriptpubkey_for_address_or_none(address)
+        key = f"script:{script_pubkey}" if script_pubkey else f"text:{address}"
+        if key in seen:
+            continue
+        seen.add(key)
         output.append(address)
     return output
 
@@ -492,6 +497,8 @@ def create_wallet(conn, workspace_ref, profile_ref, label, kind, account_ref=Non
 
 def _validated_wallet_config(normalized_kind, config):
     config = dict(config or {})
+    if "addresses" in config:
+        config["addresses"] = normalize_addresses(config.get("addresses"))
     if WALLET_DEPRECATED_CONFIG_KEY in config:
         config[WALLET_DEPRECATED_CONFIG_KEY] = wallet_is_deprecated(config)
     has_live_material = bool(config.get("descriptor") or config.get("xpub"))

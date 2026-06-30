@@ -1619,6 +1619,44 @@ class CrossWalletPrefetchTest(unittest.TestCase):
         self.assertIsInstance(prefetched["w-bad"], AppError)
         self.assertEqual(prefetched["w-bad"].code, "discovery")
 
+    def test_prefetch_runs_preflight_before_backend_adapter(self):
+        wallets = [
+            _backend_sync_wallet("w-good", "Good", "bc1qgood"),
+            _backend_sync_wallet("w-bad", "Bad", "bc1qbad"),
+        ]
+        adapter_calls = []
+
+        def adapter(_backend, wallet, _sync_state):
+            adapter_calls.append(wallet["id"])
+            return [], {}
+
+        hooks = self._hooks()
+        hooks = WalletSyncHooks(
+            import_file=hooks.import_file,
+            insert_records=hooks.insert_records,
+            resolve_backend=hooks.resolve_backend,
+            resolve_sync_state=hooks.resolve_sync_state,
+            normalize_addresses=hooks.normalize_addresses,
+            backend_adapters={"esplora": adapter},
+        )
+
+        def preflight(wallet, _sync_state):
+            if wallet["id"] == "w-bad":
+                raise AppError("overlap", code="source_overlap")
+
+        prefetched = prefetch_wallets_backend(
+            {},
+            {},
+            wallets,
+            hooks,
+            source_overlap_preflight=preflight,
+        )
+
+        self.assertIsInstance(prefetched["w-good"], WalletBackendFetch)
+        self.assertIsInstance(prefetched["w-bad"], AppError)
+        self.assertEqual(prefetched["w-bad"].code, "source_overlap")
+        self.assertEqual(adapter_calls, ["w-good"])
+
     def test_sync_wallets_applies_prefetch_and_reraises_captured_error(self):
         hooks = self._hooks()
         good = _backend_sync_wallet("w-good", "Good", "bc1qgood")
