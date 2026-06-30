@@ -87,14 +87,16 @@ function formatMetricValue(
 const PeriodTabs = ({
   activePeriod,
   onPeriodChange,
+  periodOptions = periodKeys,
 }: {
   activePeriod: PeriodKey;
   onPeriodChange: (period: PeriodKey) => void;
+  periodOptions?: PeriodKey[];
 }) => {
   const { t } = useTranslation("transactions");
   return (
     <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
-      {periodKeys.map((key) => (
+      {periodOptions.map((key) => (
         <button
           key={key}
           type="button"

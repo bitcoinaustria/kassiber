@@ -1,12 +1,11 @@
 import {
   AlertTriangle,
+  ArrowDown,
   ArrowDownRight,
   ArrowLeftRight,
+  ArrowUp,
   ArrowUpRight,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
+  ArrowUpDown,
   Coins,
   Copy,
   Eye,
@@ -23,6 +22,7 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,16 +35,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -105,10 +97,8 @@ import {
   type TransactionStatus,
 } from "@/components/transactions";
 import {
-  PAGE_SIZE_OPTIONS,
   attachmentRecordToItem,
   breakdownSelectionLabel,
-  dateFilterOptions,
   filterChipClassName,
   flowChartSelectionLabel,
   isAttachmentListQueryKeyForTransaction,
@@ -145,6 +135,27 @@ type CollateralMark = {
 type LoansList = {
   marks: CollateralMark[];
 };
+
+type TableSortKey = "date" | "amount";
+type TableSortDirection = "asc" | "desc";
+type TableSortState = {
+  key: TableSortKey;
+  direction: TableSortDirection;
+} | null;
+
+function sortableTransactionDateValue(label: string) {
+  const normalized = label.trim().toLowerCase();
+  if (normalized === "today") return Date.now();
+  if (normalized === "yesterday" || normalized === "1 day ago") {
+    return Date.now() - 24 * 60 * 60 * 1000;
+  }
+  const relativeDays = normalized.match(/^(\d+)\s+days?\s+ago$/);
+  if (relativeDays) {
+    return Date.now() - Number(relativeDays[1]) * 24 * 60 * 60 * 1000;
+  }
+  const parsed = Date.parse(label);
+  return Number.isNaN(parsed) ? null : parsed;
+}
 
 const TransactionsTable = ({
   records,
@@ -191,13 +202,11 @@ const TransactionsTable = ({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
-  const [dateFilter, setDateFilter] = React.useState<string>("all");
   const [flowFilter, setFlowFilter] = React.useState<string>("all");
   const [paymentMethodFilter, setPaymentMethodFilter] =
     React.useState<string>("all");
   const [feeFilter, setFeeFilter] = React.useState<FeeFilter>("all");
-  const [currentPage, setCurrentPage] = React.useState(1);
-  const [pageSize, setPageSize] = React.useState(10);
+  const [tableSort, setTableSort] = React.useState<TableSortState>(null);
   const [isHydrated, setIsHydrated] = React.useState(false);
   const [explorerTransaction, setExplorerTransaction] =
     React.useState<Transaction | null>(null);
@@ -213,6 +222,8 @@ const TransactionsTable = ({
     React.useState("");
   const pendingDetailLinkRef = React.useRef(readTransactionDetailParams());
   const tableRef = React.useRef<HTMLDivElement>(null);
+  const tableScrollRef = React.useRef<HTMLDivElement>(null);
+  const lastAutoLoadRowCountRef = React.useRef<number | null>(null);
   const [drafts, setDrafts] = React.useState<Record<string, TransactionEditDraft>>(
     {},
   );
@@ -563,7 +574,6 @@ const TransactionsTable = ({
     quickFilter !== null ||
     breakdownSelection !== null ||
     statusFilter !== "all" ||
-    dateFilter !== "all" ||
     flowFilter !== "all" ||
     paymentMethodFilter !== "all" ||
     feeFilter !== "all";
@@ -573,7 +583,6 @@ const TransactionsTable = ({
     onQuickFilterChange(null);
     onBreakdownSelectionChange(null);
     setStatusFilter("all");
-    setDateFilter("all");
     setFlowFilter("all");
     setPaymentMethodFilter("all");
     setFeeFilter("all");
@@ -582,7 +591,6 @@ const TransactionsTable = ({
   React.useEffect(() => {
     if (resetTableFiltersToken === 0) return;
     setStatusFilter("all");
-    setDateFilter("all");
     setFlowFilter("all");
     setPaymentMethodFilter("all");
     setFeeFilter("all");
@@ -599,14 +607,6 @@ const TransactionsTable = ({
         allTransactionStatuses.includes(nextStatus as TransactionStatus))
     ) {
       setStatusFilter(nextStatus);
-    }
-
-    const nextDate = params.get("date");
-    if (
-      nextDate &&
-      dateFilterOptions.some((option) => option.value === nextDate)
-    ) {
-      setDateFilter(nextDate);
     }
 
     const nextFlow = params.get("flow");
@@ -636,17 +636,12 @@ const TransactionsTable = ({
       setFeeFilter("all");
     }
 
-    const nextPage = Number(params.get("page"));
-    if (!Number.isNaN(nextPage) && nextPage > 0) {
-      setCurrentPage(nextPage);
-    }
-
-    const nextPageSize = Number(params.get("pageSize"));
-    if (
-      !Number.isNaN(nextPageSize) &&
-      PAGE_SIZE_OPTIONS.includes(nextPageSize)
-    ) {
-      setPageSize(nextPageSize);
+    if (params.get("sort") === "amount" || params.get("sort") === "date") {
+      const sortKey = params.get("sort") === "date" ? "date" : "amount";
+      const nextOrder = params.get("order");
+      if (nextOrder === "asc" || nextOrder === "desc") {
+        setTableSort({ key: sortKey, direction: nextOrder });
+      }
     }
 
     setIsHydrated(true);
@@ -663,8 +658,103 @@ const TransactionsTable = ({
     openTransactionDetail(transaction, pending.tab);
   }, [records, openTransactionDetail]);
 
+  const dateSortDirection =
+    tableSort?.key === "date" ? tableSort.direction : null;
+  const amountSortDirection =
+    tableSort?.key === "amount" ? tableSort.direction : null;
+  const dateSortButtonLabel =
+    dateSortDirection === "desc"
+      ? t("table.sort.dateDescending")
+      : dateSortDirection === "asc"
+        ? t("table.sort.dateAscending")
+        : t("table.sort.dateInactive");
+  const DateSortIcon =
+    dateSortDirection === "desc"
+      ? ArrowDown
+      : dateSortDirection === "asc"
+        ? ArrowUp
+        : ArrowUpDown;
+  const amountSortButtonLabel =
+    amountSortDirection === "desc"
+      ? t("table.sort.amountDescending")
+      : amountSortDirection === "asc"
+        ? t("table.sort.amountAscending")
+        : t("table.sort.amountInactive");
+  const AmountSortIcon =
+    amountSortDirection === "desc"
+      ? ArrowDown
+      : amountSortDirection === "asc"
+        ? ArrowUp
+        : ArrowUpDown;
+  const toggleDateSort = React.useCallback(() => {
+    setTableSort((current) => {
+      if (current?.key !== "date") return { key: "date", direction: "asc" };
+      if (current.direction === "asc") return { key: "date", direction: "desc" };
+      return { key: "date", direction: "asc" };
+    });
+  }, []);
+  const toggleAmountSort = React.useCallback(() => {
+    setTableSort((current) => {
+      if (current?.key !== "amount") return { key: "amount", direction: "desc" };
+      if (current.direction === "desc") {
+        return { key: "amount", direction: "asc" };
+      }
+      return null;
+    });
+  }, []);
+  const scrollTableIntoView = React.useCallback(() => {
+    if (typeof window === "undefined") return;
+    const table = tableRef.current;
+    if (!table) return;
+    const periodNav = document.getElementById("transactions-period-nav");
+    const periodNavBottom = periodNav?.getBoundingClientRect().bottom ?? 88;
+    const viewportTopOffset = Math.max(104, periodNavBottom + 12);
+    let scrollParent = table.parentElement;
+    while (scrollParent) {
+      const style = window.getComputedStyle(scrollParent);
+      const canScroll =
+        /(auto|scroll|overlay)/.test(style.overflowY) &&
+        scrollParent.scrollHeight > scrollParent.clientHeight;
+      if (canScroll) break;
+      scrollParent = scrollParent.parentElement;
+    }
+
+    if (scrollParent) {
+      const nextTop =
+        scrollParent.scrollTop +
+        table.getBoundingClientRect().top -
+        viewportTopOffset;
+      scrollParent.scrollTo({
+        top: Math.max(0, nextTop),
+        behavior: "smooth",
+      });
+      return;
+    }
+
+    const top = table.getBoundingClientRect().top + window.scrollY - viewportTopOffset;
+    window.scrollTo({
+      top: Math.max(0, top),
+      behavior: "smooth",
+    });
+  }, []);
+  const handleTableToolbarClick = React.useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (
+        target.closest(
+          'button, a, input, select, textarea, [role="button"], [role="menuitem"], [data-radix-collection-item]',
+        )
+      ) {
+        return;
+      }
+      scrollTableIntoView();
+    },
+    [scrollTableIntoView],
+  );
+
   const filteredTransactions = React.useMemo(() => {
-    return records.filter((txn) => {
+    const filtered = records.filter((txn) => {
       const draft = getDraft(txn);
       const matchesStatus =
         statusFilter === "all" || draft.reviewStatus === statusFilter;
@@ -707,29 +797,6 @@ const TransactionsTable = ({
             ? accountMatchesLabel(txn.wallet, breakdownSelection.key)
             : (txn.wallet ?? "Unassigned") === breakdownSelection.key));
 
-      let matchesDate = true;
-      const pd = txn.date.toLowerCase();
-      switch (dateFilter) {
-        case "today":
-          matchesDate = pd === "today";
-          break;
-        case "yesterday":
-          matchesDate = pd === "1 day ago";
-          break;
-        case "7days":
-          matchesDate =
-            pd === "today" ||
-            pd.includes("day ago") ||
-            (pd.includes("days ago") && parseInt(pd) <= 7);
-          break;
-        case "30days":
-          matchesDate =
-            pd === "today" ||
-            pd.includes("day ago") ||
-            (pd.includes("days ago") && parseInt(pd) <= 30);
-          break;
-      }
-
       return (
         matchesChartSelection &&
         matchesQuickFilter &&
@@ -737,9 +804,53 @@ const TransactionsTable = ({
         matchesStatus &&
         matchesFlow &&
         matchesPaymentMethod &&
-        matchesFees &&
-        matchesDate
+        matchesFees
       );
+    });
+    const originalIndex = new Map(records.map((txn, index) => [txn.id, index]));
+    if (tableSort === null) return filtered;
+
+    if (tableSort.key === "date") {
+      return [...filtered].sort((left, right) => {
+        const leftValue = sortableTransactionDateValue(left.date);
+        const rightValue = sortableTransactionDateValue(right.date);
+        if (leftValue === null && rightValue === null) {
+          return (originalIndex.get(left.id) ?? 0) - (originalIndex.get(right.id) ?? 0);
+        }
+        if (leftValue === null) return 1;
+        if (rightValue === null) return -1;
+        const delta =
+          tableSort.direction === "asc"
+            ? leftValue - rightValue
+            : rightValue - leftValue;
+        return delta === 0
+          ? (originalIndex.get(left.id) ?? 0) - (originalIndex.get(right.id) ?? 0)
+          : delta;
+      });
+    }
+
+    const amountValue = (txn: Transaction) => {
+      const flow = displayFlow(txn);
+      const sign = flow === "outgoing" ? -1 : 1;
+      if (currency === "btc") return sign * transactionBtc(txn);
+      return txn.amount === null ? null : sign * txn.amount;
+    };
+
+    return [...filtered].sort((left, right) => {
+      const leftValue = amountValue(left);
+      const rightValue = amountValue(right);
+      if (leftValue === null && rightValue === null) {
+        return (originalIndex.get(left.id) ?? 0) - (originalIndex.get(right.id) ?? 0);
+      }
+      if (leftValue === null) return 1;
+      if (rightValue === null) return -1;
+      const delta =
+        tableSort.direction === "asc"
+          ? leftValue - rightValue
+          : rightValue - leftValue;
+      return delta === 0
+        ? (originalIndex.get(left.id) ?? 0) - (originalIndex.get(right.id) ?? 0)
+        : delta;
     });
   }, [
     records,
@@ -748,11 +859,12 @@ const TransactionsTable = ({
     quickFilter,
     breakdownSelection,
     statusFilter,
-    dateFilter,
     flowFilter,
     paymentMethodFilter,
     feeFilter,
     displayFlow,
+    tableSort,
+    currency,
   ]);
 
   React.useEffect(() => {
@@ -763,50 +875,88 @@ const TransactionsTable = ({
       return;
     }
     window.requestAnimationFrame(() => {
-      tableRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      scrollTableIntoView();
     });
-  }, [chartSelection, quickFilter, breakdownSelection]);
+  }, [chartSelection, quickFilter, breakdownSelection, scrollTableIntoView]);
 
-  const totalPages = Math.ceil(filteredTransactions.length / pageSize);
-
-  const paginatedTransactions = React.useMemo(() => {
-    const startIndex = (currentPage - 1) * pageSize;
-    const endIndex = startIndex + pageSize;
-    return filteredTransactions.slice(startIndex, endIndex);
-  }, [filteredTransactions, currentPage, pageSize]);
+  const virtualRowCount = isRefreshing
+    ? 10
+    : filteredTransactions.length + (hasMoreRecords ? 1 : 0);
+  const rowVirtualizer = useVirtualizer({
+    count: virtualRowCount,
+    getScrollElement: () => tableScrollRef.current,
+    estimateSize: () => 76,
+    overscan: 8,
+    getItemKey: (index) =>
+      isRefreshing
+        ? `refresh-${index}`
+        : (filteredTransactions[index]?.id ?? `loader-${index}`),
+  });
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const firstVirtualRow = virtualRows[0];
+  const lastVirtualRow = virtualRows[virtualRows.length - 1];
+  const lastVirtualIndex = lastVirtualRow?.index ?? -1;
+  const paddingTop = firstVirtualRow?.start ?? 0;
+  const paddingBottom =
+    lastVirtualRow !== undefined
+      ? Math.max(0, rowVirtualizer.getTotalSize() - lastVirtualRow.end)
+      : 0;
+  const loadedRecordCount = filteredTransactions.length;
+  const isCompleteRecordSet = !hasMoreRecords;
 
   React.useEffect(() => {
-    setCurrentPage(1);
+    tableScrollRef.current?.scrollTo({ top: 0 });
   }, [
     chartSelection,
     quickFilter,
     breakdownSelection,
     statusFilter,
-    dateFilter,
     flowFilter,
     paymentMethodFilter,
     feeFilter,
-    pageSize,
+    tableSort,
   ]);
+
+  React.useEffect(() => {
+    if (isRefreshing) return;
+    if (!hasMoreRecords || isLoadingMoreRecords || !onLoadMoreRecords) {
+      lastAutoLoadRowCountRef.current = null;
+      return;
+    }
+    if (lastVirtualIndex < 0) return;
+    const prefetchFromIndex = Math.max(0, filteredTransactions.length - 8);
+    if (lastVirtualIndex < prefetchFromIndex) return;
+    if (lastAutoLoadRowCountRef.current === filteredTransactions.length) return;
+    lastAutoLoadRowCountRef.current = filteredTransactions.length;
+    onLoadMoreRecords();
+  }, [
+    filteredTransactions.length,
+    hasMoreRecords,
+    isLoadingMoreRecords,
+    isRefreshing,
+    lastVirtualIndex,
+    onLoadMoreRecords,
+  ]);
+
+  React.useEffect(() => {
+    if (isLoadingMoreRecords) return;
+    if (lastAutoLoadRowCountRef.current !== filteredTransactions.length) {
+      lastAutoLoadRowCountRef.current = null;
+    }
+  }, [filteredTransactions.length, isLoadingMoreRecords]);
 
   React.useEffect(() => {
     if (!isHydrated || typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     params.delete("q");
+    params.delete("page");
+    params.delete("pageSize");
+    params.delete("date");
 
     if (statusFilter !== "all") {
       params.set("status", statusFilter);
     } else {
       params.delete("status");
-    }
-
-    if (dateFilter !== "all") {
-      params.set("date", dateFilter);
-    } else {
-      params.delete("date");
     }
 
     if (flowFilter !== "all") {
@@ -827,16 +977,12 @@ const TransactionsTable = ({
       params.delete("fees");
     }
 
-    if (currentPage > 1) {
-      params.set("page", String(currentPage));
+    if (tableSort) {
+      params.set("sort", tableSort.key);
+      params.set("order", tableSort.direction);
     } else {
-      params.delete("page");
-    }
-
-    if (pageSize !== PAGE_SIZE_OPTIONS[0]) {
-      params.set("pageSize", String(pageSize));
-    } else {
-      params.delete("pageSize");
+      params.delete("sort");
+      params.delete("order");
     }
 
     const nextQuery = params.toString();
@@ -846,50 +992,30 @@ const TransactionsTable = ({
     window.history.replaceState(null, "", nextUrl);
   }, [
     statusFilter,
-    dateFilter,
     flowFilter,
     paymentMethodFilter,
     feeFilter,
-    currentPage,
-    pageSize,
+    tableSort,
     isHydrated,
   ]);
-
-  const goToPage = (page: number) => {
-    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
-  };
 
   return (
     <>
       <div
         ref={tableRef}
-        className="rounded-xl border bg-card"
+        className="scroll-mt-24 rounded-xl border bg-card"
         role={isRefreshing ? "status" : undefined}
         aria-live={isRefreshing ? "polite" : undefined}
       >
-      <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5">
+      <div
+        className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5"
+        onClick={handleTableToolbarClick}
+      >
         <div className="flex flex-1 items-center gap-2">
           <span className="text-sm font-medium sm:text-base">{t("table.title")}</span>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={dateFilter} onValueChange={setDateFilter}>
-            <SelectTrigger
-              className="h-8 w-[120px] text-xs sm:h-9 sm:w-[140px] sm:text-sm"
-              aria-label={t("table.filter.dateAria")}
-            >
-              <SelectValue placeholder={t("table.filter.datePlaceholder")} />
-            </SelectTrigger>
-            <SelectContent>
-              {dateFilterOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {/* loose translator */}
-                  {(t as (key: string) => string)(option.label)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -1145,27 +1271,6 @@ const TransactionsTable = ({
               <X className="size-2.5 sm:size-3" aria-hidden="true" />
             </button>
           )}
-          {dateFilter !== "all" && (
-            <button
-              type="button"
-              className={filterChipClassName}
-              onClick={() => setDateFilter("all")}
-              aria-label={t("table.chip.clearDate", {
-                // loose translator
-                label: (t as (key: string) => string)(
-                  dateFilterOptions.find((o) => o.value === dateFilter)?.label ??
-                    "",
-                ),
-              })}
-            >
-              {/* loose translator */}
-              {(t as (key: string) => string)(
-                dateFilterOptions.find((o) => o.value === dateFilter)?.label ??
-                  "",
-              )}
-              <X className="size-2.5 sm:size-3" aria-hidden="true" />
-            </button>
-          )}
           {flowFilter !== "all" && (
             <button
               type="button"
@@ -1218,65 +1323,94 @@ const TransactionsTable = ({
         </div>
       )}
 
-      <div className="overflow-x-auto px-3 pb-3 sm:px-6 sm:pb-4">
-        <Table className="min-w-[980px]">
-          <TableHeader>
+      <div
+        ref={tableScrollRef}
+        className="overflow-auto px-3 pb-3 sm:px-6 sm:pb-4"
+        role="region"
+        aria-label={t("table.virtual.scrollRegion")}
+        tabIndex={0}
+        style={{ maxHeight: "clamp(560px, calc(100vh - 18rem), 1120px)" }}
+      >
+        <table
+          data-slot="table"
+          className="w-full min-w-[1080px] table-fixed caption-bottom text-sm"
+        >
+          <colgroup>
+            <col className="w-[34%]" />
+            <col className="w-[150px]" />
+            <col className="hidden w-[190px] md:table-column" />
+            <col className="hidden w-[180px] lg:table-column" />
+            <col className="hidden w-[150px] xl:table-column" />
+            <col className="w-[130px]" />
+            <col className="w-[48px]" />
+          </colgroup>
+          <TableHeader className="sticky top-0 z-20 bg-card">
             <TableRow className="bg-muted/50 hover:bg-muted/50">
-              <TableHead className="min-w-[280px] text-xs font-medium text-muted-foreground sm:text-sm">
-                {t("table.column.transaction")}
+              <TableHead
+                className="w-[34%] text-xs font-medium text-muted-foreground sm:text-sm"
+                aria-sort={
+                  dateSortDirection === "desc"
+                    ? "descending"
+                    : dateSortDirection === "asc"
+                      ? "ascending"
+                      : "none"
+                }
+              >
+                <button
+                  type="button"
+                  className={cn(
+                    "inline-flex h-7 items-center gap-1 rounded-md px-1.5 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    dateSortDirection && "text-foreground",
+                  )}
+                  aria-label={dateSortButtonLabel}
+                  title={dateSortButtonLabel}
+                  onClick={toggleDateSort}
+                >
+                  <span>{t("table.column.transaction")}</span>
+                  <DateSortIcon className="size-3.5" aria-hidden="true" />
+                </button>
               </TableHead>
-              <TableHead className="min-w-[140px] text-right text-xs font-medium text-muted-foreground sm:text-sm">
-                {t("table.column.amount")}
+              <TableHead
+                className="w-[150px] text-right text-xs font-medium text-muted-foreground sm:text-sm"
+                aria-sort={
+                  amountSortDirection === "desc"
+                    ? "descending"
+                    : amountSortDirection === "asc"
+                      ? "ascending"
+                      : "none"
+                }
+              >
+                <button
+                  type="button"
+                  className={cn(
+                    "ml-auto inline-flex h-7 items-center justify-end gap-1 rounded-md px-1.5 text-right transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    amountSortDirection && "text-foreground",
+                  )}
+                  aria-label={amountSortButtonLabel}
+                  title={amountSortButtonLabel}
+                  onClick={toggleAmountSort}
+                >
+                  <span>{t("table.column.amount")}</span>
+                  <AmountSortIcon className="size-3.5" aria-hidden="true" />
+                </button>
               </TableHead>
-              <TableHead className="hidden min-w-[190px] text-xs font-medium text-muted-foreground sm:text-sm md:table-cell">
+              <TableHead className="hidden w-[190px] text-xs font-medium text-muted-foreground sm:text-sm md:table-cell">
                 {t("table.column.accounting")}
               </TableHead>
-              <TableHead className="hidden min-w-[150px] text-xs font-medium text-muted-foreground sm:text-sm lg:table-cell">
+              <TableHead className="hidden w-[180px] text-xs font-medium text-muted-foreground sm:text-sm lg:table-cell">
                 {t("table.column.pricing")}
               </TableHead>
-              <TableHead className="hidden min-w-[150px] text-xs font-medium text-muted-foreground sm:text-sm xl:table-cell">
+              <TableHead className="hidden w-[150px] text-xs font-medium text-muted-foreground sm:text-sm xl:table-cell">
                 {t("table.column.network")}
               </TableHead>
-              <TableHead className="min-w-[100px] text-xs font-medium text-muted-foreground sm:text-sm">
+              <TableHead className="w-[130px] text-xs font-medium text-muted-foreground sm:text-sm">
                 {t("table.column.status")}
               </TableHead>
-              <TableHead className="w-[40px]"></TableHead>
+              <TableHead className="w-[48px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isRefreshing ? (
-              Array.from({ length: Math.min(pageSize, 10) }).map((_, index) => (
-                <TableRow key={`refresh-${index}`}>
-                  <TableCell>
-                    <div className="space-y-2">
-                      <Skeleton className="h-4 w-48 max-w-full" />
-                      <Skeleton className="h-3 w-72 max-w-full" />
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="space-y-2">
-                      <Skeleton className="ml-auto h-4 w-24" />
-                      <Skeleton className="ml-auto h-3 w-16" />
-                    </div>
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell">
-                    <Skeleton className="h-5 w-28" />
-                  </TableCell>
-                  <TableCell className="hidden lg:table-cell">
-                    <Skeleton className="h-5 w-24" />
-                  </TableCell>
-                  <TableCell className="hidden xl:table-cell">
-                    <Skeleton className="h-5 w-20" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-6 w-24" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="size-8 rounded-md" />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : paginatedTransactions.length === 0 ? (
+            {!isRefreshing && virtualRowCount === 0 ? (
               <TableRow>
                 <TableCell
                   colSpan={7}
@@ -1286,7 +1420,85 @@ const TransactionsTable = ({
                 </TableCell>
               </TableRow>
             ) : (
-              paginatedTransactions.map((txn) => {
+              <>
+                {paddingTop > 0 ? (
+                  <TableRow aria-hidden="true">
+                    <TableCell
+                      colSpan={7}
+                      style={{ height: paddingTop, padding: 0 }}
+                    />
+                  </TableRow>
+                ) : null}
+                {virtualRows.map((virtualRow) => {
+                  if (isRefreshing) {
+                    return (
+                      <tr
+                        key={virtualRow.key}
+                        ref={rowVirtualizer.measureElement}
+                        data-index={virtualRow.index}
+                        className="border-b transition-colors"
+                      >
+                        <TableCell>
+                          <div className="space-y-2">
+                            <Skeleton className="h-4 w-48 max-w-full" />
+                            <Skeleton className="h-3 w-72 max-w-full" />
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="space-y-2">
+                            <Skeleton className="ml-auto h-4 w-24" />
+                            <Skeleton className="ml-auto h-3 w-16" />
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <Skeleton className="h-5 w-28" />
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          <Skeleton className="h-5 w-24" />
+                        </TableCell>
+                        <TableCell className="hidden xl:table-cell">
+                          <Skeleton className="h-5 w-20" />
+                        </TableCell>
+                        <TableCell>
+                          <Skeleton className="h-6 w-24" />
+                        </TableCell>
+                        <TableCell>
+                          <Skeleton className="size-8 rounded-md" />
+                        </TableCell>
+                      </tr>
+                    );
+                  }
+                  if (virtualRow.index >= filteredTransactions.length) {
+                    return (
+                      <tr
+                        key={virtualRow.key}
+                        ref={rowVirtualizer.measureElement}
+                        data-index={virtualRow.index}
+                        className="border-b transition-colors"
+                      >
+                        <TableCell
+                          colSpan={7}
+                          className="h-16 text-center text-sm text-muted-foreground"
+                        >
+                          {isLoadingMoreRecords
+                            ? t("table.virtual.loadingMore")
+                            : onLoadMoreRecords
+                              ? (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={onLoadMoreRecords}
+                                  >
+                                    {t("table.virtual.loadMore")}
+                                  </Button>
+                                )
+                              : t("table.virtual.moreAvailable")}
+                        </TableCell>
+                      </tr>
+                    );
+                  }
+                  const txn = filteredTransactions[virtualRow.index];
+                  if (!txn) return null;
                 const draft = getDraft(txn);
                 const rowTaxClassification = austrianTaxClassificationFor(
                   draft.atRegime,
@@ -1348,12 +1560,14 @@ const TransactionsTable = ({
                       ? "text-red-700 dark:text-red-300"
                       : "text-muted-foreground";
                 return (
-                  <TableRow
+                  <tr
                     key={txn.id}
-                    className="cursor-pointer align-top hover:bg-muted/35"
+                    ref={rowVirtualizer.measureElement}
+                    data-index={virtualRow.index}
+                    className="cursor-pointer border-b align-top transition-colors hover:bg-muted/35"
                     onClick={() => openTransactionDetail(txn)}
                   >
-                    <TableCell className="min-w-[280px]">
+                    <TableCell className="overflow-hidden whitespace-normal">
                       <div className="flex min-w-0 items-start gap-3">
                         <span
                           className={cn(
@@ -1364,7 +1578,7 @@ const TransactionsTable = ({
                         >
                           <FlowIcon className="size-4" />
                         </span>
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1 overflow-hidden">
                           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                             <span
                               className={cn(
@@ -1443,7 +1657,7 @@ const TransactionsTable = ({
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="min-w-[140px] text-right">
+                    <TableCell className="overflow-hidden text-right">
                       <CurrencyToggleText
                         className={cn(
                           "text-sm font-semibold tabular-nums",
@@ -1466,13 +1680,16 @@ const TransactionsTable = ({
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      <div className="flex max-w-[210px] flex-wrap gap-1">
+                    <TableCell className="hidden overflow-hidden whitespace-normal md:table-cell">
+                      <div className="flex min-w-0 max-w-full flex-wrap gap-1 overflow-hidden">
                         {tagPreview.slice(0, 2).map((tag) => (
                           <Badge
                             key={tag}
                             variant="outline"
-                            className={cn("rounded-md", blurClass(hideSensitive))}
+                            className={cn(
+                              "max-w-full rounded-md truncate",
+                              blurClass(hideSensitive),
+                            )}
                           >
                             {tag}
                           </Badge>
@@ -1490,11 +1707,11 @@ const TransactionsTable = ({
                         )}
                       </p>
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell">
-                      <div className="flex items-center gap-1.5">
+                    <TableCell className="hidden overflow-hidden whitespace-normal lg:table-cell">
+                      <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
                         <span
                           className={cn(
-                            "inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium sm:text-xs",
+                            "inline-flex max-w-full items-center truncate rounded-md px-2 py-1 text-[10px] font-medium sm:text-xs",
                             pricingSourceStyles[rowPricingValue],
                           )}
                         >
@@ -1508,7 +1725,7 @@ const TransactionsTable = ({
                         </span>
                         {draft.pricingQuality === "coarse_fallback" ? (
                           <span
-                            className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+                            className="inline-flex max-w-full items-center gap-1 truncate rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
                             title={t("table.coarse.title")}
                           >
                             <AlertTriangle className="size-3" aria-hidden="true" />
@@ -1539,14 +1756,14 @@ const TransactionsTable = ({
                         </p>
                       ) : null}
                     </TableCell>
-                    <TableCell className="hidden xl:table-cell">
-                      <div className="flex flex-wrap gap-1">
-                        <span className="inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-normal text-muted-foreground sm:text-xs">
+                    <TableCell className="hidden overflow-hidden whitespace-normal xl:table-cell">
+                      <div className="flex min-w-0 flex-wrap gap-1 overflow-hidden">
+                        <span className="inline-flex max-w-full items-center truncate rounded-md border px-2 py-0.5 text-[10px] font-normal text-muted-foreground sm:text-xs">
                           {networkLabel}
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell className="min-w-[120px]">
+                    <TableCell className="overflow-hidden">
                       <span
                         className={cn(
                           "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium sm:text-xs",
@@ -1567,7 +1784,7 @@ const TransactionsTable = ({
                             : t("table.row.notTaxable")}
                       </p>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="overflow-hidden">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
@@ -1666,133 +1883,57 @@ const TransactionsTable = ({
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
-                  </TableRow>
+                  </tr>
                 );
-              })
+                })}
+                {paddingBottom > 0 ? (
+                  <TableRow aria-hidden="true">
+                    <TableCell
+                      colSpan={7}
+                      style={{ height: paddingBottom, padding: 0 }}
+                    />
+                  </TableRow>
+                ) : null}
+              </>
             )}
           </TableBody>
-        </Table>
+        </table>
       </div>
 
-      <div className="flex flex-col items-center justify-between gap-3 border-t px-3 py-3 sm:flex-row sm:px-6">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground sm:text-sm">
-          <span className="hidden sm:inline">{t("table.pagination.rowsPerPage")}</span>
-          <Select
-            value={pageSize.toString()}
-            onValueChange={(value: string) => setPageSize(Number(value))}
-          >
-            <SelectTrigger className="h-8 w-[70px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PAGE_SIZE_OPTIONS.map((size) => (
-                <SelectItem key={size} value={size.toString()}>
-                  {size}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <span className="text-muted-foreground">
+      <div className="grid items-center gap-3 border-t px-3 py-3 text-xs text-muted-foreground sm:grid-cols-[1fr_auto_1fr] sm:px-6 sm:text-sm">
+        <div className="flex flex-col gap-1">
+          <span>
             {isRefreshing
-              ? t("table.pagination.refreshing")
-              : filteredTransactions.length === 0
-              ? "0"
-              : `${(currentPage - 1) * pageSize + 1}-${Math.min(
-                  currentPage * pageSize,
-                  filteredTransactions.length,
-                )}`}{" "}
-            {isRefreshing
-              ? ""
-              : t("table.pagination.rangeOf", {
-                  total: filteredTransactions.length,
-                })}
+              ? t("table.virtual.refreshing")
+              : isCompleteRecordSet
+                ? t("table.virtual.complete", { count: loadedRecordCount })
+                : t("table.virtual.loaded", { count: loadedRecordCount })}
           </span>
+          {!isRefreshing && !isCompleteRecordSet ? (
+            <span className="text-[10px] sm:text-xs">
+              {isLoadingMoreRecords
+                ? t("table.virtual.loadingMore")
+                : t("table.virtual.moreHint")}
+            </span>
+          ) : null}
         </div>
 
-        {hasMoreRecords && onLoadMoreRecords ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-2"
-            onClick={onLoadMoreRecords}
-            disabled={isLoadingMoreRecords}
-          >
-            {isLoadingMoreRecords
-              ? t("table.pagination.loading")
-              : t("table.pagination.loadMore")}
-          </Button>
-        ) : null}
-
-        <div className="flex items-center gap-1">
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-8"
-            onClick={() => goToPage(1)}
-            disabled={currentPage === 1}
-            aria-label={t("table.pagination.firstPage")}
-          >
-            <ChevronsLeft className="size-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-8"
-            onClick={() => goToPage(currentPage - 1)}
-            disabled={currentPage === 1}
-            aria-label={t("table.pagination.previousPage")}
-          >
-            <ChevronLeft className="size-4" />
-          </Button>
-
-          <div className="flex items-center gap-1 px-2">
-            {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-              let pageNum: number;
-              if (totalPages <= 5) {
-                pageNum = i + 1;
-              } else if (currentPage <= 3) {
-                pageNum = i + 1;
-              } else if (currentPage >= totalPages - 2) {
-                pageNum = totalPages - 4 + i;
-              } else {
-                pageNum = currentPage - 2 + i;
-              }
-
-              return (
-                <Button
-                  key={pageNum}
-                  variant={currentPage === pageNum ? "default" : "ghost"}
-                  size="icon"
-                  className="size-8"
-                  onClick={() => goToPage(pageNum)}
-                >
-                  {pageNum}
-                </Button>
-              );
-            })}
-          </div>
-
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-8"
-            onClick={() => goToPage(currentPage + 1)}
-            disabled={currentPage === totalPages || totalPages === 0}
-            aria-label={t("table.pagination.nextPage")}
-          >
-            <ChevronRight className="size-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-8"
-            onClick={() => goToPage(totalPages)}
-            disabled={currentPage === totalPages || totalPages === 0}
-            aria-label={t("table.pagination.lastPage")}
-          >
-            <ChevronsRight className="size-4" />
-          </Button>
+        <div className="flex justify-center">
+          {hasMoreRecords && onLoadMoreRecords ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={onLoadMoreRecords}
+              disabled={isLoadingMoreRecords}
+            >
+              {isLoadingMoreRecords
+                ? t("table.virtual.loadingMore")
+                : t("table.virtual.loadMore")}
+            </Button>
+          ) : null}
         </div>
+        <div aria-hidden="true" />
       </div>
       </div>
       <ExplorerOpenDialog

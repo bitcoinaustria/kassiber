@@ -4,6 +4,7 @@ import i18n from "@/i18n";
 
 import {
   attachmentRecordToItem,
+  availablePeriodKeysForRecords,
   buildFlowChartRows,
   buildSwapCandidates,
   buildTransferCandidates,
@@ -44,6 +45,33 @@ function transaction(
 }
 
 describe("transaction dashboard chart selection", () => {
+  it("hides long-range period tabs for young transaction histories", () => {
+    expect(
+      availablePeriodKeysForRecords([
+        transaction({ id: "newer", date: "2100-01-01T12:00:00Z" }),
+        transaction({ id: "older", date: "2099-08-01T12:00:00Z" }),
+      ]),
+    ).toEqual(["30days", "3months", "ytd", "1year", "all"]);
+  });
+
+  it("reveals longer period tabs as transaction history gets older", () => {
+    expect(
+      availablePeriodKeysForRecords([
+        transaction({ id: "newer", date: "2100-01-01T12:00:00Z" }),
+        transaction({ id: "older", date: "2084-01-01T12:00:00Z" }),
+      ]),
+    ).toEqual([
+      "30days",
+      "3months",
+      "ytd",
+      "1year",
+      "5years",
+      "10years",
+      "15years",
+      "all",
+    ]);
+  });
+
   it("does not substitute demo rows for an empty live transaction list", () => {
     expect(dashboardRecordsFromTxs([])).toEqual([]);
   });

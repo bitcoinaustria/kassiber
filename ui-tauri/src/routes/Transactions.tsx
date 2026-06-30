@@ -31,7 +31,6 @@ interface OverviewSnapshot {
 
 const TRANSACTIONS_PAGE_LIMIT = 100;
 const TRANSACTIONS_WORKBENCH_LIMIT = 500;
-const TRANSACTIONS_AUTO_PREFETCH_LIMIT = 5000;
 
 export function Transactions() {
   const { t } = useTranslation("transactions");
@@ -112,38 +111,26 @@ export function Transactions() {
       txs: pages.flatMap((page) => page.txs),
     };
   }, [transactionsQuery.data]);
-  const loadedTransactions = React.useMemo<TransactionsList | null>(() => {
-    if (!liveTransactions) return workbenchData;
-    if (!workbenchData) return liveTransactions;
-    return liveTransactions.txs.length >= workbenchData.txs.length
-      ? liveTransactions
-      : workbenchData;
-  }, [liveTransactions, workbenchData]);
-  React.useEffect(() => {
-    if (dataMode !== "real") return;
-    if (!hasNextTransactionsPage) return;
-    if (isFetchingNextTransactionsPage) return;
-    if ((liveTransactions?.txs.length ?? 0) >= TRANSACTIONS_AUTO_PREFETCH_LIMIT) {
-      return;
-    }
+  const loadMoreTransactions = React.useCallback(() => {
+    if (!hasNextTransactionsPage || isFetchingNextTransactionsPage) return;
     void fetchNextTransactionsPage();
   }, [
-    dataMode,
     fetchNextTransactionsPage,
     hasNextTransactionsPage,
     isFetchingNextTransactionsPage,
-    liveTransactions?.txs.length,
   ]);
   const transactions: TransactionsList =
-    hasLiveTransactions && loadedTransactions
-      ? loadedTransactions
+    hasLiveTransactions && workbenchData
+      ? workbenchData
       : dataMode === "real"
         ? { ...MOCK_TRANSACTIONS, txs: [], nextCursor: null, hasMore: false }
         : MOCK_TRANSACTIONS;
   const tableTransactions: TransactionsList =
-    loadedTransactions ??
+    liveTransactions ??
     (hasLiveTableTransactions ? firstPage?.data : null) ??
-    transactions;
+    (dataMode === "real"
+      ? { ...MOCK_TRANSACTIONS, txs: [], nextCursor: null, hasMore: false }
+      : transactions);
   const hasMoreTransactions = Boolean(hasNextTransactionsPage);
   const shouldShowLiveSkeleton =
     dataMode === "real" &&
@@ -217,7 +204,7 @@ export function Transactions() {
       isLoadingMoreTransactions={isFetchingNextTransactionsPage}
       onLoadMoreTransactions={
         hasMoreTransactions
-          ? () => void fetchNextTransactionsPage()
+          ? loadMoreTransactions
           : undefined
       }
       focusedTransaction={focusedTransaction.data?.data?.transaction ?? null}
