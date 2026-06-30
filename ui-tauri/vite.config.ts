@@ -41,6 +41,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.transactions.list",
   "ui.transactions.metadata.update",
   "ui.transactions.resolve",
+  "ui.transactions.graph",
   "ui.transactions.history",
   "ui.transactions.history.revert",
   "ui.activity.history",

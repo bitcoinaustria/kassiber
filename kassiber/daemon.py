@@ -143,6 +143,7 @@ from .core.ui_snapshot import (
     build_workspace_health_snapshot,
     build_workspace_overview_snapshot,
 )
+from .core.transaction_graph import build_transaction_graph_snapshot
 from .core.sync_backends import (
     ElectrumClient,
     detect_active_script_types,
@@ -233,6 +234,14 @@ _AI_PROVIDER_SECRET_STORE_IDS = {
 }
 _REQUEST_LOGGER = logging.getLogger("kassiber.daemon.request")
 
+# Profile-scoped graph semantics are expensive to derive (they walk the whole
+# profile). The graph endpoint is read repeatedly — once for the focused tx and
+# again for each eagerly-prefetched swap leg — so we memoise the bundle per
+# profile, keyed by a (journal_input_version, wallet count, utxo count) signature,
+# for the life of the daemon process. Access is serialized on the request thread
+# (single shared sqlite connection).
+_GRAPH_SEMANTICS_CACHE: dict[str, tuple[tuple[Any, ...], Any]] = {}
+
 SUPPORTED_KINDS = (
     "status",
     "ui.logs.snapshot",
@@ -241,6 +250,7 @@ SUPPORTED_KINDS = (
     "ui.transactions.list",
     "ui.transactions.extremes",
     "ui.transactions.resolve",
+    "ui.transactions.graph",
     "ui.transactions.search",
     "ui.transactions.export_csv",
     "ui.transactions.export_xlsx",
@@ -3312,6 +3322,13 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                 payload = build_transactions_extremes_snapshot(conn, call.arguments)
             elif entry.daemon_kind == "ui.transactions.resolve":
                 payload = build_transactions_resolve_snapshot(conn, call.arguments)
+            elif entry.daemon_kind == "ui.transactions.graph":
+                payload = build_transaction_graph_snapshot(
+                    conn,
+                    call.arguments,
+                    runtime.runtime_config,
+                    semantics_cache=_GRAPH_SEMANTICS_CACHE,
+                )
             elif entry.daemon_kind == "ui.transactions.search":
                 payload = build_transactions_search_snapshot(conn, call.arguments)
             elif entry.daemon_kind == "ui.wallets.list":
@@ -8423,6 +8440,23 @@ def handle_request(
                 build_envelope(
                     "ui.transactions.resolve",
                     build_transactions_resolve_snapshot(ctx.conn, request.get("args")),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.transactions.graph":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.transactions.graph",
+                    build_transaction_graph_snapshot(
+                        ctx.conn,
+                        request.get("args"),
+                        ctx.runtime_config,
+                        semantics_cache=_GRAPH_SEMANTICS_CACHE,
+                    ),
                 ),
                 request_id,
             ),

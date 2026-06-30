@@ -427,7 +427,7 @@ def _normalize_wasabi_history_record(record: dict[str, Any]) -> dict[str, Any]:
         "privacy_hop": "coinjoin" if is_coinjoin else None,
     }
     safe_raw = {key: value for key, value in safe_raw.items() if value not in (None, "")}
-    description = label or ("Wasabi CoinJoin privacy hop" if is_coinjoin else "Wasabi transaction")
+    description = label or ("CoinJoin transaction" if is_coinjoin else "Wasabi transaction")
     return {
         "txid": txid,
         "occurred_at": sanitized.get("datetime") or sanitized.get("date") or sanitized.get("time"),

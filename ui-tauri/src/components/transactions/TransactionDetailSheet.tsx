@@ -21,6 +21,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useDaemon } from "@/daemon/client";
 import { type Currency } from "@/lib/currency";
 import type { ExplorerSettings } from "@/lib/explorer";
 import type {
@@ -78,6 +79,7 @@ import {
   TransactionLinkedTab,
   TransactionPricingTab,
   TransactionTaxTab,
+  type TransactionGraphPayload,
   type TransactionDetailTabContext,
 } from "./TransactionDetailSheetTabs";
 
@@ -182,7 +184,8 @@ export function TransactionDetailSheet({
   hasNext?: boolean;
 }) {
   const { t } = useTranslation(["transactions", "common"]);
-  const [activeTab, setActiveTab] = React.useState(initialTab);
+  const visibleInitialTab = initialTab === "graph" ? "details" : initialTab;
+  const [activeTab, setActiveTab] = React.useState(visibleInitialTab);
   const [localDraft, setLocalDraft] =
     React.useState<TransactionEditDraft | null>(draft);
   const [originalDraft, setOriginalDraft] =
@@ -191,10 +194,14 @@ export function TransactionDetailSheet({
   const [balanceCurrency, setBalanceCurrency] =
     React.useState<Currency>(currency);
   const manualPriceRef = React.useRef<HTMLInputElement | null>(null);
-
+  const graphQuery = useDaemon<TransactionGraphPayload>(
+    "ui.transactions.graph",
+    { transaction: transaction?.id ?? "" },
+    { enabled: Boolean(transaction) },
+  );
   React.useEffect(() => {
-    setActiveTab(initialTab);
-  }, [initialTab, transaction?.id]);
+    setActiveTab(visibleInitialTab);
+  }, [visibleInitialTab, transaction?.id]);
 
   React.useEffect(() => {
     setLocalDraft(draft);
@@ -352,6 +359,7 @@ export function TransactionDetailSheet({
   const dirtyReviewTax = Boolean(
     dirty.reviewStatus || dirty.taxable || dirty.atRegime || dirty.atCategory,
   );
+  const graphData = graphQuery.data?.data;
 
   const timelineSteps: TimelineStep[] = [
     {
@@ -619,6 +627,12 @@ export function TransactionDetailSheet({
     feeImpactEur,
     netImpactBtc,
     netImpactEur,
+    graphData,
+    graphLoading: graphQuery.isLoading || (graphQuery.isFetching && !graphData),
+    graphError:
+      graphQuery.error instanceof Error
+        ? graphQuery.error.message
+        : null,
   };
 
   return (
@@ -770,7 +784,7 @@ export function TransactionDetailSheet({
               ) : null}
               <span className="hidden items-center gap-1.5 sm:inline-flex">
                 <kbd className="rounded border bg-muted px-1">⌘S</kbd> {t("sheet.footer.shortcutSave")} ·{" "}
-                <kbd className="rounded border bg-muted px-1">1–6</kbd> {t("sheet.footer.shortcutTabs")} ·{" "}
+                <kbd className="rounded border bg-muted px-1">1-6</kbd> {t("sheet.footer.shortcutTabs")} ·{" "}
                 <kbd className="rounded border bg-muted px-1">e</kbd> {t("sheet.footer.shortcutExclude")}
               </span>
               {saveError ? (

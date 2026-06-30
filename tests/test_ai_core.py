@@ -293,6 +293,9 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertIn("ui_journals_process", tool_names)
         self.assertIn("ui_maintenance_configure", tool_names)
         self.assertIn("ui_maintenance_run", tool_names)
+        pair_schema = get_tool("ui_transfers_pair").parameters
+        self.assertIn("coinjoin", pair_schema["properties"]["kind"]["enum"])
+        self.assertIn("Coinjoin", get_tool("ui_transfers_pair").description)
 
     def test_mutating_tool_preview_redacts_secret_like_arguments(self):
         tool = get_tool("ui.wallets.sync")

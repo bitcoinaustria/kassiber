@@ -503,7 +503,7 @@ class SamouraiImportTest(unittest.TestCase):
         self.assertEqual(missing_price.transfers, [])
         self.assertEqual(missing_price.quarantines[0]["reason"], "missing_spot_price")
         detail = json.loads(missing_price.quarantines[0]["detail_json"])
-        self.assertEqual(detail["required_for"], "samourai_privacy_fee")
+        self.assertEqual(detail["required_for"], "coinjoin_fee")
 
         first_mix = normalize_tax_asset_inputs(
             {"id": "profile-1", "workspace_id": "ws-1"},
@@ -769,7 +769,7 @@ class SamouraiImportTest(unittest.TestCase):
             links = result["links"]
             self.assertEqual(len(links), 1)
             self.assertEqual(links[0]["link_type"], "coinjoin")
-            self.assertEqual(links[0]["method"], "samourai_whirlpool")
+            self.assertEqual(links[0]["method"], "coinjoin")
             self.assertIn("privacy boundary", links[0]["explanation"])
 
 

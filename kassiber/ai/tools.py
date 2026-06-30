@@ -1347,8 +1347,10 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         name="ui.transfers.pair",
         description=(
             "Pair one outbound + one inbound transaction after explicit "
-            "consent. Computes swap_fee_msat at pair time and invalidates "
-            "the journal so the next report read reflects the change."
+            "consent. Use kind='coinjoin' for a reviewed same-asset Coinjoin "
+            "ownership hop. Computes swap_fee_msat at pair time for swap-like "
+            "pairs and invalidates the journal so the next report read "
+            "reflects the change."
         ),
         parameters={
             "type": "object",
@@ -1359,7 +1361,14 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 "tx_in": {"type": "string", "description": "Inbound transaction id."},
                 "kind": {
                     "type": "string",
-                    "enum": ["manual", "peg-in", "peg-out", "submarine-swap", "swap-refund"],
+                    "enum": [
+                        "manual",
+                        "coinjoin",
+                        "peg-in",
+                        "peg-out",
+                        "submarine-swap",
+                        "swap-refund",
+                    ],
                 },
                 "policy": {
                     "type": "string",
@@ -1378,7 +1387,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         kind_class="mutating",
         wire_name="ui_transfers_pair",
         daemon_kind="ui.transfers.pair",
-        summary_template="Pair swap legs",
+        summary_template="Pair transfer legs",
     ),
     ToolEntry(
         name="ui.transfers.unpair",

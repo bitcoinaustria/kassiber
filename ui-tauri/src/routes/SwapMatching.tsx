@@ -111,7 +111,14 @@ import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
-const PAIR_KIND_OPTIONS = ["manual", "peg-in", "peg-out", "submarine-swap", "swap-refund"] as const;
+const PAIR_KIND_OPTIONS = [
+  "manual",
+  "coinjoin",
+  "peg-in",
+  "peg-out",
+  "submarine-swap",
+  "swap-refund",
+] as const;
 const PAIR_POLICY_OPTIONS = ["carrying-value", "taxable"] as const;
 // Stable `value` (machine code, used in filter payloads + lookups) paired with a
 // `labelKey` into the `review` namespace; labels are resolved at render.

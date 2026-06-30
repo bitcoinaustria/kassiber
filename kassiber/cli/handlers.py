@@ -343,13 +343,13 @@ def _journals_current_for_profile(conn, profile):
     )
 
 
-TRANSFER_PAIR_KINDS = ("manual", "peg-in", "peg-out", "submarine-swap", "swap-refund")
 BITCOIN_LAYER_TRANSITION_PAIR_KINDS = (
     "peg-in",
     "peg-out",
     "submarine-swap",
     "swap-refund",
 )
+TRANSFER_PAIR_KINDS = ("manual", "coinjoin", *BITCOIN_LAYER_TRANSITION_PAIR_KINDS)
 TRANSFER_PAIR_POLICIES = ("carrying-value", "taxable")
 DIRECT_SWAP_PAYOUT_KINDS = ("direct-swap-payout",)
 
