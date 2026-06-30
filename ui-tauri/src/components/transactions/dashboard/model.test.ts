@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
 
@@ -14,6 +14,7 @@ import {
   flowChartSelectionLabel,
   isAttachmentListQueryKeyForTransaction,
   matchesFlowChartSelection,
+  readTransactionScopeParams,
   removeAttachmentRecord,
   replaceAttachmentRecord,
   toDashboardTransaction,
@@ -45,6 +46,24 @@ function transaction(
 }
 
 describe("transaction dashboard chart selection", () => {
+  it("preserves wallet detail deep-link scope parameters", () => {
+    vi.stubGlobal("window", {
+      location: {
+        search:
+          "?wallet=Satoshi-Liquid%20-%3E%20Satoshi-Onchain-Multi&quick=missing_price",
+      },
+    });
+
+    try {
+      expect(readTransactionScopeParams()).toEqual({
+        wallet: "Satoshi-Liquid -> Satoshi-Onchain-Multi",
+        quick: "missing_price",
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("hides long-range period tabs for young transaction histories", () => {
     expect(
       availablePeriodKeysForRecords([

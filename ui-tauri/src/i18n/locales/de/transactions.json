@@ -312,6 +312,9 @@
       "amountAscending": "Nach Betrag sortiert, aufsteigend"
     },
     "filter": {
+      "menuAria": "Transaktionsfilter öffnen",
+      "menuTrigger": "Filter",
+      "menuLabel": "Transaktionsfilter",
       "statusAria": "Nach Status filtern",
       "statusTrigger": "Status",
       "statusLabel": "Nach Status filtern",
@@ -327,7 +330,10 @@
       "walletAria": "Nach Wallet oder Quelle filtern",
       "walletTrigger": "Wallet",
       "walletLabel": "Nach Wallet / Quelle filtern",
-      "allWallets": "Alle Wallets"
+      "allWallets": "Alle Wallets",
+      "feesTrigger": "Gebühren",
+      "feesLabel": "Nach Gebühren filtern",
+      "allFees": "Alle Gebühren"
     },
     "chip": {
       "clearChart": "Diagrammfilter {{label}} entfernen",

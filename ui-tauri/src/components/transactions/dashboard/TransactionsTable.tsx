@@ -14,8 +14,6 @@ import {
   Link2Off,
   MoreHorizontal,
   Pencil,
-  Wallet,
-  WalletCards,
   X,
 } from "lucide-react";
 import * as React from "react";
@@ -33,6 +31,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -999,6 +1000,127 @@ const TransactionsTable = ({
     isHydrated,
   ]);
 
+  const activeFilterCount = [
+    chartSelection,
+    quickFilter,
+    breakdownSelection,
+    statusFilter !== "all",
+    flowFilter !== "all",
+    paymentMethodFilter !== "all",
+    feeFilter !== "all",
+  ].filter(Boolean).length;
+
+  const headerFilterButtonClassName =
+    "inline-flex h-7 items-center gap-1 rounded-md px-1.5 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+  const renderStatusFilterItems = () => (
+    <>
+      <DropdownMenuLabel>{t("table.filter.statusLabel")}</DropdownMenuLabel>
+      <DropdownMenuCheckboxItem
+        checked={statusFilter === "all"}
+        onCheckedChange={() => setStatusFilter("all")}
+      >
+        {t("table.filter.allStatuses")}
+      </DropdownMenuCheckboxItem>
+      {allTransactionStatuses.map((status) => (
+        <DropdownMenuCheckboxItem
+          key={status}
+          checked={statusFilter === status}
+          onCheckedChange={() => setStatusFilter(status)}
+        >
+          {/* loose translator */}
+          {(t as (key: string) => string)(transactionStatusLabels[status])}
+        </DropdownMenuCheckboxItem>
+      ))}
+    </>
+  );
+
+  const renderFlowFilterItems = () => (
+    <>
+      <DropdownMenuLabel>{t("table.filter.flowLabel")}</DropdownMenuLabel>
+      <DropdownMenuCheckboxItem
+        checked={flowFilter === "all"}
+        onCheckedChange={() => setFlowFilter("all")}
+      >
+        {t("table.filter.allFlows")}
+      </DropdownMenuCheckboxItem>
+      {allTransactionFlows.map((flow) => (
+        <DropdownMenuCheckboxItem
+          key={flow}
+          checked={flowFilter === flow}
+          onCheckedChange={() => setFlowFilter(flow)}
+        >
+          {/* loose translator */}
+          {(t as (key: string) => string)(transactionFlowLabels[flow])}
+        </DropdownMenuCheckboxItem>
+      ))}
+    </>
+  );
+
+  const renderNetworkFilterItems = () => (
+    <>
+      <DropdownMenuLabel>{t("table.filter.networkLabel")}</DropdownMenuLabel>
+      <DropdownMenuCheckboxItem
+        checked={paymentMethodFilter === "all"}
+        onCheckedChange={() => setPaymentMethodFilter("all")}
+      >
+        {t("table.filter.allNetworks")}
+      </DropdownMenuCheckboxItem>
+      {allPaymentMethods.map((method) => (
+        <DropdownMenuCheckboxItem
+          key={method}
+          checked={paymentMethodFilter === method}
+          onCheckedChange={() => setPaymentMethodFilter(method)}
+        >
+          {method}
+        </DropdownMenuCheckboxItem>
+      ))}
+    </>
+  );
+
+  const renderWalletFilterItems = () => (
+    <>
+      <DropdownMenuLabel>{t("table.filter.walletLabel")}</DropdownMenuLabel>
+      <DropdownMenuCheckboxItem
+        checked={!walletFilterActive}
+        onCheckedChange={() => {
+          // Only clear when a wallet is selected — don't clobber an active
+          // network breakdown (both share breakdownSelection).
+          if (walletFilterActive) clearWalletScope();
+        }}
+      >
+        {t("table.filter.allWallets")}
+      </DropdownMenuCheckboxItem>
+      {walletOptions.map((wallet) => (
+        <DropdownMenuCheckboxItem
+          key={wallet}
+          checked={selectedWalletKey === wallet}
+          onCheckedChange={() => selectWalletScope(wallet)}
+        >
+          {wallet}
+        </DropdownMenuCheckboxItem>
+      ))}
+    </>
+  );
+
+  const renderFeeFilterItems = () => (
+    <>
+      <DropdownMenuLabel>{t("table.filter.feesLabel")}</DropdownMenuLabel>
+      <DropdownMenuCheckboxItem
+        checked={feeFilter === "all"}
+        onCheckedChange={() => setFeeFilter("all")}
+      >
+        {t("table.filter.allFees")}
+      </DropdownMenuCheckboxItem>
+      <DropdownMenuCheckboxItem
+        checked={feeFilter === "with-fees"}
+        onCheckedChange={() => setFeeFilter("with-fees")}
+      >
+        {t("table.withFees")}
+      </DropdownMenuCheckboxItem>
+    </>
+  );
+
   return (
     <>
       <div
@@ -1023,164 +1145,80 @@ const TransactionsTable = ({
                 size="sm"
                 className={cn(
                   "h-8 gap-1.5 sm:h-9 sm:gap-2",
-                  statusFilter !== "all" && "border-primary",
+                  activeFilterCount > 0 && "border-primary",
                 )}
-                aria-label={t("table.filter.statusAria")}
+                aria-label={t("table.filter.menuAria")}
               >
                 <Filter className="size-3.5 sm:size-4" aria-hidden="true" />
-                <span className="hidden sm:inline">{t("table.filter.statusTrigger")}</span>
-                {statusFilter !== "all" && (
-                  <span className="size-1.5 rounded-full bg-primary sm:size-2" />
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[180px]">
-              <DropdownMenuLabel>{t("table.filter.statusLabel")}</DropdownMenuLabel>
-              <DropdownMenuCheckboxItem
-                checked={statusFilter === "all"}
-                onCheckedChange={() => setStatusFilter("all")}
-              >
-                {t("table.filter.allStatuses")}
-              </DropdownMenuCheckboxItem>
-              {allTransactionStatuses.map((status) => (
-                <DropdownMenuCheckboxItem
-                  key={status}
-                  checked={statusFilter === status}
-                  onCheckedChange={() => setStatusFilter(status)}
-                >
-                  {/* loose translator */}
-                  {(t as (key: string) => string)(transactionStatusLabels[status])}
-                </DropdownMenuCheckboxItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className={cn(
-                  "h-8 gap-1.5 sm:h-9 sm:gap-2",
-                  flowFilter !== "all" && "border-primary",
-                )}
-                aria-label={t("table.filter.flowAria")}
-              >
-                <ArrowLeftRight
-                  className="size-3.5 sm:size-4"
-                  aria-hidden="true"
-                />
-                <span className="hidden sm:inline">{t("table.filter.flowTrigger")}</span>
-                {flowFilter !== "all" && (
-                  <span className="size-1.5 rounded-full bg-primary sm:size-2" />
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[190px]">
-              <DropdownMenuLabel>{t("table.filter.flowLabel")}</DropdownMenuLabel>
-              <DropdownMenuCheckboxItem
-                checked={flowFilter === "all"}
-                onCheckedChange={() => setFlowFilter("all")}
-              >
-                {t("table.filter.allFlows")}
-              </DropdownMenuCheckboxItem>
-              {allTransactionFlows.map((flow) => (
-                <DropdownMenuCheckboxItem
-                  key={flow}
-                  checked={flowFilter === flow}
-                  onCheckedChange={() => setFlowFilter(flow)}
-                >
-                  {/* loose translator */}
-                  {(t as (key: string) => string)(transactionFlowLabels[flow])}
-                </DropdownMenuCheckboxItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className={cn(
-                  "h-8 gap-1.5 sm:h-9 sm:gap-2",
-                  paymentMethodFilter !== "all" && "border-primary",
-                )}
-                aria-label={t("table.filter.paymentAria")}
-              >
-                <Wallet className="size-3.5 sm:size-4" aria-hidden="true" />
-                <span className="hidden sm:inline">{t("table.filter.networkTrigger")}</span>
-                {paymentMethodFilter !== "all" && (
-                  <span className="size-1.5 rounded-full bg-primary sm:size-2" />
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[200px]">
-              <DropdownMenuLabel>{t("table.filter.networkLabel")}</DropdownMenuLabel>
-              <DropdownMenuCheckboxItem
-                checked={paymentMethodFilter === "all"}
-                onCheckedChange={() => setPaymentMethodFilter("all")}
-              >
-                {t("table.filter.allNetworks")}
-              </DropdownMenuCheckboxItem>
-              {allPaymentMethods.map((method) => (
-                <DropdownMenuCheckboxItem
-                  key={method}
-                  checked={paymentMethodFilter === method}
-                  onCheckedChange={() => setPaymentMethodFilter(method)}
-                >
-                  {method}
-                </DropdownMenuCheckboxItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className={cn(
-                  "h-8 gap-1.5 sm:h-9 sm:gap-2",
-                  walletFilterActive && "border-primary",
-                )}
-                aria-label={t("table.filter.walletAria")}
-                disabled={walletOptions.length === 0}
-              >
-                <WalletCards
-                  className="size-3.5 sm:size-4"
-                  aria-hidden="true"
-                />
-                <span className="hidden sm:inline">{t("table.filter.walletTrigger")}</span>
-                {walletFilterActive && (
-                  <span className="size-1.5 rounded-full bg-primary sm:size-2" />
-                )}
+                <span>{t("table.filter.menuTrigger")}</span>
+                {activeFilterCount > 0 ? (
+                  <span className="grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-4 text-primary-foreground">
+                    {activeFilterCount}
+                  </span>
+                ) : null}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
-              className="max-h-[320px] w-[220px] overflow-y-auto"
+              className="w-[220px]"
             >
-              <DropdownMenuLabel>{t("table.filter.walletLabel")}</DropdownMenuLabel>
-              <DropdownMenuCheckboxItem
-                checked={!walletFilterActive}
-                onCheckedChange={() => {
-                  // Only clear when a wallet is selected — don't clobber an
-                  // active network breakdown (both share breakdownSelection).
-                  if (walletFilterActive) clearWalletScope();
-                }}
-              >
-                {t("table.filter.allWallets")}
-              </DropdownMenuCheckboxItem>
-              {walletOptions.map((wallet) => (
-                <DropdownMenuCheckboxItem
-                  key={wallet}
-                  checked={selectedWalletKey === wallet}
-                  onCheckedChange={() => selectWalletScope(wallet)}
-                >
-                  {wallet}
-                </DropdownMenuCheckboxItem>
-              ))}
+              <DropdownMenuLabel>{t("table.filter.menuLabel")}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <span>{t("table.filter.statusTrigger")}</span>
+                  {statusFilter !== "all" ? (
+                    <span className="ml-1 size-1.5 rounded-full bg-primary" />
+                  ) : null}
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-[180px]">
+                  {renderStatusFilterItems()}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <span>{t("table.filter.flowTrigger")}</span>
+                  {flowFilter !== "all" ? (
+                    <span className="ml-1 size-1.5 rounded-full bg-primary" />
+                  ) : null}
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-[190px]">
+                  {renderFlowFilterItems()}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <span>{t("table.filter.networkTrigger")}</span>
+                  {paymentMethodFilter !== "all" ? (
+                    <span className="ml-1 size-1.5 rounded-full bg-primary" />
+                  ) : null}
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-[200px]">
+                  {renderNetworkFilterItems()}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger disabled={walletOptions.length === 0}>
+                  <span>{t("table.filter.walletTrigger")}</span>
+                  {walletFilterActive ? (
+                    <span className="ml-1 size-1.5 rounded-full bg-primary" />
+                  ) : null}
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="max-h-[320px] w-[220px] overflow-y-auto">
+                  {renderWalletFilterItems()}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <span>{t("table.filter.feesTrigger")}</span>
+                  {feeFilter !== "all" ? (
+                    <span className="ml-1 size-1.5 rounded-full bg-primary" />
+                  ) : null}
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-[180px]">
+                  {renderFeeFilterItems()}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -1401,10 +1439,52 @@ const TransactionsTable = ({
                 {t("table.column.pricing")}
               </TableHead>
               <TableHead className="hidden w-[150px] text-xs font-medium text-muted-foreground sm:text-sm xl:table-cell">
-                {t("table.column.network")}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        headerFilterButtonClassName,
+                        paymentMethodFilter !== "all" && "text-foreground",
+                      )}
+                      aria-label={t("table.filter.paymentAria")}
+                      title={t("table.filter.paymentAria")}
+                    >
+                      <span>{t("table.column.network")}</span>
+                      <Filter className="size-3.5" aria-hidden="true" />
+                      {paymentMethodFilter !== "all" ? (
+                        <span className="size-1.5 rounded-full bg-primary" />
+                      ) : null}
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-[200px]">
+                    {renderNetworkFilterItems()}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </TableHead>
               <TableHead className="w-[130px] text-xs font-medium text-muted-foreground sm:text-sm">
-                {t("table.column.status")}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        headerFilterButtonClassName,
+                        statusFilter !== "all" && "text-foreground",
+                      )}
+                      aria-label={t("table.filter.statusAria")}
+                      title={t("table.filter.statusAria")}
+                    >
+                      <span>{t("table.column.status")}</span>
+                      <Filter className="size-3.5" aria-hidden="true" />
+                      {statusFilter !== "all" ? (
+                        <span className="size-1.5 rounded-full bg-primary" />
+                      ) : null}
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-[180px]">
+                    {renderStatusFilterItems()}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </TableHead>
               <TableHead className="w-[48px]"></TableHead>
             </TableRow>
