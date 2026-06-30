@@ -537,7 +537,12 @@ export type JournalEventItem = {
   asset: string;
   quantity: number;
   fiatValueEur: number;
+  unitCostEur?: number | null;
+  costBasisEur?: number | null;
+  proceedsEur?: number | null;
   gainLossEur?: number | null;
+  marketValueEur?: number | null;
+  marketDeltaEur?: number | null;
   atCategory?: string | null;
   description?: string;
 };
