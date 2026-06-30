@@ -33,8 +33,8 @@ from typing import Any, Optional
 from ..errors import AppError
 from ..time_utils import now_iso
 
-# The two collateral roles. A lock suppresses the outbound disposal; a release
-# suppresses the inbound acquisition. The strings are also the membership values
+# Loan leg roles. Outbound roles suppress disposal booking; inbound roles
+# suppress acquisition/income booking. The strings are also the membership values
 # the tax engine checks, so keep them stable.
 COLLATERAL_LOCK = "collateral_lock"
 COLLATERAL_RELEASE = "collateral_release"
@@ -46,6 +46,12 @@ COLLATERAL_ROLES = (
     PRINCIPAL_RECEIVED,
     PRINCIPAL_REPAID,
 )
+ROLE_DIRECTIONS = {
+    COLLATERAL_LOCK: "outbound",
+    COLLATERAL_RELEASE: "inbound",
+    PRINCIPAL_RECEIVED: "inbound",
+    PRINCIPAL_REPAID: "outbound",
+}
 
 # Outbound legs that are loan non-events: suppress disposal booking.
 LOCK_SUPPRESS_ROLES = frozenset({COLLATERAL_LOCK, PRINCIPAL_REPAID})
@@ -70,6 +76,21 @@ def _require_role(role: str) -> None:
         )
 
 
+def _require_role_direction(role: str, direction: str) -> None:
+    expected = ROLE_DIRECTIONS[role]
+    if direction != expected:
+        raise AppError(
+            f"Loan role '{role}' requires an {expected} transaction",
+            code="validation",
+            details={
+                "field": "role",
+                "role": role,
+                "expected_direction": expected,
+                "actual_direction": direction,
+            },
+        )
+
+
 def mark_collateral(
     conn,
     workspace_id: str,
@@ -85,7 +106,7 @@ def mark_collateral(
     re-marking replaces the existing role."""
     _require_role(role)
     tx = conn.execute(
-        "SELECT id FROM transactions WHERE id = ? AND profile_id = ?",
+        "SELECT id, direction FROM transactions WHERE id = ? AND profile_id = ?",
         (transaction_id, profile_id),
     ).fetchone()
     if tx is None:
@@ -94,6 +115,7 @@ def mark_collateral(
             code="not_found",
             details={"transaction_id": transaction_id},
         )
+    _require_role_direction(role, str(tx["direction"]))
     existing = conn.execute(
         "SELECT loan_id FROM loan_legs WHERE profile_id = ? AND transaction_id = ? AND deleted_at IS NULL",
         (profile_id, transaction_id),
@@ -172,7 +194,8 @@ def link_loan_marks(
         """,
         (profile_id, *unique_ids),
     ).fetchall()
-    found = {str(row["transaction_id"]) for row in rows}
+    rows_by_transaction_id = {str(row["transaction_id"]): row for row in rows}
+    found = set(rows_by_transaction_id)
     missing = [transaction_id for transaction_id in unique_ids if transaction_id not in found]
     if missing:
         raise AppError(
@@ -181,7 +204,12 @@ def link_loan_marks(
             details={"transaction_ids": unique_ids, "missing": missing},
         )
     chosen_loan_id = (loan_id or "").strip() or next(
-        (str(row["loan_id"]) for row in rows if row["loan_id"]), str(uuid.uuid4())
+        (
+            str(rows_by_transaction_id[transaction_id]["loan_id"])
+            for transaction_id in unique_ids
+            if rows_by_transaction_id[transaction_id]["loan_id"]
+        ),
+        str(uuid.uuid4()),
     )
     conn.execute(
         f"""

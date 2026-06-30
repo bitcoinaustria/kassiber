@@ -239,25 +239,50 @@ class CollateralMarkTest(unittest.TestCase):
 
     def test_remark_replaces_role_one_active_mark(self):
         core_loans.mark_collateral(self.conn, "w1", "p1", "tx1", role="collateral_lock")
-        core_loans.mark_collateral(self.conn, "w1", "p1", "tx1", role="collateral_release")
+        core_loans.mark_collateral(self.conn, "w1", "p1", "tx1", role="loan_principal_repaid")
         # The unique index allows the re-mark (old one retired), and the map
         # reflects only the latest role.
-        self.assertEqual(core_loans.load_collateral_role_map(self.conn, "p1"), {"tx1": "collateral_release"})
+        self.assertEqual(core_loans.load_collateral_role_map(self.conn, "p1"), {"tx1": "loan_principal_repaid"})
         self.assertEqual(len(core_loans.list_collateral_marks(self.conn, "p1")), 1)
 
     def test_link_marks_assigns_shared_loan_id(self):
-        core_loans.mark_collateral(self.conn, "w1", "p1", "tx1", role="loan_principal_received")
-        core_loans.mark_collateral(self.conn, "w1", "p1", "tx2", role="loan_principal_repaid")
+        core_loans.mark_collateral(self.conn, "w1", "p1", "tx1", role="loan_principal_repaid")
+        core_loans.mark_collateral(self.conn, "w1", "p1", "tx2", role="loan_principal_received")
         result = core_loans.link_loan_marks(self.conn, "p1", ["tx1", "tx2"], loan_id="loan-a")
         self.assertEqual(result, {"loan_id": "loan-a", "transaction_ids": ["tx1", "tx2"]})
         marks = core_loans.list_collateral_marks(self.conn, "p1")
         self.assertEqual({mark["loan_id"] for mark in marks}, {"loan-a"})
 
+    def test_link_preserves_first_existing_loan_id_by_request_order(self):
+        core_loans.mark_collateral(
+            self.conn, "w1", "p1", "tx1", role="loan_principal_repaid", loan_id="loan-a"
+        )
+        core_loans.mark_collateral(
+            self.conn, "w1", "p1", "tx2", role="loan_principal_received", loan_id="loan-b"
+        )
+        result = core_loans.link_loan_marks(self.conn, "p1", ["tx2", "tx1"])
+        self.assertEqual(result["loan_id"], "loan-b")
+        marks = core_loans.list_collateral_marks(self.conn, "p1")
+        self.assertEqual({mark["loan_id"] for mark in marks}, {"loan-b"})
+
     def test_link_requires_active_marks(self):
-        core_loans.mark_collateral(self.conn, "w1", "p1", "tx1", role="loan_principal_received")
+        core_loans.mark_collateral(self.conn, "w1", "p1", "tx1", role="loan_principal_repaid")
         with self.assertRaises(AppError) as ctx:
             core_loans.link_loan_marks(self.conn, "p1", ["tx1", "tx2"])
         self.assertEqual(ctx.exception.code, "not_found")
+
+    def test_mark_rejects_role_direction_mismatch(self):
+        with self.assertRaises(AppError) as ctx:
+            core_loans.mark_collateral(
+                self.conn,
+                "w1",
+                "p1",
+                "tx1",
+                role="loan_principal_received",
+            )
+        self.assertEqual(ctx.exception.code, "validation")
+        self.assertEqual(ctx.exception.details["expected_direction"], "inbound")
+        self.assertEqual(ctx.exception.details["actual_direction"], "outbound")
 
     def test_unmark_reverts_to_normal_classification(self):
         core_loans.mark_collateral(self.conn, "w1", "p1", "tx1", role="collateral_lock")

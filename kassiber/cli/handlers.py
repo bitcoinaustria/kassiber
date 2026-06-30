@@ -3406,10 +3406,10 @@ def build_ledger_state(conn, profile):
             {"code": "ownership_index", "message": str(message)}
             for message in ownership_warnings or ()
         )
-    # Active loan marks that classify a journal transaction by role: a
-    # collateral lock (outbound) and release (inbound) are non-events that keep
-    # the coins in the owned pool. Removing a mark reverts the transaction to its
-    # normal classification (a liquidated lock then books as the disposal it is).
+    # Active loan marks classify a journal transaction by role. Collateral
+    # lock/release and borrowed-principal receive/repay roles are non-events for
+    # the tax engine; removing a mark reverts the transaction to its normal
+    # classification (a liquidated lock then books as the disposal it is).
     loan_legs = conn.execute(
         "SELECT transaction_id, role FROM loan_legs WHERE profile_id = ? AND deleted_at IS NULL",
         (profile["id"],),

@@ -901,13 +901,11 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
             continue
         loan_role = getattr(event, "loan_leg_role", None)
         if loan_role in _LOAN_LOCK_SUPPRESS_ROLES:
-            # Outbound marked as loan collateral: the borrower still owns the
-            # coins (encumbered), so this is NOT a disposal. Skip emission and
-            # leave availability untouched — the lot stays in the global pool and
-            # a later release draws from it. No separate balance-bearing account,
-            # so the per-(exchange, holder) gate can never go negative here. If
-            # the collateral is liquidated instead of returned, the user removes
-            # the mark and this outbound books as the disposal it is.
+            # Outbound loan non-events are not disposals: posted collateral stays
+            # owned and principal repayment returns borrowed coins. Skip emission
+            # and leave availability untouched. If collateral is liquidated
+            # instead of returned, the user removes the mark and this outbound
+            # books as the disposal it is.
             continue
         disposal_kind = _normalized_event_kind(event)
         if _kind_has_token(disposal_kind, _NON_SALE_DISPOSAL_KIND_TOKENS):
@@ -2309,11 +2307,9 @@ class GenericRP2TaxEngine:
             pairs_by_asset = defaultdict(list)
             for pair in all_pairs:
                 pairs_by_asset[pair["out"]["asset"]].append(pair)
-            # Active loan marks classify their journal transaction by role:
-            # a collateral lock (outbound) and release (inbound) are non-events
-            # that keep the coins in the owned global pool (encumbered, NOT a
-            # separate balance-bearing account). Row-index access works for both
-            # sqlite3.Row and dict.
+            # Active loan marks classify their journal transaction by role.
+            # Suppressed roles are non-events for owned-lot accounting. Row-index
+            # access works for both sqlite3.Row and dict.
             loan_leg_by_transaction_id = {
                 str(leg["transaction_id"]): str(leg["role"])
                 for leg in (inputs.loan_legs or ())
