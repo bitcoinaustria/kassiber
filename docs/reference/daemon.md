@@ -147,6 +147,17 @@ global search: it accepts a Kassiber transaction id or external transaction id
 scoped to the active profile and returns at most one safe transaction display
 row. It does not create a browser-side search index.
 
+`ui.transactions.graph` is the read-only transaction-detail graph model. It
+returns one transaction's safe metadata, public input/output references, fee
+metadata when locally known, graph support level, warnings, ownership/accounting
+annotations, and reviewed paired-route context. Bitcoin transactions with
+stored valued vin/vout can render a proportional flow graph; records with only
+safe references render a reference/amountless graph; graphless imports return a
+typed empty state. Liquid confidential transactions may expose public
+references while keeping confidential amounts unsized or hidden. The payload
+never returns descriptors, xpubs, backend URLs/tokens, wallet config, raw
+files, raw JSON blobs, or other secret-bearing material.
+
 `ui.wallets.utxos` accepts `{"wallet":"<wallet id or label>"}` and returns the
 active local UTXO inventory for one wallet. Rows include outpoint, txid, vout,
 asset, amount, confirmation status, block/time when known, address or safe

@@ -85,6 +85,20 @@ phrases, API keys, passwords, bearer tokens, cookies, raw daemon arguments,
 raw AI prompts, imported rows, database files, and stack locals are excluded or
 redacted.
 
+Transaction detail includes a Transaction flow panel on the Details tab. The
+panel uses `ui.transactions.graph` to draw a local, read-only flow view: valued
+Bitcoin vin/vout become proportional input/output strands with a distinct fee
+leg, reference-only or confidential records can show amountless public
+references, and unsupported imports get an explicit empty state instead of a
+guessed graph. The view is explanatory, not a source of new accounting truth;
+ownership tags such as owned wallet, external recipient, change, transfer,
+swap, Coinjoin, blocker, or quarantine come from the same transaction graph and
+manual-pair semantics used by the journal pipeline. Hidden-sensitive mode keeps
+amounts and long references masked. Reviewed paired routes, including swaps and
+manual/AI-consented Coinjoin links, can show the spent and received legs; the
+desktop preloads both safe graph payloads once the route is known so switching
+between legs is UI-only when the daemon data is already available.
+
 The Connections detail page includes a read-only UTXOs table for chain-backed
 wallet sources. Refreshing a descriptor/xpub/address wallet updates the local
 output inventory, and the detail page shows current unspent transaction outputs with
